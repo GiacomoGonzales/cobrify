@@ -2833,7 +2833,7 @@ export default function Inventory() {
                       )}
 
                       {/* Expandible: Stock por almacén/sucursal (productos sin variantes) */}
-                      {isExpanded && canExpand && !hasVariantsWithStock && (filteredWarehouses.length > 0 || hasBatches) && (
+                      {isExpanded && canExpand && isProduct && !hasVariantsWithStock && (filteredWarehouses.length > 0 || hasBatches) && (
                         <div className="px-4 pb-3 bg-gray-50">
                           <div className="space-y-2">
                             {(() => {
@@ -3039,26 +3039,68 @@ export default function Inventory() {
                       {isExpanded && canExpand && item.isIngredient && item.warehouseStocks && item.warehouseStocks.length > 0 && (
                         <div className="px-4 pb-3 bg-gray-50">
                           <div className="space-y-2">
-                            <div className="flex items-center gap-1.5 text-xs text-gray-600 mb-2">
+                            <div className="flex items-center gap-1.5 text-xs text-gray-600 mb-1">
                               <Store className="w-3.5 h-3.5" />
-                              <span className="font-medium">Stock por Almacén:</span>
+                              <span className="font-medium">
+                                {filterBranch === 'all' ? 'Stock por Sucursal y Almacén:' : 'Stock por Almacén:'}
+                              </span>
                             </div>
-                            {item.warehouseStocks.map(ws => {
-                              const warehouse = allWarehouses.find(w => w.id === ws.warehouseId)
-                              if (!warehouse) return null
-                              return (
-                                <div key={ws.warehouseId} className="flex items-center justify-between bg-white rounded px-3 py-2">
-                                  <div className="flex items-center gap-2">
-                                    <Warehouse className="w-3.5 h-3.5 text-gray-400" />
-                                    <span className="text-sm text-gray-700">{warehouse.name}</span>
-                                    {warehouse.isDefault && <span className="text-[10px] text-primary-500 font-medium bg-primary-50 px-1.5 py-0.5 rounded-full">Principal</span>}
+                            {(() => {
+                              const stockOf = (w) => (item.warehouseStocks.find(ws => ws.warehouseId === w.id)?.stock || 0)
+                              const mainBranchWarehouses = filteredWarehouses.filter(w => !w.branchId)
+                              const warehousesByBranch = filteredWarehouses.filter(w => w.branchId).reduce((acc, w) => {
+                                if (!acc[w.branchId]) acc[w.branchId] = []
+                                acc[w.branchId].push(w)
+                                return acc
+                              }, {})
+                              const renderWarehouse = (warehouse) => {
+                                const stock = stockOf(warehouse)
+                                return (
+                                  <div key={warehouse.id} className="flex items-center justify-between bg-white rounded px-3 py-2">
+                                    <div className="flex items-center gap-2">
+                                      <Warehouse className="w-3.5 h-3.5 text-gray-400" />
+                                      <span className="text-sm text-gray-700">{warehouse.name}</span>
+                                      {warehouse.isDefault && <span className="text-[10px] text-primary-500 font-medium bg-primary-50 px-1.5 py-0.5 rounded-full">Principal</span>}
+                                    </div>
+                                    <span className={`font-semibold text-sm ${stock > (item?.minStock ?? 3) ? 'text-green-600' : stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                      {stock.toFixed(2)} {item.unit || 'uds'}
+                                    </span>
                                   </div>
-                                  <span className={`font-semibold text-sm ${ws.stock > (item?.minStock ?? 3) ? 'text-green-600' : ws.stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                    {(ws.stock || 0).toFixed(2)} {item.unit || 'uds'}
-                                  </span>
+                                )
+                              }
+                              return (
+                                <div className="space-y-2">
+                                  {mainBranchWarehouses.length > 0 && (
+                                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                      {filterBranch === 'all' && (
+                                        <div className="bg-primary-50 px-3 py-1.5 flex items-center gap-2 border-b border-gray-200">
+                                          <Store className="w-3 h-3 text-primary-600" />
+                                          <span className="text-xs font-medium text-primary-700">{companySettings?.mainBranchName || 'Sucursal Principal'}</span>
+                                          <span className="text-xs text-primary-600 ml-auto">{mainBranchWarehouses.reduce((s, w) => s + stockOf(w), 0).toFixed(2)} {item.unit || 'uds'}</span>
+                                        </div>
+                                      )}
+                                      <div className="p-2 space-y-1">{mainBranchWarehouses.map(renderWarehouse)}</div>
+                                    </div>
+                                  )}
+                                  {Object.entries(warehousesByBranch).map(([branchId, branchWarehouses]) => {
+                                    const branch = branches.find(b => b.id === branchId)
+                                    const branchTotal = branchWarehouses.reduce((s, w) => s + stockOf(w), 0)
+                                    return (
+                                      <div key={branchId} className="border border-gray-200 rounded-lg overflow-hidden">
+                                        {filterBranch === 'all' && (
+                                          <div className="bg-blue-50 px-3 py-1.5 flex items-center gap-2 border-b border-gray-200">
+                                            <Store className="w-3 h-3 text-blue-600" />
+                                            <span className="text-xs font-medium text-blue-700">{branch?.name || 'Sucursal'}</span>
+                                            <span className="text-xs text-blue-600 ml-auto">{branchTotal.toFixed(2)} {item.unit || 'uds'}</span>
+                                          </div>
+                                        )}
+                                        <div className="p-2 space-y-1">{branchWarehouses.map(renderWarehouse)}</div>
+                                      </div>
+                                    )
+                                  })}
                                 </div>
                               )
-                            })}
+                            })()}
                           </div>
                         </div>
                       )}
@@ -3654,31 +3696,75 @@ export default function Inventory() {
                       {isExpanded && item.isIngredient && item.warehouseStocks && item.warehouseStocks.length > 0 && (
                         <TableRow className="bg-gray-50">
                           <TableCell colSpan={8} className="py-3">
-                            <div className="pl-8 space-y-4">
+                            <div className="pl-8 space-y-2">
                               <div className="flex items-center space-x-2 text-sm text-gray-600 mb-2">
                                 <Store className="w-4 h-4" />
-                                <span className="font-medium">Stock por Almacén:</span>
+                                <span className="font-medium">
+                                  {filterBranch === 'all' ? 'Stock por Sucursal y Almacén:' : 'Stock por Almacén:'}
+                                </span>
                               </div>
-                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                                {item.warehouseStocks.map(ws => {
-                                  const warehouse = allWarehouses.find(w => w.id === ws.warehouseId)
-                                  if (!warehouse) return null
+                              {(() => {
+                                const stockOf = (w) => (item.warehouseStocks.find(ws => ws.warehouseId === w.id)?.stock || 0)
+                                const mainBranchWarehouses = filteredWarehouses.filter(w => !w.branchId)
+                                const warehousesByBranch = filteredWarehouses.filter(w => w.branchId).reduce((acc, w) => {
+                                  if (!acc[w.branchId]) acc[w.branchId] = []
+                                  acc[w.branchId].push(w)
+                                  return acc
+                                }, {})
+                                const renderWarehouse = (warehouse) => {
+                                  const stock = stockOf(warehouse)
                                   return (
-                                    <div key={ws.warehouseId} className="bg-white border border-gray-100 rounded-lg p-2.5">
+                                    <div key={warehouse.id} className="bg-white border border-gray-100 rounded-lg p-2.5">
                                       <div className="flex items-center justify-between">
                                         <div className="flex items-center space-x-2">
                                           <Warehouse className="w-3.5 h-3.5 text-gray-400" />
                                           <span className="text-sm text-gray-700">{warehouse.name}</span>
                                           {warehouse.isDefault && <span className="text-[10px] text-primary-500 font-medium bg-primary-50 px-1.5 py-0.5 rounded-full">Principal</span>}
                                         </div>
-                                        <span className={`font-semibold text-sm ${ws.stock > (item?.minStock ?? 3) ? 'text-green-600' : ws.stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                          {(ws.stock || 0).toFixed(2)} {item.unit || 'uds'}
+                                        <span className={`font-semibold text-sm ${stock > (item?.minStock ?? 3) ? 'text-green-600' : stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                          {stock.toFixed(2)} {item.unit || 'uds'}
                                         </span>
                                       </div>
                                     </div>
                                   )
-                                })}
-                              </div>
+                                }
+                                return (
+                                  <div className="space-y-2">
+                                    {mainBranchWarehouses.length > 0 && (
+                                      <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                        {filterBranch === 'all' && (
+                                          <div className="bg-primary-50 px-3 py-1.5 flex items-center gap-2 border-b border-gray-200">
+                                            <Store className="w-3 h-3 text-primary-600" />
+                                            <span className="text-xs font-medium text-primary-700">{companySettings?.mainBranchName || 'Sucursal Principal'}</span>
+                                            <span className="text-xs text-primary-600 ml-auto">{mainBranchWarehouses.reduce((s, w) => s + stockOf(w), 0).toFixed(2)} {item.unit || 'uds'}</span>
+                                          </div>
+                                        )}
+                                        <div className="p-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                          {mainBranchWarehouses.map(renderWarehouse)}
+                                        </div>
+                                      </div>
+                                    )}
+                                    {Object.entries(warehousesByBranch).map(([branchId, branchWarehouses]) => {
+                                      const branch = branches.find(b => b.id === branchId)
+                                      const branchTotal = branchWarehouses.reduce((s, w) => s + stockOf(w), 0)
+                                      return (
+                                        <div key={branchId} className="border border-gray-200 rounded-lg overflow-hidden">
+                                          {filterBranch === 'all' && (
+                                            <div className="bg-blue-50 px-3 py-1.5 flex items-center gap-2 border-b border-gray-200">
+                                              <Store className="w-3 h-3 text-blue-600" />
+                                              <span className="text-xs font-medium text-blue-700">{branch?.name || 'Sucursal'}</span>
+                                              <span className="text-xs text-blue-600 ml-auto">{branchTotal.toFixed(2)} {item.unit || 'uds'}</span>
+                                            </div>
+                                          )}
+                                          <div className="p-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                            {branchWarehouses.map(renderWarehouse)}
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                )
+                              })()}
                             </div>
                           </TableCell>
                         </TableRow>
