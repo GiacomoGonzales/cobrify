@@ -69,6 +69,7 @@ import { getDoc, doc, Timestamp } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { db, storage } from '@/lib/firebase'
 import { getRooms as getHotelRooms, getActiveReservations, addCharge as addFolioCharge, markChargesAsInvoiced } from '@/services/hotelService'
+import { getCachedProducts, setCachedProducts } from '@/utils/productCache'
 import {
   subscribeToProducts,
   getCustomers,
@@ -2280,17 +2281,48 @@ export default function POS() {
   // Productos en TIEMPO REAL: un listener (onSnapshot) mantiene el catálogo del POS
   // siempre fresco, así un cambio/renombre de producto hecho desde otra pestaña o
   // dispositivo se refleja al instante (sin tener que refrescar). En demo se usa demoData.
+  //
+  // PERF: con miles de productos la primera descarga del snapshot tarda 5-15s.
+  // Para que el cajero NO espere, primero leemos el caché local (IndexedDB) de
+  // la última sesión y mostramos esos productos al instante; el listener sigue
+  // detrás y reemplaza el estado cuando llega el snapshot fresco. Tras cada
+  // snapshot guardamos el caché para la próxima sesión.
   useEffect(() => {
     if (isDemoMode) return
     if (!user?.uid) return
     const businessId = getBusinessId()
     if (!businessId) return
+
+    let cancelled = false
     setProductsLoading(true)
+
+    // 1) Mostrar caché de inmediato (si existe) para que el cajero pueda buscar
+    // mientras el snapshot fresco viene en background.
+    getCachedProducts(businessId).then((cached) => {
+      if (cancelled) return
+      if (cached && cached.length > 0) {
+        setProducts(cached)
+        setProductsLoading(false) // UX inmediata, aunque el listener siga sincronizando
+      }
+    }).catch(() => {})
+
+    // 2) Suscripción en tiempo real (igual que antes). Cuando llega el primer
+    // snapshot, reemplaza el estado y persiste al caché para la próxima vez.
     const unsubscribe = subscribeToProducts(businessId, (result) => {
-      if (result.success) setProducts(result.data || [])
+      if (cancelled) return
+      if (result.success) {
+        const list = result.data || []
+        setProducts(list)
+        // Fire-and-forget: no bloquear el snapshot por la escritura del caché.
+        setCachedProducts(businessId, list).catch(() => {})
+      }
       setProductsLoading(false)
     })
-    return () => { if (typeof unsubscribe === 'function') unsubscribe() }
+
+    return () => {
+      cancelled = true
+      if (typeof unsubscribe === 'function') unsubscribe()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid, currentBusinessId, isDemoMode])
 
