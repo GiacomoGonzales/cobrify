@@ -77,7 +77,12 @@ export default function Accounting() {
 
   useEffect(() => {
     loadInvoices()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, dateFrom, dateTo])
+
+  useEffect(() => {
     loadBranches()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
   const loadBranches = async () => {
@@ -99,7 +104,33 @@ export default function Accounting() {
     try {
       const businessId = getBusinessId()
       const ref = collection(db, 'businesses', businessId, 'invoices')
-      const snapshot = await getDocs(ref)
+
+      // PERF: en cuentas grandes (20k+ comprobantes) descargar TODO el historial
+      // tardaba 3-10s. Acotamos la descarga al rango de fechas activo (createdAt)
+      // con un buffer amplio para absorber cualquier desfase entre createdAt y la
+      // fecha de emisión (back-dating). El filtro EXACTO por fecha de emisión sigue
+      // siendo el de abajo (getInvoiceDate), así que la precisión fiscal no cambia.
+      // Si el usuario limpió las fechas ("ver todo"), se descarga todo (como antes).
+      let snapshot
+      if (dateFrom || dateTo) {
+        const constraints = []
+        if (dateFrom) {
+          const from = new Date(dateFrom + 'T00:00:00')
+          from.setDate(from.getDate() - 40) // buffer izquierdo (cubre emisión back-dateada)
+          constraints.push(where('createdAt', '>=', from))
+        }
+        if (dateTo) {
+          const to = new Date(dateTo + 'T23:59:59')
+          to.setDate(to.getDate() + 5) // buffer derecho
+          constraints.push(where('createdAt', '<=', to))
+        }
+        constraints.push(orderBy('createdAt', 'desc'))
+        snapshot = await getDocs(query(ref, ...constraints))
+      } else {
+        // Sin rango (el usuario eligió "ver todo") → comportamiento anterior.
+        snapshot = await getDocs(ref)
+      }
+
       const data = snapshot.docs
         .map(d => ({ id: d.id, ...d.data() }))
         .filter(inv => inv.documentType === 'factura' || inv.documentType === 'boleta' || inv.documentType === 'nota_credito')

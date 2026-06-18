@@ -136,15 +136,19 @@ export default function StockMovements() {
           return branch?.name || 'Sucursal desconocida'
         }
 
+        // PERF: índices Map para lookups O(1). Antes se hacía `.find()` (O(n))
+        // dentro del `.map()` de movimientos → con 7k productos y 200 movimientos
+        // eran ~4M comparaciones por carga. Ahora es O(productos + movimientos).
+        const productById = new Map((productsResult.data || []).map(p => [p.id, p]))
+        const warehouseById = new Map((warehousesResult.data || []).map(w => [w.id, w]))
+        const defaultWarehouse = (warehousesResult.data || []).find(w => w.isDefault) || warehousesResult.data?.[0]
+
         // Enriquecer movimientos con nombres de productos, almacenes y sucursales
         const enrichedMovements = movementsResult.data.map(mov => {
-          const product = productsResult.data?.find(p => p.id === mov.productId)
-          const defaultWarehouse = warehousesResult.data?.find(w => w.isDefault) || warehousesResult.data?.[0]
-          const warehouse = mov.warehouseId
-            ? warehousesResult.data?.find(w => w.id === mov.warehouseId) || defaultWarehouse
-            : defaultWarehouse
-          const fromWarehouse = warehousesResult.data?.find(w => w.id === mov.fromWarehouse)
-          const toWarehouse = warehousesResult.data?.find(w => w.id === mov.toWarehouse)
+          const product = productById.get(mov.productId)
+          const warehouse = (mov.warehouseId ? warehouseById.get(mov.warehouseId) : null) || defaultWarehouse
+          const fromWarehouse = warehouseById.get(mov.fromWarehouse)
+          const toWarehouse = warehouseById.get(mov.toWarehouse)
 
           // Determinar si es transferencia entre sucursales
           const isCrossBranchTransfer = fromWarehouse && toWarehouse &&

@@ -320,9 +320,9 @@ export default function CashFlow() {
       const [invoicesRes, expensesData, purchasesRes, loansRes, cashMovementsRes, financialRes, branchesRes, warehousesRes] = await Promise.all([
         getRecentInvoices(user.uid, sinceDate),
         getExpenses(user.uid, { startDate: dateRange.startDate, endDate: dateRange.endDate }),
-        getPurchases(user.uid),
+        getPurchases(user.uid, { sinceDate }),
         getLoans(user.uid),
-        getAllCashMovements(user.uid),
+        getAllCashMovements(user.uid, sinceDate),
         getFinancialMovements(user.uid),
         getActiveBranches(user.uid),
         getWarehouses(user.uid)

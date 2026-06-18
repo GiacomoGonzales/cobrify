@@ -1782,9 +1782,14 @@ export const getPurchase = async (userId, purchaseId) => {
 /**
  * Obtener compras de un usuario
  */
-export const getPurchases = async userId => {
+export const getPurchases = async (userId, { sinceDate = null } = {}) => {
   try {
-    const querySnapshot = await getDocs(collection(db, 'businesses', userId, 'purchases'))
+    // PERF: con sinceDate (Flujo de Caja, por periodo) trae solo compras desde
+    // esa fecha. Sin sinceDate = todas (compatibilidad con Compras/Historial).
+    const ref = collection(db, 'businesses', userId, 'purchases')
+    const querySnapshot = sinceDate
+      ? await getDocs(query(ref, where('createdAt', '>=', sinceDate), orderBy('createdAt', 'desc')))
+      : await getDocs(ref)
     const purchases = querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
@@ -2443,11 +2448,15 @@ export const getOrderModificationsAfterPrecuenta = async (businessId, startDate,
 /**
  * Obtener todos los movimientos de caja (para Flujo de Caja)
  */
-export const getAllCashMovements = async (userId) => {
+export const getAllCashMovements = async (userId, sinceDate = null) => {
   try {
-    const snapshot = await getDocs(
-      collection(db, 'businesses', userId, 'cashMovements')
-    )
+    // PERF: si se pasa sinceDate, traer solo los movimientos desde esa fecha
+    // (Flujo de Caja es por periodo → no necesita el historial completo). Sin
+    // sinceDate el comportamiento es el de siempre (todos), por compatibilidad.
+    const ref = collection(db, 'businesses', userId, 'cashMovements')
+    const snapshot = sinceDate
+      ? await getDocs(query(ref, where('createdAt', '>=', sinceDate), orderBy('createdAt', 'desc')))
+      : await getDocs(ref)
 
     const movements = snapshot.docs
       .map(doc => ({
