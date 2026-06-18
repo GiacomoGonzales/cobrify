@@ -17,6 +17,7 @@ import {
   getIngredients,
   createIngredient,
   updateIngredient,
+  updateIngredientWithWarehouseStock,
   deleteIngredient,
   getIngredientStockForBranch
 } from '@/services/ingredientService'
@@ -52,12 +53,39 @@ const UNITS = [
   { value: 'piezas', label: 'Piezas' }
 ]
 
+// Conversión automática al cambiar la unidad de compra de un insumo.
+// Solo se convierte entre unidades de la MISMA dimensión (masa kg↔g, volumen L↔ml).
+// Las unidades de conteo (unidades, cajas, etc.) no son convertibles entre sí.
+const UNIT_DIMENSION = { kg: 'mass', g: 'mass', l: 'volume', ml: 'volume' }
+const UNIT_TO_BASE = { kg: 1000, g: 1, l: 1000, ml: 1 } // a gramos / mililitros
+
+// Cuántas unidades 'to' hay en 1 'from' (factor para el STOCK). null si no son convertibles.
+const getStockConversionFactor = (fromUnit, toUnit) => {
+  if (!fromUnit || !toUnit) return null
+  const f = fromUnit.toLowerCase()
+  const t = toUnit.toLowerCase()
+  if (f === t) return 1
+  if (UNIT_DIMENSION[f] && UNIT_DIMENSION[f] === UNIT_DIMENSION[t]) {
+    return UNIT_TO_BASE[f] / UNIT_TO_BASE[t]
+  }
+  return null
+}
+
+// Limpia ruido de punto flotante conservando hasta 6 decimales (suficiente para costos chicos).
+const cleanNumber = (x) => Math.round(x * 1e6) / 1e6
+
 export default function Ingredients() {
   const { user, getBusinessId, isDemoMode, businessMode, hasMainBranchAccess, allowedWarehouses, filterBranchesByAccess, businessSettings } = useAppContext()
   const demoContext = useDemoRestaurant()
   const navigate = useNavigate()
   const toast = useToast()
   const hidePrivateData = useHidePrivateData()
+
+  // Edición manual de stock — mismo toggle que productos (businessSettings.enableManualStockEdit).
+  // OFF (por defecto): el stock se bloquea al editar; se ingresa por Compras y se ajusta desde
+  // Inventario (mermas/transferencias). ON: se puede editar el stock por almacén y queda como
+  // movimiento de ajuste auditable.
+  const manualStockEditOn = businessSettings?.enableManualStockEdit === true
 
   // Textos condicionales según el modo de negocio
   const isRestaurantMode = businessMode === 'restaurant'
@@ -410,15 +438,66 @@ export default function Ingredients() {
     try {
       const businessId = getBusinessId()
 
-      // Convertir strings vacíos a 0
-      const dataToSave = {
-        ...formData,
-        currentStock: parseFloat(formData.currentStock) || 0,
+      // Campos no-stock (comunes a todas las rutas)
+      const fields = {
+        name: formData.name,
+        category: formData.category,
+        purchaseUnit: formData.purchaseUnit,
         minimumStock: parseFloat(formData.minimumStock) || 0,
-        averageCost: parseFloat(formData.averageCost) || 0
+        averageCost: parseFloat(formData.averageCost) || 0,
+        supplier: formData.supplier,
+        trackStock: formData.trackStock
       }
 
-      const result = await updateIngredient(businessId, selectedIngredient.id, dataToSave)
+      const activeWhs = warehouses.filter(w => w.isActive !== false)
+      const hasWs = (selectedIngredient.warehouseStocks?.length || 0) > 0
+
+      // Conversión por cambio de unidad: re-expresa el stock existente en la nueva unidad.
+      // Es integridad de datos (no un movimiento de stock), así que se aplica SIEMPRE,
+      // incluso con el stock bloqueado.
+      const unitChanged = (selectedIngredient.purchaseUnit || '') !== formData.purchaseUnit
+      const convFactor = unitChanged ? getStockConversionFactor(selectedIngredient.purchaseUnit, formData.purchaseUnit) : 1
+      const factor = (convFactor && convFactor !== 0) ? convFactor : 1
+      // warehouseStocks viejos re-expresados en la unidad nueva.
+      const baseWs = (selectedIngredient.warehouseStocks || []).map(w => ({
+        ...w,
+        stock: cleanNumber((w.stock || 0) * factor)
+      }))
+
+      let result
+      if (manualStockEditOn && formData.trackStock && activeWhs.length > 0 && hasWs) {
+        // EDICIÓN MANUAL ON + stock por almacén: aplicar los valores editados por almacén
+        // y registrar movimientos de ajuste. baseWs (ya en la unidad nueva) evita que un
+        // simple cambio de unidad se registre como ajuste falso.
+        const newStockByWarehouse = {}
+        for (const w of activeWhs) {
+          if (warehouseInitialStocks[w.id] !== undefined) {
+            newStockByWarehouse[w.id] = warehouseInitialStocks[w.id]
+          }
+        }
+        result = await updateIngredientWithWarehouseStock(businessId, selectedIngredient.id, {
+          fields,
+          oldWarehouseStocks: baseWs,
+          newStockByWarehouse
+        })
+      } else {
+        // STOCK BLOQUEADO (o negocio sin almacenes): NO se edita el stock manualmente.
+        // Solo se persiste el stock si cambió la unidad (re-expresión, sin movimiento).
+        const updates = { ...fields }
+        if (hasWs) {
+          if (unitChanged) {
+            updates.warehouseStocks = baseWs
+            updates.currentStock = baseWs.reduce((s, x) => s + (x.stock || 0), 0)
+          }
+          // sin cambio de unidad: no tocar el stock
+        } else if (manualStockEditOn && formData.trackStock) {
+          // Negocio sin almacenes + edición manual ON: permitir el campo único.
+          updates.currentStock = parseFloat(formData.currentStock) || 0
+        } else if (unitChanged) {
+          updates.currentStock = cleanNumber((selectedIngredient.currentStock || 0) * factor)
+        }
+        result = await updateIngredient(businessId, selectedIngredient.id, updates)
+      }
 
       if (result.success) {
         toast.success('Ingrediente actualizado exitosamente')
@@ -478,12 +557,95 @@ export default function Ingredients() {
       supplier: ingredient.supplier || '',
       trackStock: ingredient.trackStock !== false // Por defecto true para compatibilidad
     })
+    // Si el insumo maneja stock por almacén, precargar cada almacén activo con su stock
+    // actual (la fuente de verdad). Así el modal de editar refleja y reescribe warehouseStocks
+    // en vez de solo currentStock (que Inventario ignora cuando hay warehouseStocks).
+    const activeWhs = warehouses.filter(w => w.isActive !== false)
+    if ((ingredient.warehouseStocks?.length || 0) > 0 && activeWhs.length > 0) {
+      const map = {}
+      for (const w of activeWhs) {
+        const ws = ingredient.warehouseStocks.find(x => x.warehouseId === w.id)
+        map[w.id] = String(ws?.stock ?? 0)
+      }
+      setWarehouseInitialStocks(map)
+    } else {
+      setWarehouseInitialStocks({})
+    }
     setShowEditModal(true)
   }
 
   const openDeleteModal = (ingredient) => {
     setSelectedIngredient(ingredient)
     setShowDeleteModal(true)
+  }
+
+  // Cambio de unidad de compra. En edición, si hay stock, convierte automáticamente
+  // stock + mínimo (×factor) y costo (÷factor) entre unidades compatibles (kg↔g, L↔ml);
+  // bloquea cambios incompatibles (ej. kg→unidades) para no corromper datos/movimientos.
+  const handlePurchaseUnitChange = (newUnit) => {
+    const oldUnit = formData.purchaseUnit
+    if (newUnit === oldUnit) return
+
+    // En creación no hay datos previos que convertir: solo aplicar la unidad.
+    if (!showEditModal) {
+      setFormData(prev => ({ ...prev, purchaseUnit: newUnit }))
+      return
+    }
+
+    const hasWs = (selectedIngredient?.warehouseStocks?.length || 0) > 0
+    const totalStock = hasWs
+      ? Object.values(warehouseInitialStocks).reduce((s, v) => s + (parseFloat(v) || 0), 0)
+      : (parseFloat(formData.currentStock) || 0)
+
+    const factor = getStockConversionFactor(oldUnit, newUnit)
+
+    if (factor === null) {
+      // Incompatible: bloquear si tiene stock; permitir si está en 0 (no hay nada que corromper).
+      if (totalStock > 0) {
+        toast.error(
+          `No se puede cambiar de ${oldUnit} a ${newUnit} porque el insumo tiene stock. ` +
+          `Pon el stock en 0 o crea un insumo nuevo.`,
+          6000
+        )
+        return // se mantiene la unidad anterior (el Select es controlado)
+      }
+      setFormData(prev => ({ ...prev, purchaseUnit: newUnit }))
+      return
+    }
+
+    if (factor === 1) {
+      setFormData(prev => ({ ...prev, purchaseUnit: newUnit }))
+      return
+    }
+
+    // Compatible: convertir en vivo todo lo que está expresado en la unidad de compra.
+    if (hasWs) {
+      setWarehouseInitialStocks(prev => {
+        const next = {}
+        for (const [wid, val] of Object.entries(prev)) {
+          const n = parseFloat(val)
+          next[wid] = Number.isNaN(n) ? val : String(cleanNumber(n * factor))
+        }
+        return next
+      })
+    }
+    setFormData(prev => {
+      const next = { ...prev, purchaseUnit: newUnit }
+      if (!hasWs && prev.currentStock !== '' && prev.currentStock != null) {
+        const n = parseFloat(prev.currentStock)
+        if (!Number.isNaN(n)) next.currentStock = String(cleanNumber(n * factor))
+      }
+      if (prev.minimumStock !== '' && prev.minimumStock != null) {
+        const n = parseFloat(prev.minimumStock)
+        if (!Number.isNaN(n)) next.minimumStock = String(cleanNumber(n * factor))
+      }
+      if (prev.averageCost !== '' && prev.averageCost != null) {
+        const n = parseFloat(prev.averageCost)
+        if (!Number.isNaN(n)) next.averageCost = String(cleanNumber(n / factor))
+      }
+      return next
+    })
+    toast.info(`Stock y costo convertidos de ${oldUnit} a ${newUnit}`)
   }
 
   const resetForm = () => {
@@ -1084,15 +1246,22 @@ export default function Ingredients() {
             </Select>
           </div>
 
-          <Select
-            label="Unidad de Compra"
-            value={formData.purchaseUnit}
-            onChange={e => setFormData({ ...formData, purchaseUnit: e.target.value })}
-          >
-            {UNITS.map(unit => (
-              <option key={unit.value} value={unit.value}>{unit.label}</option>
-            ))}
-          </Select>
+          <div>
+            <Select
+              label="Unidad de Compra"
+              value={formData.purchaseUnit}
+              onChange={e => handlePurchaseUnitChange(e.target.value)}
+            >
+              {UNITS.map(unit => (
+                <option key={unit.value} value={unit.value}>{unit.label}</option>
+              ))}
+            </Select>
+            {showEditModal && (
+              <p className="mt-1 text-xs text-gray-500">
+                Al cambiar la unidad se convierte automáticamente el stock y el costo (kg↔g, L↔ml). No se permite cambiar a una unidad incompatible si hay stock.
+              </p>
+            )}
+          </div>
 
           <div>
             <Input
@@ -1124,42 +1293,92 @@ export default function Ingredients() {
                   setFormData({ ...formData, minimumStock: value })
                 }}
               />
-              {warehouses.filter(w => w.isActive !== false).length > 0 && !showEditModal ? (
-                <div className="col-span-full">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Stock Inicial por Almacén</label>
-                  <div className="space-y-2">
-                    {warehouses.filter(w => w.isActive !== false).map(w => (
-                      <div key={w.id} className="flex items-center gap-3 p-2 bg-white rounded-lg border border-gray-200">
-                        <span className="text-sm text-gray-700 flex-1">{w.name}</span>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          placeholder="0"
-                          value={warehouseInitialStocks[w.id] || ''}
-                          onChange={e => {
-                            const value = e.target.value.replace(',', '.')
-                            setWarehouseInitialStocks(prev => ({ ...prev, [w.id]: value }))
-                          }}
-                          className="w-24 px-3 py-1.5 text-sm text-center border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
-                        />
-                        <span className="text-xs text-gray-400 w-12">{formData.purchaseUnit}</span>
+              {(() => {
+                const activeWhs = warehouses.filter(w => w.isActive !== false)
+                const showPerWarehouse = activeWhs.length > 0 &&
+                  (!showEditModal || (selectedIngredient?.warehouseStocks?.length || 0) > 0)
+                // Stock bloqueado: al editar con la edición manual desactivada (como productos).
+                const stockLocked = showEditModal && !manualStockEditOn
+
+                if (stockLocked) {
+                  return (
+                    <div className="col-span-full">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Stock actual</label>
+                      {showPerWarehouse ? (
+                        <div className="space-y-2">
+                          {activeWhs.map(w => (
+                            <div key={w.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg border border-gray-200">
+                              <span className="text-sm text-gray-700 flex-1">{w.name}</span>
+                              <span className="text-sm font-medium text-gray-900 w-24 text-center">
+                                {parseFloat(warehouseInitialStocks[w.id] || 0)}
+                              </span>
+                              <span className="text-xs text-gray-400 w-12">{formData.purchaseUnit}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg border border-gray-200">
+                          <span className="text-sm font-medium text-gray-900">
+                            {parseFloat(formData.currentStock || 0)} {formData.purchaseUnit}
+                          </span>
+                        </div>
+                      )}
+                      <p className="mt-2 text-xs text-gray-500">
+                        El stock se ingresa por <strong>Compras</strong> y se ajusta desde <strong>Inventario</strong> (mermas y transferencias).
+                        Para editarlo a mano, activa <em>"Permitir editar stock manualmente"</em> en Configuración.
+                      </p>
+                    </div>
+                  )
+                }
+
+                if (showPerWarehouse) {
+                  return (
+                    <div className="col-span-full">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        {showEditModal ? 'Stock por Almacén' : 'Stock Inicial por Almacén'}
+                      </label>
+                      <div className="space-y-2">
+                        {activeWhs.map(w => (
+                          <div key={w.id} className="flex items-center gap-3 p-2 bg-white rounded-lg border border-gray-200">
+                            <span className="text-sm text-gray-700 flex-1">{w.name}</span>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="0"
+                              value={warehouseInitialStocks[w.id] || ''}
+                              onChange={e => {
+                                const value = e.target.value.replace(',', '.')
+                                setWarehouseInitialStocks(prev => ({ ...prev, [w.id]: value }))
+                              }}
+                              className="w-24 px-3 py-1.5 text-sm text-center border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                            />
+                            <span className="text-xs text-gray-400 w-12">{formData.purchaseUnit}</span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <Input
-                  label="Stock Inicial"
-                  type="text"
-                  inputMode="decimal"
-                  placeholder="Ej: 50"
-                  value={formData.currentStock}
-                  onChange={e => {
-                    const value = e.target.value.replace(',', '.')
-                    setFormData({ ...formData, currentStock: value })
-                  }}
-                />
-              )}
+                      {showEditModal && (
+                        <p className="mt-2 text-xs text-gray-500">
+                          Editar estos valores ajusta el stock real y registra un movimiento de ajuste en el historial.
+                        </p>
+                      )}
+                    </div>
+                  )
+                }
+
+                return (
+                  <Input
+                    label={showEditModal ? 'Stock actual' : 'Stock Inicial'}
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="Ej: 50"
+                    value={formData.currentStock}
+                    onChange={e => {
+                      const value = e.target.value.replace(',', '.')
+                      setFormData({ ...formData, currentStock: value })
+                    }}
+                  />
+                )
+              })()}
             </div>
           )}
 

@@ -3403,14 +3403,14 @@ export default function Settings() {
                       : '✗ Deshabilitado: Los productos no mostrarán información de ubicación física.'}
                   />
 
-                  {/* Edición manual de stock desde el modal de productos */}
+                  {/* Edición manual de stock desde el modal de productos e insumos */}
                   <SettingToggle
                     checked={enableManualStockEdit}
                     onChange={(e) => setEnableManualStockEdit(e.target.checked)}
-                    title="Permitir editar stock manualmente desde productos"
+                    title="Permitir editar stock manualmente (productos e insumos)"
                     description={enableManualStockEdit
-                      ? '✓ Habilitado: Al editar un producto podrás ajustar su stock por almacén (y por variante si tiene). Cada ajuste queda registrado como movimiento auditable. Los productos con control de lotes se siguen modificando desde Control de Lotes para preservar la trazabilidad.'
-                      : '✗ Deshabilitado: El stock solo se modifica vía ventas, compras, transferencias y movimientos en su página específica. Recomendado para mantener historial limpio.'}
+                      ? '✓ Habilitado: Al editar un producto o insumo podrás ajustar su stock por almacén (y por variante si tiene). Cada ajuste queda registrado como movimiento auditable. Los productos con control de lotes se siguen modificando desde Control de Lotes para preservar la trazabilidad.'
+                      : '✗ Deshabilitado: El stock de productos e insumos solo se modifica vía ventas, compras, transferencias y movimientos en su página específica. Recomendado para mantener historial limpio.'}
                   />
 
                   {/* Control de Lotes y Vencimientos - solo para modos que no son farmacia */}

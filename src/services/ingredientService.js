@@ -264,6 +264,90 @@ export const updateIngredient = async (businessId, ingredientId, updates) => {
 }
 
 /**
+ * Actualiza un insumo desde el modal "Editar Insumo" cuando maneja stock POR ALMACÉN.
+ *
+ * Reconstruye `warehouseStocks` (la fuente de verdad que lee Inventario) + `currentStock`
+ * a partir del stock editado por almacén, y registra un movimiento `adjustment` (con signo)
+ * por cada almacén cuyo stock cambió, para auditoría. Todo en un solo batch (atómico).
+ *
+ * Espeja la edición manual de stock de productos (ver Products.jsx _manualStockChanges).
+ * Antes el modal de editar insumo escribía solo en `currentStock`, que Inventario ignora
+ * cuando existe `warehouseStocks` → la edición "no hacía nada".
+ *
+ * @param {Object} params
+ * @param {Object} params.fields - campos no-stock ya parseados (name, category, purchaseUnit, averageCost, minimumStock, supplier, trackStock)
+ * @param {Array<{warehouseId, stock}>} params.oldWarehouseStocks - warehouseStocks actuales del insumo
+ * @param {Object<string, (number|string)>} params.newStockByWarehouse - mapa warehouseId -> nuevo stock (almacenes activos mostrados)
+ * @param {string} [params.reason]
+ */
+export const updateIngredientWithWarehouseStock = async (
+  businessId,
+  ingredientId,
+  { fields = {}, oldWarehouseStocks = [], newStockByWarehouse = {}, reason = 'Ajuste manual desde edición de insumo' }
+) => {
+  try {
+    const batch = writeBatch(db)
+    const ingredientRef = doc(db, 'businesses', businessId, 'ingredients', ingredientId)
+
+    // Partir de los almacenes actuales y aplicar solo los cambios reales (preserva
+    // almacenes no mostrados, p. ej. desactivados con stock).
+    const ws = Array.isArray(oldWarehouseStocks) ? oldWarehouseStocks.map(w => ({ ...w })) : []
+    const changes = []
+
+    for (const [warehouseId, rawVal] of Object.entries(newStockByWarehouse)) {
+      const newVal = parseFloat(rawVal)
+      if (Number.isNaN(newVal)) continue
+      const idx = ws.findIndex(x => x.warehouseId === warehouseId)
+      const oldVal = idx >= 0 ? (ws[idx].stock || 0) : 0
+      if (newVal === oldVal) continue
+      if (idx >= 0) ws[idx] = { ...ws[idx], stock: newVal }
+      else ws.push({ warehouseId, stock: newVal, minStock: 0 })
+      changes.push({ warehouseId, oldVal, newVal })
+    }
+
+    const currentStock = ws.reduce((sum, x) => sum + (x.stock || 0), 0)
+
+    batch.update(ingredientRef, {
+      ...fields,
+      warehouseStocks: ws,
+      currentStock,
+      updatedAt: Timestamp.now()
+    })
+
+    // Un movimiento de ajuste por almacén cambiado (quantity con signo, igual que el
+    // "Recuento de inventario" de productos → cuadra Entradas/Salidas/Balance).
+    const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
+    for (const ch of changes) {
+      const delta = ch.newVal - ch.oldVal
+      if (delta === 0) continue
+      batch.set(doc(movementsRef), {
+        ingredientId,
+        ingredientName: fields.name || '',
+        // productName: para que la página de Movimientos (que lee productName) muestre el nombre.
+        productName: fields.name || '',
+        isIngredient: true,
+        type: 'adjustment',
+        quantity: delta,
+        unit: fields.purchaseUnit || null,
+        warehouseId: ch.warehouseId,
+        reason,
+        referenceType: 'manual_adjustment',
+        referenceId: ingredientId,
+        beforeStock: ch.oldVal,
+        afterStock: ch.newVal,
+        createdAt: Timestamp.now()
+      })
+    }
+
+    await batch.commit()
+    return { success: true, currentStock }
+  } catch (error) {
+    console.error('Error al actualizar insumo con stock por almacén:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * Eliminar un ingrediente
  */
 export const deleteIngredient = async (businessId, ingredientId) => {
