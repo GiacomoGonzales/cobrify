@@ -46,6 +46,13 @@ const getAllSubcategoryIds = (categories, parentId) => {
   return ids
 }
 
+// Formatea cantidades de insumo: hasta 3 decimales, sin ceros sobrantes (ej. 0.15, 2, 1.5).
+const fmtQty = (n) => {
+  const num = Number(n)
+  if (!Number.isFinite(num)) return '0'
+  return String(parseFloat(num.toFixed(3)))
+}
+
 export default function Production() {
   const { user, getBusinessId, filterBranchesByAccess, allowedBranches, isDemoMode, demoData, businessSettings } = useAppContext()
   const toast = useToast()
@@ -1055,6 +1062,31 @@ export default function Production() {
                             </button>
                           </div>
                         </div>
+
+                        {/* Desglose de insumos faltantes: muestra qué falta y cuánto para guiar al usuario */}
+                        {item.hasRecipe && !item.isCheckingRecipe && item.recipeInfo &&
+                         !item.recipeInfo.hasStock && item.recipeInfo.missingIngredients?.length > 0 && (
+                          <div className="mt-2 rounded-md border border-red-100 bg-red-50 p-2">
+                            <p className="text-[11px] font-semibold text-red-700 mb-1 flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                              Faltan insumos para producir {item.quantity}:
+                            </p>
+                            <ul className="space-y-0.5">
+                              {item.recipeInfo.missingIngredients.map((ing, idx) => {
+                                const short = Math.max(0, (ing.needed || 0) - (ing.available || 0))
+                                return (
+                                  <li key={idx} className="text-[11px] text-red-600 flex items-start gap-1">
+                                    <span className="text-red-400 leading-4">•</span>
+                                    <span>
+                                      <span className="font-medium">{ing.name}</span>: necesitas {fmtQty(ing.needed)} {ing.unit}, tienes {fmtQty(ing.available)} {ing.unit}
+                                      {short > 0 && <span className="font-medium"> · faltan {fmtQty(short)} {ing.unit}</span>}
+                                    </span>
+                                  </li>
+                                )
+                              })}
+                            </ul>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
