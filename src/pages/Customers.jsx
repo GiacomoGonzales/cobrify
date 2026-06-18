@@ -122,12 +122,24 @@ export default function Customers() {
       }
 
       const businessId = getBusinessId()
-      const result = await getCustomersWithStats(businessId)
-      if (result.success) {
-        setCustomers(result.data || [])
+      // PERF cuentas grandes: la tabla aparece al instante con la lista de
+      // clientes (getCustomers, ~liviano). Las estadísticas (nº de compras y
+      // total gastado) recorren TODAS las facturas, así que se calculan en
+      // SEGUNDO PLANO y se fusionan cuando llegan, sin bloquear la página.
+      const baseResult = await getCustomers(businessId)
+      if (baseResult.success) {
+        setCustomers(baseResult.data || [])
       } else {
-        console.error('Error al cargar clientes:', result.error)
+        console.error('Error al cargar clientes:', baseResult.error)
       }
+      setIsLoading(false)
+
+      getCustomersWithStats(businessId)
+        .then(statsResult => {
+          if (statsResult.success) setCustomers(statsResult.data || [])
+        })
+        .catch(err => console.error('Error al cargar estadísticas de clientes:', err))
+      return
     } catch (error) {
       console.error('Error:', error)
     } finally {

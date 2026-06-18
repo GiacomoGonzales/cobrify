@@ -168,6 +168,35 @@ export const getRecentInvoices = async (userId, sinceDate) => {
 }
 
 /**
+ * Obtener facturas paginadas (más recientes primero). Para cuentas grandes:
+ * evita descargar las 20k+ facturas de una. Usa solo el índice de createdAt
+ * (single-field, existe por defecto) → sin índices compuestos que desplegar.
+ *
+ * @param {string} userId
+ * @param {{ pageSize?: number, startAfterDoc?: any }} options
+ * @returns {{ success, data, lastDoc, hasMore }}
+ */
+export const getInvoicesPage = async (userId, { pageSize = 100, startAfterDoc = null } = {}) => {
+  try {
+    const constraints = [orderBy('createdAt', 'desc')]
+    if (startAfterDoc) constraints.push(startAfter(startAfterDoc))
+    constraints.push(limit(pageSize))
+    const q = query(collection(db, 'businesses', userId, 'invoices'), ...constraints)
+    const snap = await getDocs(q)
+    const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+    return {
+      success: true,
+      data,
+      lastDoc: snap.docs[snap.docs.length - 1] || null,
+      hasMore: snap.docs.length === pageSize,
+    }
+  } catch (error) {
+    console.error('Error al obtener facturas paginadas:', error)
+    return { success: false, error: error.message, data: [] }
+  }
+}
+
+/**
  * Obtener facturas de un usuario
  */
 export const getInvoices = async userId => {
@@ -636,28 +665,40 @@ export const getCustomersWithStats = async userId => {
     const customers = customersResult.data || []
     const invoices = invoicesResult.data || []
 
-    // Calcular estadísticas por cliente
+    // PERF: en cuentas grandes (20k+ facturas, 2k+ clientes) el cálculo anterior
+    // era O(clientes × facturas) = decenas de millones de comparaciones (colgaba
+    // la página). Ahora recorremos las facturas UNA sola vez (O(n)) acumulando en
+    // dos Maps (por customerId y por documentNumber) y luego asignamos a cada
+    // cliente con lookups O(1).
+    const byId = new Map()
+    const byDoc = new Map()
+    for (const inv of invoices) {
+      const total = inv.total || 0
+      if (inv.customerId) {
+        const cur = byId.get(inv.customerId) || { count: 0, total: 0 }
+        cur.count += 1; cur.total += total
+        byId.set(inv.customerId, cur)
+      }
+      const invDoc = inv.customer?.documentNumber
+      if (invDoc && invDoc !== '00000000' && invDoc !== '') {
+        const cur = byDoc.get(invDoc) || { count: 0, total: 0 }
+        cur.count += 1; cur.total += total
+        byDoc.set(invDoc, cur)
+      }
+    }
+
     const customersWithStats = customers.map(customer => {
-      // Filtrar facturas del cliente - por customerId (principal) o documentNumber (fallback)
-      const customerInvoices = invoices.filter(invoice => {
-        // Prioridad 1: comparar por customerId (vinculación directa)
-        if (invoice.customerId && invoice.customerId === customer.id) return true
-        // Prioridad 2: comparar por documentNumber (solo si es un documento real, no genérico)
-        const docNum = customer.documentNumber
-        if (docNum && docNum !== '00000000' && docNum !== '' && invoice.customer?.documentNumber === docNum) return true
-        return false
-      })
-
-      // Calcular total gastado
-      const totalSpent = customerInvoices.reduce(
-        (sum, invoice) => sum + (invoice.total || 0),
-        0
-      )
-
+      // Preferir vinculación directa por customerId; si no, por documentNumber.
+      // (No sumamos ambos para no duplicar cuando la factura trae los dos.)
+      const stat = byId.get(customer.id)
+        || (customer.documentNumber && customer.documentNumber !== '00000000' && customer.documentNumber !== ''
+              ? byDoc.get(customer.documentNumber)
+              : null)
+        || { count: 0, total: 0 }
       return {
         ...customer,
-        ordersCount: customerInvoices.length,
-        totalSpent: totalSpent,
+        ordersCount: stat.count,
+        totalSpent: stat.total,
       }
     })
 

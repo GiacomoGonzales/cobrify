@@ -8,7 +8,7 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Alert from '@/components/ui/Alert'
-import { getInvoices, createInvoice, getDocumentSeries, sendInvoiceToSunat, getCompanySettings } from '@/services/firestoreService'
+import { getInvoicesPage, createInvoice, getDocumentSeries, sendInvoiceToSunat, getCompanySettings } from '@/services/firestoreService'
 import { formatCurrency } from '@/lib/utils'
 import { normalizeCurrency, convertToBase } from '@/utils/currency'
 import { getAuth } from 'firebase/auth'
@@ -72,7 +72,8 @@ export default function CreateDebitNote() {
     setIsLoading(true)
     try {
       const [invoicesResult, seriesResult, settingsResult] = await Promise.all([
-        getInvoices(user.uid),
+        // PERF: solo las 2000 facturas más recientes (no las 20k+ del historial).
+        getInvoicesPage(user.uid, { pageSize: 2000 }),
         getDocumentSeries(user.uid),
         getCompanySettings(user.uid)
       ])
