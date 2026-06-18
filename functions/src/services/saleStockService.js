@@ -263,6 +263,26 @@ export async function processSaleStock(db, FieldValue, payload) {
   const docTypeName = documentType === 'boleta' ? 'Boleta' : documentType === 'factura' ? 'Factura' : 'Nota de Venta'
   const batchBreakdownByCartKey = {}
 
+  // IDEMPOTENCIA por invoiceId: si ya hay movimientos de venta para esta
+  // factura, NO volver a descontar. Esto cubre los casos de doble descuento
+  // por reintento automatico de Firebase callable, timeout falso (el server
+  // termino pero el cliente recibio error y reintento) o doble clic que
+  // burle el guard del cliente. Sin esto, el bug reportado (1 coca = doble
+  // salida) se repite ante cualquiera de esos escenarios.
+  // La verificacion va FUERA de la transaccion (cualquier resultado ya
+  // committeado es visible y no necesitamos write lock para detectarlo).
+  if (invoiceId) {
+    const existing = await movementsCol
+      .where('referenceType', '==', 'invoice')
+      .where('referenceId', '==', invoiceId)
+      .limit(1)
+      .get()
+    if (!existing.empty) {
+      console.warn(`[processSaleStock] IDEMPOTENCY: invoiceId=${invoiceId} ya tenia movimientos de venta. Saltando descuento para evitar doble salida.`)
+      return { batchBreakdownByCartKey: {}, alreadyProcessed: true }
+    }
+  }
+
   await db.runTransaction(async (tx) => {
     // 1 sola lectura de TODOS los productos (getAll = 1 round-trip server-local)
     const snaps = await tx.getAll(...productRefs)

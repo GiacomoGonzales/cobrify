@@ -6070,6 +6070,30 @@ export default function POS() {
               }
 
               try {
+              // IDEMPOTENCIA: antes de descontar en cliente, verificar si el servidor
+              // YA CREÓ movimientos de stock para esta factura (caso clásico: timeout
+              // falso → el cliente recibe error pero el server sí termino la tx).
+              // Sin esto, el fallback descuenta otra vez → bug "1 coca = doble salida".
+              if (bgInvoiceId) {
+                try {
+                  const { collection: _col, query: _q, where: _w, limit: _lim, getDocs: _gd } = await import('firebase/firestore')
+                  const { db: _fdb } = await import('@/lib/firebase')
+                  const _movRef = _col(_fdb, 'businesses', businessId, 'stockMovements')
+                  const _existing = await _gd(_q(_movRef,
+                    _w('referenceType', '==', 'invoice'),
+                    _w('referenceId', '==', bgInvoiceId),
+                    _lim(1)
+                  ))
+                  if (!_existing.empty) {
+                    console.warn(`[POS fallback] IDEMPOTENCY: invoiceId=${bgInvoiceId} ya tiene movimientos. Aborto descuento en cliente para evitar doble salida.`)
+                    _stockMs = Date.now() - _stockT0
+                    return
+                  }
+                } catch (idemErr) {
+                  console.warn('[POS fallback] No se pudo verificar idempotencia (sigo con el descuento):', idemErr)
+                }
+              }
+
               // FALLBACK (cliente): Map para almacenar desglose de lotes por item (para actualizar factura)
               const batchBreakdownByItemId = {}
 
