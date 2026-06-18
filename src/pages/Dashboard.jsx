@@ -22,14 +22,13 @@ import { useAppContext } from '@/hooks/useAppContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
-import Alert from '@/components/ui/Alert'
 import SalesChart from '@/components/charts/SalesChart'
 import MonthlyDailySalesChart from '@/components/charts/MonthlyDailySalesChart'
 import YearlyMonthlyChart from '@/components/charts/YearlyMonthlyChart'
 import PaymentMethodsPieChart from '@/components/charts/PaymentMethodsPieChart'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getDocumentTotalInBase, isMultiCurrencyEnabled, normalizeCurrency } from '@/utils/currency'
-import { getRecentInvoices, getProducts } from '@/services/firestoreService'
+import { getRecentInvoices } from '@/services/firestoreService'
 import { useBranding } from '@/contexts/BrandingContext'
 import { getTables } from '@/services/tableService'
 import { useLocationAccess } from '@/utils/locationAccess'
@@ -47,7 +46,6 @@ export default function Dashboard() {
   const { branding } = useBranding()
   const location = useLocation()
   const [invoices, setInvoices] = useState([])
-  const [products, setProducts] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   // El filtro de sucursal del Dashboard usa el selector GLOBAL del Navbar (branchScope):
   // 'all' = Todas | 'main' = Principal | <branchId>. Ya no hay selector propio aquí.
@@ -252,7 +250,6 @@ export default function Dashboard() {
     if (isDemoMode && demoData) {
       // Load demo data
       setInvoices(demoData.invoices || [])
-      setProducts(demoData.products || [])
       // El monto de mesas abiertas se calcula en el useEffect dedicado (respeta filterBranch).
       setIsLoading(false)
       return
@@ -274,7 +271,6 @@ export default function Dashboard() {
       // If we need to hide data, don't load anything
       if (shouldHideData) {
         setInvoices([])
-        setProducts([])
         setIsLoading(false)
         return
       }
@@ -290,18 +286,16 @@ export default function Dashboard() {
       twoMonthsAgo.setHours(0, 0, 0, 0)
       const sinceDate = twoMonthsAgo
 
-      const [invoicesResult, productsResult] = await Promise.all([
-        getRecentInvoices(businessId, sinceDate),
-        getProducts(businessId),
-      ])
+      // PERF: solo cargamos invoices recientes (con filtro por fecha). La lista
+      // de productos YA NO se descarga acá: con 4k+ productos eran 5-15s de
+      // espera para mostrar un alert opcional de "stock bajo". El detalle vive
+      // en /inventario que ya tiene paginación y búsqueda optimizadas.
+      const invoicesResult = await getRecentInvoices(businessId, sinceDate)
 
       if (invoicesResult.success) {
         // Filtrar por sucursales/almacenes permitidos del usuario (seguridad de usuarios secundarios).
         // Sanea el estado base → KPIs, gráficos, top productos/clientes/pagos lo respetan.
         setInvoices((invoicesResult.data || []).filter(canAccess))
-      }
-      if (productsResult.success) {
-        setProducts(productsResult.data || [])
       }
 
       // El monto de mesas abiertas (modo restaurante) se calcula en un useEffect
@@ -667,20 +661,6 @@ export default function Dashboard() {
     return data
   }, [validInvoicesForSales, getDaysAgo, getStartOfTodayPeru, getInvoiceDate])
 
-  // === Productos con stock bajo (memoized) ===
-  const lowStockProducts = useMemo(() => {
-    return products.filter(p => {
-      const threshold = Number.isFinite(Number(p.minStock)) && Number(p.minStock) >= 0
-        ? Number(p.minStock)
-        : 3
-      if (p.hasVariants && p.variants?.length > 0) {
-        const totalStock = p.variants.reduce((sum, v) => sum + (v.stock || 0), 0)
-        return totalStock <= threshold
-      }
-      return p.stock !== null && p.stock <= threshold
-    })
-  }, [products])
-
   // Formatear fecha corta en zona Perú (ej: "30 mar")
   const formatShortDate = (date) => {
     return date.toLocaleDateString('es-PE', { timeZone: 'America/Lima', day: 'numeric', month: 'short' })
@@ -1037,35 +1017,6 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Low Stock Alert */}
-      {lowStockProducts.length > 0 && (
-        <Alert variant="warning" title="Productos con Stock Bajo">
-          <div className="space-y-2 mt-2">
-            {lowStockProducts.slice(0, 5).map((product, index) => (
-              <div
-                key={index}
-                className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0 text-sm"
-              >
-                <span className="font-medium text-sm">{product.name}</span>
-                <span className="text-red-600 font-semibold text-xs sm:text-sm">
-                  Stock: {product.hasVariants ? product.variants?.reduce((s, v) => s + (v.stock || 0), 0) : product.stock}
-                  {(product.hasVariants ? product.variants?.reduce((s, v) => s + (v.stock || 0), 0) === 0 : product.stock === 0) && ' - ¡Agotado!'}
-                </span>
-              </div>
-            ))}
-            {lowStockProducts.length > 5 && (
-              <p className="text-xs text-gray-600 mt-2">
-                +{lowStockProducts.length - 5} productos más con stock bajo
-              </p>
-            )}
-          </div>
-          <Link to={`${routePrefix}/productos`} className="inline-block mt-3">
-            <Button variant="outline" size="sm" className="w-full sm:w-auto">
-              Ver Inventario
-            </Button>
-          </Link>
-        </Alert>
-      )}
 
       {/* Recent Invoices */}
       <Card>
