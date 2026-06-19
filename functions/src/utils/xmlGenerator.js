@@ -1207,6 +1207,34 @@ export function generateInvoiceXML(invoiceData, businessData) {
  * - '07' = Devolución por ítem
  * - '13' = Otros conceptos
  */
+/**
+ * Fecha de emisión para SUNAT (YYYY-MM-DD) en zona horaria de Perú (America/Lima).
+ *
+ * Prioriza un string 'YYYY-MM-DD' ya provisto (lo usa tal cual, igual que la factura).
+ * Para Timestamps/Date formatea SIEMPRE en America/Lima — NUNCA con toISOString(), que
+ * devuelve UTC: al emitir entre las 7pm y medianoche (Perú = UTC-5) la fecha rodaba al
+ * día siguiente, y la NC/ND salía a SUNAT con fecha +1 respecto al PDF y al sistema.
+ */
+function resolveSunatIssueDate(dateSource) {
+  if (typeof dateSource === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateSource)) {
+    return dateSource
+  }
+  let date
+  if (dateSource?.toDate) {
+    date = dateSource.toDate()
+  } else if (dateSource) {
+    const d = new Date(dateSource)
+    date = isNaN(d.getTime()) ? new Date() : d
+  } else {
+    date = new Date()
+  }
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Lima', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date)
+  const get = (t) => parts.find((p) => p.type === t).value
+  return `${get('year')}-${get('month')}-${get('day')}`
+}
+
 export function generateCreditNoteXML(creditNoteData, businessData) {
   // Configuración de impuestos (IGV) - soporta IGV 0% para empresas exoneradas
   // Buscar taxConfig en: 1) creditNoteData.taxConfig, 2) businessData.emissionConfig.taxConfig, 3) default 18
@@ -1217,21 +1245,9 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
 
   console.log(`💰 NC - Configuración IGV: rate=${igvRate}%, exempt=${igvExempt}`)
 
-  // Formatear fecha para SUNAT (YYYY-MM-DD)
-  let issueDate
-  if (creditNoteData.issueDate?.toDate) {
-    issueDate = creditNoteData.issueDate.toDate().toISOString().split('T')[0]
-  } else if (creditNoteData.issueDate) {
-    const date = new Date(creditNoteData.issueDate)
-    if (!isNaN(date.getTime())) {
-      issueDate = date.toISOString().split('T')[0]
-    } else {
-      console.warn('⚠️ Fecha de emisión inválida, usando fecha actual')
-      issueDate = new Date().toISOString().split('T')[0]
-    }
-  } else {
-    issueDate = new Date().toISOString().split('T')[0]
-  }
+  // Fecha de emisión SUNAT (YYYY-MM-DD) en hora de Perú. Prioriza emissionDate (string
+  // local) y, si no, formatea el timestamp en America/Lima (no UTC). Ver resolveSunatIssueDate.
+  const issueDate = resolveSunatIssueDate(creditNoteData.emissionDate || creditNoteData.issueDate)
 
   // Construir XML según especificación UBL 2.1 CreditNote
   const root = create({ version: '1.0', encoding: 'UTF-8' })
@@ -1761,21 +1777,8 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
 
   console.log(`💰 ND - Configuración IGV: rate=${igvRate}%, exempt=${igvExempt}`)
 
-  // Formatear fecha para SUNAT (YYYY-MM-DD)
-  let issueDate
-  if (debitNoteData.issueDate?.toDate) {
-    issueDate = debitNoteData.issueDate.toDate().toISOString().split('T')[0]
-  } else if (debitNoteData.issueDate) {
-    const date = new Date(debitNoteData.issueDate)
-    if (!isNaN(date.getTime())) {
-      issueDate = date.toISOString().split('T')[0]
-    } else {
-      console.warn('⚠️ Fecha de emisión inválida, usando fecha actual')
-      issueDate = new Date().toISOString().split('T')[0]
-    }
-  } else {
-    issueDate = new Date().toISOString().split('T')[0]
-  }
+  // Fecha de emisión SUNAT (YYYY-MM-DD) en hora de Perú. Ver resolveSunatIssueDate.
+  const issueDate = resolveSunatIssueDate(debitNoteData.emissionDate || debitNoteData.issueDate)
 
   // Construir XML según especificación UBL 2.1 DebitNote
   const root = create({ version: '1.0', encoding: 'UTF-8' })

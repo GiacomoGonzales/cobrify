@@ -225,6 +225,9 @@ export default function CreateDebitNote() {
         // Metadata
         userId: user.uid,
         issueDate: new Date(),
+        // Fecha de emisión como string YYYY-MM-DD en hora local (Perú). El backend la usa
+        // directamente para SUNAT, evitando que toISOString()/UTC ruede al día siguiente de noche.
+        emissionDate: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })(),
 
         // Información del vendedor
         createdBy: user.uid,
