@@ -28,6 +28,11 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
   const logoScale = Math.max(0.3, Math.min(2, (Number(companySettings?.logoPrintScale) || 100) / 100))
   const ls = (n) => Math.round(n * logoScale)
 
+  // Leyenda de Amazonía (Ley 27037): se imprime en el ticket cuando el negocio
+  // está acogido (motivo de exoneración = Amazonía).
+  const _amazonReason = companySettings?.emissionConfig?.taxConfig?.exemptionReason || companySettings?.taxConfig?.exemptionReason || ''
+  const showAmazonLegend = typeof _amazonReason === 'string' && _amazonReason.toLowerCase().includes('amazon')
+
   // Función para detectar si la imagen es cuadrada
   const handleLogoLoad = (e) => {
     const img = e.target
@@ -1006,6 +1011,13 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           <span>{formatCurrency(invoice.total || 0)}</span>
         </div>
       </div>
+
+      {/* Leyenda de Amazonía (Ley 27037) */}
+      {showAmazonLegend && (
+        <div className="ticket-section" style={{ borderTop: '1px dashed #000', paddingTop: '6px', marginTop: '6px', fontWeight: 'bold', fontSize: '9px', textAlign: 'center' }}>
+          LEYENDA: BIENES TRANSFERIDOS EN LA AMAZONÍA REGIÓN SELVA PARA SER CONSUMIDOS EN LA MISMA
+        </div>
+      )}
 
       {/* Estado de Pago (para notas de venta con pagos parciales o completados) */}
       {invoice.documentType === 'nota_venta' && invoice.paymentStatus && invoice.paymentHistory && invoice.paymentHistory.length > 0 && (

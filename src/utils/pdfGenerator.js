@@ -1318,13 +1318,19 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // Altura base 55, +15 si hay descuento, +15 si hay recargo consumo, +36 si hay detracción (2 filas: detracción + neto a pagar)
   const TOTALS_SECTION_HEIGHT = (55 + (HAS_DISCOUNT ? 15 : 0) + (HAS_RECARGO_CONSUMO ? 15 : 0) + (HAS_DETRACTION ? 36 : 0)) * S
   const SON_SECTION_HEIGHT = (spacious ? 28 : 22) * S
+  // Leyenda de Amazonía (Ley 27037): se imprime debajo del "SON:" cuando el
+  // negocio está acogido (motivo de exoneración = Amazonía). Reserva su alto en
+  // el footer para no romper el salto de página.
+  const amazonReason = companySettings?.emissionConfig?.taxConfig?.exemptionReason || companySettings?.taxConfig?.exemptionReason || ''
+  const HAS_AMAZON_LEGEND = typeof amazonReason === 'string' && amazonReason.toLowerCase().includes('amazon')
+  const AMAZON_LEGEND_HEIGHT = HAS_AMAZON_LEGEND ? (20 * S) : 0
 
   // Posición Y donde termina el área de productos (empieza el pie fijo).
   // Layout vertical real del footer: SON -> max(BANCOS, TOTALES) lado a lado -> QR -> [términos opcionales].
   // Antes esta fórmula sumaba TOTALS_SECTION_HEIGHT como si fuera apilado encima del bloque bancos,
   // sobreestimando la altura del footer hasta en ~50pt y forzando saltos de página prematuros
   // (especialmente con espaciado amplio en facturas con ~12-15 productos).
-  const FOOTER_BLOCK_HEIGHT = SON_SECTION_HEIGHT + (spacious ? 12 : 5) + Math.max(TOTALS_SECTION_HEIGHT, BANK_TABLE_HEIGHT) + QR_BOX_HEIGHT + FOOTER_TEXT_HEIGHT
+  const FOOTER_BLOCK_HEIGHT = SON_SECTION_HEIGHT + AMAZON_LEGEND_HEIGHT + (spacious ? 12 : 5) + Math.max(TOTALS_SECTION_HEIGHT, BANK_TABLE_HEIGHT) + QR_BOX_HEIGHT + FOOTER_TEXT_HEIGHT
   const FOOTER_AREA_START = PAGE_HEIGHT - MARGIN_BOTTOM - FOOTER_BLOCK_HEIGHT - (spacious ? 15 : 8)
 
   // ========== 3. TABLA DE PRODUCTOS ==========
@@ -1889,6 +1895,17 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.text(letrasLines[0], MARGIN_LEFT + 28, footerY + 14)
 
   footerY += SON_SECTION_HEIGHT + (spacious ? 12 : 5)
+
+  // Leyenda de Amazonía (Ley 27037), debajo del "SON:".
+  if (HAS_AMAZON_LEGEND) {
+    doc.setFontSize(7)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...BLACK)
+    const legendLines = doc.splitTextToSize('LEYENDA: BIENES TRANSFERIDOS EN LA AMAZONÍA REGIÓN SELVA PARA SER CONSUMIDOS EN LA MISMA', CONTENT_WIDTH)
+    doc.text(legendLines, MARGIN_LEFT, footerY + 8)
+    doc.setFont('helvetica', 'normal')
+    footerY += AMAZON_LEGEND_HEIGHT
+  }
 
   // ========== FILA: BANCOS (izq) + TOTALES (der) ==========
 

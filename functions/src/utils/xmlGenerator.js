@@ -367,6 +367,17 @@ export function generateInvoiceXML(invoiceData, businessData) {
     }).txt('Operación sujeta al Sistema de Pago de Obligaciones Tributarias con el Gobierno Central')
   }
 
+  // Leyenda de AMAZONÍA (Ley 27037) - Catálogo 52 código 2001 ("Bienes
+  // transferidos en la Amazonía"). Obligatoria en operaciones exoneradas del IGV
+  // de negocios acogidos a la Ley de Promoción de la inversión en la Amazonía.
+  // Se dispara cuando el motivo de exoneración configurado del negocio es
+  // Amazonía. (OJO: 2006 es "Operación sujeta a detracción", NO Amazonía.)
+  if (exemptionReason && exemptionReason.toLowerCase().includes('amazon')) {
+    root.ele('cbc:Note', {
+      'languageLocaleID': '2001'
+    }).txt('BIENES TRANSFERIDOS EN LA AMAZONÍA REGIÓN SELVA PARA SER CONSUMIDOS EN LA MISMA')
+  }
+
   // Leyenda informativa de RETENCIÓN del IGV (cliente agente de retención). Texto libre
   // SIN languageLocaleID: no existe código de Catálogo 52 para esto y un código inválido
   // hace que SUNAT rechace (error 3289). El total NO cambia (la retención la efectúa el comprador).
