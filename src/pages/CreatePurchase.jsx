@@ -9,7 +9,7 @@ import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Alert from '@/components/ui/Alert'
-import { formatCurrency, matchesSearchQuery } from '@/lib/utils'
+import { formatCurrency, matchesSearchQuery, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import {
   isMultiCurrencyEnabled,
   getDefaultCurrency,
@@ -687,6 +687,26 @@ export default function CreatePurchase() {
     setShowSupplierDropdown(false)
   }
 
+  // Índices de búsqueda pre-normalizados (mismo patrón que el POS). Se rearman
+  // SOLO cuando cambian products/ingredients, NO en cada tecla. Sin esto, cada
+  // keystroke re-normalizaba (NFD + regex) todos los campos de los miles de
+  // productos → la búsqueda se sentía lenta con 4k+ productos.
+  const productSearchIndex = useMemo(() => {
+    const map = new Map()
+    for (const p of products) {
+      map.set(p.id, buildSearchHaystack(p.name, p.code, p.sku, p.category, p.marca))
+    }
+    return map
+  }, [products])
+
+  const ingredientSearchIndex = useMemo(() => {
+    const map = new Map()
+    for (const ing of ingredients) {
+      map.set(ing.id, buildSearchHaystack(ing.name))
+    }
+    return map
+  }, [ingredients])
+
   // Filtrar productos e ingredientes según búsqueda y modo (flexible + sin acentos)
   const getFilteredItems = (index) => {
     const search = productSearches[index] || ''
@@ -696,7 +716,7 @@ export default function CreatePurchase() {
     // Agregar productos si el modo lo permite
     if (itemMode === 'products' || itemMode === 'all') {
       const filteredProducts = products.filter(product =>
-        matchesSearchQuery(search, product.name, product.code, product.sku, product.category, product.marca)
+        matchesPrebuilt(search, productSearchIndex.get(product.id))
       ).map(p => ({ ...p, itemType: 'product' }))
       items = [...items, ...filteredProducts]
     }
@@ -704,7 +724,7 @@ export default function CreatePurchase() {
     // Agregar ingredientes si el modo lo permite
     if (itemMode === 'ingredients' || itemMode === 'all') {
       const filteredIngredients = ingredients.filter(ing =>
-        matchesSearchQuery(search, ing.name)
+        matchesPrebuilt(search, ingredientSearchIndex.get(ing.id))
       ).map(i => ({ ...i, itemType: 'ingredient' }))
       items = [...items, ...filteredIngredients]
     }
