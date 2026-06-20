@@ -90,7 +90,7 @@ import {
 import ModifierSelectorModal from '@/components/restaurant/ModifierSelectorModal'
 import { consultarDNI, consultarRUC, consultarEstablecimientos } from '@/services/documentLookupService'
 import { deductIngredients } from '@/services/ingredientService'
-import { getRecipeByProductId, checkRecipeStock, shouldDeductIngredients } from '@/services/recipeService'
+import { getRecipeByProductId, checkRecipeStock, shouldDeductIngredients, getRecipes } from '@/services/recipeService'
 import { computeProductsWithoutIngredients, hasAnyRecipe } from '@/utils/recipeAvailability'
 import { getWarehouses, getDefaultWarehouse, updateWarehouseStock, getStockInWarehouse, getTotalAvailableStock, getOrphanStock, createStockMovement } from '@/services/warehouseService'
 import { getActiveBranches, getDefaultBranch } from '@/services/branchService'
@@ -330,6 +330,10 @@ export default function POS() {
   // Se calcula lazy (después del primer paint) y sólo si `!allowNegativeStock`.
   // El badge "Sin insumos" se renderiza con base en este set.
   const [productsWithoutIngredients, setProductsWithoutIngredients] = useState(() => new Set())
+  // Map<productId, totalCost> de recetas. Se usa para congelar el costo del
+  // plato al vender (costAtSale en comprobantes). Se carga lazy y SOLO si la
+  // cuenta tiene recetas → cero overhead para las cuentas retail.
+  const [recipeCostMap, setRecipeCostMap] = useState(() => new Map())
   const [customers, setCustomers] = useState([])
   const [companySettings, setCompanySettings] = useState(null)
   const [taxConfig, setTaxConfig] = useState({ igvRate: 18, igvExempt: false, taxType: 'standard' }) // Configuración de impuestos
@@ -2633,6 +2637,30 @@ export default function POS() {
     return () => { cancelled = true; clearTimeout(handle) }
   }, [isLoading, companySettings?.allowNegativeStock, getBusinessId, isDemoMode, selectedWarehouse?.id, saleCompleted])
 
+  // Lazy: cargar el costo (totalCost) de las recetas para poder CONGELAR el
+  // costo del plato al momento de la venta (costAtSale). Igual que el efecto
+  // de arriba: corre después del primer paint y sólo si la cuenta tiene
+  // recetas → cero overhead para cuentas retail. En demo no aplica.
+  React.useEffect(() => {
+    if (isLoading || isDemoMode) return
+    const businessId = getBusinessId()
+    if (!businessId) return
+    let cancelled = false
+    const handle = setTimeout(async () => {
+      if (cancelled) return
+      const has = await hasAnyRecipe(businessId)
+      if (cancelled || !has) return
+      const result = await getRecipes(businessId)
+      if (cancelled || !result?.success) return
+      const map = new Map()
+      for (const r of (result.data || [])) {
+        if (r.productId) map.set(r.productId, Number(r.totalCost) || 0)
+      }
+      setRecipeCostMap(map)
+    }, 0)
+    return () => { cancelled = true; clearTimeout(handle) }
+  }, [isLoading, isDemoMode, getBusinessId, saleCompleted])
+
   // useDeferredValue mantiene el <input> responsivo aunque el filtro tarde.
   // React renderiza el input con la última tecla de inmediato, y el filter
   // se procesa "low priority" un tick después. Sensación instantánea con 4k+ productos.
@@ -3526,6 +3554,48 @@ export default function POS() {
       out.push({ key, label: businessSettings?.priceLabels?.[key] || def, value })
     }
     return out
+  }
+
+  // Costo histórico del item al momento de la venta ("costAtSale").
+  //
+  // Los reportes de margen valorizan cada venta con el `cost` ACTUAL del
+  // producto en el catálogo. Si el dueño edita el producto después de vender
+  // (cambia la unidad, entra una compra que reescribe el costo promedio, lo
+  // ajusta a mano), todos los reportes históricos se "redibujan" con el costo
+  // nuevo → márgenes absurdos en ventas viejas. Para evitarlo, congelamos el
+  // costo en el comprobante.
+  //
+  // El valor se devuelve POR UNIDAD de `quantity` (ya incluye el factor de
+  // presentación), para que el reporte haga `costAtSale * quantity` sin más.
+  // Devuelve null cuando no se puede determinar (producto personalizado, sin
+  // costo registrado, o con receta): en esos casos el reporte usa su fallback
+  // (costo de catálogo / receta actual).
+  const computeItemCostAtSale = (item) => {
+    // Productos personalizados / servicios ad-hoc no existen en el catálogo.
+    const itemId = item.id || item.productId
+    if (item.isCustom || (typeof itemId === 'string' && (itemId.startsWith('custom-') || itemId.startsWith('appointment-')))) {
+      return null
+    }
+    const product = products.find(p => p.id === itemId)
+    if (!product) return null
+    const factor = item.presentationFactor || 1
+    // Plato con receta: congelar el costo de la receta (costo de insumos a la
+    // fecha) en vez del costo manual del producto. Prioridad sobre product.cost
+    // porque para platos el costo real lo da la receta. Si la receta aún no
+    // cargó (carrera con el efecto lazy), cae al costo del producto abajo.
+    if (recipeCostMap.has(itemId)) {
+      const recipeCost = recipeCostMap.get(itemId)
+      if (recipeCost > 0) return Math.round(recipeCost * factor * 1e6) / 1e6
+    }
+    // Variante: preferir el costo propio de la variante, caer al del padre.
+    let baseCost = parseFloat(product.cost) || 0
+    if (item.isVariant && item.variantSku && Array.isArray(product.variants)) {
+      const variant = product.variants.find(v => v.sku === item.variantSku)
+      const variantCost = parseFloat(variant?.cost)
+      if (Number.isFinite(variantCost) && variantCost > 0) baseCost = variantCost
+    }
+    if (!(baseCost > 0)) return null // sin costo conocido → que el reporte decida
+    return Math.round(baseCost * factor * 1e6) / 1e6
   }
 
   // Manejar selección de precio desde el modal
@@ -5188,6 +5258,7 @@ export default function POS() {
           quantity: item.quantity,
           unit: item.unit || 'NIU',
           unitPrice: item.price,
+          ...(() => { const c = computeItemCostAtSale(item); return c != null ? { costAtSale: c } : {} })(), // costo congelado al momento de la venta (reportes de margen)
           ...(item.imageUrl && { imageUrl: item.imageUrl }), // imagen del producto para el PDF de comprobante (opción showImagesInInvoices)
           ...(currency === 'USD' && Number(item.basePrice) > 0 && {
             basePrice: Number(item.basePrice),
@@ -5394,6 +5465,7 @@ export default function POS() {
         quantity: item.quantity,
         unit: item.unit || 'NIU',
         unitPrice: item.price,
+        ...(() => { const c = computeItemCostAtSale(item); return c != null ? { costAtSale: c } : {} })(), // costo congelado al momento de la venta (reportes de margen)
         ...(item.imageUrl && { imageUrl: item.imageUrl }), // imagen del producto para el PDF de comprobante (opción showImagesInInvoices)
         // Multi-divisa: persistir basePrice (PEN exacto) cuando la venta es
         // USD, para que NC/ND/reportes futuros puedan reconstruir el

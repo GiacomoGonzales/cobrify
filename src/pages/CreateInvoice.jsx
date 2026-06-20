@@ -323,16 +323,25 @@ export default function CreateInvoice() {
 
     try {
       // 1. Preparar items de la factura
-      const items = invoiceItems.map(item => ({
-        productId: item.productId || '',
-        code: products.find(p => p.id === item.productId)?.code || '',
-        name: item.name,
-        quantity: parseFloat(item.quantity),
-        unitPrice: parseFloat(item.unitPrice),
-        unit: item.unit,
-        subtotal: calculateItemTotal(item),
-        taxAffectation: item.taxAffectation || '10',
-      }))
+      const items = invoiceItems.map(item => {
+        // Costo congelado al momento de la venta (reportes de margen): se guarda
+        // el costo actual del producto del catálogo para que editarlo después no
+        // descuadre el histórico. Esta página es estructura plana (sin
+        // presentaciones/variantes), así que el costo va por unidad directo.
+        const product = products.find(p => p.id === item.productId)
+        const baseCost = parseFloat(product?.cost) || 0
+        return {
+          productId: item.productId || '',
+          code: product?.code || '',
+          name: item.name,
+          quantity: parseFloat(item.quantity),
+          unitPrice: parseFloat(item.unitPrice),
+          unit: item.unit,
+          subtotal: calculateItemTotal(item),
+          taxAffectation: item.taxAffectation || '10',
+          ...(baseCost > 0 && { costAtSale: Math.round(baseCost * 1e6) / 1e6 }),
+        }
+      })
 
       // 2. Preparar datos de la factura (SIN número - se genera atómicamente)
       const invoiceData = {

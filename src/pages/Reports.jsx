@@ -390,22 +390,39 @@ export default function Reports() {
   }, [locationRestricted, allowedWarehouseIds, hasMainBranchAccess])
 
   // Función para calcular el costo de un item
+  // Aplica `presentationFactor` para que vender por presentación (caja/pack/etc.)
+  // no descalibre el costo: `product.cost` está en unidad base, `quantity` está
+  // en la unidad de la presentación → multiplicar por el factor da el costo real.
   const calculateItemCost = useCallback((item) => {
     const productId = item.productId || item.id
     const quantity = item.quantity || 0
+    const factor = item.presentationFactor || 1
 
-    // Buscar si el producto tiene receta (prioridad)
-    const recipe = recipes.find(r => r.productId === productId)
-
-    if (recipe) {
-      // Usar costo de la receta (calculado de ingredientes)
-      return (recipe.totalCost || 0) * quantity
-    } else {
-      // Si no tiene receta, usar costo manual del producto
-      const product = products.find(p => p.id === productId)
-      return (product?.cost || 0) * quantity
+    // Costo congelado al momento de la venta (Fase 2): es el más fiable — no se
+    // ve afectado por ediciones posteriores del producto NI por recálculos de
+    // receta. Tiene prioridad sobre todo. Ya viene por unidad de `quantity`
+    // (incluye el factor de presentación) → no multiplicar por factor.
+    if (typeof item.costAtSale === 'number') {
+      return item.costAtSale * quantity
     }
+    // Fallback receta (ventas previas a Fase 2): costo de la receta actual.
+    const recipe = recipes.find(r => r.productId === productId)
+    if (recipe) {
+      return (recipe.totalCost || 0) * quantity * factor
+    }
+    // Fallback final: costo ACTUAL del producto en catálogo.
+    const product = products.find(p => p.id === productId)
+    return (product?.cost || 0) * quantity * factor
   }, [products, recipes])
+
+  // Detecta si un item se agregó como "producto personalizado" en el POS
+  // (no existe en el catálogo). Convención del POS: `id: custom-{ts}` para
+  // productos libres y `id: appointment-...` para citas veterinarias.
+  // Estos items no tienen `cost` registrado → no se puede saber el margen real.
+  const isCustomItem = useCallback((item) => {
+    const id = item.productId || item.id
+    return typeof id === 'string' && (id.startsWith('custom-') || id.startsWith('appointment-'))
+  }, [])
 
   // Filtrar facturas por rango de fecha y calcular costos
   const filteredInvoices = useMemo(() => {
@@ -446,14 +463,30 @@ export default function Reports() {
 
     const addCostCalculations = (invoice) => {
       let totalCost = 0
+      let hasCustomItems = false
+      let hasCatalogItems = false
       invoice.items?.forEach(item => {
+        if (isCustomItem(item)) {
+          hasCustomItems = true
+        } else {
+          hasCatalogItems = true
+        }
         totalCost += calculateItemCost(item)
       })
+      const profit = (invoice.total || 0) - totalCost
+      const profitMargin = invoice.total > 0 ? (profit / invoice.total) * 100 : 0
+      // Banderas para la UI: si TODO es personalizado no hay costo registrado;
+      // si el margen es muy negativo probablemente el `cost` del producto está
+      // descalibrado (cambio de unidad / costo editado a mano / presentación mal).
+      const allItemsCustom = hasCustomItems && !hasCatalogItems
+      const marginUnreliable = !allItemsCustom && profitMargin < -100
       return {
         ...invoice,
         totalCost,
-        profit: (invoice.total || 0) - totalCost,
-        profitMargin: invoice.total > 0 ? ((invoice.total - totalCost) / invoice.total) * 100 : 0
+        profit,
+        profitMargin,
+        allItemsCustom,
+        marginUnreliable,
       }
     }
 
@@ -508,7 +541,7 @@ export default function Reports() {
         return invoiceDate >= filterDate
       })
       .map(addCostCalculations)
-  }, [invoices, dateRange, customStartDate, customEndDate, calculateItemCost, filterBranch, canAccess])
+  }, [invoices, dateRange, customStartDate, customEndDate, calculateItemCost, isCustomItem, filterBranch, canAccess])
 
   // Función helper para calcular revenue del período anterior
   const getPreviousPeriodRevenue = useCallback(() => {
@@ -590,19 +623,21 @@ export default function Reports() {
       invoice.items?.forEach(item => {
         const productId = item.productId || item.id
         const quantity = item.quantity || 0
+        const factor = item.presentationFactor || 1
 
-        // Buscar si el producto tiene receta (prioridad)
-        const recipe = recipes.find(r => r.productId === productId)
-
-        if (recipe) {
-          // Usar costo de la receta (calculado de ingredientes)
-          const cost = recipe.totalCost || 0
-          totalCost += cost * quantity
+        // Costo congelado al momento de la venta (Fase 2): prioridad sobre todo
+        if (typeof item.costAtSale === 'number') {
+          totalCost += item.costAtSale * quantity
         } else {
-          // Si no tiene receta, usar costo manual del producto
-          const product = products.find(p => p.id === productId)
-          const cost = product?.cost || 0
-          totalCost += cost * quantity
+          const recipe = recipes.find(r => r.productId === productId)
+          if (recipe) {
+            // Fallback receta: costo calculado de ingredientes
+            totalCost += (recipe.totalCost || 0) * quantity * factor
+          } else {
+            // Fallback final: costo actual del producto en catálogo
+            const product = products.find(p => p.id === productId)
+            totalCost += (product?.cost || 0) * quantity * factor
+          }
         }
       })
     })
@@ -677,14 +712,20 @@ export default function Reports() {
 
         // Calcular costo del producto (mismo cálculo que utilidad total)
         let itemCost = 0
-        const recipe = recipes.find(r => r.productId === productId)
-        if (recipe) {
-          // Usar costo de la receta (para productos elaborados)
-          itemCost = (recipe.totalCost || 0) * quantity
+        const factor = item.presentationFactor || 1
+        if (typeof item.costAtSale === 'number') {
+          // Costo congelado al momento de la venta (Fase 2): prioridad sobre todo
+          itemCost = item.costAtSale * quantity
         } else {
-          // Si no tiene receta, buscar costo del producto
-          const product = products.find(p => p.id === productId)
-          itemCost = (product?.cost || 0) * quantity
+          const recipe = recipes.find(r => r.productId === productId)
+          if (recipe) {
+            // Fallback receta (productos elaborados)
+            itemCost = (recipe.totalCost || 0) * quantity * factor
+          } else {
+            // Fallback final: costo actual del producto
+            const product = products.find(p => p.id === productId)
+            itemCost = (product?.cost || 0) * quantity * factor
+          }
         }
         productSales[key].cost = Number((productSales[key].cost + itemCost).toFixed(2))
       })
@@ -842,11 +883,16 @@ export default function Reports() {
 
         // Calcular costo
         let itemCost = 0
-        const recipe = recipes.find(r => r.productId === productId)
-        if (recipe) {
-          itemCost = (recipe.totalCost || 0) * quantity
-        } else if (product) {
-          itemCost = (product.cost || 0) * quantity
+        const factor = item.presentationFactor || 1
+        if (typeof item.costAtSale === 'number') {
+          itemCost = item.costAtSale * quantity
+        } else {
+          const recipe = recipes.find(r => r.productId === productId)
+          if (recipe) {
+            itemCost = (recipe.totalCost || 0) * quantity * factor
+          } else if (product) {
+            itemCost = (product.cost || 0) * quantity * factor
+          }
         }
         categoryStats[categoryName].cost = Number((categoryStats[categoryName].cost + itemCost).toFixed(2))
       })
@@ -915,11 +961,16 @@ export default function Reports() {
         brandStats[brandName].itemCount += 1
 
         let itemCost = 0
-        const recipe = recipes.find(r => r.productId === productId)
-        if (recipe) {
-          itemCost = (recipe.totalCost || 0) * quantity
-        } else if (product) {
-          itemCost = (product.cost || 0) * quantity
+        const factor = item.presentationFactor || 1
+        if (typeof item.costAtSale === 'number') {
+          itemCost = item.costAtSale * quantity
+        } else {
+          const recipe = recipes.find(r => r.productId === productId)
+          if (recipe) {
+            itemCost = (recipe.totalCost || 0) * quantity * factor
+          } else if (product) {
+            itemCost = (product.cost || 0) * quantity * factor
+          }
         }
         brandStats[brandName].cost = Number((brandStats[brandName].cost + itemCost).toFixed(2))
       })
@@ -2730,10 +2781,24 @@ export default function Reports() {
                           {getInvoiceDate(invoice) ? formatDate(getInvoiceDate(invoice)) : '-'}
                         </span>
                         <div className="flex items-center gap-3">
-                          <span className="text-green-600">+{formatCurrency(invoice.profit || 0)}</span>
-                          <span className={`font-medium ${(invoice.profitMargin || 0) >= 30 ? 'text-green-600' : (invoice.profitMargin || 0) >= 15 ? 'text-yellow-600' : 'text-red-600'}`}>
-                            {(invoice.profitMargin || 0).toFixed(1)}%
-                          </span>
+                          {invoice.allItemsCustom ? (
+                            <span className="text-gray-400" title="Venta con productos personalizados (sin costo registrado en el catálogo).">s/c</span>
+                          ) : invoice.marginUnreliable ? (
+                            <span
+                              className="text-red-600 font-medium flex items-center gap-1"
+                              title="Margen sospechoso. Posibles causas: cambiaste la unidad o el costo del producto después de la venta, o el costo del catálogo está descalibrado. Revisa el costo del producto."
+                            >
+                              <span aria-hidden="true">⚠️</span>
+                              {(invoice.profitMargin || 0).toFixed(1)}%
+                            </span>
+                          ) : (
+                            <>
+                              <span className="text-green-600">+{formatCurrency(invoice.profit || 0)}</span>
+                              <span className={`font-medium ${(invoice.profitMargin || 0) >= 30 ? 'text-green-600' : (invoice.profitMargin || 0) >= 15 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                {(invoice.profitMargin || 0).toFixed(1)}%
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -2814,21 +2879,37 @@ export default function Reports() {
                             {formatCurrency(invoice.total)}
                           </TableCell>
                           <TableCell className="text-right text-red-600">
-                            {formatCurrency(invoice.totalCost || 0)}
+                            {invoice.allItemsCustom
+                              ? <span className="text-gray-400" title="Productos personalizados sin costo registrado">—</span>
+                              : formatCurrency(invoice.totalCost || 0)}
                           </TableCell>
                           <TableCell className="text-right font-semibold text-green-600">
-                            {formatCurrency(invoice.profit || 0)}
+                            {invoice.allItemsCustom
+                              ? <span className="text-gray-400">—</span>
+                              : formatCurrency(invoice.profit || 0)}
                           </TableCell>
                           <TableCell className="text-right">
-                            <span className={`font-medium ${
-                              (invoice.profitMargin || 0) >= 30
-                                ? 'text-green-600'
-                                : (invoice.profitMargin || 0) >= 15
-                                ? 'text-yellow-600'
-                                : 'text-red-600'
-                            }`}>
-                              {(invoice.profitMargin || 0).toFixed(1)}%
-                            </span>
+                            {invoice.allItemsCustom ? (
+                              <span className="text-gray-400" title="Venta con productos personalizados (sin costo registrado en el catálogo).">s/c</span>
+                            ) : invoice.marginUnreliable ? (
+                              <span
+                                className="font-medium text-red-600 inline-flex items-center gap-1"
+                                title="Margen sospechoso. Posibles causas: cambiaste la unidad o el costo del producto después de la venta, o el costo del catálogo está descalibrado. Revisa el costo del producto."
+                              >
+                                <span aria-hidden="true">⚠️</span>
+                                {(invoice.profitMargin || 0).toFixed(1)}%
+                              </span>
+                            ) : (
+                              <span className={`font-medium ${
+                                (invoice.profitMargin || 0) >= 30
+                                  ? 'text-green-600'
+                                  : (invoice.profitMargin || 0) >= 15
+                                  ? 'text-yellow-600'
+                                  : 'text-red-600'
+                              }`}>
+                                {(invoice.profitMargin || 0).toFixed(1)}%
+                              </span>
+                            )}
                           </TableCell>
                         </TableRow>
                       )
