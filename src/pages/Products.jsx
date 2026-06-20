@@ -18,6 +18,7 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { productSchema } from '@/utils/schemas'
+import { UNITS, getUnitLabel } from '@/utils/units'
 import { formatCurrency, formatProductPrice, applyMarginToCost, matchesSearchQuery, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import {
   getProducts,
@@ -43,76 +44,8 @@ import { db } from '@/lib/firebase'
 import { printProductBarcodes, isPrinterReady } from '@/services/thermalPrinterService'
 
 // Unidades de medida SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
-const UNITS = [
-  { value: 'NIU', label: 'Unidad' },
-  { value: 'ZZ', label: 'Servicio' },
-  { value: 'KGM', label: 'Kilogramo' },
-  { value: 'GRM', label: 'Gramo' },
-  { value: 'LTR', label: 'Litro' },
-  { value: 'MTR', label: 'Metro' },
-  { value: 'MTK', label: 'Metro cuadrado' },
-  { value: 'MTQ', label: 'Metro cúbico' },
-  { value: 'BX', label: 'Caja' },
-  { value: 'DISPLAY', label: 'Display' },
-  { value: 'PK', label: 'Paquete' },
-  { value: 'SET', label: 'Juego' },
-  { value: 'HUR', label: 'Hora' },
-  { value: 'DZN', label: 'Docena' },
-  { value: 'PR', label: 'Par' },
-  { value: 'MIL', label: 'Millar' },
-  { value: 'TNE', label: 'Tonelada' },
-  { value: 'BJ', label: 'Balde' },
-  { value: 'BLL', label: 'Barril' },
-  { value: 'BG', label: 'Bolsa' },
-  { value: 'BO', label: 'Botella' },
-  { value: 'CT', label: 'Cartón' },
-  { value: 'CMK', label: 'Centímetro cuadrado' },
-  { value: 'CMQ', label: 'Centímetro cúbico' },
-  { value: 'CMT', label: 'Centímetro' },
-  { value: 'CEN', label: 'Ciento de unidades' },
-  { value: 'CY', label: 'Cilindro' },
-  { value: 'BE', label: 'Fardo' },
-  { value: 'GLL', label: 'Galón' },
-  { value: 'GLI', label: 'Galón inglés' },
-  { value: 'LEF', label: 'Hoja' },
-  { value: 'KTM', label: 'Kilómetro' },
-  { value: 'KWH', label: 'Kilovatio hora' },
-  { value: 'KT', label: 'Kit' },
-  { value: 'CA', label: 'Lata' },
-  { value: 'LBR', label: 'Libra' },
-  { value: 'MWH', label: 'Megavatio hora' },
-  { value: 'MGM', label: 'Miligramo' },
-  { value: 'MLT', label: 'Mililitro' },
-  { value: 'MMT', label: 'Milímetro' },
-  { value: 'MMK', label: 'Milímetro cuadrado' },
-  { value: 'MMQ', label: 'Milímetro cúbico' },
-  { value: 'UM', label: 'Millón de unidades' },
-  { value: 'ONZ', label: 'Onza' },
-  { value: 'PF', label: 'Paleta' },
-  { value: 'FOT', label: 'Pie' },
-  { value: 'FTK', label: 'Pie cuadrado' },
-  { value: 'FTQ', label: 'Pie cúbico' },
-  { value: 'C62', label: 'Pieza' },
-  { value: 'PG', label: 'Placa' },
-  { value: 'ST', label: 'Pliego' },
-  { value: 'INH', label: 'Pulgada' },
-  { value: 'TU', label: 'Tubo' },
-  { value: 'YRD', label: 'Yarda' },
-  { value: 'QD', label: 'Cuarto de docena' },
-  { value: 'HD', label: 'Media docena' },
-  { value: 'JG', label: 'Jarra' },
-  { value: 'JR', label: 'Frasco' },
-  { value: 'CH', label: 'Envase' },
-  { value: 'AV', label: 'Cápsula' },
-  { value: 'SA', label: 'Saco' },
-  { value: 'BT', label: 'Tornillo' },
-  { value: 'U2', label: 'Tableta/Blister' },
-  { value: 'DZP', label: 'Docena de paquetes' },
-  { value: 'HT', label: 'Media hora' },
-  { value: 'RL', label: 'Carrete' },
-  { value: 'SEC', label: 'Segundo' },
-  { value: 'RD', label: 'Varilla' },
-]
+// UNITS y getUnitLabel viven ahora en '@/utils/units' (reusados por Inventario,
+// historial de movimientos, etc.).
 
 // Helper functions for category hierarchy
 const migrateLegacyCategories = (cats) => {
@@ -232,6 +165,11 @@ export default function Products() {
   const [showExpiringOnly, setShowExpiringOnly] = useState(false) // Filtro de vencimiento
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState(null)
+  // Confirmación al cambiar la unidad de medida de un producto existente:
+  // cambiar la unidad NO reconvierte stock ni costo → puede distorsionar
+  // márgenes/reportes. Guardamos la data del form mientras se confirma.
+  const [pendingUnitChange, setPendingUnitChange] = useState(null)
+  const unitWarningConfirmedRef = useRef(false)
   const [deletingProduct, setDeletingProduct] = useState(null)
   const [viewingProduct, setViewingProduct] = useState(null)
   const [isViewModalOpen, setIsViewModalOpen] = useState(false)
@@ -999,6 +937,17 @@ export default function Products() {
       return
     }
     if (!user?.uid) return
+
+    // Advertencia al cambiar la unidad de medida de un producto EXISTENTE.
+    // Cambiar la unidad no reconvierte el stock ni el costo (solo cambia la
+    // etiqueta) → puede distorsionar márgenes y reportes. Pedimos confirmación
+    // explícita una vez; al confirmar, el botón "Continuar" reejecuta onSubmit
+    // con el ref en true para saltar este guard.
+    if (!unitWarningConfirmedRef.current && editingProduct && data.unit && data.unit !== editingProduct.unit) {
+      setPendingUnitChange(data)
+      return
+    }
+    unitWarningConfirmedRef.current = false
 
     // Establecer isSaving INMEDIATAMENTE para prevenir múltiples clicks
     if (isSaving) return // Prevenir ejecución si ya está guardando
@@ -4599,7 +4548,7 @@ export default function Products() {
                               <span className="text-xs text-gray-500 ml-1">({product.variants?.length || 0} var.)</span>
                             )}
                             {!product.hasVariants && product.unit && (
-                              <span className="text-xs text-gray-400 ml-1">/ {product.unit}</span>
+                              <span className="text-xs text-gray-400 ml-1">/ {getUnitLabel(product.unit)}</span>
                             )}
                             {visibleColumns.cost && !product.hasVariants && product.cost !== undefined && product.cost !== null && (
                               <div className="text-xs text-green-600 font-medium mt-0.5">
@@ -4618,7 +4567,7 @@ export default function Products() {
                                     : 'bg-red-100 text-red-700'
                                 }`}
                               >
-                                {stockDisplay} uds
+                                {stockDisplay} {getUnitLabel(product.unit, 'uds').toLowerCase()}
                               </span>
                             ) : (
                               <span className="text-gray-400 text-xs">Sin stock</span>
@@ -7323,6 +7272,60 @@ export default function Products() {
         </div>
       </Modal>
 
+      {/* Modal: confirmar cambio de unidad de medida en producto existente */}
+      <Modal
+        isOpen={!!pendingUnitChange}
+        onClose={() => setPendingUnitChange(null)}
+        title="Cambiar unidad de medida"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start space-x-3">
+            <div className="flex-shrink-0">
+              <AlertTriangle className="w-6 h-6 text-yellow-500" />
+            </div>
+            <div className="text-sm text-gray-700 space-y-2">
+              <p>
+                Vas a cambiar la unidad de{' '}
+                <strong>{getUnitLabel(editingProduct?.unit)}</strong> a{' '}
+                <strong>{getUnitLabel(pendingUnitChange?.unit)}</strong>.
+              </p>
+              <p className="text-gray-600">
+                Cambiar la unidad <strong>no reconvierte</strong> el stock ni el costo: las
+                cantidades y el costo mantienen el mismo número, solo cambia la etiqueta. Esto
+                puede distorsionar los márgenes y reportes históricos de este producto.
+              </p>
+              <p className="text-gray-600">
+                Si el producto cambió de presentación real, considera revisar también su costo,
+                o crear un producto nuevo.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPendingUnitChange(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              onClick={() => {
+                const data = pendingUnitChange
+                setPendingUnitChange(null)
+                unitWarningConfirmedRef.current = true
+                onSubmit(data)
+              }}
+            >
+              Sí, cambiar unidad
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Modal Ver Detalles del Producto */}
       <Modal
         isOpen={isViewModalOpen}
@@ -7367,7 +7370,7 @@ export default function Products() {
                 <div>
                   <label className="text-xs font-medium text-gray-500">Unidad de Medida</label>
                   <p className="text-sm text-gray-900 mt-1">
-                    {UNITS.find(u => u.value === viewingProduct.unit)?.label || viewingProduct.unit}
+                    {getUnitLabel(viewingProduct.unit, viewingProduct.unit)}
                   </p>
                 </div>
               </div>
@@ -7467,7 +7470,7 @@ export default function Products() {
                           realStock > 0 ? 'text-yellow-600' :
                           'text-red-600'
                         }`}>
-                          {realStock} {UNITS.find(u => u.value === viewingProduct.unit)?.label?.toLowerCase() || 'unidades'}
+                          {realStock} {getUnitLabel(viewingProduct.unit, 'unidades').toLowerCase()}
                         </p>
                       )
                     })()}
@@ -7628,7 +7631,7 @@ export default function Products() {
                               </div>
                               <div className="flex items-center gap-2">
                                 <span className={`text-sm font-medium ${batch.quantity <= 0 ? 'text-gray-400' : 'text-gray-900'}`}>
-                                  {batch.quantity || 0} uds
+                                  {batch.quantity || 0} {getUnitLabel(viewingProduct?.unit, 'uds').toLowerCase()}
                                 </span>
                                 {diffDays !== null && diffDays <= 90 && (
                                   <Badge variant={diffDays < 0 ? 'danger' : diffDays <= 30 ? 'danger' : diffDays <= 60 ? 'warning' : 'warning'} className="text-xs">

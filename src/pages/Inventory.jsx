@@ -70,6 +70,7 @@ import { executeRecipeProduction, executeManualProduction, checkProductionReadin
 import { getRecipeByProductId, calculateRecipeCost } from '@/services/recipeService'
 import { getCompanySettings } from '@/services/firestoreService'
 import { computeBatchDeduction, computeProductBatchMetadata } from '@/utils/batchStock'
+import { getItemUnitLabel } from '@/utils/units'
 
 // Helper functions for category hierarchy
 const migrateLegacyCategories = (cats) => {
@@ -2724,7 +2725,7 @@ export default function Inventory() {
                               <span className="text-xs text-gray-500">S/C</span>
                             ) : (
                               <span className={`font-bold text-sm ${realStock === 0 ? 'text-red-600' : realStock <= (item?.minStock ?? 3) ? 'text-yellow-600' : 'text-green-600'}`}>
-                                {item.isIngredient || !Number.isInteger(realStock) ? Number(realStock).toFixed(2) : realStock} {item.unit || 'uds'}
+                                {item.isIngredient || !Number.isInteger(realStock) ? Number(realStock).toFixed(2) : realStock} {getItemUnitLabel(item, 'uds').toLowerCase()}
                               </span>
                             )}
                             <span className="text-sm text-gray-700">{isProduct ? formatProductPrice(item) : formatCurrency(item.averageCost || 0)}</span>
@@ -3063,7 +3064,7 @@ export default function Inventory() {
                                       {warehouse.isDefault && <span className="text-[10px] text-primary-500 font-medium bg-primary-50 px-1.5 py-0.5 rounded-full">Principal</span>}
                                     </div>
                                     <span className={`font-semibold text-sm ${stock > (item?.minStock ?? 3) ? 'text-green-600' : stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                      {stock.toFixed(2)} {item.unit || 'uds'}
+                                      {stock.toFixed(2)} {getItemUnitLabel(item, 'uds').toLowerCase()}
                                     </span>
                                   </div>
                                 )
@@ -3076,7 +3077,7 @@ export default function Inventory() {
                                         <div className="bg-primary-50 px-3 py-1.5 flex items-center gap-2 border-b border-gray-200">
                                           <Store className="w-3 h-3 text-primary-600" />
                                           <span className="text-xs font-medium text-primary-700">{companySettings?.mainBranchName || 'Sucursal Principal'}</span>
-                                          <span className="text-xs text-primary-600 ml-auto">{mainBranchWarehouses.reduce((s, w) => s + stockOf(w), 0).toFixed(2)} {item.unit || 'uds'}</span>
+                                          <span className="text-xs text-primary-600 ml-auto">{mainBranchWarehouses.reduce((s, w) => s + stockOf(w), 0).toFixed(2)} {getItemUnitLabel(item, 'uds').toLowerCase()}</span>
                                         </div>
                                       )}
                                       <div className="p-2 space-y-1">{mainBranchWarehouses.map(renderWarehouse)}</div>
@@ -3091,7 +3092,7 @@ export default function Inventory() {
                                           <div className="bg-blue-50 px-3 py-1.5 flex items-center gap-2 border-b border-gray-200">
                                             <Store className="w-3 h-3 text-blue-600" />
                                             <span className="text-xs font-medium text-blue-700">{branch?.name || 'Sucursal'}</span>
-                                            <span className="text-xs text-blue-600 ml-auto">{branchTotal.toFixed(2)} {item.unit || 'uds'}</span>
+                                            <span className="text-xs text-blue-600 ml-auto">{branchTotal.toFixed(2)} {getItemUnitLabel(item, 'uds').toLowerCase()}</span>
                                           </div>
                                         )}
                                         <div className="p-2 space-y-1">{branchWarehouses.map(renderWarehouse)}</div>
@@ -3670,7 +3671,7 @@ export default function Inventory() {
                                                   <span className={`font-bold text-lg ${batch.quantity >= 4 ? 'text-green-600' : batch.quantity > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
                                                     {batch.quantity}
                                                   </span>
-                                                  <p className="text-xs text-gray-400">unidades</p>
+                                                  <p className="text-xs text-gray-400">{getItemUnitLabel(item, 'unidades').toLowerCase()}</p>
                                                 </div>
                                               </div>
                                             )
@@ -3722,7 +3723,7 @@ export default function Inventory() {
                                           {warehouse.isDefault && <span className="text-[10px] text-primary-500 font-medium bg-primary-50 px-1.5 py-0.5 rounded-full">Principal</span>}
                                         </div>
                                         <span className={`font-semibold text-sm ${stock > (item?.minStock ?? 3) ? 'text-green-600' : stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                          {stock.toFixed(2)} {item.unit || 'uds'}
+                                          {stock.toFixed(2)} {getItemUnitLabel(item, 'uds').toLowerCase()}
                                         </span>
                                       </div>
                                     </div>
@@ -3736,7 +3737,7 @@ export default function Inventory() {
                                           <div className="bg-primary-50 px-3 py-1.5 flex items-center gap-2 border-b border-gray-200">
                                             <Store className="w-3 h-3 text-primary-600" />
                                             <span className="text-xs font-medium text-primary-700">{companySettings?.mainBranchName || 'Sucursal Principal'}</span>
-                                            <span className="text-xs text-primary-600 ml-auto">{mainBranchWarehouses.reduce((s, w) => s + stockOf(w), 0).toFixed(2)} {item.unit || 'uds'}</span>
+                                            <span className="text-xs text-primary-600 ml-auto">{mainBranchWarehouses.reduce((s, w) => s + stockOf(w), 0).toFixed(2)} {getItemUnitLabel(item, 'uds').toLowerCase()}</span>
                                           </div>
                                         )}
                                         <div className="p-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -3753,7 +3754,7 @@ export default function Inventory() {
                                             <div className="bg-blue-50 px-3 py-1.5 flex items-center gap-2 border-b border-gray-200">
                                               <Store className="w-3 h-3 text-blue-600" />
                                               <span className="text-xs font-medium text-blue-700">{branch?.name || 'Sucursal'}</span>
-                                              <span className="text-xs text-blue-600 ml-auto">{branchTotal.toFixed(2)} {item.unit || 'uds'}</span>
+                                              <span className="text-xs text-blue-600 ml-auto">{branchTotal.toFixed(2)} {getItemUnitLabel(item, 'uds').toLowerCase()}</span>
                                             </div>
                                           )}
                                           <div className="p-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -4821,9 +4822,7 @@ export default function Inventory() {
                         >
                           {movement.quantity > 0 ? '+' : ''}
                           {Math.round(movement.quantity * 100) / 100}
-                          {historyProduct?.isIngredient && historyProduct?.purchaseUnit && (
-                            <span className="text-xs font-normal text-gray-400 ml-1">{historyProduct.purchaseUnit}</span>
-                          )}
+                          <span className="text-xs font-normal text-gray-400 ml-1">{getItemUnitLabel(historyProduct, '').toLowerCase()}</span>
                         </span>
                       </div>
 
@@ -4912,9 +4911,7 @@ export default function Inventory() {
                             <span className={`font-bold ${movement.quantity > 0 ? 'text-green-600' : 'text-red-600'}`}>
                               {movement.quantity > 0 ? '+' : ''}{Math.round(movement.quantity * 100) / 100}
                             </span>
-                            {historyProduct?.isIngredient && historyProduct?.purchaseUnit && (
-                              <span className="text-xs text-gray-400 ml-1">{historyProduct.purchaseUnit}</span>
-                            )}
+                            <span className="text-xs text-gray-400 ml-1">{getItemUnitLabel(historyProduct, '').toLowerCase()}</span>
                           </td>
                           <td className="px-3 py-2">
                             <p className="text-xs text-gray-600 whitespace-normal break-words line-clamp-3">
@@ -4936,7 +4933,7 @@ export default function Inventory() {
           {/* Resumen de movimientos */}
           {!isLoadingHistory && productMovements.length > 0 && (() => {
             const stockFromMovements = productMovements.reduce((sum, m) => sum + (m.quantity || 0), 0)
-            const stockUnit = historyProduct?.isIngredient ? (historyProduct?.purchaseUnit || 'und') : 'und'
+            const stockUnit = getItemUnitLabel(historyProduct, 'und')
             const currentStock = historyProduct?.hasVariants && historyProduct.variants?.length > 0
               ? historyProduct.variants.reduce((sum, v) => sum + (v.stock || 0), 0)
               : historyProduct?.warehouseStocks?.length > 0
