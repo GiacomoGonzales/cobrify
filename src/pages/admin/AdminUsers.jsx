@@ -208,6 +208,7 @@ export default function AdminUsers() {
   const [showContactModal, setShowContactModal] = useState(false)
   const [userToEditContact, setUserToEditContact] = useState(null)
   const [contactNameInput, setContactNameInput] = useState('')
+  const [contactPhoneInput, setContactPhoneInput] = useState('')
   const [savingContact, setSavingContact] = useState(false)
   const [assigningNumbers, setAssigningNumbers] = useState(false)
   const [showNumberModal, setShowNumberModal] = useState(false)
@@ -400,6 +401,9 @@ export default function AdminUsers() {
           businessName: business.razonSocial || business.businessName || data.businessName || 'Sin nombre',
           ruc: business.ruc || data.ruc || null,
           phone: business.phone || null,
+          // Teléfono de contacto del dueño (uso interno admin). Distinto del
+          // `phone` del negocio (ese imprime en el ticket).
+          contactPhone: business.contactPhone || null,
           address: business.address || null,
           // Ubicación
           department: business.department || null,
@@ -911,16 +915,24 @@ export default function AdminUsers() {
 
     setSavingContact(true)
     try {
-      // Guardar en la colección users
+      // Guardar el nombre de contacto en la colección users
       const userRef = doc(db, 'users', userToEditContact.id)
       await setDoc(userRef, {
         displayName: contactNameInput.trim()
       }, { merge: true })
 
-      toast.success('Nombre de contacto actualizado')
+      // Guardar el teléfono de contacto del dueño en el negocio (uso interno;
+      // NO es el `phone` que imprime en el ticket).
+      const bizRef = doc(db, 'businesses', userToEditContact.id)
+      await setDoc(bizRef, {
+        contactPhone: contactPhoneInput.trim()
+      }, { merge: true })
+
+      toast.success('Contacto actualizado')
       setShowContactModal(false)
       setUserToEditContact(null)
       setContactNameInput('')
+      setContactPhoneInput('')
       loadUsers() // Recargar lista
     } catch (error) {
       console.error('Error guardando nombre:', error)
@@ -2291,6 +2303,7 @@ export default function AdminUsers() {
                     onClick={() => {
                       setUserToEditContact(user)
                       setContactNameInput(user.contactName || '')
+                      setContactPhoneInput(user.contactPhone || '')
                       setShowContactModal(true)
                     }}
                     className="flex items-center gap-1 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
@@ -2647,6 +2660,7 @@ export default function AdminUsers() {
                                 e.stopPropagation()
                                 setUserToEditContact(user)
                                 setContactNameInput(user.contactName || '')
+                                setContactPhoneInput(user.contactPhone || '')
                                 setShowContactModal(true)
                                 setActionMenuUser(null)
                               }}
@@ -4296,13 +4310,27 @@ export default function AdminUsers() {
                 />
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Teléfono de contacto (dueño)
+                </label>
+                <input
+                  type="tel"
+                  value={contactPhoneInput}
+                  onChange={(e) => setContactPhoneInput(e.target.value)}
+                  placeholder="987654321"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                />
+                <p className="mt-1 text-xs text-gray-500">Para contactar al dueño. No se imprime en el ticket.</p>
+              </div>
+
               <div className="bg-gray-50 rounded-lg p-3">
                 <p className="text-xs text-gray-500">
                   <span className="font-medium">Email:</span> {userToEditContact.email}
                 </p>
                 {userToEditContact.phone && (
                   <p className="text-xs text-gray-500">
-                    <span className="font-medium">Teléfono:</span> {userToEditContact.phone}
+                    <span className="font-medium">Teléfono del negocio (ticket):</span> {userToEditContact.phone}
                   </p>
                 )}
               </div>
@@ -4314,6 +4342,7 @@ export default function AdminUsers() {
                   setShowContactModal(false)
                   setUserToEditContact(null)
                   setContactNameInput('')
+                  setContactPhoneInput('')
                 }}
                 disabled={savingContact}
                 className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
@@ -4322,7 +4351,7 @@ export default function AdminUsers() {
               </button>
               <button
                 onClick={handleSaveContactName}
-                disabled={savingContact || !contactNameInput.trim()}
+                disabled={savingContact}
                 className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 flex items-center gap-2"
               >
                 {savingContact ? (

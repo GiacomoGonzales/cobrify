@@ -20,6 +20,7 @@ const EMPTY_FORM = {
   businessName: '',
   tradeName: '',
   phone: '',
+  contactPhone: '',
   address: '',
 }
 
@@ -266,6 +267,7 @@ export default function AdminCreateAccount() {
           businessName: form.businessName.trim(),
           tradeName: form.tradeName.trim(),
           phone: form.phone.trim(),
+          contactPhone: form.contactPhone.trim(),
           address: form.address.trim(),
           department: loc.department,
           province: loc.province,
@@ -488,7 +490,11 @@ export default function AdminCreateAccount() {
             </div>
             <div>
               <label className={labelClass}>Teléfono</label>
-              <input type="tel" value={form.phone} onChange={setField('phone')} className={inputClass} placeholder="Opcional" />
+              <input type="tel" value={form.phone} onChange={setField('phone')} className={inputClass} placeholder="Imprime en el ticket" />
+            </div>
+            <div>
+              <label className={labelClass}>Teléfono de contacto (dueño)</label>
+              <input type="tel" value={form.contactPhone} onChange={setField('contactPhone')} className={inputClass} placeholder="Para contactar al dueño" />
             </div>
             <div className="sm:col-span-2">
               <label className={labelClass}>Dirección</label>

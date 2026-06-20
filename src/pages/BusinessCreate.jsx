@@ -27,6 +27,7 @@ const businessSchema = z.object({
   province: z.string().min(2, 'La provincia es obligatoria'),
   department: z.string().min(2, 'El departamento es obligatorio'),
   phone: z.string().optional(),
+  contactPhone: z.string().optional(),
   email: z.string().email('Email inválido'),
 })
 
@@ -80,6 +81,7 @@ export default function BusinessCreate() {
       province: '',
       department: '',
       phone: '',
+      contactPhone: '',
       email: user?.email || '',
     },
   })
@@ -104,6 +106,9 @@ export default function BusinessCreate() {
         province: data.province,
         department: data.department,
         phone: data.phone || '',
+        // Teléfono de contacto del dueño (uso interno: contactarlo por
+        // renovaciones, etc.). NO se imprime en el ticket (eso usa `phone`).
+        contactPhone: data.contactPhone || '',
         email: data.email,
         ownerId: user.uid,
         // Series por defecto COMPLETAS (todos los tipos de documento), para que la
@@ -291,6 +296,7 @@ export default function BusinessCreate() {
                     label="Teléfono"
                     type="tel"
                     placeholder="01-2345678"
+                    helperText="Se imprime en el ticket/comprobante."
                     error={errors.phone?.message}
                     {...register('phone')}
                   />
@@ -302,6 +308,15 @@ export default function BusinessCreate() {
                     placeholder="contacto@miempresa.com"
                     error={errors.email?.message}
                     {...register('email')}
+                  />
+
+                  <Input
+                    label="Teléfono de contacto (dueño)"
+                    type="tel"
+                    placeholder="987654321"
+                    helperText="Para contactarte. No se imprime en el ticket."
+                    error={errors.contactPhone?.message}
+                    {...register('contactPhone')}
                   />
                 </div>
 

@@ -138,6 +138,9 @@ export const registerBusinessAsAdmin = async (email, password, displayName, busi
         businessName: businessData?.businessName || '',
         name: businessData?.tradeName || businessData?.businessName || '',
         phone: businessData?.phone || '',
+        // Teléfono de contacto del dueño (uso interno admin: contactarlo por
+        // renovaciones, etc.). NO se imprime en el ticket (eso usa `phone`).
+        contactPhone: businessData?.contactPhone || '',
         email,
         address: businessData?.address || '',
         district: businessData?.district || '',

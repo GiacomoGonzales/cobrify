@@ -15,7 +15,9 @@ import {
   XCircle,
   Loader2,
   Archive,
-  ArchiveRestore
+  ArchiveRestore,
+  Copy,
+  Check
 } from 'lucide-react'
 
 // Normaliza un teléfono guardado en businesses/{uid}.phone a formato wa.me
@@ -52,6 +54,18 @@ export default function AdminExpirations() {
   const [searchTerm, setSearchTerm] = useState('')
   const [activeTab, setActiveTab] = useState('today')
   const [actionLoading, setActionLoading] = useState(null)
+  const [copiedId, setCopiedId] = useState(null)
+
+  async function copyPhone(sub) {
+    if (!sub.phone) return
+    try {
+      await navigator.clipboard.writeText(sub.phone)
+      setCopiedId(sub.id)
+      setTimeout(() => setCopiedId(prev => (prev === sub.id ? null : prev)), 1500)
+    } catch (error) {
+      console.error('No se pudo copiar el teléfono:', error)
+    }
+  }
 
   useEffect(() => {
     loadSubscriptions()
@@ -92,7 +106,22 @@ export default function AdminExpirations() {
 
       const filtered = Array.from(allSubs.values()).filter(sub => !subUserIds.has(sub.id))
 
-      setSubscriptions(filtered)
+      // Adjuntar el teléfono de cada negocio para mostrarlo en su columna. Se
+      // prefiere el teléfono de contacto del dueño (businesses/{uid}.contactPhone);
+      // si no tiene, cae al teléfono del negocio (el que imprime en el ticket)
+      // para no dejar la celda vacía. Lectura por negocio en paralelo; es una
+      // página de admin de uso esporádico.
+      const withPhones = await Promise.all(filtered.map(async sub => {
+        try {
+          const bizSnap = await getDoc(doc(db, 'businesses', sub.id))
+          const biz = bizSnap.exists() ? bizSnap.data() : {}
+          return { ...sub, phone: (biz.contactPhone || biz.phone || '') }
+        } catch {
+          return { ...sub, phone: '' }
+        }
+      }))
+
+      setSubscriptions(withPhones)
     } catch (error) {
       console.error('Error loading subscriptions:', error)
     } finally {
@@ -222,10 +251,14 @@ export default function AdminExpirations() {
     // bloquee el popup tras el await de Firestore; luego la redirigimos.
     const win = window.open('', '_blank')
     try {
-      // El teléfono se guarda en businesses/{uid}; la suscripción usa el mismo
-      // uid como id de documento, así que sub.id sirve para ubicar el negocio.
-      const bizSnap = await getDoc(doc(db, 'businesses', sub.id))
-      const phone = bizSnap.exists() ? bizSnap.data().phone : ''
+      // El teléfono ya viene adjunto a la fila (sub.phone). Si por algún motivo
+      // no está, lo buscamos en businesses/{uid} (mismo uid que la suscripción).
+      let phone = sub.phone
+      if (!phone) {
+        const bizSnap = await getDoc(doc(db, 'businesses', sub.id))
+        const biz = bizSnap.exists() ? bizSnap.data() : {}
+        phone = biz.contactPhone || biz.phone || ''
+      }
       const number = buildPeruWhatsappNumber(phone)
 
       if (!number) {
@@ -346,6 +379,7 @@ export default function AdminExpirations() {
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Negocio</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teléfono</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Plan</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vencimiento</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Días</th>
@@ -366,6 +400,37 @@ export default function AdminExpirations() {
                           <p className="font-medium text-gray-900">{sub.businessName || 'Sin nombre'}</p>
                           <p className="text-sm text-gray-500">{sub.email}</p>
                         </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {sub.phone ? (
+                          <div className="flex items-center gap-1.5">
+                            {buildPeruWhatsappNumber(sub.phone) ? (
+                              <a
+                                href={`https://wa.me/${buildPeruWhatsappNumber(sub.phone)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-green-700 hover:underline"
+                              >
+                                {sub.phone}
+                              </a>
+                            ) : (
+                              <span className="text-gray-700">{sub.phone}</span>
+                            )}
+                            <button
+                              onClick={() => copyPhone(sub)}
+                              className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                              title={copiedId === sub.id ? 'Copiado' : 'Copiar teléfono'}
+                            >
+                              {copiedId === sub.id ? (
+                                <Check className="w-3.5 h-3.5 text-green-600" />
+                              ) : (
+                                <Copy className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-sm text-gray-700">
