@@ -22,6 +22,7 @@ import { getRateForDate } from '@/services/exchangeRateService'
 import ProductFormModal, { getRootCategories, getSubcategories } from '@/components/product/ProductFormModal'
 import {
   getSuppliers,
+  createSupplier,
   getProducts,
   createPurchase,
   updatePurchase,
@@ -32,6 +33,7 @@ import {
   getProductCategories,
   getProductBrands,
 } from '@/services/firestoreService'
+import { consultarRUC } from '@/services/documentLookupService'
 import { getWarehouses, updateWarehouseStock, createStockMovement } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
 import { getIngredients, registerPurchase as registerIngredientPurchase, createIngredient, updateIngredient, convertUnit } from '@/services/ingredientService'
@@ -171,6 +173,14 @@ export default function CreatePurchase() {
   // Estados para el autocompletado de proveedor
   const [supplierSearch, setSupplierSearch] = useState('')
   const [showSupplierDropdown, setShowSupplierDropdown] = useState(false)
+  // Crear proveedor inline (sin salir a la página de Proveedores): mismo patrón
+  // que el buscador de clientes del POS / el modal de orden de compra.
+  const [showNewSupplierModal, setShowNewSupplierModal] = useState(false)
+  const [isLookingUpRuc, setIsLookingUpRuc] = useState(false)
+  const [isCreatingSupplier, setIsCreatingSupplier] = useState(false)
+  const [newSupplier, setNewSupplier] = useState({
+    ruc: '', businessName: '', address: '', phone: '', email: '', contactName: '',
+  })
   const supplierInputRef = useRef(null)
 
   // Estados para el autocompletado de productos
@@ -663,11 +673,14 @@ export default function CreatePurchase() {
     setPurchaseItems(newItems)
   }
 
-  // Filtrar proveedores según búsqueda (flexible: multi-palabra parcial, sin acentos)
+  // Filtrar proveedores según búsqueda (flexible: multi-palabra parcial, sin acentos).
+  // Incluye `ruc` además de `documentNumber` (legacy): los proveedores nuevos guardan
+  // el RUC en `ruc`, así que pegar el RUC debe encontrar al existente.
   const filteredSuppliers = suppliers.filter(supplier =>
     matchesSearchQuery(
       supplierSearch,
       supplier.businessName,
+      supplier.ruc,
       supplier.documentNumber,
       supplier.contactName,
     )
@@ -685,6 +698,100 @@ export default function CreatePurchase() {
     setSelectedSupplier(null)
     setSupplierSearch('')
     setShowSupplierDropdown(false)
+  }
+
+  // Abrir el modal de "nuevo proveedor", prellenando con lo escrito en el buscador
+  // (si es un RUC de 11 dígitos va a `ruc`; si no, a la razón social).
+  const openNewSupplierModal = () => {
+    const term = (supplierSearch || '').trim()
+    const isRuc = /^\d{11}$/.test(term)
+    setNewSupplier({
+      ruc: isRuc ? term : '',
+      businessName: isRuc ? '' : term,
+      address: '', phone: '', email: '', contactName: '',
+    })
+    setShowSupplierDropdown(false)
+    setShowNewSupplierModal(true)
+  }
+
+  // Consultar RUC en SUNAT para autocompletar razón social + dirección (silencioso).
+  const handleSupplierRucLookup = async () => {
+    const ruc = (newSupplier.ruc || '').trim()
+    if (!/^\d{11}$/.test(ruc)) {
+      toast.error('Ingrese un RUC válido de 11 dígitos')
+      return
+    }
+    setIsLookingUpRuc(true)
+    try {
+      const result = await consultarRUC(ruc)
+      if (result.success) {
+        setNewSupplier(prev => ({
+          ...prev,
+          businessName: result.data.razonSocial || prev.businessName,
+          address: result.data.direccion || prev.address,
+        }))
+        toast.success(`Datos encontrados: ${result.data.razonSocial}`)
+      } else {
+        toast.error(result.error || 'No se encontraron datos para este RUC')
+      }
+    } catch (error) {
+      console.error('Error al buscar RUC:', error)
+      toast.error('Error al consultar el RUC')
+    } finally {
+      setIsLookingUpRuc(false)
+    }
+  }
+
+  // Crear el proveedor, recargar la lista y dejarlo seleccionado en la compra.
+  const handleCreateSupplier = async () => {
+    const ruc = (newSupplier.ruc || '').trim()
+    const businessName = (newSupplier.businessName || '').trim()
+    if (!ruc || !businessName) {
+      toast.error('El RUC y la razón social son obligatorios')
+      return
+    }
+    if (!/^\d{11}$/.test(ruc)) {
+      toast.error('El RUC debe tener 11 dígitos')
+      return
+    }
+    // Evitar duplicados: si ya existe un proveedor con ese RUC, seleccionarlo.
+    const existing = suppliers.find(s => (s.ruc || s.documentNumber) === ruc)
+    if (existing) {
+      selectSupplier(existing)
+      setShowNewSupplierModal(false)
+      toast.info('Ese proveedor ya existía; se seleccionó el existente.')
+      return
+    }
+    setIsCreatingSupplier(true)
+    try {
+      const businessId = getBusinessId()
+      const result = await createSupplier(businessId, {
+        ruc,
+        documentType: 'RUC',
+        documentNumber: ruc, // compat con código que lee documentNumber
+        businessName,
+        address: newSupplier.address || '',
+        phone: newSupplier.phone || '',
+        email: newSupplier.email || '',
+        contactName: newSupplier.contactName || '',
+      })
+      if (!result.success) throw new Error(result.error)
+      toast.success('Proveedor creado y seleccionado')
+      // Recargar y auto-seleccionar el recién creado.
+      const suppliersResult = await getSuppliers(businessId)
+      if (suppliersResult.success) {
+        setSuppliers(suppliersResult.data || [])
+        const created = (suppliersResult.data || []).find(s => s.id === result.id)
+        if (created) selectSupplier(created)
+      }
+      setShowNewSupplierModal(false)
+      setNewSupplier({ ruc: '', businessName: '', address: '', phone: '', email: '', contactName: '' })
+    } catch (error) {
+      console.error('Error al crear proveedor:', error)
+      toast.error('Error al crear el proveedor')
+    } finally {
+      setIsCreatingSupplier(false)
+    }
   }
 
   // Índices de búsqueda pre-normalizados (mismo patrón que el POS). Se rearman
@@ -2199,16 +2306,25 @@ export default function CreatePurchase() {
                         >
                           <div className="font-medium text-gray-900">{supplier.businessName}</div>
                           <div className="text-sm text-gray-500">
-                            {supplier.documentNumber}
+                            {supplier.ruc || supplier.documentNumber}
                             {supplier.contactName && ` • ${supplier.contactName}`}
                           </div>
                         </button>
                       ))
                     ) : (
                       <div className="px-4 py-3 text-sm text-gray-500">
-                        No se encontraron proveedores
+                        No se encontró el proveedor
                       </div>
                     )}
+                    {/* Crear proveedor inline (sin salir a la página de Proveedores) */}
+                    <button
+                      type="button"
+                      onClick={openNewSupplierModal}
+                      className="w-full text-left px-4 py-3 border-t border-gray-200 bg-gray-50 hover:bg-primary-50 text-primary-700 font-medium flex items-center gap-2 transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Crear proveedor{/^\d{11}$/.test((supplierSearch || '').trim()) ? ` con RUC ${supplierSearch.trim()}` : ''}
+                    </button>
                   </div>
                 )}
 
@@ -3407,6 +3523,102 @@ export default function CreatePurchase() {
             )}
           </div>
         )}
+      </Modal>
+
+      {/* Modal: Crear proveedor inline */}
+      <Modal
+        isOpen={showNewSupplierModal}
+        onClose={() => setShowNewSupplierModal(false)}
+        title="Nuevo proveedor"
+        maxWidth="md"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">RUC <span className="text-red-500">*</span></label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={11}
+                placeholder="11 dígitos"
+                value={newSupplier.ruc}
+                onChange={e => setNewSupplier(prev => ({ ...prev, ruc: e.target.value.replace(/\D/g, '') }))}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              <button
+                type="button"
+                onClick={handleSupplierRucLookup}
+                disabled={isLookingUpRuc || newSupplier.ruc.length !== 11}
+                className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 flex items-center gap-2 whitespace-nowrap"
+              >
+                {isLookingUpRuc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                Buscar
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">Busca los datos en SUNAT automáticamente.</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Razón Social <span className="text-red-500">*</span></label>
+            <input
+              type="text"
+              placeholder="Razón social del proveedor"
+              value={newSupplier.businessName}
+              onChange={e => setNewSupplier(prev => ({ ...prev, businessName: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Dirección</label>
+            <input
+              type="text"
+              placeholder="Dirección (opcional)"
+              value={newSupplier.address}
+              onChange={e => setNewSupplier(prev => ({ ...prev, address: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
+              <input
+                type="tel"
+                placeholder="Opcional"
+                value={newSupplier.phone}
+                onChange={e => setNewSupplier(prev => ({ ...prev, phone: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Contacto</label>
+              <input
+                type="text"
+                placeholder="Opcional"
+                value={newSupplier.contactName}
+                onChange={e => setNewSupplier(prev => ({ ...prev, contactName: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setShowNewSupplierModal(false)}
+              disabled={isCreatingSupplier}
+              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleCreateSupplier}
+              disabled={isCreatingSupplier || !newSupplier.ruc || !newSupplier.businessName}
+              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              {isCreatingSupplier ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              Crear y seleccionar
+            </button>
+          </div>
+        </div>
       </Modal>
 
       {/* Modal: Editar precios de venta del item */}
