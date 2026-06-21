@@ -263,6 +263,8 @@ export function generateInvoiceXML(invoiceData, businessData) {
   const igvRate = rawIgvRate === 10 ? 10.5 : rawIgvRate
   const igvExempt = invoiceData.taxConfig?.igvExempt ?? businessData?.emissionConfig?.taxConfig?.igvExempt ?? false
   const exemptionReason = invoiceData.taxConfig?.exemptionReason ?? businessData?.emissionConfig?.taxConfig?.exemptionReason ?? ''
+  // taxType del régimen del negocio: 'exempt' = Exonerado (0%) Ley 27037 (Amazonía).
+  const taxType = invoiceData.taxConfig?.taxType ?? businessData?.emissionConfig?.taxConfig?.taxType ?? ''
   const igvMultiplier = igvRate / 100
 
   console.log(`💰 Configuración IGV FINAL: rate=${igvRate}%, exempt=${igvExempt}, multiplier=${igvMultiplier}`)
@@ -370,9 +372,10 @@ export function generateInvoiceXML(invoiceData, businessData) {
   // Leyenda de AMAZONÍA (Ley 27037) - Catálogo 52 código 2001 ("Bienes
   // transferidos en la Amazonía"). Obligatoria en operaciones exoneradas del IGV
   // de negocios acogidos a la Ley de Promoción de la inversión en la Amazonía.
-  // Se dispara cuando el motivo de exoneración configurado del negocio es
-  // Amazonía. (OJO: 2006 es "Operación sujeta a detracción", NO Amazonía.)
-  if (exemptionReason && exemptionReason.toLowerCase().includes('amazon')) {
+  // Se dispara cuando el régimen del negocio es Exonerado (0%) Ley 27037
+  // (taxType 'exempt' = la opción "Amazonía" del panel admin), o por el campo
+  // legado exemptionReason. (OJO: 2006 es "Operación sujeta a detracción", NO Amazonía.)
+  if (taxType === 'exempt' || (exemptionReason && exemptionReason.toLowerCase().includes('amazon'))) {
     root.ele('cbc:Note', {
       'languageLocaleID': '2001'
     }).txt('BIENES TRANSFERIDOS EN LA AMAZONÍA REGIÓN SELVA PARA SER CONSUMIDOS EN LA MISMA')

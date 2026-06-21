@@ -30,8 +30,10 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
 
   // Leyenda de Amazonía (Ley 27037): se imprime en el ticket cuando el negocio
   // está acogido (motivo de exoneración = Amazonía).
+  const _amazonTaxType = companySettings?.emissionConfig?.taxConfig?.taxType || companySettings?.taxConfig?.taxType || ''
   const _amazonReason = companySettings?.emissionConfig?.taxConfig?.exemptionReason || companySettings?.taxConfig?.exemptionReason || ''
-  const showAmazonLegend = typeof _amazonReason === 'string' && _amazonReason.toLowerCase().includes('amazon')
+  // 'exempt' = Exonerado (0%) Ley 27037 (Amazonía). Fallback al reason legado.
+  const showAmazonLegend = _amazonTaxType === 'exempt' || (typeof _amazonReason === 'string' && _amazonReason.toLowerCase().includes('amazon'))
 
   // Función para detectar si la imagen es cuadrada
   const handleLogoLoad = (e) => {
