@@ -126,8 +126,12 @@ const statusBadge = (record) => {
 }
 
 export default function Attendance() {
-  const { user, isBusinessOwner, isAdmin, getBusinessId, filterBranchesByAccess, hasMainBranchAccess, isDemoMode, demoData, businessSettings } = useAppContext()
+  const { user, isBusinessOwner, isAdmin, getBusinessId, filterBranchesByAccess, hasMainBranchAccess, isDemoMode, demoData, businessSettings, hasPageAccess } = useAppContext()
   const canManage = !!(isBusinessOwner || isAdmin)
+  // Sub-usuario con permiso "Horarios": puede usar SOLO el planificador de
+  // horarios (no el resto de la gestión de personal). Requiere también el
+  // permiso "Marcar Asistencia" para tener acceso a la página /asistencia.
+  const canManageSchedules = canManage || (typeof hasPageAccess === 'function' && hasPageAccess('schedules'))
   const toast = useToast()
 
   // Tab inicial: en app nativa siempre "mark", en web depende del rol.
@@ -216,11 +220,21 @@ export default function Attendance() {
   // Cargar empleados cuando se entra a "Personal", "Horarios" o "Vacaciones"
   useEffect(() => {
     const needsEmployees = ['personnel', 'schedules', 'vacations'].includes(activeTab)
-    if (needsEmployees && !employeesLoaded && canManage) {
+    if (needsEmployees && !employeesLoaded && canManageSchedules) {
       loadEmployees()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, employeesLoaded, canManage])
+  }, [activeTab, employeesLoaded, canManageSchedules])
+
+  // Sub-usuario con permiso de Horarios (no gestor): abrir directo el
+  // planificador en vez de "Mi historial". Se ejecuta una sola vez al
+  // resolverse el permiso (no pelea con clics posteriores del usuario).
+  useEffect(() => {
+    if (!canManage && canManageSchedules) {
+      setActiveTab(prev => (prev === 'myhistory' ? 'schedules' : prev))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canManage, canManageSchedules])
 
   const loadInitial = async () => {
     if (isDemoMode) {
@@ -247,7 +261,7 @@ export default function Attendance() {
       const [branchesRes, settingsRes, usersRes, lastRes, weekRes] = await Promise.all([
         getBranches(businessId),
         getCompanySettings(businessId),
-        canManage ? getManagedUsers(businessId) : Promise.resolve({ success: true, data: [] }),
+        canManageSchedules ? getManagedUsers(businessId) : Promise.resolve({ success: true, data: [] }),
         user?.uid ? getLastAttendance(businessId, user.uid) : Promise.resolve({ success: true, data: null }),
         user?.uid
           ? getAttendanceRecords(businessId, { userId: user.uid, fromDate: sevenDaysAgo.toISOString(), max: 200 })
@@ -687,7 +701,8 @@ export default function Attendance() {
   }
 
   // Sub-usuario en web: no puede marcar (requiere app) ni gestionar. Mostrar mensaje.
-  if (!canManage && !isNative) {
+  // Excepción: si tiene el permiso de Horarios, sí puede usar el planificador en web.
+  if (!canManage && !canManageSchedules && !isNative) {
     return (
       <div className="space-y-4">
         <div className="flex items-center gap-2">
@@ -759,6 +774,9 @@ export default function Attendance() {
                     <TabsTrigger value="vacations" activeTab={at} setActiveTab={setAt}>Vacaciones</TabsTrigger>
                     <TabsTrigger value="config" activeTab={at} setActiveTab={setAt}>Configuración</TabsTrigger>
                   </>
+                )}
+                {!canManage && canManageSchedules && (
+                  <TabsTrigger value="schedules" activeTab={at} setActiveTab={setAt}>Horarios</TabsTrigger>
                 )}
                 {!canManage && (
                   <TabsTrigger value="myhistory" activeTab={at} setActiveTab={setAt}>Mi historial</TabsTrigger>
@@ -1186,8 +1204,9 @@ export default function Attendance() {
                 </TabsContent>
               )}
 
-              {/* ========== TAB: HORARIOS (owner) — Capa 2 del módulo Personal ========== */}
-              {canManage && (
+              {/* ========== TAB: HORARIOS — Capa 2 del módulo Personal ==========
+                  Visible para owner/admin y para sub-usuarios con permiso 'schedules'. */}
+              {canManageSchedules && (
                 <TabsContent value="schedules" activeTab={at} className="mt-4">
                   <SchedulePlanner
                     businessId={businessId}

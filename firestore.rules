@@ -150,12 +150,17 @@ service cloud.firestore {
       // Business Owners pueden LISTAR usuarios de SU negocio. Antes era
       // `if isAuthenticated()` → cualquier autenticado podía enumerar TODA la
       // colección /users (emails, roles, tenant de todos). Ahora se obliga a que
-      // la query esté acotada al propio tenant: por `ownerId == uid` (listar
-      // sub-usuarios) o `businessId == uid` (flujo de Settings/Yape). Admin lista
-      // todo. Firestore rechaza las queries no acotadas a estos filtros.
+      // la query esté acotada al propio tenant:
+      //  - `ownerId == uid` (el dueño lista a sus sub-usuarios)
+      //  - `businessId == uid` (flujo de Settings/Yape)
+      //  - `ownerId == (mi ownerId)` → un SUB-USUARIO lista a sus COMPAÑEROS del
+      //    mismo negocio (necesario para el planificador de Horarios). Sigue
+      //    acotado al propio tenant: no puede listar otros negocios.
+      // Admin lista todo. Firestore rechaza las queries no acotadas a estos filtros.
       allow list: if isAdmin() || (isAuthenticated() && (
         resource.data.ownerId == request.auth.uid ||
-        resource.data.businessId == request.auth.uid
+        resource.data.businessId == request.auth.uid ||
+        resource.data.ownerId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.ownerId
       ));
 
       // Admins pueden leer cualquier usuario
