@@ -2529,7 +2529,12 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(...BLACK)
     let _termsY = footerY + 14
+    // Salto de página si los términos largos llegan al pie, para que salgan completos.
     invoiceTermsLines.forEach((line) => {
+      if (_termsY > PAGE_HEIGHT - MARGIN_BOTTOM - 14) {
+        doc.addPage()
+        _termsY = MARGIN_TOP
+      }
       doc.text(line, MARGIN_LEFT, _termsY)
       _termsY += 8
     })

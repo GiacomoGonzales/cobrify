@@ -1475,7 +1475,13 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     doc.setFontSize(6)
     doc.setTextColor(...DARK_GRAY)
     const termsLines = doc.splitTextToSize(quotation.terms, CONTENT_WIDTH - 10)
-    termsLines.slice(0, 4).forEach(line => {
+    // Renderizar TODAS las líneas (antes se truncaba a 4 y se cortaba el texto).
+    // Si llega al pie, salto de página para que el texto largo salga completo.
+    termsLines.forEach(line => {
+      if (footerY > PAGE_HEIGHT - MARGIN_BOTTOM - 18) {
+        doc.addPage()
+        footerY = MARGIN_TOP
+      }
       doc.text(line, MARGIN_LEFT + 5, footerY)
       footerY += 8
     })
@@ -1493,7 +1499,11 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     doc.setFontSize(6)
     doc.setTextColor(...DARK_GRAY)
     const notesLines = doc.splitTextToSize(quotation.notes, CONTENT_WIDTH - 10)
-    notesLines.slice(0, 3).forEach(line => {
+    notesLines.forEach(line => {
+      if (footerY > PAGE_HEIGHT - MARGIN_BOTTOM - 18) {
+        doc.addPage()
+        footerY = MARGIN_TOP
+      }
       doc.text(line, MARGIN_LEFT + 5, footerY)
       footerY += 8
     })
