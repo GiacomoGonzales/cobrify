@@ -5419,7 +5419,7 @@ export default function Settings() {
                     Términos y condiciones (al pie del comprobante)
                   </label>
                   <p className="text-xs text-gray-500 mb-3">
-                    Texto libre que aparece automáticamente al pie de las facturas, boletas y notas de venta en PDF (ej: garantías, políticas de devolución). Solo se muestra en el PDF, no se envía a SUNAT. Dejalo vacío para no mostrar nada.
+                    Texto libre que aparece automáticamente al pie de las facturas, boletas y notas de venta en PDF (ej: garantías, políticas de devolución). También se usa como Términos y Condiciones por defecto en cotizaciones nuevas (editable). Solo se muestra en el PDF, no se envía a SUNAT. Dejalo vacío para no mostrar nada.
                   </p>
                   <textarea
                     value={invoiceFooterTerms}

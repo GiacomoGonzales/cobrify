@@ -196,6 +196,8 @@ export default function CreateQuotation() {
   // ===== Borrador automático en localStorage =====
   // Evita perder trabajo si el usuario cambia de página o cierra el navegador.
   const draftLoadedRef = useRef(false)
+  // Para autocompletar los Términos y Condiciones desde la config una sola vez.
+  const defaultTermsAppliedRef = useRef(false)
   const getDraftKey = () => `quotation_draft_${getBusinessId()}`
 
   const clearDraft = () => {
@@ -415,6 +417,24 @@ export default function CreateQuotation() {
     }
     draftLoadedRef.current = true
   }, [quotationId, cloneId])
+
+  // Autocompletar "Términos y Condiciones" con el texto configurado en
+  // Configuración ("Términos y condiciones al pie del comprobante",
+  // businessSettings.invoiceFooterTerms) para cotizaciones NUEVAS.
+  // El usuario puede editarlo, borrarlo o reemplazarlo por una plantilla.
+  // No aplica en edición/clonación (esas cargan sus propios términos guardados),
+  // ni pisa lo que el borrador o el prellenado ya hayan puesto.
+  useEffect(() => {
+    if (quotationId || cloneId) return        // edición/clonación: respetar lo guardado
+    if (defaultTermsAppliedRef.current) return // aplicar una sola vez
+    if (!draftLoadedRef.current) return        // esperar a que se intente cargar el borrador
+    if (!businessSettings) return              // esperar a que cargue la config
+    const defaultTerms = (businessSettings.invoiceFooterTerms || '').trim()
+    defaultTermsAppliedRef.current = true
+    if (!defaultTerms) return
+    // Updater funcional: solo llena si el campo sigue vacío (no pisa draft/plantilla).
+    setTerms(prev => (prev.trim() ? prev : defaultTerms))
+  }, [businessSettings, quotationId, cloneId])
 
   // Guardar borrador cuando cambian datos importantes (debounced 500ms)
   useEffect(() => {
