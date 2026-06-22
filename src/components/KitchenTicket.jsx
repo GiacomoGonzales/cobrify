@@ -44,6 +44,27 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = fa
     }
   }
 
+  // Bloque de pago: solo para pedidos sin mesa (delivery / para llevar). El
+  // repartidor/cajero necesita saber si debe cobrar y cuánto.
+  const showPaymentBadge = !order.tableNumber && (order.orderType === 'delivery' || order.orderType === 'takeaway')
+  const paymentMethodLabel = (() => {
+    const m = (order.paymentMethod || '').toLowerCase()
+    const map = { efectivo: 'Efectivo', cash: 'Efectivo', yape: 'Yape', plin: 'Plin', tarjeta: 'Tarjeta', card: 'Tarjeta', transferencia: 'Transferencia', transfer: 'Transferencia' }
+    return map[m] || ''
+  })()
+  const orderAmount = Number(order.total || 0)
+  const paymentBadge = showPaymentBadge ? (
+    order.paid ? (
+      <div style={{ textAlign: 'center', fontWeight: 700, border: '1px solid #000', padding: '4px', margin: '6px 0', fontSize: '11pt' }}>
+        ✓ PAGADO — S/ {orderAmount.toFixed(2)}{paymentMethodLabel ? ` (${paymentMethodLabel})` : ''}
+      </div>
+    ) : (
+      <div style={{ textAlign: 'center', fontWeight: 900, border: '3px solid #000', padding: '6px', margin: '6px 0', fontSize: '13pt', letterSpacing: '1px' }}>
+        ★ POR COBRAR ★<br />S/ {orderAmount.toFixed(2)}{paymentMethodLabel ? ` · ${paymentMethodLabel}` : ''}
+      </div>
+    )
+  ) : null
+
   return (
     <div ref={ref} className="kitchen-ticket-container" data-web-print-legible={webPrintLegible}>
       {/* Estilos de impresión */}
@@ -583,6 +604,8 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = fa
             )}
           </div>
 
+          {paymentBadge}
+
           <div className="items-section">
             {(order.items || []).map((item, index) => (
               <div key={index} className="item">
@@ -713,6 +736,8 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = fa
               <span>{getStatusLabel(order.status)}</span>
             </div>
           </div>
+
+          {paymentBadge}
 
           {/* ITEMS */}
           <div className="items-section">

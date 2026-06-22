@@ -1269,6 +1269,28 @@ export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58)
       }
     }
 
+    // Estado de pago (delivery / para llevar): el repartidor/cajero debe saber si cobra y cuánto
+    if (!table && (order.orderType === 'delivery' || order.orderType === 'takeaway')) {
+      const _amt = Number(order.total || 0).toFixed(2);
+      const _mMap = { efectivo: 'Efectivo', cash: 'Efectivo', yape: 'Yape', plin: 'Plin', tarjeta: 'Tarjeta', card: 'Tarjeta', transferencia: 'Transferencia', transfer: 'Transferencia' };
+      const _mLabel = _mMap[(order.paymentMethod || '').toLowerCase()] || '';
+      const _mSuffix = _mLabel ? ' (' + _mLabel + ')' : '';
+      commands.push(ESCPOSCommands.bold(false));
+      commands.push(ESCPOSCommands.text(separator + '\n'));
+      commands.push(ESCPOSCommands.align(1));
+      commands.push(ESCPOSCommands.bold(true));
+      if (order.paid) {
+        commands.push(ESCPOSCommands.text('PAGADO - S/ ' + _amt + _mSuffix + '\n'));
+      } else {
+        commands.push(ESCPOSCommands.doubleHeight(true));
+        commands.push(ESCPOSCommands.text('** POR COBRAR **\n'));
+        commands.push(ESCPOSCommands.text('S/ ' + _amt + _mSuffix + '\n'));
+        commands.push(ESCPOSCommands.doubleHeight(false));
+      }
+      commands.push(ESCPOSCommands.bold(false));
+      commands.push(ESCPOSCommands.align(0));
+    }
+
     commands.push(ESCPOSCommands.bold(false));
     commands.push(ESCPOSCommands.text(separator + '\n'));
 

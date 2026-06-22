@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { X, ShoppingBag, Bike, Smartphone, User, Phone, AlertTriangle, Clock, Tag } from 'lucide-react'
+import { X, ShoppingBag, Bike, Smartphone, User, Phone, AlertTriangle, Clock, Tag, MapPin, Wallet } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -22,8 +22,12 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
   const [source, setSource] = useState('counter')
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
+  const [customerAddress, setCustomerAddress] = useState('') // dirección de entrega (delivery)
   const [priority, setPriority] = useState('normal') // 'normal' or 'urgent'
   const [brandId, setBrandId] = useState('') // Brand selection
+  // Estado de pago del pedido: false = por cobrar (el repartidor/cajero cobra), true = pagado
+  const [paid, setPaid] = useState(false)
+  const [paymentMethod, setPaymentMethod] = useState('efectivo')
 
   // Auto-select brand if there's only one
   useEffect(() => {
@@ -39,10 +43,15 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
       source: ORDER_SOURCES.find(s => s.value === source)?.label || source,
       customerName: customerName.trim() || null,
       customerPhone: customerPhone.trim() || null,
+      // La dirección solo aplica a delivery
+      customerAddress: orderType === 'delivery' ? (customerAddress.trim() || null) : null,
       priority,
       brandId: brandId || null,
       brandName: selectedBrand?.name || null,
       brandColor: selectedBrand?.color || null,
+      // Estado de pago: para que la comanda y la nota de envío sepan si hay que cobrar
+      paid,
+      paymentMethod,
     }
 
     onConfirm(orderData)
@@ -52,8 +61,11 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
     setSource('counter')
     setCustomerName('')
     setCustomerPhone('')
+    setCustomerAddress('')
     setPriority('normal')
     setBrandId(brands.length === 1 ? brands[0].id : '')
+    setPaid(false)
+    setPaymentMethod('efectivo')
   }
 
   const handleClose = () => {
@@ -61,8 +73,11 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
     setSource('counter')
     setCustomerName('')
     setCustomerPhone('')
+    setCustomerAddress('')
     setPriority('normal')
     setBrandId(brands.length === 1 ? brands[0].id : '')
+    setPaid(false)
+    setPaymentMethod('efectivo')
     onClose()
   }
 
@@ -238,6 +253,82 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
               className="w-full"
             />
           </div>
+
+          {/* Dirección de entrega (solo delivery) */}
+          {orderType === 'delivery' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4" />
+                  Dirección de entrega
+                </div>
+              </label>
+              <Input
+                value={customerAddress}
+                onChange={(e) => setCustomerAddress(e.target.value)}
+                placeholder="Ej: Av. Las Viñas 123, Ref. frente al parque"
+                className="w-full"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Pago: para que la comanda diga si el repartidor debe cobrar o ya está pagado */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-3">
+            <div className="flex items-center gap-2">
+              <Wallet className="w-4 h-4" />
+              Estado de pago
+            </div>
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setPaid(false)}
+              className={`p-4 rounded-lg border-2 transition-all ${
+                !paid ? 'border-amber-500 bg-amber-50' : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <p className={`font-semibold ${!paid ? 'text-amber-700' : 'text-gray-700'}`}>
+                Por cobrar
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                {orderType === 'delivery' ? 'El repartidor cobra al entregar' : 'Cobrar al recoger'}
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPaid(true)}
+              className={`p-4 rounded-lg border-2 transition-all ${
+                paid ? 'border-green-500 bg-green-50' : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <p className={`font-semibold ${paid ? 'text-green-700' : 'text-gray-700'}`}>
+                Pagado
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Ya pagó (no cobrar)
+              </p>
+            </button>
+          </div>
+
+          {/* Método de pago */}
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Método de pago
+            </label>
+            <Select
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value)}
+              className="w-full"
+            >
+              <option value="efectivo">Efectivo</option>
+              <option value="yape">Yape</option>
+              <option value="plin">Plin</option>
+              <option value="tarjeta">Tarjeta</option>
+              <option value="transferencia">Transferencia</option>
+            </Select>
+          </div>
         </div>
 
         {/* Prioridad */}
@@ -301,6 +392,13 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
               <span className={priority === 'urgent' ? 'text-red-600 font-semibold' : ''}>
                 {priority === 'urgent' ? '🔴 Urgente' : 'Normal'}
               </span>
+            </li>
+            <li>
+              • <span className="font-medium">Pago:</span>{' '}
+              <span className={paid ? 'text-green-600 font-semibold' : 'text-amber-600 font-semibold'}>
+                {paid ? 'Pagado' : 'Por cobrar'}
+              </span>
+              {' '}({paymentMethod})
             </li>
             {brandId && brands.find(b => b.id === brandId) && (
               <li className="flex items-center gap-1">

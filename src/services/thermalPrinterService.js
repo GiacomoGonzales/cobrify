@@ -1584,6 +1584,25 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58, st
 
     printer = printer.clearFormatting();
 
+    // Estado de pago (delivery / para llevar): el repartidor/cajero debe saber si cobra y cuánto
+    if (!table && (order.orderType === 'delivery' || order.orderType === 'takeaway')) {
+      const _amt = Number(order.total || 0).toFixed(2);
+      const _mMap = { efectivo: 'Efectivo', cash: 'Efectivo', yape: 'Yape', plin: 'Plin', tarjeta: 'Tarjeta', card: 'Tarjeta', transferencia: 'Transferencia', transfer: 'Transferencia' };
+      const _mLabel = _mMap[(order.paymentMethod || '').toLowerCase()] || '';
+      const _mSuffix = _mLabel ? ` (${_mLabel})` : '';
+      printer = printer.clearFormatting().align('center').bold();
+      if (order.paid) {
+        printer = printer.text(`PAGADO - S/ ${_amt}${_mSuffix}\n`);
+      } else {
+        printer = printer
+          .doubleHeight()
+          .text('** POR COBRAR **\n')
+          .text(`S/ ${_amt}${_mSuffix}\n`);
+      }
+      printer = printer.clearFormatting().align('left');
+      printer = addSeparator(printer, format.separator, paperWidth, 'left');
+    }
+
     printer = addSeparator(printer, format.separator, paperWidth, 'left');
 
     printer = printer
@@ -2804,6 +2823,24 @@ const printWifiKitchenOrder = async (order, table = null, paperWidth = 58, stati
           .doubleHeight(false)
           .alignLeft();
       }
+    }
+
+    // Estado de pago (delivery / para llevar): el repartidor/cajero debe saber si cobra y cuánto
+    if (!table && (order.orderType === 'delivery' || order.orderType === 'takeaway')) {
+      const _amt = Number(order.total || 0).toFixed(2);
+      const _mMap = { efectivo: 'Efectivo', cash: 'Efectivo', yape: 'Yape', plin: 'Plin', tarjeta: 'Tarjeta', card: 'Tarjeta', transferencia: 'Transferencia', transfer: 'Transferencia' };
+      const _mLabel = _mMap[(order.paymentMethod || '').toLowerCase()] || '';
+      const _mSuffix = _mLabel ? ` (${_mLabel})` : '';
+      builder.bold(false).text(format.separator).newLine().alignCenter().bold(true);
+      if (order.paid) {
+        builder.text(`PAGADO - S/ ${_amt}${_mSuffix}`).newLine();
+      } else {
+        builder.doubleHeight(true)
+          .text('** POR COBRAR **').newLine()
+          .text(`S/ ${_amt}${_mSuffix}`).newLine()
+          .doubleHeight(false);
+      }
+      builder.bold(false).alignLeft();
     }
 
     builder.bold(false)

@@ -964,7 +964,10 @@ export default function Orders() {
             amount: order.total || 0,
             deliveryFee: order.deliveryFee || 0,
             paymentMethod: order.paymentMethod || 'cash',
-            cashCollected: order.paymentMethod === 'cash' || order.paymentMethod === 'efectivo' ? (order.total || 0) : 0,
+            // Hereda el estado de pago fijado al crear el pedido (por cobrar / pagado)
+            paymentStatus: order.paid ? 'paid' : 'pending',
+            // Solo hay efectivo por cobrar si NO está pagado y el método es efectivo
+            cashCollected: (!order.paid && (order.paymentMethod === 'cash' || order.paymentMethod === 'efectivo')) ? (order.total || 0) : 0,
             status: 'assigned',
           }).catch(err => console.error('Error creando delivery record:', err))
 

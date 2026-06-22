@@ -222,6 +222,7 @@ export const createOrder = async (businessId, orderData) => {
       // Información del cliente (opcional)
       ...(orderData.customerName && { customerName: orderData.customerName }),
       ...(orderData.customerPhone && { customerPhone: orderData.customerPhone }),
+      ...(orderData.customerAddress && { customerAddress: orderData.customerAddress }),
 
       // Marca (para dark kitchens / multi-marca)
       ...(orderData.brandId && { brandId: orderData.brandId }),
@@ -234,6 +235,7 @@ export const createOrder = async (businessId, orderData) => {
       // Estado de pago
       paid: orderData.paid || false,
       paidAt: orderData.paid ? serverTimestamp() : null,
+      ...(orderData.paymentMethod && { paymentMethod: orderData.paymentMethod }),
 
       // Cálculos
       subtotal: orderData.subtotal || 0,
