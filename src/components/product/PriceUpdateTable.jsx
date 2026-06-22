@@ -133,6 +133,11 @@ export default function PriceUpdateTable({
   const [bulkApplyTo, setBulkApplyTo] = useState('price') // qué precio(s) afectar
 
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100
+  // Para GUARDAR precios tecleados por el usuario: NO redondear a 2 decimales
+  // (un precio sub-céntimo como 0.125 se convertía en 0.13 → al vender 12 daba
+  // 1.56 en vez de 1.50). Se preserva hasta 6 decimales; el redondeo a céntimos
+  // ocurre al final, sobre el total de la venta. Solo limpia ruido de float.
+  const roundPrice = (n) => Math.round((Number(n) || 0) * 1e6) / 1e6
 
   // ----- Helpers de detección -----
   const hasVariants = (p) => !!p.hasVariants && Array.isArray(p.variants) && p.variants.length > 0
@@ -167,7 +172,7 @@ export default function PriceUpdateTable({
     if (raw === '') return true
     const n = Number(raw)
     if (!Number.isFinite(n)) return true
-    return round2(n) !== round2(saved || 0)
+    return roundPrice(n) !== roundPrice(saved || 0)
   }
   const isFieldInvalid = (raw) => {
     if (raw === undefined) return false
@@ -430,9 +435,9 @@ export default function PriceUpdateTable({
         const update = {}
         // Precios planos
         if (!hasVariants(p)) {
-          if (isFieldDirty(p.price, patch.price)) update.price = round2(Number(patch.price))
+          if (isFieldDirty(p.price, patch.price)) update.price = roundPrice(Number(patch.price))
           for (const lvl of EXTRA_LEVELS) {
-            if (isFieldDirty(p[lvl], patch[lvl])) update[lvl] = round2(Number(patch[lvl]))
+            if (isFieldDirty(p[lvl], patch[lvl])) update[lvl] = roundPrice(Number(patch[lvl]))
           }
         }
         // Presentaciones: reescribir el array completo (Firestore no permite update parcial de array)
@@ -443,7 +448,7 @@ export default function PriceUpdateTable({
             update.presentations = p.presentations.map((pres, idx) => {
               const raw = patch.presentations[idx]
               if (raw === undefined) return pres
-              return { ...pres, price: round2(Number(raw)) }
+              return { ...pres, price: roundPrice(Number(raw)) }
             })
           }
         }
@@ -460,9 +465,9 @@ export default function PriceUpdateTable({
             const newVariants = p.variants.map(v => {
               const vp = patch.variants[v.sku] || {}
               const out = { ...v }
-              if (vp.price !== undefined && vp.price !== '') out.price = round2(Number(vp.price))
+              if (vp.price !== undefined && vp.price !== '') out.price = roundPrice(Number(vp.price))
               for (const lvl of EXTRA_LEVELS) {
-                if (vp[lvl] !== undefined && vp[lvl] !== '') out[lvl] = round2(Number(vp[lvl]))
+                if (vp[lvl] !== undefined && vp[lvl] !== '') out[lvl] = roundPrice(Number(vp[lvl]))
               }
               return out
             })
