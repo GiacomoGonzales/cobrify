@@ -126,6 +126,7 @@ export default function WarehouseExits() {
             variantSku: v.sku,
             variantLabel,
             isVariant: true,
+            allowDecimalQuantity: product.allowDecimalQuantity === true,
           }
         })
 
@@ -160,12 +161,12 @@ export default function WarehouseExits() {
         return
       }
       // Ya existe, incrementar cantidad (con tope por stock)
-      if (existing.quantity >= stock) {
+      if ((parseFloat(existing.quantity) || 0) >= stock) {
         toast.error(`Ya agregaste el máximo disponible de "${product.name}" (${stock})`)
         return
       }
       setItems(items.map(i => i.productId === product.id && !i.variantSku
-        ? { ...i, quantity: i.quantity + 1 }
+        ? { ...i, quantity: (parseFloat(i.quantity) || 0) + 1 }
         : i))
     } else {
       const availableSerials = product.trackSerials
@@ -181,6 +182,7 @@ export default function WarehouseExits() {
         serials: availableSerials,
         hasSerials: product.trackSerials && availableSerials.length > 0,
         selectedSerials: [],
+        allowDecimalQuantity: product.allowDecimalQuantity === true,
       }])
     }
     setProductSearch('')
@@ -220,22 +222,27 @@ export default function WarehouseExits() {
     i.productId === productId && (i.variantSku || null) === (variantSku || null)
 
   const updateItemQuantity = (productId, variantSku, value) => {
-    const raw = value === '' ? '' : parseInt(value) || ''
     setItems(items.map(i => {
       if (!rowMatches(i, productId, variantSku)) return i
-      if (typeof raw === 'number' && raw > (i.availableStock || 0)) {
-        return { ...i, quantity: raw, exceedsStock: true }
-      }
-      return { ...i, quantity: raw, exceedsStock: false }
+      // Productos con decimales (peso/volumen): guardar el texto crudo mientras se
+      // escribe (permite teclear "1.5", "0.25", "1.") y parsear en el blur. Resto:
+      // entero como antes.
+      const raw = value === '' ? '' : (i.allowDecimalQuantity ? value : (parseInt(value) || ''))
+      const num = parseFloat(raw)
+      const exceeds = !isNaN(num) && num > (i.availableStock || 0)
+      return { ...i, quantity: raw, exceedsStock: exceeds }
     }))
   }
 
   const finalizeItemQuantity = (productId, variantSku) => {
     setItems(items.map(i => {
       if (!rowMatches(i, productId, variantSku)) return i
-      const parsed = parseInt(i.quantity) || 1
       const maxStock = i.availableStock || 0
-      const clamped = Math.max(1, Math.min(parsed, maxStock || parsed))
+      let parsed = i.allowDecimalQuantity ? parseFloat(i.quantity) : parseInt(i.quantity)
+      if (!parsed || isNaN(parsed) || parsed <= 0) parsed = 1
+      if (i.allowDecimalQuantity) parsed = Math.round(parsed * 1000) / 1000 // hasta 3 decimales
+      // Tope por stock. El mínimo es el propio valor (>0): no forzar a 1, así 0.5 es válido.
+      const clamped = maxStock > 0 ? Math.min(parsed, maxStock) : parsed
       if (parsed > maxStock && maxStock > 0) {
         const who = i.variantLabel ? `${i.productName} (${i.variantLabel})` : i.productName
         toast.error(`Stock máximo de "${who}" es ${maxStock}. Se ajustó la cantidad.`)
@@ -295,13 +302,13 @@ export default function WarehouseExits() {
     if (isDemoMode) { toast.error('No disponible en modo demo'); return }
 
     // Validar que ningún item exceda el stock disponible
-    const overStock = items.find(i => (parseInt(i.quantity) || 0) > (i.availableStock || 0))
+    const overStock = items.find(i => (parseFloat(i.quantity) || 0) > (i.availableStock || 0))
     if (overStock) {
       toast.error(`Cantidad inválida: "${overStock.productName}" solicita ${overStock.quantity} pero hay ${overStock.availableStock} en stock.`)
       return
     }
-    // Validar que ningún item tenga cantidad < 1
-    const invalidQty = items.find(i => !i.quantity || parseInt(i.quantity) < 1)
+    // Validar que ningún item tenga cantidad <= 0 (parseFloat: acepta decimales como 0.5)
+    const invalidQty = items.find(i => !(parseFloat(i.quantity) > 0))
     if (invalidQty) {
       toast.error(`Ingresa una cantidad válida para "${invalidQty.productName}"`)
       return
@@ -323,7 +330,10 @@ export default function WarehouseExits() {
         warehouseId: selectedWarehouse,
         warehouseName: warehouse?.name || '',
         items: items.map(({ productId, productName, productCode, quantity, unit, variantSku, selectedSerials }) => ({
-          productId, productName, productCode, quantity, unit, variantSku: variantSku || null,
+          productId, productName, productCode,
+          // Normalizar a número (hasta 3 decimales) por si quedó como texto sin blur
+          quantity: Math.round((parseFloat(quantity) || 0) * 1000) / 1000,
+          unit, variantSku: variantSku || null,
           selectedSerials: selectedSerials || [],
         })),
         notes,
@@ -753,7 +763,8 @@ export default function WarehouseExits() {
                       <td className="py-2 px-3 text-center">
                         <input
                           type="number"
-                          min="1"
+                          min={item.allowDecimalQuantity ? '0.001' : '1'}
+                          step={item.allowDecimalQuantity ? '0.001' : '1'}
                           max={item.availableStock}
                           value={item.hasSerials ? (item.selectedSerials?.length || 0) : item.quantity}
                           disabled={item.hasSerials}
@@ -813,7 +824,7 @@ export default function WarehouseExits() {
                 </tbody>
               </table>
               <div className="bg-gray-50 px-3 py-2 text-sm text-gray-600 font-medium border-t">
-                Total: {items.reduce((s, i) => s + i.quantity, 0)} unidades en {items.length} productos
+                Total: {Math.round(items.reduce((s, i) => s + (parseFloat(i.quantity) || 0), 0) * 1000) / 1000} unidades en {items.length} productos
               </div>
             </div>
           )}
