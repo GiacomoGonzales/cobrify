@@ -1525,9 +1525,10 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58, st
         printer = printer.text(`Mesa: ${table.number}${table.waiter ? ' | Mozo: ' + table.waiter : ''}\n`);
       } else if (order.orderType) {
         const typeLabels = { delivery: 'DELIVERY', takeaway: 'PARA LLEVAR' };
-        printer = printer.text(`${typeLabels[order.orderType] || ''} ${order.customerName ? '- ' + convertSpanishText(order.customerName) : ''}\n`);
+        const _cust = order._showCustomerData && order.customerName ? '- ' + convertSpanishText(order.customerName) : '';
+        printer = printer.text(`${typeLabels[order.orderType] || ''} ${_cust}\n`);
       }
-      if (order.customerAddress) {
+      if (order._showCustomerData && order.customerAddress) {
         printer = printer.text(`${convertSpanishText(order.customerAddress)}\n`);
       }
     } else {
@@ -1546,14 +1547,14 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58, st
         printer = printer.text(`Marca: ${convertSpanishText(order.brandName)}\n`);
       }
 
-      // Datos del cliente para delivery/takeaway
-      if (order.customerName) {
+      // Datos del cliente para delivery/takeaway (solo si está activado en Preferencias)
+      if (order._showCustomerData && order.customerName) {
         printer = printer.text(`Cliente: ${convertSpanishText(order.customerName)}\n`);
       }
-      if (order.customerPhone) {
+      if (order._showCustomerData && order.customerPhone) {
         printer = printer.text(`Tel: ${order.customerPhone}\n`);
       }
-      if (order.customerAddress) {
+      if (order._showCustomerData && order.customerAddress) {
         printer = printer.text(`Dir: ${convertSpanishText(order.customerAddress)}\n`);
       }
       if (order.orderType && !table) {
@@ -1585,7 +1586,7 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58, st
     printer = printer.clearFormatting();
 
     // Estado de pago (delivery / para llevar): el repartidor/cajero debe saber si cobra y cuánto
-    if (!table && (order.orderType === 'delivery' || order.orderType === 'takeaway')) {
+    if (order._showCustomerData && !table && (order.orderType === 'delivery' || order.orderType === 'takeaway')) {
       const _amt = Number(order.total || 0).toFixed(2);
       const _mMap = { efectivo: 'Efectivo', cash: 'Efectivo', yape: 'Yape', plin: 'Plin', tarjeta: 'Tarjeta', card: 'Tarjeta', transferencia: 'Transferencia', transfer: 'Transferencia' };
       const _mLabel = _mMap[(order.paymentMethod || '').toLowerCase()] || '';
@@ -2765,9 +2766,10 @@ const printWifiKitchenOrder = async (order, table = null, paperWidth = 58, stati
         builder.text(`Mesa: ${table.number}${table.waiter ? ' | Mozo: ' + table.waiter : ''}`).newLine();
       } else if (order.orderType) {
         const typeLabels = { delivery: 'DELIVERY', takeaway: 'PARA LLEVAR' };
-        builder.text(`${typeLabels[order.orderType] || ''} ${order.customerName ? '- ' + order.customerName : ''}`).newLine();
+        const _cust = order._showCustomerData && order.customerName ? '- ' + order.customerName : '';
+        builder.text(`${typeLabels[order.orderType] || ''} ${_cust}`).newLine();
       }
-      if (order.customerAddress) {
+      if (order._showCustomerData && order.customerAddress) {
         builder.text(order.customerAddress).newLine();
       }
     } else {
@@ -2789,14 +2791,14 @@ const printWifiKitchenOrder = async (order, table = null, paperWidth = 58, stati
           .newLine();
       }
 
-      // Datos del cliente para delivery/takeaway
-      if (order.customerName) {
+      // Datos del cliente para delivery/takeaway (solo si está activado en Preferencias)
+      if (order._showCustomerData && order.customerName) {
         builder.text(`Cliente: ${order.customerName}`).newLine();
       }
-      if (order.customerPhone) {
+      if (order._showCustomerData && order.customerPhone) {
         builder.text(`Tel: ${order.customerPhone}`).newLine();
       }
-      if (order.customerAddress) {
+      if (order._showCustomerData && order.customerAddress) {
         builder.text(`Dir: ${order.customerAddress}`).newLine();
       }
       if (order.orderType && !table) {
@@ -2826,7 +2828,7 @@ const printWifiKitchenOrder = async (order, table = null, paperWidth = 58, stati
     }
 
     // Estado de pago (delivery / para llevar): el repartidor/cajero debe saber si cobra y cuánto
-    if (!table && (order.orderType === 'delivery' || order.orderType === 'takeaway')) {
+    if (order._showCustomerData && !table && (order.orderType === 'delivery' || order.orderType === 'takeaway')) {
       const _amt = Number(order.total || 0).toFixed(2);
       const _mMap = { efectivo: 'Efectivo', cash: 'Efectivo', yape: 'Yape', plin: 'Plin', tarjeta: 'Tarjeta', card: 'Tarjeta', transferencia: 'Transferencia', transfer: 'Transferencia' };
       const _mLabel = _mMap[(order.paymentMethod || '').toLowerCase()] || '';

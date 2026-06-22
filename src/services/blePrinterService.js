@@ -1219,9 +1219,9 @@ export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58)
         commands.push(ESCPOSCommands.text('Mesa: ' + table.number + (table.waiter ? ' | Mozo: ' + table.waiter : '') + '\n'));
       } else if (order.orderType) {
         const typeLabels = { delivery: 'DELIVERY', takeaway: 'PARA LLEVAR' };
-        commands.push(ESCPOSCommands.text((typeLabels[order.orderType] || '') + (order.customerName ? ' - ' + convertSpanishText(order.customerName) : '') + '\n'));
+        commands.push(ESCPOSCommands.text((typeLabels[order.orderType] || '') + (order._showCustomerData && order.customerName ? ' - ' + convertSpanishText(order.customerName) : '') + '\n'));
       }
-      if (order.customerAddress) {
+      if (order._showCustomerData && order.customerAddress) {
         commands.push(ESCPOSCommands.text(convertSpanishText(order.customerAddress) + '\n'));
       }
     } else {
@@ -1237,13 +1237,13 @@ export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58)
         commands.push(ESCPOSCommands.text('Marca: ' + convertSpanishText(order.brandName) + '\n'));
       }
 
-      if (order.customerName) {
+      if (order._showCustomerData && order.customerName) {
         commands.push(ESCPOSCommands.text('Cliente: ' + convertSpanishText(order.customerName) + '\n'));
       }
-      if (order.customerPhone) {
+      if (order._showCustomerData && order.customerPhone) {
         commands.push(ESCPOSCommands.text('Tel: ' + order.customerPhone + '\n'));
       }
-      if (order.customerAddress) {
+      if (order._showCustomerData && order.customerAddress) {
         commands.push(ESCPOSCommands.text('Dir: ' + convertSpanishText(order.customerAddress) + '\n'));
       }
       if (order.orderType && !table) {
@@ -1270,7 +1270,7 @@ export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58)
     }
 
     // Estado de pago (delivery / para llevar): el repartidor/cajero debe saber si cobra y cuánto
-    if (!table && (order.orderType === 'delivery' || order.orderType === 'takeaway')) {
+    if (order._showCustomerData && !table && (order.orderType === 'delivery' || order.orderType === 'takeaway')) {
       const _amt = Number(order.total || 0).toFixed(2);
       const _mMap = { efectivo: 'Efectivo', cash: 'Efectivo', yape: 'Yape', plin: 'Plin', tarjeta: 'Tarjeta', card: 'Tarjeta', transferencia: 'Transferencia', transfer: 'Transferencia' };
       const _mLabel = _mMap[(order.paymentMethod || '').toLowerCase()] || '';

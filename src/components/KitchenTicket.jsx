@@ -44,9 +44,12 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = fa
     }
   }
 
-  // Bloque de pago: solo para pedidos sin mesa (delivery / para llevar). El
-  // repartidor/cajero necesita saber si debe cobrar y cuánto.
-  const showPaymentBadge = !order.tableNumber && (order.orderType === 'delivery' || order.orderType === 'takeaway')
+  // Mostrar datos del cliente (nombre/teléfono/dirección) y el cobro en la comanda
+  // solo si el negocio lo activó en Configuración > Preferencias. Por defecto la
+  // comanda es solo para cocina (sin datos del cliente ni cobro).
+  const showCustomerData = companySettings?.showCustomerDataOnKitchenTicket === true
+  // Bloque de pago: solo para pedidos sin mesa (delivery / para llevar) y si está activado.
+  const showPaymentBadge = showCustomerData && !order.tableNumber && (order.orderType === 'delivery' || order.orderType === 'takeaway')
   const paymentMethodLabel = (() => {
     const m = (order.paymentMethod || '').toLowerCase()
     const map = { efectivo: 'Efectivo', cash: 'Efectivo', yape: 'Yape', plin: 'Plin', tarjeta: 'Tarjeta', card: 'Tarjeta', transferencia: 'Transferencia', transfer: 'Transferencia' }
@@ -594,10 +597,10 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = fa
             ) : (
               <div className="info-row">
                 <span className="info-label">{getOrderTypeLabel(order.orderType)}</span>
-                {order.customerName && <span style={{ marginLeft: 'auto', paddingLeft: '8px' }}>{order.customerName}</span>}
+                {showCustomerData && order.customerName && <span style={{ marginLeft: 'auto', paddingLeft: '8px' }}>{order.customerName}</span>}
               </div>
             )}
-            {order.customerAddress && (
+            {showCustomerData && order.customerAddress && (
               <div className="info-row">
                 <span>{order.customerAddress}</span>
               </div>
@@ -697,14 +700,14 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = fa
               </div>
             )}
 
-            {order.customerName && (
+            {showCustomerData && order.customerName && (
               <div className="info-row">
                 <span className="info-label">CLIENTE:</span>
                 <span>{order.customerName}</span>
               </div>
             )}
 
-            {order.customerPhone && (
+            {showCustomerData && order.customerPhone && (
               <div className="info-row">
                 <span className="info-label">TELÉFONO:</span>
                 <span>
@@ -724,7 +727,7 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = fa
               </div>
             )}
 
-            {order.customerAddress && (
+            {showCustomerData && order.customerAddress && (
               <div className="info-row" style={{ flexDirection: 'column' }}>
                 <span className="info-label">DIRECCIÓN:</span>
                 <span style={{ fontWeight: 700 }}>{order.customerAddress}</span>

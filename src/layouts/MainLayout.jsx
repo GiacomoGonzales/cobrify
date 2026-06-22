@@ -300,6 +300,8 @@ export default function MainLayout() {
         customerAddress: alert.customerAddress || '',
         items: alert.newItems || [],
         _printNote: alert.type === 'items_added' ? 'ITEMS AGREGADOS' : null,
+        // Respeta el ajuste "mostrar datos y cobro en comandas" (Configuración > Preferencias)
+        _showCustomerData: alertCompanySettings?.showCustomerDataOnKitchenTicket === true,
         source: 'menu_digital',
       }
 

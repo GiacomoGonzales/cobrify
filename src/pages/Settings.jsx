@@ -3942,6 +3942,59 @@ export default function Settings() {
                 </p>
               </div>
 
+              {/* Comandas (solo restaurante): qué se imprime en el ticket de cocina */}
+              {businessMode === 'restaurant' && (
+                <>
+                  <div className="border-t border-gray-200"></div>
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900 mb-1">Comandas</h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Qué información se imprime en las comandas (tickets de cocina).
+                    </p>
+                    <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={businessSettings?.showCustomerDataOnKitchenTicket === true}
+                        onChange={async (e) => {
+                          if (isDemoMode) {
+                            toast.error('No disponible en modo demo')
+                            return
+                          }
+                          const enabled = e.target.checked
+                          try {
+                            const businessRef = doc(db, 'businesses', getBusinessId())
+                            await setDoc(businessRef, {
+                              showCustomerDataOnKitchenTicket: enabled,
+                              updatedAt: serverTimestamp(),
+                            }, { merge: true })
+                            if (refreshBusinessSettings) await refreshBusinessSettings()
+                            toast.success(enabled
+                              ? 'Las comandas mostrarán datos del cliente y cobro'
+                              : 'Las comandas mostrarán solo los productos (cocina)')
+                          } catch (error) {
+                            console.error('Error toggle comandas:', error)
+                            toast.error('No se pudo actualizar')
+                          }
+                        }}
+                        className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                          <Bike className="w-4 h-4 text-primary-600" />
+                          Mostrar datos del cliente y cobro en comandas
+                        </span>
+                        <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                          Al activarlo, las comandas de delivery y para llevar incluyen nombre,
+                          teléfono, dirección y el estado de pago (★ POR COBRAR ★ con el monto, o
+                          ✓ PAGADO). Si está desactivado, la comanda muestra solo los productos para
+                          la cocina, como siempre.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                </>
+              )}
+
               {/* Integraciones — visibles para TODOS los modos de negocio.
                   Cada toggle individual decide si aplica al modo (ej. Rappi solo restaurant). */}
               <div className="border-t border-gray-200"></div>

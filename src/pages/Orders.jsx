@@ -207,11 +207,15 @@ export default function Orders() {
   })
 
   // Función para imprimir comanda
-  const handlePrintKitchenTicket = async (order) => {
+  const handlePrintKitchenTicket = async (orderArg) => {
     if (isDemoMode) {
       toast.info('Esta función no está disponible en modo demo')
       return
     }
+
+    // Inyectar el ajuste "mostrar datos y cobro en comandas" (Configuración > Preferencias)
+    // para que la comanda térmica respete si se imprimen datos del cliente y el cobro.
+    const order = { ...orderArg, _showCustomerData: companySettings?.showCustomerDataOnKitchenTicket === true }
 
     const isNative = Capacitor.isNativePlatform()
 
