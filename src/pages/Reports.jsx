@@ -5458,6 +5458,25 @@ export default function Reports() {
         })()
         const roomTypeNightsTotal = revenueByRoomType.reduce((s, r) => s + r.nights, 0)
 
+        // Ingresos agrupados por habitación INDIVIDUAL, mostrando su nombre
+        // (ej. cada cabaña por su nombre). Agrupa por roomId; fallback al nombre/número
+        // guardado en la reserva si la habitación fue eliminada.
+        const revenueByRoom = (() => {
+          const map = {}
+          activeRes.forEach(res => {
+            const room = hotelRooms.find(rm => rm.id === res.roomId)
+            const key = res.roomId || res.roomName || res.roomNumber || 'sin-hab'
+            const name = (room?.name || res.roomName || '').trim()
+            const number = room?.number || res.roomNumber || ''
+            const label = name || (number ? `Hab. ${number}` : 'Sin habitación')
+            if (!map[key]) map[key] = { key, label, reservations: 0, nights: 0, revenue: 0 }
+            map[key].reservations += 1
+            map[key].nights += (res.nights || 0)
+            map[key].revenue += (res.totalAmount || res.total || 0)
+          })
+          return Object.values(map).sort((a, b) => b.revenue - a.revenue)
+        })()
+
         return (
           <>
             {/* Total de reservas del período (independiente de boletas/facturas) */}
@@ -5586,6 +5605,64 @@ export default function Reports() {
                           {revenueByRoomType.map((row) => (
                             <TableRow key={row.type}>
                               <TableCell className="font-medium">{row.type}</TableCell>
+                              <TableCell className="text-center">{row.reservations}</TableCell>
+                              <TableCell className="text-center">{row.nights}</TableCell>
+                              <TableCell className="text-right font-semibold">{formatCurrency(row.revenue)}</TableCell>
+                            </TableRow>
+                          ))}
+                          <TableRow className="bg-gray-50 font-bold">
+                            <TableCell>Total</TableCell>
+                            <TableCell className="text-center">{totalReservationsCount}</TableCell>
+                            <TableCell className="text-center">{roomTypeNightsTotal}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(totalReservationsAmount)}</TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Ingresos por habitación individual (cada cabaña por su nombre) */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Ingresos por Habitación</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {revenueByRoom.length === 0 ? (
+                  <p className="text-center py-8 text-gray-500">No hay reservas en este período</p>
+                ) : (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                    {/* Gráfico de barras horizontal */}
+                    <ResponsiveContainer width="100%" height={Math.max(180, revenueByRoom.length * 48)}>
+                      <BarChart data={revenueByRoom} layout="vertical" margin={{ left: 10, right: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                        <XAxis type="number" tickFormatter={(v) => formatCurrency(v)} />
+                        <YAxis type="category" dataKey="label" width={110} />
+                        <Tooltip formatter={(value) => formatCurrency(value)} />
+                        <Bar dataKey="revenue" name="Ingresos" radius={[0, 4, 4, 0]}>
+                          {revenueByRoom.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                    {/* Tabla */}
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Habitación</TableHead>
+                            <TableHead className="text-center">Reservas</TableHead>
+                            <TableHead className="text-center">Noches</TableHead>
+                            <TableHead className="text-right">Ingreso total</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {revenueByRoom.map((row) => (
+                            <TableRow key={row.key}>
+                              <TableCell className="font-medium">{row.label}</TableCell>
                               <TableCell className="text-center">{row.reservations}</TableCell>
                               <TableCell className="text-center">{row.nights}</TableCell>
                               <TableCell className="text-right font-semibold">{formatCurrency(row.revenue)}</TableCell>
