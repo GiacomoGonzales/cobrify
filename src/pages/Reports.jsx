@@ -5434,8 +5434,57 @@ export default function Reports() {
           no_show: filteredRes.filter(r => r.status === 'no_show').length,
         }
 
+        // Total de TODAS las reservas reales del período (excluye canceladas y no-show).
+        // No depende de boletas/facturas emitidas: suma el monto de cada reserva.
+        const activeRes = filteredRes.filter(r => r.status !== 'cancelled' && r.status !== 'no_show')
+        const totalReservationsCount = activeRes.length
+        const totalReservationsAmount = activeRes.reduce((s, r) => s + (r.totalAmount || r.total || 0), 0)
+        const totalReservationsPaid = activeRes.reduce((s, r) => s + (r.amountPaid || 0), 0)
+        const totalReservationsPending = Math.max(0, totalReservationsAmount - totalReservationsPaid)
+
+        // Ingresos agrupados por tipo de habitación (reserva -> habitación por roomId -> type)
+        const ROOM_TYPE_LABELS = { simple: 'Simple', doble: 'Doble', matrimonial: 'Matrimonial', suite: 'Suite', familiar: 'Familiar' }
+        const revenueByRoomType = (() => {
+          const map = {}
+          activeRes.forEach(res => {
+            const room = hotelRooms.find(rm => rm.id === res.roomId)
+            const label = ROOM_TYPE_LABELS[room?.type] || 'Otros'
+            if (!map[label]) map[label] = { type: label, reservations: 0, nights: 0, revenue: 0 }
+            map[label].reservations += 1
+            map[label].nights += (res.nights || 0)
+            map[label].revenue += (res.totalAmount || res.total || 0)
+          })
+          return Object.values(map).sort((a, b) => b.revenue - a.revenue)
+        })()
+        const roomTypeNightsTotal = revenueByRoomType.reduce((s, r) => s + r.nights, 0)
+
         return (
           <>
+            {/* Total de reservas del período (independiente de boletas/facturas) */}
+            <Card className="border-blue-200 bg-blue-50/50">
+              <CardContent className="p-5">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Total de reservas del período</p>
+                    <p className="text-3xl font-bold text-blue-700">{formatCurrency(totalReservationsAmount)}</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {totalReservationsCount} {totalReservationsCount === 1 ? 'reserva' : 'reservas'} · suma de todas las reservas hechas (no depende de boletas/facturas emitidas)
+                    </p>
+                  </div>
+                  <div className="flex gap-6">
+                    <div className="text-center">
+                      <p className="text-xs text-gray-500">Cobrado</p>
+                      <p className="text-lg font-bold text-green-600">{formatCurrency(totalReservationsPaid)}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-gray-500">Pendiente</p>
+                      <p className="text-lg font-bold text-amber-600">{formatCurrency(totalReservationsPending)}</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
             {/* KPIs */}
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
               <Card>
@@ -5463,7 +5512,7 @@ export default function Reports() {
                 <CardContent className="p-4 text-center">
                   <p className="text-xs text-gray-500">Ingresos Habitaciones</p>
                   <p className="text-2xl font-bold text-green-600">{formatCurrency(totalRoomRevenue)}</p>
-                  <p className="text-xs text-gray-400">{totalNights} noches</p>
+                  <p className="text-xs text-gray-400">{totalNights} noches (check-out)</p>
                 </CardContent>
               </Card>
               <Card>
@@ -5495,6 +5544,64 @@ export default function Reports() {
                     </div>
                   ))}
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Costo / ingreso total por tipo de habitación */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Ingresos por Tipo de Habitación</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {revenueByRoomType.length === 0 ? (
+                  <p className="text-center py-8 text-gray-500">No hay reservas en este período</p>
+                ) : (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                    {/* Gráfico de barras horizontal */}
+                    <ResponsiveContainer width="100%" height={Math.max(180, revenueByRoomType.length * 56)}>
+                      <BarChart data={revenueByRoomType} layout="vertical" margin={{ left: 10, right: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                        <XAxis type="number" tickFormatter={(v) => formatCurrency(v)} />
+                        <YAxis type="category" dataKey="type" width={90} />
+                        <Tooltip formatter={(value) => formatCurrency(value)} />
+                        <Bar dataKey="revenue" name="Ingresos" radius={[0, 4, 4, 0]}>
+                          {revenueByRoomType.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                    {/* Tabla */}
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Tipo</TableHead>
+                            <TableHead className="text-center">Reservas</TableHead>
+                            <TableHead className="text-center">Noches</TableHead>
+                            <TableHead className="text-right">Ingreso total</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {revenueByRoomType.map((row) => (
+                            <TableRow key={row.type}>
+                              <TableCell className="font-medium">{row.type}</TableCell>
+                              <TableCell className="text-center">{row.reservations}</TableCell>
+                              <TableCell className="text-center">{row.nights}</TableCell>
+                              <TableCell className="text-right font-semibold">{formatCurrency(row.revenue)}</TableCell>
+                            </TableRow>
+                          ))}
+                          <TableRow className="bg-gray-50 font-bold">
+                            <TableCell>Total</TableCell>
+                            <TableCell className="text-center">{totalReservationsCount}</TableCell>
+                            <TableCell className="text-center">{roomTypeNightsTotal}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(totalReservationsAmount)}</TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
