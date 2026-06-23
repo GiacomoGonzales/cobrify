@@ -704,7 +704,7 @@ export default function MainLayout() {
               <Outlet />
             </main>
           ) : (
-            <main className="flex-1 overflow-y-auto overscroll-none p-2 sm:p-4 custom-scrollbar" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
+            <main className="flex-1 overflow-y-auto overscroll-none p-2 sm:p-4 custom-scrollbar" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))', scrollbarGutter: 'stable' }}>
               <Outlet />
             </main>
           )}

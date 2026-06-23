@@ -127,9 +127,18 @@
     display: none;             /* Chrome/Safari/Opera */
   }
 
-  /* Custom scrollbar */
+  /* Custom scrollbar — visible y cross-navegador.
+     Antes solo definía ::-webkit-scrollbar, así que en Firefox y en
+     pantallas con barras "overlay" (macOS con trackpad, táctiles) se veía
+     muy tenue o no se veía. Ahora también declara scrollbar-width/color
+     (estándar, Firefox) y un thumb más marcado. */
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(156, 163, 175, 0.8) transparent; /* gray-400 @ 80% */
+  }
+
   .custom-scrollbar::-webkit-scrollbar {
-    @apply w-1.5;
+    @apply w-2 h-2;
   }
 
   .custom-scrollbar::-webkit-scrollbar-track {
@@ -137,7 +146,7 @@
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    @apply bg-gray-300/60 rounded-full hover:bg-gray-400/80;
+    @apply bg-gray-400/80 rounded-full hover:bg-gray-500;
   }
 
   /* Sidebar scrollbar - más sutil, solo visible al hacer hover */
