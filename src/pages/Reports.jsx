@@ -5402,22 +5402,46 @@ export default function Reports() {
         const occupiedRooms = hotelRooms.filter(r => r.status === 'occupied').length
         const occupancyRate = totalRooms > 0 ? ((occupiedRooms / totalRooms) * 100).toFixed(1) : 0
 
-        // Filtrar reservas por rango de fecha
+        // Filtrar reservas SIEMPRE por la fecha de la reserva (check-in / estadía),
+        // NO por cuándo se creó. Con límite inferior Y superior para que, por ejemplo,
+        // una reserva hecha en junio pero para julio cuente en JULIO (su check-in), no
+        // en junio. "Este mes" = mes calendario completo (incluye reservas futuras del
+        // mismo mes). Para ver otro mes usar "Personalizado".
         const filteredRes = hotelReservations.filter(res => {
           if (!res.checkIn) return false
-          const checkInDate = new Date(res.checkIn + 'T00:00:00')
           if (dateRange === 'all') return true
+          const checkInDate = new Date(res.checkIn + 'T00:00:00')
           const now = new Date()
-          let startDate = new Date()
-          switch (dateRange) {
-            case 'today': startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0); break
-            case 'week': startDate.setDate(now.getDate() - 7); break
-            case 'month': startDate = new Date(now.getFullYear(), now.getMonth(), 1); break
-            case 'quarter': startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1); break
-            case 'year': startDate = new Date(now.getFullYear(), 0, 1); break
-            default: startDate.setMonth(now.getMonth() - 1)
+          let startDate, endDate
+          if (dateRange === 'custom') {
+            if (!customStartDate || !customEndDate) return true // sin fechas → no filtrar
+            startDate = parseLocalDate(customStartDate); startDate.setHours(0, 0, 0, 0)
+            endDate = parseLocalDate(customEndDate); endDate.setHours(23, 59, 59, 999)
+          } else {
+            switch (dateRange) {
+              case 'today':
+                startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+                endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
+                break
+              case 'week':
+                startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0, 0)
+                endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
+                break
+              case 'quarter':
+                startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1, 0, 0, 0, 0)
+                endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+                break
+              case 'year':
+                startDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0)
+                endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999)
+                break
+              case 'month':
+              default:
+                startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
+                endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+            }
           }
-          return checkInDate >= startDate
+          return checkInDate >= startDate && checkInDate <= endDate
         })
 
         const completedRes = filteredRes.filter(r => r.status === 'checked_out')
