@@ -16,12 +16,22 @@ import { unitDisplayName } from '@/data/sunatUnits'
  * - Código QR para validación
  * - Representación impresa
  */
-const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, webPrintLegible = false, compactPrint = false, printMargins = 8, simplePrint = false, a4SheetPrint = false, showItemUnit = false }, ref) => {
+const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, webPrintLegible: webPrintLegibleProp = false, ticketFontSize, compactPrint = false, printMargins = 8, simplePrint = false, a4SheetPrint = false, showItemUnit = false }, ref) => {
   // Estado para detectar si el logo es cuadrado
   const [isSquareLogo, setIsSquareLogo] = React.useState(false)
 
   // Determinar si es papel de 58mm o 80mm
   const is58mm = paperWidth === 58
+
+  // Tamaño de letra del ticket: 'small' | 'medium' | 'large'.
+  // Retrocompat: si no llega ticketFontSize, se deriva del booleano legacy webPrintLegible.
+  // - 'medium' reusa el modo legible existente (sizes ya afinados).
+  // - 'large' = legible + zoom del contenedor con compensación de ancho: escala letra y
+  //   espaciado de forma coherente manteniendo el ancho FÍSICO del papel (el texto
+  //   reflowea dentro del ticket, no se desborda).
+  const webPrintLegible = ticketFontSize ? ticketFontSize !== 'small' : webPrintLegibleProp
+  const ticketZoom = ticketFontSize === 'large' ? 1.2 : 1
+  const ticketWidthMm = Number((paperWidth / ticketZoom).toFixed(3))
 
   // Escala del logo configurable por el usuario (companySettings.logoPrintScale, en %).
   // 100 = tamaño actual. Acotada para no romper el ticket.
@@ -234,8 +244,9 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           .ticket-container {
             position: ${a4SheetPrint ? 'static' : 'absolute'};
             ${a4SheetPrint ? '' : 'left: 0;\n            top: 0;'}
-            width: ${paperWidth}mm !important;
-            max-width: ${paperWidth}mm !important;
+            width: ${ticketWidthMm}mm !important;
+            max-width: ${ticketWidthMm}mm !important;
+            zoom: ${ticketZoom};
             margin: ${a4SheetPrint ? '0' : '0 auto'} !important;
             padding: ${is58mm ? '1.5mm' : '2mm'} ${printMargins}mm !important;
             box-sizing: border-box;
@@ -294,7 +305,8 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
         }
 
         .ticket-container {
-          max-width: ${paperWidth}mm;
+          max-width: ${ticketWidthMm}mm;
+          zoom: ${ticketZoom};
           margin: 0 auto;
           padding: ${is58mm ? '1.5mm' : '2mm'};
           font-family: Arial, Helvetica, sans-serif;

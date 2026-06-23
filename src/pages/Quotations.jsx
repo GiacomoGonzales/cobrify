@@ -87,6 +87,7 @@ export default function Quotations() {
   const [ticketQuotation, setTicketQuotation] = useState(null)
   const [ticketPaperWidth, setTicketPaperWidth] = useState(80)
   const [webPrintLegible, setWebPrintLegible] = useState(false)
+  const [ticketFontSize, setTicketFontSize] = useState('small')
   const [compactPrint, setCompactPrint] = useState(false)
   const [printMargins, setPrintMargins] = useState(8)
   const [simplePrint, setSimplePrint] = useState(false)
@@ -470,6 +471,7 @@ export default function Quotations() {
       if (fresh.success && fresh.config) {
         setTicketPaperWidth(fresh.config.paperWidth || 80)
         setWebPrintLegible(fresh.config.webPrintLegible || false)
+        setTicketFontSize(fresh.config.ticketFontSize || (fresh.config.webPrintLegible ? 'medium' : 'small'))
         setCompactPrint(fresh.config.compactPrint || false)
         setPrintMargins(fresh.config.printMargins ?? 8)
         setSimplePrint(fresh.config.simplePrint || false)
@@ -1550,6 +1552,7 @@ export default function Quotations() {
             companySettings={companySettings}
             paperWidth={ticketPaperWidth}
             webPrintLegible={webPrintLegible}
+            ticketFontSize={ticketFontSize}
             compactPrint={compactPrint}
             printMargins={printMargins}
             simplePrint={simplePrint}

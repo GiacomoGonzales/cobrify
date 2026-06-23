@@ -49,7 +49,7 @@ import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
-import { formatCurrency, formatUnitPrice, formatProductPrice, applyMarginToCost, matchesSearchQuery, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
+import { formatCurrency, formatUnitPrice, formatLineAmount, formatProductPrice, applyMarginToCost, matchesSearchQuery, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import {
   isMultiCurrencyEnabled,
   getDefaultCurrency,
@@ -678,6 +678,7 @@ export default function POS() {
 
   // Estado para configuración de impresión web legible y compacta
   const [webPrintLegible, setWebPrintLegible] = useState(false)
+  const [ticketFontSize, setTicketFontSize] = useState('small')
   const [compactPrint, setCompactPrint] = useState(false)
   const [printMargins, setPrintMargins] = useState(8)
   const [simplePrint, setSimplePrint] = useState(false)
@@ -1118,6 +1119,11 @@ export default function POS() {
     // No cargar borrador si viene de una mesa, orden, nota de venta o folio de hotel
     if (location.state?.fromTable || location.state?.fromOrder || location.state?.fromNotaVenta || location.state?.fromFolio) return
 
+    // No cargar borrador si venimos a editar o duplicar un comprobante (URL),
+    // para no pisar lo que cargan loadInvoiceForEdit/loadInvoiceForDuplicate.
+    const editParams = new URLSearchParams(location.search)
+    if (editParams.get('editInvoiceId') || editParams.get('duplicateInvoiceId')) return
+
     try {
       const savedDraft = localStorage.getItem(getDraftKey())
       if (savedDraft) {
@@ -1333,6 +1339,7 @@ export default function POS() {
         const printerConfigResult = await getPrinterConfig(getBusinessId())
         if (printerConfigResult.success && printerConfigResult.config) {
           setWebPrintLegible(printerConfigResult.config.webPrintLegible || false)
+          setTicketFontSize(printerConfigResult.config.ticketFontSize || (printerConfigResult.config.webPrintLegible ? 'medium' : 'small'))
           setCompactPrint(printerConfigResult.config.compactPrint || false)
           setPrintMargins(printerConfigResult.config.printMargins ?? 8)
           setSimplePrint(printerConfigResult.config.simplePrint || false)
@@ -2006,6 +2013,21 @@ export default function POS() {
       setEditingInvoiceId(invoiceId)
       setEditingInvoiceData(invoice)
 
+      // Restaurar moneda y tipo de cambio del comprobante (multi-divisa).
+      // Sin esto, un comprobante en USD se abría en PEN y, al cambiar a USD,
+      // los precios se recalculaban por el TC (se "bajaban"). Honramos la
+      // moneda original; el basePrice (PEN) por ítem queda como fuente de verdad.
+      const invoiceCurrency = normalizeCurrency(invoice.currency || 'PEN')
+      setCurrency(invoiceCurrency)
+      if (invoiceCurrency === 'USD') {
+        const savedRate = Number(invoice.exchangeRate) || 0
+        if (savedRate > 1) {
+          setExchangeRate(savedRate)
+          setExchangeRateInput(String(savedRate))
+          setExchangeRateSource('manual')
+        }
+      }
+
       // Desbloquear UI para edición (por si venía de una venta completada)
       setSaleCompleted(false)
 
@@ -2047,6 +2069,10 @@ export default function POS() {
         name: item.name || item.description,
         description: item.description,
         price: item.unitPrice || item.price,
+        // basePrice (PEN) = fuente de verdad multi-divisa. En comprobantes USD
+        // se guardó el precio en soles; en PEN cae al propio precio. Necesario
+        // para que cambiar de moneda recompute bien (no "baje" los precios).
+        basePrice: Number(item.basePrice) > 0 ? Number(item.basePrice) : (Number(item.unitPrice ?? item.price) || 0),
         quantity: item.quantity,
         itemDiscount: item.itemDiscount || item.descuento || 0,
         itemDiscountType: item.itemDiscountType || 'amount',
@@ -2168,6 +2194,20 @@ export default function POS() {
       setEditingInvoiceId(null)
       setEditingInvoiceData(null)
 
+      // Restaurar moneda y TC del comprobante original (multi-divisa), igual
+      // que en edición: el duplicado debe nacer en la misma moneda y no
+      // recalcular los precios por el TC.
+      const invoiceCurrency = normalizeCurrency(invoice.currency || 'PEN')
+      setCurrency(invoiceCurrency)
+      if (invoiceCurrency === 'USD') {
+        const savedRate = Number(invoice.exchangeRate) || 0
+        if (savedRate > 1) {
+          setExchangeRate(savedRate)
+          setExchangeRateInput(String(savedRate))
+          setExchangeRateSource('manual')
+        }
+      }
+
       // Cargar tipo de documento
       setDocumentType(invoice.documentType)
 
@@ -2203,6 +2243,10 @@ export default function POS() {
         name: item.name || item.description,
         description: item.description,
         price: item.unitPrice || item.price,
+        // basePrice (PEN) = fuente de verdad multi-divisa. En comprobantes USD
+        // se guardó el precio en soles; en PEN cae al propio precio. Necesario
+        // para que cambiar de moneda recompute bien (no "baje" los precios).
+        basePrice: Number(item.basePrice) > 0 ? Number(item.basePrice) : (Number(item.unitPrice ?? item.price) || 0),
         quantity: item.quantity,
         itemDiscount: item.itemDiscount || item.descuento || 0,
         itemDiscountType: item.itemDiscountType || 'amount',
@@ -6783,7 +6827,7 @@ export default function POS() {
               toast.info('Usando impresión estándar...')
             } else {
               // Imprimir en impresora térmica (80mm por defecto)
-              const result = await printInvoiceTicket(invoiceToprint, companySettings, printerConfigResult.config.paperWidth || 80, printerConfigResult.config.showItemUnit || false)
+              const result = await printInvoiceTicket(invoiceToprint, companySettings, printerConfigResult.config.paperWidth || 80, printerConfigResult.config.showItemUnit || false, printerConfigResult.config.ticketFontSize || (printerConfigResult.config.webPrintLegible ? 'medium' : 'small'))
 
               if (result.success) {
                 toast.success('Comprobante impreso en ticketera')
@@ -6812,6 +6856,7 @@ export default function POS() {
         if (fresh.success && fresh.config) {
           setShowItemUnit(fresh.config.showItemUnit || false)
           setWebPrintLegible(fresh.config.webPrintLegible || false)
+          setTicketFontSize(fresh.config.ticketFontSize || (fresh.config.webPrintLegible ? 'medium' : 'small'))
           setCompactPrint(fresh.config.compactPrint || false)
           setPrintMargins(fresh.config.printMargins ?? 8)
           setSimplePrint(fresh.config.simplePrint || false)
@@ -9411,15 +9456,15 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                 {displayDiscount > 0 ? (
                                   <>
                                     <p className="text-[10px] text-gray-400 line-through leading-tight">
-                                      {formatCurrency(item.price * displayQty, currency)}
+                                      {formatLineAmount(item.price * displayQty, currency)}
                                     </p>
                                     <p className="font-bold text-orange-600 text-sm leading-tight">
-                                      {formatCurrency((item.price * displayQty) - displayDiscount)}
+                                      {formatLineAmount((item.price * displayQty) - displayDiscount, currency)}
                                     </p>
                                   </>
                                 ) : (
                                   <p className="font-bold text-gray-900 text-sm">
-                                    {formatCurrency(item.price * displayQty, currency)}
+                                    {formatLineAmount(item.price * displayQty, currency)}
                                   </p>
                                 )}
                               </div>
@@ -11033,6 +11078,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             companySettings={companySettings}
             paperWidth={ticketPaperWidth}
             webPrintLegible={webPrintLegible}
+            ticketFontSize={ticketFontSize}
             compactPrint={compactPrint}
             printMargins={printMargins}
             simplePrint={simplePrint}

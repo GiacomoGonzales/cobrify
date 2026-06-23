@@ -611,7 +611,8 @@ export default function Settings() {
     // (paperWidth || 80). Antes era 58: si el usuario nunca elegía ancho, al activar un toggle
     // web se persistía 58 en localStorage y el POS pasaba a imprimir en 58mm sin querer.
     paperWidth: 80, // 58mm o 80mm
-    webPrintLegible: false, // Modo legible para impresión web (letras más grandes)
+    webPrintLegible: false, // Modo legible para impresión web (legacy; derivado de ticketFontSize)
+    ticketFontSize: 'small', // Tamaño de letra del ticket web: 'small' | 'medium' | 'large'
   })
   const [availablePrinters, setAvailablePrinters] = useState([])
   const [isScanning, setIsScanning] = useState(false)
@@ -8670,22 +8671,48 @@ export default function Settings() {
                 </div>
               </div>
 
-              {/* Modo legible para impresión web - SIEMPRE VISIBLE */}
-              <SettingToggle
-                checked={printerConfig.webPrintLegible || false}
-                onChange={async (e) => {
-                  const newConfig = {
-                    ...printerConfig,
-                    webPrintLegible: e.target.checked,
-                    ...(e.target.checked && { compactPrint: false })
-                  }
-                  setPrinterConfig(newConfig)
-                  await savePrinterConfig(getBusinessId(), newConfig)
-                  toast.success(e.target.checked ? 'Modo legible activado' : 'Modo legible desactivado')
-                }}
-                title="Impresión Web Legible"
-                description="Activa esta opción para hacer las letras más grandes y gruesas al imprimir desde el navegador web (comprobantes, precuentas, comandas). No afecta la impresión térmica Bluetooth."
-              />
+              {/* Tamaño de letra del ticket (impresión web) - SIEMPRE VISIBLE */}
+              <div className="py-4 border-b border-gray-100">
+                <div className="text-sm font-medium text-gray-900 mb-1">Tamaño de letra del ticket</div>
+                <p className="text-xs text-gray-500 mb-3">
+                  Elige qué tan grande sale la letra al imprimir desde el navegador (comprobantes, precuentas y comandas). Útil para tickets más legibles. No afecta la impresión térmica Bluetooth directa.
+                </p>
+                <div className="flex gap-2">
+                  {[
+                    { key: 'small', label: 'Pequeño', hint: 'Estándar', cls: 'text-sm' },
+                    { key: 'medium', label: 'Mediano', hint: 'Más legible', cls: 'text-base' },
+                    { key: 'large', label: 'Grande', hint: 'Letra grande', cls: 'text-lg' },
+                  ].map((opt) => {
+                    const current = printerConfig.ticketFontSize || (printerConfig.webPrintLegible ? 'medium' : 'small')
+                    const selected = current === opt.key
+                    return (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={async () => {
+                          const newConfig = {
+                            ...printerConfig,
+                            ticketFontSize: opt.key,
+                            webPrintLegible: opt.key !== 'small', // legacy: medium/large => legible
+                            ...(opt.key !== 'small' && { compactPrint: false }), // incompatible con compacto
+                          }
+                          setPrinterConfig(newConfig)
+                          await savePrinterConfig(getBusinessId(), newConfig)
+                          toast.success(`Tamaño de letra: ${opt.label}`)
+                        }}
+                        className={`flex-1 py-3 px-3 rounded-lg border-2 transition-all ${
+                          selected
+                            ? 'border-purple-600 bg-purple-100 text-purple-700'
+                            : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                        }`}
+                      >
+                        <div className={`font-semibold ${opt.cls}`}>{opt.label}</div>
+                        <div className="text-xs mt-1">{opt.hint}</div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
 
               {/* Modo compacto para impresión web */}
               <SettingToggle
@@ -8694,7 +8721,7 @@ export default function Settings() {
                   const newConfig = {
                     ...printerConfig,
                     compactPrint: e.target.checked,
-                    ...(e.target.checked && { webPrintLegible: false })
+                    ...(e.target.checked && { webPrintLegible: false, ticketFontSize: 'small' })
                   }
                   setPrinterConfig(newConfig)
                   await savePrinterConfig(getBusinessId(), newConfig)

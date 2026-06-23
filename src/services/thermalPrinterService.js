@@ -495,7 +495,8 @@ export const savePrinterConfig = async (userId, printerConfig) => {
       type: printerConfig.type || 'bluetooth', // bluetooth, wifi o internal
       paperWidth: printerConfig.paperWidth || 80, // Guardar ancho de papel (80mm por defecto)
       enabled: printerConfig.enabled !== false,
-      webPrintLegible: printerConfig.webPrintLegible || false, // Modo legible para impresión web
+      webPrintLegible: printerConfig.webPrintLegible || false, // Modo legible para impresión web (legacy; derivado de ticketFontSize)
+      ticketFontSize: printerConfig.ticketFontSize || (printerConfig.webPrintLegible ? 'medium' : 'small'), // Tamaño de letra del ticket web: 'small' | 'medium' | 'large'
       compactPrint: printerConfig.compactPrint || false, // Modo compacto para ahorro de papel
       printMargins: printerConfig.printMargins ?? 8, // Márgenes laterales en mm para impresión web
       simplePrint: printerConfig.simplePrint || false, // Impresión simple sin fondos negros
@@ -635,8 +636,13 @@ const addSeparator = (printer, separator, paperWidth, currentAlign = 'left') => 
  * @param {Object} business - Datos del negocio
  * @param {number} paperWidth - Ancho de papel (58 o 80mm)
  */
-export const printInvoiceTicket = async (invoice, business, paperWidth = 58, showItemUnit = false) => {
+export const printInvoiceTicket = async (invoice, business, paperWidth = 58, showItemUnit = false, ticketFontSize = 'small') => {
   const isNative = Capacitor.isNativePlatform();
+
+  // Tamaño de letra del ticket en impresión ESC/POS directa (Bluetooth/red/documento).
+  // 'small' = normal (no cambia nada). 'medium'/'large' escalan SOLO el alto, así las
+  // columnas de precios se mantienen alineadas. El builder.init() lo aplica y lo consume.
+  EscPosBuilder.baseSizeScale = ticketFontSize === 'large' ? 2 : ticketFontSize === 'medium' ? 1 : 0;
 
   // Verificar si hay impresora de documentos configurada (prioridad sobre impresora principal)
   if (isNative) {
@@ -655,6 +661,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
   }
 
   if (!isNative || !isPrinterConnected) {
+    EscPosBuilder.baseSizeScale = 0; // no se armó ticket: evitar fuga del escalado
     return { success: false, error: 'Printer not connected' };
   }
 
@@ -1418,8 +1425,25 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
  * @param {Object} table - Datos de la mesa (opcional)
  * @param {number} paperWidth - Ancho de papel (58 o 80mm)
  */
+// Lee el tamaño de letra del ticket guardado (config de impresora) y lo convierte
+// a la escala de ALTO para ESC/POS: 0 = normal, 1 = alto x2, 2 = alto x3.
+// Sin config o 'small' => 0 (sin cambios). Permite escalar comanda/precuenta directas
+// sin tener que pasar el parámetro por sus múltiples callers.
+function ticketSizeScaleFromConfig() {
+  try {
+    const cfg = JSON.parse(localStorage.getItem('factuya_printerConfig') || '{}');
+    const level = cfg.ticketFontSize || (cfg.webPrintLegible ? 'medium' : 'small');
+    return level === 'large' ? 2 : level === 'medium' ? 1 : 0;
+  } catch {
+    return 0;
+  }
+}
+
 export const printKitchenOrder = async (order, table = null, paperWidth = 58, stationName = null) => {
   const isNative = Capacitor.isNativePlatform();
+
+  // Tamaño de letra de la comanda en ESC/POS (lee la config; small = sin cambios)
+  EscPosBuilder.baseSizeScale = ticketSizeScaleFromConfig();
 
   console.log('🖨️ printKitchenOrder - Iniciando...');
   console.log('📱 Plataforma nativa:', isNative);
@@ -1638,6 +1662,9 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58, st
  */
 export const printPreBill = async (order, table, business, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 58, recargoConsumoConfig = { enabled: false, rate: 10 }) => {
   const isNative = Capacitor.isNativePlatform();
+
+  // Tamaño de letra de la precuenta en ESC/POS (lee la config; small = sin cambios)
+  EscPosBuilder.baseSizeScale = ticketSizeScaleFromConfig();
 
   // Verificar si hay impresora de documentos configurada (prioridad sobre impresora principal)
   if (isNative) {
@@ -2226,9 +2253,23 @@ class EscPosBuilder {
   static GS = 0x1D;
   static LF = 0x0A;
 
+  // Tamaño de letra del ticket, escalado en ALTO (el ancho queda x1 para NO
+  // romper la alineación de columnas de precios). 0 = normal, 1 = alto x2,
+  // 2 = alto x3. Es "consume-once": init() lo aplica y lo vuelve a 0 para que
+  // NO se filtre a otros tickets impresos después. printInvoiceTicket lo setea
+  // antes de armar el ticket de venta.
+  static baseSizeScale = 0;
+
   // Inicializar impresora
   init() {
     this.commands.push(EscPosBuilder.ESC, 0x40); // ESC @
+    // Tamaño base del ticket (GS ! n; nibble bajo = alto-1, nibble alto = ancho-1).
+    // Solo escalamos el alto; se consume tras aplicarlo.
+    const h = EscPosBuilder.baseSizeScale | 0;
+    if (h > 0) {
+      this.commands.push(EscPosBuilder.GS, 0x21, h & 0x07);
+      EscPosBuilder.baseSizeScale = 0;
+    }
     return this;
   }
 

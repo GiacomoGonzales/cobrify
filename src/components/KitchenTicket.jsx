@@ -6,7 +6,15 @@ import { forwardRef } from 'react'
  * Diseñado para impresoras térmicas de 80mm
  * Muestra la información esencial para la cocina/bar
  */
-const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = false, compactPrint = false, ultraCompactKitchen = false, simplePrint = false, stationName = null, a4SheetPrint = false }, ref) => {
+const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible: webPrintLegibleProp = false, ticketFontSize, compactPrint = false, ultraCompactKitchen = false, simplePrint = false, stationName = null, a4SheetPrint = false }, ref) => {
+  // Tamaño de letra de la comanda: 'small' | 'medium' | 'large' (retrocompat con
+  // webPrintLegible). 'large' = legible + zoom con compensación de ancho: escala letra
+  // y espaciado de forma uniforme manteniendo el ancho FÍSICO del papel.
+  const webPrintLegible = ticketFontSize ? ticketFontSize !== 'small' : webPrintLegibleProp
+  const ticketZoom = ticketFontSize === 'large' ? 1.2 : 1
+  const kitchenWidthMm = Number((70 / ticketZoom).toFixed(3)) // ancho de impresión (dentro de 80mm)
+  const kitchenScreenWidthMm = Number((80 / ticketZoom).toFixed(3)) // ancho de preview en pantalla
+
   // Formatear fecha
   const formatDate = (timestamp) => {
     if (!timestamp) return new Date().toLocaleDateString('es-PE')
@@ -100,8 +108,9 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = fa
           .kitchen-ticket-container {
             position: ${a4SheetPrint ? 'static' : 'absolute'};
             ${a4SheetPrint ? '' : 'left: 0;\n            top: 0;'}
-            width: 70mm !important;
-            max-width: 70mm !important;
+            width: ${kitchenWidthMm}mm !important;
+            max-width: ${kitchenWidthMm}mm !important;
+            zoom: ${ticketZoom};
             margin: ${a4SheetPrint ? '0' : '0 auto'} !important;
             padding: 2mm 1.5mm !important;
             box-sizing: border-box;
@@ -165,7 +174,8 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = fa
         }
 
         .kitchen-ticket-container {
-          max-width: 80mm;
+          max-width: ${kitchenScreenWidthMm}mm;
+          zoom: ${ticketZoom};
           margin: 0 auto;
           padding: 8px;
           font-family: 'Courier New', Courier, monospace;

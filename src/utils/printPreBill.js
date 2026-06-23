@@ -54,7 +54,7 @@ const printHTML = (html) => {
  * @param {Array} itemFilter - Items a mostrar (opcional, si es null muestra todos)
  * @param {string} personLabel - Etiqueta de persona (ej: "Persona 1 de 3")
  */
-export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 80, webPrintLegible = false, itemFilter = null, personLabel = null, recargoConsumoConfig = { enabled: false, rate: 10 }, compactPrint = false, overrideTotal = null) => {
+export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 80, webPrintLegible = false, itemFilter = null, personLabel = null, recargoConsumoConfig = { enabled: false, rate: 10 }, compactPrint = false, overrideTotal = null, ticketFontSize = null) => {
   console.log('🖨️ printPreBill - Parámetros recibidos:', { paperWidth, webPrintLegible, itemFilter, personLabel, overrideTotal })
 
   const currentDate = new Date()
@@ -72,6 +72,12 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
 
   // Determinar si es papel de 58mm o 80mm
   const is58mm = paperWidth === 58
+
+  // Tamaño de letra: 'small' | 'medium' | 'large' (retrocompat con webPrintLegible).
+  // 'large' = legible + zoom con compensación de ancho (mantiene el ancho físico del papel).
+  if (ticketFontSize) webPrintLegible = ticketFontSize !== 'small'
+  const ticketZoom = ticketFontSize === 'large' ? 1.2 : 1
+  const bodyWidthMm = Number((paperWidth / ticketZoom).toFixed(3))
 
   // Determinar qué items mostrar
   const itemsToShow = itemFilter || (order.items || [])
@@ -152,7 +158,8 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
           font-weight: ${webPrintLegible ? '600' : 'normal'};
           line-height: ${webPrintLegible ? '1.4' : '1.2'};
           padding: ${is58mm ? '1.5mm 5mm' : '2mm 6mm'};
-          width: ${paperWidth}mm;
+          width: ${bodyWidthMm}mm;
+          zoom: ${ticketZoom};
           background: white;
           color: #000;
           -webkit-print-color-adjust: exact;
@@ -163,8 +170,9 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
 
         @media print {
           body {
-            width: ${paperWidth}mm !important;
-            max-width: ${paperWidth}mm !important;
+            width: ${bodyWidthMm}mm !important;
+            max-width: ${bodyWidthMm}mm !important;
+            zoom: ${ticketZoom};
             margin: 0 auto !important;
             padding: ${is58mm ? '1.5mm 5mm' : '2mm 6mm'} !important;
             box-sizing: border-box;
@@ -610,13 +618,19 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
 /**
  * Imprimir todas las precuentas divididas en un solo documento
  */
-export const printAllSplitPreBills = (table, order, splitData, businessInfo = {}, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 80, webPrintLegible = false, recargoConsumoConfig = { enabled: false, rate: 10 }, compactPrint = false) => {
+export const printAllSplitPreBills = (table, order, splitData, businessInfo = {}, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 80, webPrintLegible = false, recargoConsumoConfig = { enabled: false, rate: 10 }, compactPrint = false, ticketFontSize = null) => {
 
   const currentDate = new Date()
   const dateStr = currentDate.toLocaleDateString('es-PE', { year: 'numeric', month: '2-digit', day: '2-digit' })
   const timeStr = currentDate.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })
 
   const is58mm = paperWidth === 58
+
+  // Tamaño de letra: 'small' | 'medium' | 'large' (retrocompat con webPrintLegible).
+  // 'large' = legible + zoom con compensación de ancho (mantiene el ancho físico del papel).
+  if (ticketFontSize) webPrintLegible = ticketFontSize !== 'small'
+  const ticketZoom = ticketFontSize === 'large' ? 1.2 : 1
+  const bodyWidthMm = Number((paperWidth / ticketZoom).toFixed(3))
   const orderTotal = order.total || 0
   const isItemsSplit = splitData.method === 'items'
 
@@ -709,12 +723,13 @@ export const printAllSplitPreBills = (table, order, splitData, businessInfo = {}
           font-weight: ${webPrintLegible ? '600' : 'normal'};
           line-height: ${webPrintLegible ? '1.4' : '1.2'};
           padding: ${is58mm ? '1.5mm 5mm' : '2mm 6mm'};
-          width: ${paperWidth}mm;
+          width: ${bodyWidthMm}mm;
+          zoom: ${ticketZoom};
           background: white; color: #000;
           text-transform: uppercase; margin: 0 auto;
         }
         @media print {
-          body { width: ${paperWidth}mm !important; max-width: ${paperWidth}mm !important; margin: 0 auto !important; }
+          body { width: ${bodyWidthMm}mm !important; max-width: ${bodyWidthMm}mm !important; zoom: ${ticketZoom}; margin: 0 auto !important; }
         }
         .header { text-align: center; margin-bottom: ${is58mm ? '2mm' : '3mm'}; }
         .header .logo { max-width: ${is58mm ? '140px' : '200px'}; max-height: ${is58mm ? '140px' : '200px'}; width: auto; height: auto; margin: 0 auto ${is58mm ? '1mm' : '1.5mm'}; object-fit: contain; display: block; }

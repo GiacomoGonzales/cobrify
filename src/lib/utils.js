@@ -162,6 +162,36 @@ export function formatUnitPrice(amount, currency = 'PEN') {
 }
 
 /**
+ * Formatea un IMPORTE DE LÍNEA (cantidad × precio) conservando hasta 4
+ * decimales, sin ceros de más (mínimo 2). A diferencia de formatCurrency
+ * (que fija 2 decimales, ideal para el TOTAL final), aquí 252.045 se muestra
+ * "S/ 252.045" en vez de "S/ 252.05". Así el subtotal por línea del carrito
+ * no redondea y el total final (ese sí a 2 decimales) cuadra.
+ * Usar para importes de línea, NUNCA para el total a cobrar.
+ */
+export function formatLineAmount(amount, currency = 'PEN') {
+  const n = Number(amount)
+  const safe = Number.isFinite(n) ? n : 0
+  const code = currency || 'PEN'
+  const locale = code === 'USD' ? 'en-US' : 'es-PE'
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: code,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 4,
+    }).format(safe)
+  } catch {
+    return new Intl.NumberFormat('es-PE', {
+      style: 'currency',
+      currency: 'PEN',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 4,
+    }).format(safe)
+  }
+}
+
+/**
  * Devuelve la cantidad mínima requerida para que aplique un nivel de precio en
  * el catálogo público.
  *

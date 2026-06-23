@@ -69,6 +69,7 @@ export default function Orders() {
 
   // Estado para configuración de impresión web legible y compacta
   const [webPrintLegible, setWebPrintLegible] = useState(false)
+  const [ticketFontSize, setTicketFontSize] = useState('small')
   const [compactPrint, setCompactPrint] = useState(false)
   const [ultraCompactKitchen, setUltraCompactKitchen] = useState(false)
   const [simplePrint, setSimplePrint] = useState(false)
@@ -106,6 +107,7 @@ export default function Orders() {
         const printerConfigResult = await getPrinterConfig(getBusinessId())
         if (printerConfigResult.success && printerConfigResult.config) {
           setWebPrintLegible(printerConfigResult.config.webPrintLegible || false)
+          setTicketFontSize(printerConfigResult.config.ticketFontSize || (printerConfigResult.config.webPrintLegible ? 'medium' : 'small'))
           setCompactPrint(printerConfigResult.config.compactPrint || false)
           setUltraCompactKitchen(printerConfigResult.config.ultraCompactKitchen || false)
           setSimplePrint(printerConfigResult.config.simplePrint || false)
@@ -722,9 +724,10 @@ export default function Orders() {
       // Fallback HTML
       const printerConfigResult = await getPrinterConfig(businessId)
       const webPrintLegibleCfg = printerConfigResult.config?.webPrintLegible || false
+      const ticketFontSizeCfg = printerConfigResult.config?.ticketFontSize || (printerConfigResult.config?.webPrintLegible ? 'medium' : 'small')
       const paperWidth = printerConfigResult.config?.paperWidth || 80
       const compactPrintValue = printerConfigResult.config?.compactPrint || false
-      printPreBill(pseudoTable, freshOrder, businessInfo, taxConfig, paperWidth, webPrintLegibleCfg, itemFilter, personLabel, recargoConsumoConfig, compactPrintValue, overrideTotal)
+      printPreBill(pseudoTable, freshOrder, businessInfo, taxConfig, paperWidth, webPrintLegibleCfg, itemFilter, personLabel, recargoConsumoConfig, compactPrintValue, overrideTotal, ticketFontSizeCfg)
       toast.success('Imprimiendo precuenta...')
     } catch (error) {
       console.error('Error al imprimir precuenta:', error)
@@ -846,8 +849,9 @@ export default function Orders() {
       }
 
       const webPrintLegibleCfg = printerConfigResult.config?.webPrintLegible || false
+      const ticketFontSizeCfg = printerConfigResult.config?.ticketFontSize || (printerConfigResult.config?.webPrintLegible ? 'medium' : 'small')
       const compactPrintValue = printerConfigResult.config?.compactPrint || false
-      printAllSplitPreBills(pseudoTable, selectedOrderForAction, splitData, businessInfo, taxConfig, paperWidth, webPrintLegibleCfg, recargoConsumoConfig, compactPrintValue)
+      printAllSplitPreBills(pseudoTable, selectedOrderForAction, splitData, businessInfo, taxConfig, paperWidth, webPrintLegibleCfg, recargoConsumoConfig, compactPrintValue, ticketFontSizeCfg)
       toast.success('Imprimiendo precuentas divididas...')
     } catch (error) {
       console.error('Error al imprimir precuentas divididas:', error)
@@ -1779,6 +1783,7 @@ export default function Orders() {
                     order={{ ...orderToPrint, items: ticket.items }}
                     companySettings={companySettings}
                     webPrintLegible={webPrintLegible}
+                    ticketFontSize={ticketFontSize}
                     compactPrint={compactPrint}
                     ultraCompactKitchen={ultraCompactKitchen}
                     simplePrint={simplePrint}
@@ -1792,6 +1797,7 @@ export default function Orders() {
                 order={orderToPrint}
                 companySettings={companySettings}
                 webPrintLegible={webPrintLegible}
+                ticketFontSize={ticketFontSize}
                 compactPrint={compactPrint}
                 ultraCompactKitchen={ultraCompactKitchen}
                 simplePrint={simplePrint}
