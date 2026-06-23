@@ -14,6 +14,7 @@
  */
 import { collection, getDocs, query, limit } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { convertUnit } from '@/services/ingredientService'
 
 /**
  * Lee la primera receta del negocio. Si no hay ninguna, devuelve false sin
@@ -55,22 +56,26 @@ export const computeProductsWithoutIngredients = async (businessId, warehouseId 
 
     if (recipesSnap.empty) return empty
 
-    // Mapa de stock por id de insumo. Si hay warehouseId, sumamos sólo de ese
-    // almacén; si no, usamos currentStock (suma global del documento).
-    const stockById = new Map()
+    // Mapa por id de insumo: { stock, unit }. Si hay warehouseId, tomamos el
+    // stock SÓLO de ese almacén; si no, usamos currentStock (suma global).
+    // Guardamos también la unidad de compra (`purchaseUnit`) para poder
+    // convertir la cantidad de la receta a la unidad en que se guarda el stock.
+    const infoById = new Map()
     ingredientsSnap.forEach(d => {
       const data = d.data()
       if (data.trackStock === false) {
         // Insumos que no manejan stock no bloquean nunca: stock infinito.
-        stockById.set(d.id, Infinity)
+        infoById.set(d.id, { stock: Infinity, unit: null })
         return
       }
+      let stock
       if (warehouseId && Array.isArray(data.warehouseStocks)) {
         const ws = data.warehouseStocks.find(w => w.warehouseId === warehouseId)
-        stockById.set(d.id, ws?.stock || 0)
+        stock = ws?.stock || 0
       } else {
-        stockById.set(d.id, data.currentStock || 0)
+        stock = data.currentStock || 0
       }
+      infoById.set(d.id, { stock, unit: data.purchaseUnit || null })
     })
 
     // Para insumos de tipo "producto terminado", no precargamos porque sería
@@ -85,9 +90,14 @@ export const computeProductsWithoutIngredients = async (businessId, warehouseId 
       if (ingredients.length === 0) return
       for (const ing of ingredients) {
         if (ing.ingredientType === 'product') continue // no se valida en badge
-        const need = Number(ing.quantity) || 0
-        if (need <= 0) continue
-        const have = stockById.has(ing.ingredientId) ? stockById.get(ing.ingredientId) : 0
+        const info = infoById.get(ing.ingredientId)
+        const have = info ? info.stock : 0
+        // La cantidad de la receta viene en `ing.unit` (p.ej. g) pero el stock
+        // se guarda en la unidad de compra del insumo (p.ej. kg). Convertimos
+        // antes de comparar, igual que checkRecipeStock al cobrar. Sin esto,
+        // 150 g vs 5 kg se comparaba como 5 < 150 y marcaba "Sin insumos" mal.
+        const need = convertUnit(Number(ing.quantity) || 0, ing.unit, info?.unit)
+        if (!(need > 0)) continue
         if (have < need) {
           result.add(recipe.productId)
           break
