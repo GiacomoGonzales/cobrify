@@ -3987,7 +3987,13 @@ export default function POS() {
         .map(item => {
           const matchId = item.cartId || item.id
           if (matchId === itemId) {
-            const newQuantity = item.quantity + change
+            // Coercionar a número: la cantidad puede ser '' transitorio mientras el
+            // usuario edita el campo, y '' + 1 daría el string '1' (concatenación).
+            const newQuantity = (parseFloat(item.quantity) || 0) + change
+
+            // El botón "−" nunca elimina el producto: si bajaría de 1, no hace nada.
+            // La única forma de quitar un ítem del carrito es el tacho rojo (removeFromCart).
+            if (newQuantity < 1) return item
 
             // Verificar stock del almacén seleccionado (solo para productos no personalizados)
             // Si allowNegativeStock está habilitado, permitir venta sin stock
@@ -9312,23 +9318,33 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                               <>
                                 <button
                                   onClick={() => updateQuantity(itemId, -1)}
-                                  className="w-7 h-7 rounded bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors"
+                                  disabled={Number(item.quantity) <= 1}
+                                  title={Number(item.quantity) <= 1 ? 'Para quitar el producto usa el tacho rojo' : 'Disminuir'}
+                                  className="w-7 h-7 rounded bg-gray-200 enabled:hover:bg-gray-300 flex items-center justify-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                                 >
                                   <Minus className="w-3.5 h-3.5" />
                                 </button>
                                 <input
-                                  type="number"
+                                  type="text"
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
                                   value={item.quantity}
                                   onChange={(e) => {
-                                    const val = parseInt(e.target.value)
+                                    const raw = e.target.value
+                                    // Permitir vaciar el campo para que en táctil se pueda
+                                    // escribir una cantidad nueva sin tener que borrar el "1".
+                                    if (raw === '') { setQuantityDirectly(itemId, ''); return }
+                                    const val = parseInt(raw)
                                     if (!isNaN(val) && val >= 0) {
                                       setQuantityDirectly(itemId, val)
                                     }
                                   }}
                                   onBlur={() => handleQuantityBlur(itemId, item.quantity)}
-                                  onFocus={(e) => e.target.select()}
-                                  min="1"
-                                  className="w-11 text-center font-bold text-sm border border-gray-300 rounded py-1 focus:outline-none focus:ring-1 focus:ring-primary-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                  // Seleccionar todo al enfocar. El setTimeout hace que funcione
+                                  // de forma confiable en pantallas táctiles (la selección inmediata
+                                  // se pierde al levantar el dedo en varios navegadores móviles).
+                                  onFocus={(e) => { const el = e.target; setTimeout(() => { try { el.select() } catch (err) { void err } }, 0) }}
+                                  className="w-11 text-center font-bold text-sm border border-gray-300 rounded py-1 focus:outline-none focus:ring-1 focus:ring-primary-500"
                                 />
                                 <button
                                   onClick={() => updateQuantity(itemId, 1)}
