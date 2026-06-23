@@ -23,9 +23,13 @@ export function resolveBranchCompanyInfo(companySettings = {}, snap = {}) {
   const s = snap || {}
   return {
     logoUrl: s.branchLogoUrl || cs.logoUrl || null,
-    // Nombre a mostrar: nombre comercial de la sucursal > nombre de la sucursal >
-    // nombre comercial global > razón social.
-    name: s.branchTradeName || s.branchName || cs.name || cs.businessName || '',
+    // Nombre a mostrar: nombre comercial PROPIO de la sucursal (si la sucursal definió
+    // uno) > nombre comercial del negocio > razón social > nombre interno de la sucursal
+    // (último recurso). Antes el nombre interno de la sucursal ("Tienda Tacna") ganaba
+    // sobre el nombre comercial del negocio, por lo que los comprobantes de una sucursal
+    // mostraban "Tienda Tacna" en vez de "GRUPO ASSAD". El nombre interno de la sucursal
+    // es una etiqueta de ubicación, no un nombre comercial: solo se usa si no hay nada más.
+    name: s.branchTradeName || cs.name || cs.businessName || s.branchName || '',
     address: s.branchAddress || cs.address || '',
     phone: s.branchPhone || cs.phone || '',
   }
