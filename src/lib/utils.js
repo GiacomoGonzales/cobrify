@@ -134,6 +134,34 @@ export function formatCurrency(amount, currency = 'PEN') {
 }
 
 /**
+ * Formatea un PRECIO UNITARIO mostrando su precisión real (mínimo 2 decimales,
+ * hasta 6, sin ceros de más). A diferencia de formatCurrency (que fija 2
+ * decimales, ideal para totales), aquí 0.125 se muestra "S/ 0.125" y 0.20
+ * "S/ 0.20". Usar SOLO para precios por unidad, NUNCA para totales/importes.
+ */
+export function formatUnitPrice(amount, currency = 'PEN') {
+  const n = Number(amount)
+  const safe = Number.isFinite(n) ? n : 0
+  const code = currency || 'PEN'
+  const locale = code === 'USD' ? 'en-US' : 'es-PE'
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: code,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 6,
+    }).format(safe)
+  } catch {
+    return new Intl.NumberFormat('es-PE', {
+      style: 'currency',
+      currency: 'PEN',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 6,
+    }).format(safe)
+  }
+}
+
+/**
  * Devuelve la cantidad mínima requerida para que aplique un nivel de precio en
  * el catálogo público.
  *

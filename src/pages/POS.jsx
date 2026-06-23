@@ -49,7 +49,7 @@ import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
-import { formatCurrency, formatProductPrice, applyMarginToCost, matchesSearchQuery, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
+import { formatCurrency, formatUnitPrice, formatProductPrice, applyMarginToCost, matchesSearchQuery, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import {
   isMultiCurrencyEnabled,
   getDefaultCurrency,
@@ -7660,7 +7660,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                               <div key={lvl.key} className="flex items-center justify-between gap-1.5 leading-tight">
                                 <span className="text-[10px] sm:text-xs text-gray-500 truncate">{lvl.label}</span>
                                 <span className={`text-xs sm:text-sm font-bold whitespace-nowrap ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
-                                  {formatCurrency(toSessionCurrency(lvl.value), currency)}
+                                  {formatUnitPrice(toSessionCurrency(lvl.value), currency)}
                                 </span>
                               </div>
                             ))}
@@ -9404,8 +9404,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                   (misma línea, para corroborar el precio sin agrandar la fila) */}
                               <span className="text-[10px] text-gray-400 whitespace-nowrap">
                                 {dualUnit
-                                  ? `${formatCurrency(dualUnit.usd, 'USD')} · ${formatCurrency(dualUnit.pen, 'PEN')}`
-                                  : formatCurrency(item.price, currency)} × {displayQty}
+                                  ? `${formatUnitPrice(dualUnit.usd, 'USD')} · ${formatUnitPrice(dualUnit.pen, 'PEN')}`
+                                  : formatUnitPrice(item.price, currency)} × {displayQty}
                               </span>
                               <div className="text-right min-w-[58px]">
                                 {displayDiscount > 0 ? (
@@ -10508,7 +10508,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       <p className="text-xs text-gray-500">Precio principal</p>
                     </div>
                     <p className="text-xl font-bold text-primary-600">
-                      {formatCurrency(priceSource.price)}
+                      {formatUnitPrice(priceSource.price)}
                     </p>
                   </div>
                 </button>
@@ -10541,7 +10541,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           </p>
                         </div>
                         <p className={`text-xl font-bold text-${color}-600`}>
-                          {formatCurrency(resolved)}
+                          {formatUnitPrice(resolved)}
                         </p>
                       </div>
                     </button>
