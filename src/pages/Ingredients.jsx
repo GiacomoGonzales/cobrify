@@ -141,6 +141,11 @@ export default function Ingredients() {
   const [visibleCount, setVisibleCount] = useState(20)
   const ITEMS_PER_PAGE = 20
 
+  // Selección múltiple para eliminación en grupo
+  const [selectedIngredientIds, setSelectedIngredientIds] = useState(() => new Set())
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false)
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false)
+
   // Categorías dinámicas del negocio
   const [categories, setCategories] = useState([])
 
@@ -545,6 +550,47 @@ export default function Ingredients() {
     }
   }
 
+  // Selección múltiple
+  const toggleSelectIngredient = (id) => {
+    setSelectedIngredientIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  const clearSelection = () => setSelectedIngredientIds(new Set())
+
+  // Eliminación en grupo de los insumos seleccionados
+  const handleBulkDelete = async () => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
+      return
+    }
+    const ids = Array.from(selectedIngredientIds)
+    if (ids.length === 0) return
+
+    setIsBulkDeleting(true)
+    try {
+      const businessId = getBusinessId()
+      const results = await Promise.allSettled(ids.map(id => deleteIngredient(businessId, id)))
+      const okCount = results.filter(r => r.status === 'fulfilled' && r.value?.success).length
+      const failCount = ids.length - okCount
+
+      if (okCount > 0) toast.success(`${okCount} ${okCount === 1 ? 'insumo eliminado' : 'insumos eliminados'}`)
+      if (failCount > 0) toast.error(`${failCount} no se ${failCount === 1 ? 'pudo' : 'pudieron'} eliminar`)
+
+      setShowBulkDeleteModal(false)
+      clearSelection()
+      loadIngredients()
+    } catch (error) {
+      console.error('Error en eliminación masiva:', error)
+      toast.error('Error al eliminar los insumos')
+    } finally {
+      setIsBulkDeleting(false)
+    }
+  }
+
   const openEditModal = (ingredient) => {
     setSelectedIngredient(ingredient)
     setFormData({
@@ -803,6 +849,17 @@ export default function Ingredients() {
   const displayedIngredients = filteredIngredients.slice(0, visibleCount)
   const hasMore = filteredIngredients.length > visibleCount
 
+  // Estado de "seleccionar todos" sobre los insumos visibles
+  const allDisplayedSelected = displayedIngredients.length > 0 && displayedIngredients.every(i => selectedIngredientIds.has(i.id))
+  const toggleSelectAllDisplayed = () => {
+    setSelectedIngredientIds(prev => {
+      const next = new Set(prev)
+      if (allDisplayedSelected) displayedIngredients.forEach(i => next.delete(i.id))
+      else displayedIngredients.forEach(i => next.add(i.id))
+      return next
+    })
+  }
+
   useEffect(() => {
     setVisibleCount(ITEMS_PER_PAGE)
   }, [searchTerm, filterCategory])
@@ -993,6 +1050,25 @@ export default function Ingredients() {
         </CardContent>
       </Card>
 
+      {/* Barra de acciones masivas */}
+      {selectedIngredientIds.size > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-primary-50 border border-primary-200 rounded-lg px-4 py-3">
+          <span className="text-sm font-medium text-primary-900">
+            {selectedIngredientIds.size} {selectedIngredientIds.size === 1 ? 'insumo seleccionado' : 'insumos seleccionados'}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={clearSelection}>
+              <X className="w-4 h-4 mr-1" />
+              Limpiar
+            </Button>
+            <Button variant="danger" size="sm" onClick={() => setShowBulkDeleteModal(true)}>
+              <Trash2 className="w-4 h-4 mr-1" />
+              Eliminar seleccionados
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Ingredients Table */}
       <Card>
         {filteredIngredients.length === 0 ? (
@@ -1023,7 +1099,15 @@ export default function Ingredients() {
                 <div key={ingredient.id} className="px-4 py-3 hover:bg-gray-50">
                   {/* Fila 1: Nombre + acciones */}
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-medium line-clamp-2 flex-1">{ingredient.name}</p>
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={selectedIngredientIds.has(ingredient.id)}
+                        onChange={() => toggleSelectIngredient(ingredient.id)}
+                        className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer flex-shrink-0"
+                      />
+                      <p className="text-sm font-medium line-clamp-2 flex-1">{ingredient.name}</p>
+                    </div>
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
@@ -1076,6 +1160,14 @@ export default function Ingredients() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-10">
+                      <input
+                        type="checkbox"
+                        checked={allDisplayedSelected}
+                        onChange={toggleSelectAllDisplayed}
+                        className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                      />
+                    </TableHead>
                     <TableHead>{texts.tableHeader}</TableHead>
                     <TableHead>Categoría</TableHead>
                     <TableHead>Stock Actual</TableHead>
@@ -1087,6 +1179,14 @@ export default function Ingredients() {
                 <TableBody>
                   {displayedIngredients.map(ingredient => (
                     <TableRow key={ingredient.id}>
+                      <TableCell className="w-10">
+                        <input
+                          type="checkbox"
+                          checked={selectedIngredientIds.has(ingredient.id)}
+                          onChange={() => toggleSelectIngredient(ingredient.id)}
+                          className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                        />
+                      </TableCell>
                       <TableCell>
                         <div>
                           <p className="font-medium">{ingredient.name}</p>
@@ -1675,6 +1775,48 @@ export default function Ingredients() {
                 </>
               ) : (
                 'Eliminar'
+              )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Bulk Delete Confirmation Modal */}
+      <Modal
+        isOpen={showBulkDeleteModal}
+        onClose={() => setShowBulkDeleteModal(false)}
+        title="Eliminar insumos seleccionados"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start space-x-3">
+            <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0" />
+            <div>
+              <p className="text-sm text-gray-700">
+                ¿Estás seguro de que deseas eliminar <strong>{selectedIngredientIds.size}</strong> {selectedIngredientIds.size === 1 ? 'insumo' : 'insumos'}?
+              </p>
+              <p className="text-sm text-gray-600 mt-2">
+                Esta acción no se puede deshacer y se perderá el historial de cada insumo eliminado.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => setShowBulkDeleteModal(false)}
+              disabled={isBulkDeleting}
+            >
+              Cancelar
+            </Button>
+            <Button variant="danger" onClick={handleBulkDelete} disabled={isBulkDeleting}>
+              {isBulkDeleting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Eliminando...
+                </>
+              ) : (
+                `Eliminar ${selectedIngredientIds.size}`
               )}
             </Button>
           </div>

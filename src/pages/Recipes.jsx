@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Plus, Search, Edit, Trash2, ChefHat, AlertTriangle, Loader2, Package, MoreVertical } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, ChefHat, AlertTriangle, Loader2, Package, MoreVertical, X } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
@@ -70,6 +70,11 @@ export default function Recipes() {
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: false })
   const [visibleCount, setVisibleCount] = useState(20)
   const ITEMS_PER_PAGE = 20
+
+  // Selección múltiple para eliminación en grupo
+  const [selectedRecipeIds, setSelectedRecipeIds] = useState(() => new Set())
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false)
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false)
 
   // Form data
   const [formData, setFormData] = useState({
@@ -396,6 +401,47 @@ export default function Recipes() {
     }
   }
 
+  // Selección múltiple
+  const toggleSelectRecipe = (id) => {
+    setSelectedRecipeIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  const clearSelection = () => setSelectedRecipeIds(new Set())
+
+  // Eliminación en grupo de las recetas seleccionadas
+  const handleBulkDelete = async () => {
+    if (demoContext || isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
+      return
+    }
+    const ids = Array.from(selectedRecipeIds)
+    if (ids.length === 0) return
+
+    setIsBulkDeleting(true)
+    try {
+      const businessId = getBusinessId()
+      const results = await Promise.allSettled(ids.map(id => deleteRecipe(businessId, id)))
+      const okCount = results.filter(r => r.status === 'fulfilled' && r.value?.success).length
+      const failCount = ids.length - okCount
+
+      if (okCount > 0) toast.success(`${okCount} ${okCount === 1 ? 'eliminada' : 'eliminadas'}`)
+      if (failCount > 0) toast.error(`${failCount} no se ${failCount === 1 ? 'pudo' : 'pudieron'} eliminar`)
+
+      setShowBulkDeleteModal(false)
+      clearSelection()
+      loadData()
+    } catch (error) {
+      console.error('Error en eliminación masiva:', error)
+      toast.error('Error al eliminar')
+    } finally {
+      setIsBulkDeleting(false)
+    }
+  }
+
   const openEditModal = (recipe) => {
     setSelectedRecipe(recipe)
     setFormData({
@@ -445,6 +491,17 @@ export default function Recipes() {
 
   const displayedRecipes = filteredRecipes.slice(0, visibleCount)
   const hasMore = filteredRecipes.length > visibleCount
+
+  // Estado de "seleccionar todos" sobre las recetas visibles
+  const allDisplayedSelected = displayedRecipes.length > 0 && displayedRecipes.every(r => selectedRecipeIds.has(r.id))
+  const toggleSelectAllDisplayed = () => {
+    setSelectedRecipeIds(prev => {
+      const next = new Set(prev)
+      if (allDisplayedSelected) displayedRecipes.forEach(r => next.delete(r.id))
+      else displayedRecipes.forEach(r => next.add(r.id))
+      return next
+    })
+  }
 
   useEffect(() => {
     setVisibleCount(ITEMS_PER_PAGE)
@@ -516,6 +573,25 @@ export default function Recipes() {
         </CardContent>
       </Card>
 
+      {/* Barra de acciones masivas */}
+      {selectedRecipeIds.size > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-primary-50 border border-primary-200 rounded-lg px-4 py-3">
+          <span className="text-sm font-medium text-primary-900">
+            {selectedRecipeIds.size} {selectedRecipeIds.size === 1 ? 'seleccionada' : 'seleccionadas'}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={clearSelection}>
+              <X className="w-4 h-4 mr-1" />
+              Limpiar
+            </Button>
+            <Button variant="danger" size="sm" onClick={() => setShowBulkDeleteModal(true)}>
+              <Trash2 className="w-4 h-4 mr-1" />
+              Eliminar seleccionadas
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Recipes Table */}
       <Card>
         {filteredRecipes.length === 0 ? (
@@ -542,7 +618,15 @@ export default function Recipes() {
                 <div key={recipe.id} className="px-4 py-3 hover:bg-gray-50">
                   {/* Fila 1: Nombre + acciones */}
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-medium line-clamp-2 flex-1">{recipe.productName}</p>
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={selectedRecipeIds.has(recipe.id)}
+                        onChange={() => toggleSelectRecipe(recipe.id)}
+                        className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer flex-shrink-0"
+                      />
+                      <p className="text-sm font-medium line-clamp-2 flex-1">{recipe.productName}</p>
+                    </div>
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
@@ -601,6 +685,14 @@ export default function Recipes() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-10">
+                      <input
+                        type="checkbox"
+                        checked={allDisplayedSelected}
+                        onChange={toggleSelectAllDisplayed}
+                        className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                      />
+                    </TableHead>
                     <TableHead>{texts.tableHeaderProduct}</TableHead>
                     <TableHead>{texts.tableHeaderIngredients}</TableHead>
                     <TableHead>Porciones</TableHead>
@@ -611,6 +703,14 @@ export default function Recipes() {
                 <TableBody>
                   {displayedRecipes.map(recipe => (
                     <TableRow key={recipe.id}>
+                      <TableCell className="w-10">
+                        <input
+                          type="checkbox"
+                          checked={selectedRecipeIds.has(recipe.id)}
+                          onChange={() => toggleSelectRecipe(recipe.id)}
+                          className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                        />
+                      </TableCell>
                       <TableCell>
                         <div>
                           <p className="font-medium">{recipe.productName}</p>
@@ -1061,6 +1161,48 @@ export default function Recipes() {
                 </>
               ) : (
                 'Eliminar'
+              )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Bulk Delete Confirmation Modal */}
+      <Modal
+        isOpen={showBulkDeleteModal}
+        onClose={() => setShowBulkDeleteModal(false)}
+        title={isRestaurantMode ? 'Eliminar recetas seleccionadas' : 'Eliminar composiciones seleccionadas'}
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start space-x-3">
+            <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0" />
+            <div>
+              <p className="text-sm text-gray-700">
+                ¿Estás seguro de que deseas eliminar <strong>{selectedRecipeIds.size}</strong> {selectedRecipeIds.size === 1 ? (isRestaurantMode ? 'receta' : 'composición') : (isRestaurantMode ? 'recetas' : 'composiciones')}?
+              </p>
+              <p className="text-sm text-gray-600 mt-2">
+                Esta acción no se puede deshacer.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => setShowBulkDeleteModal(false)}
+              disabled={isBulkDeleting}
+            >
+              Cancelar
+            </Button>
+            <Button variant="danger" onClick={handleBulkDelete} disabled={isBulkDeleting}>
+              {isBulkDeleting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Eliminando...
+                </>
+              ) : (
+                `Eliminar ${selectedRecipeIds.size}`
               )}
             </Button>
           </div>
