@@ -9074,6 +9074,10 @@ export default function Settings() {
                 </div>
               </div>
 
+              {/* Cambio de contraseña — solo el dueño/admin del negocio. Los usuarios
+                  secundarios NO pueden cambiar su contraseña; la gestiona el administrador. */}
+              {(isBusinessOwner || isAdmin) ? (
+                <>
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
 
@@ -9219,6 +9223,21 @@ export default function Settings() {
                   </li>
                 </ul>
               </div>
+                </>
+              ) : (
+                <>
+                  {/* Divider */}
+                  <div className="border-t border-gray-200"></div>
+                  {/* Usuarios secundarios: el cambio de contraseña lo gestiona el administrador */}
+                  <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg flex items-start space-x-3">
+                    <Info className="w-5 h-5 text-gray-600 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-gray-600">
+                      El cambio de contraseña está deshabilitado para usuarios secundarios.
+                      Si necesitas restablecer tu contraseña, contacta al administrador de tu cuenta.
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
           </CardContent>
         </Card>
