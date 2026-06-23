@@ -1384,6 +1384,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // Flag para mostrar imágenes de productos en comprobantes (default false).
   // IMPORTANTE: con FALSE el layout debe quedar EXACTAMENTE igual que antes (documento fiscal).
   const showImages = companySettings?.showImagesInInvoices === true
+  // Flag para mostrar la descripción del producto (debajo del nombre) en comprobantes.
+  // Default false: los comprobantes actuales NO muestran la descripción → no cambia nada salvo opt-in.
+  const showProductDescription = companySettings?.showProductDescriptionInInvoice === true
   // Escala de imágenes elegida por el usuario (Configuración > Documentos, 50–150%; 100 = actual).
   // Escala la miniatura Y la columna IMAGEN, tomando/devolviendo espacio a DESCRIPCIÓN. El máximo
   // efectivo se limita según el layout (farmacia / filas con descuento tienen menos espacio) para
@@ -1559,6 +1562,18 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     const descWidth = hasAnyItemDiscount ? colWidths.desc - 6 : colWidths.desc - 10
     const descLines = doc.splitTextToSize(itemDesc, descWidth)
 
+    // Descripción adicional del producto (debajo del nombre), solo si el negocio la activó.
+    // No mostrar si es igual al nombre (evita duplicar).
+    let productDescLines = []
+    if (showProductDescription) {
+      const rawDescription = (item.description || '').trim()
+      if (rawDescription && rawDescription.toLowerCase() !== itemName.trim().toLowerCase()) {
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(8)
+        productDescLines = doc.splitTextToSize(rawDescription, descWidth)
+      }
+    }
+
     // Línea(s) de número de serie (productos con trackSerials)
     // Soporta múltiples series agrupadas (serialNumbers: array) o una sola (serialNumber: string)
     let serialLines = []
@@ -1620,7 +1635,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(7)
     const umLines = doc.splitTextToSize(getUnitText(item), colWidths.um - 6)
-    const totalLines = descLines.length + serialLines.length + pharmaLines.length
+    const totalLines = descLines.length + productDescLines.length + serialLines.length + pharmaLines.length
     const baseHeight = Math.max(totalLines, umLines.length) * lineHeight + (spacious ? 10 : 6) * S
     let calculatedHeight = Math.max(minProductRowHeight, baseHeight)
     // Si el item tiene imagen, asegurar suficiente alto para mostrarla con padding
@@ -1628,7 +1643,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     if (hasImage) {
       calculatedHeight = Math.max(calculatedHeight, imageBoxSize + imagePadding)
     }
-    return { height: calculatedHeight, descLines, pharmaLines, serialLines, hasImage }
+    return { height: calculatedHeight, descLines, productDescLines, pharmaLines, serialLines, hasImage }
   }
 
   // Calcular alturas de todos los items
@@ -1683,7 +1698,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.setFontSize(7)
 
   for (let i = 0; i < items.length; i++) {
-    const { height: rowHeight, descLines, pharmaLines, serialLines, hasImage } = itemHeights[i]
+    const { height: rowHeight, descLines, productDescLines, pharmaLines, serialLines, hasImage } = itemHeights[i]
 
     // Verificar si la fila cabe en la página actual, si no → nueva página
     if (dataRowY + rowHeight > currentPageBottomLimit) {
@@ -1786,6 +1801,19 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       doc.text(line, cols.desc + 4, descStartY + (lineIdx * lineHeight))
     })
 
+    // Descripción del producto (debajo del nombre, en gris) — opción showProductDescriptionInInvoice
+    let productDescCount = 0
+    if (productDescLines && productDescLines.length > 0) {
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8)
+      doc.setTextColor(110, 110, 110)
+      productDescLines.forEach((line, idx) => {
+        doc.text(line, cols.desc + 4, descStartY + ((descLines.length + idx) * lineHeight))
+      })
+      doc.setTextColor(...BLACK)
+      productDescCount = productDescLines.length
+    }
+
     // Número(s) de serie debajo de la descripción
     let serialLinesCount = 0
     if (serialLines && serialLines.length > 0) {
@@ -1793,7 +1821,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       doc.setFontSize(7)
       doc.setTextColor(80, 80, 80)
       serialLines.forEach((line, idx) => {
-        doc.text(line, cols.desc + 4, descStartY + ((descLines.length + idx) * lineHeight))
+        doc.text(line, cols.desc + 4, descStartY + ((descLines.length + productDescCount + idx) * lineHeight))
       })
       doc.setFont('helvetica', 'normal')
       doc.setTextColor(...BLACK)
@@ -1805,7 +1833,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       doc.setFont('helvetica', 'italic')
       doc.setFontSize(6.5)
       doc.setTextColor(80, 100, 120) // Azul-gris
-      const pharmaStartY = descStartY + ((descLines.length + serialLinesCount) * lineHeight)
+      const pharmaStartY = descStartY + ((descLines.length + productDescCount + serialLinesCount) * lineHeight)
       pharmaLines.forEach((line, lineIdx) => {
         doc.text(line, cols.desc + 4, pharmaStartY + (lineIdx * lineHeight))
       })

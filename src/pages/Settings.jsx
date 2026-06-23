@@ -312,6 +312,7 @@ export default function Settings() {
 
   // Estado para mostrar descripción de producto en cotizaciones PDF
   const [showProductDescriptionInQuotation, setShowProductDescriptionInQuotation] = useState(true)
+  const [showProductDescriptionInInvoice, setShowProductDescriptionInInvoice] = useState(false)
 
   // Estado para mostrar imágenes de producto en cotizaciones PDF
   const [showImagesInQuotations, setShowImagesInQuotations] = useState(false)
@@ -1134,6 +1135,10 @@ export default function Settings() {
         if (businessData.showProductDescriptionInQuotation !== undefined) {
           setShowProductDescriptionInQuotation(businessData.showProductDescriptionInQuotation)
         }
+        // Descripción de producto en comprobantes (default false: comprobantes no la mostraban)
+        if (businessData.showProductDescriptionInInvoice !== undefined) {
+          setShowProductDescriptionInInvoice(businessData.showProductDescriptionInInvoice)
+        }
 
         // Cargar flag de imágenes en cotizaciones (default false)
         if (businessData.showImagesInQuotations !== undefined) {
@@ -1820,6 +1825,7 @@ export default function Settings() {
         showProductCodeInQuotation: showProductCodeInQuotation,
         showProductCodeInInvoices: showProductCodeInInvoices,
         showProductDescriptionInQuotation: showProductDescriptionInQuotation,
+        showProductDescriptionInInvoice: showProductDescriptionInInvoice,
         showImagesInQuotations: showImagesInQuotations,
         showImagesInInvoices: showImagesInInvoices,
         quotationImageScale: Number(quotationImageScale) || 100,
@@ -5417,6 +5423,18 @@ export default function Settings() {
                   />
                 </div>
 
+                {/* Descripción de producto en comprobantes */}
+                <div className="mb-3">
+                  <SettingToggle
+                    checked={showProductDescriptionInInvoice}
+                    onChange={(e) => setShowProductDescriptionInInvoice(e.target.checked)}
+                    title="Mostrar descripción del producto en comprobantes"
+                    description={showProductDescriptionInInvoice
+                      ? 'Habilitado: La descripción detallada del producto se incluirá debajo del nombre en el PDF de facturas, boletas y notas de venta.'
+                      : 'Deshabilitado: Solo se mostrará el nombre del producto, sin la descripción adicional.'}
+                  />
+                </div>
+
                 {/* Imágenes de producto en cotizaciones */}
                 <div className="mb-3">
                   <SettingToggle
@@ -6018,6 +6036,7 @@ export default function Settings() {
                       showProductCodeInQuotation: showProductCodeInQuotation,
                       showProductCodeInInvoices: showProductCodeInInvoices,
                       showProductDescriptionInQuotation: showProductDescriptionInQuotation,
+                      showProductDescriptionInInvoice: showProductDescriptionInInvoice,
                       showImagesInQuotations: showImagesInQuotations,
                       showImagesInInvoices: showImagesInInvoices,
                       quotationImageScale: Number(quotationImageScale) || 100,

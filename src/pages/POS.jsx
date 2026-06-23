@@ -3834,6 +3834,7 @@ export default function POS() {
         quantity: 1,
         isVariant: true,
         imageUrl: product.imageUrl, // Include product image
+        description: product.description || '', // Descripción del producto para el PDF (opción showProductDescriptionInInvoice)
       }
       setCart([...cart, cartItem])
     }
@@ -5260,6 +5261,7 @@ export default function POS() {
           unitPrice: item.price,
           ...(() => { const c = computeItemCostAtSale(item); return c != null ? { costAtSale: c } : {} })(), // costo congelado al momento de la venta (reportes de margen)
           ...(item.imageUrl && { imageUrl: item.imageUrl }), // imagen del producto para el PDF de comprobante (opción showImagesInInvoices)
+        ...(item.description && { description: item.description }), // descripción del producto para el PDF (opción showProductDescriptionInInvoice)
           ...(currency === 'USD' && Number(item.basePrice) > 0 && {
             basePrice: Number(item.basePrice),
           }),
@@ -5467,6 +5469,7 @@ export default function POS() {
         unitPrice: item.price,
         ...(() => { const c = computeItemCostAtSale(item); return c != null ? { costAtSale: c } : {} })(), // costo congelado al momento de la venta (reportes de margen)
         ...(item.imageUrl && { imageUrl: item.imageUrl }), // imagen del producto para el PDF de comprobante (opción showImagesInInvoices)
+        ...(item.description && { description: item.description }), // descripción del producto para el PDF (opción showProductDescriptionInInvoice)
         // Multi-divisa: persistir basePrice (PEN exacto) cuando la venta es
         // USD, para que NC/ND/reportes futuros puedan reconstruir el
         // equivalente PEN sin pérdida de redondeo.
