@@ -637,6 +637,8 @@ const addSeparator = (printer, separator, paperWidth, currentAlign = 'left') => 
  * @param {number} paperWidth - Ancho de papel (58 o 80mm)
  */
 export const printInvoiceTicket = async (invoice, business, paperWidth = 58, showItemUnit = false, ticketFontSize = 'small') => {
+  // Símbolo de moneda según la factura (USD → $, PEN/otros → S/).
+  const currencySymbol = invoice?.currency === 'USD' ? '$' : 'S/';
   const isNative = Capacitor.isNativePlatform();
 
   // Tamaño de letra del ticket en impresión ESC/POS directa (Bluetooth/red/documento).
@@ -762,15 +764,15 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
           ? item.quantity.toString()
           : item.quantity.toFixed(3).replace(/\.?0+$/, '');
         const unitSuffix = item.unit && item.allowDecimalQuantity ? item.unit.toLowerCase() : '';
-        const qtyAndPrice = `${qtyFormatted}${unitSuffix} X S/ ${unitPrice.toFixed(2)}`;
-        const totalStr = `S/ ${itemTotal.toFixed(2)}`;
+        const qtyAndPrice = `${qtyFormatted}${unitSuffix} X ${currencySymbol} ${unitPrice.toFixed(2)}`;
+        const totalStr = `${currencySymbol} ${itemTotal.toFixed(2)}`;
         const spaceBetween = lineWidth - qtyAndPrice.length - totalStr.length;
         itemsText += `${qtyAndPrice}${' '.repeat(Math.max(1, spaceBetween))}${totalStr}\n`;
 
         // Línea de descuento por ítem si existe
         if (itemDiscount > 0) {
           const discountLabel = `Dsct.`;
-          const discountStr = `-S/ ${itemDiscount.toFixed(2)}`;
+          const discountStr = `-${currencySymbol} ${itemDiscount.toFixed(2)}`;
           const discountSpace = lineWidth - discountLabel.length - discountStr.length;
           itemsText += `${discountLabel}${' '.repeat(Math.max(1, discountSpace))}${discountStr}\n`;
         }
@@ -806,7 +808,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
           modifier.options.forEach((option) => {
             const qty = option.quantity > 1 ? `${option.quantity}x ` : '';
             const totalAdj = (option.priceAdjustment || 0) * (option.quantity || 1);
-            itemsText += `  + ${qty}${convertSpanishText(option.optionName)} (+S/ ${totalAdj.toFixed(2)})\n`;
+            itemsText += `  + ${qty}${convertSpanishText(option.optionName)} (+${currencySymbol} ${totalAdj.toFixed(2)})\n`;
           });
         });
       } else {
@@ -820,15 +822,15 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
           ? item.quantity.toString()
           : item.quantity.toFixed(3).replace(/\.?0+$/, '');
         const unitSuffix = item.unit && item.allowDecimalQuantity ? item.unit.toLowerCase() : '';
-        const qtyAndPrice = `${qtyFormatted}${unitSuffix}x S/ ${unitPrice.toFixed(2)}`;
-        const totalStr = `S/ ${itemTotal.toFixed(2)}`;
+        const qtyAndPrice = `${qtyFormatted}${unitSuffix}x ${currencySymbol} ${unitPrice.toFixed(2)}`;
+        const totalStr = `${currencySymbol} ${itemTotal.toFixed(2)}`;
         const spaceBetween = lineWidth - qtyAndPrice.length - totalStr.length;
         itemsText += `${qtyAndPrice}${' '.repeat(Math.max(1, spaceBetween))}${totalStr}\n`;
 
         // Línea de descuento por ítem si existe
         if (itemDiscount > 0) {
           const discountLabel = `Dsct.`;
-          const discountStr = `-S/ ${itemDiscount.toFixed(2)}`;
+          const discountStr = `-${currencySymbol} ${itemDiscount.toFixed(2)}`;
           const discountSpace = lineWidth - discountLabel.length - discountStr.length;
           itemsText += `${discountLabel}${' '.repeat(Math.max(1, discountSpace))}${discountStr}\n`;
         }
@@ -864,7 +866,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
           modifier.options.forEach((option) => {
             const qty = option.quantity > 1 ? `${option.quantity}x ` : '';
             const totalAdj = (option.priceAdjustment || 0) * (option.quantity || 1);
-            itemsText += `  + ${qty}${convertSpanishText(option.optionName)} (+S/${totalAdj.toFixed(2)})\n`;
+            itemsText += `  + ${qty}${convertSpanishText(option.optionName)} (+${currencySymbol}${totalAdj.toFixed(2)})\n`;
           });
         });
       }
@@ -1122,23 +1124,23 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
     if (!(isNotaVenta && (business.hideRucIgvInNotaVenta || business.hideOnlyIgvInNotaVenta))) {
       const igvRateDisplay = business.emissionConfig?.taxConfig?.igvRate ?? business.taxConfig?.igvRate ?? 18
       printer = printer
-        .text(`Subtotal: S/ ${(invoice.subtotal || 0).toFixed(2)}\n`)
-        .text(`IGV (${igvRateDisplay}%): S/ ${(invoice.tax || invoice.igv || 0).toFixed(2)}\n`);
+        .text(`Subtotal: ${currencySymbol} ${(invoice.subtotal || 0).toFixed(2)}\n`)
+        .text(`IGV (${igvRateDisplay}%): ${currencySymbol} ${(invoice.tax || invoice.igv || 0).toFixed(2)}\n`);
     }
 
     // Mostrar descuento si existe
     if (invoice.discount && invoice.discount > 0) {
-      printer = printer.text(`Descuento: -S/ ${invoice.discount.toFixed(2)}\n`);
+      printer = printer.text(`Descuento: -${currencySymbol} ${invoice.discount.toFixed(2)}\n`);
     }
 
     // Mostrar Recargo al Consumo si existe
     if (invoice.recargoConsumo && invoice.recargoConsumo > 0) {
-      printer = printer.text(`Rec. Consumo (${invoice.recargoConsumoRate || 10}%): S/ ${invoice.recargoConsumo.toFixed(2)}\n`);
+      printer = printer.text(`Rec. Consumo (${invoice.recargoConsumoRate || 10}%): ${currencySymbol} ${invoice.recargoConsumo.toFixed(2)}\n`);
     }
 
     printer = printer
       .bold()
-      .text(`TOTAL: S/ ${(invoice.total || 0).toFixed(2)}\n`)
+      .text(`TOTAL: ${currencySymbol} ${(invoice.total || 0).toFixed(2)}\n`)
       .clearFormatting()
       // QR Code según formato SUNAT
       .align('center');
@@ -1186,32 +1188,32 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
           .bold()
           .text(convertSpanishText('AL CREDITO\n'))
           .clearFormatting();
-        printer = printer.text(convertSpanishText(`Saldo Pendiente: S/ ${(invoice.total || 0).toFixed(2)}\n`));
+        printer = printer.text(convertSpanishText(`Saldo Pendiente: ${currencySymbol} ${(invoice.total || 0).toFixed(2)}\n`));
       } else if (invoice.payments && invoice.payments.length > 0) {
         invoice.payments.forEach(payment => {
-          printer = printer.text(convertSpanishText(`${payment.method}: S/ ${payment.amount.toFixed(2)}\n`));
+          printer = printer.text(convertSpanishText(`${payment.method}: ${currencySymbol} ${payment.amount.toFixed(2)}\n`));
         });
         // Mostrar saldo pendiente si el pago es menor al total
         if (totalPaid < (invoice.total || 0)) {
           const saldoPendiente = (invoice.total || 0) - totalPaid;
           printer = printer
             .bold()
-            .text(convertSpanishText(`Saldo Pendiente: S/ ${saldoPendiente.toFixed(2)}\n`))
+            .text(convertSpanishText(`Saldo Pendiente: ${currencySymbol} ${saldoPendiente.toFixed(2)}\n`))
             .clearFormatting();
         }
       } else if (invoice.paymentMethod) {
-        printer = printer.text(convertSpanishText(`${invoice.paymentMethod}: S/ ${(invoice.total || 0).toFixed(2)}\n`));
+        printer = printer.text(convertSpanishText(`${invoice.paymentMethod}: ${currencySymbol} ${(invoice.total || 0).toFixed(2)}\n`));
       }
 
       // Pago con: monto entregado por el cliente (solo si hay vuelto)
       if (Number(invoice.change) > 0 && Number(invoice.amountReceived) > 0) {
-        printer = printer.text(convertSpanishText(`Pago con: S/ ${Number(invoice.amountReceived).toFixed(2)}\n`));
+        printer = printer.text(convertSpanishText(`Pago con: ${currencySymbol} ${Number(invoice.amountReceived).toFixed(2)}\n`));
       }
       // Vuelto: solo si el cliente pagó más que el total (pagos al contado, no crédito)
       if (Number(invoice.change) > 0) {
         printer = printer
           .bold()
-          .text(convertSpanishText(`Vuelto: S/ ${Number(invoice.change).toFixed(2)}\n`))
+          .text(convertSpanishText(`Vuelto: ${currencySymbol} ${Number(invoice.change).toFixed(2)}\n`))
           .clearFormatting();
       }
     }
@@ -1229,10 +1231,10 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
         .clearFormatting();
 
       if (invoice.paymentStatus === 'partial') {
-        printer = printer.text(convertSpanishText(`Pagado: S/ ${(invoice.amountPaid || 0).toFixed(2)}\n`));
+        printer = printer.text(convertSpanishText(`Pagado: ${currencySymbol} ${(invoice.amountPaid || 0).toFixed(2)}\n`));
         printer = printer
           .bold()
-          .text(convertSpanishText(`Saldo Pendiente: S/ ${(invoice.balance || 0).toFixed(2)}\n`))
+          .text(convertSpanishText(`Saldo Pendiente: ${currencySymbol} ${(invoice.balance || 0).toFixed(2)}\n`))
           .clearFormatting();
       }
 
@@ -1242,7 +1244,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
           const paymentDate = payment.date?.toDate ? payment.date.toDate() : new Date(payment.date);
           const dateStr = paymentDate.toLocaleDateString('es-PE');
           const amountStr = (payment.amount || 0).toFixed(2);
-          printer = printer.text(convertSpanishText(` ${dateStr} S/${amountStr} (${payment.method || 'Efectivo'})\n`));
+          printer = printer.text(convertSpanishText(` ${dateStr} ${currencySymbol}${amountStr} (${payment.method || 'Efectivo'})\n`));
         }
       }
     }
@@ -1279,7 +1281,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
           const cuotaDueDate = cuota.dueDate
             ? new Date(cuota.dueDate + 'T00:00:00').toLocaleDateString('es-PE')
             : '-';
-          printer = printer.text(convertSpanishText(`  Cuota ${cuotaNum}: S/ ${cuotaAmount} - Vence: ${cuotaDueDate}\n`));
+          printer = printer.text(convertSpanishText(`  Cuota ${cuotaNum}: ${currencySymbol} ${cuotaAmount} - Vence: ${cuotaDueDate}\n`));
         });
       }
     }
@@ -1869,6 +1871,8 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
  */
 const printBLETicket = async (invoice, business, paperWidth = 58) => {
   try {
+    // Símbolo de moneda según la factura (USD → $, PEN/otros → S/).
+    const currencySymbol = invoice?.currency === 'USD' ? '$' : 'S/';
     // Determinar tipo de documento
     const docType = invoice.documentType || invoice.type || 'boleta';
     const isInvoice = docType === 'factura' || docType === 'invoice';
@@ -1924,7 +1928,7 @@ const printBLETicket = async (invoice, business, paperWidth = 58) => {
           m.options.map((o) => {
             const qty = o.quantity > 1 ? `${o.quantity}x ` : ''
             const totalAdj = (o.priceAdjustment || 0) * (o.quantity || 1)
-            return `+ ${qty}${o.optionName} (+S/ ${totalAdj.toFixed(2)})`
+            return `+ ${qty}${o.optionName} (+${currencySymbol} ${totalAdj.toFixed(2)})`
           })
         )
         const baseObs = item.observations || ''
@@ -2433,6 +2437,7 @@ class EscPosBuilder {
 const buildTicketEscPos = async (invoice, business, paperWidth = 58) => {
     const format = getFormat(paperWidth);
     const builder = new EscPosBuilder();
+    const currencySymbol = invoice?.currency === 'USD' ? '$' : 'S/';
 
     // Determinar tipo de documento
     const docType = invoice.documentType || invoice.type || 'boleta';
@@ -2576,14 +2581,14 @@ const buildTicketEscPos = async (invoice, business, paperWidth = 58) => {
       const unitSuffix = item.unit && item.allowDecimalQuantity ? item.unit.toLowerCase() : '';
 
       builder.text(itemName).newLine()
-        .text(`${qtyFormatted}${unitSuffix} x S/ ${unitPrice.toFixed(2)}`)
-        .text(`  S/ ${itemTotal.toFixed(2)}`)
+        .text(`${qtyFormatted}${unitSuffix} x ${currencySymbol} ${unitPrice.toFixed(2)}`)
+        .text(`  ${currencySymbol} ${itemTotal.toFixed(2)}`)
         .newLine();
 
       // Mostrar descuento por ítem si existe
       if (itemDiscount > 0) {
         builder.text(`Dsct.`)
-          .text(`  -S/ ${itemDiscount.toFixed(2)}`)
+          .text(`  -${currencySymbol} ${itemDiscount.toFixed(2)}`)
           .newLine();
       }
 
@@ -2613,7 +2618,7 @@ const buildTicketEscPos = async (invoice, business, paperWidth = 58) => {
         modifier.options.forEach((option) => {
           const qty = option.quantity > 1 ? `${option.quantity}x ` : '';
           const totalAdj = (option.priceAdjustment || 0) * (option.quantity || 1);
-          builder.text(`  + ${qty}${option.optionName} (+S/ ${totalAdj.toFixed(2)})`).newLine();
+          builder.text(`  + ${qty}${option.optionName} (+${currencySymbol} ${totalAdj.toFixed(2)})`).newLine();
         });
       });
     }
@@ -2624,17 +2629,17 @@ const buildTicketEscPos = async (invoice, business, paperWidth = 58) => {
     // Totales
     if (!(isNotaVenta && (business.hideRucIgvInNotaVenta || business.hideOnlyIgvInNotaVenta))) {
       const igvRateDisplay = business.emissionConfig?.taxConfig?.igvRate ?? business.taxConfig?.igvRate ?? 18
-      builder.text(`Subtotal: S/ ${(invoice.subtotal || 0).toFixed(2)}`).newLine()
-        .text(`IGV (${igvRateDisplay}%): S/ ${(invoice.tax || invoice.igv || 0).toFixed(2)}`).newLine();
+      builder.text(`Subtotal: ${currencySymbol} ${(invoice.subtotal || 0).toFixed(2)}`).newLine()
+        .text(`IGV (${igvRateDisplay}%): ${currencySymbol} ${(invoice.tax || invoice.igv || 0).toFixed(2)}`).newLine();
     }
 
     // Recargo al Consumo (si existe)
     if (invoice.recargoConsumo && invoice.recargoConsumo > 0) {
-      builder.text(`Rec. Consumo (${invoice.recargoConsumoRate || 10}%): S/ ${invoice.recargoConsumo.toFixed(2)}`).newLine();
+      builder.text(`Rec. Consumo (${invoice.recargoConsumoRate || 10}%): ${currencySymbol} ${invoice.recargoConsumo.toFixed(2)}`).newLine();
     }
 
     builder.bold(true)
-      .text(`TOTAL: S/ ${(invoice.total || 0).toFixed(2)}`)
+      .text(`TOTAL: ${currencySymbol} ${(invoice.total || 0).toFixed(2)}`)
       .newLine()
       .bold(false);
 
