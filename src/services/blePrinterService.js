@@ -691,10 +691,15 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
       // Tax config
       taxConfig,
       igvRate: igvRateParam,
+      // Moneda
+      currency,
     } = receiptData;
 
     // Obtener igvRate de taxConfig o parámetro directo
     const igvRate = taxConfig?.igvRate ?? igvRateParam ?? 18;
+
+    // Símbolo de moneda según la factura (USD → $, PEN/otros → S/).
+    const currencySymbol = currency === 'USD' ? '$' : 'S/';
 
     const commands = [
       ESCPOSCommands.init(),
@@ -915,15 +920,15 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
           ? item.quantity.toString()
           : item.quantity.toFixed(3).replace(/\.?0+$/, '');
         const unitSuffix = item.unit && item.allowDecimalQuantity ? item.unit.toLowerCase() : '';
-        const qtyAndPrice = `${qtyFormatted}${unitSuffix}x S/ ${unitPrice.toFixed(2)}`;
-        const totalStr = `S/ ${itemTotal.toFixed(2)}`;
+        const qtyAndPrice = `${qtyFormatted}${unitSuffix}x ${currencySymbol} ${unitPrice.toFixed(2)}`;
+        const totalStr = `${currencySymbol} ${itemTotal.toFixed(2)}`;
         const spaceBetween = charsPerLine - qtyAndPrice.length - totalStr.length;
         commands.push(ESCPOSCommands.text(qtyAndPrice + ' '.repeat(Math.max(1, spaceBetween)) + totalStr + '\n'));
 
         // Línea de descuento por ítem si existe
         if (itemDiscount > 0) {
           const discountLabel = 'Dsct.';
-          const discountStr = `-S/ ${itemDiscount.toFixed(2)}`;
+          const discountStr = `-${currencySymbol} ${itemDiscount.toFixed(2)}`;
           const discountSpace = charsPerLine - discountLabel.length - discountStr.length;
           commands.push(ESCPOSCommands.text(discountLabel + ' '.repeat(Math.max(1, discountSpace)) + discountStr + '\n'));
         }
@@ -954,7 +959,7 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
               const totalAdj = (option.priceAdjustment || 0) * (option.quantity || 1);
               commands.push(ESCPOSCommands.text(
                 '  + ' + qtyPrefix + convertSpanishText(option.optionName) +
-                ' (+S/ ' + totalAdj.toFixed(2) + ')\n'
+                ' (+' + currencySymbol + ' ' + totalAdj.toFixed(2) + ')\n'
               ));
             }
           }
@@ -975,21 +980,21 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
     if (!(isNotaVenta && (hideRucIgvInNotaVenta || hideOnlyIgvInNotaVenta))) {
       const subtotalValue = subtotal || 0;
       const taxValue = tax || igv || 0;
-      commands.push(ESCPOSCommands.text('Subtotal: S/ ' + subtotalValue.toFixed(2) + '\n'));
-      commands.push(ESCPOSCommands.text(`IGV (${igvRate}%): S/ ` + taxValue.toFixed(2) + '\n'));
+      commands.push(ESCPOSCommands.text('Subtotal: ' + currencySymbol + ' ' + subtotalValue.toFixed(2) + '\n'));
+      commands.push(ESCPOSCommands.text(`IGV (${igvRate}%): ${currencySymbol} ` + taxValue.toFixed(2) + '\n'));
     }
 
     if (discount && discount > 0) {
-      commands.push(ESCPOSCommands.text('Descuento: -S/ ' + discount.toFixed(2) + '\n'));
+      commands.push(ESCPOSCommands.text('Descuento: -' + currencySymbol + ' ' + discount.toFixed(2) + '\n'));
     }
 
     // Recargo al Consumo (si existe)
     if (recargoConsumo && recargoConsumo > 0) {
-      commands.push(ESCPOSCommands.text('Rec. Consumo (' + (recargoConsumoRate || 10) + '%): S/ ' + recargoConsumo.toFixed(2) + '\n'));
+      commands.push(ESCPOSCommands.text('Rec. Consumo (' + (recargoConsumoRate || 10) + '%): ' + currencySymbol + ' ' + recargoConsumo.toFixed(2) + '\n'));
     }
 
     commands.push(ESCPOSCommands.bold(true));
-    commands.push(ESCPOSCommands.text('TOTAL: S/ ' + (total || 0).toFixed(2) + '\n'));
+    commands.push(ESCPOSCommands.text('TOTAL: ' + currencySymbol + ' ' + (total || 0).toFixed(2) + '\n'));
     commands.push(ESCPOSCommands.bold(false));
 
     // ========== Forma de Pago ==========
@@ -1008,7 +1013,7 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
       commands.push(ESCPOSCommands.bold(true));
       commands.push(ESCPOSCommands.text(convertSpanishText('AL CREDITO') + '\n'));
       commands.push(ESCPOSCommands.bold(false));
-      commands.push(ESCPOSCommands.text('Saldo Pendiente: S/ ' + (total || 0).toFixed(2) + '\n'));
+      commands.push(ESCPOSCommands.text('Saldo Pendiente: ' + currencySymbol + ' ' + (total || 0).toFixed(2) + '\n'));
     } else if (paymentMethod || (payments && payments.length > 0)) {
       commands.push(ESCPOSCommands.text(separator + '\n'));
       commands.push(ESCPOSCommands.align(0));
@@ -1018,17 +1023,17 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
 
       if (payments && payments.length > 0) {
         for (const payment of payments) {
-          commands.push(ESCPOSCommands.text(convertSpanishText(payment.method) + ': S/ ' + payment.amount.toFixed(2) + '\n'));
+          commands.push(ESCPOSCommands.text(convertSpanishText(payment.method) + ': ' + currencySymbol + ' ' + payment.amount.toFixed(2) + '\n'));
         }
         // Mostrar saldo pendiente si el pago es menor al total
         if (totalPaid < (total || 0)) {
           const saldoPendiente = (total || 0) - totalPaid;
           commands.push(ESCPOSCommands.bold(true));
-          commands.push(ESCPOSCommands.text('Saldo Pendiente: S/ ' + saldoPendiente.toFixed(2) + '\n'));
+          commands.push(ESCPOSCommands.text('Saldo Pendiente: ' + currencySymbol + ' ' + saldoPendiente.toFixed(2) + '\n'));
           commands.push(ESCPOSCommands.bold(false));
         }
       } else if (paymentMethod) {
-        commands.push(ESCPOSCommands.text(convertSpanishText(paymentMethod) + ': S/ ' + (total || 0).toFixed(2) + '\n'));
+        commands.push(ESCPOSCommands.text(convertSpanishText(paymentMethod) + ': ' + currencySymbol + ' ' + (total || 0).toFixed(2) + '\n'));
       }
     }
 
@@ -1044,9 +1049,9 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
       commands.push(ESCPOSCommands.bold(false));
 
       if (paymentStatus === 'partial') {
-        commands.push(ESCPOSCommands.text('Pagado: S/ ' + (amountPaid || 0).toFixed(2) + '\n'));
+        commands.push(ESCPOSCommands.text('Pagado: ' + currencySymbol + ' ' + (amountPaid || 0).toFixed(2) + '\n'));
         commands.push(ESCPOSCommands.bold(true));
-        commands.push(ESCPOSCommands.text('Saldo Pendiente: S/ ' + (balance || 0).toFixed(2) + '\n'));
+        commands.push(ESCPOSCommands.text('Saldo Pendiente: ' + currencySymbol + ' ' + (balance || 0).toFixed(2) + '\n'));
         commands.push(ESCPOSCommands.bold(false));
       }
 
@@ -1056,7 +1061,7 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
           const paymentDate = payment.date?.toDate ? payment.date.toDate() : new Date(payment.date);
           const dateStr = paymentDate.toLocaleDateString('es-PE');
           const amountStr = (payment.amount || 0).toFixed(2);
-          commands.push(ESCPOSCommands.text(' ' + dateStr + ' S/' + amountStr + ' (' + convertSpanishText(payment.method || 'Efectivo') + ')\n'));
+          commands.push(ESCPOSCommands.text(' ' + dateStr + ' ' + currencySymbol + amountStr + ' (' + convertSpanishText(payment.method || 'Efectivo') + ')\n'));
         }
       }
     }

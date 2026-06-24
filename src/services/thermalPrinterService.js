@@ -1957,6 +1957,9 @@ const printBLETicket = async (invoice, business, paperWidth = 58) => {
       recargoConsumo: invoice.recargoConsumo || 0,
       recargoConsumoRate: invoice.recargoConsumoRate || 0,
 
+      // Moneda (para que el ticket BLE imprima $ en facturas USD)
+      currency: invoice.currency || 'PEN',
+
       // Pago
       paymentMethod: invoice.paymentMethod || '',
       payments: invoice.payments || [],
