@@ -461,6 +461,8 @@ export default function Ingredients() {
       // Es integridad de datos (no un movimiento de stock), así que se aplica SIEMPRE,
       // incluso con el stock bloqueado.
       const unitChanged = (selectedIngredient.purchaseUnit || '') !== formData.purchaseUnit
+      // Cambió el costo o la unidad → hay que propagar a las recetas que usan este insumo.
+      const costChanged = (parseFloat(formData.averageCost) || 0) !== (selectedIngredient.averageCost || 0)
       const convFactor = unitChanged ? getStockConversionFactor(selectedIngredient.purchaseUnit, formData.purchaseUnit) : 1
       const factor = (convFactor && convFactor !== 0) ? convFactor : 1
       // warehouseStocks viejos re-expresados en la unidad nueva.
@@ -505,6 +507,16 @@ export default function Ingredients() {
       }
 
       if (result.success) {
+        // Propagar el nuevo costo a las recetas que usan este insumo. El totalCost de una
+        // receta es un snapshot; sin esto, las recetas quedarían con el costo viejo.
+        if (costChanged || unitChanged) {
+          try {
+            const { recalculateRecipeCostsForIngredient } = await import('@/services/recipeService')
+            await recalculateRecipeCostsForIngredient(businessId, selectedIngredient.id)
+          } catch (e) {
+            console.error('Error al propagar costo del insumo a las recetas:', e)
+          }
+        }
         toast.success('Ingrediente actualizado exitosamente')
         setShowEditModal(false)
         resetForm()

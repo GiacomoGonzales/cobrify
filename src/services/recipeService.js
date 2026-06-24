@@ -365,3 +365,49 @@ export const recalculateAllRecipeCosts = async (businessId) => {
     return { success: false, error: error.message }
   }
 }
+
+/**
+ * Recalcular el costo (totalCost) solo de las recetas que usan un insumo concreto.
+ *
+ * El totalCost de una receta es un snapshot que se calcula al crear/editar la receta.
+ * Cuando cambia el costo (averageCost) o la unidad de compra de un insumo, las recetas
+ * que lo usan quedan con el costo viejo. Esta función las vuelve a calcular en cascada.
+ *
+ * Acotada a las recetas afectadas (no recalcula todo el catálogo) para que se pueda
+ * llamar tras cada edición de insumo sin un costo excesivo de lecturas/escrituras.
+ */
+export const recalculateRecipeCostsForIngredient = async (businessId, ingredientId) => {
+  try {
+    const recipesResult = await getRecipes(businessId)
+
+    if (!recipesResult.success) {
+      throw new Error(recipesResult.error)
+    }
+
+    const recipes = recipesResult.data
+    let updated = 0
+
+    for (const recipe of recipes) {
+      // Solo recetas que usan ESTE insumo como ingrediente crudo (no como producto terminado).
+      const usesIngredient = (recipe.ingredients || []).some(
+        (ing) => ing.ingredientId === ingredientId && ing.ingredientType !== 'product'
+      )
+      if (!usesIngredient) continue
+
+      const totalCost = await calculateRecipeCost(businessId, recipe.ingredients)
+      const recipeRef = doc(db, 'businesses', businessId, 'recipes', recipe.id)
+
+      await updateDoc(recipeRef, {
+        totalCost,
+        updatedAt: Timestamp.now()
+      })
+
+      updated++
+    }
+
+    return { success: true, updated }
+  } catch (error) {
+    console.error('Error al recalcular costos de recetas por insumo:', error)
+    return { success: false, error: error.message }
+  }
+}
