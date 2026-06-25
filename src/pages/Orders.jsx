@@ -1013,32 +1013,18 @@ export default function Orders() {
     })
   }
 
-  // Marcar orden como entregada (quita de la lista activa).
-  // Si la orden no está cobrada, NO se permite marcar como entregada directamente: se obliga
-  // a pasar por CloseOrderModal (con comprobante / sin comprobante con razón auditable),
-  // igual que en la página de mesas. Evita que se cierren órdenes sin cobrar.
+  // "Marcar Entregada" abre el cierre de la orden. SIEMPRE pasa por CloseOrderModal
+  // (emitir comprobante en el POS, o cerrar sin comprobante con motivo auditable),
+  // aunque la orden ya esté pagada: "pagado" es solo informativo (para la comanda del
+  // motorizado, que sepa si cobrar al entregar) y NO equivale a "facturado". Así una
+  // orden con pago anticipado sigue requiriendo su comprobante antes de salir de la lista.
   const handleMarkAsDelivered = async (order) => {
     if (isDemoMode) {
       toast.info('Esta función no está disponible en modo demo')
       return
     }
 
-    if (!order?.paid) {
-      handleCloseOrder(order)
-      return
-    }
-
-    try {
-      const result = await updateOrderStatus(getBusinessId(), order.id, 'delivered')
-      if (result.success) {
-        toast.success('Orden marcada como entregada')
-      } else {
-        toast.error('Error al actualizar orden: ' + result.error)
-      }
-    } catch (error) {
-      console.error('Error al marcar orden como entregada:', error)
-      toast.error('Error al actualizar orden')
-    }
+    handleCloseOrder(order)
   }
 
   const calculateElapsedTime = (createdAt) => {
@@ -1600,8 +1586,12 @@ export default function Orders() {
                       </Button>
                     )}
 
-                    {/* Cobrar (si no pagada) */}
-                    {!order.paid && order.status !== 'delivered' && (
+                    {/* Cobrar/Facturar: el comprobante se emite SIEMPRE en el POS, aunque la
+                        orden ya esté pagada. El flag "pagado" es solo informativo para la
+                        comanda del motorizado (saber si cobrar al entregar), NO equivale a
+                        "facturado". Por eso una orden con pago anticipado sigue mostrando esta
+                        acción hasta que se emite su comprobante. */}
+                    {order.status !== 'delivered' && (
                       <Button
                         onClick={() => handleGoToPayment(order)}
                         variant="outline"
@@ -1609,7 +1599,7 @@ export default function Orders() {
                         className="flex-1 border-green-500 text-green-600 hover:bg-green-50"
                       >
                         <DollarSign className="w-4 h-4 mr-1" />
-                        Cobrar
+                        {order.paid ? 'Facturar' : 'Cobrar'}
                       </Button>
                     )}
 
@@ -1842,49 +1832,18 @@ export default function Orders() {
               </div>
             </div>
 
-            {/* Opciones de cierre */}
-            {orderToClose.paid ? (
+            {/* Opciones de cierre — el comprobante se ofrece SIEMPRE, aunque la orden ya
+                esté pagada (pagado = informativo, no equivale a facturado). */}
+            {(
               <>
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <div className="flex items-center gap-3">
-                    <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0" />
-                    <div>
-                      <p className="font-semibold text-green-800">Esta orden ya fue cobrada</p>
-                      <p className="text-sm text-green-700">El comprobante ya fue generado desde la opción Cobrar.</p>
-                    </div>
+                {orderToClose.paid && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-2">
+                    <CheckCircle className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                    <p className="text-sm text-blue-800">
+                      Esta orden está marcada como <strong>pagada</strong> (pago anticipado). Igual debes emitir el comprobante.
+                    </p>
                   </div>
-                </div>
-                <div className="flex gap-3 pt-4 border-t">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      setShowCloseOrderModal(false)
-                      setOrderToClose(null)
-                    }}
-                    className="flex-1"
-                    disabled={isClosingOrder}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button
-                    onClick={handleCloseWithoutReceipt}
-                    disabled={isClosingOrder}
-                    className="flex-1 bg-green-600 hover:bg-green-700"
-                  >
-                    {isClosingOrder ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Cerrando...
-                      </>
-                    ) : (
-                      'Cerrar Orden'
-                    )}
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-3">
                     ¿Cómo desea cerrar la cuenta?
