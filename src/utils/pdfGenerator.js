@@ -1291,6 +1291,18 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     }
   }
 
+  // Preparar billeteras digitales (Yape/Plin) + precargar sus QR como base64 para el PDF
+  let digitalWalletsArray = []
+  if (Array.isArray(companySettings?.digitalWalletsList) && companySettings.digitalWalletsList.length > 0) {
+    digitalWalletsArray = await Promise.all(companySettings.digitalWalletsList.map(async (w) => {
+      let qrData = null
+      if (w.qrImageUrl) {
+        try { qrData = await loadProductImageAsBase64(w.qrImageUrl) } catch { qrData = null }
+      }
+      return { provider: w.provider || '', holderName: w.holderName || '', phoneNumber: w.phoneNumber || '', qrData }
+    }))
+  }
+
   // ========== CALCULAR POSICIONES FIJAS ==========
 
   // Alturas de elementos del pie (fijo en la parte inferior)
@@ -1314,7 +1326,11 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // Altura de la sección de información de detracción (leyenda SPOT + datos)
   const DETRACTION_INFO_HEIGHT = HAS_DETRACTION ? 70 : 0 // 22 (SPOT) + 4 filas * 12
   const RETENCION_INFO_HEIGHT = HAS_RETENCION ? 58 : 0 // header + 3 filas (base/porcentaje/monto)
-  const BANK_TABLE_HEIGHT = bankAccountsArray.length > 0 ? (14 + BANK_ROWS * 13) + DETRACTION_INFO_HEIGHT + RETENCION_INFO_HEIGHT : DETRACTION_INFO_HEIGHT + RETENCION_INFO_HEIGHT
+  // Bloque Yape/Plin (debajo de bancos). Filas más altas si hay QR para que la imagen entre.
+  const WALLET_HAS_QR = digitalWalletsArray.some(w => w.qrData)
+  const WALLET_ROW_H = WALLET_HAS_QR ? 30 : 16
+  const WALLET_SECTION_HEIGHT = digitalWalletsArray.length > 0 ? (5 + 14 + digitalWalletsArray.length * WALLET_ROW_H) : 0
+  const BANK_TABLE_HEIGHT = (bankAccountsArray.length > 0 ? (14 + BANK_ROWS * 13) : 0) + WALLET_SECTION_HEIGHT + DETRACTION_INFO_HEIGHT + RETENCION_INFO_HEIGHT
   // Altura base 55, +15 si hay descuento, +15 si hay recargo consumo, +36 si hay detracción (2 filas: detracción + neto a pagar)
   const TOTALS_SECTION_HEIGHT = (55 + (HAS_DISCOUNT ? 15 : 0) + (HAS_RECARGO_CONSUMO ? 15 : 0) + (HAS_DETRACTION ? 36 : 0)) * S
   const SON_SECTION_HEIGHT = (spacious ? 28 : 22) * S
@@ -2237,14 +2253,65 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     detractionSectionEndY = bankY
   }
 
+  // --- SECCIÓN YAPE / PLIN (debajo de bancos) ---
+  if (digitalWalletsArray.length > 0) {
+    const walletX = MARGIN_LEFT
+    const walletWidth = bankSectionWidth
+    let walletY = detractionSectionEndY + (bankAccountsArray.length > 0 ? 5 : 0)
+    const walletHeaderH = 13
+    const qrSize = 26
+
+    const walletTotalH = walletHeaderH + digitalWalletsArray.length * WALLET_ROW_H
+    doc.setDrawColor(...BLACK); doc.setLineWidth(0.5)
+    doc.rect(walletX, walletY, walletWidth, walletTotalH)
+    doc.setFillColor(...ACCENT_COLOR)
+    doc.rect(walletX, walletY, walletWidth, walletHeaderH, 'F')
+    doc.setFontSize(7); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255)
+    doc.text('YAPE / PLIN', walletX + 2, walletY + 9)
+    walletY += walletHeaderH
+
+    doc.setTextColor(...BLACK)
+    digitalWalletsArray.forEach((w, index) => {
+      if (index > 0) {
+        doc.setDrawColor(200, 200, 200); doc.setLineWidth(0.3)
+        doc.line(walletX, walletY, walletX + walletWidth, walletY)
+      }
+      const textX = walletX + 4
+      const lineY = walletY + (WALLET_HAS_QR ? 12 : 11)
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(8)
+      doc.text(String(w.provider || ''), textX, lineY)
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8)
+      doc.text(String(w.phoneNumber || ''), textX + 32, lineY)
+      if (w.holderName) {
+        doc.setFontSize(7); doc.setTextColor(110, 110, 110)
+        if (WALLET_HAS_QR) {
+          doc.text(String(w.holderName), textX, walletY + 22)
+        } else {
+          doc.text(`- ${w.holderName}`, textX + 92, lineY)
+        }
+        doc.setTextColor(...BLACK)
+      }
+      if (w.qrData) {
+        try {
+          const fmt = detectImageFormat(w.qrData)
+          const qrX = walletX + walletWidth - qrSize - 3
+          const qrY = walletY + (WALLET_ROW_H - qrSize) / 2
+          doc.addImage(w.qrData, fmt, qrX, qrY, qrSize, qrSize, undefined, 'FAST')
+        } catch (e) { /* QR que no carga: omitir */ }
+      }
+      walletY += WALLET_ROW_H
+    })
+    detractionSectionEndY = walletY
+  }
+
   // --- SECCIÓN INFORMACIÓN DE DETRACCIÓN (si aplica) ---
   if (HAS_DETRACTION) {
     const detractionInfoX = MARGIN_LEFT
     const detractionInfoWidth = bankSectionWidth
-    let detractionInfoY = detractionSectionEndY + (bankAccountsArray.length > 0 ? 5 : 0)
+    let detractionInfoY = detractionSectionEndY + ((bankAccountsArray.length > 0 || digitalWalletsArray.length > 0) ? 5 : 0)
 
-    // Si no hay bancos, empezar desde totalsStartY
-    if (bankAccountsArray.length === 0) {
+    // Si no hay bancos ni billeteras, empezar desde totalsStartY
+    if (bankAccountsArray.length === 0 && digitalWalletsArray.length === 0) {
       detractionInfoY = totalsStartY
     }
 

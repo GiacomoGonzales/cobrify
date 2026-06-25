@@ -850,6 +850,21 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     }
   }
 
+  // Billeteras digitales (Yape/Plin) + precarga de QR para el PDF de cotización
+  let digitalWalletsArray = []
+  if (Array.isArray(companySettings?.digitalWalletsList) && companySettings.digitalWalletsList.length > 0) {
+    digitalWalletsArray = await Promise.all(companySettings.digitalWalletsList.map(async (w) => {
+      let qrData = null
+      if (w.qrImageUrl) {
+        try { qrData = await loadProductImageAsBase64(w.qrImageUrl) } catch { qrData = null }
+      }
+      return { provider: w.provider || '', holderName: w.holderName || '', phoneNumber: w.phoneNumber || '', qrData }
+    }))
+  }
+  const WALLET_HAS_QR = digitalWalletsArray.some(w => w.qrData)
+  const WALLET_ROW_H = WALLET_HAS_QR ? 30 : 16
+  const WALLET_SECTION_HEIGHT = digitalWalletsArray.length > 0 ? (5 + 14 + digitalWalletsArray.length * WALLET_ROW_H) : 0
+
   // ========== 3. TABLA DE PRODUCTOS ==========
 
   const tableY = currentY
@@ -1231,7 +1246,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   const totalsEstHeight = 60
   const termsEstHeight = quotation.terms ? 65 : 0
   const notesEstHeight = quotation.notes ? 45 : 0
-  const footerEstimatedHeight = SON_SECTION_HEIGHT + (spacious ? 22 : 15) + Math.max(bankEstHeight, totalsEstHeight) + termsEstHeight + notesEstHeight + 50
+  const footerEstimatedHeight = SON_SECTION_HEIGHT + (spacious ? 22 : 15) + Math.max(bankEstHeight + WALLET_SECTION_HEIGHT, totalsEstHeight) + termsEstHeight + notesEstHeight + 50
 
   // Si el footer no cabe en la página actual, agregar nueva página
   if (dataRowY + footerEstimatedHeight > PAGE_HEIGHT - MARGIN_BOTTOM) {
@@ -1460,9 +1475,52 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     })
   }
 
+  // --- SECCIÓN YAPE / PLIN (debajo de bancos) ---
+  let walletBottomY = totalsStartY + (bankAccountsArray.length > 0 ? (13 + bankAccountsArray.length * 12) : 0)
+  if (digitalWalletsArray.length > 0) {
+    const walletX = MARGIN_LEFT
+    const walletWidth = bankSectionWidth
+    let walletY = walletBottomY + (bankAccountsArray.length > 0 ? 5 : 0)
+    const walletHeaderH = 13
+    const qrSize = 26
+    const walletTotalH = walletHeaderH + digitalWalletsArray.length * WALLET_ROW_H
+    doc.setDrawColor(...BLACK); doc.setLineWidth(0.5)
+    doc.rect(walletX, walletY, walletWidth, walletTotalH)
+    doc.setFillColor(...ACCENT_COLOR)
+    doc.rect(walletX, walletY, walletWidth, walletHeaderH, 'F')
+    doc.setFontSize(7); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255)
+    doc.text('YAPE / PLIN', walletX + 2, walletY + 9)
+    walletY += walletHeaderH
+    doc.setTextColor(...BLACK)
+    digitalWalletsArray.forEach((w, index) => {
+      if (index > 0) {
+        doc.setDrawColor(200, 200, 200); doc.setLineWidth(0.3)
+        doc.line(walletX, walletY, walletX + walletWidth, walletY)
+      }
+      const textX = walletX + 4
+      const lineY = walletY + (WALLET_HAS_QR ? 12 : 11)
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.text(String(w.provider || ''), textX, lineY)
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.text(String(w.phoneNumber || ''), textX + 32, lineY)
+      if (w.holderName) {
+        doc.setFontSize(7); doc.setTextColor(110, 110, 110)
+        if (WALLET_HAS_QR) doc.text(String(w.holderName), textX, walletY + 22)
+        else doc.text(`- ${w.holderName}`, textX + 92, lineY)
+        doc.setTextColor(...BLACK)
+      }
+      if (w.qrData) {
+        try {
+          const fmt = detectImageFormat(w.qrData)
+          doc.addImage(w.qrData, fmt, walletX + walletWidth - qrSize - 3, walletY + (WALLET_ROW_H - qrSize) / 2, qrSize, qrSize, undefined, 'FAST')
+        } catch (e) { /* QR que no carga: omitir */ }
+      }
+      walletY += WALLET_ROW_H
+    })
+    walletBottomY = walletY
+  }
+
   // ========== TÉRMINOS Y NOTAS ==========
 
-  footerY = totalsStartY + totalsRowHeight * 3 + (spacious ? 22 : 15)
+  footerY = Math.max(totalsStartY + totalsRowHeight * 3, walletBottomY) + (spacious ? 22 : 15)
 
   if (quotation.terms) {
     doc.setFontSize(7)
