@@ -1458,9 +1458,25 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
     cnLineIsBonificacion.push(isBonifLine)
 
     const priceWithIGV = item.unitPrice
-    const priceWithoutIGV = isGravadoOrBonif ? priceWithIGV / (1 + itemIgvMultiplier) : priceWithIGV
-    const refTaxable = Math.round(item.quantity * priceWithoutIGV * 100) / 100
-    const refIGV = isGravadoOrBonif ? Math.round((item.quantity * priceWithIGV - refTaxable) * 100) / 100 : 0
+    const itemDiscount = item.itemDiscount || item.descuento || 0
+    let refTaxable, refIGV
+    if (isBonifLine) {
+      // Bonificación: valor referencial = lo que valdría sin el descuento (no se resta nada).
+      const refTotalWithIGV = item.quantity * priceWithIGV
+      refTaxable = Math.round((refTotalWithIGV / (1 + itemIgvMultiplier)) * 100) / 100
+      refIGV = Math.round((refTotalWithIGV - refTaxable) * 100) / 100
+    } else {
+      // Items normales: restar el descuento por ítem ANTES de dividir por la tasa, IDÉNTICO
+      // a generateInvoiceXML. Así la NC cuadra bit a bit con la factura original (mismo método
+      // round-then-sum y mismo tratamiento del descuento por línea).
+      const lineTotalWithIGV = item.quantity * priceWithIGV - itemDiscount
+      refTaxable = isGravado
+        ? Math.round((lineTotalWithIGV / (1 + itemIgvMultiplier)) * 100) / 100
+        : Math.round(lineTotalWithIGV * 100) / 100
+      refIGV = isGravado
+        ? Math.round((lineTotalWithIGV - refTaxable) * 100) / 100
+        : 0
+    }
 
     // Para items normales: lineTotal = valor referencial; para bonificación: lineTotal = 0
     const lineTotal = isBonifLine ? 0 : refTaxable
@@ -1490,12 +1506,29 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
   cnSumBonificadas = Math.round(cnSumBonificadas * 100) / 100
   cnSumIGVBonificadas = Math.round(cnSumIGVBonificadas * 100) / 100
 
+  // === TOTALES CANÓNICOS DEL DOCUMENTO (round-then-sum por línea, igual que la factura) ===
+  // El XML de la NC DEBE ser coherente consigo mismo (TaxTotal == suma de TaxSubtotal,
+  // TaxInclusive == LineExtension + IGV) Y cuadrar con la factura original que ya tiene
+  // SUNAT. Por eso los totales del documento se derivan de las MISMAS sumas por línea que
+  // los TaxSubtotal — NO de creditNoteData.igv/subtotal/total, que el cliente calcula con
+  // otro redondeo (sum-then-round) y descuadraban en 1 céntimo → SUNAT rechazaba la NC.
+  // El descuento global (cód. 02) llega SIN IGV y afecta la base gravada (igual que la factura).
+  const cnDiscountBase = Math.round((creditNoteData.discount || 0) * 100) / 100
+  if (cnDiscountBase > 0 && cnSumGravadas > 0) {
+    const cappedDiscount = Math.min(cnDiscountBase, cnSumGravadas)
+    cnSumGravadas = Math.round((cnSumGravadas - cappedDiscount) * 100) / 100
+    cnSumIGVGravadas = Math.round(cnSumGravadas * (igvRate / 100) * 100) / 100
+  }
+  const cnLineExtension = Math.round((cnSumGravadas + cnSumExoneradas + cnSumInafectas) * 100) / 100
+  const cnIGVTotal = Math.round(cnSumIGVGravadas * 100) / 100
+  const cnTotal = Math.round((cnLineExtension + cnIGVTotal) * 100) / 100
+
   // === IMPUESTOS (IGV) ===
   // NUEVO: Generar múltiples TaxSubtotals según los tipos de afectación usados
   const currencyCN = creditNoteData.currency || 'PEN'
   const taxTotal = root.ele('cac:TaxTotal')
   taxTotal.ele('cbc:TaxAmount', { 'currencyID': currencyCN })
-    .txt(creditNoteData.igv.toFixed(2))
+    .txt(cnIGVTotal.toFixed(2))
 
   // Función helper para crear un TaxSubtotal
   const createTaxSubtotalCN = (taxableAmt, taxAmt, percent, categoryId, schemeId, schemeName, taxTypeCode) => {
@@ -1564,16 +1597,16 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
 
   // Orden correcto según XSD UBL 2.1
   legalMonetaryTotal.ele('cbc:LineExtensionAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
-    .txt(creditNoteData.subtotal.toFixed(2))
+    .txt(cnLineExtension.toFixed(2))
 
   legalMonetaryTotal.ele('cbc:TaxInclusiveAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
-    .txt(creditNoteData.total.toFixed(2))
+    .txt(cnTotal.toFixed(2))
 
   // NOTA: Para descuentos código 02 (afectan base) NO se declara cbc:AllowanceTotalAmount
   // — ya está reflejado en LineExtensionAmount. SUNAT lo restaría doble del PayableAmount.
 
   legalMonetaryTotal.ele('cbc:PayableAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
-    .txt(creditNoteData.total.toFixed(2))
+    .txt(cnTotal.toFixed(2))
 
   // === ITEMS (CreditNoteLine en lugar de InvoiceLine) ===
   creditNoteData.items.forEach((item, index) => {
@@ -1605,10 +1638,10 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
     // === DESCUENTO POR ÍTEM ===
     const itemDiscount = item.itemDiscount || item.descuento || 0
 
-    // Total línea SIN IGV (base imponible).
-    // Para bonificación: LineExtensionAmount = valor referencial SIN IGV (Greenter setMtoValorVenta)
-    // Para items normales: LineExtensionAmount = base imponible
-    const lineTotal = isBonifLine ? cnLineTaxableRef[index] : item.quantity * priceWithoutIGV
+    // Total línea SIN IGV (base imponible) = la base ya calculada en el primer loop
+    // (cnLineTaxableRef, neta del descuento por ítem). Reusarla garantiza que la base
+    // por línea, los TaxSubtotal y el total del documento usen el MISMO valor.
+    const lineTotal = cnLineTaxableRef[index]
     creditNoteLine.ele('cbc:LineExtensionAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
       .txt(lineTotal.toFixed(2))
 
@@ -1657,7 +1690,10 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
     // Para bonificación: TaxableAmount/TaxAmount = valor referencial
     // Para items normales: TaxableAmount = LineExtensionAmount, TaxAmount = IGV efectivo
     const lineTaxTotal = creditNoteLine.ele('cac:TaxTotal')
-    const lineIGV = isBonifLine ? 0 : (isGravado ? lineTotal * itemIgvMultiplier : 0)
+    // IGV de la línea = el valor por DIFERENCIA ya calculado arriba (cnLineIGVRef), no
+    // recalcular por multiplicación: así la suma de IGV por línea cuadra exactamente con
+    // el cnIGVTotal del documento (mismo método round-then-sum en todo el XML).
+    const lineIGV = isBonifLine ? 0 : (isGravado ? cnLineIGVRef[index] : 0)
     const taxableForXml = isBonifLine ? cnLineTaxableRef[index] : lineTotal
     const igvForXml = isBonifLine ? cnLineIGVRef[index] : lineIGV
     lineTaxTotal.ele('cbc:TaxAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
