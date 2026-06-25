@@ -209,34 +209,28 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible: web
           color: #000;
         }
 
+        /* Número de orden: grande y claro, solo con líneas (sin relleno). */
         .order-number-big {
-          font-size: 24pt;
+          font-size: 26pt;
           font-weight: 900;
-          margin: 10px 0;
-          padding: 10px;
+          margin: 8px 0;
+          padding: 6px 0;
           text-align: center;
-          background: #000;
-          color: #fff;
-          border: 3px solid #000;
+          color: #000;
+          border-top: 2px solid #000;
+          border-bottom: 2px solid #000;
           letter-spacing: 2px;
-          -webkit-print-color-adjust: exact;
-          print-color-adjust: exact;
         }
 
         .order-info {
-          margin: 10px 0;
-          padding: 8px;
-          background: #f0f0f0;
-          border: 2px solid #000;
-          -webkit-print-color-adjust: exact;
-          print-color-adjust: exact;
+          margin: 8px 0;
         }
 
         .info-row {
           display: flex;
           justify-content: space-between;
-          margin: 4px 0;
-          font-size: 10pt;
+          margin: 3px 0;
+          font-size: 11pt;
           font-weight: 700;
         }
 
@@ -245,10 +239,9 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible: web
         }
 
         .items-section {
-          margin: 12px 0;
-          border-top: 2px dashed #000;
-          border-bottom: 2px dashed #000;
-          padding: 10px 0;
+          margin: 10px 0;
+          border-top: 1px dashed #000;
+          padding-top: 8px;
         }
 
         .section-title {
@@ -256,97 +249,92 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible: web
           font-size: 11pt;
           margin-bottom: 8px;
           text-transform: uppercase;
-          letter-spacing: 0.5px;
+          letter-spacing: 1px;
           color: #000;
           text-align: center;
         }
 
+        /* Cada ítem se separa con una línea punteada, sin caja ni relleno. */
         .item {
-          margin: 10px 0;
-          padding: 8px;
-          background: #fff;
-          border: 1px solid #000;
+          margin: 8px 0;
+          padding-bottom: 8px;
+          border-bottom: 1px dashed #000;
+        }
+
+        .item:last-child {
+          border-bottom: none;
+          padding-bottom: 0;
         }
 
         .item-header {
           display: flex;
-          justify-content: space-between;
-          margin-bottom: 6px;
-          font-size: 12pt;
+          gap: 6px;
+          margin-bottom: 4px;
+          font-size: 13pt;
           font-weight: 900;
         }
 
         .item-qty {
           font-size: 14pt;
+          font-weight: 900;
           color: #000;
+          white-space: nowrap;
         }
 
         .item-name {
           flex: 1;
-          padding: 0 8px;
           color: #000;
         }
 
+        /* Modificadores: texto negro indentado bajo el ítem (sin fondo negro). */
         .item-modifiers {
-          margin-top: 6px;
-          padding: 6px;
-          background: #000;
-          color: #fff;
-          border: 3px solid #000;
-          font-size: 10pt;
-          font-weight: 900;
-          -webkit-print-color-adjust: exact;
-          print-color-adjust: exact;
+          margin-top: 4px;
+          margin-left: 16px;
+          font-size: 11pt;
+          font-weight: 700;
+          color: #000;
         }
 
         .modifier-label {
-          font-weight: 900;
-          color: #fff;
-          margin-bottom: 3px;
-          text-decoration: underline;
-          text-transform: uppercase;
+          display: none;
         }
 
         .modifier-group {
-          margin: 4px 0;
-          padding: 3px 0;
+          margin: 3px 0;
         }
 
         .modifier-name {
           font-weight: 900;
-          color: #fff;
-          text-transform: uppercase;
+          color: #000;
         }
 
         .modifier-options {
-          margin-left: 8px;
-          margin-top: 2px;
-          color: #fff;
+          margin-left: 12px;
+          margin-top: 1px;
+          color: #000;
         }
 
+        /* Especificaciones: borde fino para que resalten, sin relleno. */
         .item-notes {
-          margin-top: 6px;
-          padding: 6px;
-          background: #fff;
-          border: 3px double #000;
-          font-size: 10pt;
-          font-weight: 900;
+          margin-top: 4px;
+          margin-left: 16px;
+          padding: 4px 6px;
+          border: 1px solid #000;
+          font-size: 10.5pt;
+          font-weight: 700;
           color: #000;
-          -webkit-print-color-adjust: exact;
-          print-color-adjust: exact;
         }
 
         .notes-label {
           font-weight: 900;
           color: #000;
-          margin-bottom: 3px;
-          text-decoration: underline;
+          margin-bottom: 2px;
         }
 
         .kitchen-footer {
-          margin-top: 12px;
-          padding-top: 8px;
-          border-top: 3px double #000;
+          margin-top: 10px;
+          padding-top: 6px;
+          border-top: 1px dashed #000;
           text-align: center;
           font-size: 9pt;
           font-weight: 700;
@@ -354,25 +342,23 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible: web
 
         .footer-time {
           font-size: 10pt;
-          margin: 4px 0;
-          font-weight: 900;
+          margin: 2px 0;
+          font-weight: 700;
         }
 
         .station-name {
           text-align: center;
-          font-size: 14pt;
+          font-size: 13pt;
           font-weight: 900;
-          background: #000;
-          color: #fff;
-          padding: 6px 10px;
+          color: #000;
+          border: 2px solid #000;
+          padding: 4px 8px;
           margin: 4px 0 8px 0;
           letter-spacing: 1px;
-          -webkit-print-color-adjust: exact;
-          print-color-adjust: exact;
         }
 
         [data-web-print-legible="true"] .station-name {
-          font-size: 16pt !important;
+          font-size: 15pt !important;
         }
 
         ${compactPrint ? `
@@ -562,9 +548,9 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible: web
           border: 3px solid #000 !important;
         }
         .item-modifiers {
-          background: #f5f5f5 !important;
+          background: transparent !important;
           color: #000 !important;
-          border: 2px solid #000 !important;
+          border: none !important;
         }
         .modifier-label {
           color: #000 !important;
@@ -657,7 +643,7 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible: web
           {/* HEADER */}
           <div className="kitchen-header">
             {order._isCopy && (
-              <div style={{ fontSize: '14pt', fontWeight: 900, color: '#000', letterSpacing: '2px', marginBottom: '4px', border: '3px solid #000', padding: '4px', background: '#f0f0f0', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+              <div style={{ fontSize: '14pt', fontWeight: 900, color: '#000', letterSpacing: '2px', marginBottom: '4px', border: '2px solid #000', padding: '4px' }}>
                 *** COPIA ***
               </div>
             )}
@@ -765,14 +751,13 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible: web
 
                 {item.modifiers && item.modifiers.length > 0 && (
                   <div className="item-modifiers">
-                    <div className="modifier-label">★ MODIFICADORES ★</div>
                     {item.modifiers.map((modifier, modIdx) => (
                       <div key={modIdx} className="modifier-group">
-                        <div className="modifier-name">• {modifier.modifierName}:</div>
+                        <div className="modifier-name">{modifier.modifierName}:</div>
                         <div className="modifier-options">
                           {modifier.options.map((opt, optIdx) => (
                             <div key={optIdx}>
-                              → {opt.quantity > 1 ? `${opt.quantity}x ` : ''}{opt.optionName}
+                              - {opt.quantity > 1 ? `${opt.quantity}x ` : ''}{opt.optionName}
                               {opt.priceAdjustment > 0 && ` (+S/ ${((opt.priceAdjustment || 0) * (opt.quantity || 1)).toFixed(2)})`}
                             </div>
                           ))}
