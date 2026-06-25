@@ -8,6 +8,7 @@ import QRCode from 'qrcode'
 import { storage } from '@/lib/firebase'
 import { ref, getDownloadURL, getBlob } from 'firebase/storage'
 import { Capacitor, CapacitorHttp } from '@capacitor/core'
+import { getWalletLogoDataUrl } from '@/utils/walletLogos'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 
@@ -1299,7 +1300,8 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       if (w.qrImageUrl) {
         try { qrData = await loadProductImageAsBase64(w.qrImageUrl) } catch { qrData = null }
       }
-      return { provider: w.provider || '', holderName: w.holderName || '', phoneNumber: w.phoneNumber || '', qrData }
+      const logoData = await getWalletLogoDataUrl(w.provider, 96, 18)
+      return { provider: w.provider || '', holderName: w.holderName || '', phoneNumber: w.phoneNumber || '', qrData, logoData }
     }))
   }
 
@@ -2276,18 +2278,32 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
         doc.setDrawColor(200, 200, 200); doc.setLineWidth(0.3)
         doc.line(walletX, walletY, walletX + walletWidth, walletY)
       }
-      const textX = walletX + 4
+      const baseX = walletX + 4
       const lineY = walletY + (WALLET_HAS_QR ? 12 : 11)
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(8)
-      doc.text(String(w.provider || ''), textX, lineY)
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(8)
-      doc.text(String(w.phoneNumber || ''), textX + 32, lineY)
+      const logoSize = WALLET_HAS_QR ? 20 : 13
+      let textX = baseX
+      // Logo de marca (Yape/Plin) con esquinas redondeadas; si no carga, texto de respaldo.
+      if (w.logoData) {
+        try {
+          doc.addImage(w.logoData, 'PNG', baseX, walletY + (WALLET_ROW_H - logoSize) / 2, logoSize, logoSize, undefined, 'FAST')
+          textX = baseX + logoSize + 5
+        } catch (e) {
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.text(String(w.provider || ''), baseX, lineY)
+          textX = baseX + 32
+        }
+      } else {
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.text(String(w.provider || ''), baseX, lineY)
+        textX = baseX + 32
+      }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(...BLACK)
+      doc.text(String(w.phoneNumber || ''), textX, lineY)
+      const numW = doc.getTextWidth(String(w.phoneNumber || ''))
       if (w.holderName) {
-        doc.setFontSize(7); doc.setTextColor(110, 110, 110)
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(110, 110, 110)
         if (WALLET_HAS_QR) {
           doc.text(String(w.holderName), textX, walletY + 22)
         } else {
-          doc.text(`- ${w.holderName}`, textX + 92, lineY)
+          doc.text(`- ${w.holderName}`, textX + numW + 6, lineY)
         }
         doc.setTextColor(...BLACK)
       }
