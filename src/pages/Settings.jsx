@@ -647,6 +647,12 @@ export default function Settings() {
   const [bankAccounts, setBankAccounts] = useState([])
   // Estructura: [{ bank: 'BCP', currency: 'PEN', accountNumber: '123-456789-0-12', cci: '00212345678901234567' }]
 
+  // Estado para billeteras digitales (Yape / Plin) con QR
+  const [digitalWallets, setDigitalWallets] = useState([])
+  // Estructura: [{ provider: 'Yape'|'Plin', holderName, phoneNumber, qrImageUrl, _qrFile?, _qrPreview? }]
+  const [newWalletQrFile, setNewWalletQrFile] = useState(null)
+  const [newWalletQrPreview, setNewWalletQrPreview] = useState('')
+
   // Estados para eliminación masiva de datos
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false)
   const [bulkDeleteType, setBulkDeleteType] = useState(null) // 'products' | 'customers' | 'suppliers'
@@ -1201,6 +1207,11 @@ export default function Settings() {
         // Cargar cuentas bancarias estructuradas
         if (businessData.bankAccountsList && Array.isArray(businessData.bankAccountsList)) {
           setBankAccounts(businessData.bankAccountsList)
+        }
+
+        // Cargar billeteras digitales (Yape / Plin)
+        if (businessData.digitalWalletsList && Array.isArray(businessData.digitalWalletsList)) {
+          setDigitalWallets(businessData.digitalWalletsList)
         }
 
         // Cargar configuración de inventario
@@ -1795,6 +1806,32 @@ export default function Settings() {
         }
       }
 
+      // Subir los QR pendientes de las billeteras digitales (Yape/Plin). Mismo patrón que
+      // el logo/QR del ticket: el archivo se sube a Storage al guardar y se reemplaza por su URL.
+      let walletsToSave = digitalWallets.map(w => ({
+        provider: w.provider,
+        holderName: w.holderName || '',
+        phoneNumber: w.phoneNumber || '',
+        qrImageUrl: w.qrImageUrl || null,
+      }))
+      if (digitalWallets.some(w => w._qrFile)) {
+        try {
+          walletsToSave = await Promise.all(digitalWallets.map(async (w, i) => {
+            let qrUrl = w.qrImageUrl || null
+            if (w._qrFile) {
+              const wRef = ref(storage, `businesses/${getBusinessId()}/wallet-qr/${w.provider}_${Date.now()}_${i}`)
+              await uploadBytes(wRef, w._qrFile)
+              qrUrl = await getDownloadURL(wRef)
+            }
+            return { provider: w.provider, holderName: w.holderName || '', phoneNumber: w.phoneNumber || '', qrImageUrl: qrUrl }
+          }))
+          invalidateLogoCache()
+        } catch (e) {
+          console.error('Error al subir QR de billetera:', e)
+          toast.error('Error al subir el QR de Yape/Plin. Se guardará el resto de la configuración.')
+        }
+      }
+
       // Crear o actualizar datos de la empresa usando userId como businessId
       const businessRef = doc(db, 'businesses', getBusinessId())
 
@@ -1808,6 +1845,7 @@ export default function Settings() {
         socialMedia: data.socialMedia || '',
         bankAccounts: data.bankAccounts || '', // Campo legacy (texto libre)
         bankAccountsList: bankAccounts, // Cuentas estructuradas
+        digitalWalletsList: walletsToSave, // Billeteras digitales (Yape/Plin) con QR
         address: data.address,
         urbanization: data.urbanization,
         district: data.district,
@@ -1845,6 +1883,9 @@ export default function Settings() {
 
       setLogoFile(null) // Limpiar archivo temporal
       setTicketQrImageFile(null) // Limpiar archivo temporal del QR
+      setDigitalWallets(walletsToSave) // Reflejar las URLs subidas (quita los archivos/preview temporales)
+      setNewWalletQrFile(null)
+      setNewWalletQrPreview('')
       if (refreshBusinessSettings) await refreshBusinessSettings()
       toast.success('Configuración guardada exitosamente')
     } catch (error) {
@@ -3318,6 +3359,133 @@ export default function Settings() {
                       document.getElementById('newBankCurrency').value = 'PEN'
                       document.getElementById('newBankAccount').value = ''
                       document.getElementById('newBankCci').value = ''
+                    }}
+                    className="px-3 py-1.5 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors"
+                  >
+                    Agregar
+                  </button>
+                </div>
+              </div>
+
+              {/* Yape / Plin (billeteras digitales) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Yape / Plin
+                </label>
+                <p className="text-xs text-gray-500 mb-3">
+                  Número, titular y QR de tus billeteras Yape/Plin para que tus clientes te paguen.
+                </p>
+
+                {/* Lista de billeteras */}
+                {digitalWallets.length > 0 && (
+                  <div className="mb-3 border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">Billetera</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">Titular</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">Número</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">QR</th>
+                          <th className="px-3 py-2 w-10"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {digitalWallets.map((w, index) => (
+                          <tr key={index} className="hover:bg-gray-50">
+                            <td className="px-3 py-2">
+                              <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${w.provider === 'Yape' ? 'bg-purple-100 text-purple-700' : 'bg-cyan-100 text-cyan-700'}`}>{w.provider}</span>
+                            </td>
+                            <td className="px-3 py-2">{w.holderName || '-'}</td>
+                            <td className="px-3 py-2 font-mono text-xs">{w.phoneNumber}</td>
+                            <td className="px-3 py-2">
+                              {(w._qrPreview || w.qrImageUrl) ? (
+                                <img src={w._qrPreview || w.qrImageUrl} alt="QR" className="w-10 h-10 object-contain border rounded" />
+                              ) : (
+                                <span className="text-xs text-gray-400">Sin QR</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              <button
+                                type="button"
+                                onClick={() => setDigitalWallets(digitalWallets.filter((_, i) => i !== index))}
+                                className="text-red-500 hover:text-red-700"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Formulario para agregar billetera */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2 p-3 bg-gray-50 rounded-lg items-stretch">
+                  <select
+                    id="newWalletProvider"
+                    className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    defaultValue=""
+                  >
+                    <option value="" disabled>Yape / Plin</option>
+                    <option value="Yape">Yape</option>
+                    <option value="Plin">Plin</option>
+                  </select>
+                  <input
+                    id="newWalletHolder"
+                    type="text"
+                    placeholder="Titular (opcional)"
+                    className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  />
+                  <input
+                    id="newWalletPhone"
+                    type="text"
+                    placeholder="Número (celular)"
+                    className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  />
+                  <label className="cursor-pointer">
+                    <input
+                      id="newWalletQrInput"
+                      type="file"
+                      accept="image/jpeg,image/jpg,image/png,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files[0]
+                        if (!file) return
+                        const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+                        if (!validTypes.includes(file.type)) { toast.error('El QR debe ser una imagen (JPG, PNG o WEBP)'); return }
+                        if (file.size > 2 * 1024 * 1024) { toast.error('La imagen no debe superar los 2MB'); return }
+                        setNewWalletQrFile(file)
+                        const reader = new FileReader()
+                        reader.onload = (ev) => setNewWalletQrPreview(ev.target.result)
+                        reader.readAsDataURL(file)
+                      }}
+                    />
+                    <div className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg text-center hover:border-primary-400 hover:bg-primary-50 transition-colors text-gray-600 truncate h-full flex items-center justify-center">
+                      {newWalletQrPreview ? 'QR listo ✓' : 'Subir QR (opcional)'}
+                    </div>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const provider = document.getElementById('newWalletProvider').value
+                      const holderName = document.getElementById('newWalletHolder').value
+                      const phoneNumber = document.getElementById('newWalletPhone').value
+
+                      if (!provider || !phoneNumber) {
+                        toast.error('Elige Yape o Plin e ingresa el número')
+                        return
+                      }
+
+                      setDigitalWallets([...digitalWallets, { provider, holderName, phoneNumber, qrImageUrl: null, _qrFile: newWalletQrFile, _qrPreview: newWalletQrPreview }])
+
+                      // Limpiar campos
+                      document.getElementById('newWalletProvider').value = ''
+                      document.getElementById('newWalletHolder').value = ''
+                      document.getElementById('newWalletPhone').value = ''
+                      setNewWalletQrFile(null)
+                      setNewWalletQrPreview('')
+                      const fi = document.getElementById('newWalletQrInput'); if (fi) fi.value = ''
                     }}
                     className="px-3 py-1.5 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors"
                   >
