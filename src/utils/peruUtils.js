@@ -136,6 +136,13 @@ export function calculateMixedInvoiceAmounts(items, igvRate = 18) {
   // Desglose por tasa de IGV (para mostrar IGV 18% e IGV 10.5% por separado)
   const byRate = {}
 
+  // Redondeo a 2 decimales POR LÍNEA, idéntico al XML del servidor (xmlGenerator).
+  // SUNAT valida con el método round-then-sum: cada línea redondea su base e IGV a 2
+  // decimales y el total del documento = suma de líneas redondeadas. Si el cliente usara
+  // sum-then-round (acumular con precisión y redondear al final) el total puede diferir en
+  // 1 céntimo del XML → descuadre con SUNAT (PDF/consulta) y rechazo de notas de crédito.
+  const r2 = (n) => Math.round(n * 100) / 100
+
   items.forEach(item => {
     const lineTotal = item.price * item.quantity
     const taxAffectation = item.taxAffectation || '10' // Default: Gravado
@@ -147,27 +154,29 @@ export function calculateMixedInvoiceAmounts(items, igvRate = 18) {
         const rawItemRate = item.igvRate ?? igvRate
         const itemRate = rawItemRate === 10 ? 10.5 : rawItemRate
         const itemMultiplier = itemRate / 100
-        const lineSubtotal = lineTotal / (1 + itemMultiplier)
-        const lineIgv = lineTotal - lineSubtotal
+        // Base e IGV redondeados por línea (IGV = total - base, garantiza cuadre por línea)
+        const lineSubtotal = r2(lineTotal / (1 + itemMultiplier))
+        const lineIgv = r2(lineTotal - lineSubtotal)
+        const lineRounded = lineSubtotal + lineIgv // total de la línea = suma de redondeados
         subtotalGravado += lineSubtotal
         igvGravado += lineIgv
-        totalGravado += lineTotal
+        totalGravado += lineRounded
 
         // Acumular por tasa
         if (!byRate[itemRate]) byRate[itemRate] = { subtotal: 0, igv: 0, total: 0 }
         byRate[itemRate].subtotal += lineSubtotal
         byRate[itemRate].igv += lineIgv
-        byRate[itemRate].total += lineTotal
+        byRate[itemRate].total += lineRounded
         break
       }
       case '20': // Exonerado
-        totalExonerado += lineTotal
+        totalExonerado += r2(lineTotal)
         break
       case '30': // Inafecto
-        totalInafecto += lineTotal
+        totalInafecto += r2(lineTotal)
         break
       default:
-        totalGravado += lineTotal // Default a gravado
+        totalGravado += r2(lineTotal) // Default a gravado
     }
   })
 
