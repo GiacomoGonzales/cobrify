@@ -115,8 +115,13 @@ export default function Tables() {
   const [simplePrint, setSimplePrint] = useState(false)
   const [a4SheetPrint, setA4SheetPrint] = useState(false)
   const kitchenTicketRef = useRef()
+  // Bandera: la auto-impresión de comanda al agregar items está en curso. Evita que el
+  // botón manual "Imprimir Comanda" mande la MISMA comanda otra vez (ticket duplicado).
+  const kitchenAutoPrintInProgressRef = useRef(false)
   const [kitchenStations, setKitchenStations] = useState([])
   const [enableKitchenStations, setEnableKitchenStations] = useState(false)
+  // Al imprimir comanda desde PC/navegador: imprimir todo junto (no separar por estación).
+  const [combineStationsOnWebPrint, setCombineStationsOnWebPrint] = useState(false)
   const [categoryMap, setCategoryMap] = useState({})
 
   // Form state
@@ -190,6 +195,7 @@ export default function Tables() {
           const config = docSnap.data().restaurantConfig || {}
           setKitchenStations(config.kitchenStations || [])
           setEnableKitchenStations(config.enableKitchenStations || false)
+          setCombineStationsOnWebPrint(config.combineStationsOnWebPrint || false)
         }
       },
       (error) => {
@@ -1167,10 +1173,19 @@ export default function Tables() {
     // Filtrar items no impresos (solo si no se fuerza reimprimir todo)
     const unprintedItems = (selectedOrder.items || []).filter(item => !item.printedToKitchen)
     const hasUnprintedItems = unprintedItems.length > 0
+
+    // Evitar comanda DUPLICADA: la auto-impresión al agregar items ya manda la comanda
+    // a cocina. Si está en curso, no mandar otra vez (esa era la causa del doble ticket).
+    if (kitchenAutoPrintInProgressRef.current) {
+      toast.info('La comanda se está enviando a cocina automáticamente')
+      return
+    }
+
     const itemsToPrint = (!printAll && hasUnprintedItems) ? unprintedItems : (selectedOrder.items || [])
     const isPartialPrint = !printAll && hasUnprintedItems
-    // Es copia si se reimprimen items que ya fueron impresos
-    const isCopy = printAll && !hasUnprintedItems
+    // Es copia cuando NO hay items nuevos sin imprimir (todo ya se envió): un reimpreso
+    // deliberado sale marcado "COPIA" en vez de duplicar silenciosamente la comanda.
+    const isCopy = !hasUnprintedItems
     const orderToPrintData = { ...selectedOrder, items: itemsToPrint, _isCopy: isCopy, _ultraCompact: ultraCompactKitchen }
 
     const isNative = Capacitor.isNativePlatform()
@@ -1301,6 +1316,8 @@ export default function Tables() {
       if (!printerConfigResult.success || !printerConfigResult.config?.enabled || !printerConfigResult.config?.address) return
 
       const pw = printerConfigResult.config.paperWidth || 58
+      // Marcar la auto-impresión en curso para que el botón manual no duplique la comanda.
+      kitchenAutoPrintInProgressRef.current = true
       const orderToPrintData = { ...selectedOrder, items, _ultraCompact: ultraCompactKitchen }
       let printed = false
 
@@ -1358,6 +1375,8 @@ export default function Tables() {
     } catch (error) {
       console.error('Error en auto-impresion de comanda al agregar items:', error)
       // Silencioso: el agregado de items ya fue exitoso
+    } finally {
+      kitchenAutoPrintInProgressRef.current = false
     }
   }
 
@@ -1382,7 +1401,16 @@ export default function Tables() {
           amount: 0,
         }
         setSelectedTable(updatedTable)
-        setSelectedOrder({ id: result.orderId, items: [] })
+        // Sembrar el objeto con los datos reales de la mesa/orden (número, mesa, tipo).
+        // Si se imprime una comanda ANTES de que el listener de Firestore traiga el doc
+        // completo, así sale "Mesa N / #NNN" y NO el ticket fantasma "PARA LLEVAR / <id>".
+        setSelectedOrder({
+          id: result.orderId,
+          items: [],
+          tableNumber: selectedTable.number,
+          orderNumber: result.orderNumber,
+          orderType: 'dine_in',
+        })
         setIsActionModalOpen(false)
         setIsOrderItemsModalOpen(true)
       } else {
@@ -2232,8 +2260,8 @@ export default function Tables() {
       {/* Comanda para imprimir (oculta, fuera de pantalla para react-to-print) */}
       {orderToPrint && (
         <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
-          <div ref={kitchenTicketRef} className={enableKitchenStations && kitchenStations.length > 0 ? 'kitchen-multi-ticket' : undefined}>
-            {enableKitchenStations && kitchenStations.length > 0 ? (() => {
+          <div ref={kitchenTicketRef} className={enableKitchenStations && kitchenStations.length > 0 && !combineStationsOnWebPrint ? 'kitchen-multi-ticket' : undefined}>
+            {enableKitchenStations && kitchenStations.length > 0 && !combineStationsOnWebPrint ? (() => {
               // Helper: matchear categoría de item con categorías de estación
               const itemMatchesStation = (itemCategory, stationCategories) => {
                 if (!itemCategory || !stationCategories || stationCategories.length === 0) return false

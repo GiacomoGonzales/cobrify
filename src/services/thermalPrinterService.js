@@ -5,6 +5,7 @@ import * as BLEPrinter from './blePrinterService';
 import { getPricedModifiers } from '@/utils/modifierHelpers';
 import { unitDisplayName } from '@/data/sunatUnits';
 import { getComprobanteBreakdown } from '@/utils/peruUtils';
+import { buildKitchenLines } from '@/utils/kitchenComandaFormat';
 
 /**
  * Servicio para manejar impresoras térmicas WiFi/Bluetooth
@@ -1451,6 +1452,41 @@ function ticketSizeScaleFromConfig() {
   }
 }
 
+// Renderiza la lista de líneas de la comanda (buildKitchenLines) usando el
+// EscPosBuilder (WiFi / interna / estación). builder.text() ya convierte acentos.
+function renderKitchenLinesEscPos(builder, lines, format) {
+  for (const ln of lines) {
+    if (ln.sep) {
+      builder.alignLeft().bold(false).doubleHeight(false).text(format.separator).newLine();
+      continue;
+    }
+    if (ln.blank) { builder.newLine(); continue; }
+    builder[ln.a === 'C' ? 'alignCenter' : 'alignLeft']()
+      .doubleHeight(!!ln.big)
+      .bold(!!ln.b)
+      .text(ln.t)
+      .newLine();
+  }
+  builder.doubleHeight(false).bold(false).alignLeft();
+}
+
+// Renderiza la lista de líneas de la comanda usando CapacitorThermalPrinter
+// (Bluetooth clásico Android). Aquí SÍ hay que convertir acentos manualmente.
+function renderKitchenLinesBT(printer, lines, format) {
+  for (const ln of lines) {
+    if (ln.sep) {
+      printer = printer.clearFormatting().align('left').text(format.separator + '\n');
+      continue;
+    }
+    if (ln.blank) { printer = printer.text('\n'); continue; }
+    printer = printer.align(ln.a === 'C' ? 'center' : 'left');
+    if (ln.big) printer = printer.doubleHeight();
+    if (ln.b) printer = printer.bold();
+    printer = printer.text(convertSpanishText(ln.t) + '\n').clearFormatting();
+  }
+  return printer;
+}
+
 export const printKitchenOrder = async (order, table = null, paperWidth = 58, stationName = null) => {
   const isNative = Capacitor.isNativePlatform();
 
@@ -1491,161 +1527,10 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58, st
   try {
     const format = getFormat(paperWidth);
 
-    // Construir items text
-    let itemsText = '';
-    for (const item of order.items || []) {
-      itemsText += `${item.quantity}x ${convertSpanishText(item.name)}\n`;
+    // Formato ÚNICO de comanda (mismo que WiFi / estación / BLE / HTML)
+    const lines = buildKitchenLines(order, table, paperWidth, stationName);
 
-      // Mostrar modificadores si existen
-      if (item.modifiers && item.modifiers.length > 0) {
-        if (order._ultraCompact) {
-          // Ultracompacto: modificadores en una sola línea
-          const allOpts = item.modifiers.flatMap(m => m.options.map(o =>
-            `${o.quantity > 1 ? o.quantity + 'x ' : ''}${convertSpanishText(o.optionName)}`
-          ));
-          if (allOpts.length > 0) itemsText += `  > ${allOpts.join(', ')}\n`;
-        } else {
-          for (const modifier of item.modifiers) {
-            for (const option of modifier.options) {
-              itemsText += `  > ${option.quantity > 1 ? option.quantity + 'x ' : ''}${convertSpanishText(option.optionName)}`;
-              if (option.priceAdjustment > 0) {
-                itemsText += ` (+S/${((option.priceAdjustment || 0) * (option.quantity || 1)).toFixed(2)})`;
-              }
-              itemsText += '\n';
-            }
-          }
-        }
-      }
-
-      if (item.notes) {
-        itemsText += `  ${order._ultraCompact ? '' : 'Nota: '}${convertSpanishText(item.notes)}\n`;
-      }
-    }
-
-    // Construir comando en cadena
-    let printer = CapacitorThermalPrinter.begin()
-      // Encabezado
-      .align('center')
-      .doubleHeight()
-      .bold();
-
-    if (order._isCopy) {
-      printer = printer.text('*** COPIA ***\n');
-    }
-
-    printer = printer
-      .text(order._printNote ? `*** COMANDA ***\n*** ${order._printNote} ***\n` : '*** COMANDA ***\n')
-      .clearFormatting();
-
-    if (stationName) {
-      printer = printer
-        .align('center')
-        .bold()
-        .text(`* ${convertSpanishText(stationName.toUpperCase())} *\n`)
-        .clearFormatting();
-    }
-
-    printer = addSeparator(printer, format.separator, paperWidth, 'center');
-
-    // Información de la orden
-    printer = printer
-      .align('left')
-      .bold();
-
-    if (order._ultraCompact) {
-      // Ultracompacto: info mínima en pocas líneas
-      const orderNum = order.orderNumber || order.id?.slice(-6) || 'N/A';
-      const time = new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
-      printer = printer.text(`#${orderNum} - ${time}\n`);
-      if (table) {
-        printer = printer.text(`Mesa: ${table.number}${table.waiter ? ' | Mozo: ' + table.waiter : ''}\n`);
-      } else if (order.orderType) {
-        const typeLabels = { delivery: 'DELIVERY', takeaway: 'PARA LLEVAR' };
-        const _cust = order._showCustomerData && order.customerName ? '- ' + convertSpanishText(order.customerName) : '';
-        printer = printer.text(`${typeLabels[order.orderType] || ''} ${_cust}\n`);
-      }
-      if (order._showCustomerData && order.customerAddress) {
-        printer = printer.text(`${convertSpanishText(order.customerAddress)}\n`);
-      }
-    } else {
-      printer = printer.text(`Fecha: ${new Date().toLocaleString('es-PE')}\n`);
-
-      if (table) {
-        printer = printer
-          .text(`Mesa: ${table.number}\n`)
-          .text(`Mozo: ${table.waiter || 'N/A'}\n`);
-      }
-
-      printer = printer
-        .text(`Orden: #${order.orderNumber || order.id?.slice(-6) || 'N/A'}\n`);
-
-      if (order.brandName) {
-        printer = printer.text(`Marca: ${convertSpanishText(order.brandName)}\n`);
-      }
-
-      // Datos del cliente para delivery/takeaway (solo si está activado en Preferencias)
-      if (order._showCustomerData && order.customerName) {
-        printer = printer.text(`Cliente: ${convertSpanishText(order.customerName)}\n`);
-      }
-      if (order._showCustomerData && order.customerPhone) {
-        printer = printer.text(`Tel: ${order.customerPhone}\n`);
-      }
-      if (order._showCustomerData && order.customerAddress) {
-        printer = printer.text(`Dir: ${convertSpanishText(order.customerAddress)}\n`);
-      }
-      if (order.orderType && !table) {
-        const typeLabels = { delivery: 'DELIVERY', takeaway: 'PARA LLEVAR' };
-        if (typeLabels[order.orderType]) {
-          printer = printer
-            .clearFormatting()
-            .align('center')
-            .doubleHeight()
-            .bold()
-            .text(`*** ${typeLabels[order.orderType]} ***\n`)
-            .clearFormatting()
-            .align('left');
-        }
-      }
-
-      if (order.priority === 'urgent') {
-        printer = printer
-          .clearFormatting()
-          .align('center')
-          .doubleHeight()
-          .bold()
-          .text('!!! URGENTE !!!\n')
-          .clearFormatting()
-          .align('left');
-      }
-    }
-
-    printer = printer.clearFormatting();
-
-    // Estado de pago (delivery / para llevar): el repartidor/cajero debe saber si cobra y cuánto
-    if (order._showCustomerData && !table && (order.orderType === 'delivery' || order.orderType === 'takeaway')) {
-      const _amt = Number(order.total || 0).toFixed(2);
-      const _mMap = { efectivo: 'Efectivo', cash: 'Efectivo', yape: 'Yape', plin: 'Plin', tarjeta: 'Tarjeta', card: 'Tarjeta', transferencia: 'Transferencia', transfer: 'Transferencia' };
-      const _mLabel = _mMap[(order.paymentMethod || '').toLowerCase()] || '';
-      const _mSuffix = _mLabel ? ` (${_mLabel})` : '';
-      printer = printer.clearFormatting().align('center').bold();
-      if (order.paid) {
-        printer = printer.text(`PAGADO - S/ ${_amt}${_mSuffix}\n`);
-      } else {
-        printer = printer
-          .doubleHeight()
-          .text('** POR COBRAR **\n')
-          .text(`S/ ${_amt}${_mSuffix}\n`);
-      }
-      printer = printer.clearFormatting().align('left');
-      printer = addSeparator(printer, format.separator, paperWidth, 'left');
-    }
-
-    printer = addSeparator(printer, format.separator, paperWidth, 'left');
-
-    printer = printer
-      .text(itemsText);
-
-    printer = addSeparator(printer, format.separator, paperWidth, 'left');
+    let printer = renderKitchenLinesBT(CapacitorThermalPrinter.begin(), lines, format);
 
     // Avanzar según configuración del usuario
     const cutFeed = getCutFeedLines();
@@ -2794,167 +2679,15 @@ export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
 const printWifiKitchenOrder = async (order, table = null, paperWidth = 58, stationName = null) => {
   try {
     const format = getFormat(paperWidth);
+    EscPosBuilder.baseSizeScale = ticketSizeScaleFromConfig();
     const builder = new EscPosBuilder();
+    builder.init();
 
-    builder.init()
-      .alignCenter()
-      .doubleHeight(true)
-      .bold(true);
+    // Formato ÚNICO de comanda (mismo que Bluetooth / estación / BLE / HTML)
+    const lines = buildKitchenLines(order, table, paperWidth, stationName);
+    renderKitchenLinesEscPos(builder, lines, format);
 
-    if (order._isCopy) {
-      builder.text('*** COPIA ***')
-        .newLine();
-    }
-
-    builder.text('*** COMANDA ***')
-      .newLine();
-
-    if (order._printNote) {
-      builder.text(`*** ${order._printNote} ***`)
-        .newLine();
-    }
-
-    builder.doubleHeight(false);
-
-    if (stationName) {
-      builder.bold(true)
-        .text(`* ${stationName.toUpperCase()} *`)
-        .newLine();
-    }
-
-    builder.bold(false)
-      .text(format.separator)
-      .newLine()
-      .alignLeft()
-      .bold(true);
-
-    if (order._ultraCompact) {
-      // Ultracompacto: info mínima
-      const orderNum = order.orderNumber || order.id?.slice(-6) || 'N/A';
-      const time = new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
-      builder.text(`#${orderNum} - ${time}`).newLine();
-      if (table) {
-        builder.text(`Mesa: ${table.number}${table.waiter ? ' | Mozo: ' + table.waiter : ''}`).newLine();
-      } else if (order.orderType) {
-        const typeLabels = { delivery: 'DELIVERY', takeaway: 'PARA LLEVAR' };
-        const _cust = order._showCustomerData && order.customerName ? '- ' + order.customerName : '';
-        builder.text(`${typeLabels[order.orderType] || ''} ${_cust}`).newLine();
-      }
-      if (order._showCustomerData && order.customerAddress) {
-        builder.text(order.customerAddress).newLine();
-      }
-    } else {
-      builder.text(`Fecha: ${new Date().toLocaleString('es-PE')}`)
-        .newLine();
-
-      if (table) {
-        builder.text(`Mesa: ${table.number}`)
-          .newLine()
-          .text(`Mozo: ${table.waiter || 'N/A'}`)
-          .newLine();
-      }
-
-      builder.text(`Orden: #${order.orderNumber || order.id?.slice(-6) || 'N/A'}`)
-        .newLine();
-
-      if (order.brandName) {
-        builder.text(`Marca: ${order.brandName}`)
-          .newLine();
-      }
-
-      // Datos del cliente para delivery/takeaway (solo si está activado en Preferencias)
-      if (order._showCustomerData && order.customerName) {
-        builder.text(`Cliente: ${order.customerName}`).newLine();
-      }
-      if (order._showCustomerData && order.customerPhone) {
-        builder.text(`Tel: ${order.customerPhone}`).newLine();
-      }
-      if (order._showCustomerData && order.customerAddress) {
-        builder.text(`Dir: ${order.customerAddress}`).newLine();
-      }
-      if (order.orderType && !table) {
-        const typeLabels = { delivery: 'DELIVERY', takeaway: 'PARA LLEVAR' };
-        if (typeLabels[order.orderType]) {
-          builder.bold(false)
-            .alignCenter()
-            .doubleHeight(true)
-            .bold(true)
-            .text(`*** ${typeLabels[order.orderType]} ***`)
-            .newLine()
-            .doubleHeight(false)
-            .alignLeft();
-        }
-      }
-
-      if (order.priority === 'urgent') {
-        builder.bold(false)
-          .alignCenter()
-          .doubleHeight(true)
-          .bold(true)
-          .text('!!! URGENTE !!!')
-          .newLine()
-          .doubleHeight(false)
-          .alignLeft();
-      }
-    }
-
-    // Estado de pago (delivery / para llevar): el repartidor/cajero debe saber si cobra y cuánto
-    if (order._showCustomerData && !table && (order.orderType === 'delivery' || order.orderType === 'takeaway')) {
-      const _amt = Number(order.total || 0).toFixed(2);
-      const _mMap = { efectivo: 'Efectivo', cash: 'Efectivo', yape: 'Yape', plin: 'Plin', tarjeta: 'Tarjeta', card: 'Tarjeta', transferencia: 'Transferencia', transfer: 'Transferencia' };
-      const _mLabel = _mMap[(order.paymentMethod || '').toLowerCase()] || '';
-      const _mSuffix = _mLabel ? ` (${_mLabel})` : '';
-      builder.bold(false).text(format.separator).newLine().alignCenter().bold(true);
-      if (order.paid) {
-        builder.text(`PAGADO - S/ ${_amt}${_mSuffix}`).newLine();
-      } else {
-        builder.doubleHeight(true)
-          .text('** POR COBRAR **').newLine()
-          .text(`S/ ${_amt}${_mSuffix}`).newLine()
-          .doubleHeight(false);
-      }
-      builder.bold(false).alignLeft();
-    }
-
-    builder.bold(false)
-      .text(format.separator)
-      .newLine();
-
-    // Items
-    for (const item of order.items || []) {
-      builder.bold(true)
-        .text(`${item.quantity}x ${item.name}`)
-        .newLine()
-        .bold(false);
-
-      // Modificadores
-      if (item.modifiers && item.modifiers.length > 0) {
-        if (order._ultraCompact) {
-          const allOpts = item.modifiers.flatMap(m => m.options.map(o =>
-            `${o.quantity > 1 ? o.quantity + 'x ' : ''}${o.optionName}`
-          ));
-          if (allOpts.length > 0) builder.text(`  > ${allOpts.join(', ')}`).newLine();
-        } else {
-          for (const modifier of item.modifiers) {
-            for (const option of modifier.options) {
-              let optionText = `  > ${option.quantity > 1 ? option.quantity + 'x ' : ''}${option.optionName}`;
-              if (option.priceAdjustment > 0) {
-                optionText += ` (+S/${((option.priceAdjustment || 0) * (option.quantity || 1)).toFixed(2)})`;
-              }
-              builder.text(optionText).newLine();
-            }
-          }
-        }
-      }
-
-      if (item.notes) {
-        builder.text(`  ${order._ultraCompact ? '' : 'Nota: '}${item.notes}`).newLine();
-      }
-    }
-
-    builder.text(format.separator)
-      .newLine()
-      .feed(order._ultraCompact ? 1 : 2)
+    builder.feed(order._ultraCompact ? 1 : 2)
       .cut();
 
     const base64Data = builder.toBase64();
@@ -2986,84 +2719,20 @@ export const printStationTicket = async (printerIp, order, station, items, paper
 
   try {
     const format = getFormat(paperWidth);
+    EscPosBuilder.baseSizeScale = ticketSizeScaleFromConfig();
     const builder = new EscPosBuilder();
+    builder.init();
 
-    builder.init()
-      .alignCenter()
-      .doubleHeight(true)
-      .bold(true);
+    // Formato ÚNICO de comanda (mismo que Bluetooth / WiFi / BLE / HTML).
+    // La estación recibe sus items filtrados aparte → se los inyectamos a la orden.
+    const stationOrder = { ...order, items };
+    const stationTable = order.tableNumber
+      ? { number: order.tableNumber, waiter: order.waiterName || order.waiter || '' }
+      : null;
+    const lines = buildKitchenLines(stationOrder, stationTable, paperWidth, station.name || 'ESTACION');
+    renderKitchenLinesEscPos(builder, lines, format);
 
-    if (order._isCopy) {
-      builder.text('*** COPIA ***')
-        .newLine();
-    }
-
-    builder.text(`*** ${station.name?.toUpperCase() || 'ESTACION'} ***`)
-      .newLine()
-      .doubleHeight(false)
-      .bold(false)
-      .text(format.separator)
-      .newLine()
-      .alignLeft()
-      .bold(true)
-      .text(`Orden: #${order.orderNumber || order.id?.slice(-6) || 'N/A'}`)
-      .newLine()
-      .text(`Fecha: ${new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}`)
-      .newLine();
-
-    // Info de mesa o tipo de orden
-    if (order.tableNumber) {
-      builder.text(`Mesa: ${order.tableNumber}`).newLine();
-    } else {
-      builder.text(order.orderType === 'delivery' ? 'DELIVERY' : 'PARA LLEVAR').newLine();
-    }
-
-    // Marca si existe
-    if (order.brandName) {
-      builder.text(`Marca: ${order.brandName}`).newLine();
-    }
-
-    // Prioridad si es urgente
-    if (order.priority === 'urgent') {
-      builder.doubleHeight(true)
-        .text('!!! URGENTE !!!')
-        .newLine()
-        .doubleHeight(false);
-    }
-
-    builder.bold(false)
-      .text(format.separator)
-      .newLine();
-
-    // Items para esta estación
-    for (const item of items) {
-      builder.bold(true)
-        .text(`${item.quantity}x ${item.name}`)
-        .newLine()
-        .bold(false);
-
-      // Modificadores
-      if (item.modifiers && item.modifiers.length > 0) {
-        for (const modifier of item.modifiers) {
-          for (const option of modifier.options) {
-            let optionText = `  > ${option.quantity > 1 ? option.quantity + 'x ' : ''}${option.optionName}`;
-            if (option.priceAdjustment > 0) {
-              optionText += ` (+S/${((option.priceAdjustment || 0) * (option.quantity || 1)).toFixed(2)})`;
-            }
-            builder.text(optionText).newLine();
-          }
-        }
-      }
-
-      if (item.notes) {
-        builder.text(`  Nota: ${item.notes}`).newLine();
-      }
-    }
-
-    builder.text(format.separator)
-      .newLine()
-      .feed(2)
-      .cut();
+    builder.feed(2).cut();
 
     const base64Data = builder.toBase64();
 

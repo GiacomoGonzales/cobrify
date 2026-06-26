@@ -4456,6 +4456,26 @@ export default function Settings() {
                             </div>
                           </label>
 
+                          {/* Checkbox: imprimir comanda junta desde PC/navegador */}
+                          <label className="flex items-center gap-2 cursor-pointer p-3 bg-white border border-gray-200 rounded-lg mb-4">
+                            <input
+                              type="checkbox"
+                              checked={restaurantConfig.combineStationsOnWebPrint || false}
+                              onChange={(e) => setRestaurantConfig({...restaurantConfig, combineStationsOnWebPrint: e.target.checked})}
+                              className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                            />
+                            <div>
+                              <span className="text-sm font-medium text-gray-900">
+                                Imprimir comanda junta desde PC/navegador
+                              </span>
+                              <p className="text-xs text-gray-500">
+                                {restaurantConfig.combineStationsOnWebPrint
+                                  ? '✓ Habilitado: Al imprimir la comanda desde la computadora (Chrome), sale TODO en una sola comanda, sin separar por estación.'
+                                  : 'Al imprimir desde PC, la comanda se separa en una hoja por estación (Cocina, Bar…). Actívalo para que salga todo junto en una sola.'}
+                              </p>
+                            </div>
+                          </label>
+
                           {/* Lista de estaciones */}
                           <div className="space-y-3">
                             {(restaurantConfig.kitchenStations || []).length === 0 ? (

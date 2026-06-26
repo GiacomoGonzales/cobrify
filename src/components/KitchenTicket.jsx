@@ -27,29 +27,16 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible: web
   }
 
   const formatTime = (timestamp) => {
-    if (!timestamp) return new Date().toLocaleTimeString('es-PE')
+    const opts = { hour: '2-digit', minute: '2-digit' }
+    if (!timestamp) return new Date().toLocaleTimeString('es-PE', opts)
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
-    return date.toLocaleTimeString('es-PE', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    })
+    return date.toLocaleTimeString('es-PE', opts)
   }
 
   const getOrderTypeLabel = (orderType) => {
     if (orderType === 'delivery') return 'DELIVERY'
     if (orderType === 'takeaway') return 'PARA LLEVAR'
     return 'EN MESA'
-  }
-
-  const getStatusLabel = (status) => {
-    switch (status) {
-      case 'pending': return 'PENDIENTE'
-      case 'preparing': return 'EN PREPARACIÓN'
-      case 'ready': return 'LISTA'
-      case 'delivered': return 'ENTREGADA'
-      default: return status?.toUpperCase()
-    }
   }
 
   // Mostrar datos del cliente (nombre/teléfono/dirección) y el cobro en la comanda
@@ -224,6 +211,21 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible: web
 
         .order-info {
           margin: 8px 0;
+        }
+
+        /* Info compacta (igual que el térmico): 2 líneas en vez de filas sueltas. */
+        .info-primary {
+          font-size: 13pt;
+          font-weight: 900;
+          margin: 2px 0;
+          color: #000;
+        }
+
+        .info-secondary {
+          font-size: 11pt;
+          font-weight: 700;
+          margin: 2px 0;
+          color: #000;
         }
 
         .info-row {
@@ -643,105 +645,70 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible: web
           {/* HEADER */}
           <div className="kitchen-header">
             {order._isCopy && (
-              <div style={{ fontSize: '14pt', fontWeight: 900, color: '#000', letterSpacing: '2px', marginBottom: '4px', border: '2px solid #000', padding: '4px' }}>
+              <div style={{ fontSize: '12pt', fontWeight: 900, color: '#000', letterSpacing: '1px', marginBottom: '4px' }}>
                 *** COPIA ***
               </div>
             )}
-            <div className="kitchen-title">{order._printNote ? `COMANDA - ${order._printNote}` : 'COMANDA'}</div>
+            <div className="kitchen-title">COMANDA</div>
             {stationName && (
-              <div className="station-name">★ {stationName.toUpperCase()} ★</div>
+              <div style={{ fontSize: '12pt', fontWeight: 700, color: '#000', marginTop: '2px', letterSpacing: '1px' }}>
+                {stationName.toUpperCase()}
+              </div>
             )}
-            <div className="kitchen-subtitle">
-              {companySettings?.tradeName || companySettings?.name || 'RESTAURANTE'}
-            </div>
+            {order._printNote && (
+              <div style={{ fontSize: '11pt', fontWeight: 900, color: '#000', marginTop: '2px' }}>
+                *** {String(order._printNote).toUpperCase()} ***
+              </div>
+            )}
           </div>
 
-          {/* NÚMERO DE ORDEN DESTACADO */}
-          <div className="order-number-big">
-            {order.orderNumber || '#' + order.id?.slice(-6)}
-          </div>
-
-          {/* INFO DE LA ORDEN */}
+          {/* INFO DE LA ORDEN (compacta, mismo formato que el térmico) */}
           <div className="order-info">
-            {order.tableNumber ? (
-              <div className="info-row">
-                <span className="info-label">MESA:</span>
-                <span>{order.tableNumber}</span>
-              </div>
-            ) : (
-              <div className="info-row">
-                <span className="info-label">TIPO:</span>
-                <span>{getOrderTypeLabel(order.orderType)}</span>
-              </div>
-            )}
+            <div className="info-primary">
+              Orden #{String(order.orderNumber || order.id?.slice(-6) || 'N/A').replace(/^#+/, '')}
+              {order.tableNumber ? `   ·   Mesa ${order.tableNumber}` : ''}
+            </div>
+            <div className="info-secondary">
+              {formatTime(order.createdAt)}
+              {order.waiterName ? `   ·   Mozo: ${order.waiterName}` : ''}
+              {!order.tableNumber && order.orderType ? `   ·   ${getOrderTypeLabel(order.orderType)}` : ''}
+            </div>
 
             {order.brandName && (
-              <div className="info-row">
-                <span className="info-label">MARCA:</span>
-                <span>{order.brandName}</span>
-              </div>
-            )}
-
-            {order.waiterName && (
-              <div className="info-row">
-                <span className="info-label">MOZO:</span>
-                <span>{order.waiterName}</span>
-              </div>
-            )}
-
-            {order.source && !order.tableNumber && (
-              <div className="info-row">
-                <span className="info-label">FUENTE:</span>
-                <span>{order.source}</span>
-              </div>
+              <div className="info-secondary">Marca: {order.brandName}</div>
             )}
 
             {showCustomerData && order.customerName && (
-              <div className="info-row">
-                <span className="info-label">CLIENTE:</span>
-                <span>{order.customerName}</span>
-              </div>
+              <div className="info-secondary">Cliente: {order.customerName}</div>
             )}
 
             {showCustomerData && order.customerPhone && (
-              <div className="info-row">
-                <span className="info-label">TELÉFONO:</span>
-                <span>
-                  {order.orderType === 'delivery' ? (
-                    <a
-                      href={`https://wa.me/${order.customerPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${order.customerName || ''}, su pedido #${order.orderNumber || ''} está siendo preparado.`)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ color: '#25D366', textDecoration: 'underline', fontWeight: 900 }}
-                    >
-                      {order.customerPhone} (WhatsApp)
-                    </a>
-                  ) : (
-                    order.customerPhone
-                  )}
-                </span>
+              <div className="info-secondary">
+                Tel:{' '}
+                {order.orderType === 'delivery' ? (
+                  <a
+                    href={`https://wa.me/${order.customerPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${order.customerName || ''}, su pedido #${order.orderNumber || ''} está siendo preparado.`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: '#000', textDecoration: 'underline', fontWeight: 700 }}
+                  >
+                    {order.customerPhone} (WhatsApp)
+                  </a>
+                ) : (
+                  order.customerPhone
+                )}
               </div>
             )}
 
             {showCustomerData && order.customerAddress && (
-              <div className="info-row" style={{ flexDirection: 'column' }}>
-                <span className="info-label">DIRECCIÓN:</span>
-                <span style={{ fontWeight: 700 }}>{order.customerAddress}</span>
-              </div>
+              <div className="info-secondary">Dir: {order.customerAddress}</div>
             )}
-
-            <div className="info-row">
-              <span className="info-label">ESTADO:</span>
-              <span>{getStatusLabel(order.status)}</span>
-            </div>
           </div>
 
           {paymentBadge}
 
           {/* ITEMS */}
           <div className="items-section">
-            <div className="section-title">═══ PEDIDO ═══</div>
-
             {(order.items || []).map((item, index) => (
               <div key={index} className="item">
                 <div className="item-header">
@@ -781,9 +748,6 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible: web
           <div className="kitchen-footer">
             <div className="footer-time">
               {formatDate(order.createdAt)} - {formatTime(order.createdAt)}
-            </div>
-            <div style={{ marginTop: '6px', fontSize: '9pt' }}>
-              ═══════════════════════
             </div>
           </div>
         </>

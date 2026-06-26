@@ -54,6 +54,8 @@ export default function Orders() {
   const [brands, setBrands] = useState([]) // Lista de marcas
   const [kitchenStations, setKitchenStations] = useState([]) // Estaciones de cocina
   const [enableKitchenStations, setEnableKitchenStations] = useState(false) // Multi-estación habilitada
+  // Al imprimir comanda desde PC/navegador: imprimir todo junto (no separar por estación).
+  const [combineStationsOnWebPrint, setCombineStationsOnWebPrint] = useState(false)
   const [categoryMap, setCategoryMap] = useState({}) // Mapeo ID → nombre de categoría
   const [autoPrintByStation, setAutoPrintByStation] = useState(false) // Impresión automática
 
@@ -142,6 +144,7 @@ export default function Orders() {
           setBrands((config.brands || []).filter(b => b.active !== false))
           setKitchenStations(config.kitchenStations || [])
           setEnableKitchenStations(config.enableKitchenStations || false)
+          setCombineStationsOnWebPrint(config.combineStationsOnWebPrint || false)
           setAutoPrintByStation(config.autoPrintByStation || false)
         }
       },
@@ -209,10 +212,12 @@ export default function Orders() {
   })
 
   // Función para imprimir comanda
-  const handlePrintKitchenTicket = async (orderArg) => {
+  // silent=true: auto-impresión (al crear el pedido) — sin toasts de error ni caída al
+  // diálogo de impresión web. Devuelve true si se imprimió en la ticketera.
+  const handlePrintKitchenTicket = async (orderArg, { silent = false } = {}) => {
     if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
-      return
+      if (!silent) toast.info('Esta función no está disponible en modo demo')
+      return false
     }
 
     // Inyectar el ajuste "mostrar datos y cobro en comandas" (Configuración > Preferencias)
@@ -234,18 +239,19 @@ export default function Orders() {
             const results = await printToAllStations(order, kitchenStations, printerConfigResult.config.paperWidth || 58)
             const allOk = results.every(r => r.success)
             if (allOk) {
-              toast.success('Comandas impresas por estación')
-            } else {
+              if (!silent) toast.success('Comandas impresas por estación')
+            } else if (!silent) {
               const failed = results.filter(r => !r.success).map(r => r.station).join(', ')
               toast.error('Error en estaciones: ' + failed)
             }
-            return
+            return allOk
           }
 
           // Reconectar a la impresora
           const connectResult = await connectPrinter(printerConfigResult.config.address)
 
           if (!connectResult.success) {
+            if (silent) return false
             toast.error('No se pudo conectar a la impresora: ' + connectResult.error)
             toast.info('Usando impresión estándar...')
           } else {
@@ -286,8 +292,8 @@ export default function Orders() {
                 }
               }
               if (anyPrinted) {
-                toast.success('Comandas impresas por estación')
-                return
+                if (!silent) toast.success('Comandas impresas por estación')
+                return true
               }
             }
 
@@ -295,9 +301,10 @@ export default function Orders() {
             const result = await printKitchenOrder(order, null, pw)
 
             if (result.success) {
-              toast.success('Comanda impresa en ticketera')
-              return
+              if (!silent) toast.success('Comanda impresa en ticketera')
+              return true
             } else {
+              if (silent) return false
               toast.error('Error al imprimir en ticketera: ' + result.error)
               toast.info('Usando impresión estándar...')
             }
@@ -305,9 +312,13 @@ export default function Orders() {
         }
       } catch (error) {
         console.error('Error al imprimir en ticketera:', error)
+        if (silent) return false
         toast.info('Usando impresión estándar...')
       }
     }
+
+    // En auto-impresión silenciosa NO caemos al diálogo de impresión web (solo app térmica).
+    if (silent) return false
 
     // Fallback: impresión estándar (web o si falla la térmica)
     setOrderToPrint(order)
@@ -315,6 +326,7 @@ export default function Orders() {
     setTimeout(() => {
       handlePrint()
     }, 300)
+    return true
   }
 
   // Cargar sucursales (sedes) habilitadas para el usuario y fijar la sede por defecto
@@ -493,6 +505,14 @@ export default function Orders() {
         toast.success('Orden creada exitosamente')
         setShowOrderItemsModal(false)
         setNewOrderData(null)
+        // Auto-imprimir la comanda del pedido recién creado (delivery / para-llevar), igual
+        // que Mesas auto-imprime al agregar. Silenciosa: solo app + impresora configurada.
+        const createdOrder = { ...orderPayload, id: result.id, orderNumber: result.orderNumber }
+        handlePrintKitchenTicket(createdOrder, { silent: true }).then((printed) => {
+          // Marcar como ya impresa para que el auto-print por estación (al pasar a
+          // "Preparando") no la duplique.
+          if (printed) updateOrder(getBusinessId(), result.id, { kitchenPrinted: true }).catch(() => {})
+        })
       } else {
         toast.error('Error al crear orden: ' + result.error)
       }
@@ -891,7 +911,7 @@ export default function Orders() {
         toast.success(`Orden actualizada a ${getStatusConfig(nextStatus).label}`)
 
         // Auto-imprimir a estaciones cuando se envía a cocina
-        if (currentStatus === 'pending' && nextStatus === 'preparing' && autoPrintByStation && kitchenStations.length > 0) {
+        if (currentStatus === 'pending' && nextStatus === 'preparing' && autoPrintByStation && kitchenStations.length > 0 && !order?.kitchenPrinted) {
           const stationsWithPrinter = kitchenStations.filter(s => s.printerIp)
           if (stationsWithPrinter.length > 0) {
             toast.info('Imprimiendo comandas en estaciones...')
@@ -1713,8 +1733,8 @@ export default function Orders() {
       {/* Comanda para imprimir (oculta, fuera de pantalla para react-to-print) */}
       {orderToPrint && (
         <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
-          <div ref={kitchenTicketRef} className={enableKitchenStations && kitchenStations.length > 0 ? 'kitchen-multi-ticket' : undefined}>
-            {enableKitchenStations && kitchenStations.length > 0 ? (() => {
+          <div ref={kitchenTicketRef} className={enableKitchenStations && kitchenStations.length > 0 && !combineStationsOnWebPrint ? 'kitchen-multi-ticket' : undefined}>
+            {enableKitchenStations && kitchenStations.length > 0 && !combineStationsOnWebPrint ? (() => {
               // Helper: matchear categoría de item con categorías de estación
               // Soporta nombres e IDs en ambos lados (igual que Kitchen.jsx)
               const itemMatchesStation = (itemCategory, stationCategories) => {

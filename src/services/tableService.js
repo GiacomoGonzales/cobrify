@@ -193,7 +193,7 @@ export const occupyTable = async (businessId, tableId, occupyData) => {
       })
     }
 
-    return { success: true, orderId }
+    return { success: true, orderId, orderNumber: orderResult.orderNumber }
   } catch (error) {
     console.error('Error al ocupar mesa:', error)
     return { success: false, error: error.message }

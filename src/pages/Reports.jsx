@@ -2085,6 +2085,62 @@ export default function Reports() {
     await exportExcelFile(wb, `reporte_gastos_${dateRangeText}.xlsx`)
   }
 
+  // Exportar el reporte de VENDEDORES a Excel: hoja "Resumen" (por vendedor) +
+  // hoja "Detalle de Ventas" (cada comprobante con su vendedor).
+  const exportSellersReport = async () => {
+    const branchLabel = getBranchLabel()
+    const DOC_LABELS = {
+      factura: 'Factura', boleta: 'Boleta', nota_venta: 'Nota de Venta',
+      nota_credito: 'Nota de Crédito', nota_debito: 'Nota de Débito',
+    }
+
+    // Hoja 1: Resumen por vendedor
+    const resumen = [
+      { 'Vendedor': 'Sucursal:', 'Email': branchLabel || 'Todas', 'N° Ventas': '', 'Ingresos': '', 'Facturas': '', 'Boletas': '', 'Notas de Venta': '', 'Notas de Crédito': '', 'Notas de Débito': '' },
+      { 'Vendedor': '', 'Email': '', 'N° Ventas': '', 'Ingresos': '', 'Facturas': '', 'Boletas': '', 'Notas de Venta': '', 'Notas de Crédito': '', 'Notas de Débito': '' },
+      ...sellerStats.map(s => ({
+        'Vendedor': s.name,
+        'Email': s.email || '',
+        'N° Ventas': s.salesCount,
+        'Ingresos': Math.round((s.totalRevenue || 0) * 100) / 100,
+        'Facturas': s.facturas,
+        'Boletas': s.boletas,
+        'Notas de Venta': s.notasVenta,
+        'Notas de Crédito': s.notasCredito,
+        'Notas de Débito': s.notasDebito,
+      })),
+    ]
+    resumen.push({
+      'Vendedor': 'TOTAL', 'Email': '',
+      'N° Ventas': sellerStats.reduce((a, s) => a + (s.salesCount || 0), 0),
+      'Ingresos': Math.round(sellerStats.reduce((a, s) => a + (s.totalRevenue || 0), 0) * 100) / 100,
+      'Facturas': '', 'Boletas': '', 'Notas de Venta': '', 'Notas de Crédito': '', 'Notas de Débito': '',
+    })
+
+    // Hoja 2: Detalle de cada venta con su vendedor
+    const detalle = (filteredInvoices || []).map(inv => ({
+      'Fecha': typeof inv.emissionDate === 'string'
+        ? inv.emissionDate
+        : (inv.emissionDate?.toDate?.() || inv.createdAt?.toDate?.() || new Date()).toLocaleDateString('es-PE'),
+      'Comprobante': `${inv.series || ''}-${String(inv.correlativeNumber || inv.number || '').padStart(8, '0')}`,
+      'Tipo': DOC_LABELS[inv.documentType] || inv.documentType || '',
+      'Cliente': inv.customerName || inv.customer?.name || 'Cliente General',
+      'Vendedor': inv.createdByName || inv.createdByEmail || 'Sin asignar',
+      'Total': Math.round((getDocumentTotalInBase(inv) || 0) * 100) / 100,
+    }))
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumen), 'Resumen Vendedores')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detalle), 'Detalle de Ventas')
+
+    const dateRangeText = {
+      week: 'ultima_semana', month: 'ultimo_mes', quarter: 'ultimo_trimestre',
+      year: 'ultimo_año', all: 'todo',
+    }[dateRange] || 'periodo'
+
+    await exportExcelFile(wb, `reporte_vendedores_${dateRangeText}.xlsx`)
+  }
+
   // Custom tooltip para los gráficos
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
@@ -4351,6 +4407,17 @@ export default function Reports() {
       {/* Reporte por Vendedores */}
       {selectedReport === 'sellers' && (
         <>
+          {/* Botón de exportación */}
+          <div className="flex justify-end">
+            <button
+              onClick={exportSellersReport}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Descargar Reporte de Vendedores (Excel)
+            </button>
+          </div>
+
           {/* Resumen de ventas por vendedor */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card>

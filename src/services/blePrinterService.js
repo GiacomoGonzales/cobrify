@@ -6,6 +6,7 @@
 import { Capacitor } from '@capacitor/core';
 import { BleClient, numbersToDataView, numberToUUID } from '@capacitor-community/bluetooth-le';
 import { prepareLogoForPrinting } from './imageProcessingService';
+import { buildKitchenLines } from '@/utils/kitchenComandaFormat';
 
 // Estado de conexión
 let connectedDeviceId = null;
@@ -1201,147 +1202,24 @@ export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58)
   }
 
   try {
-    const separator = paperWidth === 58 ? '------------------------' : '------------------------------------------';
-    const charsPerLine = paperWidth === 58 ? 24 : 42;
+    const commands = [ESCPOSCommands.init()];
 
-    const commands = [
-      ESCPOSCommands.init(),
-      ESCPOSCommands.align(1), // Centro
-      ESCPOSCommands.bold(true),
-      ESCPOSCommands.doubleHeight(true),
-    ];
-
-    if (order._isCopy) {
-      commands.push(ESCPOSCommands.text('*** COPIA ***\n'));
+    // Formato ÚNICO de comanda (mismo que Bluetooth / WiFi / estación / HTML)
+    const lines = buildKitchenLines(order, table, paperWidth, null);
+    for (const ln of lines) {
+      if (ln.sep) {
+        commands.push(ESCPOSCommands.align(0), ESCPOSCommands.bold(false), ESCPOSCommands.doubleHeight(false));
+        commands.push(ESCPOSCommands.text('-'.repeat(paperWidth === 58 ? 24 : 42) + '\n'));
+        continue;
+      }
+      if (ln.blank) { commands.push(ESCPOSCommands.text('\n')); continue; }
+      commands.push(ESCPOSCommands.align(ln.a === 'C' ? 1 : 0));
+      commands.push(ESCPOSCommands.doubleHeight(!!ln.big));
+      commands.push(ESCPOSCommands.bold(!!ln.b));
+      commands.push(ESCPOSCommands.text(convertSpanishText(ln.t) + '\n'));
     }
+    commands.push(ESCPOSCommands.align(0), ESCPOSCommands.bold(false), ESCPOSCommands.doubleHeight(false));
 
-    commands.push(
-      ESCPOSCommands.text('*** COMANDA ***\n'),
-      ESCPOSCommands.doubleHeight(false),
-      ESCPOSCommands.bold(false),
-      ESCPOSCommands.text(separator + '\n'),
-      ESCPOSCommands.align(0), // Izquierda
-      ESCPOSCommands.bold(true),
-      ESCPOSCommands.text('Fecha: ' + new Date().toLocaleString('es-PE') + '\n'),
-    );
-
-    if (order._ultraCompact) {
-      // Ultracompacto: info mínima
-      const orderNum = order.orderNumber || order.id?.slice(-6) || 'N/A';
-      const time = new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
-      commands.push(ESCPOSCommands.text('#' + orderNum + ' - ' + time + '\n'));
-      if (table) {
-        commands.push(ESCPOSCommands.text('Mesa: ' + table.number + (table.waiter ? ' | Mozo: ' + table.waiter : '') + '\n'));
-      } else if (order.orderType) {
-        const typeLabels = { delivery: 'DELIVERY', takeaway: 'PARA LLEVAR' };
-        commands.push(ESCPOSCommands.text((typeLabels[order.orderType] || '') + (order._showCustomerData && order.customerName ? ' - ' + convertSpanishText(order.customerName) : '') + '\n'));
-      }
-      if (order._showCustomerData && order.customerAddress) {
-        commands.push(ESCPOSCommands.text(convertSpanishText(order.customerAddress) + '\n'));
-      }
-    } else {
-      if (table) {
-        commands.push(ESCPOSCommands.text('Mesa: ' + table.number + '\n'));
-        commands.push(ESCPOSCommands.text('Mozo: ' + (table.waiter || 'N/A') + '\n'));
-      }
-
-      const orderNum = order.orderNumber || order.id?.slice(-6) || 'N/A';
-      commands.push(ESCPOSCommands.text('Orden: #' + orderNum + '\n'));
-
-      if (order.brandName) {
-        commands.push(ESCPOSCommands.text('Marca: ' + convertSpanishText(order.brandName) + '\n'));
-      }
-
-      if (order._showCustomerData && order.customerName) {
-        commands.push(ESCPOSCommands.text('Cliente: ' + convertSpanishText(order.customerName) + '\n'));
-      }
-      if (order._showCustomerData && order.customerPhone) {
-        commands.push(ESCPOSCommands.text('Tel: ' + order.customerPhone + '\n'));
-      }
-      if (order._showCustomerData && order.customerAddress) {
-        commands.push(ESCPOSCommands.text('Dir: ' + convertSpanishText(order.customerAddress) + '\n'));
-      }
-      if (order.orderType && !table) {
-        const typeLabels = { delivery: 'DELIVERY', takeaway: 'PARA LLEVAR' };
-        if (typeLabels[order.orderType]) {
-          commands.push(ESCPOSCommands.bold(false));
-          commands.push(ESCPOSCommands.align(1));
-          commands.push(ESCPOSCommands.doubleHeight(true));
-          commands.push(ESCPOSCommands.bold(true));
-          commands.push(ESCPOSCommands.text('*** ' + typeLabels[order.orderType] + ' ***\n'));
-          commands.push(ESCPOSCommands.doubleHeight(false));
-          commands.push(ESCPOSCommands.bold(false));
-          commands.push(ESCPOSCommands.align(0));
-        }
-      }
-
-      if (order.priority === 'urgent') {
-        commands.push(ESCPOSCommands.doubleHeight(true));
-        commands.push(ESCPOSCommands.align(1));
-        commands.push(ESCPOSCommands.text('!!! URGENTE !!!\n'));
-        commands.push(ESCPOSCommands.doubleHeight(false));
-        commands.push(ESCPOSCommands.align(0));
-      }
-    }
-
-    // Estado de pago (delivery / para llevar): el repartidor/cajero debe saber si cobra y cuánto
-    if (order._showCustomerData && !table && (order.orderType === 'delivery' || order.orderType === 'takeaway')) {
-      const _amt = Number(order.total || 0).toFixed(2);
-      const _mMap = { efectivo: 'Efectivo', cash: 'Efectivo', yape: 'Yape', plin: 'Plin', tarjeta: 'Tarjeta', card: 'Tarjeta', transferencia: 'Transferencia', transfer: 'Transferencia' };
-      const _mLabel = _mMap[(order.paymentMethod || '').toLowerCase()] || '';
-      const _mSuffix = _mLabel ? ' (' + _mLabel + ')' : '';
-      commands.push(ESCPOSCommands.bold(false));
-      commands.push(ESCPOSCommands.text(separator + '\n'));
-      commands.push(ESCPOSCommands.align(1));
-      commands.push(ESCPOSCommands.bold(true));
-      if (order.paid) {
-        commands.push(ESCPOSCommands.text('PAGADO - S/ ' + _amt + _mSuffix + '\n'));
-      } else {
-        commands.push(ESCPOSCommands.doubleHeight(true));
-        commands.push(ESCPOSCommands.text('** POR COBRAR **\n'));
-        commands.push(ESCPOSCommands.text('S/ ' + _amt + _mSuffix + '\n'));
-        commands.push(ESCPOSCommands.doubleHeight(false));
-      }
-      commands.push(ESCPOSCommands.bold(false));
-      commands.push(ESCPOSCommands.align(0));
-    }
-
-    commands.push(ESCPOSCommands.bold(false));
-    commands.push(ESCPOSCommands.text(separator + '\n'));
-
-    // Items
-    for (const item of order.items || []) {
-      commands.push(ESCPOSCommands.bold(true));
-      commands.push(ESCPOSCommands.text(item.quantity + 'x ' + convertSpanishText(item.name) + '\n'));
-      commands.push(ESCPOSCommands.bold(false));
-
-      // Modificadores
-      if (item.modifiers && item.modifiers.length > 0) {
-        if (order._ultraCompact) {
-          const allOpts = item.modifiers.flatMap(m => m.options.map(o =>
-            (o.quantity > 1 ? o.quantity + 'x ' : '') + convertSpanishText(o.optionName)
-          ));
-          if (allOpts.length > 0) commands.push(ESCPOSCommands.text('  > ' + allOpts.join(', ') + '\n'));
-        } else {
-          for (const modifier of item.modifiers) {
-            for (const option of modifier.options) {
-              let optText = '  > ' + (option.quantity > 1 ? option.quantity + 'x ' : '') + convertSpanishText(option.optionName);
-              if (option.priceAdjustment > 0) {
-                optText += ' (+S/' + ((option.priceAdjustment || 0) * (option.quantity || 1)).toFixed(2) + ')';
-              }
-              commands.push(ESCPOSCommands.text(optText + '\n'));
-            }
-          }
-        }
-      }
-
-      // Notas del item
-      if (item.notes) {
-        commands.push(ESCPOSCommands.text('  ' + (order._ultraCompact ? '' : 'Nota: ') + convertSpanishText(item.notes) + '\n'));
-      }
-    }
-
-    commands.push(ESCPOSCommands.text(separator + '\n'));
     // En 80mm la impresora hace feed automático al cortar, menos líneas evitan margen excesivo
     commands.push(ESCPOSCommands.feed(getCutFeedLines()));
     commands.push(ESCPOSCommands.cut());
