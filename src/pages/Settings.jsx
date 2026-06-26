@@ -8356,11 +8356,11 @@ export default function Settings() {
             <CardContent>
               <div className="space-y-6">
                 {/* Información */}
-                <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded">
+                <div className="bg-gray-50 border border-gray-200 p-4 rounded-lg">
                   <div className="flex items-start">
-                    <Info className="w-5 h-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" />
-                    <div className="text-sm text-blue-800">
-                      <p className="font-semibold mb-1">Impresión Térmica WiFi/Bluetooth</p>
+                    <Info className="w-5 h-5 text-gray-400 mt-0.5 mr-3 flex-shrink-0" />
+                    <div className="text-sm text-gray-600">
+                      <p className="font-semibold mb-1 text-gray-900">Impresión Térmica WiFi/Bluetooth</p>
                       <p>
                         Conecta una impresora térmica (ticketera) para imprimir automáticamente tickets,
                         comandas de cocina y precuentas desde la app móvil.
@@ -8371,6 +8371,8 @@ export default function Settings() {
                     </div>
                   </div>
                 </div>
+
+                <h3 className="text-sm font-semibold text-gray-900 pt-1">Conexión</h3>
 
                 {/* Impresora configurada */}
                 {printerConfig.enabled && printerConfig.address && (
@@ -8467,7 +8469,7 @@ export default function Settings() {
                       <Button
                         onClick={handleInternalConnect}
                         disabled={isConnecting}
-                        className="flex-1 bg-purple-600 hover:bg-purple-700"
+                        className="flex-1"
                       >
                         {isConnecting ? (
                           <>
@@ -8484,7 +8486,7 @@ export default function Settings() {
                       <Button
                         onClick={handleScanPrinters}
                         disabled={isScanning}
-                        className="flex-1 bg-blue-600 hover:bg-blue-700"
+                        className="flex-1"
                       >
                         {isScanning ? (
                           <>
@@ -8504,7 +8506,7 @@ export default function Settings() {
                           setShowManualConnect(!showManualConnect)
                           setShowWifiConnect(false)
                         }}
-                        className="flex-1 border-gray-300 hover:bg-gray-100"
+                        className="flex-1"
                       >
                         {showManualConnect ? (
                           <>
@@ -8524,11 +8526,11 @@ export default function Settings() {
                           setShowWifiConnect(!showWifiConnect)
                           setShowManualConnect(false)
                         }}
-                        className="flex-1 border-green-300 text-green-700 hover:bg-green-100"
+                        className="flex-1"
                       >
                         {showWifiConnect ? (
                           <>
-                            <X className="w-4 h-4 mr-2 text-green-700" />
+                            <X className="w-4 h-4 mr-2" />
                             Cancelar
                           </>
                         ) : (
@@ -8551,13 +8553,13 @@ export default function Settings() {
 
                     {/* Formulario de conexión WiFi/LAN */}
                     {showWifiConnect && (
-                      <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-4">
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4">
                         <div className="flex items-start space-x-3 mb-4">
-                          <div className="bg-green-100 p-2 rounded-full flex-shrink-0">
-                            <Info className="w-4 h-4 text-green-600" />
+                          <div className="bg-gray-100 p-2 rounded-full flex-shrink-0">
+                            <Info className="w-4 h-4 text-gray-500" />
                           </div>
-                          <div className="text-sm text-green-800">
-                            <p className="font-semibold mb-1">Conexión WiFi/LAN</p>
+                          <div className="text-sm text-gray-600">
+                            <p className="font-semibold mb-1 text-gray-900">Conexión WiFi/LAN</p>
                             <p>Tu impresora debe estar conectada a la misma red que tu celular. Las impresoras térmicas generalmente usan el puerto 9100.</p>
                           </div>
                         </div>
@@ -8599,8 +8601,8 @@ export default function Settings() {
                             onChange={(e) => setWifiName(e.target.value)}
                           />
                         </div>
-                        <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
-                          <p className="text-xs text-yellow-800">
+                        <div className="bg-gray-100 border border-gray-200 rounded p-3">
+                          <p className="text-xs text-gray-600">
                             <strong>Cómo encontrar la IP de tu impresora:</strong><br />
                             1. Mantén presionado el botón FEED de la impresora al encenderla<br />
                             2. Se imprimirá una página de autotest con la IP<br />
@@ -8610,7 +8612,7 @@ export default function Settings() {
                         <Button
                           onClick={handleWifiConnect}
                           disabled={isConnecting || !wifiIp.trim()}
-                          className="w-full bg-green-600 hover:bg-green-700"
+                          className="w-full"
                         >
                           {isConnecting ? (
                             <>
@@ -8653,8 +8655,8 @@ export default function Settings() {
                             onChange={(e) => setManualName(e.target.value)}
                           />
                         </div>
-                        <div className="bg-blue-50 border border-blue-200 rounded p-3">
-                          <p className="text-xs text-blue-800">
+                        <div className="bg-gray-100 border border-gray-200 rounded p-3">
+                          <p className="text-xs text-gray-600">
                             <strong>Cómo encontrar la dirección MAC:</strong><br />
                             1. Ve a Configuración → Bluetooth en tu celular<br />
                             2. Busca tu impresora en la lista de dispositivos emparejados<br />
@@ -8735,9 +8737,13 @@ export default function Settings() {
                 </div>
               </div>
 
+              {/* === Ajustes de impresión === */}
+              <h3 className="text-sm font-semibold text-gray-900 mt-6 mb-1">Ajustes de impresión</h3>
+              <p className="text-xs text-gray-500 mb-4">Cómo salen los tickets al imprimir desde el navegador/USB. No afecta la impresión térmica Bluetooth directa.</p>
+
               {/* Avance de papel antes del corte */}
               {(
-              <div className="border border-gray-200 rounded-lg p-4 bg-green-50">
+              <div className="border border-gray-200 rounded-lg p-4">
                 <div className="flex-1">
                   <label className="block text-sm font-medium text-gray-900 mb-1">
                     Avance de papel antes del corte
@@ -8764,7 +8770,7 @@ export default function Settings() {
                           await savePrinterConfig(getBusinessId(), newConfig)
                           toast.success(`Avance antes del corte: ${val} líneas`)
                         }}
-                        className="w-16 sm:w-20 px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                        className="w-16 sm:w-20 px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                       />
                       <span className="text-sm text-gray-600">líneas</span>
                     </div>
@@ -8779,7 +8785,7 @@ export default function Settings() {
                             await savePrinterConfig(getBusinessId(), newConfig)
                             toast.success(`Avance antes del corte: ${val} líneas`)
                           }}
-                          className={`px-2 py-1 text-xs rounded border ${(printerConfig.cutFeedLines ?? 5) === val ? 'bg-green-200 border-green-400 font-bold' : 'bg-white border-gray-300 hover:bg-gray-50'}`}
+                          className={`px-2 py-1 text-xs rounded border ${(printerConfig.cutFeedLines ?? 5) === val ? 'bg-primary-50 border-primary-500 text-primary-700 font-bold' : 'bg-white border-gray-300 hover:bg-gray-50'}`}
                         >
                           {val}
                         </button>
@@ -8790,11 +8796,8 @@ export default function Settings() {
               </div>
               )}
 
-              {/* Divider */}
-              <div className="border-t border-gray-200 my-6"></div>
-
               {/* Ancho de papel para impresión web - SIEMPRE VISIBLE */}
-              <div className="border border-gray-200 rounded-lg p-4 bg-purple-50">
+              <div className="border border-gray-200 rounded-lg p-4">
                 <div className="flex-1">
                   <label className="block text-sm font-medium text-gray-900 mb-1">
                     Ancho de papel (impresión web/USB)
@@ -8812,7 +8815,7 @@ export default function Settings() {
                       }}
                       className={`flex-1 py-3 px-4 rounded-lg border-2 transition-all ${
                         (printerConfig.paperWidth || 80) === 58
-                          ? 'border-purple-600 bg-purple-100 text-purple-700'
+                          ? 'border-primary-600 bg-primary-50 text-primary-700'
                           : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
                       }`}
                     >
@@ -8828,7 +8831,7 @@ export default function Settings() {
                       }}
                       className={`flex-1 py-3 px-4 rounded-lg border-2 transition-all ${
                         (printerConfig.paperWidth || 80) === 80
-                          ? 'border-purple-600 bg-purple-100 text-purple-700'
+                          ? 'border-primary-600 bg-primary-50 text-primary-700'
                           : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
                       }`}
                     >
@@ -8870,7 +8873,7 @@ export default function Settings() {
                         }}
                         className={`flex-1 py-3 px-3 rounded-lg border-2 transition-all ${
                           selected
-                            ? 'border-purple-600 bg-purple-100 text-purple-700'
+                            ? 'border-primary-600 bg-primary-50 text-primary-700'
                             : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
                         }`}
                       >
@@ -8948,7 +8951,7 @@ export default function Settings() {
               />
 
               {/* Márgenes laterales para impresión */}
-              <div className="border border-gray-200 rounded-lg p-4 bg-yellow-50">
+              <div className="border border-gray-200 rounded-lg p-4">
                 <div className="flex-1">
                   <label className="block text-sm font-medium text-gray-900 mb-1">
                     Márgenes laterales de impresión web
@@ -8975,7 +8978,7 @@ export default function Settings() {
                         await savePrinterConfig(getBusinessId(), newConfig)
                         toast.success(`Márgenes de impresión: ${val}mm`)
                       }}
-                      className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                      className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     />
                     <span className="text-sm text-gray-600">mm</span>
                     <div className="flex gap-1 ml-2">
@@ -8989,7 +8992,7 @@ export default function Settings() {
                             await savePrinterConfig(getBusinessId(), newConfig)
                             toast.success(`Márgenes de impresión: ${val}mm`)
                           }}
-                          className={`px-2 py-1 text-xs rounded border ${(printerConfig.printMargins ?? 8) === val ? 'bg-yellow-200 border-yellow-400 font-bold' : 'bg-white border-gray-300 hover:bg-gray-50'}`}
+                          className={`px-2 py-1 text-xs rounded border ${(printerConfig.printMargins ?? 8) === val ? 'bg-primary-50 border-primary-500 text-primary-700 font-bold' : 'bg-white border-gray-300 hover:bg-gray-50'}`}
                         >
                           {val}
                         </button>
@@ -9021,18 +9024,18 @@ export default function Settings() {
           <Card className="mt-6">
             <CardHeader>
               <div className="flex items-center space-x-2">
-                <FileText className="w-5 h-5 text-orange-600" />
+                <FileText className="w-5 h-5 text-primary-600" />
                 <CardTitle>Impresora de Documentos (Precuentas y Boletas)</CardTitle>
               </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 {/* Info */}
-                <div className="bg-orange-50 border-l-4 border-orange-400 p-4 rounded">
+                <div className="bg-gray-50 border border-gray-200 p-4 rounded-lg">
                   <div className="flex items-start">
-                    <Info className="w-5 h-5 text-orange-600 mt-0.5 mr-3 flex-shrink-0" />
-                    <div className="text-sm text-orange-800">
-                      <p className="font-semibold mb-1">Impresora separada para documentos de venta</p>
+                    <Info className="w-5 h-5 text-gray-400 mt-0.5 mr-3 flex-shrink-0" />
+                    <div className="text-sm text-gray-600">
+                      <p className="font-semibold mb-1 text-gray-900">Impresora separada para documentos de venta</p>
                       <p>
                         Configura una segunda impresora WiFi/LAN dedicada para imprimir precuentas y boletas/facturas.
                         La impresora principal seguirá usándose para comandas de cocina.
@@ -9102,7 +9105,7 @@ export default function Settings() {
                           onClick={() => handleDocPaperWidth(58)}
                           className={`flex-1 py-3 px-4 rounded-lg border-2 transition-all ${
                             documentPrinterConfig.paperWidth === 58
-                              ? 'border-orange-600 bg-orange-50 text-orange-700'
+                              ? 'border-primary-600 bg-primary-50 text-primary-700'
                               : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
                           }`}
                         >
@@ -9113,7 +9116,7 @@ export default function Settings() {
                           onClick={() => handleDocPaperWidth(80)}
                           className={`flex-1 py-3 px-4 rounded-lg border-2 transition-all ${
                             documentPrinterConfig.paperWidth === 80
-                              ? 'border-orange-600 bg-orange-50 text-orange-700'
+                              ? 'border-primary-600 bg-primary-50 text-primary-700'
                               : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
                           }`}
                         >
@@ -9132,19 +9135,19 @@ export default function Settings() {
                       <Button
                         variant="outline"
                         onClick={() => setShowDocPrinterForm(true)}
-                        className="w-full border-orange-300 text-orange-700 hover:bg-orange-100"
+                        className="w-full"
                       >
                         <Wifi className="w-4 h-4 mr-2" />
                         Configurar Impresora de Documentos
                       </Button>
                     ) : (
-                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 space-y-4">
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4">
                         <div className="flex items-start space-x-3 mb-4">
-                          <div className="bg-orange-100 p-2 rounded-full flex-shrink-0">
-                            <Info className="w-4 h-4 text-orange-600" />
+                          <div className="bg-gray-100 p-2 rounded-full flex-shrink-0">
+                            <Info className="w-4 h-4 text-gray-500" />
                           </div>
-                          <div className="text-sm text-orange-800">
-                            <p className="font-semibold mb-1">Impresora de Documentos (WiFi/LAN)</p>
+                          <div className="text-sm text-gray-600">
+                            <p className="font-semibold mb-1 text-gray-900">Impresora de Documentos (WiFi/LAN)</p>
                             <p>Esta impresora se usará para precuentas y boletas/facturas. Debe estar en la misma red que tu celular.</p>
                           </div>
                         </div>
@@ -9187,7 +9190,7 @@ export default function Settings() {
                           <Button
                             onClick={handleDocPrinterConnect}
                             disabled={isConnectingDocPrinter || !docPrinterIp.trim()}
-                            className="flex-1 bg-orange-600 hover:bg-orange-700"
+                            className="flex-1"
                           >
                             {isConnectingDocPrinter ? (
                               <>
