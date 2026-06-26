@@ -597,6 +597,15 @@ export default function CreatePurchase() {
     setPurchaseItems(newItems)
   }
 
+  // Editar el precio de venta de una presentación del item (se guarda al registrar la compra).
+  const updatePresentationPrice = (index, presName, value) => {
+    const newItems = [...purchaseItems]
+    const row = { ...newItems[index] }
+    row.presentationPrices = { ...(row.presentationPrices || {}), [presName]: value }
+    newItems[index] = row
+    setPurchaseItems(newItems)
+  }
+
   // Marcar/desmarcar una línea como bonificación (producto gratis del proveedor).
   // Al activarla, el costo se pone en 0 (la bonificación no afecta el costo promedio,
   // ver lógica de agrupación al guardar). Al desactivarla, queda en 0 para que el
@@ -2183,6 +2192,26 @@ export default function CreatePurchase() {
             if (p2 != null) updates.price2 = p2
             if (p3 != null) updates.price3 = p3
             if (p4 != null) updates.price4 = p4
+            // Precios de presentaciones editados en la compra (mismo método que el precio base:
+            // ancla USD si aplica, si no conversión a base PEN). Solo las que se ingresaron.
+            if (item.presentationPrices && product.presentations?.length > 0) {
+              let presChanged = false
+              const updatedPres = product.presentations.map(p => {
+                const raw = item.presentationPrices[p.name]
+                if (raw === undefined || raw === '') return p
+                if (useUsdAnchor) {
+                  const usd = salePriceUsdRaw(raw)
+                  if (usd == null) return p
+                  presChanged = true
+                  return { ...p, priceUSD: usd, price: Math.round(convertToBase(usd, 'USD', exchangeRate) * 100) / 100 }
+                }
+                const base = salePriceToBase(raw)
+                if (base == null) return p
+                presChanged = true
+                return { ...p, price: base }
+              })
+              if (presChanged) updates.presentations = updatedPres
+            }
             if (Object.keys(updates).length > 0) {
               priceUpdates.push(updateProduct(businessId, productId, updates))
             }
@@ -3666,6 +3695,39 @@ export default function CreatePurchase() {
                   </div>
                 ))}
               </div>
+
+              {/* Precios de las presentaciones del producto (solo si tiene). Dejar en blanco
+                  = no cambiar el precio de esa presentación. */}
+              {item.presentations?.length > 0 && (
+                <div className="border-t pt-3">
+                  <p className="text-sm font-medium text-gray-700 mb-2">Precios de presentaciones</p>
+                  <div className="space-y-2">
+                    {item.presentations.map(pres => (
+                      <div key={pres.name} className="flex items-center gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-gray-700 truncate">
+                            {pres.name} <span className="text-gray-400 text-xs">(×{pres.factor})</span>
+                          </p>
+                          {pres.price != null && (
+                            <p className="text-[11px] text-gray-400">Actual: {formatCurrency(Number(pres.price) || 0, 'PEN')}</p>
+                          )}
+                        </div>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          placeholder="0.00"
+                          value={item.presentationPrices?.[pres.name] ?? ''}
+                          onChange={e => updatePresentationPrice(idx, pres.name, e.target.value)}
+                          className="w-28 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">Deja en blanco para no cambiar el precio de esa presentación.</p>
+                </div>
+              )}
+
               <p className="text-xs text-gray-500">
                 Estos precios actualizarán el producto en tu catálogo al registrar la compra.
               </p>
