@@ -49,6 +49,7 @@ import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
+import PostSaleModal from '@/components/pos/PostSaleModal'
 import { formatCurrency, formatUnitPrice, formatLineAmount, formatProductPrice, applyMarginToCost, matchesSearchQuery, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import {
   isMultiCurrencyEnabled,
@@ -447,6 +448,8 @@ export default function POS() {
   const [lastInvoiceNumber, setLastInvoiceNumber] = useState('')
   const [lastInvoiceData, setLastInvoiceData] = useState(null)
   const [saleCompleted, setSaleCompleted] = useState(false) // Bloquea el carrito después de una venta exitosa
+  const [postSaleModalOpen, setPostSaleModalOpen] = useState(false) // Modal de opciones post-venta
+  const postSaleHandledRef = useRef(false) // Para abrir el modal una sola vez por venta
   const [isLookingUp, setIsLookingUp] = useState(false)
   // Establecimientos (anexos) de un RUC con varios locales: lista + modal para elegir.
   const [establishments, setEstablishments] = useState([])
@@ -4425,6 +4428,7 @@ export default function POS() {
     setSelectedRoom(null)
     setLastInvoiceData(null)
     setSaleCompleted(false) // Desbloquear carrito para nueva venta
+    setPostSaleModalOpen(false) // Cerrar el modal de opciones post-venta
     // Reiniciar la fecha de emisión a HOY y limpiar el flag de edición manual, para
     // que cada nueva venta tome la fecha actual del sistema (no una fecha "congelada").
     setEmissionDate(getLocalDateString())
@@ -4446,6 +4450,22 @@ export default function POS() {
     setMetaEventTime(getLocalDateTimeString())
     clearDraft() // Limpiar borrador de localStorage
   }
+
+  // Abrir el modal de opciones post-venta al completar una venta (una sola vez por venta;
+  // postSaleHandledRef se libera al limpiar). Si el negocio tiene impresión automática Y
+  // reinicio automático (flujo 100% automático), NO se abre el modal para no estorbar al
+  // cajero rápido; si la auto-impresión falla, el carrito queda con el mini-aviso para reintentar.
+  useEffect(() => {
+    if (lastInvoiceData && saleCompleted) {
+      if (!postSaleHandledRef.current) {
+        postSaleHandledRef.current = true
+        const fullyAuto = !!(companySettings?.autoPrintTicket && companySettings?.autoResetPOS)
+        if (!fullyAuto) setPostSaleModalOpen(true)
+      }
+    } else {
+      postSaleHandledRef.current = false
+    }
+  }, [lastInvoiceData, saleCompleted, companySettings])
 
   // Buscar datos de DNI o RUC automáticamente
   const handleLookupDocument = async () => {
@@ -6875,7 +6895,7 @@ export default function POS() {
     }
   }
 
-  const handleSendWhatsApp = async () => {
+  const handleSendWhatsApp = async (phoneParam) => {
     console.log('=== handleSendWhatsApp llamado ===')
 
     if (!lastInvoiceData) {
@@ -6883,9 +6903,12 @@ export default function POS() {
       return
     }
 
-    const phone = lastInvoiceData.customer?.phone || customerData.phone
+    // Prioriza el número escrito en el momento (modal post-venta); si no, el del cliente.
+    const phone = (typeof phoneParam === 'string' && phoneParam.trim())
+      ? phoneParam.trim()
+      : (lastInvoiceData.customer?.phone || customerData.phone)
     if (!phone) {
-      toast.error('El cliente no tiene un número de teléfono registrado')
+      toast.error('Ingresa un número de WhatsApp')
       return
     }
 
@@ -10040,117 +10063,26 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 )}
               </button>
 
-              {/* Mensaje de venta completada */}
-              {lastInvoiceData && (
-                <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <div className="flex items-start gap-2">
-                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-green-900">
-                        ¡Venta procesada exitosamente!
-                      </p>
-                      <p className="text-xs text-green-700 mt-1">
-                        Para realizar una nueva venta, presiona el botón "Nueva Venta" a continuación.
-                      </p>
-                    </div>
-                  </div>
+              {/* Mini-aviso de venta completada. Las opciones (Ticket/Preview/PDF/WhatsApp/
+                  Nueva venta) viven en el modal PostSaleModal; este aviso aparece cuando el
+                  modal está cerrado, para reabrir opciones o iniciar una nueva venta. */}
+              {lastInvoiceData && !postSaleModalOpen && (
+                <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                  <p className="text-sm font-medium text-green-900 flex-1 min-w-0 truncate">
+                    Venta completada · {lastInvoiceData.number}
+                  </p>
+                  <Button variant="outline" size="sm" onClick={() => setPostSaleModalOpen(true)}>
+                    Opciones
+                  </Button>
+                  <Button size="sm" className="bg-primary-600 hover:bg-primary-700 text-white" onClick={clearCart}>
+                    <Plus className="w-4 h-4 mr-1" />Nueva
+                  </Button>
                 </div>
               )}
 
-              {/* Print/PDF Buttons - Show after successful sale */}
-              {lastInvoiceData && (
-                <div className="border-t pt-4 mt-4">
-                  <p className="text-sm font-medium text-gray-700 mb-3">Descargar comprobante:</p>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    <Button
-                      onClick={() => handlePrintTicket()}
-                      variant="outline"
-                      size="sm"
-                      className="text-xs xl:text-sm px-1 xl:px-3"
-                      disabled={isPrintingTicket}
-                    >
-                      {isPrintingTicket ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <>
-                          <Printer className="w-4 h-4 mr-1" />
-                          <span className="truncate">Ticket</span>
-                        </>
-                      )}
-                    </Button>
-                    <Button
-                      onClick={async () => {
-                        setIsLoadingPreview(true)
-                        try {
-                          await previewInvoicePDF(lastInvoiceData, companySettings, branding, branches)
-                          if (companySettings?.autoResetPOS) setTimeout(() => clearCart(), 1000)
-                        } catch (error) {
-                          console.error('Error al generar vista previa:', error)
-                          toast.error('Error al generar la vista previa')
-                        } finally {
-                          setIsLoadingPreview(false)
-                        }
-                      }}
-                      variant="outline"
-                      size="sm"
-                      className="text-xs xl:text-sm px-1 xl:px-3"
-                      disabled={isLoadingPreview}
-                    >
-                      {isLoadingPreview ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <>
-                          <Eye className="w-4 h-4 mr-1" />
-                          <span className="truncate">Preview</span>
-                        </>
-                      )}
-                    </Button>
-                    <Button
-                      onClick={() => {
-                        try {
-                          generateInvoicePDF(lastInvoiceData, companySettings, true, branding, branches)
-                          if (companySettings?.autoResetPOS) setTimeout(() => clearCart(), 1000)
-                        } catch (error) {
-                          console.error('Error al generar PDF:', error)
-                          toast.error('Error al generar el PDF')
-                        }
-                      }}
-                      variant="outline"
-                      size="sm"
-                      className="text-xs xl:text-sm px-1 xl:px-3"
-                    >
-                      <Printer className="w-4 h-4 mr-1" />
-                      <span className="truncate">PDF</span>
-                    </Button>
-                  </div>
-                  <Button
-                    onClick={handleSendWhatsApp}
-                    variant="outline"
-                    size="sm"
-                    className="w-full mt-2"
-                    disabled={sendingWhatsApp}
-                  >
-                    {sendingWhatsApp ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Enviando...
-                      </>
-                    ) : (
-                      <>
-                        <Share2 className="w-4 h-4 mr-2" />
-                        Enviar por WhatsApp
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    onClick={clearCart}
-                    className="w-full mt-3 bg-primary-600 hover:bg-primary-700 text-white h-12"
-                  >
-                    <Plus className="w-5 h-5 mr-2" />
-                    Nueva Venta
-                  </Button>
-                </div>
-              )}
+              {/* Las opciones post-venta (Ticket / Preview / PDF / WhatsApp / Nueva venta)
+                  están en el modal PostSaleModal (renderizado más abajo). */}
             </CardContent>
             </div>{/* fin grid 2-cols expandido */}
           </Card>
@@ -10502,6 +10434,42 @@ ${companySettings?.businessName || 'Tu Empresa'}`
           </div>
         )}
       </Modal>
+
+      {/* Modal de opciones post-venta (Ticket/Preview/PDF/WhatsApp/Nueva venta) */}
+      <PostSaleModal
+        isOpen={postSaleModalOpen && !!lastInvoiceData}
+        onClose={() => setPostSaleModalOpen(false)}
+        invoice={lastInvoiceData}
+        formatCurrency={formatCurrency}
+        isPrintingTicket={isPrintingTicket}
+        isLoadingPreview={isLoadingPreview}
+        sendingWhatsApp={sendingWhatsApp}
+        defaultPhone={lastInvoiceData?.customer?.phone || customerData?.phone || ''}
+        onPrintTicket={() => handlePrintTicket()}
+        onPreview={async () => {
+          setIsLoadingPreview(true)
+          try {
+            await previewInvoicePDF(lastInvoiceData, companySettings, branding, branches)
+            if (companySettings?.autoResetPOS) setTimeout(() => clearCart(), 1000)
+          } catch (error) {
+            console.error('Error al generar vista previa:', error)
+            toast.error('Error al generar la vista previa')
+          } finally {
+            setIsLoadingPreview(false)
+          }
+        }}
+        onPdf={() => {
+          try {
+            generateInvoicePDF(lastInvoiceData, companySettings, true, branding, branches)
+            if (companySettings?.autoResetPOS) setTimeout(() => clearCart(), 1000)
+          } catch (error) {
+            console.error('Error al generar PDF:', error)
+            toast.error('Error al generar el PDF')
+          }
+        }}
+        onSendWhatsApp={(phone) => handleSendWhatsApp(phone)}
+        onNewSale={clearCart}
+      />
 
       {/* Modal de Selección de Precio */}
       <Modal
