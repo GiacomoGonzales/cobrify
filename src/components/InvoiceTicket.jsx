@@ -3,6 +3,7 @@ import React from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { formatPricedModifierLines } from '@/utils/modifierHelpers'
 import { unitDisplayName } from '@/data/sunatUnits'
+import { getComprobanteBreakdown } from '@/utils/peruUtils'
 
 /**
  * Componente de Ticket Imprimible según formato SUNAT
@@ -211,6 +212,9 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
   const formatCurrency = (value) => {
     return `${currencySymbol} ${Number(value).toFixed(2)}`
   }
+
+  // Desglose por afectación (gravada/exonerada/inafecta) para mostrar el comprobante correcto
+  const igvBreakdown = getComprobanteBreakdown(invoice, companySettings)
 
   return (
     <div ref={ref} className="ticket-container">
@@ -989,27 +993,58 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
 
         {!(invoice.documentType === 'nota_venta' && (companySettings?.hideRucIgvInNotaVenta || companySettings?.hideOnlyIgvInNotaVenta)) && !(isQuotation && invoice.hideIgv) && (
           <>
-            <div className="total-row">
-              <span>{invoice.discount && invoice.discount > 0 ? 'OP. Gravada:' : 'Subtotal:'}</span>
-              <span>{formatCurrency(invoice.subtotal || 0)}</span>
-            </div>
-            {invoice.igvByRate && Object.keys(invoice.igvByRate).length > 1 ? (
-              Object.entries(invoice.igvByRate)
-                .sort(([a], [b]) => Number(b) - Number(a))
-                .map(([rate, data]) => {
-                  const displayRate = rate === '10' ? '10.5' : rate
-                  return (
-                    <div key={rate} className="total-row">
-                      <span>IGV ({displayRate}%):</span>
-                      <span>{formatCurrency(data.igv || 0)}</span>
-                    </div>
-                  )
-                })
+            {igvBreakdown.hasExoOrIna ? (
+              <>
+                {igvBreakdown.hasGravada && (
+                  <div className="total-row">
+                    <span>OP. Gravada:</span>
+                    <span>{formatCurrency(igvBreakdown.gravada)}</span>
+                  </div>
+                )}
+                {igvBreakdown.exonerada > 0 && (
+                  <div className="total-row">
+                    <span>OP. Exonerada:</span>
+                    <span>{formatCurrency(igvBreakdown.exonerada)}</span>
+                  </div>
+                )}
+                {igvBreakdown.inafecta > 0 && (
+                  <div className="total-row">
+                    <span>OP. Inafecta:</span>
+                    <span>{formatCurrency(igvBreakdown.inafecta)}</span>
+                  </div>
+                )}
+                {igvBreakdown.hasGravada && (
+                  <div className="total-row">
+                    <span>IGV ({(() => { const r = (invoice.igvByRate && Object.keys(invoice.igvByRate)[0]) || (companySettings?.emissionConfig?.taxConfig?.igvRate ?? companySettings?.taxConfig?.igvRate ?? 18); return r === '10' || r === 10 ? '10.5' : r })()}%):</span>
+                    <span>{formatCurrency(igvBreakdown.igv)}</span>
+                  </div>
+                )}
+              </>
             ) : (
-              <div className="total-row">
-                <span>IGV ({(() => { const r = (invoice.igvByRate && Object.keys(invoice.igvByRate)[0]) || (companySettings?.emissionConfig?.taxConfig?.igvRate ?? companySettings?.taxConfig?.igvRate ?? 18); return r === '10' || r === 10 ? '10.5' : r })()}%):</span>
-                <span>{formatCurrency(invoice.igv || invoice.tax || 0)}</span>
-              </div>
+              <>
+                <div className="total-row">
+                  <span>{invoice.discount && invoice.discount > 0 ? 'OP. Gravada:' : 'Subtotal:'}</span>
+                  <span>{formatCurrency(invoice.subtotal || 0)}</span>
+                </div>
+                {invoice.igvByRate && Object.keys(invoice.igvByRate).length > 1 ? (
+                  Object.entries(invoice.igvByRate)
+                    .sort(([a], [b]) => Number(b) - Number(a))
+                    .map(([rate, data]) => {
+                      const displayRate = rate === '10' ? '10.5' : rate
+                      return (
+                        <div key={rate} className="total-row">
+                          <span>IGV ({displayRate}%):</span>
+                          <span>{formatCurrency(data.igv || 0)}</span>
+                        </div>
+                      )
+                    })
+                ) : (
+                  <div className="total-row">
+                    <span>IGV ({(() => { const r = (invoice.igvByRate && Object.keys(invoice.igvByRate)[0]) || (companySettings?.emissionConfig?.taxConfig?.igvRate ?? companySettings?.taxConfig?.igvRate ?? 18); return r === '10' || r === 10 ? '10.5' : r })()}%):</span>
+                    <span>{formatCurrency(invoice.igv || invoice.tax || 0)}</span>
+                  </div>
+                )}
+              </>
             )}
           </>
         )}

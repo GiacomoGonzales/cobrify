@@ -4,6 +4,7 @@ import { prepareLogoForPrinting } from './imageProcessingService';
 import * as BLEPrinter from './blePrinterService';
 import { getPricedModifiers } from '@/utils/modifierHelpers';
 import { unitDisplayName } from '@/data/sunatUnits';
+import { getComprobanteBreakdown } from '@/utils/peruUtils';
 
 /**
  * Servicio para manejar impresoras térmicas WiFi/Bluetooth
@@ -1123,9 +1124,18 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
     // Mostrar subtotal e IGV solo si NO es nota de venta con ocultar IGV
     if (!(isNotaVenta && (business.hideRucIgvInNotaVenta || business.hideOnlyIgvInNotaVenta))) {
       const igvRateDisplay = business.emissionConfig?.taxConfig?.igvRate ?? business.taxConfig?.igvRate ?? 18
-      printer = printer
-        .text(`Subtotal: ${currencySymbol} ${(invoice.subtotal || 0).toFixed(2)}\n`)
-        .text(`IGV (${igvRateDisplay}%): ${currencySymbol} ${(invoice.tax || invoice.igv || 0).toFixed(2)}\n`);
+      const bd = getComprobanteBreakdown(invoice, business)
+      if (bd.hasExoOrIna) {
+        // Desglose por afectación (productos exonerados/inafectos)
+        if (bd.hasGravada) printer = printer.text(`OP. Gravada: ${currencySymbol} ${bd.gravada.toFixed(2)}\n`);
+        if (bd.exonerada > 0) printer = printer.text(`OP. Exonerada: ${currencySymbol} ${bd.exonerada.toFixed(2)}\n`);
+        if (bd.inafecta > 0) printer = printer.text(`OP. Inafecta: ${currencySymbol} ${bd.inafecta.toFixed(2)}\n`);
+        if (bd.hasGravada) printer = printer.text(`IGV (${igvRateDisplay}%): ${currencySymbol} ${bd.igv.toFixed(2)}\n`);
+      } else {
+        printer = printer
+          .text(`Subtotal: ${currencySymbol} ${(invoice.subtotal || 0).toFixed(2)}\n`)
+          .text(`IGV (${igvRateDisplay}%): ${currencySymbol} ${(invoice.tax || invoice.igv || 0).toFixed(2)}\n`);
+      }
     }
 
     // Mostrar descuento si existe
@@ -1960,6 +1970,10 @@ const printBLETicket = async (invoice, business, paperWidth = 58) => {
       // Moneda (para que el ticket BLE imprima $ en facturas USD)
       currency: invoice.currency || 'PEN',
 
+      // Desglose por afectación (gravada/exonerada/inafecta) ya calculado, para que el
+      // ticket BLE muestre OP. EXONERADA/INAFECTA cuando corresponde.
+      taxBreakdown: getComprobanteBreakdown(invoice, business),
+
       // Pago
       paymentMethod: invoice.paymentMethod || '',
       payments: invoice.payments || [],
@@ -2632,8 +2646,16 @@ const buildTicketEscPos = async (invoice, business, paperWidth = 58) => {
     // Totales
     if (!(isNotaVenta && (business.hideRucIgvInNotaVenta || business.hideOnlyIgvInNotaVenta))) {
       const igvRateDisplay = business.emissionConfig?.taxConfig?.igvRate ?? business.taxConfig?.igvRate ?? 18
-      builder.text(`Subtotal: ${currencySymbol} ${(invoice.subtotal || 0).toFixed(2)}`).newLine()
-        .text(`IGV (${igvRateDisplay}%): ${currencySymbol} ${(invoice.tax || invoice.igv || 0).toFixed(2)}`).newLine();
+      const bd = getComprobanteBreakdown(invoice, business)
+      if (bd.hasExoOrIna) {
+        if (bd.hasGravada) builder.text(`OP. Gravada: ${currencySymbol} ${bd.gravada.toFixed(2)}`).newLine();
+        if (bd.exonerada > 0) builder.text(`OP. Exonerada: ${currencySymbol} ${bd.exonerada.toFixed(2)}`).newLine();
+        if (bd.inafecta > 0) builder.text(`OP. Inafecta: ${currencySymbol} ${bd.inafecta.toFixed(2)}`).newLine();
+        if (bd.hasGravada) builder.text(`IGV (${igvRateDisplay}%): ${currencySymbol} ${bd.igv.toFixed(2)}`).newLine();
+      } else {
+        builder.text(`Subtotal: ${currencySymbol} ${(invoice.subtotal || 0).toFixed(2)}`).newLine()
+          .text(`IGV (${igvRateDisplay}%): ${currencySymbol} ${(invoice.tax || invoice.igv || 0).toFixed(2)}`).newLine();
+      }
     }
 
     // Recargo al Consumo (si existe)

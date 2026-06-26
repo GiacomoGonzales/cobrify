@@ -217,6 +217,58 @@ export function calculateMixedInvoiceAmounts(items, igvRate = 18) {
 }
 
 /**
+ * Desglose de un comprobante por tipo de afectación, para mostrarlo en el PDF/ticket.
+ *
+ * El display antes decidía "OP. GRAVADA vs OP. EXONERADA" mirando SOLO el flag global del
+ * negocio (igvExempt / ley de la selva) e ignoraba la afectación por producto. Por eso una
+ * venta de un producto exonerado en modo estándar salía como "OP. GRAVADA + IGV" aunque su
+ * IGV fuera 0. Este helper usa los montos REALES ya guardados (opExoneradas / opInafectas)
+ * para mostrar el desglose correcto, y conserva el comportamiento actual cuando la venta es
+ * 100% gravada (la mayoría) → no cambia esos comprobantes.
+ *
+ * @returns {{ gravada:number, exonerada:number, inafecta:number, igv:number,
+ *             hasGravada:boolean, hasExoOrIna:boolean }}
+ */
+export function getComprobanteBreakdown(invoice, companySettings) {
+  const opExo = Number(invoice?.opExoneradas || 0)
+  const opIna = Number(invoice?.opInafectas || 0)
+  const igv = Number(invoice?.igv ?? invoice?.tax ?? 0)
+  const subtotal = Number(invoice?.subtotal || 0) // base sin IGV (gravada + exonerada + inafecta)
+
+  const bizExempt = companySettings?.emissionConfig?.taxConfig?.igvExempt
+    || companySettings?.taxConfig?.igvExempt
+    || false
+
+  const hasOpBreakdown = opExo > 0 || opIna > 0
+  let gravada, exonerada, inafecta
+  if (hasOpBreakdown) {
+    // La base gravada (sin IGV) es lo que queda tras restar exonerado e inafecto.
+    gravada = Math.max(0, Number((subtotal - opExo - opIna).toFixed(2)))
+    exonerada = opExo
+    inafecta = opIna
+  } else if (bizExempt) {
+    // Factura vieja exonerada por negocio (ley de la selva) sin desglose por-operación.
+    gravada = 0
+    exonerada = subtotal
+    inafecta = 0
+  } else {
+    // Sin exonerados/inafectos: 100% gravada (caso normal, no cambia el comprobante).
+    gravada = subtotal
+    exonerada = 0
+    inafecta = 0
+  }
+
+  return {
+    gravada,
+    exonerada,
+    inafecta,
+    igv,
+    hasGravada: gravada > 0,
+    hasExoOrIna: exonerada > 0 || inafecta > 0,
+  }
+}
+
+/**
  * Valida un número de RUC peruano
  * @param {string} ruc - Número de RUC a validar
  * @returns {boolean} - true si es válido

@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf'
 import { formatDate } from '@/lib/utils'
 import { getCurrencySymbol, normalizeCurrency } from '@/utils/currency'
+import { getComprobanteBreakdown } from '@/utils/peruUtils'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 import { resolveBranchCompanyInfo } from '@/utils/companyDisplay'
 import { UNITS } from '@/components/product/ProductFormModal'
@@ -1321,6 +1322,13 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const FOOTER_TEXT_HEIGHT = invoiceTermsText ? (25 * S + INVOICE_TERMS_HEIGHT) : 0
   const QR_BOX_HEIGHT = 75 * S
   const BANK_ROWS = Math.max(bankAccountsArray.length, 2) // Mínimo 2 filas para bancos
+  // Desglose por afectación (gravada/exonerada/inafecta). Calculado aquí (antes del
+  // presupuesto de altura del pie) para reservar las filas extra de OP. EXONERADA/INAFECTA.
+  const igvBd = getComprobanteBreakdown(invoice, companySettings)
+  const showExoRow = igvBd.hasExoOrIna && igvBd.exonerada > 0
+  const showInaRow = igvBd.hasExoOrIna && igvBd.inafecta > 0
+  const showGravadaRow = igvBd.hasExoOrIna ? igvBd.hasGravada : true
+  const showIgvRow = igvBd.hasExoOrIna ? igvBd.hasGravada : true
   const HAS_DISCOUNT = (invoice.discount || 0) > 0
   const HAS_RECARGO_CONSUMO = (invoice.recargoConsumo || 0) > 0
   const HAS_DETRACTION = invoice.hasDetraction && invoice.detractionAmount > 0
@@ -1334,7 +1342,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const WALLET_SECTION_HEIGHT = digitalWalletsArray.length > 0 ? (5 + 14 + digitalWalletsArray.length * WALLET_ROW_H) : 0
   const BANK_TABLE_HEIGHT = (bankAccountsArray.length > 0 ? (14 + BANK_ROWS * 13) : 0) + WALLET_SECTION_HEIGHT + DETRACTION_INFO_HEIGHT + RETENCION_INFO_HEIGHT
   // Altura base 55, +15 si hay descuento, +15 si hay recargo consumo, +36 si hay detracción (2 filas: detracción + neto a pagar)
-  const TOTALS_SECTION_HEIGHT = (55 + (HAS_DISCOUNT ? 15 : 0) + (HAS_RECARGO_CONSUMO ? 15 : 0) + (HAS_DETRACTION ? 36 : 0)) * S
+  const TOTALS_SECTION_HEIGHT = (55 + (HAS_DISCOUNT ? 15 : 0) + (HAS_RECARGO_CONSUMO ? 15 : 0) + (HAS_DETRACTION ? 36 : 0) + (showExoRow ? 15 : 0) + (showInaRow ? 15 : 0)) * S
   const SON_SECTION_HEIGHT = (spacious ? 28 : 22) * S
   // Leyenda de Amazonía (Ley 27037): se imprime debajo del "SON:" cuando el
   // negocio está acogido (motivo de exoneración = Amazonía). Reserva su alto en
@@ -1984,9 +1992,14 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   // Calcular filas de totales (usado para posicionar elementos después)
   // Si oculta IGV: solo 1 fila (total), sino: 3 base + extras
+  // Filas de operaciones: gravada + exonerada + inafecta + IGV (cada una condicional).
+  // Caso normal (sin exo/ina): 2 filas (gravada + IGV) + extras por tasas mixtas.
+  const opRows = igvBd.hasExoOrIna
+    ? ((showGravadaRow ? 1 : 0) + (showExoRow ? 1 : 0) + (showInaRow ? 1 : 0) + (showIgvRow ? 1 : 0))
+    : (2 + extraIgvRows)
   const totalsSectionRows = shouldHideIgv
     ? 1
-    : (3 + extraIgvRows + (HAS_DISCOUNT ? 1 : 0) + (HAS_RECARGO_CONSUMO ? 1 : 0) + (HAS_DETRACTION ? 2 : 0))
+    : (opRows + 1 + (HAS_DISCOUNT ? 1 : 0) + (HAS_RECARGO_CONSUMO ? 1 : 0) + (HAS_DETRACTION ? 2 : 0))
 
   // Si es nota de venta con ocultar IGV, solo mostrar TOTAL
   if (shouldHideIgv) {
@@ -2011,17 +2024,26 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.setLineWidth(0.5)
     doc.rect(totalsX, totalsStartY, totalsWidth, totalsRowHeight * totalsSectionRows + 6)
 
-    // Fila 1: OP. GRAVADA
-    doc.setFillColor(250, 250, 250)
-    doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
-    doc.setDrawColor(200, 200, 200)
-    doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
-    doc.setFontSize(9)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...BLACK)
-    doc.text(labelGravada, totalsX + 5, footerY + 10)
-    doc.text(CCY + ' ' + (invoice.subtotal || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
-    footerY += totalsRowHeight
+    // Fila(s) de operaciones: gravada / exonerada / inafecta
+    const drawOpRow = (label, amount) => {
+      doc.setFillColor(250, 250, 250)
+      doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
+      doc.setDrawColor(200, 200, 200)
+      doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(...BLACK)
+      doc.text(label, totalsX + 5, footerY + 10)
+      doc.text(CCY + ' ' + (amount || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+      footerY += totalsRowHeight
+    }
+    if (igvBd.hasExoOrIna) {
+      if (showGravadaRow) drawOpRow('OP. GRAVADA', igvBd.gravada)
+      if (showExoRow) drawOpRow('OP. EXONERADA', igvBd.exonerada)
+      if (showInaRow) drawOpRow('OP. INAFECTA', igvBd.inafecta)
+    } else {
+      drawOpRow(labelGravada, invoice.subtotal || 0)
+    }
 
     // Fila 2: DESCUENTO (solo si hay descuento)
     if (HAS_DISCOUNT) {
@@ -2036,25 +2058,27 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       footerY += totalsRowHeight
     }
 
-    // Fila(s): IGV - desagregado si hay tasas mixtas
-    if (hasMultipleIgvRates) {
-      igvRateKeys.forEach(rate => {
+    // Fila(s): IGV — solo si hay operación gravada. Desagregado si hay tasas mixtas.
+    if (showIgvRow) {
+      if (!igvBd.hasExoOrIna && hasMultipleIgvRates) {
+        igvRateKeys.forEach(rate => {
+          doc.setFillColor(255, 255, 255)
+          doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
+          doc.setDrawColor(200, 200, 200)
+          doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
+          doc.text(`IGV (${rate}%)`, totalsX + 5, footerY + 10)
+          doc.text(CCY + ' ' + (igvByRate[rate].igv || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+          footerY += totalsRowHeight
+        })
+      } else {
         doc.setFillColor(255, 255, 255)
         doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
         doc.setDrawColor(200, 200, 200)
         doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
-        doc.text(`IGV (${rate}%)`, totalsX + 5, footerY + 10)
-        doc.text(CCY + ' ' + (igvByRate[rate].igv || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+        doc.text(`IGV (${igvRateKeys[0] || igvRate}%)`, totalsX + 5, footerY + 10)
+        doc.text(CCY + ' ' + (igvBd.hasExoOrIna ? igvBd.igv : (invoice.igv || 0)).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
         footerY += totalsRowHeight
-      })
-    } else {
-      doc.setFillColor(255, 255, 255)
-      doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
-      doc.setDrawColor(200, 200, 200)
-      doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
-      doc.text(`IGV (${igvRateKeys[0] || igvRate}%)`, totalsX + 5, footerY + 10)
-      doc.text(CCY + ' ' + (invoice.igv || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
-      footerY += totalsRowHeight
+      }
     }
 
     // Fila: RECARGO AL CONSUMO (solo si aplica)

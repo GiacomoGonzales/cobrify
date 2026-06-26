@@ -693,6 +693,8 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
       igvRate: igvRateParam,
       // Moneda
       currency,
+      // Desglose por afectación (gravada/exonerada/inafecta) precalculado
+      taxBreakdown,
     } = receiptData;
 
     // Obtener igvRate de taxConfig o parámetro directo
@@ -980,8 +982,16 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
     if (!(isNotaVenta && (hideRucIgvInNotaVenta || hideOnlyIgvInNotaVenta))) {
       const subtotalValue = subtotal || 0;
       const taxValue = tax || igv || 0;
-      commands.push(ESCPOSCommands.text('Subtotal: ' + currencySymbol + ' ' + subtotalValue.toFixed(2) + '\n'));
-      commands.push(ESCPOSCommands.text(`IGV (${igvRate}%): ${currencySymbol} ` + taxValue.toFixed(2) + '\n'));
+      if (taxBreakdown && taxBreakdown.hasExoOrIna) {
+        // Desglose por afectación (productos exonerados/inafectos)
+        if (taxBreakdown.hasGravada) commands.push(ESCPOSCommands.text('OP. Gravada: ' + currencySymbol + ' ' + taxBreakdown.gravada.toFixed(2) + '\n'));
+        if (taxBreakdown.exonerada > 0) commands.push(ESCPOSCommands.text('OP. Exonerada: ' + currencySymbol + ' ' + taxBreakdown.exonerada.toFixed(2) + '\n'));
+        if (taxBreakdown.inafecta > 0) commands.push(ESCPOSCommands.text('OP. Inafecta: ' + currencySymbol + ' ' + taxBreakdown.inafecta.toFixed(2) + '\n'));
+        if (taxBreakdown.hasGravada) commands.push(ESCPOSCommands.text(`IGV (${igvRate}%): ${currencySymbol} ` + taxBreakdown.igv.toFixed(2) + '\n'));
+      } else {
+        commands.push(ESCPOSCommands.text('Subtotal: ' + currencySymbol + ' ' + subtotalValue.toFixed(2) + '\n'));
+        commands.push(ESCPOSCommands.text(`IGV (${igvRate}%): ${currencySymbol} ` + taxValue.toFixed(2) + '\n'));
+      }
     }
 
     if (discount && discount > 0) {
