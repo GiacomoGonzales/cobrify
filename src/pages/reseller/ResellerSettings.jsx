@@ -61,7 +61,14 @@ export default function ResellerSettings() {
     phone: resellerData?.phone || '',
     address: resellerData?.address || '',
     contactName: resellerData?.contactName || '',
-    customDomain: resellerData?.customDomain || ''
+    customDomain: resellerData?.customDomain || '',
+    // Datos de cobro a TUS clientes: se muestran cuando vence la suscripción de uno de
+    // ellos, para que te paguen a ti (no a Cobrify).
+    yapeNumber: resellerData?.paymentInfo?.yapeNumber || '',
+    yapeName: resellerData?.paymentInfo?.yapeName || '',
+    bcpAccount: resellerData?.paymentInfo?.bcpAccount || '',
+    bcpCci: resellerData?.paymentInfo?.bcpCci || '',
+    titular: resellerData?.paymentInfo?.titular || '',
   })
 
   const [brandingData, setBrandingData] = useState({
@@ -92,7 +99,12 @@ export default function ResellerSettings() {
         phone: resellerData.phone || '',
         address: resellerData.address || '',
         contactName: resellerData.contactName || '',
-        customDomain: resellerData.customDomain || ''
+        customDomain: resellerData.customDomain || '',
+        yapeNumber: resellerData.paymentInfo?.yapeNumber || '',
+        yapeName: resellerData.paymentInfo?.yapeName || '',
+        bcpAccount: resellerData.paymentInfo?.bcpAccount || '',
+        bcpCci: resellerData.paymentInfo?.bcpCci || '',
+        titular: resellerData.paymentInfo?.titular || '',
       })
       setBrandingData({
         companyName: resellerData.branding?.companyName || resellerData.companyName || '',
@@ -271,6 +283,14 @@ export default function ResellerSettings() {
         address: formData.address,
         contactName: formData.contactName,
         customDomain: formData.customDomain?.toLowerCase().trim() || null,
+        // Datos de cobro a tus clientes (pantalla de "suscripción vencida")
+        paymentInfo: {
+          yapeNumber: formData.yapeNumber?.trim() || '',
+          yapeName: formData.yapeName?.trim() || '',
+          bcpAccount: formData.bcpAccount?.trim() || '',
+          bcpCci: formData.bcpCci?.trim() || '',
+          titular: formData.titular?.trim() || '',
+        },
         updatedAt: Timestamp.now()
       })
       console.log('✅ Reseller document updated')
@@ -630,6 +650,36 @@ export default function ResellerSettings() {
                           </ol>
                         </div>
                       )}
+                    </div>
+
+                    {/* Datos de cobro a tus clientes (pantalla de "suscripción vencida") */}
+                    <div className="sm:col-span-2 border-t border-gray-200 pt-4 mt-2">
+                      <h4 className="text-sm font-semibold text-gray-900">Datos de cobro a tus clientes</h4>
+                      <p className="text-xs text-gray-500 mb-3">
+                        Aparecen cuando vence la suscripción de uno de tus clientes, para que te paguen a TI (no a Cobrify). Si los dejas vacíos, a tu cliente le aparecerá "Contacta a tu proveedor".
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Número de Yape / Plin</label>
+                          <input type="text" name="yapeNumber" value={formData.yapeNumber} onChange={handleChange} placeholder="999 888 777" className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Nombre en Yape / Plin</label>
+                          <input type="text" name="yapeName" value={formData.yapeName} onChange={handleChange} placeholder="Tu Empresa S.A.C." className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">N° de cuenta bancaria</label>
+                          <input type="text" name="bcpAccount" value={formData.bcpAccount} onChange={handleChange} placeholder="191-1234567-0-12" className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">CCI</label>
+                          <input type="text" name="bcpCci" value={formData.bcpCci} onChange={handleChange} placeholder="00219100123456701234" className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Titular de la cuenta</label>
+                          <input type="text" name="titular" value={formData.titular} onChange={handleChange} placeholder="Tu Empresa S.A.C." className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

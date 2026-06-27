@@ -1,16 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { AlertTriangle, MessageCircle, Copy, Check, Smartphone, Building2, Loader2, LogOut } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
-import { getVendedor } from '@/services/vendedorService'
-
-const DEFAULT_WHATSAPP = '51900434988'
-
-const DEFAULT_PAYMENT_INFO = {
-  yape: { number: '926 258 059', name: 'Quantio Solutions EIRL' },
-  bcp: { account: '1937311451039', cci: '00219300731145103916' },
-  titular: 'Quantio Solutions EIRL',
-}
+import { useSubscriptionPaymentInfo } from '@/hooks/useSubscriptionPaymentInfo'
 
 function CopyButton({ text }) {
   const [copied, setCopied] = useState(false)
@@ -46,34 +38,11 @@ function CopyButton({ text }) {
 
 export default function SubscriptionBlockedModal({ isOpen, subscription, businessName, onLogout }) {
   const email = subscription?.email || ''
-  const [vendedor, setVendedor] = useState(null)
-  const [loadingVendedor, setLoadingVendedor] = useState(!!subscription?.vendedorId)
-
-  useEffect(() => {
-    if (subscription?.vendedorId) {
-      setLoadingVendedor(true)
-      getVendedor(subscription.vendedorId).then(result => {
-        if (result.success) setVendedor(result.data)
-      }).finally(() => setLoadingVendedor(false))
-    } else {
-      setLoadingVendedor(false)
-    }
-  }, [subscription?.vendedorId])
-
-  const paymentInfo = vendedor
-    ? {
-        yape: { number: vendedor.yapeNumber, name: vendedor.yapeName },
-        bcp: { account: vendedor.bcpAccount, cci: vendedor.bcpCci },
-        titular: vendedor.titular,
-      }
-    : DEFAULT_PAYMENT_INFO
-
-  const whatsappNumber = vendedor?.phone || DEFAULT_WHATSAPP
-  const yapeRaw = vendedor ? vendedor.yapeNumber.replace(/\s/g, '') : '926258059'
+  const { loading, paymentInfo, whatsappNumber, yapeRaw, isResellerWithoutPayment } = useSubscriptionPaymentInfo(subscription)
 
   const handleContactWhatsApp = () => {
     const message = encodeURIComponent(
-      `Hola, quiero renovar mi suscripción de Cobrify. Mi email es ${email}. Mi negocio es ${businessName || ''}.`
+      `Hola, quiero renovar mi suscripción. Mi email es ${email}. Mi negocio es ${businessName || ''}.`
     )
     window.open(`https://wa.me/${whatsappNumber}?text=${message}`, '_blank')
   }
@@ -98,9 +67,15 @@ export default function SubscriptionBlockedModal({ isOpen, subscription, busines
         </div>
 
         {/* Datos de pago */}
-        {loadingVendedor ? (
+        {loading ? (
           <div className="mb-5 flex items-center justify-center py-8">
             <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+          </div>
+        ) : isResellerWithoutPayment || !paymentInfo ? (
+          <div className="mb-5 bg-amber-50 border border-amber-200 rounded-lg p-4 text-center">
+            <p className="text-sm text-amber-800">
+              Contacta a tu proveedor para reactivar tu cuenta.
+            </p>
           </div>
         ) : (
         <div className="mb-5 space-y-3">

@@ -49,6 +49,38 @@ export async function getResellerBranding(resellerId) {
 }
 
 /**
+ * Datos de COBRO del reseller, para mostrarlos cuando vence la suscripción de uno de SUS
+ * clientes (así el cliente le paga al reseller, no a Cobrify). El reseller los configura
+ * en su panel (ResellerSettings). yapeName/titular caen al nombre de la empresa si faltan.
+ * Devuelve { success, data: { yapeNumber, yapeName, bcpAccount, bcpCci, titular, phone, whatsapp } }.
+ */
+export async function getResellerPaymentInfo(resellerId) {
+  if (!resellerId) return { success: false, data: null }
+  try {
+    const resellerDoc = await getDoc(doc(db, 'resellers', resellerId))
+    if (resellerDoc.exists()) {
+      const d = resellerDoc.data()
+      const pay = d.paymentInfo || {}
+      return {
+        success: true,
+        data: {
+          yapeNumber: pay.yapeNumber || '',
+          yapeName: pay.yapeName || d.companyName || '',
+          bcpAccount: pay.bcpAccount || '',
+          bcpCci: pay.bcpCci || '',
+          titular: pay.titular || d.companyName || '',
+          phone: d.phone || '',
+          whatsapp: d.branding?.whatsapp || d.phone || '',
+        },
+      }
+    }
+  } catch (error) {
+    console.error('Error getting reseller payment info:', error)
+  }
+  return { success: false, data: null }
+}
+
+/**
  * Obtiene el branding para un cliente basado en su suscripción
  * El branding se guarda en la suscripción cuando el reseller crea al cliente
  * Para clientes antiguos, se obtiene del documento del reseller
