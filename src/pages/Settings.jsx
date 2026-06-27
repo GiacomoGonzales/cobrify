@@ -4436,6 +4436,12 @@ export default function Settings() {
                             </button>
                           </div>
 
+                          {/* Nota cruzada hacia la config de impresora */}
+                          <div className="flex items-start gap-2 p-3 mb-4 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800">
+                            <Info className="w-4 h-4 mt-0.5 flex-shrink-0 text-blue-600" />
+                            <span>Aquí van las impresoras de <strong>Cocina y Bar</strong> (comandas), cada una con su IP. La <strong>Impresora de Caja</strong> (comprobantes y precuentas) y la principal se configuran en <strong>Configuración → Impresora</strong>.</span>
+                          </div>
+
                           {/* Checkbox para impresión automática */}
                           <label className="flex items-center gap-2 cursor-pointer p-3 bg-white border border-gray-200 rounded-lg mb-4">
                             <input
@@ -8366,6 +8372,44 @@ export default function Settings() {
       {/* Tab Content - Impresora */}
       {activeTab === 'impresora' && (
         <div className="space-y-6">
+          {/* Guía: qué impresora imprime qué (modelo por zonas) */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center space-x-2">
+                <Info className="w-5 h-5 text-primary-600" />
+                <CardTitle>¿Qué impresora imprime qué?</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3 text-sm">
+                <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <Printer className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="font-semibold text-blue-900">Impresora principal (esta pantalla)</p>
+                    <p className="text-blue-700">Tickets de venta, comandas (si no usas estaciones) y precuentas.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <FileText className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="font-semibold text-green-900">Impresora de Caja (más abajo, en esta pantalla)</p>
+                    <p className="text-green-700">Ticketera de red de la CAJA: comprobantes (boletas/facturas) y precuentas. Pon su IP.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <UtensilsCrossed className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="font-semibold text-amber-900">Cocina / Bar (en Configuración → Ventas → Estaciones)</p>
+                    <p className="text-amber-700">Una estación por zona, cada una con su IP y sus categorías. Las comandas se reparten solas.</p>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 pt-1">
+                  La app de la <strong>tablet</strong> manda a cada impresora por su IP (cocina, bar, caja). Desde la <strong>computadora</strong> (navegador) se imprime a una sola impresora (la predeterminada).
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <div className="flex items-center space-x-2">
@@ -9045,7 +9089,7 @@ export default function Settings() {
             <CardHeader>
               <div className="flex items-center space-x-2">
                 <FileText className="w-5 h-5 text-primary-600" />
-                <CardTitle>Impresora de Documentos (Precuentas y Boletas)</CardTitle>
+                <CardTitle>Impresora de Caja (comprobantes y precuentas)</CardTitle>
               </div>
             </CardHeader>
             <CardContent>
@@ -9055,13 +9099,14 @@ export default function Settings() {
                   <div className="flex items-start">
                     <Info className="w-5 h-5 text-gray-400 mt-0.5 mr-3 flex-shrink-0" />
                     <div className="text-sm text-gray-600">
-                      <p className="font-semibold mb-1 text-gray-900">Impresora separada para documentos de venta</p>
+                      <p className="font-semibold mb-1 text-gray-900">Impresora de Caja (de red / WiFi)</p>
                       <p>
-                        Configura una segunda impresora WiFi/LAN dedicada para imprimir precuentas y boletas/facturas.
-                        La impresora principal seguirá usándose para comandas de cocina.
+                        Es la ticketera de la CAJA. Configura aquí su IP para imprimir
+                        <strong> comprobantes (boletas/facturas) y precuentas</strong> en ella.
+                        La impresora principal sigue para las comandas de cocina.
                       </p>
                       <p className="mt-1">
-                        <strong>Si no configuras esta impresora</strong>, las precuentas y boletas se imprimirán en la impresora principal como siempre.
+                        <strong>Si no configuras esta impresora</strong>, los comprobantes y precuentas salen en la impresora principal, como siempre.
                       </p>
                     </div>
                   </div>
@@ -9077,9 +9122,9 @@ export default function Settings() {
                             <CheckCircle className="w-5 h-5 text-green-600" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-gray-900">{documentPrinterConfig.name || 'Impresora de Documentos'}</p>
+                            <p className="font-semibold text-gray-900">{documentPrinterConfig.name || 'Impresora de Caja'}</p>
                             <p className="text-sm text-gray-600 break-all">IP: {documentPrinterConfig.ip}:{documentPrinterConfig.port || 9100}</p>
-                            <p className="text-sm text-gray-600">Uso: Precuentas y Boletas/Facturas</p>
+                            <p className="text-sm text-gray-600">Imprime: comprobantes y precuentas</p>
                           </div>
                         </div>
                         <div className="flex flex-col sm:flex-row gap-2">
@@ -9118,7 +9163,7 @@ export default function Settings() {
                     {/* Ancho de papel */}
                     <div className="border border-gray-200 rounded-lg p-4">
                       <label className="block text-sm font-medium text-gray-700 mb-3">
-                        Ancho de Papel (Impresora de Documentos)
+                        Ancho de Papel (Impresora de Caja)
                       </label>
                       <div className="flex gap-3">
                         <button
@@ -9158,7 +9203,7 @@ export default function Settings() {
                         className="w-full"
                       >
                         <Wifi className="w-4 h-4 mr-2" />
-                        Configurar Impresora de Documentos
+                        Configurar Impresora de Caja
                       </Button>
                     ) : (
                       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4">
@@ -9167,8 +9212,8 @@ export default function Settings() {
                             <Info className="w-4 h-4 text-gray-500" />
                           </div>
                           <div className="text-sm text-gray-600">
-                            <p className="font-semibold mb-1 text-gray-900">Impresora de Documentos (WiFi/LAN)</p>
-                            <p>Esta impresora se usará para precuentas y boletas/facturas. Debe estar en la misma red que tu celular.</p>
+                            <p className="font-semibold mb-1 text-gray-900">Impresora de Caja (de red / WiFi)</p>
+                            <p>Imprime los comprobantes (boletas/facturas) y precuentas. Debe estar en la misma red que tu dispositivo.</p>
                           </div>
                         </div>
                         <div>
