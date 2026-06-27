@@ -37,6 +37,7 @@ import { consultarRUC } from '@/services/documentLookupService'
 import { getWarehouses, updateWarehouseStock, createStockMovement } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
 import { getIngredients, registerPurchase as registerIngredientPurchase, createIngredient, updateIngredient, convertUnit } from '@/services/ingredientService'
+import { recalculateRecipeCostsForIngredient } from '@/services/recipeService'
 import Modal from '@/components/ui/Modal'
 import { collection, doc, getDoc, getDocs, Timestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -1743,8 +1744,10 @@ export default function CreatePurchase() {
           const roundedAverageCost = Math.round(averageCost * 1e6) / 1e6
 
           // Preparar datos extra (costo, proveedor, lotes)
+          // Si el producto se costea por RECETA (hasRecipe), la compra del terminado NO
+          // pisa su costo: manda la receta. Igual se actualiza stock/proveedor/lotes.
           const extraUpdates = {
-            cost: roundedAverageCost,
+            ...(product.hasRecipe ? {} : { cost: roundedAverageCost }),
             ...(selectedSupplier && {
               lastSupplier: {
                 id: selectedSupplier.id || '',
@@ -2098,6 +2101,18 @@ export default function CreatePurchase() {
         })
 
         await Promise.all(ingredientStockUpdates)
+      }
+
+      // Recostear las recetas que usan estos insumos (y, en cascada, el costo de sus
+      // productos con receta): así el promedio de compra del insumo llega a la receta y
+      // al producto. Antes la compra de insumo no propagaba a las recetas.
+      try {
+        const purchasedIngredientIds = Object.keys(groupedIngredients)
+        await Promise.all(
+          purchasedIngredientIds.map(id => recalculateRecipeCostsForIngredient(businessId, id))
+        )
+      } catch (e) {
+        console.error('Error al recostear recetas tras compra de insumo:', e)
       }
 
       // 5. Actualizar precios de venta

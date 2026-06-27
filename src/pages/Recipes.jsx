@@ -11,9 +11,14 @@ import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { formatCurrency, matchesSearchQuery } from '@/lib/utils'
-import { getRecipes, createRecipe, updateRecipe, deleteRecipe } from '@/services/recipeService'
+import { getRecipes, createRecipe, updateRecipe, deleteRecipe, recalculateAllRecipeCosts } from '@/services/recipeService'
 import { getIngredients } from '@/services/ingredientService'
 import { getProducts } from '@/services/firestoreService'
+
+// Migración/sincronización 1 vez por sesión: al entrar a Recetas, recostear las recetas
+// desde los costos actuales de insumos y propagar el costo a cada producto con receta.
+// Así los productos con receta ya existentes quedan con su costo = costo de la receta.
+let recipeCostSyncDone = false
 
 export default function Recipes() {
   const { user, getBusinessId, businessMode, isDemoMode } = useAppContext()
@@ -222,6 +227,11 @@ export default function Recipes() {
 
         if (recipesResult.success) {
           setRecipes(recipesResult.data || [])
+          // Sincronizar costos (1 vez por sesión): recostea recetas y propaga al producto.
+          if (!recipeCostSyncDone && (recipesResult.data || []).length > 0) {
+            recipeCostSyncDone = true
+            recalculateAllRecipeCosts(businessId).catch(() => {})
+          }
         }
         if (ingredientsResult.success) {
           setIngredients(ingredientsResult.data || [])

@@ -139,6 +139,29 @@ export const getRecipeByProductId = async (businessId, productId) => {
 }
 
 /**
+ * Sincroniza el COSTO del producto con el de su receta.
+ *
+ * Para un producto hecho con receta, la receta es la ÚNICA fuente del costo: el costo
+ * unitario del producto = totalCost / porciones. Además marca el producto con
+ * `hasRecipe: true` para que las compras del terminado, la edición manual y el recálculo
+ * de costos desde compras NO le pisen el costo (manda siempre la receta).
+ *
+ * Escribe directo al doc del producto (updateDoc parcial) para evitar import circular
+ * con productService.
+ */
+const syncProductCostFromRecipe = async (businessId, productId, totalCost, portions) => {
+  if (!businessId || !productId) return
+  try {
+    const units = Math.max(1, Number(portions) || 1)
+    const unitCost = Math.round(((Number(totalCost) || 0) / units) * 1e6) / 1e6
+    const productRef = doc(db, 'businesses', businessId, 'products', productId)
+    await updateDoc(productRef, { cost: unitCost, hasRecipe: true, updatedAt: Timestamp.now() })
+  } catch (e) {
+    console.error('Error al sincronizar costo del producto desde la receta:', e)
+  }
+}
+
+/**
  * Crear una nueva receta
  */
 export const createRecipe = async (businessId, recipeData) => {
@@ -157,6 +180,9 @@ export const createRecipe = async (businessId, recipeData) => {
     }
 
     const docRef = await addDoc(recipesRef, newRecipe)
+
+    // El producto se costea por su receta (costo unitario = totalCost / porciones)
+    await syncProductCostFromRecipe(businessId, recipeData.productId, totalCost, newRecipe.portions)
 
     return { success: true, id: docRef.id, totalCost }
   } catch (error) {
@@ -184,6 +210,12 @@ export const updateRecipe = async (businessId, recipeId, updates) => {
       updatedAt: Timestamp.now()
     })
 
+    // Sincronizar el costo del producto vinculado (lee la receta para tomar el productId
+    // y las porciones autoritativos, vengan o no en `updates`).
+    const savedSnap = await getDoc(recipeRef)
+    const saved = savedSnap.exists() ? savedSnap.data() : {}
+    await syncProductCostFromRecipe(businessId, saved.productId, totalCost, saved.portions)
+
     return { success: true, totalCost }
   } catch (error) {
     console.error('Error al actualizar receta:', error)
@@ -197,7 +229,22 @@ export const updateRecipe = async (businessId, recipeId, updates) => {
 export const deleteRecipe = async (businessId, recipeId) => {
   try {
     const recipeRef = doc(db, 'businesses', businessId, 'recipes', recipeId)
+
+    // Antes de borrar, tomar el productId para des-marcar el producto (ya no se costea
+    // por receta → vuelve a poder costearse por compras / edición manual).
+    const snap = await getDoc(recipeRef)
+    const productId = snap.exists() ? snap.data().productId : null
+
     await deleteDoc(recipeRef)
+
+    if (productId) {
+      try {
+        const productRef = doc(db, 'businesses', businessId, 'products', productId)
+        await updateDoc(productRef, { hasRecipe: false, updatedAt: Timestamp.now() })
+      } catch (e) {
+        console.error('Error al des-marcar hasRecipe del producto:', e)
+      }
+    }
 
     return { success: true }
   } catch (error) {
@@ -356,6 +403,9 @@ export const recalculateAllRecipeCosts = async (businessId) => {
         updatedAt: Timestamp.now()
       })
 
+      // Propagar el costo al producto vinculado (costo por unidad = totalCost / porciones)
+      await syncProductCostFromRecipe(businessId, recipe.productId, totalCost, recipe.portions)
+
       updated++
     }
 
@@ -401,6 +451,9 @@ export const recalculateRecipeCostsForIngredient = async (businessId, ingredient
         totalCost,
         updatedAt: Timestamp.now()
       })
+
+      // Propagar el costo al producto vinculado (costo por unidad = totalCost / porciones)
+      await syncProductCostFromRecipe(businessId, recipe.productId, totalCost, recipe.portions)
 
       updated++
     }

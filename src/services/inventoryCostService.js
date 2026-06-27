@@ -56,6 +56,14 @@ export async function recalculateProductCostsFromPurchases(businessId, onProgres
 
     for (const prodDoc of productsSnap.docs) {
       const prod = prodDoc.data()
+
+      // Los productos costeados por RECETA no se recalculan desde compras: manda la receta.
+      if (prod.hasRecipe) {
+        processed++
+        if (onProgress) onProgress({ processed, total, percentage: Math.round((processed / total) * 100) })
+        continue
+      }
+
       const patch = {}
 
       // Costo base (productos sin variante)

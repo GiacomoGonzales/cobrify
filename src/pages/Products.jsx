@@ -1048,7 +1048,11 @@ export default function Products() {
         description: data.description || '',
         unit: data.unit,
         category: data.category || '',
-        cost: data.cost && data.cost !== '' ? parseFloat(data.cost) : null,
+        // El costo de un producto CON receta lo manda la receta: no se sobrescribe desde
+        // el form (updateDoc hace merge y preserva el costo sincronizado por la receta).
+        ...(editingProduct?.hasRecipe
+          ? {}
+          : { cost: data.cost && data.cost !== '' ? parseFloat(data.cost) : null }),
         weight: data.weight && data.weight !== '' ? parseFloat(data.weight) : null,
         hasVariants: hasVariants,
         // Con batches activos, forzar trackExpiration:true (los lotes lo implican)
@@ -2137,7 +2141,8 @@ export default function Products() {
             if (product.name) updates.name = product.name
             if (product.description) updates.description = product.description
             if (product.price != null && !isNaN(product.price) && product.price >= 0) updates.price = product.price
-            if (product.cost != null) updates.cost = product.cost
+            // No pisar el costo de un producto con receta (manda la receta)
+            if (product.cost != null && !existingProduct.hasRecipe) updates.cost = product.cost
             if (product.price2 !== undefined) updates.price2 = product.price2
             if (product.price3 !== undefined) updates.price3 = product.price3
             if (product.price4 !== undefined) updates.price4 = product.price4
@@ -5683,9 +5688,12 @@ export default function Products() {
                   step="any"
                   placeholder="0.00"
                   error={errors.cost?.message}
+                  disabled={!!editingProduct?.hasRecipe}
                   {...register('cost')}
                 />
-                <p className="text-xs text-gray-500 mt-1">Opcional</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {editingProduct?.hasRecipe ? 'Se calcula desde la receta (insumos)' : 'Opcional'}
+                </p>
               </div>
 
               <div>
@@ -7397,7 +7405,9 @@ export default function Products() {
                   )}
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-500">Costo</label>
+                  <label className="text-xs font-medium text-gray-500">
+                    Costo{viewingProduct.hasRecipe && <span className="ml-1 text-green-600 font-semibold">(desde receta)</span>}
+                  </label>
                   <p className="text-lg text-orange-600 font-bold mt-1">
                     {viewingProduct.cost ? formatCurrency(viewingProduct.cost) : '-'}
                   </p>
