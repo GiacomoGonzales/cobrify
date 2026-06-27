@@ -560,12 +560,8 @@ export default function AdminUsers() {
     }
   }
 
-  // Cargar stats de SUNAT cuando cambian los usuarios
-  useEffect(() => {
-    if (users.length > 0 && !loading) {
-      loadSunatStats(users)
-    }
-  }, [users, loading])
+  // (Las stats de SUNAT ya NO se cargan para todos los usuarios de golpe; se cargan solo
+  // para la página visible — ver el efecto más abajo, junto a la paginación.)
 
   // Filtrar y ordenar usuarios
   const filteredUsers = useMemo(() => {
@@ -669,6 +665,36 @@ export default function AdminUsers() {
 
     return result
   }, [users, searchTerm, statusFilter, planFilter, sourceFilter, modeFilter, igvFilter, vendedorFilter, sortField, sortDirection])
+
+  // ── Paginación ──────────────────────────────────────────────────────────────
+  // Renderizar SOLO la página actual evita un DOM gigante (cientos de filas) que
+  // lagueaba la página cuando hay muchos negocios.
+  const PAGE_SIZE = 50
+  const [currentPage, setCurrentPage] = useState(1)
+  const pageCount = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE))
+  const displayedUsers = useMemo(
+    () => filteredUsers.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [filteredUsers, currentPage]
+  )
+
+  // Volver a la página 1 cuando cambian filtros/búsqueda/orden (la lista cambia).
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, statusFilter, planFilter, sourceFilter, modeFilter, igvFilter, vendedorFilter, sortField, sortDirection])
+
+  // Si la página actual queda fuera de rango (ej: tras filtrar a menos resultados), corregir.
+  useEffect(() => {
+    if (currentPage > pageCount) setCurrentPage(1)
+  }, [pageCount, currentPage])
+
+  // Cargar stats SUNAT SOLO de la página visible (y solo de los que falten), en vez de
+  // hacer ~2 queries por cada uno de los cientos de usuarios.
+  useEffect(() => {
+    if (loading || displayedUsers.length === 0) return
+    const pending = displayedUsers.filter(u => !sunatStats[u.userId])
+    if (pending.length > 0) loadSunatStats(pending)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayedUsers, loading])
 
   // Estadísticas rápidas (usa fecha real de periodo para "activos")
   // Los archivados se excluyen de todos los buckets — son un cluster aparte
@@ -2196,7 +2222,7 @@ export default function AdminUsers() {
               <p className="text-sm text-gray-500">No se encontraron usuarios</p>
             </div>
           ) : (
-            filteredUsers.map(user => (
+            displayedUsers.map(user => (
               <div
                 key={user.id}
                 className="p-3 hover:bg-gray-50"
@@ -2427,7 +2453,7 @@ export default function AdminUsers() {
                   </td>
                 </tr>
               ) : (
-                filteredUsers.map((user, index) => (
+                displayedUsers.map((user) => (
                   <tr
                     key={user.id}
                     className="hover:bg-gray-50 cursor-pointer transition-colors"
@@ -2723,6 +2749,32 @@ export default function AdminUsers() {
             </tbody>
           </table>
         </div>
+
+        {/* Paginación */}
+        {!loading && filteredUsers.length > PAGE_SIZE && (
+          <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-gray-200">
+            <p className="text-xs text-gray-500">
+              Mostrando {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredUsers.length)} de {filteredUsers.length}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
+              >
+                Anterior
+              </button>
+              <span className="text-sm text-gray-700">Página {currentPage} de {pageCount}</span>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(pageCount, p + 1))}
+                disabled={currentPage >= pageCount}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
+              >
+                Siguiente
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* User Detail Modal */}
