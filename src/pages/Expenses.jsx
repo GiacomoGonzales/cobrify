@@ -150,6 +150,10 @@ export default function Expenses() {
   const { user, isDemoMode, hasMainBranchAccess, businessSettings, allowedBranches, allowedWarehouses, filterBranchesByAccess } = useAppContext()
   // Seguridad: el usuario secundario solo ve gastos de sus sucursales habilitadas
   const canAccess = useLocationAccess()
+  // Los gastos GENERALES/corporativos (sin sucursal) NO son de una sede específica, así
+  // que se ven para TODOS los usuarios (incluido el sub-usuario con sucursales restringidas).
+  // Solo los gastos asignados a una sucursal concreta respetan el filtro de acceso por sede.
+  const canViewExpense = (e) => (!e?.branchId || e.branchId === 'main') ? true : canAccess(e)
   const hidePrivateData = useHidePrivateData()
   const expenseMultiCurrencyOn = isMultiCurrencyEnabled(businessSettings)
   const toast = useToast()
@@ -269,7 +273,7 @@ export default function Expenses() {
         startDate: dateRange.startDate,
         endDate: dateRange.endDate
       })
-      setExpenses((data || []).filter(canAccess))
+      setExpenses((data || []).filter(canViewExpense))
     } catch (error) {
       toast.error('Error al cargar los gastos')
     } finally {
@@ -291,7 +295,7 @@ export default function Expenses() {
         startDate: getLocalDateString(start),
         endDate: getLocalDateString(end),
       })
-      setLast6MonthsExpenses((data || []).filter(canAccess))
+      setLast6MonthsExpenses((data || []).filter(canViewExpense))
     } catch (err) {
       console.error('Error cargando gastos 6 meses:', err)
     }
