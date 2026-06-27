@@ -46,7 +46,7 @@ import {
 } from '@/services/quotationService'
 import { createInvoice, getCompanySettings, getNextDocumentNumber } from '@/services/firestoreService'
 import { generateQuotationPDF, previewQuotationPDF } from '@/utils/quotationPdfGenerator'
-import { printQuotationTicket, getPrinterConfig } from '@/services/thermalPrinterService'
+import { printQuotationTicket, getPrinterConfig, connectPrinter } from '@/services/thermalPrinterService'
 import InvoiceTicket from '@/components/InvoiceTicket'
 import { generateQuotationsExcel } from '@/services/quotationExportService'
 import { preloadLogo } from '@/utils/pdfGenerator'
@@ -438,22 +438,27 @@ export default function Quotations() {
     }
 
     if (Capacitor.isNativePlatform()) {
-      // Leer ancho de papel guardado por el dispositivo (58 o 80mm)
-      let paperWidth = 58
       try {
-        const saved = localStorage.getItem('factuya_printerConfig')
-        if (saved) {
-          const cfg = JSON.parse(saved)
-          if (cfg.paperWidth === 58 || cfg.paperWidth === 80) paperWidth = cfg.paperWidth
+        // CONECTAR primero (igual que POS / Ventas / GRE). El modelo es conecta→imprime→
+        // suelta, así que SIEMPRE hay que conectar antes de imprimir. Antes la cotización
+        // NO conectaba → `isPrinterConnected` casi siempre false → "no hay impresora
+        // conectada" aunque sí estuviera configurada. Ahora también gana los reintentos.
+        const printerConfigResult = await getPrinterConfig(getBusinessId())
+        if (!printerConfigResult.success || !printerConfigResult.config?.enabled || !printerConfigResult.config?.address) {
+          toast.error('No hay una impresora configurada. Configúrala desde Configuración > Impresora.', 5000)
+          return
         }
-      } catch { /* usar default */ }
+        const paperWidth = printerConfigResult.config.paperWidth || 58
 
-      try {
+        const connectResult = await connectPrinter(printerConfigResult.config.address)
+        if (!connectResult.success) {
+          toast.error('No se pudo conectar a la impresora: ' + (connectResult.error || ''), 5000)
+          return
+        }
+
         const result = await printQuotationTicket(quotation, companySettings, paperWidth)
         if (result?.success) {
           toast.success('Cotización enviada a la ticketera')
-        } else if (result?.error === 'Printer not connected') {
-          toast.error('No hay una impresora conectada. Conéctala desde Configuración > Impresora.', 5000)
         } else {
           toast.error(result?.error || 'No se pudo imprimir la cotización')
         }

@@ -194,6 +194,21 @@ export const scanPrinters = async () => {
       }
     }
 
+    // Dispositivos YA EMPAREJADOS del sistema (incl. los que emparejó RawBT u otra app),
+    // que el descubrimiento NO detecta. Así aparecen solos, sin copiar la MAC a mano.
+    try {
+      const bondedResult = await BLEPrinter.getBondedDevices();
+      for (const bd of (bondedResult.devices || [])) {
+        const addr = bd.address || bd.deviceId;
+        if (addr && !devices.find(d => d.address === addr)) {
+          devices.push({ address: addr, name: bd.name || 'Impresora emparejada', bonded: true });
+          console.log('✅ Dispositivo emparejado agregado:', bd.name, addr);
+        }
+      }
+    } catch (bondedError) {
+      console.warn('No se pudieron listar dispositivos emparejados:', bondedError);
+    }
+
     console.log(`📊 Total de dispositivos encontrados: ${devices.length}`);
     if (devices.length > 0) {
       console.log('Dispositivos:', devices);
@@ -412,25 +427,39 @@ export const connectPrinter = async (address) => {
         }
       }
 
-      // En Android, intentar primero Bluetooth Clásico, luego BLE como fallback
+      // En Android, intentar primero Bluetooth Clásico (con REINTENTOS), luego BLE.
+      // Mantenemos el modelo conecta→imprime→suelta (no reusamos la conexión) para que
+      // varias tablets compartan la MISMA ticketera. El problema: si otra tablet/app
+      // (ej. RawBT) tiene la impresora OCUPADA, el connect falla a la primera. Con
+      // reintentos de espera creciente, la tablet "hace cola" hasta que se libera, en
+      // vez de rendirse (antes: chocaban y una fallaba; ahora: se encolan).
       console.log('🔵 Android: Conectando via Bluetooth Clásico...');
       let classicSuccess = false;
-      try {
-        const result = await CapacitorThermalPrinter.connect({ address });
-        console.log('📋 Resultado de connect():', result);
-
-        // Solo marcar como conectado si el resultado no es null
-        if (result !== null && result !== undefined) {
-          classicSuccess = true;
-          isPrinterConnected = true;
-          connectedPrinterAddress = address;
-          connectionType = 'bluetooth';
-          useAlternativeBLE = false;
-          console.log('✅ Printer connected (clásico):', address);
-          return { success: true, address, type: 'bluetooth' };
+      const classicWaits = [0, 600, 1200, 2000]; // 4 intentos (~3.8s de espera acumulada)
+      for (let attempt = 0; attempt < classicWaits.length && !classicSuccess; attempt++) {
+        if (classicWaits[attempt] > 0) {
+          console.log(`⏳ Impresora ocupada/no responde, reintentando (intento ${attempt + 1})...`);
+          await new Promise(r => setTimeout(r, classicWaits[attempt]));
         }
-      } catch (classicError) {
-        console.warn('⚠️ Bluetooth Clásico falló:', classicError.message);
+        try {
+          const result = await CapacitorThermalPrinter.connect({ address });
+          console.log('📋 Resultado de connect():', result);
+
+          // Solo marcar como conectado si el resultado no es null (null = no conectó,
+          // normalmente porque la impresora está ocupada por otra tablet/app).
+          if (result !== null && result !== undefined) {
+            classicSuccess = true;
+            isPrinterConnected = true;
+            connectedPrinterAddress = address;
+            connectionType = 'bluetooth';
+            useAlternativeBLE = false;
+            console.log('✅ Printer connected (clásico):', address);
+            return { success: true, address, type: 'bluetooth' };
+          }
+        } catch (classicError) {
+          console.warn(`⚠️ Bluetooth Clásico falló (intento ${attempt + 1}):`, classicError.message);
+          // "Printer already connecting!" u ocupada → esperar y reintentar.
+        }
       }
 
       // Fallback: intentar conexión BLE (para impresoras como Tiny Print que solo soportan BLE)
@@ -456,7 +485,7 @@ export const connectPrinter = async (address) => {
 
         isPrinterConnected = false;
         connectedPrinterAddress = null;
-        return { success: false, error: 'No se pudo conectar a la impresora (ni clásico ni BLE)' };
+        return { success: false, error: 'No se pudo conectar a la impresora. Verifica que esté encendida y que no la esté usando otra app (ej. RawBT) u otra tablet. Intenta de nuevo.' };
       }
     }
   } catch (error) {

@@ -95,6 +95,33 @@ export const scanBLEDevices = async (timeout = 15000) => {
   }
 };
 
+/**
+ * Lista los dispositivos Bluetooth YA EMPAREJADOS del sistema (solo Android), incluidas
+ * las impresoras emparejadas por otra app (ej. RawBT) que el escaneo por DESCUBRIMIENTO
+ * NO detecta (quedan "bonded", no salen en discovery → por eso había que copiar la MAC
+ * a mano). Usa BleClient.getBondedDevices() (disponible solo en Android).
+ */
+export const getBondedDevices = async () => {
+  try {
+    if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'android') {
+      return { success: true, devices: [] };
+    }
+    await initializeBLE();
+    const bonded = await BleClient.getBondedDevices();
+    const devices = (bonded || []).map(d => ({
+      deviceId: d.deviceId,
+      address: d.deviceId,
+      name: d.name || 'Impresora emparejada',
+      bonded: true,
+    }));
+    console.log(`📋 Dispositivos emparejados (bonded): ${devices.length}`);
+    return { success: true, devices };
+  } catch (error) {
+    console.warn('No se pudieron obtener dispositivos emparejados:', error);
+    return { success: false, devices: [] };
+  }
+};
+
 // Cache de dispositivos escaneados
 let scannedDevices = new Map();
 
