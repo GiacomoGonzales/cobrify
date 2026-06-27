@@ -594,11 +594,27 @@ export const saveDocumentPrinterConfig = (config) => {
   localStorage.setItem('factuya_documentPrinterConfig', JSON.stringify(config));
 };
 
+// Impresora de Caja COMPARTIDA por negocio (Firestore). Si está configurada, tiene
+// PRIORIDAD sobre la impresora de documentos local (localStorage). Se carga al iniciar
+// (MainLayout) y se actualiza al guardar en Configuración. Si es null, todo se comporta
+// igual que antes (cae a la config local) → retrocompatible.
+let businessCajaPrinter = null;
+export const setBusinessCajaPrinter = (config) => {
+  businessCajaPrinter = (config && config.enabled && config.ip) ? config : null;
+};
+export const getBusinessCajaPrinter = () => businessCajaPrinter;
+
 /**
- * Obtener configuración de impresora de documentos desde localStorage
+ * Obtener configuración de impresora de documentos/CAJA.
+ * Prioridad: (1) Impresora de Caja COMPARTIDA por negocio (Firestore, en memoria);
+ * (2) impresora de documentos LOCAL de este dispositivo (localStorage, comportamiento
+ * anterior). Así, si el negocio configuró la caja compartida, cualquier dispositivo la usa.
  * @returns {Object|null}
  */
 export const getDocumentPrinterConfig = () => {
+  if (businessCajaPrinter && businessCajaPrinter.enabled && businessCajaPrinter.ip) {
+    return businessCajaPrinter;
+  }
   try {
     return JSON.parse(localStorage.getItem('factuya_documentPrinterConfig') || 'null');
   } catch {

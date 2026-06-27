@@ -103,6 +103,20 @@ export default function MainLayout() {
     })
   }, [user?.uid, isOnlineOrdersMode, getBusinessId])
 
+  // Cargar la Impresora de Caja COMPARTIDA por negocio (Firestore) hacia el servicio de
+  // impresión, para que cualquier dispositivo imprima los comprobantes en la misma caja.
+  // Si el negocio no la configuró, queda null → se usa la impresora local (como antes).
+  useEffect(() => {
+    if (!user?.uid) return
+    getCompanySettings(getBusinessId()).then(result => {
+      if (result?.success && result.data) {
+        import('@/services/thermalPrinterService')
+          .then(m => m.setBusinessCajaPrinter(result.data.cajaPrinter || null))
+          .catch(() => {})
+      }
+    }).catch(() => {})
+  }, [user?.uid, getBusinessId])
+
   // react-to-print para impresión web
   const handleAlertWebPrint = useReactToPrint({
     contentRef: alertKitchenTicketRef,

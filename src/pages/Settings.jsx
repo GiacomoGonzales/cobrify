@@ -41,7 +41,8 @@ import {
   testPrinter,
   isIminDevice,
   saveDocumentPrinterConfig,
-  getDocumentPrinterConfig
+  getDocumentPrinterConfig,
+  setBusinessCajaPrinter
 } from '@/services/thermalPrinterService'
 import { getWarehouses } from '@/services/warehouseService'
 import { getAllWarehouseSeries, updateWarehouseSeries, getAllBranchSeriesFS, updateBranchSeriesFS, getProductCategories, getProducts, updateProduct } from '@/services/firestoreService'
@@ -1372,10 +1373,16 @@ export default function Settings() {
           }))
         }
 
-        // Cargar configuración de impresora de documentos
-        const savedDocPrinter = getDocumentPrinterConfig()
-        if (savedDocPrinter) {
-          setDocumentPrinterConfig(savedDocPrinter)
+        // Cargar configuración de la Impresora de Caja.
+        // Prioridad: la COMPARTIDA del negocio (Firestore); si no, la local del dispositivo.
+        if (businessData.cajaPrinter) {
+          setDocumentPrinterConfig(businessData.cajaPrinter)
+          setBusinessCajaPrinter(businessData.cajaPrinter.enabled ? businessData.cajaPrinter : null)
+        } else {
+          const savedDocPrinter = getDocumentPrinterConfig()
+          if (savedDocPrinter) {
+            setDocumentPrinterConfig(savedDocPrinter)
+          }
         }
 
         // Detectar si es dispositivo iMin
@@ -2396,6 +2403,17 @@ export default function Settings() {
     }
   }
 
+  // Persiste la Impresora de Caja COMPARTIDA por negocio (Firestore) + cache del servicio,
+  // para que TODOS los dispositivos impriman los comprobantes en la misma caja.
+  const persistSharedCajaPrinter = async (config) => {
+    try {
+      await setDoc(doc(db, 'businesses', getBusinessId()), { cajaPrinter: config }, { merge: true })
+    } catch (e) {
+      console.warn('No se pudo guardar la impresora de caja compartida:', e)
+    }
+    try { setBusinessCajaPrinter(config?.enabled ? config : null) } catch (e) { void e }
+  }
+
   // Conectar impresora de documentos (precuentas y boletas)
   const handleDocPrinterConnect = async () => {
     if (!docPrinterIp.trim()) {
@@ -2449,8 +2467,9 @@ export default function Settings() {
       }
       setDocumentPrinterConfig(newConfig)
       saveDocumentPrinterConfig(newConfig)
+      await persistSharedCajaPrinter(newConfig)
 
-      toast.success('Impresora de documentos configurada exitosamente')
+      toast.success('Impresora de Caja configurada (compartida con todos los dispositivos)')
       setShowDocPrinterForm(false)
       setDocPrinterIp('')
       setDocPrinterPort('9100')
@@ -2542,21 +2561,23 @@ export default function Settings() {
     }
   }
 
-  // Deshabilitar impresora de documentos
-  const handleDisableDocPrinter = () => {
+  // Deshabilitar impresora de caja
+  const handleDisableDocPrinter = async () => {
     const newConfig = { enabled: false, ip: '', port: 9100, name: '', paperWidth: 58 }
     setDocumentPrinterConfig(newConfig)
     saveDocumentPrinterConfig(newConfig)
+    await persistSharedCajaPrinter(newConfig)
     setShowDocPrinterForm(false)
-    toast.success('Impresora de documentos deshabilitada')
+    toast.success('Impresora de Caja deshabilitada')
   }
 
-  // Cambiar ancho de papel de impresora de documentos
-  const handleDocPaperWidth = (newWidth) => {
+  // Cambiar ancho de papel de la impresora de caja
+  const handleDocPaperWidth = async (newWidth) => {
     const newConfig = { ...documentPrinterConfig, paperWidth: parseInt(newWidth) }
     setDocumentPrinterConfig(newConfig)
     saveDocumentPrinterConfig(newConfig)
-    toast.success(`Ancho de papel de impresora de documentos actualizado a ${newWidth}mm`)
+    await persistSharedCajaPrinter(newConfig)
+    toast.success(`Ancho de papel de la Impresora de Caja actualizado a ${newWidth}mm`)
   }
 
   // Conectar impresora interna iMin
@@ -9104,6 +9125,9 @@ export default function Settings() {
                         Es la ticketera de la CAJA. Configura aquí su IP para imprimir
                         <strong> comprobantes (boletas/facturas) y precuentas</strong> en ella.
                         La impresora principal sigue para las comandas de cocina.
+                      </p>
+                      <p className="mt-1 text-green-700 font-medium">
+                        ✓ Se configura UNA vez y se comparte con todas las tablets y la PC del negocio: el comprobante siempre sale por esta caja, cobres desde donde cobres.
                       </p>
                       <p className="mt-1">
                         <strong>Si no configuras esta impresora</strong>, los comprobantes y precuentas salen en la impresora principal, como siempre.
