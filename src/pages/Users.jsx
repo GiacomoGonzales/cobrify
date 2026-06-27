@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Users as UsersIcon, Plus, Edit2, Shield, Loader2, Eye, EyeOff, UserCheck, Warehouse, Store, CheckCircle2, XCircle, ChevronDown, ChevronRight, DollarSign, Briefcase, Bell, Key } from 'lucide-react'
+import { Users as UsersIcon, Plus, Edit2, Shield, Loader2, Eye, EyeOff, UserCheck, Warehouse, Store, CheckCircle2, XCircle, ChevronDown, ChevronRight, DollarSign, Briefcase, Bell, Key, Trash2, AlertTriangle } from 'lucide-react'
 import { EMPLOYMENT_TYPES, HR_STATUSES } from '@/services/personnelService'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -19,6 +19,7 @@ import {
   updateUserData,
   toggleUserStatus,
   resetSubUserPassword,
+  deleteManagedUser,
   CATEGORY_NAMES,
 } from '@/services/userManagementService'
 import { getWarehouses } from '@/services/warehouseService'
@@ -47,6 +48,10 @@ export default function Users() {
   const [resetPasswordConfirm, setResetPasswordConfirm] = useState('')
   const [resetLoading, setResetLoading] = useState(false)
   const [showResetPassword, setShowResetPassword] = useState(false)
+  // Modal de eliminar sub-usuario
+  const [deleteTargetUser, setDeleteTargetUser] = useState(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [deleteConfirmChecked, setDeleteConfirmChecked] = useState(false)
   const [selectedPages, setSelectedPages] = useState([])
   const [selectedWarehouses, setSelectedWarehouses] = useState([])
   const [selectedBranches, setSelectedBranches] = useState([])
@@ -606,6 +611,39 @@ export default function Users() {
     }
   }
 
+  // Abrir/cerrar modal de eliminar usuario
+  const openDeleteModal = (userToDelete) => {
+    setDeleteTargetUser(userToDelete)
+    setDeleteConfirmChecked(false)
+  }
+
+  const closeDeleteModal = () => {
+    if (deleteLoading) return
+    setDeleteTargetUser(null)
+    setDeleteConfirmChecked(false)
+  }
+
+  const handleDeleteUser = async () => {
+    if (!deleteTargetUser) return
+    setDeleteLoading(true)
+    try {
+      const result = await deleteManagedUser(deleteTargetUser.id)
+      if (result.success) {
+        toast.success(`Usuario "${deleteTargetUser.displayName || deleteTargetUser.email}" eliminado`)
+        setDeleteTargetUser(null)
+        setDeleteConfirmChecked(false)
+        loadUsers()
+      } else {
+        toast.error(result.error || 'Error al eliminar usuario')
+      }
+    } catch (error) {
+      console.error('Error al eliminar usuario:', error)
+      toast.error('Error al eliminar usuario')
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
+
   // Solo Business Owners pueden ver esta página
   // Super Admins NO deben verla (ellos gestionan negocios, no usuarios de negocio)
   if (!isBusinessOwner || isAdmin) {
@@ -760,6 +798,13 @@ export default function Users() {
                     >
                       <Edit2 className="w-3.5 h-3.5" /> Editar
                     </button>
+                    <button
+                      onClick={() => openDeleteModal(userItem)}
+                      className="flex items-center gap-1 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Eliminar usuario"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Eliminar
+                    </button>
                   </div>
                 </div>
               ))}
@@ -857,6 +902,13 @@ export default function Users() {
                             title="Editar"
                           >
                             <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => openDeleteModal(userItem)}
+                            className="p-2 hover:bg-red-100 text-red-600 rounded-lg transition-colors"
+                            title="Eliminar usuario"
+                          >
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </TableCell>
@@ -1777,6 +1829,65 @@ export default function Users() {
                 <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Actualizando...</>
               ) : (
                 <><Key className="w-4 h-4 mr-2" /> Guardar nueva contraseña</>
+              )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal de Eliminar Usuario */}
+      <Modal
+        isOpen={!!deleteTargetUser}
+        onClose={closeDeleteModal}
+        title="Eliminar usuario"
+      >
+        <div className="space-y-4">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+            <p className="text-sm text-red-900 font-medium flex items-center gap-2">
+              <Trash2 className="w-4 h-4" />
+              {deleteTargetUser?.displayName || deleteTargetUser?.email}
+            </p>
+            <p className="text-xs text-red-700 mt-1">{deleteTargetUser?.email}</p>
+          </div>
+
+          <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-amber-900">
+              <p className="font-medium">Esta acción no se puede deshacer.</p>
+              <p className="mt-1 text-amber-800">
+                Por seguridad, el sistema <strong>no elimina la cuenta de acceso (Firebase Auth)</strong>,
+                solo borra los permisos y datos del usuario. Por eso <strong>no podrás volver a crear
+                un usuario con el mismo correo</strong> ({deleteTargetUser?.email}). Si más adelante
+                necesitas un usuario para esta persona, deberás usar un correo distinto.
+              </p>
+            </div>
+          </div>
+
+          <label className="flex items-start gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={deleteConfirmChecked}
+              onChange={(e) => setDeleteConfirmChecked(e.target.checked)}
+              className="mt-0.5 w-4 h-4 text-red-600 rounded border-gray-300 focus:ring-red-500"
+            />
+            <span className="text-sm text-gray-700">
+              Entiendo que es permanente y que no podré reutilizar este correo.
+            </span>
+          </label>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="outline" onClick={closeDeleteModal} disabled={deleteLoading}>
+              Cancelar
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleDeleteUser}
+              disabled={deleteLoading || !deleteConfirmChecked}
+            >
+              {deleteLoading ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Eliminando...</>
+              ) : (
+                <><Trash2 className="w-4 h-4 mr-2" /> Eliminar usuario</>
               )}
             </Button>
           </div>
