@@ -192,7 +192,7 @@ const PAYMENT_METHODS = [
 ]
 
 export default function CashFlow() {
-  const { user, isDemoMode, hasMainBranchAccess, allowedBranches, allowedWarehouses, isBusinessOwner, isAdmin, filterBranchesByAccess } = useAppContext()
+  const { user, getBusinessId, isDemoMode, hasMainBranchAccess, allowedBranches, allowedWarehouses, isBusinessOwner, isAdmin, filterBranchesByAccess } = useAppContext()
   const canAccess = useLocationAccess()
   const toast = useToast()
   const hidePrivateData = useHidePrivateData()
@@ -287,7 +287,7 @@ export default function CashFlow() {
       return
     }
     try {
-      const result = await getExpenseCategories(user.uid)
+      const result = await getExpenseCategories(getBusinessId())
       if (result.success && Array.isArray(result.data)) {
         setExpenseCategories(result.data)
       }
@@ -318,14 +318,14 @@ export default function CashFlow() {
       const sinceDate = new Date(dateRange.startDate + 'T00:00:00')
 
       const [invoicesRes, expensesData, purchasesRes, loansRes, cashMovementsRes, financialRes, branchesRes, warehousesRes] = await Promise.all([
-        getRecentInvoices(user.uid, sinceDate),
-        getExpenses(user.uid, { startDate: dateRange.startDate, endDate: dateRange.endDate }),
-        getPurchases(user.uid, { sinceDate }),
-        getLoans(user.uid),
-        getAllCashMovements(user.uid, sinceDate),
-        getFinancialMovements(user.uid),
-        getActiveBranches(user.uid),
-        getWarehouses(user.uid)
+        getRecentInvoices(getBusinessId(), sinceDate),
+        getExpenses(getBusinessId(), { startDate: dateRange.startDate, endDate: dateRange.endDate }),
+        getPurchases(getBusinessId(), { sinceDate }),
+        getLoans(getBusinessId()),
+        getAllCashMovements(getBusinessId(), sinceDate),
+        getFinancialMovements(getBusinessId()),
+        getActiveBranches(getBusinessId()),
+        getWarehouses(getBusinessId())
       ])
 
       if (invoicesRes.success) {
@@ -846,7 +846,7 @@ export default function CashFlow() {
         branchId: newMovement.branchId || '',
       }
 
-      const result = await createFinancialMovement(user.uid, movementData)
+      const result = await createFinancialMovement(getBusinessId(), movementData)
       if (result.success) {
         toast.success('Movimiento registrado')
         setShowModal(false)
@@ -872,7 +872,7 @@ export default function CashFlow() {
     if (!confirm('¿Eliminar este movimiento?')) return
 
     try {
-      const result = await deleteFinancialMovement(user.uid, movementId)
+      const result = await deleteFinancialMovement(getBusinessId(), movementId)
       if (result.success) {
         toast.success('Movimiento eliminado')
         loadData()
@@ -901,7 +901,7 @@ export default function CashFlow() {
       if (!isDemoMode && user?.uid) {
         try {
           const { getCompanySettings } = await import('@/services/firestoreService')
-          const r = await getCompanySettings(user.uid)
+          const r = await getCompanySettings(getBusinessId())
           if (r.success) businessData = r.data
         } catch (e) {
           // si falla, seguimos sin businessData

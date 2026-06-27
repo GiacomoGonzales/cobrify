@@ -365,7 +365,7 @@ export default function Customers() {
       } else {
         // Obtener datos del negocio
         const { getCompanySettings } = await import('@/services/firestoreService');
-        const settingsResult = await getCompanySettings(user.uid);
+        const settingsResult = await getCompanySettings(getBusinessId());
         businessData = settingsResult.success ? settingsResult.data : null;
       }
 

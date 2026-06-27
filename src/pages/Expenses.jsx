@@ -147,7 +147,7 @@ const getLocalDateString = (date = new Date()) => {
 }
 
 export default function Expenses() {
-  const { user, isDemoMode, hasMainBranchAccess, businessSettings, allowedBranches, allowedWarehouses, filterBranchesByAccess } = useAppContext()
+  const { user, getBusinessId, isDemoMode, hasMainBranchAccess, businessSettings, allowedBranches, allowedWarehouses, filterBranchesByAccess } = useAppContext()
   // Seguridad: el usuario secundario solo ve gastos de sus sucursales habilitadas
   const canAccess = useLocationAccess()
   // Los gastos GENERALES/corporativos (sin sucursal) NO son de una sede específica, así
@@ -231,7 +231,7 @@ export default function Expenses() {
       return
     }
     try {
-      const result = await getExpenseCategories(user.uid)
+      const result = await getExpenseCategories(getBusinessId())
       if (result.success && Array.isArray(result.data)) {
         setExpenseCategories(result.data)
       }
@@ -247,7 +247,7 @@ export default function Expenses() {
   async function loadBranches() {
     if (isDemoMode) return
     try {
-      const result = await getActiveBranches(user.uid)
+      const result = await getActiveBranches(getBusinessId())
       if (result.success) {
         setBranches(filterBranchesByAccess ? filterBranchesByAccess(result.data || []) : (result.data || []))
       }
@@ -269,7 +269,7 @@ export default function Expenses() {
         return
       }
 
-      const data = await getExpenses(user.uid, {
+      const data = await getExpenses(getBusinessId(), {
         startDate: dateRange.startDate,
         endDate: dateRange.endDate
       })
@@ -291,7 +291,7 @@ export default function Expenses() {
     const start = new Date(today.getFullYear(), today.getMonth() - 5, 1)
     const end = new Date(today.getFullYear(), today.getMonth() + 1, 0)
     try {
-      const data = await getExpenses(user.uid, {
+      const data = await getExpenses(getBusinessId(), {
         startDate: getLocalDateString(start),
         endDate: getLocalDateString(end),
       })
@@ -593,12 +593,12 @@ export default function Expenses() {
       }
 
       if (editingExpense) {
-        await updateExpense(user.uid, editingExpense.id, expenseData)
+        await updateExpense(getBusinessId(), editingExpense.id, expenseData)
         toast.success(isOffline ? 'Cambios encolados · se sincronizarán al reconectar' : 'Gasto actualizado')
       } else {
         // Pasar clientRequestId para idempotencia: múltiples submits del mismo
         // formulario sobrescriben el mismo doc en lugar de crear duplicados.
-        await createExpense(user.uid, { ...expenseData, clientRequestId })
+        await createExpense(getBusinessId(), { ...expenseData, clientRequestId })
         toast.success(isOffline ? 'Gasto encolado · se sincronizará al reconectar' : 'Gasto registrado')
       }
 
@@ -622,7 +622,7 @@ export default function Expenses() {
 
     setDeleting(true)
     try {
-      await deleteExpense(user.uid, expenseId)
+      await deleteExpense(getBusinessId(), expenseId)
       toast.success('Gasto eliminado')
       setShowDeleteConfirm(null)
       loadExpenses()

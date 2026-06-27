@@ -49,7 +49,7 @@ const GLOBAL_DISCOUNT_CODES = ['04', '05', '09']
 const BOLETA_DISALLOWED_CODES = ['04', '05', '08']
 
 export default function CreateCreditNote() {
-  const { user } = useAuth()
+  const { user, getBusinessId } = useAuth()
   const navigate = useNavigate()
   const appNavigate = useAppNavigate()
   const [searchParams] = useSearchParams()
@@ -219,9 +219,9 @@ export default function CreateCreditNote() {
         // PERF: traer solo las 2000 facturas más recientes (no las 20k+ del
         // historial). La nota de crédito referencia comprobantes recientes; con
         // 2000 se cubre el caso real y se evita descargar todo el historial.
-        getInvoicesPage(user.uid, { pageSize: 2000 }),
-        getDocumentSeries(user.uid),
-        getCompanySettings(user.uid)
+        getInvoicesPage(getBusinessId(), { pageSize: 2000 }),
+        getDocumentSeries(getBusinessId()),
+        getCompanySettings(getBusinessId())
       ])
 
       if (invoicesResult.success) {
@@ -481,7 +481,7 @@ export default function CreateCreditNote() {
       //   - false → 'not_sent' (invisible para crones, envío 100% manual)
       let shouldAutoSendToSunat = false
       try {
-        const freshSettings = await getCompanySettings(user.uid)
+        const freshSettings = await getCompanySettings(getBusinessId())
         shouldAutoSendToSunat = freshSettings?.success === true && freshSettings.data?.autoSendToSunat === true
       } catch (settingsErr) {
         console.warn('No se pudo releer companySettings:', settingsErr)
@@ -568,7 +568,7 @@ export default function CreateCreditNote() {
         createdByEmail: user.email || '',
       }
 
-      const result = await createInvoice(user.uid, creditNoteData)
+      const result = await createInvoice(getBusinessId(), creditNoteData)
 
       if (result.success) {
         // Incrementar el número de serie
@@ -579,12 +579,12 @@ export default function CreateCreditNote() {
             lastNumber: nextNumber
           }
         }
-        await updateDocumentSeries(user.uid, updatedSeries)
+        await updateDocumentSeries(getBusinessId(), updatedSeries)
 
         // Envío automático a SUNAT - reutiliza shouldAutoSendToSunat ya leído FRESH.
         if (shouldAutoSendToSunat) {
           console.log('🚀 Enviando Nota de Crédito (externa) automáticamente a SUNAT...')
-          sendCreditNoteToSunat(user.uid, result.id)
+          sendCreditNoteToSunat(getBusinessId(), result.id)
             .then((res) => {
               if (res?.success) {
                 console.log('✅ Nota de Crédito enviada a SUNAT exitosamente')
@@ -685,7 +685,7 @@ export default function CreateCreditNote() {
       // Lectura FRESH de autoSendToSunat para decidir el sunatStatus inicial.
       let shouldAutoSendToSunat = false
       try {
-        const freshSettings = await getCompanySettings(user.uid)
+        const freshSettings = await getCompanySettings(getBusinessId())
         shouldAutoSendToSunat = freshSettings?.success === true && freshSettings.data?.autoSendToSunat === true
       } catch (settingsErr) {
         console.warn('No se pudo releer companySettings:', settingsErr)
@@ -779,7 +779,7 @@ export default function CreateCreditNote() {
         createdByEmail: user.email || '',
       }
 
-      const result = await createInvoice(user.uid, creditNoteData)
+      const result = await createInvoice(getBusinessId(), creditNoteData)
 
       if (result.success) {
         // Incrementar el número de serie después de crear exitosamente
@@ -790,14 +790,14 @@ export default function CreateCreditNote() {
             lastNumber: nextNumber
           }
         }
-        await updateDocumentSeries(user.uid, updatedSeries)
+        await updateDocumentSeries(getBusinessId(), updatedSeries)
 
         // Actualizar la boleta/factura original para marcarla como pendiente de anulación
         // Esto asegura que no se cuente en el Dashboard/Caja hasta que SUNAT procese la NC
         const isFullCancellation = Math.abs(selectedInvoice.total - total) < 0.01
         const newStatus = isFullCancellation ? 'pending_cancellation' : 'partial_refund_pending'
 
-        await updateInvoice(user.uid, selectedInvoice.id, {
+        await updateInvoice(getBusinessId(), selectedInvoice.id, {
           status: newStatus,
           pendingCreditNoteId: result.id,
           pendingCreditNoteNumber: creditNoteNumber,
@@ -835,7 +835,7 @@ export default function CreateCreditNote() {
             const { updateWarehouseStock, createStockMovement } = await import('@/services/warehouseService')
             const { getProducts, updateProduct } = await import('@/services/firestoreService')
 
-            const productsResult = await getProducts(user.uid)
+            const productsResult = await getProducts(getBusinessId())
             const products = productsResult.success ? productsResult.data : []
             const warehouseId = selectedInvoice.warehouseId || ''
 
@@ -904,7 +904,7 @@ export default function CreateCreditNote() {
                   serialsToRestore
                 )
 
-                await createStockMovement(user.uid, {
+                await createStockMovement(getBusinessId(), {
                   productId: item.productId,
                   warehouseId: warehouseId,
                   type: 'entry',
@@ -931,7 +931,7 @@ export default function CreateCreditNote() {
         // Envío automático a SUNAT - reutiliza shouldAutoSendToSunat ya leído FRESH.
         if (shouldAutoSendToSunat) {
           console.log('🚀 Enviando Nota de Crédito automáticamente a SUNAT...')
-          sendCreditNoteToSunat(user.uid, result.id)
+          sendCreditNoteToSunat(getBusinessId(), result.id)
             .then((res) => {
               if (res?.success) {
                 console.log('✅ Nota de Crédito enviada a SUNAT exitosamente')

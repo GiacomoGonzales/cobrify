@@ -26,7 +26,7 @@ const DEBIT_NOTE_REASONS = [
 ]
 
 export default function CreateDebitNote() {
-  const { user } = useAuth()
+  const { user, getBusinessId } = useAuth()
   const navigate = useNavigate()
   const appNavigate = useAppNavigate()
   const [searchParams] = useSearchParams()
@@ -73,9 +73,9 @@ export default function CreateDebitNote() {
     try {
       const [invoicesResult, seriesResult, settingsResult] = await Promise.all([
         // PERF: solo las 2000 facturas más recientes (no las 20k+ del historial).
-        getInvoicesPage(user.uid, { pageSize: 2000 }),
-        getDocumentSeries(user.uid),
-        getCompanySettings(user.uid)
+        getInvoicesPage(getBusinessId(), { pageSize: 2000 }),
+        getDocumentSeries(getBusinessId()),
+        getCompanySettings(getBusinessId())
       ])
 
       if (invoicesResult.success) {
@@ -168,7 +168,7 @@ export default function CreateDebitNote() {
       // Lectura FRESH de autoSendToSunat para decidir sunatStatus inicial.
       let shouldAutoSendToSunat = false
       try {
-        const freshSettings = await getCompanySettings(user.uid)
+        const freshSettings = await getCompanySettings(getBusinessId())
         shouldAutoSendToSunat = freshSettings?.success === true && freshSettings.data?.autoSendToSunat === true
       } catch (settingsErr) {
         console.warn('No se pudo releer companySettings:', settingsErr)
@@ -237,7 +237,7 @@ export default function CreateDebitNote() {
 
       // 1. Crear el documento en Firestore
       setMessage({ type: 'info', text: 'Creando nota de débito...' })
-      const result = await createInvoice(user.uid, debitNoteData)
+      const result = await createInvoice(getBusinessId(), debitNoteData)
 
       if (!result.success) {
         throw new Error(result.error || 'Error al crear la nota de débito')

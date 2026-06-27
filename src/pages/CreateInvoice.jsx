@@ -104,7 +104,7 @@ const UNITS = [
 ]
 
 export default function CreateInvoice() {
-  const { user } = useAuth()
+  const { user, getBusinessId } = useAuth()
   const { businessSettings } = useAppContext()
   const toast = useToast()
   const navigate = useNavigate()
@@ -189,8 +189,8 @@ export default function CreateInvoice() {
     setIsLoading(true)
     try {
       const [customersResult, productsResult] = await Promise.all([
-        getCustomers(user.uid),
-        getProducts(user.uid),
+        getCustomers(getBusinessId()),
+        getProducts(getBusinessId()),
       ])
 
       if (customersResult.success) {
@@ -389,7 +389,7 @@ export default function CreateInvoice() {
       }
 
       // 3. Crear factura con número atómico (garantiza que no se pierdan números)
-      const result = await createInvoiceWithNumber(user.uid, invoiceData, documentType)
+      const result = await createInvoiceWithNumber(getBusinessId(), invoiceData, documentType)
       if (!result.success) {
         throw new Error(result.error || 'Error al crear la factura')
       }
