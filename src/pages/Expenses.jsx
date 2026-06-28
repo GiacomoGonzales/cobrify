@@ -147,7 +147,7 @@ const getLocalDateString = (date = new Date()) => {
 }
 
 export default function Expenses() {
-  const { user, getBusinessId, isDemoMode, hasMainBranchAccess, businessSettings, allowedBranches, allowedWarehouses, filterBranchesByAccess } = useAppContext()
+  const { user, getBusinessId, isDemoMode, hasMainBranchAccess, businessSettings, allowedBranches, allowedWarehouses, filterBranchesByAccess, activeBranchId } = useAppContext()
   // Seguridad: el usuario secundario solo ve gastos de sus sucursales habilitadas
   const canAccess = useLocationAccess()
   // Los gastos GENERALES/corporativos (sin sucursal) NO son de una sede específica, así
@@ -497,7 +497,10 @@ export default function Expenses() {
       reference: '',
       supplier: '',
       notes: '',
-      branchId: '',
+      // Heredar la sucursal activa del selector global (Navbar). Si está en
+      // "Todas"/"Principal" (activeBranchId null), arranca como gasto general.
+      // El usuario igual puede cambiarla en el dropdown del formulario.
+      branchId: activeBranchId || '',
       currency: 'PEN',
       exchangeRate: 1,
     })
