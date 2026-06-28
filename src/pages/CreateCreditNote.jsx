@@ -801,7 +801,10 @@ export default function CreateCreditNote() {
           status: newStatus,
           pendingCreditNoteId: result.id,
           pendingCreditNoteNumber: creditNoteNumber,
-          pendingCreditNoteTotal: total
+          pendingCreditNoteTotal: total,
+          // Idempotencia (Fase 2): si esta NC devuelve TODO el stock, marcar la factura
+          // para que una anulación posterior no lo devuelva otra vez (doble restauración).
+          ...((isFullCancellation && ['01', '06', '07'].includes(formData.discrepancyCode)) ? { stockRestored: true } : {})
         })
 
         // Si la NC es de ANULACIÓN TOTAL y la factura provino de Notas de Venta,
@@ -828,9 +831,11 @@ export default function CreateCreditNote() {
           }
         }
 
-        // Devolver stock si es una devolución o anulación (códigos 01, 06, 07)
+        // Devolver stock si es una devolución o anulación (códigos 01, 06, 07).
+        // Idempotencia (Fase 2): si el stock ya se restauró antes (anulación previa),
+        // NO volver a devolverlo.
         const stockReturnCodes = ['01', '06', '07']
-        if (stockReturnCodes.includes(formData.discrepancyCode)) {
+        if (stockReturnCodes.includes(formData.discrepancyCode) && selectedInvoice.stockRestored !== true) {
           try {
             const { updateWarehouseStock, createStockMovement } = await import('@/services/warehouseService')
             const { getProducts, updateProduct } = await import('@/services/firestoreService')

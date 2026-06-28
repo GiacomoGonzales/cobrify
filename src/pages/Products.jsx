@@ -1305,7 +1305,7 @@ export default function Products() {
         editingProduct &&
         businessSettings?.enableManualStockEdit === true &&
         !noStock &&
-        !(editingProduct.trackExpiration || (Array.isArray(editingProduct.batches) && editingProduct.batches.length > 0))
+        !(editingProduct.trackExpiration || editingProduct.trackSerials || (Array.isArray(editingProduct.batches) && editingProduct.batches.length > 0))
       ) {
         const activeWhs = (warehouses || []).filter(w => w.isActive)
         const changes = []

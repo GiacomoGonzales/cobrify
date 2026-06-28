@@ -60,7 +60,7 @@ import { formatCurrency, formatProductPrice, buildSearchHaystack, matchesPrebuil
 import { getProducts, getProductCategories, getProductBrands, updateProduct, updateProductStockTransaction, getIngredientCategories } from '@/services/firestoreService'
 import { getIngredients, updateIngredient, transferIngredientStock } from '@/services/ingredientService'
 import { generateProductsExcel } from '@/services/productExportService'
-import { getWarehouses, createStockMovement, updateWarehouseStock, getOrphanStockProducts, migrateOrphanStock, getOrphanStock, getDeletedWarehouseStock, getStockMovements, getInventoryCounts, recalculateStockFromMovements, bulkRecalculateStock, getLatestActiveStockBackup, revertStockBackup } from '@/services/warehouseService'
+import { getWarehouses, createStockMovement, updateWarehouseStock, getOrphanStockProducts, migrateOrphanStock, getOrphanStock, getDeletedWarehouseStock, getStockMovements, getInventoryCounts, recalculateStockFromMovements, bulkRecalculateStock, getLatestActiveStockBackup, revertStockBackup, createStockBackup, buildStockBackupItems } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
 import InventoryCountModal from '@/components/InventoryCountModal'
 import InventoryExportModal from '@/components/InventoryExportModal'
@@ -149,7 +149,7 @@ const getRealStockValue = (item) => {
 }
 
 export default function Inventory() {
-  const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings, hasMainBranchAccess, allowedWarehouses } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings, hasMainBranchAccess, allowedWarehouses, isBusinessOwner } = useAppContext()
   const hidePrivateData = useHidePrivateData()
   const { filterWarehousesByAccess } = useAuth()
   const toast = useToast()
@@ -1994,10 +1994,30 @@ export default function Inventory() {
       return
     }
 
+    // Blindaje (Fase 1): solo el dueño, con confirmación y respaldo revertible.
+    if (!isBusinessOwner) {
+      toast.error('Solo el dueño del negocio puede reasignar stock')
+      return
+    }
+    if (!window.confirm(`Vas a reasignar el stock SIN almacén al almacén "${defaultWarehouse.name}". Se creará un respaldo para poder revertir. ¿Continuar?`)) {
+      return
+    }
+
     setIsMigratingOrphanStock(true)
 
     try {
       const businessId = getBusinessId()
+
+      // Respaldo revertible ANTES de tocar nada (botón "Revertir" en Inventario).
+      try {
+        await createStockBackup(businessId, buildStockBackupItems(orphanStockProducts), {
+          userId: user?.uid || null,
+          userName: user?.displayName || user?.email || null,
+          totalChecked: orphanStockProducts.length,
+        })
+      } catch (e) {
+        console.error('No se pudo crear el respaldo antes de migrar:', e)
+      }
       let successCount = 0
       let errorCount = 0
 
@@ -2025,6 +2045,7 @@ export default function Inventory() {
       if (successCount > 0) {
         toast.success(`${successCount} producto(s) migrado(s) exitosamente al almacén "${defaultWarehouse.name}"`)
         loadProducts() // Recargar productos
+        loadLatestStockBackup() // Mostrar el botón "Revertir"
       }
 
       if (errorCount > 0) {
@@ -2094,6 +2115,7 @@ export default function Inventory() {
             <ClipboardCheck className="w-4 h-4 mr-2" />
             Recuento
           </Button>
+          {isBusinessOwner && (
           <Button
             variant="outline"
             size="sm"
@@ -2104,6 +2126,7 @@ export default function Inventory() {
             <Wrench className="w-4 h-4 mr-2" />
             Verificar stock
           </Button>
+          )}
           {/* Botón "Revertir" — solo visible si hay un backup activo (≤ 7 días). */}
           {latestStockBackup && !isDemoMode && (
             <Button
@@ -2230,6 +2253,7 @@ export default function Inventory() {
               El stock no asignado no aparecerá disponible en el Punto de Venta.
             </span>
           </p>
+          {isBusinessOwner && (
           <Button
             size="sm"
             onClick={handleMigrateOrphanStock}
@@ -2247,6 +2271,7 @@ export default function Inventory() {
               </>
             )}
           </Button>
+          )}
         </Alert>
       )}
 

@@ -39,6 +39,8 @@ import {
   updateWarehouse,
   deleteWarehouse,
   syncAllProductsStock,
+  createStockBackup,
+  buildStockBackupItems,
 } from '@/services/warehouseService'
 import { getProducts, getAllBranchSeriesFS, getCompanySettings, updateProduct } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
@@ -56,7 +58,7 @@ const warehouseSchema = z.object({
 })
 
 export default function Warehouses() {
-  const { user, getBusinessId, filterBranchesByAccess, isDemoMode, demoData } = useAppContext()
+  const { user, getBusinessId, filterBranchesByAccess, isDemoMode, demoData, isBusinessOwner } = useAppContext()
   const toast = useToast()
   const [warehouses, setWarehouses] = useState([])
   const [companySettings, setCompanySettings] = useState(null)
@@ -391,9 +393,33 @@ export default function Warehouses() {
       return
     }
 
+    // Blindaje (Fase 1): solo el dueño + respaldo revertible (el preview ya confirma).
+    if (!isBusinessOwner) {
+      toast.error('Solo el dueño del negocio puede sincronizar stock')
+      return
+    }
+
     setIsSyncing(true)
     try {
-      const result = await syncAllProductsStock(getBusinessId(), syncPreview.targetWarehouse.id)
+      const businessId = getBusinessId()
+
+      // Respaldo revertible de los productos que van a cambiar.
+      try {
+        const changedIds = new Set((syncPreview.changes || []).map(c => c.id))
+        const prodRes = await getProducts(businessId)
+        const affected = (prodRes.success ? prodRes.data : []).filter(p => changedIds.has(p.id))
+        if (affected.length > 0) {
+          await createStockBackup(businessId, buildStockBackupItems(affected), {
+            userId: user?.uid || null,
+            userName: user?.displayName || user?.email || null,
+            totalChecked: affected.length,
+          })
+        }
+      } catch (e) {
+        console.error('No se pudo crear el respaldo antes de sincronizar:', e)
+      }
+
+      const result = await syncAllProductsStock(businessId, syncPreview.targetWarehouse.id)
       if (result.success) {
         toast.success(`Stock sincronizado: ${result.synced} producto(s) actualizado(s)`)
         setShowSyncModal(false)
@@ -593,9 +619,30 @@ export default function Warehouses() {
       return
     }
 
+    // Blindaje (Fase 1): solo el dueño, con confirmación y respaldo revertible.
+    if (!isBusinessOwner) {
+      toast.error('Solo el dueño del negocio puede reparar stock')
+      return
+    }
+    if (!window.confirm('Reparar reasigna el stock de este producto al almacén elegido y puede colapsar el reparto entre almacenes. Se creará un respaldo para revertir. ¿Continuar?')) {
+      return
+    }
+
     setIsRepairing(true)
     try {
       const businessId = getBusinessId()
+
+      // Respaldo revertible ANTES de tocar nada (revertir desde Inventario → "Revertir").
+      try {
+        await createStockBackup(businessId, buildStockBackupItems([selectedProduct]), {
+          userId: user?.uid || null,
+          userName: user?.displayName || user?.email || null,
+          totalChecked: 1,
+        })
+      } catch (e) {
+        console.error('No se pudo crear el respaldo antes de reparar:', e)
+      }
+
       let updateData = {}
 
       if (selectedProduct.hasVariants && selectedProduct.variants?.length > 0) {
@@ -783,12 +830,32 @@ export default function Warehouses() {
       return
     }
 
+    // Blindaje (Fase 1): solo el dueño + respaldo revertible.
+    if (!isBusinessOwner) {
+      toast.error('Solo el dueño del negocio puede reparar stock')
+      return
+    }
+
     setIsRepairing(true)
     let repaired = 0
     let errors = 0
 
     try {
       const businessId = getBusinessId()
+
+      // Respaldo revertible de los productos seleccionados.
+      try {
+        const affected = selectedForRepair.map(id => productsWithIssues.find(p => p.id === id)).filter(Boolean)
+        if (affected.length > 0) {
+          await createStockBackup(businessId, buildStockBackupItems(affected), {
+            userId: user?.uid || null,
+            userName: user?.displayName || user?.email || null,
+            totalChecked: affected.length,
+          })
+        }
+      } catch (e) {
+        console.error('No se pudo crear el respaldo antes de reparar:', e)
+      }
 
       for (const productId of selectedForRepair) {
         const product = productsWithIssues.find(p => p.id === productId)
@@ -895,6 +962,7 @@ export default function Warehouses() {
                 <Bug className="w-4 h-4" />
                 Diagnóstico Stock
               </Button>
+              {isBusinessOwner && (
               <Button
                 variant="outline"
                 onClick={() => setShowSyncModal(true)}
@@ -903,6 +971,7 @@ export default function Warehouses() {
                 <RefreshCw className="w-4 h-4" />
                 Sincronizar Stock
               </Button>
+              )}
             </>
           )}
           <Button onClick={openCreateModal} className="flex items-center justify-center gap-2 w-full sm:w-auto">
@@ -1726,6 +1795,7 @@ export default function Warehouses() {
                       </option>
                     ))}
                   </select>
+                  {isBusinessOwner && (
                   <Button
                     onClick={handleBulkRepair}
                     disabled={!bulkRepairWarehouse || isRepairing}
@@ -1743,6 +1813,7 @@ export default function Warehouses() {
                       </>
                     )}
                   </Button>
+                  )}
                 </div>
               )}
             </div>
@@ -1881,6 +1952,7 @@ export default function Warehouses() {
                               </option>
                             ))}
                           </select>
+                          {isBusinessOwner && (
                           <Button
                             onClick={handleRepairProduct}
                             disabled={!repairWarehouseId || isRepairing}
@@ -1898,6 +1970,7 @@ export default function Warehouses() {
                               </>
                             )}
                           </Button>
+                          )}
                         </div>
                       </div>
                     )}

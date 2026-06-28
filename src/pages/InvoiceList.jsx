@@ -682,6 +682,9 @@ Gracias por tu preferencia.`
     }
 
     const businessId = getBusinessId()
+    // Idempotencia (Fase 2): si el stock de este comprobante ya se restauró antes
+    // (p.ej. por una nota de crédito o una anulación previa), NO volver a devolverlo.
+    const alreadyRestored = voidingInvoice.stockRestored === true
     setIsVoiding(true)
     try {
       // Actualizar el estado de la nota de venta a 'cancelled'
@@ -689,7 +692,8 @@ Gracias por tu preferencia.`
         status: 'cancelled',
         voidedAt: new Date(),
         voidReason: voidReason.trim() || 'Sin motivo especificado',
-        voidedBy: user.email || user.uid
+        voidedBy: user.email || user.uid,
+        stockRestored: true,
       }
 
       const result = await updateInvoice(businessId, voidingInvoice.id, voidData)
@@ -715,14 +719,16 @@ Gracias por tu preferencia.`
           const hasSaleMovements = allMovements.some(m =>
             m.referenceId === voidingInvoice.id && m.type === 'sale'
           )
-          if (!hasSaleMovements) {
+          if (alreadyRestored) {
+            toast.info('El stock de este comprobante ya había sido restaurado antes (no se duplica).')
+          } else if (!hasSaleMovements) {
             toast.warning(
               'La venta original no registró movimientos de stock. No se devolvió stock al anular para evitar descuadre. Revisá el inventario manualmente.',
               8000
             )
           }
 
-          for (const item of hasSaleMovements ? voidingInvoice.items : []) {
+          for (const item of (hasSaleMovements && !alreadyRestored) ? voidingInvoice.items : []) {
             if (item.productId) {
               try {
                 // Buscar el producto actual
@@ -828,7 +834,7 @@ Gracias por tu preferencia.`
             const { restoreIngredients } = await import('@/services/ingredientService')
 
             // Mismo guard de idempotencia que el stock de producto.
-            for (const item of hasSaleMovements ? voidingInvoice.items : []) {
+            for (const item of (hasSaleMovements && !alreadyRestored) ? voidingInvoice.items : []) {
               if (!item.productId || item.isCustom) continue
               try {
                 const recipeResult = await getRecipeByProductId(businessId, item.productId)
@@ -979,6 +985,8 @@ Gracias por tu preferencia.`
           const productsResult = await getProducts(businessId)
           const products = productsResult.success ? productsResult.data : []
           const warehouseId = voidingSunatInvoice.warehouseId || ''
+          // Idempotencia (Fase 2): no devolver stock si ya se restauró (NC/anulación previa).
+          const alreadyRestored = voidingSunatInvoice.stockRestored === true
 
           // Idempotencia: solo devolver stock si la venta original registró movimientos.
           // Si no los registró (por bug o conversión desde nota de venta sin mov.), devolver
@@ -989,7 +997,9 @@ Gracias por tu preferencia.`
             m.referenceId === voidingSunatInvoice.id && m.type === 'sale'
           )
 
-          if (!hasSaleMovements) {
+          if (alreadyRestored) {
+            toast.info('El stock de este comprobante ya había sido restaurado antes (no se duplica).')
+          } else if (!hasSaleMovements) {
             console.warn(`⚠️ Venta ${voidingSunatInvoice.number} sin movimientos de stock originales. Se omite la devolución para evitar descuadre.`)
             toast.warning(
               'La venta original no registró movimientos de stock. No se devolvió stock al anular para evitar descuadre. Revisá el inventario manualmente.',
@@ -997,7 +1007,7 @@ Gracias por tu preferencia.`
             )
           }
 
-          for (const item of hasSaleMovements ? voidingSunatInvoice.items : []) {
+          for (const item of (hasSaleMovements && !alreadyRestored) ? voidingSunatInvoice.items : []) {
             if (item.productId) {
               try {
                 const productData = products.find(p => p.id === item.productId)
@@ -1089,7 +1099,7 @@ Gracias por tu preferencia.`
 
             // Mismo guard de idempotencia que el stock de producto: si la venta original no
             // registró movimientos, NO restaurar insumos (evita doble restauración / inflado).
-            for (const item of hasSaleMovements ? voidingSunatInvoice.items : []) {
+            for (const item of (hasSaleMovements && !alreadyRestored) ? voidingSunatInvoice.items : []) {
               if (!item.productId || item.isCustom) continue
               try {
                 const recipeResult = await getRecipeByProductId(businessId, item.productId)
@@ -1177,6 +1187,7 @@ Gracias por tu preferencia.`
         } else {
           toast.success(`${docTypeName} anulada exitosamente en SUNAT.${voidingSunatInvoice.convertedFrom ? ' Notas de venta revertidas.' : ''} Stock restaurado.`)
         }
+        try { await updateInvoice(businessId, voidingSunatInvoice.id, { stockRestored: true }) } catch (e) { /* flag no crítico */ }
         setVoidingSunatInvoice(null)
         setVoidSunatReason('')
         loadInvoices()

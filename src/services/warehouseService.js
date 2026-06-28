@@ -156,30 +156,57 @@ export const updateWarehouse = async (businessId, warehouseId, warehouseData) =>
  */
 export const deleteWarehouse = async (businessId, warehouseId) => {
   try {
-    // Verificar que no tenga productos con stock en este almacén
+    // Verificar que no tenga stock vivo en este almacén — contemplando warehouseStocks,
+    // VARIANTES, LOTES y SERIES (Fase 2). Antes solo miraba product.warehouseStocks, lo
+    // que permitía borrar un almacén con stock vivo en variantes/lotes/series → dejaba
+    // ese stock huérfano (apuntando a un almacén inexistente).
+    const stockInThisWarehouse = (p) => {
+      let total = 0
+      ;(p.warehouseStocks || []).forEach(ws => { if (ws.warehouseId === warehouseId) total += (ws.stock || 0) })
+      if (p.hasVariants && Array.isArray(p.variants)) {
+        p.variants.forEach(v => (v.warehouseStocks || []).forEach(ws => { if (ws.warehouseId === warehouseId) total += (ws.stock || 0) }))
+      }
+      if (Array.isArray(p.batches)) {
+        p.batches.forEach(b => { if (b.warehouseId === warehouseId) total += (b.quantity || 0) })
+      }
+      if (Array.isArray(p.serials)) {
+        p.serials.forEach(s => { if (s.warehouseId === warehouseId && s.status === 'available') total += 1 })
+      }
+      return total
+    }
+
     const productsRef = collection(db, 'businesses', businessId, 'products')
     const productsSnapshot = await getDocs(productsRef)
 
     const productsWithStock = []
-    productsSnapshot.forEach((doc) => {
-      const product = doc.data()
-      const warehouseStocks = product.warehouseStocks || []
-      const stockInWarehouse = warehouseStocks.find(ws => ws.warehouseId === warehouseId)
-
-      if (stockInWarehouse && stockInWarehouse.stock > 0) {
-        productsWithStock.push({
-          id: doc.id,
-          name: product.name,
-          stock: stockInWarehouse.stock
-        })
+    productsSnapshot.forEach((docSnap) => {
+      const product = docSnap.data()
+      const qty = stockInThisWarehouse(product)
+      if (qty > 0) {
+        productsWithStock.push({ id: docSnap.id, name: product.name, stock: qty })
       }
     })
 
-    // Si hay productos con stock, no permitir eliminar
+    // También revisar insumos (ingredientes) con stock en este almacén.
+    try {
+      const ingredientsRef = collection(db, 'businesses', businessId, 'ingredients')
+      const ingredientsSnapshot = await getDocs(ingredientsRef)
+      ingredientsSnapshot.forEach((docSnap) => {
+        const ing = docSnap.data()
+        const qty = (ing.warehouseStocks || []).reduce((s, ws) => ws.warehouseId === warehouseId ? s + (ws.stock || 0) : s, 0)
+        if (qty > 0) {
+          productsWithStock.push({ id: docSnap.id, name: ing.name || 'Insumo', stock: qty })
+        }
+      })
+    } catch (e) {
+      console.warn('No se pudieron revisar insumos al eliminar almacén:', e)
+    }
+
+    // Si hay productos/insumos con stock, no permitir eliminar
     if (productsWithStock.length > 0) {
       return {
         success: false,
-        error: `No se puede eliminar el almacén porque tiene ${productsWithStock.length} producto(s) con stock. Transfiere el stock a otro almacén primero.`,
+        error: `No se puede eliminar el almacén porque tiene ${productsWithStock.length} producto(s)/insumo(s) con stock (incluye variantes, lotes y series). Transfiere el stock a otro almacén primero.`,
         productsWithStock
       }
     }
@@ -1399,6 +1426,23 @@ const STOCK_BACKUP_TTL_DAYS = 7
  * @param {object} metadata - { userId, userName, totalChecked, totalCorrected }
  * @returns {Promise<string>} - ID del backup creado
  */
+// Construye los items de backup (snapshot completo) a partir de una lista de
+// productos/insumos, para pasarlos a createStockBackup. Incluye variantes, lotes
+// y series para que el revert sea TOTAL (revertStockBackup los restaura si están).
+export const buildStockBackupItems = (items = [], isIngredient = false) => {
+  return (items || []).filter(Boolean).map((p) => {
+    const snap = {
+      stock: isIngredient ? null : (p.stock ?? null),
+      currentStock: isIngredient ? (p.currentStock ?? null) : null,
+      warehouseStocks: JSON.parse(JSON.stringify(p.warehouseStocks || [])),
+    }
+    if (p.variants) snap.variants = JSON.parse(JSON.stringify(p.variants))
+    if (p.batches) snap.batches = JSON.parse(JSON.stringify(p.batches))
+    if (p.serials) snap.serials = JSON.parse(JSON.stringify(p.serials))
+    return { id: p.id, name: p.name || p.id, isIngredient, previousSnapshot: snap }
+  })
+}
+
 export const createStockBackup = async (businessId, backupItems, metadata = {}) => {
   if (!Array.isArray(backupItems) || backupItems.length === 0) {
     throw new Error('createStockBackup: backupItems vacío')
@@ -1564,6 +1608,12 @@ export const revertStockBackup = async (businessId, backupId, options = {}) => {
           }
           if (snapshot.variants) {
             updateData.variants = snapshot.variants
+          }
+          if (snapshot.batches) {
+            updateData.batches = snapshot.batches
+          }
+          if (snapshot.serials) {
+            updateData.serials = snapshot.serials
           }
           await updateDoc(itemRef, updateData)
           restored += 1
