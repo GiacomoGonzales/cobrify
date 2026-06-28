@@ -980,6 +980,118 @@ export const updateProductStockTransaction = async (userId, productId, warehouse
 }
 
 /**
+ * Transferencia ATÓMICA de stock de un producto entre dos almacenes.
+ * Hace la salida del origen y la entrada al destino en UNA sola transacción que lee
+ * el producto FRESCO y mueve warehouseStocks + lotes (del lote indicado, FEFO implícito
+ * por lote) + series + variantes juntos. Evita: (a) stock evaporado si fallaba el 2º paso
+ * (antes eran 2 transacciones), (b) clobber de lotes por snapshot viejo (varios lotes del
+ * mismo producto en la misma operación), (c) descuadre lote↔warehouseStocks.
+ * @param {object} options - { variantSku, batchNumber, isNoLot, serialNumbers, allowNegative }
+ */
+export const transferProductStockTransaction = async (userId, productId, fromWarehouseId, toWarehouseId, quantity, options = {}) => {
+  const { variantSku = null, batchNumber = null, isNoLot = false, serialNumbers = [], allowNegative = true } = options
+  if (!fromWarehouseId || !toWarehouseId || fromWarehouseId === toWarehouseId) {
+    return { success: false, error: 'Almacén origen/destino inválido' }
+  }
+  try {
+    const docRef = doc(db, 'businesses', userId, 'products', productId)
+    await runTransaction(db, async (transaction) => {
+      const productDoc = await transaction.get(docRef)
+      if (!productDoc.exists()) throw new Error('Producto no encontrado')
+      const product = productDoc.data()
+      if (product.trackStock === false) return
+
+      const updateData = { updatedAt: serverTimestamp() }
+
+      // --- VARIANTES: mover en variant.warehouseStocks y reagregar a nivel producto ---
+      if (product.hasVariants && variantSku && product.variants?.length > 0) {
+        const variants = [...product.variants]
+        const vIdx = variants.findIndex(v => v.sku === variantSku)
+        if (vIdx === -1) { console.warn(`Variante ${variantSku} no encontrada en ${productId}`); return }
+        const variant = { ...variants[vIdx] }
+        const vws = [...(variant.warehouseStocks || [])]
+        const moveWs = (whId, delta) => {
+          const i = vws.findIndex(ws => ws.warehouseId === whId)
+          if (i >= 0) { const s = (vws[i].stock || 0) + delta; vws[i] = { ...vws[i], stock: allowNegative ? s : Math.max(0, s) } }
+          else { vws.push({ warehouseId: whId, stock: delta, minStock: 0 }) }
+        }
+        moveWs(fromWarehouseId, -quantity)
+        moveWs(toWarehouseId, quantity)
+        variant.warehouseStocks = vws
+        variant.stock = vws.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+        variants[vIdx] = variant
+
+        const agg = {}
+        variants.forEach(v => (v.warehouseStocks || []).forEach(ws => { if (ws.warehouseId) agg[ws.warehouseId] = (agg[ws.warehouseId] || 0) + (ws.stock || 0) }))
+        const existingPWS = product.warehouseStocks || []
+        const pws = []; const seen = new Set()
+        existingPWS.forEach(ws => { if (!ws.warehouseId) return; seen.add(ws.warehouseId); pws.push({ ...ws, stock: agg[ws.warehouseId] || 0 }) })
+        Object.entries(agg).forEach(([w, st]) => { if (!seen.has(w)) pws.push({ warehouseId: w, stock: st, minStock: 0 }) })
+        updateData.variants = variants
+        updateData.warehouseStocks = pws
+        updateData.stock = variants.reduce((sum, v) => sum + (v.stock || 0), 0)
+        transaction.update(docRef, updateData)
+        return
+      }
+
+      // --- NORMAL: warehouseStocks (salida + entrada) ---
+      const ws = [...(product.warehouseStocks || [])]
+      const moveWs = (whId, delta) => {
+        const i = ws.findIndex(x => x.warehouseId === whId)
+        if (i >= 0) { const s = (ws[i].stock || 0) + delta; ws[i] = { ...ws[i], stock: allowNegative ? s : Math.max(0, s) } }
+        else { ws.push({ warehouseId: whId, stock: delta, minStock: 0 }) }
+      }
+      moveWs(fromWarehouseId, -quantity)
+      moveWs(toWarehouseId, quantity)
+      updateData.warehouseStocks = ws
+      updateData.stock = ws.reduce((sum, x) => sum + (x.stock || 0), 0)
+
+      // --- LOTES: mover el lote indicado del origen al destino (datos FRESCOS) ---
+      if (!isNoLot && batchNumber && Array.isArray(product.batches) && product.batches.length > 0) {
+        let batches = product.batches.map(b => ({ ...b }))
+        const bId = (b) => b.lotNumber || b.batchNumber || b.id
+        const srcBatch = batches.find(b => bId(b) === batchNumber && (b.warehouseId === fromWarehouseId || !b.warehouseId))
+        if (srcBatch) {
+          srcBatch.quantity = (srcBatch.quantity || 0) - quantity
+          srcBatch.warehouseId = srcBatch.warehouseId || fromWarehouseId
+        }
+        const destBatch = batches.find(b => bId(b) === batchNumber && b.warehouseId === toWarehouseId)
+        if (destBatch) {
+          destBatch.quantity = (destBatch.quantity || 0) + quantity
+        } else {
+          const meta = srcBatch || {}
+          batches.push({
+            ...meta,
+            id: `batch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            batchNumber: meta.batchNumber || batchNumber,
+            lotNumber: meta.lotNumber || batchNumber,
+            quantity,
+            warehouseId: toWarehouseId,
+          })
+        }
+        updateData.batches = batches.filter(b => (b.quantity || 0) > 0)
+      }
+
+      // --- SERIES: cambiar warehouseId del origen al destino ---
+      if (serialNumbers && serialNumbers.length > 0 && Array.isArray(product.serials)) {
+        const wanted = new Set(serialNumbers)
+        updateData.serials = product.serials.map(s =>
+          (wanted.has(s.serialNumber) && s.status === 'available' && (s.warehouseId === fromWarehouseId || !s.warehouseId))
+            ? { ...s, warehouseId: toWarehouseId }
+            : s
+        )
+      }
+
+      transaction.update(docRef, updateData)
+    })
+    return { success: true }
+  } catch (error) {
+    console.error('Error en transferencia atómica de stock:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * Eliminar un producto
  * Verifica que el producto no tenga stock antes de eliminarlo
  */

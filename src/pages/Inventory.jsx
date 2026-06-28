@@ -57,7 +57,7 @@ import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency, formatProductPrice, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
-import { getProducts, getProductCategories, getProductBrands, updateProduct, updateProductStockTransaction, getIngredientCategories } from '@/services/firestoreService'
+import { getProducts, getProductCategories, getProductBrands, updateProduct, updateProductStockTransaction, transferProductStockTransaction, getIngredientCategories } from '@/services/firestoreService'
 import { getIngredients, updateIngredient, transferIngredientStock } from '@/services/ingredientService'
 import { generateProductsExcel } from '@/services/productExportService'
 import { getWarehouses, createStockMovement, updateWarehouseStock, getOrphanStockProducts, migrateOrphanStock, getOrphanStock, getDeletedWarehouseStock, getStockMovements, getInventoryCounts, recalculateStockFromMovements, bulkRecalculateStock, getLatestActiveStockBackup, revertStockBackup, createStockBackup, buildStockBackupItems } from '@/services/warehouseService'
@@ -1550,103 +1550,28 @@ export default function Inventory() {
     try {
       const businessId = getBusinessId()
 
-      // 1. Actualizar stock - Salida del almacén origen (transacción atómica)
+      // Transferencia ATÓMICA (Fase 2): salida del origen + entrada al destino en UNA
+      // sola transacción que lee fresco y mueve warehouseStocks + el lote seleccionado
+      // + series juntos. Evita stock evaporado (antes 2 transacciones) y el descuadre
+      // lote↔almacén por snapshot viejo.
       const variantSku = isVariantTransfer ? transferData.selectedVariantSku : null
-      const exitResult = await updateProductStockTransaction(
+      const transferRes = await transferProductStockTransaction(
         businessId,
         transferProduct.id,
         transferData.fromWarehouse,
-        -quantity,
-        {},
-        variantSku
-      )
-
-      if (!exitResult.success) {
-        throw new Error('Error al descontar stock del almacén origen')
-      }
-
-      // 2. Actualizar stock - Entrada al almacén destino (transacción atómica)
-      // Incluir actualización de lotes si aplica
-      const extraUpdates = {}
-
-      if (selectedBatchData) {
-        const batchId = transferData.selectedBatch
-        let updatedBatches = (transferProduct.batches || []).map(b => {
-          const bId = b.lotNumber || b.batchNumber || b.id
-          if (bId === batchId && (!b.warehouseId || b.warehouseId === transferData.fromWarehouse)) {
-            return { ...b, quantity: b.quantity - quantity, warehouseId: b.warehouseId || transferData.fromWarehouse }
-          }
-          return b
-        })
-
-        // Crear o actualizar lote en almacén destino
-        const existingDestBatch = updatedBatches.find(b => {
-          const bId = b.lotNumber || b.batchNumber || b.id
-          return bId === batchId && b.warehouseId === transferData.toWarehouse
-        })
-
-        if (existingDestBatch) {
-          // Ya existe lote con mismo ID en destino: sumar cantidad
-          updatedBatches = updatedBatches.map(b => {
-            const bId = b.lotNumber || b.batchNumber || b.id
-            if (bId === batchId && b.warehouseId === transferData.toWarehouse) {
-              return { ...b, quantity: b.quantity + quantity }
-            }
-            return b
-          })
-        } else {
-          // Crear nuevo lote en destino con los mismos datos
-          updatedBatches.push({
-            ...selectedBatchData,
-            id: `batch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            quantity: quantity,
-            warehouseId: transferData.toWarehouse,
-          })
-        }
-
-        // Limpiar lotes con cantidad 0
-        updatedBatches = updatedBatches.filter(b => b.quantity > 0)
-
-        extraUpdates.batches = updatedBatches
-
-        // Actualizar fecha de vencimiento más próxima
-        const activeBatches = updatedBatches.filter(b => b.quantity > 0 && (b.expirationDate || b.expiryDate))
-        if (activeBatches.length > 0) {
-          activeBatches.sort((a, b) => {
-            const dateA = (a.expirationDate || a.expiryDate)?.toDate?.() || new Date(a.expirationDate || a.expiryDate || '2099-12-31')
-            const dateB = (b.expirationDate || b.expiryDate)?.toDate?.() || new Date(b.expirationDate || b.expiryDate || '2099-12-31')
-            return dateA - dateB
-          })
-          extraUpdates.expirationDate = activeBatches[0].expirationDate || activeBatches[0].expiryDate
-          extraUpdates.batchNumber = activeBatches[0].lotNumber || activeBatches[0].batchNumber
-        } else {
-          extraUpdates.expirationDate = null
-          extraUpdates.batchNumber = null
-        }
-      }
-
-      // Transferir números de serie si aplica
-      if (transferData.selectedSerials?.length > 0 && transferProduct.serials?.length > 0) {
-        const updatedSerials = transferProduct.serials.map(s => {
-          if (transferData.selectedSerials.includes(s.serialNumber) && s.status === 'available') {
-            return { ...s, warehouseId: transferData.toWarehouse }
-          }
-          return s
-        })
-        extraUpdates.serials = updatedSerials
-      }
-
-      const entryResult = await updateProductStockTransaction(
-        businessId,
-        transferProduct.id,
         transferData.toWarehouse,
         quantity,
-        extraUpdates,
-        variantSku
+        {
+          variantSku,
+          batchNumber: selectedBatchData ? transferData.selectedBatch : null,
+          isNoLot: isNoLotTransfer,
+          serialNumbers: transferData.selectedSerials || [],
+          allowNegative: false,
+        }
       )
 
-      if (!entryResult.success) {
-        throw new Error('Error al ingresar stock al almacén destino')
+      if (!transferRes.success) {
+        throw new Error(transferRes.error || 'Error al transferir el stock')
       }
 
       const batchNote = selectedBatchData ? ` (Lote: ${transferData.selectedBatch})` : ''

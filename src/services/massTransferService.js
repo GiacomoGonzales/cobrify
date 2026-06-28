@@ -11,7 +11,7 @@ import {
   runTransaction,
 } from 'firebase/firestore'
 import { createStockMovement } from '@/services/warehouseService'
-import { updateProductStockTransaction } from '@/services/firestoreService'
+import { transferProductStockTransaction } from '@/services/firestoreService'
 import { transferIngredientStock } from '@/services/ingredientService'
 
 /**
@@ -150,102 +150,29 @@ export const createMassTransfer = async (businessId, transferData) => {
         continue
       }
 
-      // Flujo normal para productos
-      // Salida del almacén origen. allowNegative=true: si el origen no tuviera suficiente,
-      // se descuenta igual (puede quedar negativo, visible y corregible) en vez de clampar
-      // a 0 y sumar al destino la cantidad completa → eso CREABA stock fantasma (el total
-      // subía). Con allowNegative el total se preserva.
-      const exitResult = await updateProductStockTransaction(
+      // Flujo normal para productos — transferencia ATÓMICA (Fase 2): salida del origen
+      // + entrada al destino en UNA sola transacción que lee fresco y mueve
+      // warehouseStocks + el lote indicado + series juntos. Evita el stock evaporado
+      // (antes 2 transacciones) y el clobber de lotes por snapshot viejo.
+      const transferRes = await transferProductStockTransaction(
         businessId,
         item.productId,
         transferData.fromWarehouseId,
-        -item.quantity,
-        {},
-        item.variantSku || null,
-        null,
-        true
-      )
-      if (!exitResult.success) {
-        console.error(`Error al descontar stock de ${item.productName}:`, exitResult.error)
-        failedItems.push({ productId: item.productId, productName: item.productName, error: exitResult.error || 'Error al descontar stock' })
-        continue
-      }
-
-      // Entrada al almacén destino (con actualización de lotes si aplica)
-      const extraUpdates = {}
-      // Si es transferencia "Sin lote", NO procesar lotes - solo mover stock general
-      if (item.batchData && !item.batchData.isNoLot) {
-        const batchId = item.batchNumber
-        let updatedBatches = (item.batches || []).map(b => {
-          const bId = b.lotNumber || b.batchNumber || b.id
-          if (bId === batchId && (!b.warehouseId || b.warehouseId === transferData.fromWarehouseId)) {
-            return { ...b, quantity: b.quantity - item.quantity, warehouseId: b.warehouseId || transferData.fromWarehouseId }
-          }
-          return b
-        })
-
-        // Crear o actualizar lote en almacén destino
-        const existingDestBatch = updatedBatches.find(b => {
-          const bId = b.lotNumber || b.batchNumber || b.id
-          return bId === batchId && b.warehouseId === transferData.toWarehouseId
-        })
-
-        if (existingDestBatch) {
-          updatedBatches = updatedBatches.map(b => {
-            const bId = b.lotNumber || b.batchNumber || b.id
-            if (bId === batchId && b.warehouseId === transferData.toWarehouseId) {
-              return { ...b, quantity: b.quantity + item.quantity }
-            }
-            return b
-          })
-        } else {
-          updatedBatches.push({
-            ...item.batchData,
-            id: `batch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            quantity: item.quantity,
-            warehouseId: transferData.toWarehouseId,
-          })
-        }
-
-        // Limpiar lotes con cantidad 0
-        updatedBatches = updatedBatches.filter(b => b.quantity > 0)
-
-        extraUpdates.batches = updatedBatches
-
-        const activeBatches = updatedBatches.filter(b => b.quantity > 0 && (b.expirationDate || b.expiryDate))
-        if (activeBatches.length > 0) {
-          activeBatches.sort((a, b) => {
-            const dateA = (a.expirationDate || a.expiryDate)?.toDate?.() || new Date(a.expirationDate || a.expiryDate || '2099-12-31')
-            const dateB = (b.expirationDate || b.expiryDate)?.toDate?.() || new Date(b.expirationDate || b.expiryDate || '2099-12-31')
-            return dateA - dateB
-          })
-          extraUpdates.expirationDate = activeBatches[0].expirationDate || activeBatches[0].expiryDate
-          extraUpdates.batchNumber = activeBatches[0].lotNumber || activeBatches[0].batchNumber
-        } else {
-          extraUpdates.expirationDate = null
-          extraUpdates.batchNumber = null
-        }
-      }
-
-      // Transferir números de serie si aplica
-      if (item.serialNumbers && item.serialNumbers.length > 0 && item.serials) {
-        const updatedSerials = (item.serials || []).map(s => {
-          if (item.serialNumbers.includes(s.serialNumber) && s.status === 'available') {
-            return { ...s, warehouseId: transferData.toWarehouseId }
-          }
-          return s
-        })
-        extraUpdates.serials = updatedSerials
-      }
-
-      await updateProductStockTransaction(
-        businessId,
-        item.productId,
         transferData.toWarehouseId,
         item.quantity,
-        extraUpdates,
-        item.variantSku || null
+        {
+          variantSku: item.variantSku || null,
+          batchNumber: item.batchNumber === '__NO_LOT__' ? null : (item.batchNumber || null),
+          isNoLot: item.batchNumber === '__NO_LOT__',
+          serialNumbers: item.serialNumbers || item.selectedSerials || [],
+          allowNegative: true,
+        }
       )
+      if (!transferRes.success) {
+        console.error(`Error al transferir ${item.productName}:`, transferRes.error)
+        failedItems.push({ productId: item.productId, productName: item.productName, error: transferRes.error || 'Error al transferir stock' })
+        continue
+      }
 
       const variantNote = item.variantSku ? ` (${item.variantSku}${item.variantLabel ? ': ' + item.variantLabel : ''})` : ''
       const serialNote = (item.serialNumbers && item.serialNumbers.length > 0)
