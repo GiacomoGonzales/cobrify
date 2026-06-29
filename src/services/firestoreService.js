@@ -593,11 +593,20 @@ export const upsertCustomerFromSale = async (userId, customerData) => {
 
       // Mascota: si la venta trae petName y aún no existe en pets[], agregarla.
       // Normalizamos primero para migrar campo legacy petName del cliente al array pets.
+      // petName puede traer VARIAS mascotas separadas por coma (selección múltiple
+      // del POS). Las separamos y agregamos cada una solo si es nueva, para no crear
+      // una mascota fantasma con el nombre concatenado ("A, B").
       if (customerData.petName) {
         const normalized = normalizePets(existing)
-        const updatedPets = addPetIfNew(normalized, customerData.petName)
-        if (updatedPets) {
-          updates.pets = updatedPets
+        const names = customerData.petName.split(',').map(s => s.trim()).filter(Boolean)
+        let pets = normalized
+        let changed = false
+        for (const name of names) {
+          const result = addPetIfNew(pets, name)
+          if (result) { pets = result; changed = true }
+        }
+        if (changed) {
+          updates.pets = pets
         }
       }
 
@@ -623,17 +632,21 @@ export const upsertCustomerFromSale = async (userId, customerData) => {
         source: 'auto_from_sale' // Marcar que fue creado automáticamente
       }
 
-      // Si la venta trae nombre de mascota, lo registramos como primera mascota del cliente
+      // Si la venta trae nombre(s) de mascota (pueden venir varios separados por coma
+      // por la selección múltiple del POS), los registramos como mascotas del cliente.
       if (customerData.petName && customerData.petName.trim()) {
-        newCustomerData.pets = [{
-          id: generatePetId(),
-          name: customerData.petName.trim(),
-          species: '',
-          breed: '',
-          age: '',
-          weight: '',
-          notes: '',
-        }]
+        const names = customerData.petName.split(',').map(s => s.trim()).filter(Boolean)
+        if (names.length > 0) {
+          newCustomerData.pets = names.map(name => ({
+            id: generatePetId(),
+            name,
+            species: '',
+            breed: '',
+            age: '',
+            weight: '',
+            notes: '',
+          }))
+        }
       }
 
       const createResult = await createCustomer(userId, newCustomerData)
