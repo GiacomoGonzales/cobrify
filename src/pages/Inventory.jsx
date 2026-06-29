@@ -2065,6 +2065,7 @@ export default function Inventory() {
               Revertir verificación
             </Button>
           )}
+          {!hidePrivateData && (
           <Button
             variant="outline"
             size="sm"
@@ -2073,6 +2074,7 @@ export default function Inventory() {
             <History className="w-4 h-4 mr-2" />
             Historial
           </Button>
+          )}
           {!hidePrivateData && (
             <Button
               variant="outline"
