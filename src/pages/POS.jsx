@@ -8321,37 +8321,51 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             placeholder="Nombre de la mascota"
                             className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                           />
-                          {pets.length > 1 && (
-                            <div className="flex flex-wrap gap-1">
-                              {pets.map(p => (
+                          {pets.length > 1 && (() => {
+                            // Selección MÚLTIPLE: petName guarda las mascotas elegidas separadas por coma.
+                            const selectedNames = customerData.petName.split(',').map(s => s.trim()).filter(Boolean)
+                            const allOn = pets.every(p => selectedNames.includes(p.name))
+                            const togglePet = (name) => {
+                              const next = selectedNames.includes(name)
+                                ? selectedNames.filter(n => n !== name)
+                                : [...selectedNames, name]
+                              setCustomerData({ ...customerData, petName: next.join(', ') })
+                            }
+                            return (
+                              <div className="flex flex-wrap gap-1">
+                                {pets.map(p => {
+                                  const on = selectedNames.includes(p.name)
+                                  return (
+                                    <button
+                                      key={p.id || p.name}
+                                      type="button"
+                                      onClick={() => togglePet(p.name)}
+                                      className={`px-2 py-0.5 text-xs rounded-full border transition-colors ${
+                                        on
+                                          ? 'bg-primary-100 border-primary-500 text-primary-700'
+                                          : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
+                                      }`}
+                                      title={p.species ? `${p.name} (${p.species})` : p.name}
+                                    >
+                                      {p.name}
+                                    </button>
+                                  )
+                                })}
                                 <button
-                                  key={p.id || p.name}
                                   type="button"
-                                  onClick={() => setCustomerData({ ...customerData, petName: p.name })}
+                                  onClick={() => setCustomerData({ ...customerData, petName: allOn ? '' : allPetNames })}
                                   className={`px-2 py-0.5 text-xs rounded-full border transition-colors ${
-                                    customerData.petName === p.name
+                                    allOn
                                       ? 'bg-primary-100 border-primary-500 text-primary-700'
                                       : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
                                   }`}
-                                  title={p.species ? `${p.name} (${p.species})` : p.name}
+                                  title="Atender todas las mascotas"
                                 >
-                                  {p.name}
+                                  Todas
                                 </button>
-                              ))}
-                              <button
-                                type="button"
-                                onClick={() => setCustomerData({ ...customerData, petName: allPetNames })}
-                                className={`px-2 py-0.5 text-xs rounded-full border transition-colors ${
-                                  customerData.petName === allPetNames
-                                    ? 'bg-primary-100 border-primary-500 text-primary-700'
-                                    : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
-                                }`}
-                                title="Atender todas las mascotas"
-                              >
-                                Todas
-                              </button>
-                            </div>
-                          )}
+                              </div>
+                            )
+                          })()}
                         </div>
                       )
                     })()}
@@ -8897,37 +8911,51 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             placeholder="Nombre de la mascota"
                             className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                           />
-                          {pets.length > 1 && (
-                            <div className="flex flex-wrap gap-1">
-                              {pets.map(p => (
+                          {pets.length > 1 && (() => {
+                            // Selección MÚLTIPLE: petName guarda las mascotas elegidas separadas por coma.
+                            const selectedNames = customerData.petName.split(',').map(s => s.trim()).filter(Boolean)
+                            const allOn = pets.every(p => selectedNames.includes(p.name))
+                            const togglePet = (name) => {
+                              const next = selectedNames.includes(name)
+                                ? selectedNames.filter(n => n !== name)
+                                : [...selectedNames, name]
+                              setCustomerData({ ...customerData, petName: next.join(', ') })
+                            }
+                            return (
+                              <div className="flex flex-wrap gap-1">
+                                {pets.map(p => {
+                                  const on = selectedNames.includes(p.name)
+                                  return (
+                                    <button
+                                      key={p.id || p.name}
+                                      type="button"
+                                      onClick={() => togglePet(p.name)}
+                                      className={`px-2 py-0.5 text-xs rounded-full border transition-colors ${
+                                        on
+                                          ? 'bg-primary-100 border-primary-500 text-primary-700'
+                                          : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
+                                      }`}
+                                      title={p.species ? `${p.name} (${p.species})` : p.name}
+                                    >
+                                      {p.name}
+                                    </button>
+                                  )
+                                })}
                                 <button
-                                  key={p.id || p.name}
                                   type="button"
-                                  onClick={() => setCustomerData({ ...customerData, petName: p.name })}
+                                  onClick={() => setCustomerData({ ...customerData, petName: allOn ? '' : allPetNames })}
                                   className={`px-2 py-0.5 text-xs rounded-full border transition-colors ${
-                                    customerData.petName === p.name
+                                    allOn
                                       ? 'bg-primary-100 border-primary-500 text-primary-700'
                                       : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
                                   }`}
-                                  title={p.species ? `${p.name} (${p.species})` : p.name}
+                                  title="Atender todas las mascotas"
                                 >
-                                  {p.name}
+                                  Todas
                                 </button>
-                              ))}
-                              <button
-                                type="button"
-                                onClick={() => setCustomerData({ ...customerData, petName: allPetNames })}
-                                className={`px-2 py-0.5 text-xs rounded-full border transition-colors ${
-                                  customerData.petName === allPetNames
-                                    ? 'bg-primary-100 border-primary-500 text-primary-700'
-                                    : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
-                                }`}
-                                title="Atender todas las mascotas"
-                              >
-                                Todas
-                              </button>
-                            </div>
-                          )}
+                              </div>
+                            )
+                          })()}
                         </div>
                       )
                     })()}
@@ -9078,37 +9106,51 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             placeholder="Nombre de la mascota (opcional)"
                             className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                           />
-                          {pets.length > 1 && (
-                            <div className="flex flex-wrap gap-1">
-                              {pets.map(p => (
+                          {pets.length > 1 && (() => {
+                            // Selección MÚLTIPLE: petName guarda las mascotas elegidas separadas por coma.
+                            const selectedNames = customerData.petName.split(',').map(s => s.trim()).filter(Boolean)
+                            const allOn = pets.every(p => selectedNames.includes(p.name))
+                            const togglePet = (name) => {
+                              const next = selectedNames.includes(name)
+                                ? selectedNames.filter(n => n !== name)
+                                : [...selectedNames, name]
+                              setCustomerData({ ...customerData, petName: next.join(', ') })
+                            }
+                            return (
+                              <div className="flex flex-wrap gap-1">
+                                {pets.map(p => {
+                                  const on = selectedNames.includes(p.name)
+                                  return (
+                                    <button
+                                      key={p.id || p.name}
+                                      type="button"
+                                      onClick={() => togglePet(p.name)}
+                                      className={`px-2 py-0.5 text-xs rounded-full border transition-colors ${
+                                        on
+                                          ? 'bg-primary-100 border-primary-500 text-primary-700'
+                                          : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
+                                      }`}
+                                      title={p.species ? `${p.name} (${p.species})` : p.name}
+                                    >
+                                      {p.name}
+                                    </button>
+                                  )
+                                })}
                                 <button
-                                  key={p.id || p.name}
                                   type="button"
-                                  onClick={() => setCustomerData({ ...customerData, petName: p.name })}
+                                  onClick={() => setCustomerData({ ...customerData, petName: allOn ? '' : allPetNames })}
                                   className={`px-2 py-0.5 text-xs rounded-full border transition-colors ${
-                                    customerData.petName === p.name
+                                    allOn
                                       ? 'bg-primary-100 border-primary-500 text-primary-700'
                                       : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
                                   }`}
-                                  title={p.species ? `${p.name} (${p.species})` : p.name}
+                                  title="Atender todas las mascotas"
                                 >
-                                  {p.name}
+                                  Todas
                                 </button>
-                              ))}
-                              <button
-                                type="button"
-                                onClick={() => setCustomerData({ ...customerData, petName: allPetNames })}
-                                className={`px-2 py-0.5 text-xs rounded-full border transition-colors ${
-                                  customerData.petName === allPetNames
-                                    ? 'bg-primary-100 border-primary-500 text-primary-700'
-                                    : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
-                                }`}
-                                title="Atender todas las mascotas"
-                              >
-                                Todas
-                              </button>
-                            </div>
-                          )}
+                              </div>
+                            )
+                          })()}
                         </div>
                       )
                     })()}
