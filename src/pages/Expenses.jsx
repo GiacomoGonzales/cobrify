@@ -731,7 +731,9 @@ export default function Expenses() {
         </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards — agregados financieros. Ocultos a sub-usuarios cuando el dueño
+          activó "Ocultar totales y datos sensibles a usuarios secundarios". */}
+      {!hidePrivateData && (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
@@ -810,6 +812,7 @@ export default function Expenses() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Tabs Lista | Resumen */}
       <div className="border-b border-gray-200">
@@ -826,6 +829,7 @@ export default function Expenses() {
             <Receipt className="w-4 h-4 inline mr-1.5 -mt-0.5" />
             Lista de gastos
           </button>
+          {!hidePrivateData && (
           <button
             type="button"
             onClick={() => setActiveTab('summary')}
@@ -838,6 +842,7 @@ export default function Expenses() {
             <TrendingDown className="w-4 h-4 inline mr-1.5 -mt-0.5" />
             Resumen
           </button>
+          )}
         </nav>
       </div>
 
@@ -1234,7 +1239,7 @@ export default function Expenses() {
       </>)}
 
       {/* Tab: Resumen */}
-      {activeTab === 'summary' && (
+      {activeTab === 'summary' && !hidePrivateData && (
         <div className="space-y-6">
           {/* Gráfico de torta por categoría */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
