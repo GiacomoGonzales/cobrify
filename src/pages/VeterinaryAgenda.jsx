@@ -18,11 +18,10 @@ import {
   createAppointment,
   markNoShow,
   deleteAppointment,
-  SERVICE_TYPES,
   APPOINTMENT_STATUS,
   getDayStats,
 } from '@/services/appointmentService'
-import { getCustomers, createCustomer } from '@/services/firestoreService'
+import { getCustomers, createCustomer, getProducts } from '@/services/firestoreService'
 import { ID_TYPES } from '@/utils/peruUtils'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import { matchesSearchQuery } from '@/lib/utils'
@@ -87,7 +86,9 @@ export default function VeterinaryAgenda() {
   const [newClient, setNewClient] = useState({ documentType: ID_TYPES.DNI, documentNumber: '', name: '', phone: '' })
   const [newPet, setNewPet] = useState({ name: '', species: '' })
   const [lookingUpDoc, setLookingUpDoc] = useState(false)
-  const [walkInService, setWalkInService] = useState({ serviceType: 'bath', serviceName: 'Baño', price: '' })
+  const [walkInService, setWalkInService] = useState({ serviceId: '', serviceName: '', price: '' })
+  // Servicios reales del negocio (Productos y Servicios) para el dropdown del walk-in
+  const [serviceOptions, setServiceOptions] = useState([])
   const [savingWalkIn, setSavingWalkIn] = useState(false)
 
   // Cargar citas del mes para el calendario
@@ -302,7 +303,7 @@ export default function VeterinaryAgenda() {
     setWalkInPetIdx(0)
     setNewClient({ documentType: ID_TYPES.DNI, documentNumber: '', name: '', phone: '' })
     setNewPet({ name: '', species: '' })
-    setWalkInService({ serviceType: 'bath', serviceName: 'Baño', price: '' })
+    setWalkInService({ serviceId: '', serviceName: '', price: '' })
     setWalkInOpen(true)
     if (customers.length === 0) {
       try {
@@ -310,6 +311,15 @@ export default function VeterinaryAgenda() {
         if (r.success) setCustomers(r.data || [])
       } catch (e) { /* sin clientes */ }
     }
+    // Cargar los servicios reales del negocio (Productos y Servicios) para el dropdown
+    try {
+      const rp = await getProducts(getBusinessId())
+      if (rp.success) {
+        setServiceOptions((rp.data || [])
+          .filter(p => p.active !== false)
+          .sort((a, b) => (a.name || '').localeCompare(b.name || '')))
+      }
+    } catch (e) { /* sin servicios */ }
   }
 
   const selectWalkInCustomer = (c) => {
@@ -393,14 +403,15 @@ export default function VeterinaryAgenda() {
       }
 
       const price = parseFloat(walkInService.price) || 0
+      const svcName = (walkInService.serviceName || '').trim()
       const now = new Date()
       const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
       const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
       const id = await createAppointment(businessId, {
         customerId, customerName, petName, petSpecies, petId, phone,
-        serviceName: walkInService.serviceName,
+        serviceName: svcName,
         servicePrice: price,
-        services: [{ name: walkInService.serviceName, price }],
+        services: svcName ? [{ name: svcName, price }] : [],
         scheduledDate: dateStr,
         scheduledTime: timeStr,
         notes: 'Atención directa (walk-in)',
@@ -1014,21 +1025,51 @@ export default function VeterinaryAgenda() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Servicio</label>
               <select
-                value={walkInService.serviceType}
+                value={walkInService.serviceId}
                 onChange={(e) => {
-                  const st = SERVICE_TYPES.find(s => s.value === e.target.value)
-                  setWalkInService(s => ({ ...s, serviceType: e.target.value, serviceName: st?.label || 'Servicio' }))
+                  const val = e.target.value
+                  if (val === 'custom') {
+                    setWalkInService(s => ({ ...s, serviceId: 'custom', serviceName: '' }))
+                  } else if (!val) {
+                    setWalkInService(s => ({ ...s, serviceId: '', serviceName: '', price: '' }))
+                  } else {
+                    const prod = serviceOptions.find(p => p.id === val)
+                    setWalkInService(s => ({
+                      ...s,
+                      serviceId: val,
+                      serviceName: prod?.name || '',
+                      price: prod?.price != null ? String(prod.price) : s.price,
+                    }))
+                  }
                 }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
               >
-                {SERVICE_TYPES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                <option value="">Selecciona un servicio</option>
+                {serviceOptions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                <option value="custom">Otro (personalizado)</option>
               </select>
+              {serviceOptions.length === 0 && (
+                <p className="text-xs text-gray-400 mt-1">No tienes servicios creados. Créalos en Productos y Servicios o usa "Otro".</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Precio (S/)</label>
               <input type="number" min="0" step="0.01" value={walkInService.price} onChange={(e) => setWalkInService(s => ({ ...s, price: e.target.value }))} placeholder="0.00" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
             </div>
           </div>
+
+          {walkInService.serviceId === 'custom' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del servicio</label>
+              <input
+                type="text"
+                value={walkInService.serviceName}
+                onChange={(e) => setWalkInService(s => ({ ...s, serviceName: e.target.value }))}
+                placeholder="Ej. Consulta general"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              />
+            </div>
+          )}
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setWalkInOpen(false)} disabled={savingWalkIn}>Cancelar</Button>
