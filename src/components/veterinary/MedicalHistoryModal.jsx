@@ -319,18 +319,20 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
           const customerPets = normalizePets(customer)
           const currentPet = customerPets[selectedPetIndex] || customerPets[0] || {}
           return (
-            <div className="border-b rounded-t-xl">
-              <div className="flex items-center justify-between p-4 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-t-xl">
-                <div className="flex items-center gap-3">
-                  <PawPrint className="w-6 h-6" />
-                  <div>
-                    <h2 className="text-lg font-semibold">{currentPet.name || 'Mascota'}</h2>
-                    <p className="text-sm text-primary-100">
-                      {currentPet.species} {currentPet.breed && `• ${currentPet.breed}`} | {customer?.name}
+            <div className="border-b border-gray-200 rounded-t-xl">
+              <div className="flex items-center justify-between p-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-full bg-primary-50 flex items-center justify-center flex-shrink-0">
+                    <PawPrint className="w-5 h-5 text-primary-600" />
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-lg font-semibold text-gray-900 truncate">{currentPet.name || 'Mascota'}</h2>
+                    <p className="text-sm text-gray-500 truncate">
+                      {currentPet.species}{currentPet.breed ? ` • ${currentPet.breed}` : ''}{customer?.name ? ` · ${customer.name}` : ''}
                     </p>
                   </div>
                 </div>
-                <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-lg transition-colors">
+                <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -377,10 +379,10 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
                         setSearchQuery('')
                         setFormData({ ...formData, frequency: 30 })
                       }}
-                      className="flex flex-col items-center gap-2 p-4 bg-amber-50 border-2 border-amber-200 rounded-xl hover:bg-amber-100 transition-colors"
+                      className="flex flex-col items-center gap-2 p-4 bg-white border border-gray-200 rounded-xl hover:border-primary-300 hover:bg-gray-50 transition-colors"
                     >
-                      <Clock className="w-8 h-8 text-amber-600" />
-                      <span className="font-medium text-amber-800">Crear Recordatorio</span>
+                      <Clock className="w-7 h-7 text-primary-600" />
+                      <span className="font-medium text-gray-800">Crear Recordatorio</span>
                     </button>
 
                     <button
@@ -390,10 +392,10 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
                         setSearchQuery('')
                         setFormData({ ...formData, date: new Date().toISOString().split('T')[0], time: '09:00' })
                       }}
-                      className="flex flex-col items-center gap-2 p-4 bg-green-50 border-2 border-green-200 rounded-xl hover:bg-green-100 transition-colors"
+                      className="flex flex-col items-center gap-2 p-4 bg-white border border-gray-200 rounded-xl hover:border-primary-300 hover:bg-gray-50 transition-colors"
                     >
-                      <CalendarPlus className="w-8 h-8 text-green-600" />
-                      <span className="font-medium text-green-800">Agendar Cita</span>
+                      <CalendarPlus className="w-7 h-7 text-primary-600" />
+                      <span className="font-medium text-gray-800">Agendar Cita</span>
                     </button>
                   </div>
 
@@ -442,13 +444,13 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
                   <div>
                     <h3 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
                       <History className="w-4 h-4" />
-                      Historial
+                      Historial clínico
                     </h3>
 
                     {allRecords.length === 0 ? (
                       <div className="text-center py-6 text-gray-500">
                         <PawPrint className="w-10 h-10 mx-auto mb-2 text-gray-300" />
-                        <p className="text-sm">Sin registros aún</p>
+                        <p className="text-sm">Sin consultas ni vacunas registradas</p>
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -503,7 +505,7 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
                                 {items.slice(0, 5).map((item, idx) => (
                                   <div key={idx} className="flex items-center justify-between text-xs">
                                     <span className="text-gray-700 truncate flex-1">{item.quantity}x {item.name || item.description || 'Producto'}</span>
-                                    <span className="text-gray-500 ml-2 flex-shrink-0">S/{((item.price || 0) * (item.quantity || 1)).toFixed(2)}</span>
+                                    <span className="text-gray-500 ml-2 flex-shrink-0">S/{(item.subtotal != null ? item.subtotal : (item.unitPrice || item.price || 0) * (item.quantity || 1)).toFixed(2)}</span>
                                   </div>
                                 ))}
                                 {items.length > 5 && <p className="text-xs text-gray-400">+{items.length - 5} más</p>}

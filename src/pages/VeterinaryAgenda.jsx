@@ -15,12 +15,18 @@ import {
   completeAppointment,
   confirmAppointment,
   startAppointment,
+  createAppointment,
   markNoShow,
   deleteAppointment,
   SERVICE_TYPES,
   APPOINTMENT_STATUS,
   getDayStats,
 } from '@/services/appointmentService'
+import { getCustomers, createCustomer } from '@/services/firestoreService'
+import { ID_TYPES } from '@/utils/peruUtils'
+import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
+import { matchesSearchQuery } from '@/lib/utils'
+import { normalizePets } from '@/utils/petUtils'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -45,6 +51,7 @@ import {
   MoreVertical,
   Trash2,
   Edit,
+  Search,
 } from 'lucide-react'
 
 export default function VeterinaryAgenda() {
@@ -66,6 +73,22 @@ export default function VeterinaryAgenda() {
 
   // Modal de acciones
   const [actionMenu, setActionMenu] = useState(null)
+
+  // Vista: 'agenda' (calendario) | 'attention' (tablero "En atención", tipo Mesas)
+  const [view, setView] = useState('agenda')
+  const [inProgress, setInProgress] = useState([])
+  // Walk-in (atender ahora, sin cita previa)
+  const [walkInOpen, setWalkInOpen] = useState(false)
+  const [walkInMode, setWalkInMode] = useState('existing') // 'existing' | 'new'
+  const [customers, setCustomers] = useState([])
+  const [walkInSearch, setWalkInSearch] = useState('')
+  const [walkInCustomer, setWalkInCustomer] = useState(null)
+  const [walkInPetIdx, setWalkInPetIdx] = useState(0) // índice en customer.pets; -1 = otra mascota
+  const [newClient, setNewClient] = useState({ documentType: ID_TYPES.DNI, documentNumber: '', name: '', phone: '' })
+  const [newPet, setNewPet] = useState({ name: '', species: '' })
+  const [lookingUpDoc, setLookingUpDoc] = useState(false)
+  const [walkInService, setWalkInService] = useState({ serviceType: 'bath', serviceName: 'Baño', price: '' })
+  const [savingWalkIn, setSavingWalkIn] = useState(false)
 
   // Cargar citas del mes para el calendario
   useEffect(() => {
@@ -184,11 +207,6 @@ export default function VeterinaryAgenda() {
     return date.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
   }
 
-  const getServiceIcon = (serviceType) => {
-    const service = SERVICE_TYPES.find(s => s.value === serviceType)
-    return service?.icon || '📌'
-  }
-
   const getStatusBadge = (status) => {
     const config = APPOINTMENT_STATUS[status] || APPOINTMENT_STATUS.scheduled
     const colorMap = {
@@ -201,7 +219,7 @@ export default function VeterinaryAgenda() {
     }
     return (
       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${colorMap[config.color]}`}>
-        {config.icon} {config.label}
+        {config.label}
       </span>
     )
   }
@@ -254,6 +272,150 @@ export default function VeterinaryAgenda() {
 
     // Navegar al POS
     navigate('/app/pos')
+  }
+
+  // ===== Tablero "En atención" + walk-in (atender ahora) =====
+  const loadInProgress = async () => {
+    if (!user?.uid || isDemoMode) return
+    try {
+      const businessId = getBusinessId()
+      const now = new Date()
+      // Ventana de 2 días para cubrir atenciones abiertas (normalmente son del día).
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0)
+      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
+      const appts = await getAppointmentsByDateRange(businessId, start, end)
+      setInProgress(appts.filter(a => a.status === 'in_progress'))
+    } catch (e) {
+      console.error('Error al cargar en atención:', e)
+    }
+  }
+
+  useEffect(() => {
+    if (view === 'attention') loadInProgress()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, monthAppointments])
+
+  const openWalkIn = async () => {
+    setWalkInMode('existing')
+    setWalkInCustomer(null)
+    setWalkInSearch('')
+    setWalkInPetIdx(0)
+    setNewClient({ documentType: ID_TYPES.DNI, documentNumber: '', name: '', phone: '' })
+    setNewPet({ name: '', species: '' })
+    setWalkInService({ serviceType: 'bath', serviceName: 'Baño', price: '' })
+    setWalkInOpen(true)
+    if (customers.length === 0) {
+      try {
+        const r = await getCustomers(getBusinessId())
+        if (r.success) setCustomers(r.data || [])
+      } catch (e) { /* sin clientes */ }
+    }
+  }
+
+  const selectWalkInCustomer = (c) => {
+    setWalkInCustomer(c)
+    setWalkInSearch(c.name || '')
+    setWalkInPetIdx(normalizePets(c).length > 0 ? 0 : -1)
+    setNewPet({ name: '', species: '' })
+  }
+
+  // Buscar nombre por DNI/RUC al crear cliente nuevo
+  const handleLookupNewDoc = async () => {
+    const num = (newClient.documentNumber || '').trim()
+    if (!num) { toast.error('Ingresa el número de documento'); return }
+    if (newClient.documentType !== ID_TYPES.DNI && newClient.documentType !== ID_TYPES.RUC) {
+      toast.info('La búsqueda automática solo está disponible para DNI y RUC')
+      return
+    }
+    setLookingUpDoc(true)
+    try {
+      if (newClient.documentType === ID_TYPES.DNI) {
+        if (num.length !== 8) { toast.error('El DNI debe tener 8 dígitos'); return }
+        const r = await consultarDNI(num)
+        if (r.success) { setNewClient(c => ({ ...c, name: r.data.nombreCompleto || c.name })); toast.success('Datos encontrados') }
+        else toast.error(r.error || 'No se encontraron datos')
+      } else {
+        if (num.length !== 11) { toast.error('El RUC debe tener 11 dígitos'); return }
+        const r = await consultarRUC(num)
+        if (r.success) { setNewClient(c => ({ ...c, name: r.data.nombreComercial || r.data.razonSocial || c.name })); toast.success('Datos encontrados') }
+        else toast.error(r.error || 'No se encontraron datos')
+      }
+    } catch (e) {
+      toast.error('Error al consultar el documento')
+    } finally {
+      setLookingUpDoc(false)
+    }
+  }
+
+  const handleCreateWalkIn = async () => {
+    const businessId = getBusinessId()
+
+    // Validación según modo
+    if (walkInMode === 'new') {
+      if (!newClient.documentNumber.trim() || !newClient.name.trim()) { toast.error('Completa documento y nombre del cliente'); return }
+      if (!newPet.name.trim()) { toast.error('Indica el nombre de la mascota'); return }
+    } else {
+      if (!walkInCustomer) { toast.error('Selecciona un cliente'); return }
+      const usingExistingPet = walkInPetIdx >= 0 && normalizePets(walkInCustomer)[walkInPetIdx]
+      if (!usingExistingPet && !newPet.name.trim()) { toast.error('Indica la mascota'); return }
+    }
+
+    setSavingWalkIn(true)
+    try {
+      let customerId, customerName, phone, petName, petSpecies, petId = null
+
+      if (walkInMode === 'new') {
+        const res = await createCustomer(businessId, {
+          documentType: newClient.documentType,
+          documentNumber: newClient.documentNumber.trim(),
+          name: newClient.name.trim(),
+          phone: newClient.phone.trim(),
+          pets: [{ name: newPet.name.trim(), species: newPet.species.trim() }],
+          petName: newPet.name.trim(),
+          petSpecies: newPet.species.trim(),
+        })
+        if (!res.success) { toast.error(res.error || 'No se pudo crear el cliente'); setSavingWalkIn(false); return }
+        customerId = res.id
+        customerName = newClient.name.trim()
+        phone = newClient.phone.trim()
+        petName = newPet.name.trim(); petSpecies = newPet.species.trim()
+      } else {
+        customerId = walkInCustomer.id
+        customerName = walkInCustomer.name || ''
+        phone = walkInCustomer.phone || ''
+        const pets = normalizePets(walkInCustomer)
+        if (walkInPetIdx >= 0 && pets[walkInPetIdx]) {
+          const pet = pets[walkInPetIdx]
+          petName = pet.name || ''; petSpecies = pet.species || ''; petId = pet.id || null
+        } else {
+          petName = newPet.name.trim(); petSpecies = newPet.species.trim()
+        }
+      }
+
+      const price = parseFloat(walkInService.price) || 0
+      const now = new Date()
+      const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+      const id = await createAppointment(businessId, {
+        customerId, customerName, petName, petSpecies, petId, phone,
+        serviceName: walkInService.serviceName,
+        servicePrice: price,
+        services: [{ name: walkInService.serviceName, price }],
+        scheduledDate: dateStr,
+        scheduledTime: timeStr,
+        notes: 'Atención directa (walk-in)',
+      })
+      await startAppointment(businessId, id) // dejarla "en atención" de una
+      toast.success('Atención iniciada')
+      setWalkInOpen(false)
+      loadAppointments()
+      loadInProgress()
+    } catch (e) {
+      console.error('Error al crear walk-in:', e)
+      toast.error('Error al iniciar la atención')
+    } finally {
+      setSavingWalkIn(false)
+    }
   }
 
   const handleCancel = async () => {
@@ -351,6 +513,66 @@ export default function VeterinaryAgenda() {
         </div>
       </div>
 
+      {/* Pestañas: Agenda / En atención (tipo Mesas) */}
+      <div className="flex gap-1 border-b border-gray-200">
+        {[{ k: 'agenda', label: 'Agenda' }, { k: 'attention', label: `En atención${inProgress.length ? ` (${inProgress.length})` : ''}` }].map(t => (
+          <button
+            key={t.k}
+            onClick={() => setView(t.k)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${view === t.k ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tablero "En atención": mascotas siendo atendidas ahora */}
+      {view === 'attention' && (
+        <div>
+          <div className="flex justify-end mb-3">
+            <Button size="sm" onClick={openWalkIn}>
+              <Plus className="w-4 h-4 mr-1" /> Atender ahora
+            </Button>
+          </div>
+          {inProgress.length === 0 ? (
+            <Card>
+              <CardContent className="p-8 text-center text-gray-500">
+                <PawPrint className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+                <p>No hay mascotas en atención ahora.</p>
+                <p className="text-sm mt-1">Inicia una atención desde una cita o usa &quot;Atender ahora&quot;.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {inProgress.map(appt => (
+                <Card key={appt.id} className="border-l-4 border-yellow-400">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="font-semibold text-gray-900 truncate">{appt.serviceName}</span>
+                      <Badge variant="warning" className="ml-auto flex-shrink-0">En atención</Badge>
+                    </div>
+                    <p className="text-sm text-gray-800 flex items-center gap-1">
+                      <PawPrint className="w-4 h-4 text-gray-400 flex-shrink-0" /> <strong className="truncate">{appt.petName || 'Mascota'}</strong>
+                    </p>
+                    <p className="text-sm text-gray-500 flex items-center gap-1">
+                      <User className="w-4 h-4 text-gray-400 flex-shrink-0" /> <span className="truncate">{appt.customerName}</span>
+                    </p>
+                    {appt.servicePrice > 0 && (
+                      <p className="text-sm font-semibold text-primary-600 mt-1">S/ {appt.servicePrice.toFixed(2)}</p>
+                    )}
+                    <Button size="sm" className="w-full mt-3 gap-1" onClick={() => handleComplete(appt)}>
+                      <ShoppingCart className="w-4 h-4" /> Finalizar y Cobrar
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {view === 'agenda' && (
+      <>
       {/* Calendario mensual */}
       <Card>
         <CardContent className="p-4">
@@ -464,7 +686,6 @@ export default function VeterinaryAgenda() {
                       <div className="min-w-0 flex-1">
                         {/* Servicio y estado */}
                         <div className="flex items-center gap-2 flex-wrap mb-2">
-                          <span className="text-xl">{getServiceIcon(appointment.serviceType)}</span>
                           <span className="font-semibold text-gray-900">{appointment.serviceName}</span>
                           {getStatusBadge(appointment.status)}
                         </div>
@@ -591,6 +812,8 @@ export default function VeterinaryAgenda() {
           ))}
         </div>
       )}
+      </>
+      )}
 
       {/* Modal de cancelación */}
       <Modal
@@ -627,6 +850,190 @@ export default function VeterinaryAgenda() {
               ) : (
                 'Cancelar Cita'
               )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal "Atender ahora" (walk-in, sin cita previa) */}
+      <Modal isOpen={walkInOpen} onClose={() => !savingWalkIn && setWalkInOpen(false)} title="Atender ahora" size="lg">
+        <div className="space-y-4">
+          {/* Cliente existente / nuevo */}
+          <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+            {[{ k: 'existing', label: 'Cliente existente' }, { k: 'new', label: 'Cliente nuevo' }].map(t => (
+              <button
+                key={t.k}
+                type="button"
+                onClick={() => setWalkInMode(t.k)}
+                className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${walkInMode === t.k ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* ===== CLIENTE EXISTENTE ===== */}
+          {walkInMode === 'existing' && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
+                {walkInCustomer ? (
+                  <div className="flex items-center justify-between bg-primary-50 border border-primary-200 rounded-lg px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{walkInCustomer.name}</p>
+                      <p className="text-xs text-gray-500 truncate">{[walkInCustomer.documentNumber, walkInCustomer.phone].filter(Boolean).join(' · ') || 'Sin datos'}</p>
+                    </div>
+                    <button type="button" onClick={() => { setWalkInCustomer(null); setWalkInSearch('') }} className="text-xs text-primary-600 hover:underline flex-shrink-0 ml-2">Cambiar</button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={walkInSearch}
+                        onChange={(e) => setWalkInSearch(e.target.value)}
+                        placeholder="Buscar por nombre, documento o teléfono..."
+                        className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      />
+                    </div>
+                    {walkInSearch.trim().length > 0 && (() => {
+                      // Busca por nombre, razón social, documento, teléfono Y nombre de mascota
+                      // (insensible a tildes/mayúsculas, multi-palabra).
+                      const matches = customers.filter(c =>
+                        matchesSearchQuery(walkInSearch, c.name, c.businessName, c.documentNumber, c.phone, ...normalizePets(c).map(p => p.name))
+                      ).slice(0, 12)
+                      return (
+                        <div className="mt-1 max-h-44 overflow-y-auto border border-gray-200 rounded-lg divide-y">
+                          {matches.map(c => {
+                            const petNames = normalizePets(c).map(p => p.name).filter(Boolean).join(', ')
+                            return (
+                              <button key={c.id} type="button" onClick={() => selectWalkInCustomer(c)} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">
+                                <span className="font-medium text-gray-900">{c.name || c.businessName}</span>
+                                {(c.documentNumber || c.phone) && <span className="text-gray-400 ml-2">{[c.documentNumber, c.phone].filter(Boolean).join(' · ')}</span>}
+                                {petNames && <span className="block text-xs text-gray-400">Mascotas: {petNames}</span>}
+                              </button>
+                            )
+                          })}
+                          {matches.length === 0 && <p className="px-3 py-2 text-sm text-gray-400">Sin coincidencias — usa &quot;Cliente nuevo&quot;</p>}
+                        </div>
+                      )
+                    })()}
+                  </>
+                )}
+              </div>
+
+              {/* Mascota: seleccionar de las del cliente */}
+              {walkInCustomer && (() => {
+                const pets = normalizePets(walkInCustomer)
+                return (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Mascota</label>
+                  {pets.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      {pets.map((p, idx) => (
+                        <button
+                          key={p.id || idx}
+                          type="button"
+                          onClick={() => setWalkInPetIdx(idx)}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm text-left transition-colors ${walkInPetIdx === idx ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                        >
+                          <PawPrint className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                          <span className="truncate"><span className="font-medium text-gray-900">{p.name}</span>{p.species ? <span className="text-gray-400"> · {p.species}</span> : null}</span>
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setWalkInPetIdx(-1)}
+                        className={`px-3 py-2 rounded-lg border text-sm transition-colors ${walkInPetIdx === -1 ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                      >
+                        + Otra mascota
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-500 mb-2">Este cliente no tiene mascotas registradas. Agrega una:</p>
+                  )}
+                  {(walkInPetIdx === -1 || pets.length === 0) && (
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      <input type="text" value={newPet.name} onChange={(e) => setNewPet(p => ({ ...p, name: e.target.value }))} placeholder="Nombre de la mascota" className="px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                      <input type="text" value={newPet.species} onChange={(e) => setNewPet(p => ({ ...p, species: e.target.value }))} placeholder="Especie (perro, gato...)" className="px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                    </div>
+                  )}
+                </div>
+                )
+              })()}
+            </>
+          )}
+
+          {/* ===== CLIENTE NUEVO ===== */}
+          {walkInMode === 'new' && (
+            <>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tipo doc.</label>
+                  <select value={newClient.documentType} onChange={(e) => setNewClient(c => ({ ...c, documentType: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                    <option value={ID_TYPES.DNI}>DNI</option>
+                    <option value={ID_TYPES.RUC}>RUC</option>
+                    <option value={ID_TYPES.CE}>CE</option>
+                    <option value={ID_TYPES.PASSPORT}>Pasaporte</option>
+                  </select>
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Número de documento</label>
+                  <div className="flex gap-2">
+                    <input type="text" value={newClient.documentNumber} onChange={(e) => setNewClient(c => ({ ...c, documentNumber: e.target.value }))} placeholder="N° documento" className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                    <Button type="button" variant="outline" size="sm" onClick={handleLookupNewDoc} disabled={lookingUpDoc} title="Buscar datos por DNI/RUC">
+                      {lookingUpDoc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del cliente</label>
+                <input type="text" value={newClient.name} onChange={(e) => setNewClient(c => ({ ...c, name: e.target.value }))} placeholder="Nombre completo / razón social" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono <span className="text-gray-400 font-normal">(opcional)</span></label>
+                <input type="text" value={newClient.phone} onChange={(e) => setNewClient(c => ({ ...c, phone: e.target.value }))} placeholder="Teléfono" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Mascota</label>
+                  <input type="text" value={newPet.name} onChange={(e) => setNewPet(p => ({ ...p, name: e.target.value }))} placeholder="Nombre de la mascota" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Especie</label>
+                  <input type="text" value={newPet.species} onChange={(e) => setNewPet(p => ({ ...p, species: e.target.value }))} placeholder="Perro, gato..." className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ===== SERVICIO + PRECIO ===== */}
+          <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-100">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Servicio</label>
+              <select
+                value={walkInService.serviceType}
+                onChange={(e) => {
+                  const st = SERVICE_TYPES.find(s => s.value === e.target.value)
+                  setWalkInService(s => ({ ...s, serviceType: e.target.value, serviceName: st?.label || 'Servicio' }))
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              >
+                {SERVICE_TYPES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Precio (S/)</label>
+              <input type="number" min="0" step="0.01" value={walkInService.price} onChange={(e) => setWalkInService(s => ({ ...s, price: e.target.value }))} placeholder="0.00" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setWalkInOpen(false)} disabled={savingWalkIn}>Cancelar</Button>
+            <Button onClick={handleCreateWalkIn} disabled={savingWalkIn}>
+              {savingWalkIn ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Play className="w-4 h-4 mr-1" /> Iniciar atención</>}
             </Button>
           </div>
         </div>
