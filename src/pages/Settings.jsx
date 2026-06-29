@@ -4372,6 +4372,26 @@ export default function Settings() {
                           : '✗ Deshabilitado: La orden completa se marca como un todo (Pendiente → En preparación → Lista → Entregada). Más simple y rápido para operaciones pequeñas, cafeterías o negocios con preparación rápida.'}
                       />
 
+                      {/* Omitir mozos a usuarios secundarios */}
+                      <SettingToggle
+                        checked={restaurantConfig.skipWaiterForSecondary || false}
+                        onChange={(e) => setRestaurantConfig({...restaurantConfig, skipWaiterForSecondary: e.target.checked})}
+                        title="Omitir mozos a usuarios secundarios"
+                        description={restaurantConfig.skipWaiterForSecondary
+                          ? '✓ Habilitado: Los usuarios secundarios ocupan la mesa directamente, sin seleccionar un mozo. Útil cuando cada usuario secundario ES el mozo. El dueño y administradores siguen seleccionando mozo normalmente.'
+                          : '✗ Deshabilitado: Todos los usuarios deben seleccionar un mozo al ocupar una mesa.'}
+                      />
+
+                      {/* Usuarios secundarios siempre con comprobante */}
+                      <SettingToggle
+                        checked={restaurantConfig.requireReceiptForSecondary || false}
+                        onChange={(e) => setRestaurantConfig({...restaurantConfig, requireReceiptForSecondary: e.target.checked})}
+                        title="Usuarios secundarios siempre con comprobante"
+                        description={restaurantConfig.requireReceiptForSecondary
+                          ? '✓ Habilitado: Los usuarios secundarios no pueden cerrar una mesa u orden sin emitir comprobante (se oculta la opción "Cerrar sin comprobante"). El dueño y administradores sí pueden.'
+                          : '✗ Deshabilitado: Los usuarios secundarios pueden cerrar mesas u órdenes sin comprobante (con motivo registrado).'}
+                      />
+
                       {/* Pago obligatorio antes de cocina */}
                       <SettingToggle
                         checked={restaurantConfig.requirePaymentBeforeKitchen || false}

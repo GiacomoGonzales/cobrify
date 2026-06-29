@@ -122,6 +122,9 @@ export default function Tables() {
   const [enableKitchenStations, setEnableKitchenStations] = useState(false)
   // Al imprimir comanda desde PC/navegador: imprimir todo junto (no separar por estación).
   const [combineStationsOnWebPrint, setCombineStationsOnWebPrint] = useState(false)
+  // Config restaurante para usuarios secundarios (solo aplican si !isOwner)
+  const [skipWaiterForSecondary, setSkipWaiterForSecondary] = useState(false)
+  const [requireReceiptForSecondary, setRequireReceiptForSecondary] = useState(false)
   const [categoryMap, setCategoryMap] = useState({})
 
   // Form state
@@ -196,6 +199,8 @@ export default function Tables() {
           setKitchenStations(config.kitchenStations || [])
           setEnableKitchenStations(config.enableKitchenStations || false)
           setCombineStationsOnWebPrint(config.combineStationsOnWebPrint || false)
+          setSkipWaiterForSecondary(config.skipWaiterForSecondary || false)
+          setRequireReceiptForSecondary(config.requireReceiptForSecondary || false)
         }
       },
       (error) => {
@@ -2008,6 +2013,7 @@ export default function Tables() {
         order={selectedOrder}
         waiters={waiters.filter(w => (w.branchId || null) === (selectedBranchId || null) && canAccessTable(w))}
         defaultWaiterId={userPermissions?.defaultWaiterId || null}
+        skipWaiter={skipWaiterForSecondary && !isOwner}
         availableTables={tables.filter(t => t.status === 'available')}
         occupiedTables={tables.filter(t => t.status === 'occupied')}
         onOccupy={handleOccupyTable}
@@ -2103,6 +2109,7 @@ export default function Tables() {
         onConfirm={handleConfirmCloseTable}
         onIndividualPayment={handleIndividualPayment}
         taxConfig={taxConfig}
+        requireReceipt={requireReceiptForSecondary && !isOwner}
       />
 
       {/* Modal para cobro individual (parcial) */}

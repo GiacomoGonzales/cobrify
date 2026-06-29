@@ -32,6 +32,7 @@ export default function TableActionModal({
   defaultWaiterId = null,
   availableTables = [],
   occupiedTables = [],
+  skipWaiter = false,
 }) {
   const [isLoading, setIsLoading] = useState(false)
   const [action, setAction] = useState(null) // 'occupy', 'release', 'reserve', 'cancel', 'transfer', 'move'
@@ -49,7 +50,7 @@ export default function TableActionModal({
   const activeWaiters = waiters.filter(w => w.status === 'active')
 
   useEffect(() => {
-    if (action !== 'occupy' || selectedWaiter) return
+    if (action !== 'occupy' || selectedWaiter || skipWaiter) return
 
     // 1. Si el usuario tiene un mozo por defecto y está entre los activos, preseleccionarlo
     if (defaultWaiterId && activeWaiters.some(w => w.id === defaultWaiterId)) {
@@ -91,7 +92,7 @@ export default function TableActionModal({
   }
 
   const handleOccupy = async () => {
-    if (!selectedWaiter) {
+    if (!skipWaiter && !selectedWaiter) {
       alert('Por favor selecciona un mozo')
       return
     }
@@ -100,8 +101,8 @@ export default function TableActionModal({
     try {
       const waiter = waiters.find(w => w.id === selectedWaiter)
       await onOccupy(table.id, {
-        waiterId: waiter.id,
-        waiterName: waiter.name,
+        waiterId: waiter?.id || null,
+        waiterName: waiter?.name || null,
       })
       // No llamar handleClose() aquí - el padre (Tables.jsx) controla
       // si cierra este modal y abre el de agregar items
@@ -717,11 +718,12 @@ export default function TableActionModal({
         <div className="space-y-4">
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <p className="text-sm text-blue-800">
-              Vas a ocupar la <strong>Mesa {table.number}</strong>. Asigna un mozo para comenzar la
-              atención.
+              Vas a ocupar la <strong>Mesa {table.number}</strong>.
+              {skipWaiter ? ' Se ocupará directamente.' : ' Asigna un mozo para comenzar la atención.'}
             </p>
           </div>
 
+          {!skipWaiter && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Seleccionar Mozo *
@@ -754,6 +756,7 @@ export default function TableActionModal({
               </p>
             )}
           </div>
+          )}
 
           <div className="flex gap-3 pt-4">
             <Button type="button" variant="outline" onClick={() => setAction(null)} className="flex-1">
@@ -761,7 +764,7 @@ export default function TableActionModal({
             </Button>
             <Button
               onClick={handleOccupy}
-              disabled={isLoading || !selectedWaiter}
+              disabled={isLoading || (!skipWaiter && !selectedWaiter)}
               className="flex-1 bg-red-600 hover:bg-red-700"
             >
               {isLoading ? (

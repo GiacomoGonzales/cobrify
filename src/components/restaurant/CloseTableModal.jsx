@@ -12,7 +12,8 @@ export default function CloseTableModal({
   order,
   onConfirm,
   onIndividualPayment,
-  taxConfig = { igvRate: 18, igvExempt: false }
+  taxConfig = { igvRate: 18, igvExempt: false },
+  requireReceipt = false
 }) {
   const navigate = useNavigate()
   const location = useLocation()
@@ -248,6 +249,7 @@ export default function CloseTableModal({
 
             {/* Footer: Cancelar + link sutil */}
             <div className="flex items-center justify-between pt-4 border-t">
+              {requireReceipt ? <span /> : (
               <button
                 type="button"
                 onClick={() => setShowCloseWithoutReceipt(!showCloseWithoutReceipt)}
@@ -256,6 +258,7 @@ export default function CloseTableModal({
               >
                 Cerrar sin comprobante
               </button>
+              )}
               <Button
                 type="button"
                 variant="outline"

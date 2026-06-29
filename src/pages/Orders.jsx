@@ -29,7 +29,8 @@ import { printPreBill, printAllSplitPreBills } from '@/utils/printPreBill'
 import { getActiveMotoristas, createDeliveryRecord, updateOperationalStatus } from '@/services/motoristaService'
 
 export default function Orders() {
-  const { user, getBusinessId, isDemoMode, demoData, filterBranchesByAccess, allowedBranches, hasMainBranchAccess } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData, filterBranchesByAccess, allowedBranches, hasMainBranchAccess, userPermissions } = useAppContext()
+  const isOwner = !userPermissions?.ownerId
   // Filtro de seguridad por sede (respeta las sucursales habilitadas del usuario secundario)
   const canAccess = useLocationAccess()
   const toast = useToast()
@@ -50,6 +51,7 @@ export default function Orders() {
   const [updatingOrderId, setUpdatingOrderId] = useState(null)
   const [itemStatusTracking, setItemStatusTracking] = useState(false) // Config para modo de seguimiento
   const [requirePaymentBeforeKitchen, setRequirePaymentBeforeKitchen] = useState(false) // Config para pago obligatorio
+  const [requireReceiptForSecondary, setRequireReceiptForSecondary] = useState(false) // Sub-usuario siempre con comprobante
   const [deliveryPersons, setDeliveryPersons] = useState([]) // Lista de repartidores
   const [brands, setBrands] = useState([]) // Lista de marcas
   const [kitchenStations, setKitchenStations] = useState([]) // Estaciones de cocina
@@ -135,6 +137,7 @@ export default function Orders() {
           const config = businessData.restaurantConfig || {}
           setItemStatusTracking(config.itemStatusTracking || false)
           setRequirePaymentBeforeKitchen(config.requirePaymentBeforeKitchen || false)
+          setRequireReceiptForSecondary(config.requireReceiptForSecondary || false)
           // Cargar motoristas desde la colección de motoristas
           getActiveMotoristas(getBusinessId()).then(result => {
             if (result.success) {
@@ -1932,6 +1935,7 @@ export default function Orders() {
 
                 {/* Footer: Cancelar + link sutil */}
                 <div className="flex items-center justify-between pt-4 border-t">
+                  {(requireReceiptForSecondary && !isOwner) ? <span /> : (
                   <button
                     type="button"
                     onClick={() => setShowCloseWithoutReceipt(!showCloseWithoutReceipt)}
@@ -1940,6 +1944,7 @@ export default function Orders() {
                   >
                     Cerrar sin comprobante
                   </button>
+                  )}
                   <Button
                     type="button"
                     variant="outline"
