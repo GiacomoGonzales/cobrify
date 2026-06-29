@@ -305,20 +305,29 @@ export const deleteOrder = async (businessId, orderId) => {
 }
 
 /**
- * Marcar una orden como pagada
- * También cambia el status a 'closed' para que la orden salga de la lista de órdenes activas
- * (antes solo seteaba paid: true y la orden quedaba huérfana en "Órdenes Activas")
+ * Marcar una orden como pagada (y opcionalmente facturada / cerrada).
+ * - close=true (default): cierra la orden (status 'closed') → mesas y cobro al final.
+ * - close=false: solo marca pagada/facturada; la orden SIGUE en su estado de cocina
+ *   (caso mostrador: se factura al inicio y recién entra al flujo de cocina; la cierra
+ *   "Marcar Entregada").
+ * - invoiceId: si se pasa, marca invoiced:true + guarda el id del comprobante.
  */
-export const markOrderAsPaid = async (businessId, orderId) => {
+export const markOrderAsPaid = async (businessId, orderId, { close = true, invoiceId = null } = {}) => {
   try {
     const orderRef = doc(db, 'businesses', businessId, 'orders', orderId)
 
-    await updateDoc(orderRef, {
+    const updates = {
       paid: true,
-      status: 'closed',
       paidAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-    })
+    }
+    if (invoiceId) {
+      updates.invoiced = true
+      updates.invoiceId = invoiceId
+    }
+    if (close) updates.status = 'closed'
+
+    await updateDoc(orderRef, updates)
 
     return { success: true }
   } catch (error) {

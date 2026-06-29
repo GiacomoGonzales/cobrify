@@ -6701,9 +6701,14 @@ export default function POS() {
             }
 
             // 6.1. Marcar orden como pagada (flujo restaurante: mesa/delivery)
+            // Mesa (tiene tableId) → cierra la orden. Delivery/para-llevar → solo marca
+            // pagada+facturada; la orden SIGUE en su flujo de cocina y la cierra "Entregada".
             if (_pendingOrderId && _markOrderPaidOnComplete) {
               try {
-                await markOrderAsPaid(businessId, _pendingOrderId)
+                await markOrderAsPaid(businessId, _pendingOrderId, {
+                  close: !!_tableData?.tableId,
+                  invoiceId: bgInvoiceId || null,
+                })
               } catch (error) {
                 console.error('Error al marcar orden como pagada:', error)
               }

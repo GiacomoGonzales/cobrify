@@ -952,7 +952,8 @@ export default function Orders() {
     }
 
     try {
-      const result = await markOrderAsPaid(getBusinessId(), orderId)
+      // Marcar pagada NO cierra la orden: sigue en su flujo de cocina (la cierra "Entregada").
+      const result = await markOrderAsPaid(getBusinessId(), orderId, { close: false })
       if (result.success) {
         toast.success('Orden marcada como pagada')
       } else {
@@ -1047,7 +1048,26 @@ export default function Orders() {
       return
     }
 
-    handleCloseOrder(order)
+    // Si la orden YA está facturada, "Entregada" la cierra directamente (sin volver al POS).
+    // Si NO está facturada, se abre el cierre (facturar en POS o cerrar sin comprobante con motivo).
+    if (order.invoiced) {
+      try {
+        setUpdatingOrderId(order.id)
+        const result = await updateOrderStatus(getBusinessId(), order.id, 'delivered')
+        if (result.success) {
+          toast.success(`Orden #${order.orderNumber} entregada`)
+        } else {
+          toast.error('Error al marcar como entregada: ' + result.error)
+        }
+      } catch (error) {
+        console.error('Error al marcar como entregada:', error)
+        toast.error('Error al marcar como entregada')
+      } finally {
+        setUpdatingOrderId(null)
+      }
+    } else {
+      handleCloseOrder(order)
+    }
   }
 
   const calculateElapsedTime = (createdAt) => {
@@ -1324,6 +1344,12 @@ export default function Orders() {
                             PAGO PENDIENTE
                           </span>
                         ) : null
+                      )}
+                      {order.invoiced && (
+                        <span className="px-2 py-0.5 bg-emerald-600 text-white text-xs font-bold rounded-full flex items-center gap-1">
+                          <Receipt className="w-3 h-3" />
+                          FACTURADO
+                        </span>
                       )}
                       {order.brandName && (
                         <span
@@ -1614,7 +1640,7 @@ export default function Orders() {
                         comanda del motorizado (saber si cobrar al entregar), NO equivale a
                         "facturado". Por eso una orden con pago anticipado sigue mostrando esta
                         acción hasta que se emite su comprobante. */}
-                    {order.status !== 'delivered' && (
+                    {order.status !== 'delivered' && !order.invoiced && (
                       <Button
                         onClick={() => handleGoToPayment(order)}
                         variant="outline"
