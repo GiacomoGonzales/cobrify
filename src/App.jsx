@@ -41,6 +41,7 @@ import AdminInvestorReport from './pages/admin/AdminInvestorReport'
 import AdminSettings from './pages/admin/AdminSettings'
 import AdminResellers from './pages/admin/AdminResellers'
 import AdminExpirations from './pages/admin/AdminExpirations'
+import AdminPlanDistribution from './pages/admin/AdminPlanDistribution'
 import AdminNotifications from './pages/admin/AdminNotifications'
 import AdminCreateAccount from './pages/admin/AdminCreateAccount'
 // Reseller pages
@@ -544,6 +545,7 @@ function App() {
               <Route path="create-account" element={<AdminCreateAccount />} />
               <Route path="resellers" element={<AdminResellers />} />
               <Route path="expirations" element={<AdminExpirations />} />
+              <Route path="plan-distribution" element={<AdminPlanDistribution />} />
               <Route path="payments" element={<AdminPayments />} />
               <Route path="analytics" element={<AdminAnalytics />} />
               <Route path="investor-report" element={<AdminInvestorReport />} />

@@ -410,6 +410,25 @@ export const PLANS = {
   }
 };
 
+// ============================================
+// Catálogo VENDIBLE — lo único que se ofrece para comprar/renovar (Fase 0: ordenar planes).
+// El resto de entradas de PLANS quedan SOLO por compatibilidad: resolver nombre y límites
+// de clientes existentes parados en planes viejos. No se ofrecen más en los selectores.
+// ============================================
+export const SELLABLE_PLAN_IDS = ['basico_mensual', 'mensual', 'semestral', 'anual', 'addon_500_comprobantes'];
+// Planes internos del sistema (no se venden pero son válidos):
+export const SYSTEM_PLAN_IDS = ['trial', 'enterprise'];
+
+export const isSellablePlan = (id) => SELLABLE_PLAN_IDS.includes(id);
+
+// Clasifica un id de plan: 'vendible' | 'sistema' | 'legacy' | 'desconocido'
+export const classifyPlan = (id) => {
+  if (SELLABLE_PLAN_IDS.includes(id)) return 'vendible';
+  if (SYSTEM_PLAN_IDS.includes(id)) return 'sistema';
+  if (PLANS[id]) return 'legacy';
+  return 'desconocido';
+};
+
 // Obtener suscripción de un usuario
 export const getSubscription = async (userId) => {
   try {

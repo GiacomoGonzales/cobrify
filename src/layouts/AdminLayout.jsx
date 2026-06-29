@@ -17,7 +17,8 @@ import {
   CalendarClock,
   Bell,
   Sparkles,
-  UserPlus
+  UserPlus,
+  Package
 } from 'lucide-react'
 
 const navItems = [
@@ -50,6 +51,12 @@ const navItems = [
     icon: CalendarClock,
     label: 'Vencimientos',
     description: 'Gestión de vencimientos'
+  },
+  {
+    path: '/app/admin/plan-distribution',
+    icon: Package,
+    label: 'Distribución de planes',
+    description: 'Clientes por plan (ordenar catálogo)'
   },
   {
     path: '/app/admin/payments',
