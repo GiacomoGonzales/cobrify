@@ -5541,6 +5541,8 @@ export default function Reports() {
         hotelFolioCharges.forEach(c => {
           if (c.chargeType !== 'room_night' && c.chargeType !== 'room_hourly') return
           const res = resById[c.reservationId]
+          // Cargo huérfano de una reserva ELIMINADA: no cuenta (la reserva ya no existe).
+          if (c.reservationId && !res) return
           if (res && (res.status === 'cancelled' || res.status === 'no_show')) return
           // Reprogramación: ignorar noches SIN facturar que quedaron fuera del rango
           // actual de la reserva (cargos huérfanos de fechas viejas).
@@ -5556,8 +5558,11 @@ export default function Reports() {
           chargedResIds.add(c.reservationId)
           nightEntries.push({
             date: c.date,
-            roomId: c.roomId || res?.roomId || null,
-            roomNumber: c.roomNumber || res?.roomNumber || '',
+            // Habitación ACTUAL de la reserva: si la reserva se movió de habitación,
+            // el roomId guardado en el cargo queda desactualizado y atribuía la noche
+            // a la habitación vieja (hab "fantasma" en el reporte).
+            roomId: res?.roomId || c.roomId || null,
+            roomNumber: res?.roomNumber || c.roomNumber || '',
             reservationId: c.reservationId,
             amount: Number(c.amount) || 0,
             isNight: c.chargeType === 'room_night',
@@ -5598,6 +5603,8 @@ export default function Reports() {
         const consumoTotal = hotelFolioCharges.reduce((s, c) => {
           if (c.chargeType === 'room_night' || c.chargeType === 'room_hourly') return s
           const res = resById[c.reservationId]
+          // Consumo huérfano de una reserva ELIMINADA: no cuenta.
+          if (c.reservationId && !res) return s
           if (res && (res.status === 'cancelled' || res.status === 'no_show')) return s
           return inPeriod(c.date) ? s + (Number(c.amount) || 0) : s
         }, 0)

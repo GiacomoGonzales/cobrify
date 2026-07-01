@@ -229,6 +229,43 @@ export const updateReservation = async (businessId, reservationId, updates) => {
       }
     }
 
+    // Cambio de habitación / tarifa / huéspedes: sincronizar los cargos de noche SIN
+    // facturar con la reserva actual. Si no se hace, el cargo conserva el roomId y el
+    // monto viejos → el reporte atribuye la noche a la habitación anterior con la
+    // tarifa anterior. Las noches ya facturadas no se tocan.
+    const touchesRoomOrRate = ['roomId', 'roomNumber', 'ratePerNight', 'guests', 'baseGuests', 'extraGuestRate']
+      .some(k => k in updates)
+    if (touchesRoomOrRate) {
+      try {
+        const freshSnap = await getDoc(reservationRef)
+        if (freshSnap.exists()) {
+          const res = freshSnap.data()
+          if (res.pricingMode !== 'hourly') {
+            const baseRate = Number(res.ratePerNight || 0)
+            const baseGuests = Number(res.baseGuests ?? 1)
+            const extraGuestRate = Number(res.extraGuestRate ?? 0)
+            const extraGuests = Math.max(0, (Number(res.guests) || 0) - baseGuests)
+            const extraPerNight = extraGuests * extraGuestRate
+            const chargesResult = await getChargesByReservation(businessId, reservationId)
+            const nights = (chargesResult.data || []).filter(c => c.chargeType === 'room_night' && !c.invoiceId)
+            for (const c of nights) {
+              const chargeUpdates = {
+                roomId: res.roomId || null,
+                roomNumber: res.roomNumber || '',
+              }
+              if (baseRate > 0) {
+                const rate = await getEffectiveRate(businessId, res.roomId, c.date, baseRate)
+                chargeUpdates.amount = rate + extraPerNight
+              }
+              await updateDoc(doc(db, 'businesses', businessId, 'hotelFolioCharges', c.id), chargeUpdates)
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('No se pudieron sincronizar los cargos de noche con la reserva:', e)
+      }
+    }
+
     return { success: true }
   } catch (error) {
     console.error('Error al actualizar reservación:', error)
@@ -240,6 +277,16 @@ export const deleteReservation = async (businessId, reservationId) => {
   try {
     const reservationRef = doc(db, 'businesses', businessId, 'hotelReservations', reservationId)
     await deleteDoc(reservationRef)
+    // Borrar también los cargos del folio: si quedan huérfanos, los reportes
+    // siguen contando noches/consumos de una reserva que ya no existe.
+    try {
+      const chargesResult = await getChargesByReservation(businessId, reservationId)
+      for (const c of chargesResult.data || []) {
+        await deleteDoc(doc(db, 'businesses', businessId, 'hotelFolioCharges', c.id))
+      }
+    } catch (e) {
+      console.warn('No se pudieron limpiar los cargos del folio de la reserva eliminada:', e)
+    }
     return { success: true }
   } catch (error) {
     console.error('Error al eliminar reservación:', error)

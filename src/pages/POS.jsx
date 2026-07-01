@@ -5989,11 +5989,14 @@ export default function POS() {
           }
         }
 
-        // Si la venta vino de un folio de hotel, marcar esos cargos como facturados
-        // Usamos la ref (sobrevive a edits del cart) + fallback al cart
+        // Si la venta vino de un folio de hotel, marcar esos cargos como facturados.
+        // SOLO los que siguen en el carrito: si el usuario quitó un item del folio
+        // antes de cobrar, ese cargo NO está en el comprobante y no debe marcarse
+        // (quedaba "facturado" sin estar en la boleta → noche fantasma en reportes).
+        // La ref queda como fallback por si el carrito perdió el tag folioChargeId.
         const refIds = pendingFolioChargeIdsRef.current || []
         const cartIds = cart.filter(item => item.fromFolio && item.folioChargeId).map(item => item.folioChargeId)
-        const allFolioChargeIds = Array.from(new Set([...refIds, ...cartIds]))
+        const allFolioChargeIds = cartIds.length > 0 ? Array.from(new Set(cartIds)) : refIds
         if (allFolioChargeIds.length > 0) {
           console.log('📘 Marcando cargos del folio como facturados:', allFolioChargeIds, '→ invoice', invoiceId, numberResult.number)
           try {
