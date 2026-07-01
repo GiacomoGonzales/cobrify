@@ -208,6 +208,27 @@ export const updateReservation = async (businessId, reservationId, updates) => {
   try {
     const reservationRef = doc(db, 'businesses', businessId, 'hotelReservations', reservationId)
     await updateDoc(reservationRef, { ...updates, updatedAt: serverTimestamp() })
+
+    // Reprogramación: si cambian las fechas, eliminar los cargos de noche SIN facturar
+    // que quedaron fuera del nuevo rango. Evita que el folio y los reportes cuenten
+    // noches que ya no existen (ej. reserva editada de 6 a 4 noches seguía mostrando 6).
+    // Las noches ya facturadas no se tocan.
+    const newCi = updates.checkIn || updates.checkInDate
+    const newCo = updates.checkOut || updates.checkOutDate
+    if (newCi && newCo) {
+      try {
+        const chargesResult = await getChargesByReservation(businessId, reservationId)
+        const orphans = (chargesResult.data || []).filter(c =>
+          c.chargeType === 'room_night' && !c.invoiceId && (c.date < newCi || c.date >= newCo)
+        )
+        for (const c of orphans) {
+          await deleteDoc(doc(db, 'businesses', businessId, 'hotelFolioCharges', c.id))
+        }
+      } catch (e) {
+        console.warn('No se pudieron limpiar cargos de noche fuera de rango:', e)
+      }
+    }
+
     return { success: true }
   } catch (error) {
     console.error('Error al actualizar reservación:', error)
@@ -621,6 +642,20 @@ export const deleteCharge = async (businessId, chargeId) => {
     return { success: true }
   } catch (error) {
     console.error('Error al eliminar cargo:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// Todos los cargos del folio del negocio. Para reportes: las noches (room_night) traen
+// su fecha exacta → permiten contar cada noche en SU día y separar hospedaje de consumos.
+export const getAllFolioCharges = async (businessId) => {
+  try {
+    const chargesRef = collection(db, 'businesses', businessId, 'hotelFolioCharges')
+    const snapshot = await getDocs(chargesRef)
+    const charges = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
+    return { success: true, data: charges }
+  } catch (error) {
+    console.error('Error al obtener cargos del folio:', error)
     return { success: false, error: error.message }
   }
 }

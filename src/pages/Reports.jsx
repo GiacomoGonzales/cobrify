@@ -47,7 +47,7 @@ import {
 } from '@/services/reportExportService'
 import { getExpenses, EXPENSE_CATEGORIES } from '@/services/expenseService'
 import PeruHeatMap from '@/components/PeruHeatMap'
-import { getRooms as getHotelRooms, getReservations as getHotelReservations } from '@/services/hotelService'
+import { getRooms as getHotelRooms, getReservations as getHotelReservations, getAllFolioCharges } from '@/services/hotelService'
 import * as XLSX from 'xlsx'
 import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
@@ -175,6 +175,7 @@ export default function Reports() {
   const [cashMovements, setCashMovements] = useState([])
   const [hotelRooms, setHotelRooms] = useState([])
   const [hotelReservations, setHotelReservations] = useState([])
+  const [hotelFolioCharges, setHotelFolioCharges] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [dateRange, setDateRange] = useState('month') // week, month, quarter, year, all, custom
   const [selectedReport, setSelectedReport] = useState('overview') // overview, sales, products, customers, expenses
@@ -338,12 +339,14 @@ export default function Reports() {
       // Cargar datos de hotel si es modo hotel
       if (businessMode === 'hotel') {
         try {
-          const [roomsRes, reservationsRes] = await Promise.all([
+          const [roomsRes, reservationsRes, chargesRes] = await Promise.all([
             getHotelRooms(getBusinessId()),
-            getHotelReservations(getBusinessId())
+            getHotelReservations(getBusinessId()),
+            getAllFolioCharges(getBusinessId())
           ])
           if (roomsRes.success) setHotelRooms(roomsRes.data || [])
           if (reservationsRes.success) setHotelReservations(reservationsRes.data || [])
+          if (chargesRes.success) setHotelFolioCharges(chargesRes.data || [])
         } catch (error) {
           console.error('Error al cargar datos de hotel:', error)
         }
@@ -5469,53 +5472,51 @@ export default function Reports() {
         const occupiedRooms = hotelRooms.filter(r => r.status === 'occupied').length
         const occupancyRate = totalRooms > 0 ? ((occupiedRooms / totalRooms) * 100).toFixed(1) : 0
 
-        // Filtrar reservas SIEMPRE por la fecha de la reserva (check-in / estadía),
-        // NO por cuándo se creó. Con límite inferior Y superior para que, por ejemplo,
-        // una reserva hecha en junio pero para julio cuente en JULIO (su check-in), no
-        // en junio. "Este mes" = mes calendario completo (incluye reservas futuras del
-        // mismo mes). Para ver otro mes usar "Personalizado".
-        const filteredRes = hotelReservations.filter(res => {
-          if (!res.checkIn) return false
-          if (dateRange === 'all') return true
-          const checkInDate = new Date(res.checkIn + 'T00:00:00')
-          const now = new Date()
-          let startDate, endDate
-          if (dateRange === 'custom') {
-            if (!customStartDate || !customEndDate) return true // sin fechas → no filtrar
-            startDate = parseLocalDate(customStartDate); startDate.setHours(0, 0, 0, 0)
-            endDate = parseLocalDate(customEndDate); endDate.setHours(23, 59, 59, 999)
-          } else {
-            switch (dateRange) {
-              case 'today':
-                startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
-                endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
-                break
-              case 'week':
-                startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0, 0)
-                endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
-                break
-              case 'quarter':
-                startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1, 0, 0, 0, 0)
-                endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
-                break
-              case 'year':
-                startDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0)
-                endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999)
-                break
-              case 'month':
-              default:
-                startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
-                endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
-            }
+        // ===== Rango del período (calculado una sola vez) =====
+        const now = new Date()
+        let periodStart = null
+        let periodEnd = null
+        if (dateRange === 'custom') {
+          if (customStartDate && customEndDate) {
+            periodStart = parseLocalDate(customStartDate); periodStart.setHours(0, 0, 0, 0)
+            periodEnd = parseLocalDate(customEndDate); periodEnd.setHours(23, 59, 59, 999)
           }
-          return checkInDate >= startDate && checkInDate <= endDate
-        })
+        } else if (dateRange !== 'all') {
+          switch (dateRange) {
+            case 'today':
+              periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+              periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
+              break
+            case 'week':
+              periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0, 0)
+              periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
+              break
+            case 'quarter':
+              periodStart = new Date(now.getFullYear(), now.getMonth() - 2, 1, 0, 0, 0, 0)
+              periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+              break
+            case 'year':
+              periodStart = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0)
+              periodEnd = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999)
+              break
+            case 'month':
+            default:
+              periodStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
+              periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+          }
+        }
+        // ¿La fecha ISO (YYYY-MM-DD) cae dentro del período elegido?
+        const inPeriod = (dateStr) => {
+          if (!dateStr) return false
+          if (!periodStart || !periodEnd) return true // 'all' o custom sin fechas
+          const d = new Date(dateStr + 'T00:00:00')
+          return d >= periodStart && d <= periodEnd
+        }
 
+        // Reservas del período (por fecha de check-in) — solo para el card de estados
+        // y el KPI "Reservas Período". El dinero y las noches se calculan POR NOCHE abajo.
+        const filteredRes = hotelReservations.filter(res => inPeriod(res.checkIn || res.checkInDate))
         const completedRes = filteredRes.filter(r => r.status === 'checked_out')
-        const totalNights = completedRes.reduce((s, r) => s + (r.nights || 0), 0)
-        const totalRoomRevenue = completedRes.reduce((s, r) => s + (r.totalAmount || 0), 0)
-        const adr = totalNights > 0 ? totalRoomRevenue / totalNights : 0
-        const revpar = totalRooms > 0 ? totalRoomRevenue / totalRooms : 0
 
         const statusCounts = {
           confirmed: filteredRes.filter(r => r.status === 'confirmed').length,
@@ -5525,63 +5526,153 @@ export default function Reports() {
           no_show: filteredRes.filter(r => r.status === 'no_show').length,
         }
 
-        // Total de TODAS las reservas reales del período (excluye canceladas y no-show).
-        // No depende de boletas/facturas emitidas: suma el monto de cada reserva.
-        const activeRes = filteredRes.filter(r => r.status !== 'cancelled' && r.status !== 'no_show')
-        const totalReservationsCount = activeRes.length
-        const totalReservationsAmount = activeRes.reduce((s, r) => s + (r.totalAmount || r.total || 0), 0)
-        const totalReservationsPaid = activeRes.reduce((s, r) => s + (r.amountPaid || 0), 0)
-        const totalReservationsPending = Math.max(0, totalReservationsAmount - totalReservationsPaid)
+        // ===== Base POR NOCHE: cada noche cuenta en SU fecha =====
+        // Fuente primaria: cargos del folio (room_night lleva la fecha de cada noche;
+        // room_hourly la del check-in). Los consumos (productos/servicios) NO entran aquí:
+        // se muestran aparte. Las reservas que aún no generaron cargos (futuras/confirmadas
+        // o con tarifa 0) se proyectan desde sus fechas, para que "Este mes" incluya lo
+        // reservado por venir.
+        const resById = {}
+        hotelReservations.forEach(r => { resById[r.id] = r })
 
-        // Ingresos agrupados por tipo de habitación (reserva -> habitación por roomId -> type)
+        const nightEntries = []
+        const chargedResIds = new Set()
+        const seenNightKeys = new Set()
+        hotelFolioCharges.forEach(c => {
+          if (c.chargeType !== 'room_night' && c.chargeType !== 'room_hourly') return
+          const res = resById[c.reservationId]
+          if (res && (res.status === 'cancelled' || res.status === 'no_show')) return
+          // Reprogramación: ignorar noches SIN facturar que quedaron fuera del rango
+          // actual de la reserva (cargos huérfanos de fechas viejas).
+          if (res && c.chargeType === 'room_night' && !c.invoiceId) {
+            const ci = res.checkIn || res.checkInDate
+            const co = res.checkOut || res.checkOutDate
+            if (ci && co && (c.date < ci || c.date >= co)) return
+          }
+          // Dedupe defensivo: datos viejos con la misma noche duplicada cuentan UNA vez.
+          const key = `${c.reservationId}_${c.chargeType}_${c.date}`
+          if (seenNightKeys.has(key)) return
+          seenNightKeys.add(key)
+          chargedResIds.add(c.reservationId)
+          nightEntries.push({
+            date: c.date,
+            roomId: c.roomId || res?.roomId || null,
+            roomNumber: c.roomNumber || res?.roomNumber || '',
+            reservationId: c.reservationId,
+            amount: Number(c.amount) || 0,
+            isNight: c.chargeType === 'room_night',
+          })
+        })
+
+        // Reservas activas sin cargos aún → proyectar sus noches (cada una en su fecha).
+        hotelReservations.forEach(res => {
+          if (res.status === 'cancelled' || res.status === 'no_show') return
+          if (chargedResIds.has(res.id)) return
+          const ci = res.checkIn || res.checkInDate
+          const co = res.checkOut || res.checkOutDate
+          if (!ci) return
+          if (res.pricingMode === 'hourly') {
+            nightEntries.push({ date: ci, roomId: res.roomId || null, roomNumber: res.roomNumber || '', reservationId: res.id, amount: Number(res.totalAmount || res.total) || 0, isNight: false })
+            return
+          }
+          if (!co) return
+          const dates = []
+          const cur = new Date(ci + 'T12:00:00')
+          const end = new Date(co + 'T12:00:00')
+          while (cur < end) { dates.push(cur.toISOString().split('T')[0]); cur.setDate(cur.getDate() + 1) }
+          if (dates.length === 0) return
+          const resTotal = Number(res.totalAmount || res.total) || 0
+          const perNight = resTotal > 0 ? resTotal / dates.length : (Number(res.ratePerNight) || 0)
+          dates.forEach(d => nightEntries.push({ date: d, roomId: res.roomId || null, roomNumber: res.roomNumber || '', reservationId: res.id, amount: perNight, isNight: true }))
+        })
+
+        const periodEntries = nightEntries.filter(e => inPeriod(e.date))
+
+        // Hospedaje del período (SOLO habitación, sin consumos)
+        const totalRoomRevenue = periodEntries.reduce((s, e) => s + e.amount, 0)
+        const totalNights = periodEntries.filter(e => e.isNight).length
+        const adr = totalNights > 0 ? totalRoomRevenue / totalNights : 0
+        const revpar = totalRooms > 0 ? totalRoomRevenue / totalRooms : 0
+
+        // Consumos / productos del período (cargos que no son habitación, por su fecha).
+        const consumoTotal = hotelFolioCharges.reduce((s, c) => {
+          if (c.chargeType === 'room_night' || c.chargeType === 'room_hourly') return s
+          const res = resById[c.reservationId]
+          if (res && (res.status === 'cancelled' || res.status === 'no_show')) return s
+          return inPeriod(c.date) ? s + (Number(c.amount) || 0) : s
+        }, 0)
+
+        // Totales del período (card azul + filas "Total" de las tablas)
+        const periodResIds = new Set(periodEntries.map(e => e.reservationId))
+        const totalReservationsCount = periodResIds.size
+        const totalReservationsAmount = totalRoomRevenue
+        const activeRes = filteredRes.filter(r => r.status !== 'cancelled' && r.status !== 'no_show')
+        const totalReservationsPaid = activeRes.reduce((s, r) => s + (r.amountPaid || 0), 0)
+        const totalReservationsPending = Math.max(0, (totalRoomRevenue + consumoTotal) - totalReservationsPaid)
+
+        // Ingresos por tipo de habitación (desde las noches del período)
         const ROOM_TYPE_LABELS = { simple: 'Simple', doble: 'Doble', matrimonial: 'Matrimonial', suite: 'Suite', familiar: 'Familiar' }
+        const roomById = {}
+        hotelRooms.forEach(rm => { roomById[rm.id] = rm })
         const revenueByRoomType = (() => {
           const map = {}
-          activeRes.forEach(res => {
-            const room = hotelRooms.find(rm => rm.id === res.roomId)
+          periodEntries.forEach(e => {
+            const room = roomById[e.roomId]
             const label = ROOM_TYPE_LABELS[room?.type] || 'Otros'
-            if (!map[label]) map[label] = { type: label, reservations: 0, nights: 0, revenue: 0 }
-            map[label].reservations += 1
-            map[label].nights += (res.nights || 0)
-            map[label].revenue += (res.totalAmount || res.total || 0)
+            if (!map[label]) map[label] = { type: label, resIds: new Set(), nights: 0, revenue: 0 }
+            map[label].resIds.add(e.reservationId)
+            if (e.isNight) map[label].nights += 1
+            map[label].revenue += e.amount
           })
-          return Object.values(map).sort((a, b) => b.revenue - a.revenue)
+          return Object.values(map)
+            .map(r => ({ type: r.type, reservations: r.resIds.size, nights: r.nights, revenue: r.revenue }))
+            .sort((a, b) => b.revenue - a.revenue)
         })()
-        const roomTypeNightsTotal = revenueByRoomType.reduce((s, r) => s + r.nights, 0)
+        const roomTypeNightsTotal = totalNights
 
-        // Ingresos agrupados por habitación INDIVIDUAL, mostrando su nombre
-        // (ej. cada cabaña por su nombre). Agrupa por roomId; fallback al nombre/número
-        // guardado en la reserva si la habitación fue eliminada.
+        // Ingresos por habitación INDIVIDUAL (cada cabaña por su nombre), desde las
+        // noches del período: el conteo de noches por cabaña sale EXACTO (una fila por
+        // noche real, atribuida a su habitación y a su fecha).
         const revenueByRoom = (() => {
           const map = {}
-          activeRes.forEach(res => {
-            const room = hotelRooms.find(rm => rm.id === res.roomId)
-            const key = res.roomId || res.roomName || res.roomNumber || 'sin-hab'
-            const name = (room?.name || res.roomName || '').trim()
-            const number = room?.number || res.roomNumber || ''
+          periodEntries.forEach(e => {
+            const room = roomById[e.roomId]
+            const key = e.roomId || e.roomNumber || 'sin-hab'
+            const name = (room?.name || '').trim()
+            const number = room?.number || e.roomNumber || ''
             const label = name || (number ? `Hab. ${number}` : 'Sin habitación')
-            if (!map[key]) map[key] = { key, label, reservations: 0, nights: 0, revenue: 0 }
-            map[key].reservations += 1
-            map[key].nights += (res.nights || 0)
-            map[key].revenue += (res.totalAmount || res.total || 0)
+            if (!map[key]) map[key] = { key, label, resIds: new Set(), nights: 0, revenue: 0 }
+            map[key].resIds.add(e.reservationId)
+            if (e.isNight) map[key].nights += 1
+            map[key].revenue += e.amount
           })
-          return Object.values(map).sort((a, b) => b.revenue - a.revenue)
+          return Object.values(map)
+            .map(r => ({ key: r.key, label: r.label, reservations: r.resIds.size, nights: r.nights, revenue: r.revenue }))
+            .sort((a, b) => b.revenue - a.revenue)
         })()
 
         return (
           <>
-            {/* Total de reservas del período (independiente de boletas/facturas) */}
+            {/* Hospedaje del período (cada noche cuenta en su fecha) + consumos APARTE */}
             <Card className="border-blue-200 bg-blue-50/50">
               <CardContent className="p-5">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div>
-                    <p className="text-sm text-gray-600">Total de reservas del período</p>
+                    <p className="text-sm text-gray-600">Hospedaje del período</p>
                     <p className="text-3xl font-bold text-blue-700">{formatCurrency(totalReservationsAmount)}</p>
                     <p className="text-xs text-gray-500 mt-1">
-                      {totalReservationsCount} {totalReservationsCount === 1 ? 'reserva' : 'reservas'} · suma de todas las reservas hechas (no depende de boletas/facturas emitidas)
+                      {totalReservationsCount} {totalReservationsCount === 1 ? 'reserva' : 'reservas'} · {totalNights} {totalNights === 1 ? 'noche' : 'noches'} · cada noche cuenta en su fecha
                     </p>
                   </div>
-                  <div className="flex gap-6">
+                  <div className="flex flex-wrap gap-6">
+                    <div className="text-center">
+                      <p className="text-xs text-gray-500">Consumos / Productos</p>
+                      <p className="text-lg font-bold text-purple-600">{formatCurrency(consumoTotal)}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-gray-500">Total general</p>
+                      <p className="text-lg font-bold text-gray-900">{formatCurrency(totalReservationsAmount + consumoTotal)}</p>
+                    </div>
                     <div className="text-center">
                       <p className="text-xs text-gray-500">Cobrado</p>
                       <p className="text-lg font-bold text-green-600">{formatCurrency(totalReservationsPaid)}</p>
@@ -5622,7 +5713,7 @@ export default function Reports() {
                 <CardContent className="p-4 text-center">
                   <p className="text-xs text-gray-500">Ingresos Habitaciones</p>
                   <p className="text-2xl font-bold text-green-600">{formatCurrency(totalRoomRevenue)}</p>
-                  <p className="text-xs text-gray-400">{totalNights} noches (check-out)</p>
+                  <p className="text-xs text-gray-400">{totalNights} noches del período</p>
                 </CardContent>
               </Card>
               <Card>
