@@ -319,7 +319,9 @@ export const ensureRoomNightCharges = async (businessId, reservationId, roomId) 
         for (const date of dates) {
           if (existingDates.has(date)) continue
           const rate = await getEffectiveRate(businessId, rid, date, baseRate)
-          await addDoc(chargesRef, {
+          // ID determinístico por reserva+fecha → la misma noche nunca se duplica
+          // (aunque otro path la cree en paralelo, sobrescribe en vez de duplicar).
+          await setDoc(doc(chargesRef, `${reservationId}_${date}`), {
             reservationId, roomId: rid, roomNumber, guestName,
             chargeType: 'room_night',
             description: ciExtraGuests > 0 ? `Noche ${date} (+${ciExtraGuests} pers.)` : `Noche ${date}`,
@@ -402,7 +404,8 @@ export const checkIn = async (businessId, reservationId, roomId) => {
           for (const date of dates) {
             if (existingDates.has(date)) continue
             const rate = await getEffectiveRate(businessId, roomId, date, baseRate)
-            await addDoc(chargesRef, {
+            // ID determinístico por reserva+fecha → la misma noche nunca se duplica.
+            await setDoc(doc(chargesRef, `${reservationId}_${date}`), {
               reservationId,
               roomId,
               roomNumber,
@@ -692,7 +695,8 @@ export const runNightAudit = async (businessId, auditDate, performedBy) => {
         createdAt: serverTimestamp(),
       }
       const chargesRef = collection(db, 'businesses', businessId, 'hotelFolioCharges')
-      await addDoc(chargesRef, charge)
+      // ID determinístico por reserva+fecha → la misma noche nunca se duplica.
+      await setDoc(doc(chargesRef, `${res.id}_${today}`), charge)
       charges.push(charge)
     }
 
