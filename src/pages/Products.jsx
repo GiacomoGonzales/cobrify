@@ -3393,6 +3393,77 @@ export default function Products() {
     }
   }
 
+  // Cambiar masivamente el manejo de stock: noStock=true → NO controlan inventario
+  // (se venden sin descontar stock); noStock=false → reactivan el control.
+  const handleBulkSetNoStock = async (noStockValue) => {
+    if (selectedProducts.size === 0) return
+
+    setIsProcessingBulk(true)
+
+    try {
+      const businessId = getBusinessId()
+      let successCount = 0
+      let errorCount = 0
+      let skippedVariants = 0
+
+      // El "no maneja stock" del producto es stock:null + trackStock:false + warehouseStocks:[]
+      // (NO un flag noStock). Se procesa en lotes en paralelo para que 300+ productos no tarden.
+      const ids = [...selectedProducts]
+      const CHUNK = 25
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const chunk = ids.slice(i, i + CHUNK)
+        const results = await Promise.all(chunk.map(async (productId) => {
+          const prod = products.find(p => p.id === productId)
+          // Productos con variantes siempre manejan stock (a nivel variante) → se omiten.
+          if (prod?.hasVariants) return { skipped: true }
+          let updates
+          if (noStockValue) {
+            updates = { stock: null, initialStock: null, trackStock: false, warehouseStocks: [] }
+          } else {
+            // Reactivar control: si NO manejaba (stock null) inicializar en 0; si ya tenía, no tocar.
+            const currentlyNoStock = !prod || prod.stock === null || prod.stock === undefined
+            updates = currentlyNoStock
+              ? { stock: 0, initialStock: 0, trackStock: true, warehouseStocks: [] }
+              : { trackStock: true }
+          }
+          try {
+            const r = await updateProduct(businessId, productId, updates)
+            return r.success ? { ok: true } : { error: true }
+          } catch (error) {
+            console.error(`Error al actualizar producto ${productId}:`, error)
+            return { error: true }
+          }
+        }))
+        for (const r of results) {
+          if (r.skipped) skippedVariants++
+          else if (r.ok) successCount++
+          else errorCount++
+        }
+      }
+
+      await loadProducts()
+      setSelectedProducts(new Set())
+
+      const action = noStockValue ? 'ya no manejan stock' : 'ahora manejan stock'
+      if (successCount > 0) {
+        toast.success(`${successCount} producto(s) ${action}`)
+      }
+      if (skippedVariants > 0) {
+        toast.info(`${skippedVariants} con variantes se omitieron (siempre manejan stock)`)
+      }
+      if (errorCount > 0) {
+        toast.error(`${errorCount} producto(s) no pudieron ser actualizados`)
+      }
+
+      closeBulkActionModal()
+    } catch (error) {
+      console.error('Error en cambio masivo de manejo de stock:', error)
+      toast.error('Error al cambiar el manejo de stock')
+    } finally {
+      setIsProcessingBulk(false)
+    }
+  }
+
   // Cambiar masivamente la afectación IGV (gravado/exonerado/inafecto) de los
   // productos seleccionados. Pensado para negocios (ej. zona de selva) que
   // cambian su afectación por defecto y necesitan convertir el catálogo existente.
@@ -4273,6 +4344,15 @@ export default function Products() {
                 >
                   <Scale className="w-4 h-4 mr-2" />
                   Permitir decimales
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openBulkActionModal('manageStock')}
+                  className="flex-1 sm:flex-initial"
+                >
+                  <Boxes className="w-4 h-4 mr-2" />
+                  Manejar stock
                 </Button>
                 <Button
                   variant="outline"
@@ -8418,6 +8498,8 @@ export default function Products() {
             ? 'Mostrar en catálogo'
             : bulkAction === 'allowDecimals'
             ? 'Permitir decimales'
+            : bulkAction === 'manageStock'
+            ? 'Manejar stock'
             : bulkAction === 'taxAffectation'
             ? 'Afectación IGV'
             : 'Activar/Desactivar productos'
@@ -8650,6 +8732,57 @@ export default function Products() {
                     <>
                       <Scale className="w-4 h-4 mr-2" />
                       Activar decimales
+                    </>
+                  )}
+                </Button>
+              </div>
+            </>
+          )}
+
+          {bulkAction === 'manageStock' && (
+            <>
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  ¿Qué quieres hacer con los {selectedProducts.size} producto{selectedProducts.size !== 1 ? 's' : ''} seleccionado{selectedProducts.size !== 1 ? 's' : ''}?
+                </p>
+                <p className="text-sm text-blue-700 mt-1">
+                  "No manejar stock" hace que estos productos NO controlen inventario (se venden sin descontar stock). "Manejar stock" reactiva el control de inventario.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row justify-end gap-2">
+                <Button variant="outline" onClick={closeBulkActionModal} disabled={isProcessingBulk}>
+                  Cancelar
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => handleBulkSetNoStock(false)}
+                  disabled={isProcessingBulk}
+                >
+                  {isProcessingBulk ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Actualizando...
+                    </>
+                  ) : (
+                    <>
+                      <Boxes className="w-4 h-4 mr-2" />
+                      Manejar stock
+                    </>
+                  )}
+                </Button>
+                <Button
+                  onClick={() => handleBulkSetNoStock(true)}
+                  disabled={isProcessingBulk}
+                >
+                  {isProcessingBulk ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Actualizando...
+                    </>
+                  ) : (
+                    <>
+                      <Ban className="w-4 h-4 mr-2" />
+                      No manejar stock
                     </>
                   )}
                 </Button>
