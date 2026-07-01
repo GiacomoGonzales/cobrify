@@ -1315,6 +1315,85 @@ export default function CashRegister() {
     setShowMovementModal(true)
   }
 
+  // Imprime una CONSTANCIA de movimiento de caja (ingreso/egreso) con línea de firma,
+  // para control interno. Usa un iframe oculto + window.print (evita bloqueadores de popup).
+  const printCashMovementReceipt = (movement) => {
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ))
+    const bizName = businessSettings?.businessName || businessSettings?.companyName || businessSettings?.name || 'Mi Negocio'
+    const ruc = businessSettings?.ruc || businessSettings?.documentNumber || ''
+    const cajero = user?.displayName || user?.email || 'Usuario'
+    const branch = selectedBranch?.name || currentSession?.branchName || ''
+    const fecha = getDateFromTimestamp(movement.createdAt) || new Date()
+    const fechaStr = fecha.toLocaleString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    const isIncome = movement.type === 'income'
+    const tipo = isIncome ? 'INGRESO' : 'EGRESO'
+    const metodo = movement.method === 'yape' ? 'Yape' : 'Efectivo'
+    const monto = formatCurrency(movement.amount, movement.currency)
+    const correlativo = (movement.id || '').toString().slice(-8).toUpperCase()
+
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Constancia de Caja</title>
+<style>
+  @page { size: A5; margin: 12mm; }
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #111; font-size: 12px; margin: 0; }
+  .hdr { text-align:center; border-bottom: 2px solid #111; padding-bottom: 8px; margin-bottom: 12px; }
+  .biz { font-weight: bold; font-size: 14px; }
+  .ruc { font-size: 11px; color:#555; }
+  .title { font-size: 15px; font-weight: bold; margin-top: 6px; letter-spacing: .5px; }
+  .meta { display:flex; justify-content:space-between; font-size: 11px; color:#444; margin-bottom: 12px; }
+  .tipo-wrap { text-align:center; margin: 10px 0 16px; }
+  .tipo { display:inline-block; padding: 3px 14px; border-radius: 4px; font-weight:bold; font-size: 13px; }
+  .ingreso { background:#dcfce7; color:#166534; }
+  .egreso { background:#fee2e2; color:#991b1b; }
+  .monto { font-size: 22px; font-weight: bold; margin-top: 8px; color: ${isIncome ? '#166534' : '#991b1b'}; }
+  table { width:100%; border-collapse: collapse; }
+  td { padding: 5px 0; vertical-align: top; font-size: 12px; }
+  .lbl { color:#555; width: 38%; }
+  .val { font-weight: 600; }
+  .firmas { display:flex; justify-content: space-between; margin-top: 60px; }
+  .firma { width: 45%; text-align:center; border-top: 1px solid #111; padding-top: 5px; font-size: 11px; }
+  .firma small { color:#888; }
+</style></head><body>
+  <div class="hdr">
+    <div class="biz">${esc(bizName)}</div>
+    ${ruc ? `<div class="ruc">RUC: ${esc(ruc)}</div>` : ''}
+    <div class="title">CONSTANCIA DE MOVIMIENTO DE CAJA</div>
+  </div>
+  <div class="meta">
+    <span>N°: ${esc(correlativo)}</span>
+    <span>Fecha: ${esc(fechaStr)}</span>
+  </div>
+  <div class="tipo-wrap">
+    <span class="tipo ${isIncome ? 'ingreso' : 'egreso'}">${tipo}</span>
+    <div class="monto">${esc(monto)}</div>
+  </div>
+  <table>
+    <tr><td class="lbl">Concepto:</td><td class="val">${esc(movement.description || '-')}</td></tr>
+    <tr><td class="lbl">Categoría:</td><td class="val">${esc(movement.category || '-')}</td></tr>
+    <tr><td class="lbl">Método:</td><td class="val">${metodo}</td></tr>
+    ${branch ? `<tr><td class="lbl">Sucursal / Caja:</td><td class="val">${esc(branch)}</td></tr>` : ''}
+    <tr><td class="lbl">Registrado por:</td><td class="val">${esc(cajero)}</td></tr>
+  </table>
+  <div class="firmas">
+    <div class="firma">Entregado por<br><small>Nombre / DNI</small></div>
+    <div class="firma">Recibido por<br><small>Nombre / DNI</small></div>
+  </div>
+</body></html>`
+
+    const iframe = document.createElement('iframe')
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;'
+    document.body.appendChild(iframe)
+    const idoc = iframe.contentWindow.document
+    idoc.open(); idoc.write(html); idoc.close()
+    iframe.contentWindow.focus()
+    setTimeout(() => {
+      try { iframe.contentWindow.print() } catch (e) { console.error('Error al imprimir constancia:', e) }
+      setTimeout(() => { try { document.body.removeChild(iframe) } catch (e) {} }, 1500)
+    }, 300)
+  }
+
   const handleUpdateMovement = async () => {
     if (!movementData.amount || parseFloat(movementData.amount) <= 0) {
       toast.error('Ingresa un monto válido')
@@ -2317,6 +2396,13 @@ export default function CashRegister() {
                               {getDateFromTimestamp(movement.createdAt) ? formatDate(getDateFromTimestamp(movement.createdAt)) : 'Hoy'}
                             </p>
                           </div>
+                          <button
+                            onClick={() => printCashMovementReceipt(movement)}
+                            className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors sm:ml-2"
+                            title="Imprimir constancia"
+                          >
+                            <Printer className="w-4 h-4" />
+                          </button>
                           {/* Botones de editar/eliminar (ocultos en modo lectura) */}
                           {!isViewingOtherUser && (
                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity sm:ml-2">
