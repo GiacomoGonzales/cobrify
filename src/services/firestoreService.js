@@ -2720,49 +2720,77 @@ export const deleteCashMovement = async (userId, movementId) => {
 /**
  * Obtener historial de sesiones de caja cerradas
  */
+// Historial de cierres de caja con PAGINACIÓN (cursor) y filtro por rango de fechas.
+// El filtro por sucursal/usuario es client-side (no se puede en el server porque las
+// sesiones "globales" no tienen branchId), así que traemos lotes y seguimos pidiendo
+// hasta juntar `limit` resultados reales — así nunca se cortan cierres viejos por el filtro.
+// Devuelve { data, lastDoc, hasMore }. Para la siguiente página pasar startAfterDoc: lastDoc.
 export const getCashRegisterHistory = async (userId, options = {}) => {
   try {
-    const { limit: maxResults = 30, branchId = null, userUid = null } = options
+    const {
+      limit: pageSize = 30,
+      branchId = null,
+      userUid = null,
+      startAfterDoc = null,   // DocumentSnapshot de una llamada previa (paginación)
+      dateFrom = null,        // Date/Timestamp → closedAt >=
+      dateTo = null,          // Date/Timestamp → closedAt <=
+    } = options
 
-    // Query con orderBy + limit para reducir documentos leídos desde Firestore
-    const q = query(
-      collection(db, 'businesses', userId, 'cashSessions'),
-      where('status', '==', 'closed'),
-      orderBy('closedAt', 'desc'),
-      limit(maxResults * 3) // Traer extra para compensar filtros client-side
-    )
-    const snapshot = await getDocs(q)
-
-    // Filtrar por sucursal y usuario en el cliente
-    const sessions = snapshot.docs
-      .map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      }))
-      .filter(session => {
-        // Filtrar por sucursal
-        if (branchId) {
-          if (session.branchId !== branchId) return false
+    const matchesFilters = (session) => {
+      if (branchId) {
+        if (session.branchId !== branchId) return false
+      } else {
+        if (session.branchId) return false
+      }
+      if (userUid === 'global') {
+        if (session.openedByUserId && session.openedByUserId !== userId) return false
+      } else if (userUid) {
+        if (session.openedByUserId) {
+          if (session.openedByUserId !== userUid) return false
         } else {
-          if (session.branchId) return false
+          if (userUid !== userId) return false
         }
-        // Filtrar por usuario
-        if (userUid === 'global') {
-          // Sesiones globales: sin openedByUserId O del owner (sesiones antiguas)
-          if (session.openedByUserId && session.openedByUserId !== userId) return false
-        } else if (userUid) {
-          // Sesiones de un sub-usuario independiente específico
-          if (session.openedByUserId) {
-            if (session.openedByUserId !== userUid) return false
-          } else {
-            if (userUid !== userId) return false
-          }
-        }
-        return true
-      })
-      .slice(0, maxResults)
+      }
+      return true
+    }
 
-    return { success: true, data: sessions }
+    const BATCH = Math.max(30, pageSize) * 3 // sobre-traer por el filtro client-side
+    const collected = []
+    let cursor = startAfterDoc
+    let lastReturnedSnap = startAfterDoc
+    let exhausted = false
+
+    for (let iter = 0; iter < 25 && collected.length < pageSize && !exhausted; iter++) {
+      const constraints = [where('status', '==', 'closed')]
+      if (dateFrom) constraints.push(where('closedAt', '>=', dateFrom))
+      if (dateTo) constraints.push(where('closedAt', '<=', dateTo))
+      constraints.push(orderBy('closedAt', 'desc'))
+      if (cursor) constraints.push(startAfter(cursor))
+      constraints.push(limit(BATCH))
+
+      const snapshot = await getDocs(
+        query(collection(db, 'businesses', userId, 'cashSessions'), ...constraints)
+      )
+      if (snapshot.empty) { exhausted = true; break }
+
+      for (const d of snapshot.docs) {
+        if (collected.length >= pageSize) break
+        const session = { id: d.id, ...d.data() }
+        if (matchesFilters(session)) {
+          collected.push(session)
+          lastReturnedSnap = d // cursor = último ITEM devuelto (no salta los no-devueltos)
+        }
+      }
+      cursor = snapshot.docs[snapshot.docs.length - 1]
+      if (snapshot.docs.length < BATCH) exhausted = true
+    }
+
+    return {
+      success: true,
+      data: collected,
+      lastDoc: lastReturnedSnap,
+      hasMore: !exhausted && collected.length >= pageSize,
+    }
   } catch (error) {
     console.error('Error al obtener historial de caja:', error)
     return { success: false, error: error.message }

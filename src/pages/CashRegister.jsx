@@ -63,6 +63,11 @@ export default function CashRegister() {
   const [activeTab, setActiveTab] = useState('current')
   const [historyData, setHistoryData] = useState([])
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+  // Paginación + filtro por mes del historial de cierres
+  const [historyMonth, setHistoryMonth] = useState('') // '' = todos, 'YYYY-MM' = mes
+  const [historyLastDoc, setHistoryLastDoc] = useState(null)
+  const [historyHasMore, setHistoryHasMore] = useState(false)
+  const [isLoadingMoreHistory, setIsLoadingMoreHistory] = useState(false)
   const [selectedHistorySession, setSelectedHistorySession] = useState(null)
   const [historyMovements, setHistoryMovements] = useState([])
   const [historyInvoices, setHistoryInvoices] = useState([])
@@ -485,28 +490,17 @@ export default function CashRegister() {
       }
 
       const branchId = selectedBranch?.id || null
-      // Determinar filtro de usuario para historial
-      // Owner y sub-usuarios compartidos usan la misma caja global
-      const isSubUser = userPermissions && userPermissions.ownerId
-      const isSharedCashUser = isSubUser && !independentCashRegister
-      let historyUserUid = null
-      if (isSubUser && !isSharedCashUser) {
-        // Sub-usuario con caja independiente: ve solo sus propias sesiones
-        historyUserUid = user.uid
-      } else if (isSharedCashUser) {
-        // Sub-usuario con caja compartida: ve las sesiones globales
-        historyUserUid = 'global'
-      } else if (selectedCashUser && selectedCashUser !== 'all') {
-        // Owner viendo caja de un sub-usuario independiente específico
-        historyUserUid = selectedCashUser
-      } else if (!selectedCashUser) {
-        // Owner "Mi Caja": ve sesiones globales (las que comparte con sub-usuarios)
-        historyUserUid = 'global'
-      }
-      // Si selectedCashUser es 'all', historyUserUid queda null -> muestra todas
-      const result = await getCashRegisterHistory(getBusinessId(), { branchId, userUid: historyUserUid })
+      const { dateFrom, dateTo } = getHistoryDateRange()
+      const result = await getCashRegisterHistory(getBusinessId(), {
+        branchId,
+        userUid: getHistoryUserUid(),
+        dateFrom,
+        dateTo,
+      })
       if (result.success) {
         setHistoryData(result.data || [])
+        setHistoryLastDoc(result.lastDoc || null)
+        setHistoryHasMore(!!result.hasMore)
       } else {
         toast.error('Error al cargar historial')
       }
@@ -515,6 +509,57 @@ export default function CashRegister() {
       toast.error('Error al cargar historial')
     } finally {
       setIsLoadingHistory(false)
+    }
+  }
+
+  // Rango de fechas [dateFrom, dateTo] del mes seleccionado ('' = sin filtro)
+  const getHistoryDateRange = () => {
+    if (!historyMonth) return { dateFrom: null, dateTo: null }
+    const [y, m] = historyMonth.split('-').map(Number)
+    if (!y || !m) return { dateFrom: null, dateTo: null }
+    return {
+      dateFrom: new Date(y, m - 1, 1, 0, 0, 0, 0),
+      dateTo: new Date(y, m, 0, 23, 59, 59, 999), // último día del mes
+    }
+  }
+
+  // Filtro de usuario para el historial según el contexto (owner / sub-usuario / caja compartida)
+  const getHistoryUserUid = () => {
+    const isSubUser = userPermissions && userPermissions.ownerId
+    const isSharedCashUser = isSubUser && !independentCashRegister
+    if (isSubUser && !isSharedCashUser) return user.uid // caja independiente: solo sus sesiones
+    if (isSharedCashUser) return 'global' // caja compartida: sesiones globales
+    if (selectedCashUser && selectedCashUser !== 'all') return selectedCashUser // owner viendo a un sub-usuario
+    if (!selectedCashUser) return 'global' // owner "Mi Caja"
+    return null // 'all' -> todas
+  }
+
+  // "Cargar más": trae la siguiente página y la agrega al listado actual
+  const loadMoreHistory = async () => {
+    if (isDemoMode || !historyLastDoc || isLoadingMoreHistory) return
+    setIsLoadingMoreHistory(true)
+    try {
+      const branchId = selectedBranch?.id || null
+      const { dateFrom, dateTo } = getHistoryDateRange()
+      const result = await getCashRegisterHistory(getBusinessId(), {
+        branchId,
+        userUid: getHistoryUserUid(),
+        dateFrom,
+        dateTo,
+        startAfterDoc: historyLastDoc,
+      })
+      if (result.success) {
+        setHistoryData(prev => [...prev, ...(result.data || [])])
+        setHistoryLastDoc(result.lastDoc || null)
+        setHistoryHasMore(!!result.hasMore)
+      } else {
+        toast.error('Error al cargar más cierres')
+      }
+    } catch (error) {
+      console.error('Error al cargar más historial:', error)
+      toast.error('Error al cargar más cierres')
+    } finally {
+      setIsLoadingMoreHistory(false)
     }
   }
 
@@ -694,7 +739,7 @@ export default function CashRegister() {
     if (activeTab === 'history' && user?.uid) {
       loadHistory()
     }
-  }, [activeTab, user?.uid, selectedBranch, selectedCashUser])
+  }, [activeTab, user?.uid, selectedBranch, selectedCashUser, historyMonth])
 
   const handleOpenCashRegister = async () => {
     if (isOpening) return
@@ -2667,6 +2712,32 @@ export default function CashRegister() {
       ) : (
         /* Historial de Cajas */
         <div className="space-y-4">
+          {/* Filtro por mes */}
+          <Card>
+            <CardContent className="py-3">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <Calendar className="w-4 h-4" />
+                  <span>Filtrar por mes:</span>
+                </div>
+                <input
+                  type="month"
+                  value={historyMonth}
+                  onChange={(e) => setHistoryMonth(e.target.value)}
+                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                />
+                {historyMonth && (
+                  <button
+                    onClick={() => setHistoryMonth('')}
+                    className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                  >
+                    Ver todos
+                  </button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
           {isLoadingHistory ? (
             <div className="flex items-center justify-center h-64">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
@@ -2680,7 +2751,9 @@ export default function CashRegister() {
                   </div>
                   <h3 className="text-xl font-semibold text-gray-900 mb-2">Sin Historial</h3>
                   <p className="text-gray-600">
-                    No hay sesiones de caja cerradas anteriormente
+                    {historyMonth
+                      ? 'No hay cierres de caja en el mes seleccionado'
+                      : 'No hay sesiones de caja cerradas anteriormente'}
                   </p>
                 </div>
               </CardContent>
@@ -2807,6 +2880,26 @@ export default function CashRegister() {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Cargar más cierres (paginación) */}
+              {historyHasMore && (
+                <div className="flex justify-center pt-1">
+                  <button
+                    onClick={loadMoreHistory}
+                    disabled={isLoadingMoreHistory}
+                    className="px-6 py-2.5 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {isLoadingMoreHistory ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-500"></div>
+                        Cargando...
+                      </>
+                    ) : (
+                      'Cargar más cierres'
+                    )}
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>
