@@ -977,6 +977,22 @@ export default function HotelReservations() {
     [pendingItems]
   )
 
+  // Desglose del folio: hospedaje (noches/estadía) vs consumos (productos/servicios),
+  // para verlos separados en el folio (el hospedaje aparte de la venta de productos).
+  const folioSplit = useMemo(() => {
+    const isRoom = (c) => {
+      const t = c.chargeType || c.type
+      return t === 'room_night' || t === 'room_hourly'
+    }
+    let hospedaje = 0, consumo = 0
+    for (const c of folioCharges) {
+      const amt = Number(c.amount) || 0
+      if (isRoom(c)) hospedaje += amt
+      else consumo += amt
+    }
+    return { hospedaje, consumo }
+  }, [folioCharges])
+
   // Navegar al POS con los cargos del folio precargados
   const goToPOSWithFolio = (reservation, charges) => {
     appNavigate('/pos', {
@@ -1938,10 +1954,24 @@ export default function HotelReservations() {
               </div>
             )}
 
-            {/* Total */}
-            <div className="border-t pt-3 flex items-center justify-between">
-              <span className="text-lg font-semibold text-gray-700">Total</span>
-              <span className="text-xl font-bold text-gray-900">{formatCurrency(folioTotal)}</span>
+            {/* Desglose (hospedaje vs consumos) + Total */}
+            <div className="border-t pt-3 space-y-1.5">
+              {folioSplit.consumo > 0 && (
+                <>
+                  <div className="flex items-center justify-between text-sm text-gray-600">
+                    <span>Hospedaje</span>
+                    <span>{formatCurrency(folioSplit.hospedaje)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm text-gray-600">
+                    <span>Consumos / Productos</span>
+                    <span>{formatCurrency(folioSplit.consumo)}</span>
+                  </div>
+                </>
+              )}
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-lg font-semibold text-gray-700">Total</span>
+                <span className="text-xl font-bold text-gray-900">{formatCurrency(folioTotal)}</span>
+              </div>
             </div>
 
             {/* Actions */}
