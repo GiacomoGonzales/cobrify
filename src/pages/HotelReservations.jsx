@@ -30,6 +30,7 @@ import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
+import HotelWeeklyView from '@/components/hotel/HotelWeeklyView'
 import { formatCurrency, matchesSearchQuery } from '@/lib/utils'
 import {
   createReservation,
@@ -144,6 +145,7 @@ export default function HotelReservations() {
   // Filters
   const [searchTerm, setSearchTerm] = useState('')
   const [activeTab, setActiveTab] = useState('all')
+  const [viewMode, setViewMode] = useState('list') // 'list' | 'week'
   const [roomFilter, setRoomFilter] = useState('all')
 
   // Reservation modal
@@ -1100,10 +1102,28 @@ export default function HotelReservations() {
             Gestiona las reservas del hotel
           </p>
         </div>
-        <Button onClick={openCreateModal}>
-          <Plus className="w-4 h-4 mr-2" />
-          Nueva Reserva
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-lg border border-gray-300 overflow-hidden flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className={`px-3 py-2 text-sm font-medium transition-colors ${viewMode === 'list' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+            >
+              Lista
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('week')}
+              className={`px-3 py-2 text-sm font-medium transition-colors ${viewMode === 'week' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+            >
+              Semana
+            </button>
+          </div>
+          <Button onClick={openCreateModal}>
+            <Plus className="w-4 h-4 mr-2" />
+            Nueva Reserva
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -1162,6 +1182,10 @@ export default function HotelReservations() {
         </Card>
       </div>
 
+      {viewMode === 'week' ? (
+        <HotelWeeklyView rooms={rooms} reservations={reservations} />
+      ) : (
+      <>
       {/* Filter tabs + Search */}
       <Card>
         <CardContent className="p-4">
@@ -1405,6 +1429,9 @@ export default function HotelReservations() {
           )}
         </CardContent>
       </Card>
+
+      </>
+      )}
 
       {/* Create/Edit Reservation Modal */}
       <Modal
