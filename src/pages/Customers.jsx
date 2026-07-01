@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useDeferredValue } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet, CalendarClock, Cake, Columns3, PawPrint, ClipboardList, Eye, EyeOff, X } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet, Upload, CalendarClock, Cake, Columns3, PawPrint, ClipboardList, Eye, EyeOff, X } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useHidePrivateData } from '@/hooks/useHidePrivateData'
 import { useToast } from '@/contexts/ToastContext'
@@ -23,6 +23,7 @@ import {
 } from '@/services/firestoreService'
 import { formatCurrency, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import { generateCustomersExcel } from '@/services/customerExportService'
+import ImportCustomersModal from '@/components/ImportCustomersModal'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import MedicalHistoryModal from '@/components/veterinary/MedicalHistoryModal'
 import { normalizePets, createEmptyPet } from '@/utils/petUtils'
@@ -37,6 +38,7 @@ export default function Customers() {
   const [showAmounts, setShowAmounts] = useState(() => localStorage.getItem('dashboard_show_amounts') === 'true')
   const hiddenAmount = '••••••'
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isImportOpen, setIsImportOpen] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState(null)
   const [deletingCustomer, setDeletingCustomer] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -521,6 +523,14 @@ export default function Customers() {
               Exportar Excel
             </Button>
           )}
+          <Button
+            variant="outline"
+            onClick={() => setIsImportOpen(true)}
+            className="w-full sm:w-auto"
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            Importar Excel
+          </Button>
           <Button onClick={openCreateModal} className="w-full sm:w-auto">
             <Plus className="w-4 h-4 mr-2" />
             Nuevo Cliente
@@ -1103,6 +1113,13 @@ export default function Customers() {
       )}
 
       {/* Modal Crear/Editar */}
+      <ImportCustomersModal
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        onImported={loadCustomers}
+        existingCustomers={customers}
+      />
+
       <Modal
         isOpen={isModalOpen}
         onClose={closeModal}
