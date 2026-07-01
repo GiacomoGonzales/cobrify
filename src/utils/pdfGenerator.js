@@ -2941,6 +2941,30 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const footerCompanyName = branding?.companyName || 'Cobrify'
   doc.text(`Documento generado en ${footerCompanyName} - Sistema de Facturación Electrónica`, MARGIN_LEFT + CONTENT_WIDTH / 2, PAGE_HEIGHT - MARGIN_BOTTOM - 3, { align: 'center' })
 
+  // ========== MARCA DE AGUA "ANULADO" ==========
+  // Comprobante anulado: nota de venta (status 'cancelled') o boleta/factura anulada
+  // en SUNAT (sunatStatus 'voided'), o cualquiera con voidedAt. Se estampa en diagonal
+  // sobre TODAS las páginas, semitransparente, encima del contenido.
+  {
+    const isVoided = String(invoice.status || '').toLowerCase() === 'cancelled'
+      || String(invoice.sunatStatus || '').toLowerCase() === 'voided'
+      || !!invoice.voidedAt
+    if (isVoided) {
+      const totalPages = doc.getNumberOfPages()
+      for (let p = 1; p <= totalPages; p++) {
+        doc.setPage(p)
+        doc.saveGraphicsState()
+        try { doc.setGState(new doc.GState({ opacity: 0.22 })) } catch (e) { /* GState no soportado en esta versión de jsPDF */ }
+        doc.setTextColor(220, 38, 38)
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(80)
+        doc.text('ANULADO', PAGE_WIDTH / 2, PAGE_HEIGHT / 2, { align: 'center', angle: 45 })
+        doc.restoreGraphicsState()
+      }
+      doc.setTextColor(0, 0, 0)
+    }
+  }
+
   // ========== GENERAR PDF ==========
 
   if (download) {
