@@ -104,43 +104,28 @@ export async function getBrandingForClient(userId) {
 
       // Si fue creado por un reseller
       if (subscription.createdByReseller) {
-        // Opción 1: Branding guardado en la suscripción (clientes nuevos)
-        if (subscription.resellerBranding) {
-          console.log('✅ Using branding from subscription:', subscription.resellerBranding)
-          let merged = {
-            ...DEFAULT_BRANDING,
-            ...subscription.resellerBranding
-          }
-          // Si en la subscription no quedó websiteUrl/customDomain (puede ser un snapshot
-          // viejo), traerlos del reseller actual. Necesario para que footers de PDFs
-          // muestren el dominio del reseller en vez de cobrifyperu.com.
-          // Snapshots viejos no guardaron websiteUrl/customDomain ni el contacto de soporte
-          // (whatsapp/supportEmail). Si falta alguno, lo traemos del reseller actual para que
-          // los footers de PDFs y la sección de soporte de "Mi Suscripción" muestren los datos
-          // del reseller en vez de los de Cobrify.
-          if ((!merged.websiteUrl || !merged.customDomain || !merged.whatsapp || !merged.supportEmail) && subscription.resellerId) {
-            try {
-              const fresh = await getResellerBranding(subscription.resellerId)
-              merged = {
-                ...merged,
-                websiteUrl: merged.websiteUrl || fresh.websiteUrl || '',
-                customDomain: merged.customDomain || fresh.customDomain || '',
-                whatsapp: merged.whatsapp || fresh.whatsapp || '',
-                supportEmail: merged.supportEmail || fresh.supportEmail || '',
-              }
-            } catch (e) {
-              console.warn('No se pudo refrescar datos del reseller:', e.message)
+        // Priorizar SIEMPRE el branding ACTUAL del reseller. Si el reseller cambió su marca
+        // (nombre/logo/colores) DESPUÉS de crear al cliente, el snapshot `resellerBranding`
+        // guardado en la suscripción queda viejo (el cliente seguía viendo "Cobrify").
+        // Leer el vigente hace que el cliente siempre vea la marca actual del reseller
+        // (nombre, logo, colores, dominio y contacto de soporte).
+        if (subscription.resellerId) {
+          try {
+            const fresh = await getResellerBranding(subscription.resellerId)
+            if (fresh && fresh.companyName && fresh.companyName !== DEFAULT_BRANDING.companyName) {
+              console.log('✅ Using CURRENT reseller branding for client:', fresh.companyName)
+              return fresh
             }
+          } catch (e) {
+            console.warn('No se pudo obtener branding actual del reseller:', e.message)
           }
-          return merged
         }
 
-        // Opción 2: Obtener del reseller (clientes antiguos)
-        if (subscription.resellerId) {
-          console.log('🔍 Fetching branding from reseller:', subscription.resellerId)
-          const branding = await getResellerBranding(subscription.resellerId)
-          console.log('✅ Loaded branding from reseller:', branding)
-          return branding
+        // Fallback: snapshot guardado en la suscripción (si no hay resellerId, el fetch
+        // falló, o el reseller aún no configuró su marca).
+        if (subscription.resellerBranding) {
+          console.log('✅ Using branding snapshot from subscription (fallback)')
+          return { ...DEFAULT_BRANDING, ...subscription.resellerBranding }
         }
       }
     }
