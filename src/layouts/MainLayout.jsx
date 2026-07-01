@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Outlet, Navigate, useLocation } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import { useAuth } from '@/contexts/AuthContext'
+import { useBranding } from '@/contexts/BrandingContext'
 import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { getVendedor } from '@/services/vendedorService'
@@ -77,6 +78,7 @@ export default function MainLayout() {
   const toast = useToast()
   const [hasBusiness, setHasBusiness] = useState(null)
   const [checkingBusiness, setCheckingBusiness] = useState(false)
+  const { branding } = useBranding()
   const [vendedorWhatsApp, setVendedorWhatsApp] = useState(null)
   const location = useLocation()
   const sidebarCollapsed = useStore(state => state.sidebarCollapsed)
@@ -584,7 +586,7 @@ export default function MainLayout() {
             <span className="font-medium">Tu suscripción venció. Tienes hasta mañana para renovar.</span>
           </div>
           <a
-            href={`https://wa.me/${vendedorWhatsApp || '51900434988'}?text=${encodeURIComponent(`Hola, quiero renovar mi suscripción de Cobrify. Mi email es ${user?.email || ''}.`)}`}
+            href={`https://wa.me/${vendedorWhatsApp || '51900434988'}?text=${encodeURIComponent(`Hola, quiero renovar mi suscripción de ${branding?.companyName || 'Cobrify'}. Mi email es ${user?.email || ''}.`)}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1 px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-white whitespace-nowrap transition-colors"
@@ -603,7 +605,7 @@ export default function MainLayout() {
             <span className="font-medium">Has superado tu límite de envíos a SUNAT este mes. Comunícate con nosotros para ampliarlo.</span>
           </div>
           <a
-            href={`https://wa.me/${vendedorWhatsApp || '51900434988'}?text=${encodeURIComponent(`Hola, superé mi límite de comprobantes en Cobrify y quiero ampliarlo. Mi email es ${user?.email || ''}.`)}`}
+            href={`https://wa.me/${vendedorWhatsApp || '51900434988'}?text=${encodeURIComponent(`Hola, superé mi límite de comprobantes en ${branding?.companyName || 'Cobrify'} y quiero ampliarlo. Mi email es ${user?.email || ''}.`)}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1 px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-white whitespace-nowrap transition-colors"

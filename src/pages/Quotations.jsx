@@ -29,6 +29,7 @@ import {
 import { Capacitor } from '@capacitor/core'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { useBranding } from '@/contexts/BrandingContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -61,6 +62,7 @@ export default function Quotations() {
   const navigate = useNavigate()
   const appNavigate = useAppNavigate()
   const toast = useToast()
+  const { branding } = useBranding()
   const [quotations, setQuotations] = useState([])
   const [companySettings, setCompanySettings] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -388,7 +390,7 @@ export default function Quotations() {
     }
 
     try {
-      await generateQuotationPDF(quotation, companySettings)
+      await generateQuotationPDF(quotation, companySettings, true, branding)
 
       if (!isDemoMode) {
         await markQuotationAsSent(getBusinessId(), quotation.id, 'manual')
