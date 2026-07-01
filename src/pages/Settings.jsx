@@ -653,6 +653,11 @@ export default function Settings() {
   // Estructura: [{ provider: 'Yape'|'Plin', holderName, phoneNumber, qrImageUrl, _qrFile?, _qrPreview? }]
   const [newWalletQrFile, setNewWalletQrFile] = useState(null)
   const [newWalletQrPreview, setNewWalletQrPreview] = useState('')
+  // Edición inline de cuentas bancarias y billeteras (fila en modo editable)
+  const [editingBankIndex, setEditingBankIndex] = useState(null)
+  const [editingWalletIndex, setEditingWalletIndex] = useState(null)
+  const updateBankAccount = (i, patch) => setBankAccounts(prev => prev.map((a, idx) => idx === i ? { ...a, ...patch } : a))
+  const updateWallet = (i, patch) => setDigitalWallets(prev => prev.map((w, idx) => idx === i ? { ...w, ...patch } : w))
 
   // Estados para eliminación masiva de datos
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false)
@@ -3281,32 +3286,86 @@ export default function Settings() {
                         </tr>
                       </thead>
                       <tbody className="divide-y">
-                        {bankAccounts.map((account, index) => (
+                        {bankAccounts.map((account, index) => {
+                          const editing = editingBankIndex === index
+                          const inputCls = "w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
+                          return (
                           <tr key={index} className="hover:bg-gray-50">
-                            <td className="px-3 py-2">{account.bank}</td>
-                            <td className="px-3 py-2 text-xs">
-                              {account.accountType === 'detracciones' ? (
-                                <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">Detracciones</span>
-                              ) : account.accountType === 'ahorros' ? (
-                                <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">Ahorros</span>
-                              ) : (
-                                <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded">Corriente</span>
-                              )}
-                            </td>
-                            <td className="px-3 py-2">{account.currency === 'PEN' ? 'Soles' : 'Dólares'}</td>
-                            <td className="px-3 py-2 font-mono text-xs">{account.accountNumber}</td>
-                            <td className="px-3 py-2 font-mono text-xs">{account.cci || '-'}</td>
+                            {editing ? (
+                              <>
+                                <td className="px-2 py-1.5">
+                                  <select value={account.bank} onChange={e => updateBankAccount(index, { bank: e.target.value })} className={inputCls}>
+                                    <option value="BCP">BCP</option>
+                                    <option value="BBVA">BBVA</option>
+                                    <option value="Interbank">Interbank</option>
+                                    <option value="Scotiabank">Scotiabank</option>
+                                    <option value="BanBif">BanBif</option>
+                                    <option value="Pichincha">Pichincha</option>
+                                    <option value="Banco de la Nación">Banco de la Nación</option>
+                                    <option value="Otro">Otro</option>
+                                  </select>
+                                </td>
+                                <td className="px-2 py-1.5">
+                                  <select value={account.accountType} onChange={e => updateBankAccount(index, { accountType: e.target.value })} className={inputCls}>
+                                    <option value="corriente">Corriente</option>
+                                    <option value="ahorros">Ahorros</option>
+                                    <option value="detracciones">Detracciones</option>
+                                  </select>
+                                </td>
+                                <td className="px-2 py-1.5">
+                                  <select value={account.currency} onChange={e => updateBankAccount(index, { currency: e.target.value })} className={inputCls}>
+                                    <option value="PEN">Soles</option>
+                                    <option value="USD">Dólares</option>
+                                  </select>
+                                </td>
+                                <td className="px-2 py-1.5">
+                                  <input value={account.accountNumber || ''} onChange={e => updateBankAccount(index, { accountNumber: e.target.value })} className={`${inputCls} font-mono`} placeholder="Nº Cuenta" />
+                                </td>
+                                <td className="px-2 py-1.5">
+                                  <input value={account.cci || ''} onChange={e => updateBankAccount(index, { cci: e.target.value })} className={`${inputCls} font-mono`} placeholder="CCI" />
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="px-3 py-2">{account.bank}</td>
+                                <td className="px-3 py-2 text-xs">
+                                  {account.accountType === 'detracciones' ? (
+                                    <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">Detracciones</span>
+                                  ) : account.accountType === 'ahorros' ? (
+                                    <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">Ahorros</span>
+                                  ) : (
+                                    <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded">Corriente</span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2">{account.currency === 'PEN' ? 'Soles' : 'Dólares'}</td>
+                                <td className="px-3 py-2 font-mono text-xs">{account.accountNumber}</td>
+                                <td className="px-3 py-2 font-mono text-xs">{account.cci || '-'}</td>
+                              </>
+                            )}
                             <td className="px-3 py-2">
-                              <button
-                                type="button"
-                                onClick={() => setBankAccounts(bankAccounts.filter((_, i) => i !== index))}
-                                className="text-red-500 hover:text-red-700"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
+                              <div className="flex items-center gap-2">
+                                {editing ? (
+                                  <button type="button" onClick={() => setEditingBankIndex(null)} className="text-green-600 hover:text-green-700" title="Listo">
+                                    <Check className="w-4 h-4" />
+                                  </button>
+                                ) : (
+                                  <button type="button" onClick={() => setEditingBankIndex(index)} className="text-gray-400 hover:text-primary-600" title="Editar">
+                                    <Edit className="w-4 h-4" />
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => { setBankAccounts(bankAccounts.filter((_, i) => i !== index)); setEditingBankIndex(null) }}
+                                  className="text-red-500 hover:text-red-700"
+                                  title="Eliminar"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
-                        ))}
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -3411,13 +3470,35 @@ export default function Settings() {
                         </tr>
                       </thead>
                       <tbody className="divide-y">
-                        {digitalWallets.map((w, index) => (
+                        {digitalWallets.map((w, index) => {
+                          const editing = editingWalletIndex === index
+                          const inputCls = "w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
+                          return (
                           <tr key={index} className="hover:bg-gray-50">
-                            <td className="px-3 py-2">
-                              <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${w.provider === 'Yape' ? 'bg-purple-100 text-purple-700' : 'bg-cyan-100 text-cyan-700'}`}>{w.provider}</span>
-                            </td>
-                            <td className="px-3 py-2">{w.holderName || '-'}</td>
-                            <td className="px-3 py-2 font-mono text-xs">{w.phoneNumber}</td>
+                            {editing ? (
+                              <>
+                                <td className="px-2 py-1.5">
+                                  <select value={w.provider} onChange={e => updateWallet(index, { provider: e.target.value })} className={inputCls}>
+                                    <option value="Yape">Yape</option>
+                                    <option value="Plin">Plin</option>
+                                  </select>
+                                </td>
+                                <td className="px-2 py-1.5">
+                                  <input value={w.holderName || ''} onChange={e => updateWallet(index, { holderName: e.target.value })} className={inputCls} placeholder="Titular" />
+                                </td>
+                                <td className="px-2 py-1.5">
+                                  <input value={w.phoneNumber || ''} onChange={e => updateWallet(index, { phoneNumber: e.target.value })} className={`${inputCls} font-mono`} placeholder="Número" />
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="px-3 py-2">
+                                  <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${w.provider === 'Yape' ? 'bg-purple-100 text-purple-700' : 'bg-cyan-100 text-cyan-700'}`}>{w.provider}</span>
+                                </td>
+                                <td className="px-3 py-2">{w.holderName || '-'}</td>
+                                <td className="px-3 py-2 font-mono text-xs">{w.phoneNumber}</td>
+                              </>
+                            )}
                             <td className="px-3 py-2">
                               {(w._qrPreview || w.qrImageUrl) ? (
                                 <img src={w._qrPreview || w.qrImageUrl} alt="QR" className="w-10 h-10 object-contain border rounded" />
@@ -3426,16 +3507,29 @@ export default function Settings() {
                               )}
                             </td>
                             <td className="px-3 py-2">
-                              <button
-                                type="button"
-                                onClick={() => setDigitalWallets(digitalWallets.filter((_, i) => i !== index))}
-                                className="text-red-500 hover:text-red-700"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
+                              <div className="flex items-center gap-2">
+                                {editing ? (
+                                  <button type="button" onClick={() => setEditingWalletIndex(null)} className="text-green-600 hover:text-green-700" title="Listo">
+                                    <Check className="w-4 h-4" />
+                                  </button>
+                                ) : (
+                                  <button type="button" onClick={() => setEditingWalletIndex(index)} className="text-gray-400 hover:text-primary-600" title="Editar">
+                                    <Edit className="w-4 h-4" />
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => { setDigitalWallets(digitalWallets.filter((_, i) => i !== index)); setEditingWalletIndex(null) }}
+                                  className="text-red-500 hover:text-red-700"
+                                  title="Eliminar"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
-                        ))}
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
