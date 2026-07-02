@@ -101,7 +101,10 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible: web
             margin: ${a4SheetPrint ? '0' : '0 auto'} !important;
             padding: 2mm 1.5mm !important;
             box-sizing: border-box;
-            font-family: 'Courier New', Courier, monospace;
+            /* Misma fuente que la precuenta (se veía "más bonita" que Courier).
+               Solo afecta la comanda impresa desde web/PC; las térmicas usan
+               la fuente propia de la impresora. */
+            font-family: Arial, Helvetica, sans-serif;
             font-size: ${webPrintLegible ? '11pt' : '8.5pt'};
             font-weight: ${webPrintLegible ? '700' : '600'};
             line-height: ${webPrintLegible ? '1.4' : '1.25'};
@@ -165,7 +168,7 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible: web
           zoom: ${ticketZoom};
           margin: 0 auto;
           padding: 8px;
-          font-family: 'Courier New', Courier, monospace;
+          font-family: Arial, Helvetica, sans-serif;
           font-size: 12px;
           font-weight: 600;
           line-height: 1.4;

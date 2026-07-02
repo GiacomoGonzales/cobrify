@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useDeferredValue } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import {
@@ -4990,11 +4991,20 @@ Gracias por tu preferencia.`
         </div>
       )}
 
-      {/* Hidden Ticket Container for Bulk Printing */}
-      {!viewingInvoice && !rowPrintInvoice && selectedInvoiceIds.size > 0 && (
+      {/* Hidden Ticket Container for Bulk Printing.
+          Va en un PORTAL directo al <body>, FUERA del árbol de la app: los tickets
+          masivos se imprimen en flujo (position: relative, para que los saltos de
+          página funcionen), y en flujo el contenido de la página los empujaba fuera
+          de la hoja — visibility:hidden oculta pero SIGUE ocupando espacio → salía
+          la hoja en blanco. En el portal, el #root se saca del layout con
+          display:none (solo al imprimir) y los tickets arrancan en la hoja 1. */}
+      {!viewingInvoice && !rowPrintInvoice && selectedInvoiceIds.size > 0 && createPortal(
         <div className="hidden print:block bulk-print-container">
           <style>{`
             @media print {
+              body > *:not(.bulk-print-container) {
+                display: none !important;
+              }
               .bulk-print-container .ticket-container {
                 position: relative !important;
                 page-break-after: always;
@@ -5007,7 +5017,8 @@ Gracias por tu preferencia.`
           {invoices.filter(inv => selectedInvoiceIds.has(inv.id)).map(inv => (
             <InvoiceTicket key={inv.id} invoice={inv} companySettings={companySettings} paperWidth={ticketPaperWidth} webPrintLegible={webPrintLegible} ticketFontSize={ticketFontSize} compactPrint={compactPrint} printMargins={printMargins} simplePrint={simplePrint} a4SheetPrint={a4SheetPrint} showItemUnit={showItemUnit} />
           ))}
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal para crear Guía de Remisión */}
