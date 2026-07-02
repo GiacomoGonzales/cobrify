@@ -1211,9 +1211,13 @@ export default function Inventory() {
     setProductMovements([])
   }
 
-  // Recalcular stock desde movimientos
+  // Recalcular stock desde movimientos (ESCRIBE stock: solo el dueño)
   const handleRecalculateStock = async () => {
     if (!historyProduct || isDemoMode) return
+    if (!isBusinessOwner) {
+      toast.error('Solo el dueño del negocio puede corregir el stock')
+      return
+    }
     setIsRecalculating(true)
     try {
       const businessId = getBusinessId()
@@ -4940,7 +4944,9 @@ export default function Inventory() {
                         </p>
                       </div>
                     </div>
-                    {!isDemoMode && (
+                    {/* Corregir stock ESCRIBE datos: solo el dueño (consistente con
+                        las demás herramientas de stock: verificar/sincronizar/migrar). */}
+                    {!isDemoMode && isBusinessOwner && (
                       <Button
                         size="sm"
                         variant="outline"

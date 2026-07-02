@@ -24,6 +24,7 @@ import { getCustomersWithStats } from '@/services/firestoreService'
 import { formatCurrency, matchesSearchQuery } from '@/lib/utils'
 import { collection, query, where, getDocs, orderBy, Timestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { useLocationAccess } from '@/utils/locationAccess'
 import * as XLSX from 'xlsx'
 import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
@@ -31,6 +32,9 @@ import { Share } from '@capacitor/share'
 
 export default function StudentPaymentControl() {
   const { user, getBusinessId, businessSettings } = useAppContext()
+  // Sanear por sucursal/almacén permitido: el sub-usuario solo ve pagos calculados
+  // sobre comprobantes de sus ubicaciones (mismo criterio que la página Ventas).
+  const canAccessInvoice = useLocationAccess()
   const toast = useToast()
 
   const [students, setStudents] = useState([])
@@ -91,7 +95,9 @@ export default function StudentPaymentControl() {
       )
 
       const snapshot = await getDocs(q)
-      const invoices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+      const invoices = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(canAccessInvoice)
 
       // Agrupar por customerId
       const paymentsByCustomer = {}

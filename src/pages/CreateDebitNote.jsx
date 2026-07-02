@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { ArrowLeft, Loader2, FileText, AlertCircle, Send } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useLocationAccess } from '@/utils/locationAccess'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -27,6 +28,9 @@ const DEBIT_NOTE_REASONS = [
 
 export default function CreateDebitNote() {
   const { user, getBusinessId } = useAuth()
+  // Sanear por sucursal/almacén permitido: el sub-usuario solo puede referenciar
+  // comprobantes de sus ubicaciones (mismo criterio que la página Ventas).
+  const canAccessInvoice = useLocationAccess()
   const navigate = useNavigate()
   const appNavigate = useAppNavigate()
   const [searchParams] = useSearchParams()
@@ -79,10 +83,11 @@ export default function CreateDebitNote() {
       ])
 
       if (invoicesResult.success) {
-        // Solo facturas y boletas ACEPTADAS por SUNAT
+        // Solo facturas y boletas ACEPTADAS por SUNAT, de las ubicaciones permitidas
         const acceptedInvoices = (invoicesResult.data || []).filter(
           inv => (inv.documentType === 'factura' || inv.documentType === 'boleta') &&
-                 inv.sunatStatus === 'accepted'
+                 inv.sunatStatus === 'accepted' &&
+                 canAccessInvoice(inv)
         )
         setInvoices(acceptedInvoices)
       }

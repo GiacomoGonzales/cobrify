@@ -103,7 +103,7 @@ const UNITS = [
 
 export default function CreateQuotation() {
   const { user } = useAuth()
-  const { businessSettings, getBusinessId } = useAppContext()
+  const { businessSettings, getBusinessId, filterBranchesByAccess, hasMainBranchAccess } = useAppContext()
   const navigate = useNavigate()
   const appNavigate = useAppNavigate()
   const { id: quotationId } = useParams() // Si hay ID, es modo edición
@@ -521,7 +521,17 @@ export default function CreateQuotation() {
       }
 
       if (branchesResult.success) {
-        setBranches(branchesResult.data || [])
+        // Respetar el acceso por sucursal del sub-usuario: solo puede emitir
+        // cotizaciones en sus sucursales asignadas (sin restricción = todas).
+        const accessibleBranches = filterBranchesByAccess
+          ? filterBranchesByAccess(branchesResult.data || [])
+          : (branchesResult.data || [])
+        setBranches(accessibleBranches)
+        // Si no tiene acceso a la Sucursal Principal (branchId null), preseleccionar
+        // su primera sucursal permitida para que la cotización no caiga en Principal.
+        if (!quotationId && hasMainBranchAccess === false && accessibleBranches.length > 0) {
+          setSelectedBranch(accessibleBranches[0])
+        }
       }
 
       // Cargar vendedores activos
@@ -1526,7 +1536,9 @@ export default function CreateQuotation() {
                     }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   >
-                    <option value="">{(businessSettings?.mainBranchName || 'Sucursal Principal')} (por defecto)</option>
+                    {hasMainBranchAccess !== false && (
+                      <option value="">{(businessSettings?.mainBranchName || 'Sucursal Principal')} (por defecto)</option>
+                    )}
                     {branches.map(branch => (
                       <option key={branch.id} value={branch.id}>
                         {branch.name} {branch.address ? `- ${branch.address}` : ''}

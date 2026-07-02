@@ -30,6 +30,7 @@ import {
   createInvoiceWithNumber,
   updateProduct,
 } from '@/services/firestoreService'
+import { getActiveBranches } from '@/services/branchService'
 
 // Unidades de medida SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
 const UNITS = [
@@ -105,11 +106,13 @@ const UNITS = [
 
 export default function CreateInvoice() {
   const { user, getBusinessId } = useAuth()
-  const { businessSettings } = useAppContext()
+  const { businessSettings, filterBranchesByAccess, hasMainBranchAccess } = useAppContext()
   const toast = useToast()
   const navigate = useNavigate()
   const [customers, setCustomers] = useState([])
   const [products, setProducts] = useState([])
+  const [branches, setBranches] = useState([])
+  const [selectedBranch, setSelectedBranch] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [message, setMessage] = useState(null)
@@ -188,9 +191,10 @@ export default function CreateInvoice() {
 
     setIsLoading(true)
     try {
-      const [customersResult, productsResult] = await Promise.all([
+      const [customersResult, productsResult, branchesResult] = await Promise.all([
         getCustomers(getBusinessId()),
         getProducts(getBusinessId()),
+        getActiveBranches(getBusinessId()),
       ])
 
       if (customersResult.success) {
@@ -199,6 +203,19 @@ export default function CreateInvoice() {
 
       if (productsResult.success) {
         setProducts(productsResult.data || [])
+      }
+
+      if (branchesResult.success) {
+        // Respetar el acceso por sucursal del sub-usuario (sin restricción = todas).
+        const accessibleBranches = filterBranchesByAccess
+          ? filterBranchesByAccess(branchesResult.data || [])
+          : (branchesResult.data || [])
+        setBranches(accessibleBranches)
+        // Sin acceso a la Sucursal Principal: preseleccionar su primera sucursal
+        // permitida para que el comprobante no caiga en Principal (branchId null).
+        if (hasMainBranchAccess === false && accessibleBranches.length > 0) {
+          setSelectedBranch(accessibleBranches[0])
+        }
       }
     } catch (error) {
       console.error('Error al cargar datos:', error)
@@ -383,6 +400,11 @@ export default function CreateInvoice() {
         paymentMethod: 'Manual',
         status: 'pending',
         notes: '',
+        // Sucursal de emisión (null = Sucursal Principal), mismos campos que el POS
+        branchId: selectedBranch?.id || null,
+        branchName: selectedBranch?.name || null,
+        branchTradeName: selectedBranch?.tradeName || null,
+        branchAddress: selectedBranch?.address || null,
         createdBy: user.uid,
         createdByName: user.displayName || user.email || 'Usuario',
         createdByEmail: user.email || '',
@@ -517,6 +539,27 @@ export default function CreateInvoice() {
                     </option>
                   ))}
                 </Select>
+                {branches.length > 0 && (
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Sucursal
+                    </label>
+                    <Select
+                      value={selectedBranch?.id || ''}
+                      onChange={e => {
+                        const branch = branches.find(b => b.id === e.target.value)
+                        setSelectedBranch(branch || null)
+                      }}
+                    >
+                      {hasMainBranchAccess !== false && (
+                        <option value="">{businessSettings?.mainBranchName || 'Sucursal Principal'}</option>
+                      )}
+                      {branches.map(branch => (
+                        <option key={branch.id} value={branch.id}>{branch.name}</option>
+                      ))}
+                    </Select>
+                  </div>
+                )}
                 {customers.length === 0 && (
                   <p className="text-xs text-gray-500 mt-1">
                     No hay clientes. Agrega clientes desde el menú Clientes.
