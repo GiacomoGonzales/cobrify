@@ -5922,6 +5922,10 @@ export default function POS() {
           // Mantener serie y número original
           series: editingInvoiceData.series,
           number: editingInvoiceData.number,
+          // Mantener el TIPO original: el número pertenece a la serie del tipo emitido.
+          // Cambiarlo dejaría p.ej. una "factura" con correlativo de boleta (BA02-xxx),
+          // que SUNAT rechaza. Para cambiar de tipo: anular y emitir de nuevo.
+          documentType: editingInvoiceData.documentType,
           // Mantener fecha de creación original
           createdAt: editingInvoiceData.createdAt,
           // Actualizar fecha de modificación
@@ -7989,6 +7993,10 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 <div className="flex items-center gap-2">
                   <select
                     value={documentType}
+                    // En edición NO se puede cambiar el tipo: el número emitido pertenece
+                    // a la serie de ese tipo (cambiarlo genera p.ej. una "factura" con
+                    // correlativo de boleta, que SUNAT rechaza). Anular y emitir de nuevo.
+                    disabled={!!editingInvoiceId}
                     onChange={e => {
                       userChangedDocTypeRef.current = true
                       setDocumentType(e.target.value)
@@ -8003,7 +8011,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         setPaymentInstallments([])
                       }
                     }}
-                    className="flex-1 px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    className="flex-1 px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
                   >
                     {canEmitFiscal && (!allowedDocumentTypes || allowedDocumentTypes.length === 0 || allowedDocumentTypes.includes('boleta')) && (
                       <option value="boleta">Boleta de Venta</option>
@@ -8024,6 +8032,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 {!canEmitFiscal && (
                   <p className="text-xs text-amber-600 mt-1">
                     Sin conexión SUNAT: solo Nota de Venta. Contactá al administrador para habilitar comprobantes.
+                  </p>
+                )}
+                {!!editingInvoiceId && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Al editar no se puede cambiar el tipo de comprobante (el número pertenece a su serie). Para cambiarlo, anula este documento y emite uno nuevo.
                   </p>
                 )}
               </div>
