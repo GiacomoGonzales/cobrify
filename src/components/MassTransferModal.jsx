@@ -34,12 +34,17 @@ export default function MassTransferModal({
   const [lastTransfer, setLastTransfer] = useState(null)
   const searchRef = useRef(null)
 
+  // Lista completa del negocio (para lookups de nombre y para el DESTINO).
   const warehouseList = allWarehouses || warehouses || []
+  // ORIGEN: solo los almacenes accesibles al usuario (`warehouses` ya viene filtrada
+  // por acceso). Un sub-usuario despacha mercadería DESDE su almacén hacia cualquier
+  // otro, pero no puede sacar stock de almacenes ajenos. Para el dueño son iguales.
+  const originList = warehouses || warehouseList
 
   // Agrupar almacenes por sucursal
-  const groupedWarehouses = useMemo(() => {
+  const groupByBranch = (list) => {
     const groups = {}
-    warehouseList.forEach(w => {
+    list.forEach(w => {
       const branchName = w.branchId
         ? (branches || []).find(b => b.id === w.branchId)?.name || 'Otra Sucursal'
         : (companySettings?.mainBranchName || 'Sucursal Principal')
@@ -47,7 +52,15 @@ export default function MassTransferModal({
       groups[branchName].push(w)
     })
     return groups
-  }, [warehouseList, branches, companySettings])
+  }
+  const groupedOriginWarehouses = useMemo(
+    () => groupByBranch(originList),
+    [originList, branches, companySettings]
+  )
+  const groupedWarehouses = useMemo(
+    () => groupByBranch(warehouseList),
+    [warehouseList, branches, companySettings]
+  )
 
   // Productos e ingredientes con stock en almacén origen (incluye variantes)
   const availableProducts = useMemo(() => {
@@ -498,7 +511,7 @@ export default function MassTransferModal({
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
                 >
                   <option value="">Seleccionar...</option>
-                  {Object.entries(groupedWarehouses).map(([group, whs]) => (
+                  {Object.entries(groupedOriginWarehouses).map(([group, whs]) => (
                     <optgroup key={group} label={group}>
                       {whs.filter(w => w.id !== toWarehouse).map(w => (
                         <option key={w.id} value={w.id}>{w.name}</option>

@@ -153,7 +153,7 @@ const getExpirationStatus = (expirationDate) => {
 }
 
 export default function Products() {
-  const { user, isDemoMode, demoData, getBusinessId, businessMode, hasFeature, businessSettings } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessMode, hasFeature, businessSettings, filterWarehousesByAccess } = useAppContext()
   const appNavigate = useAppNavigate()
   const hidePrivateData = useHidePrivateData()
   const toast = useToast()
@@ -517,9 +517,15 @@ export default function Products() {
       const result = await getWarehouses(businessId)
 
       if (result.success) {
-        setWarehouses(result.data || [])
+        // Respetar el acceso por almacén del sub-usuario: el stock inicial (producto y
+        // variantes) solo puede asignarse a sus almacenes. Al EDITAR no se pierde el
+        // stock de almacenes no visibles: el guardado hace merge por almacén (diff).
+        const accessibleWarehouses = filterWarehousesByAccess
+          ? filterWarehousesByAccess(result.data || [])
+          : (result.data || [])
+        setWarehouses(accessibleWarehouses)
         // Preseleccionar almacén principal para variantes
-        const defaultWh = (result.data || []).find(w => w.isDefault)
+        const defaultWh = accessibleWarehouses.find(w => w.isDefault) || accessibleWarehouses[0]
         if (defaultWh && !variantWarehouseId) {
           setVariantWarehouseId(defaultWh.id)
         }

@@ -14,7 +14,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
   // En el onboarding (crear cuenta) el modo viene por prop (el del negocio que se
   // está creando), no del contexto del admin.
   const businessMode = businessModeOverride || ctx.businessMode
-  const { getBusinessId, businessSettings } = ctx
+  const { getBusinessId, businessSettings, filterWarehousesByAccess } = ctx
   const [file, setFile] = useState(null)
   const [importing, setImporting] = useState(false)
   const [previewData, setPreviewData] = useState([])
@@ -38,7 +38,10 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
 
       const result = await getWarehouses(businessId)
       if (result.success) {
-        const activeWarehouses = (result.data || []).filter(w => w.isActive !== false)
+        let activeWarehouses = (result.data || []).filter(w => w.isActive !== false)
+        // Respetar el acceso por almacén del sub-usuario: solo puede importar
+        // stock a sus almacenes asignados (sin restricción = todos).
+        if (filterWarehousesByAccess) activeWarehouses = filterWarehousesByAccess(activeWarehouses)
         setWarehouses(activeWarehouses)
         // Seleccionar almacén por defecto automáticamente
         const defaultWarehouse = activeWarehouses.find(w => w.isDefault) || activeWarehouses[0]

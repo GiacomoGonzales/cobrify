@@ -85,7 +85,7 @@ const getTomorrowDateString = () => {
 
 export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInvoice = null, selectedBranch = null, cloneData = null }) {
   const toast = useToast()
-  const { getBusinessId, filterBranchesByAccess, allowedBranches, user, businessMode, businessSettings } = useAppContext()
+  const { getBusinessId, filterBranchesByAccess, filterWarehousesByAccess, allowedBranches, user, businessMode, businessSettings } = useAppContext()
   const isPharmacy = businessMode === 'pharmacy'
   const hasBatchControl = isPharmacy || businessSettings?.posCustomFields?.showBatchExpiryInPurchase
 
@@ -278,6 +278,9 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
         const result = await getWarehouses(getBusinessId())
         if (result.success) {
           let whs = (result.data || []).filter(w => w.isActive !== false)
+          // Respetar el acceso por almacén del sub-usuario: el punto de partida de la
+          // guía solo puede ser un almacén asignado (sin restricción = todos).
+          if (filterWarehousesByAccess) whs = filterWarehousesByAccess(whs)
           // Filtrar por sucursal si hay una seleccionada
           if (selectedBranchId) {
             whs = whs.filter(w => w.branchId === selectedBranchId || !w.branchId)

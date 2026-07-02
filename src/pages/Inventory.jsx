@@ -4979,6 +4979,9 @@ export default function Inventory() {
         onClose={() => setShowMassTransferModal(false)}
         products={products}
         ingredients={ingredients}
+        // `warehouses` (filtrada por acceso) limita el ORIGEN del traslado: un
+        // sub-usuario solo despacha DESDE sus almacenes. `allWarehouses` (completa)
+        // se usa para el DESTINO: sí puede ENVIAR mercadería a cualquier almacén.
         warehouses={warehouses}
         allWarehouses={allWarehouses}
         branches={branches}

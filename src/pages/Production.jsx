@@ -54,7 +54,7 @@ const fmtQty = (n) => {
 }
 
 export default function Production() {
-  const { user, getBusinessId, filterBranchesByAccess, allowedBranches, isDemoMode, demoData, businessSettings } = useAppContext()
+  const { user, getBusinessId, filterBranchesByAccess, filterWarehousesByAccess, allowedBranches, isDemoMode, demoData, businessSettings } = useAppContext()
   const toast = useToast()
 
   // Estado principal
@@ -138,7 +138,12 @@ export default function Production() {
 
       if (prodsResult.success) setProducts(prodsResult.data || [])
       if (categoriesResult?.success) setCategories(categoriesResult.data || [])
-      if (whResult.success) setWarehouses(whResult.data || [])
+      // Respetar el acceso por almacén del sub-usuario: el destino de la producción
+      // solo puede ser un almacén asignado (sin restricción = todos).
+      if (whResult.success) {
+        const whList = whResult.data || []
+        setWarehouses(filterWarehousesByAccess ? filterWarehousesByAccess(whList) : whList)
+      }
       if (productionsResult.success) setProductions(productionsResult.data || [])
 
       // Filtrar sucursales por permisos del usuario
