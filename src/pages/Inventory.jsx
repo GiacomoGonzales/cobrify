@@ -1882,24 +1882,28 @@ export default function Inventory() {
   const { productsWithStock, lowStockItems, outOfStockItems, totalValue, totalCostValue, totalUnits } = statistics
 
   // Calcular productos con stock huérfano (pasando almacenes activos para detectar almacenes eliminados)
-  // IMPORTANTE: No calcular si los almacenes aún no se han cargado para evitar falsos positivos
+  // IMPORTANTE: No calcular si los almacenes aún no se han cargado para evitar falsos positivos.
+  // OJO: usar allWarehouses (TODOS los del negocio), NO `warehouses` (filtrados por acceso):
+  // un sub-usuario con almacenes asignados veía el stock de los demás almacenes como
+  // "huérfano / almacén eliminado" (falso positivo masivo en el aviso amarillo).
   const orphanStockProducts = React.useMemo(() => {
-    if (!warehouses || warehouses.length === 0) return []
-    return getOrphanStockProducts(products, warehouses)
-  }, [products, warehouses])
+    if (!allWarehouses || allWarehouses.length === 0) return []
+    return getOrphanStockProducts(products, allWarehouses)
+  }, [products, allWarehouses])
 
   // Calcular total de stock huérfano (incluyendo stock en almacenes eliminados)
   const totalOrphanStock = React.useMemo(() => {
-    return orphanStockProducts.reduce((sum, p) => sum + getOrphanStock(p, warehouses), 0)
-  }, [orphanStockProducts, warehouses])
+    return orphanStockProducts.reduce((sum, p) => sum + getOrphanStock(p, allWarehouses), 0)
+  }, [orphanStockProducts, allWarehouses])
 
   // Calcular cuántos productos tienen stock en almacenes eliminados
   const productsWithDeletedWarehouseStock = React.useMemo(() => {
+    if (!allWarehouses || allWarehouses.length === 0) return []
     return products.filter(p => {
-      const deleted = getDeletedWarehouseStock(p, warehouses)
+      const deleted = getDeletedWarehouseStock(p, allWarehouses)
       return deleted.total > 0
     })
-  }, [products, warehouses])
+  }, [products, allWarehouses])
 
   // Obtener almacén por defecto
   const defaultWarehouse = React.useMemo(() => {
@@ -1948,8 +1952,9 @@ export default function Inventory() {
 
       for (const product of orphanStockProducts) {
         try {
-          // Pasar los almacenes activos para limpiar referencias a almacenes eliminados
-          const updatedProduct = migrateOrphanStock(product, defaultWarehouse.id, warehouses)
+          // Pasar TODOS los almacenes del negocio (no los filtrados por acceso) para
+          // limpiar solo referencias a almacenes realmente eliminados.
+          const updatedProduct = migrateOrphanStock(product, defaultWarehouse.id, allWarehouses)
 
           // Guardar en Firestore
           const result = await updateProduct(businessId, product.id, {

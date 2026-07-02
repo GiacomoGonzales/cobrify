@@ -78,7 +78,7 @@ const cleanUndefined = (obj) => {
 }
 
 export default function CreatePurchase() {
-  const { user } = useAuth()
+  const { user, filterWarehousesByAccess } = useAuth()
   const { getBusinessId, businessMode, businessSettings } = useAppContext()
   // Precios de venta en compras: habilitado para todos por defecto (ya no es una opción configurable).
   const showSalePriceInPurchase = true
@@ -395,6 +395,9 @@ export default function CreatePurchase() {
       if (warehousesResult.success) {
         // Solo almacenes activos
         activeWarehouses = (warehousesResult.data || []).filter(w => w.isActive !== false)
+        // Respetar el acceso por almacén del sub-usuario: si tiene almacenes asignados,
+        // solo se muestran/permiten esos (sin restricción = todos).
+        activeWarehouses = filterWarehousesByAccess(activeWarehouses)
         setWarehouses(activeWarehouses)
 
         // Solo seleccionar almacén por defecto si NO estamos en modo edición

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Minus, Trash2, ShoppingCart, Save, X, Loader2, Package, Store } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -23,6 +24,7 @@ const UNITS = [
 
 export default function RegisterPurchase() {
   const { user, getBusinessId, isDemoMode, businessSettings } = useAppContext()
+  const { filterWarehousesByAccess } = useAuth()
   const navigate = useNavigate()
   const toast = useToast()
 
@@ -73,7 +75,9 @@ export default function RegisterPurchase() {
       }
 
       if (warehousesResult.success) {
-        const activeWarehouses = (warehousesResult.data || []).filter(w => w.isActive !== false)
+        let activeWarehouses = (warehousesResult.data || []).filter(w => w.isActive !== false)
+        // Respetar el acceso por almacén del sub-usuario (sin restricción = todos).
+        activeWarehouses = filterWarehousesByAccess(activeWarehouses)
         setWarehouses(activeWarehouses)
 
         // Seleccionar almacén por defecto
