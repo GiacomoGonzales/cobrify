@@ -448,6 +448,7 @@ export default function POS() {
   const [lastInvoiceNumber, setLastInvoiceNumber] = useState('')
   const [lastInvoiceData, setLastInvoiceData] = useState(null)
   const [saleCompleted, setSaleCompleted] = useState(false) // Bloquea el carrito después de una venta exitosa
+  const [changeReminder, setChangeReminder] = useState(null) // Recordatorio de vuelto en efectivo (opcional)
   const [postSaleModalOpen, setPostSaleModalOpen] = useState(false) // Modal de opciones post-venta
   const postSaleHandledRef = useRef(false) // Para abrir el modal una sola vez por venta
   const [isLookingUp, setIsLookingUp] = useState(false)
@@ -4428,6 +4429,9 @@ export default function POS() {
     setSelectedRoom(null)
     setLastInvoiceData(null)
     setSaleCompleted(false) // Desbloquear carrito para nueva venta
+    // OJO: no limpiamos changeReminder aquí. Con auto-reset activado, clearCart corre
+    // ~1s después de la venta y borraría el aviso de vuelto recién mostrado. El aviso
+    // se limpia al iniciar el siguiente cobro (handleCheckout) o al cerrarlo el cajero.
     setPostSaleModalOpen(false) // Cerrar el modal de opciones post-venta
     // Reiniciar la fecha de emisión a HOY y limpiar el flag de edición manual, para
     // que cada nueva venta tome la fecha actual del sistema (no una fecha "congelada").
@@ -4451,21 +4455,36 @@ export default function POS() {
     clearDraft() // Limpiar borrador de localStorage
   }
 
+  // Cerrar el recordatorio de vuelto. Al cerrarlo, disparar la auto-impresión que se
+  // difirió mientras el aviso estaba abierto (si el negocio la tiene activada). El
+  // modal de opciones post-venta se abre solo, vía el efecto de abajo (depende de
+  // changeReminder), al quedar el recordatorio en null.
+  const dismissChangeReminder = () => {
+    setChangeReminder(null)
+    if (companySettings?.autoPrintTicket && lastInvoiceData) {
+      setTimeout(() => handlePrintTicket(lastInvoiceData), 100)
+    }
+  }
+
   // Abrir el modal de opciones post-venta al completar una venta (una sola vez por venta;
   // postSaleHandledRef se libera al limpiar). Si el negocio tiene impresión automática Y
   // reinicio automático (flujo 100% automático), NO se abre el modal para no estorbar al
   // cajero rápido; si la auto-impresión falla, el carrito queda con el mini-aviso para reintentar.
   useEffect(() => {
-    if (lastInvoiceData && saleCompleted) {
-      if (!postSaleHandledRef.current) {
-        postSaleHandledRef.current = true
-        const fullyAuto = !!(companySettings?.autoPrintTicket && companySettings?.autoResetPOS)
-        if (!fullyAuto) setPostSaleModalOpen(true)
-      }
-    } else {
+    // Venta limpiada → reiniciar el guard de "una vez por venta"
+    if (!lastInvoiceData || !saleCompleted) {
       postSaleHandledRef.current = false
+      return
     }
-  }, [lastInvoiceData, saleCompleted, companySettings])
+    // Si hay recordatorio de vuelto abierto, esperar a que el cajero lo cierre antes
+    // de mostrar las opciones de impresión (el recordatorio sale PRIMERO).
+    if (changeReminder) return
+    if (!postSaleHandledRef.current) {
+      postSaleHandledRef.current = true
+      const fullyAuto = !!(companySettings?.autoPrintTicket && companySettings?.autoResetPOS)
+      if (!fullyAuto) setPostSaleModalOpen(true)
+    }
+  }, [lastInvoiceData, saleCompleted, companySettings, changeReminder])
 
   // Buscar datos de DNI o RUC automáticamente
   const handleLookupDocument = async () => {
@@ -5071,6 +5090,7 @@ export default function POS() {
 
     checkoutGuardRef.current = true
     setIsProcessing(true)
+    setChangeReminder(null) // Limpiar recordatorio de vuelto de la venta anterior
 
     // Helper para abortar validación y desbloquear UI
     const abortCheckout = (msg, opts) => {
@@ -5612,6 +5632,13 @@ export default function POS() {
       // claro cuánto entregó vs. cuánto cubre el total.
       const amountReceived = change > 0 ? Math.round(totalPaid * 100) / 100 : 0
 
+      // Recordatorio de vuelto (opcional): si el negocio activó la opción y la venta
+      // se pagó en EFECTIVO con cambio, guardamos los datos para mostrar el aviso al
+      // completar la venta. Si no aplica, queda null y no se muestra nada.
+      const changeReminderData = (companySettings?.showChangeReminder && change > 0 && allPayments.some(p => p.methodKey === 'CASH'))
+        ? { change, total: amounts.total, received: amountReceived, currency }
+        : null
+
       console.log('🧾 [POS] Datos de pago parcial calculados:', {
         documentType,
         enablePartialPayment,
@@ -5863,6 +5890,7 @@ export default function POS() {
             isOffline: true,
           })
           setSaleCompleted(true)
+          if (changeReminderData) setChangeReminder(changeReminderData)
           if (companySettings?.enableCustomerDisplay) {
             CustomerDisplay.showCompleted(amounts.total, `OFFLINE-${offlineId}`, documentType)
           }
@@ -5914,8 +5942,9 @@ export default function POS() {
         setEditingInvoiceData(null)
         editInvoiceLoadedRef.current = false
 
-        // Auto-imprimir en modo edición
-        if (companySettings?.autoPrintTicket) {
+        // Auto-imprimir en modo edición. Si hay recordatorio de vuelto, se difiere
+        // hasta que el cajero lo cierre (se dispara desde dismissChangeReminder).
+        if (companySettings?.autoPrintTicket && !changeReminderData) {
           setTimeout(() => handlePrintTicket(invoiceData), 500)
         }
 
@@ -5963,6 +5992,7 @@ export default function POS() {
         setLastInvoiceNumber(numberResult.number)
         setLastInvoiceData(invoiceData)
         setSaleCompleted(true)
+        if (changeReminderData) setChangeReminder(changeReminderData)
 
         // Redimir saldo a favor: descontar de las notas de crédito del cliente
         // (FIFO) lo que se aplicó como pago "Saldo a favor". No bloquea la venta:
@@ -6062,8 +6092,9 @@ export default function POS() {
         // Limpiar borrador
         clearDraft()
 
-        // Auto-imprimir ticket
-        if (companySettings?.autoPrintTicket) {
+        // Auto-imprimir ticket. Si hay recordatorio de vuelto, se difiere hasta que
+        // el cajero lo cierre (se dispara desde dismissChangeReminder).
+        if (companySettings?.autoPrintTicket && !changeReminderData) {
           setTimeout(() => handlePrintTicket(invoiceData), 100)
         }
 
@@ -11111,6 +11142,46 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             ))}
           </div>
         </div>
+      </Modal>
+
+      {/* Recordatorio de vuelto en efectivo (opcional, configurable en Ajustes) */}
+      <Modal
+        isOpen={!!changeReminder}
+        onClose={dismissChangeReminder}
+        title="Recordatorio de vuelto"
+        size="sm"
+      >
+        {changeReminder && (
+          <div className="space-y-5 text-center">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+              <Wallet className="w-8 h-8 text-green-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Dar vuelto de</p>
+              <p className="text-4xl font-bold text-green-600 mt-1">
+                {formatCurrency(changeReminder.change, changeReminder.currency)}
+              </p>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-4 text-sm">
+              <div className="flex justify-between items-center py-1">
+                <span className="text-gray-600">Pagó con</span>
+                <span className="font-semibold text-gray-900">{formatCurrency(changeReminder.received, changeReminder.currency)}</span>
+              </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-gray-600">Total de la venta</span>
+                <span className="font-semibold text-gray-900">- {formatCurrency(changeReminder.total, changeReminder.currency)}</span>
+              </div>
+              <div className="border-t border-gray-200 my-1"></div>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-gray-700 font-medium">Vuelto</span>
+                <span className="font-bold text-green-600">{formatCurrency(changeReminder.change, changeReminder.currency)}</span>
+              </div>
+            </div>
+            <Button onClick={dismissChangeReminder} className="w-full">
+              Entendido y continuar
+            </Button>
+          </div>
+        )}
       </Modal>
 
       {/* Ticket Oculto para Impresión */}

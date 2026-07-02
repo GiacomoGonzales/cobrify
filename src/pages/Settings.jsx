@@ -390,6 +390,7 @@ export default function Settings() {
   const [defaultPaymentMethod, setDefaultPaymentMethod] = useState('') // '' = ninguno; o CASH/CARD/TRANSFER/YAPE/PLIN
   const [autoResetPOS, setAutoResetPOS] = useState(false)
   const [autoPrintTicket, setAutoPrintTicket] = useState(false)
+  const [showChangeReminder, setShowChangeReminder] = useState(false)
   const [enableCustomerDisplay, setEnableCustomerDisplay] = useState(false)
 
   // Estados para configuración de notas de venta
@@ -1241,6 +1242,7 @@ export default function Settings() {
         setDefaultPaymentMethod(businessData.defaultPaymentMethod || '')
         setAutoResetPOS(businessData.autoResetPOS || false)
         setAutoPrintTicket(businessData.autoPrintTicket || false)
+        setShowChangeReminder(businessData.showChangeReminder || false)
 
         // Cargar configuración de notas de venta
         setHideRucIgvInNotaVenta(businessData.hideRucIgvInNotaVenta || false)
@@ -5006,6 +5008,16 @@ export default function Settings() {
                       : '✗ Deshabilitado: Después de emitir una venta, deberás presionar "Imprimir Ticket" manualmente.'}
                   />
 
+                  {/* Recordatorio de vuelto en efectivo */}
+                  <SettingToggle
+                    checked={showChangeReminder}
+                    onChange={(e) => setShowChangeReminder(e.target.checked)}
+                    title="Recordatorio de vuelto en efectivo"
+                    description={showChangeReminder
+                      ? '✓ Habilitado: Cuando una venta se pague en efectivo y haya vuelto, aparecerá un aviso indicando cuánto entregar al cliente (con qué pagó, total y vuelto).'
+                      : '✗ Deshabilitado: No se mostrará ningún aviso de vuelto al completar la venta.'}
+                  />
+
                   {/* Tipo de documento por defecto en POS */}
                   <div className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
                     <div className="flex-1">
@@ -5568,6 +5580,7 @@ export default function Settings() {
                       autoSku: autoSku,
                       autoResetPOS: autoResetPOS,
                       autoPrintTicket: autoPrintTicket,
+                      showChangeReminder: showChangeReminder,
                       defaultDocumentType: defaultDocumentType,
                       defaultPaymentMethod: defaultPaymentMethod || '',
                       hideRucIgvInNotaVenta: hideRucIgvInNotaVenta,
