@@ -40,7 +40,7 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
   const headers1 = [
     'Fecha', 'Tipo', 'Número', 'Cliente', 'RUC/DNI', 'Alumno', 'Productos',
     'Op. Gravada', 'Op. Exonerada', 'Op. Inafecta', 'Subtotal', 'Descuento',
-    'IGV', 'Total', 'Estado', 'Estado SUNAT', 'Método de Pago',
+    'IGV', 'Total', 'Estado', 'Estado SUNAT', 'Método de Pago', 'Vendedor',
   ]
   const totalCols1 = headers1.length
 
@@ -59,6 +59,10 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
   }
   if (filters?.startDate) extra.push(['Fecha Desde:', format(new Date(filters.startDate), 'dd/MM/yyyy', { locale: es })])
   if (filters?.endDate) extra.push(['Fecha Hasta:', format(new Date(filters.endDate), 'dd/MM/yyyy', { locale: es })])
+  if (filters?.sellerLabel) extra.push(['Vendedor:', filters.sellerLabel])
+  if (filters?.paymentStatusLabel) extra.push(['Estado de Pago:', filters.paymentStatusLabel])
+  if (filters?.paymentMethodLabel) extra.push(['Método de Pago:', filters.paymentMethodLabel])
+  if (filters?.sunatStatusLabel) extra.push(['Estado SUNAT:', filters.sunatStatusLabel])
 
   const metaStart = aoa1.length
   const metadataRows = buildBusinessMetadataRows(businessData, {
@@ -125,6 +129,8 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
       ? 'N/A'
       : (sunatStatusNames[invoice.sunatStatus] || invoice.sunatStatus || 'Pendiente')
 
+    const sellerName = invoice.createdByName || invoice.sellerName || invoice.createdByEmail || 'Sin vendedor'
+
     aoa1.push([
       invoice.createdAt?.toDate ? format(invoice.createdAt.toDate(), 'dd/MM/yyyy', { locale: es }) : 'N/A',
       typeNames[docType] || docType || 'N/A',
@@ -143,6 +149,7 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
       statusNames[invoice.status] || invoice.status || 'N/A',
       sunatStatus,
       formatPaymentMethods(invoice),
+      sellerName,
     ])
   })
 
@@ -172,14 +179,14 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
     Number(discountSum.toFixed(2)),
     Number(taxSum.toFixed(2)),
     Number(totalSum.toFixed(2)),
-    '', '', '',
+    '', '', '', '',
   ])
 
   // Crear worksheet
   const ws1 = XLSX.utils.aoa_to_sheet(aoa1)
 
   applyColumnWidths(ws1, [
-    12, 14, 14, 30, 14, 22, 45, 13, 14, 13, 12, 11, 10, 12, 12, 14, 30,
+    12, 14, 14, 30, 14, 22, 45, 13, 14, 13, 12, 11, 10, 12, 12, 14, 30, 22,
   ])
 
   // Layout: título / metadata / subtítulo / header
@@ -203,6 +210,7 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
     setStyle(ws1, r, 14, statusStyle(i, aoa1[r][14]))
     setStyle(ws1, r, 15, statusStyle(i, aoa1[r][15]))
     setStyle(ws1, r, 16, cellStyle(i))
+    setStyle(ws1, r, 17, cellStyle(i)) // Vendedor
   }
 
   // Fila de totales
@@ -334,6 +342,7 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
   appendItemsDetailSheet(workbook, invoices, businessData, branchLabel)
   appendTopProductsSheet(workbook, invoices, businessData, branchLabel)
   appendPaymentMethodsSheet(workbook, invoices, businessData, branchLabel)
+  appendSellersSheet(workbook, invoices, businessData, branchLabel)
 
   // Nombre del archivo
   const filterInfo = filters?.type && filters.type !== 'all' ? filters.type : ''
@@ -600,4 +609,74 @@ function appendPaymentMethodsSheet(wb, invoices, businessData, branchLabel) {
   setStyle(ws, totalRowIdx, 4, totalLabelStyle)
   applyFreezeBelow(ws, headerRow)
   XLSX.utils.book_append_sheet(wb, ws, 'Por Método de Pago')
+}
+
+/** Por vendedor: agregación con N° de ventas, monto total, % y ticket promedio. */
+function appendSellersSheet(wb, invoices, businessData, branchLabel) {
+  if (!invoices || invoices.length === 0) return
+
+  const agg = new Map()
+  for (const inv of invoices) {
+    const seller = inv.createdByName || inv.sellerName || inv.createdByEmail || 'Sin vendedor'
+    if (!agg.has(seller)) agg.set(seller, { seller, amount: 0, count: 0 })
+    const e = agg.get(seller)
+    e.amount += inv.total || 0
+    e.count += 1
+  }
+  if (agg.size === 0) return
+
+  const rows = [...agg.values()].sort((a, b) => b.amount - a.amount)
+  const headers = ['Vendedor', 'N° de Ventas', 'Monto Total', '% del Total', 'Ticket Promedio']
+  const totalCols = headers.length
+
+  const aoa = [['VENTAS POR VENDEDOR'], []]
+  const metaStart = aoa.length
+  aoa.push(...buildBusinessMetadataRows(businessData, {
+    branchLabel: branchLabel || 'Todas',
+    totalLabel: 'Total vendedores',
+    totalItems: rows.length,
+  }))
+  const metaEnd = aoa.length - 1
+  aoa.push([])
+  const headerRow = aoa.length
+  aoa.push(headers)
+  const dataStart = aoa.length
+
+  const totalAmount = rows.reduce((s, r) => s + r.amount, 0)
+  let totalCount = 0
+  rows.forEach(p => {
+    const pct = totalAmount > 0 ? (p.amount / totalAmount) * 100 : 0
+    const ticket = p.count > 0 ? p.amount / p.count : 0
+    totalCount += p.count
+    aoa.push([
+      p.seller, p.count,
+      Number(p.amount.toFixed(2)),
+      Number(pct.toFixed(1)),
+      Number(ticket.toFixed(2)),
+    ])
+  })
+  aoa.push([])
+  const totalRowIdx = aoa.length
+  aoa.push(['TOTALES', totalCount, Number(totalAmount.toFixed(2)), 100, ''])
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  applyColumnWidths(ws, [28, 14, 16, 14, 16])
+  applyTitleRow(ws, 0, totalCols)
+  applyMetadataRows(ws, metaStart, metaEnd)
+  applyHeaderRow(ws, headerRow, totalCols)
+  for (let i = 0; i < rows.length; i++) {
+    const r = dataStart + i
+    setStyle(ws, r, 0, cellStyle(i))
+    setStyle(ws, r, 1, numberStyle(i))
+    setStyle(ws, r, 2, numberStyle(i))
+    setStyle(ws, r, 3, numberStyle(i))
+    setStyle(ws, r, 4, numberStyle(i))
+  }
+  setStyle(ws, totalRowIdx, 0, totalLabelStyle)
+  setStyle(ws, totalRowIdx, 1, { ...totalNumberStyle, numFmt: '#,##0' })
+  setStyle(ws, totalRowIdx, 2, totalNumberStyle)
+  setStyle(ws, totalRowIdx, 3, totalNumberStyle)
+  setStyle(ws, totalRowIdx, 4, totalLabelStyle)
+  applyFreezeBelow(ws, headerRow)
+  XLSX.utils.book_append_sheet(wb, ws, 'Por Vendedor')
 }

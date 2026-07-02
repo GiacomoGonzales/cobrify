@@ -195,13 +195,52 @@ export default function InvoiceList() {
 
   // Estados para exportación
   const [showExportModal, setShowExportModal] = useState(false)
+  // Todos los filtros multi-selección: array vacío = TODOS (sin filtrar).
   const [exportFilters, setExportFilters] = useState({
-    types: ['factura', 'boleta', 'nota_venta', 'nota_credito', 'nota_debito'], // Array de tipos seleccionados
-    sunatStatus: 'all', // 'all', 'accepted', 'pending', 'rejected', 'not_applicable'
+    types: ['factura', 'boleta', 'nota_venta', 'nota_credito', 'nota_debito'], // tipos seleccionados
+    sunatStatuses: [], // [] = todos; ej: ['accepted', 'pending', ...]
+    sellers: [], // [] = todos; ids de vendedores (createdBy)
+    paymentStatuses: [], // [] = todos; ej: ['paid', 'pending', ...]
+    paymentMethods: [], // [] = todos; ej: ['Efectivo', 'Yape', ...]
     startDate: '',
     endDate: '',
     excludeConverted: true, // Por defecto excluir boletas convertidas desde notas
   })
+
+  // Marca/desmarca un valor en un filtro multi-selección del export
+  const toggleExportFilter = (key, value) => {
+    setExportFilters(prev => {
+      const arr = prev[key] || []
+      return { ...prev, [key]: arr.includes(value) ? arr.filter(v => v !== value) : [...arr, value] }
+    })
+  }
+
+  // Accesos rápidos de rango de fechas para el export ('', 'today', 'yesterday', 'week', 'month', 'custom')
+  const [exportDatePreset, setExportDatePreset] = useState('')
+
+  // Formatea una fecha a 'YYYY-MM-DD' en horario local (no UTC)
+  const toYMD = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+  // Aplica un acceso rápido rellenando startDate/endDate del export
+  const applyExportDatePreset = (preset) => {
+    if (preset === 'custom') { setExportDatePreset('custom'); return }
+    const now = new Date()
+    let start, end
+    if (preset === 'today') {
+      start = new Date(now); end = new Date(now)
+    } else if (preset === 'yesterday') {
+      const y = new Date(now); y.setDate(y.getDate() - 1); start = y; end = new Date(y)
+    } else if (preset === 'week') {
+      // Lunes de esta semana → hoy
+      const s = new Date(now); const dow = (s.getDay() + 6) % 7; s.setDate(s.getDate() - dow); start = s; end = new Date(now)
+    } else if (preset === 'month') {
+      start = new Date(now.getFullYear(), now.getMonth(), 1); end = new Date(now)
+    } else {
+      return
+    }
+    setExportFilters(prev => ({ ...prev, startDate: toYMD(start), endDate: toYMD(end) }))
+    setExportDatePreset(preset)
+  }
 
   // Modal para editar la fecha de emisión de una NC pendiente/rechazada
   // antes de re-enviarla a SUNAT (típico: SUNAT rechaza por fecha vieja).
@@ -1766,15 +1805,36 @@ Gracias por tu preferencia.`
         filteredInvoices = filteredInvoices.filter(inv => exportFilters.types.includes(inv.documentType));
       }
 
-      // Filtrar por estado SUNAT
-      if (exportFilters.sunatStatus && exportFilters.sunatStatus !== 'all') {
+      // Filtrar por estado SUNAT (multi: coincide con cualquiera de los marcados)
+      if (exportFilters.sunatStatuses && exportFilters.sunatStatuses.length > 0) {
         filteredInvoices = filteredInvoices.filter(inv => {
-          const status = inv.sunatStatus || 'pending';
           // Las notas de venta no se envían a SUNAT
           if (inv.documentType === 'nota_venta') {
-            return exportFilters.sunatStatus === 'not_applicable';
+            return exportFilters.sunatStatuses.includes('not_applicable');
           }
-          return status === exportFilters.sunatStatus;
+          const status = inv.sunatStatus || 'pending';
+          return exportFilters.sunatStatuses.includes(status);
+        });
+      }
+
+      // Filtrar por vendedor (multi: mismo criterio que la página, inv.createdBy)
+      if (exportFilters.sellers && exportFilters.sellers.length > 0) {
+        filteredInvoices = filteredInvoices.filter(inv => exportFilters.sellers.includes(inv.createdBy));
+      }
+
+      // Filtrar por estado de pago (multi: inv.status)
+      if (exportFilters.paymentStatuses && exportFilters.paymentStatuses.length > 0) {
+        filteredInvoices = filteredInvoices.filter(inv => exportFilters.paymentStatuses.includes(inv.status));
+      }
+
+      // Filtrar por método de pago (multi, con soporte de pago múltiple)
+      if (exportFilters.paymentMethods && exportFilters.paymentMethods.length > 0) {
+        const wanted = exportFilters.paymentMethods.map(m => m.toLowerCase());
+        filteredInvoices = filteredInvoices.filter(inv => {
+          if (inv.payments && inv.payments.length > 1) {
+            return inv.payments.some(p => wanted.includes((p.method || '').toLowerCase()));
+          }
+          return wanted.includes((inv.paymentMethod || 'Efectivo').toLowerCase());
         });
       }
 
@@ -1834,8 +1894,22 @@ Gracias por tu preferencia.`
         branchLabel = branch ? branch.name : null
       }
 
+      // Etiquetas legibles de los filtros aplicados (para el encabezado del Excel)
+      const paymentStatusLabels = { paid: 'Pagadas', pending: 'Pendientes', overdue: 'Vencidas', cancelled: 'Anuladas' }
+      const sunatStatusLabels = { accepted: 'Aceptados', pending: 'Pendientes de envío', rejected: 'Rechazados', voided: 'Anulados', not_applicable: 'No aplica' }
+      const sellerLabel = exportFilters.sellers.length > 0
+        ? exportFilters.sellers.map(id => sellers.find(s => s.id === id)?.name || id).join(', ')
+        : null
+      const exportFiltersWithLabels = {
+        ...exportFilters,
+        sellerLabel,
+        paymentStatusLabel: exportFilters.paymentStatuses.length > 0 ? exportFilters.paymentStatuses.map(s => paymentStatusLabels[s] || s).join(', ') : null,
+        paymentMethodLabel: exportFilters.paymentMethods.length > 0 ? exportFilters.paymentMethods.join(', ') : null,
+        sunatStatusLabel: exportFilters.sunatStatuses.length > 0 ? exportFilters.sunatStatuses.map(s => sunatStatusLabels[s] || s).join(', ') : null,
+      }
+
       // Generar Excel
-      await generateInvoicesExcel(filteredInvoices, exportFilters, companySettings, branchLabel);
+      await generateInvoicesExcel(filteredInvoices, exportFiltersWithLabels, companySettings, branchLabel);
       toast.success(`${filteredInvoices.length} comprobante(s) exportado(s) exitosamente`);
       setShowExportModal(false);
     } catch (error) {
@@ -4607,18 +4681,21 @@ Gracias por tu preferencia.`
         isOpen={showExportModal}
         onClose={() => setShowExportModal(false)}
         title="Exportar Comprobantes a Excel"
+        size="3xl"
       >
-        <div className="space-y-4">
+        <div className="space-y-5">
           <p className="text-sm text-gray-600">
-            Selecciona los tipos de comprobantes y el rango de fechas para exportar
+            Puedes marcar varias opciones en cada filtro. Si dejas un filtro sin marcar, se incluyen todos.
           </p>
 
-          {/* Checkboxes de tipos de comprobante */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Tipos de Comprobante
-            </label>
-            <div className="space-y-2 bg-gray-50 p-3 rounded-lg">
+          {/* Fila principal: tipos (izquierda) + filtros (derecha) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* Tipos de comprobante */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Tipos de Comprobante
+              </label>
+              <div className="space-y-2.5 border border-gray-200 rounded-xl p-4">
               {/* Seleccionar/Deseleccionar todos */}
               <label className="flex items-center gap-2 pb-2 border-b border-gray-200">
                 <input
@@ -4723,77 +4800,170 @@ Gracias por tu preferencia.`
             </div>
           </div>
 
-          {/* Filtro de estado SUNAT */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Estado SUNAT
-            </label>
-            <Select
-              value={exportFilters.sunatStatus}
-              onChange={(e) => setExportFilters({ ...exportFilters, sunatStatus: e.target.value })}
-            >
-              <option value="all">Todos los estados</option>
-              <option value="accepted">Aceptados por SUNAT</option>
-              <option value="pending">Pendientes de envío</option>
-              <option value="rejected">Rechazados por SUNAT</option>
-              <option value="voided">Anulados en SUNAT</option>
-              <option value="not_applicable">No aplica (Notas de Venta)</option>
-            </Select>
+            {/* Vendedor (columna derecha) — selección múltiple */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Vendedor
+              </label>
+              <div className="space-y-2.5 border border-gray-200 rounded-xl p-4 max-h-52 overflow-y-auto">
+                <label className="flex items-center gap-2 pb-2 border-b border-gray-200 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={exportFilters.sellers.length === 0}
+                    onChange={() => setExportFilters(prev => ({ ...prev, sellers: [] }))}
+                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Todos los vendedores</span>
+                </label>
+                {sellers.length === 0 ? (
+                  <p className="text-xs text-gray-400 py-1">No hay vendedores para filtrar</p>
+                ) : sellers.map(seller => (
+                  <label key={seller.id} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={exportFilters.sellers.includes(seller.id)}
+                      onChange={() => toggleExportFilter('sellers', seller.id)}
+                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <span className="text-sm text-gray-700">{seller.name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
           </div>
 
-          {/* Opción para excluir documentos convertidos */}
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-            <label className="flex items-start gap-2">
-              <input
-                type="checkbox"
-                checked={exportFilters.excludeConverted}
-                onChange={(e) => setExportFilters({ ...exportFilters, excludeConverted: e.target.checked })}
-                className="w-4 h-4 mt-0.5 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
-              />
-              <div>
-                <span className="text-sm font-medium text-amber-800">Evitar duplicados por conversión</span>
-                <p className="text-xs text-amber-700 mt-0.5">
-                  Excluye facturas y boletas generadas desde notas de venta, y las notas ya convertidas para evitar contar ventas dobles. Desmarca esta opción si quieres ver todos los documentos.
-                </p>
-              </div>
-            </label>
+          {/* Estado de pago — selección múltiple (chips) */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Estado de pago</label>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { key: 'paid', label: 'Pagadas' },
+                { key: 'pending', label: 'Pendientes' },
+                { key: 'overdue', label: 'Vencidas' },
+                { key: 'cancelled', label: 'Anuladas' },
+              ].map(opt => {
+                const active = exportFilters.paymentStatuses.includes(opt.key)
+                return (
+                  <button key={opt.key} type="button" onClick={() => toggleExportFilter('paymentStatuses', opt.key)}
+                    className={`px-3 py-1.5 rounded-full border text-sm transition-colors ${active ? 'border-primary-500 bg-primary-50 text-primary-700 font-medium' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Método de pago — selección múltiple (chips) */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Método de pago</label>
+            <div className="flex flex-wrap gap-2">
+              {['Efectivo', 'Tarjeta', 'Transferencia', 'Yape', 'Plin', 'Rappi', 'PedidosYa', 'DiDiFood'].map(m => {
+                const active = exportFilters.paymentMethods.includes(m)
+                return (
+                  <button key={m} type="button" onClick={() => toggleExportFilter('paymentMethods', m)}
+                    className={`px-3 py-1.5 rounded-full border text-sm transition-colors ${active ? 'border-primary-500 bg-primary-50 text-primary-700 font-medium' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                    {m}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Estado SUNAT — selección múltiple (chips) */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Estado SUNAT</label>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { key: 'accepted', label: 'Aceptado' },
+                { key: 'pending', label: 'Pendiente de envío' },
+                { key: 'rejected', label: 'Rechazado' },
+                { key: 'voided', label: 'Anulado' },
+                { key: 'not_applicable', label: 'No aplica (N. Venta)' },
+              ].map(opt => {
+                const active = exportFilters.sunatStatuses.includes(opt.key)
+                return (
+                  <button key={opt.key} type="button" onClick={() => toggleExportFilter('sunatStatuses', opt.key)}
+                    className={`px-3 py-1.5 rounded-full border text-sm transition-colors ${active ? 'border-primary-500 bg-primary-50 text-primary-700 font-medium' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
           {/* Rango de fechas */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Rango de fechas <span className="font-normal text-gray-400">(opcional)</span>
+              </label>
+              {(exportFilters.startDate || exportFilters.endDate) && (
+                <button
+                  type="button"
+                  onClick={() => { setExportFilters(prev => ({ ...prev, startDate: '', endDate: '' })); setExportDatePreset('') }}
+                  className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                >
+                  Limpiar fechas
+                </button>
+              )}
+            </div>
+            {/* Accesos rápidos */}
+            <div className="flex flex-wrap gap-2 mb-3">
+              {[
+                { key: 'today', label: 'Hoy' },
+                { key: 'yesterday', label: 'Ayer' },
+                { key: 'week', label: 'Esta semana' },
+                { key: 'month', label: 'Este mes' },
+                { key: 'custom', label: 'Personalizado' },
+              ].map(opt => {
+                const active = exportDatePreset === opt.key
+                return (
+                  <button key={opt.key} type="button" onClick={() => applyExportDatePreset(opt.key)}
+                    className={`px-3 py-1.5 rounded-full border text-sm transition-colors ${active ? 'border-primary-500 bg-primary-50 text-primary-700 font-medium' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input
                 type="date"
-                label="Fecha Desde"
+                label="Desde"
                 value={exportFilters.startDate}
-                onChange={(e) => setExportFilters({ ...exportFilters, startDate: e.target.value })}
+                onChange={(e) => { setExportFilters({ ...exportFilters, startDate: e.target.value }); setExportDatePreset('custom') }}
                 placeholder="dd/mm/aaaa"
               />
-              {!exportFilters.startDate && (
-                <p className="text-xs text-gray-500 mt-1">Selecciona fecha inicial</p>
-              )}
-            </div>
-            <div>
               <Input
                 type="date"
-                label="Fecha Hasta"
+                label="Hasta"
                 value={exportFilters.endDate}
-                onChange={(e) => setExportFilters({ ...exportFilters, endDate: e.target.value })}
+                onChange={(e) => { setExportFilters({ ...exportFilters, endDate: e.target.value }); setExportDatePreset('custom') }}
                 placeholder="dd/mm/aaaa"
               />
-              {!exportFilters.endDate && (
-                <p className="text-xs text-gray-500 mt-1">Selecciona fecha final</p>
-              )}
             </div>
-          </div>
-
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <p className="text-sm text-blue-800">
-              <strong>Nota:</strong> Si no seleccionas fechas, se exportarán todos los comprobantes de los tipos seleccionados.
+            <p className="text-xs text-gray-500 mt-1.5">
+              Si no eliges fechas, se exportan todos los comprobantes de los tipos seleccionados.
             </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-2 pt-4">
+          {/* Evitar duplicados por conversión */}
+          <label className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-3.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={exportFilters.excludeConverted}
+              onChange={(e) => setExportFilters({ ...exportFilters, excludeConverted: e.target.checked })}
+              className="w-4 h-4 mt-0.5 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+            />
+            <div>
+              <span className="text-sm font-medium text-amber-800">Evitar duplicados por conversión</span>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Excluye facturas y boletas generadas desde notas de venta, y las notas ya convertidas, para no contar ventas dobles. Desmárcala si quieres ver todos los documentos.
+              </p>
+            </div>
+          </label>
+
+          {/* Footer */}
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t border-gray-200">
             <Button
               variant="outline"
               onClick={() => setShowExportModal(false)}
@@ -4804,7 +4974,7 @@ Gracias por tu preferencia.`
             <Button
               onClick={handleExportToExcel}
               disabled={exportFilters.types.length === 0}
-              className="w-full sm:flex-1"
+              className="w-full sm:w-auto"
             >
               <FileSpreadsheet className="w-4 h-4 mr-2" />
               Exportar a Excel
