@@ -136,6 +136,63 @@ export function getDocumentTotalInBase(doc) {
 }
 
 /**
+ * Moneda en la que el negocio quiere VER sus reportes/dashboard (visualización).
+ * Solo puede ser USD si tiene multi-divisa activa y eligió `reportsCurrency: 'USD'`.
+ * La base contable SIEMPRE es PEN — esto es solo cómo se muestran los números.
+ *
+ * @param {Object} businessSettings
+ * @returns {'PEN' | 'USD'}
+ */
+export function getReportsCurrency(businessSettings) {
+  if (!isMultiCurrencyEnabled(businessSettings)) return BASE_CURRENCY
+  return normalizeCurrency(businessSettings?.reportsCurrency)
+}
+
+/**
+ * Tasa de referencia para convertir los montos en PEN a la moneda de reportes (USD).
+ * Prioridad: TC configurado (`reportsExchangeRate`) > TC congelado del documento USD
+ * más reciente del set > 0. Para un negocio 100% USD casi no se usa (sus docs ya
+ * son USD y se muestran nativos); solo aplica a los pocos comprobantes en soles.
+ *
+ * @param {Object} businessSettings
+ * @param {Array} docs - comprobantes disponibles (para inferir el TC si no se configuró)
+ * @returns {number}
+ */
+export function resolveReportsRate(businessSettings, docs = []) {
+  const configured = Number(businessSettings?.reportsExchangeRate)
+  if (Number.isFinite(configured) && configured > 0) return configured
+  let best = null
+  for (const d of docs || []) {
+    if (normalizeCurrency(d?.currency) !== 'USD') continue
+    const r = Number(d?.exchangeRate)
+    if (!Number.isFinite(r) || r <= 0) continue
+    const t = d?.createdAt?.toDate?.()?.getTime?.() ?? (d?.createdAt ? new Date(d.createdAt).getTime() : 0)
+    if (!best || t >= best.t) best = { t, rate: r }
+  }
+  return best ? best.rate : 0
+}
+
+/**
+ * Convierte un monto YA EN SOLES BASE a la moneda de display de reportes.
+ * Los reportes se calculan internamente en soles (con los TC congelados de cada
+ * doc); esta función es la capa de PRESENTACIÓN: si la moneda de reportes es USD,
+ * divide entre la tasa de referencia. Si no hay tasa válida, deja el monto en
+ * soles (no lo rompe). PEN → devuelve el mismo monto.
+ *
+ * @param {number} amountInBase - monto en soles (ej: getDocumentTotalInBase)
+ * @param {'PEN'|'USD'} displayCurrency
+ * @param {number} displayRate - tasa de referencia (de resolveReportsRate)
+ * @returns {number}
+ */
+export function convertBaseToDisplay(amountInBase, displayCurrency = BASE_CURRENCY, displayRate = 0) {
+  const n = Number(amountInBase) || 0
+  if (normalizeCurrency(displayCurrency) === BASE_CURRENCY) return n
+  const rate = Number(displayRate)
+  if (!Number.isFinite(rate) || rate <= 0) return n
+  return Math.round((n / rate) * 100) / 100
+}
+
+/**
  * Tipo de cambio EFECTIVO de un documento para convertir sus montos a PEN:
  * 1 si el documento está en PEN (o no tiene TC válido), su exchangeRate
  * congelado si está en USD. Útil para convertir montos parciales del doc

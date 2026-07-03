@@ -56,7 +56,7 @@ import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import Select from '@/components/ui/Select'
 import Input from '@/components/ui/Input'
 import { formatCurrency, formatDate, formatDateTime, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
-import { getDocumentTotalInBase } from '@/utils/currency'
+import { getDocumentTotalInBase, getReportsCurrency, resolveReportsRate, convertBaseToDisplay } from '@/utils/currency'
 import { getInvoices, getRecentInvoices, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat, updateProductStockTransaction } from '@/services/firestoreService'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, generateExitNotePDF, preloadLogo } from '@/utils/pdfGenerator'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
@@ -2401,6 +2401,12 @@ Gracias por tu preferencia.`
     totalAll: invoices.filter(i => i.archived !== true).filter(isValidSale).length,
   }
 
+  // Moneda de visualización de los totales (PEN por defecto; USD si el negocio lo
+  // eligió con multi-divisa). Solo presentación: el cálculo sigue en soles base.
+  const reportsCcy = getReportsCurrency(businessSettings)
+  const reportsRate = resolveReportsRate(businessSettings, invoices)
+  const toDisp = (soles) => convertBaseToDisplay(soles, reportsCcy, reportsRate)
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -2486,7 +2492,7 @@ Gracias por tu preferencia.`
                   <p className="text-xs text-primary-600">({getFilterLabel()})</p>
                 )}
                 <p className="text-lg sm:text-xl font-bold text-primary-600 mt-2">
-                  {formatCurrency(stats.totalAmount)}
+                  {formatCurrency(toDisp(stats.totalAmount), reportsCcy)}
                 </p>
               </div>
             </CardContent>
@@ -2700,7 +2706,7 @@ Gracias por tu preferencia.`
             </span>
             <span className="text-gray-300">|</span>
             <span className="text-gray-600">
-              Total: <span className="font-semibold text-gray-900">{formatCurrency(tableSales.reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0))}</span>
+              Total: <span className="font-semibold text-gray-900">{formatCurrency(toDisp(tableSales.reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0)), reportsCcy)}</span>
             </span>
             {dateFilter !== 'all' && (
               <>

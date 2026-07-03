@@ -31,7 +31,7 @@ import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { getDocumentTotalInBase, convertToBase } from '@/utils/currency'
+import { getDocumentTotalInBase, convertToBase, getReportsCurrency, resolveReportsRate, convertBaseToDisplay } from '@/utils/currency'
 import { getInvoices, getRecentInvoices, getCustomersWithStats, getProducts, getProductCategories, getProductBrands, getPurchases, getFinancialMovements, getAllCashMovements } from '@/services/firestoreService'
 import { getRecipes } from '@/services/recipeService'
 import { getActiveBranches } from '@/services/branchService'
@@ -166,6 +166,12 @@ export default function Reports() {
   const [invoices, setInvoices] = useState([])
   const [customers, setCustomers] = useState([])
   const [products, setProducts] = useState([])
+  // Moneda de visualización de reportes (PEN por defecto; USD si el negocio lo eligió
+  // con multi-divisa). Todo se calcula en soles base; formatMoney es la capa de
+  // presentación: convierte el monto (en soles) a la moneda elegida y le pone su símbolo.
+  const reportsCcy = getReportsCurrency(businessSettings)
+  const reportsRate = resolveReportsRate(businessSettings, invoices)
+  const formatMoney = (soles) => formatCurrency(convertBaseToDisplay(soles, reportsCcy, reportsRate), reportsCcy)
   const [productCategories, setProductCategories] = useState([])
   const [productBrands, setProductBrands] = useState([])
   const [recipes, setRecipes] = useState([])
@@ -2153,7 +2159,7 @@ export default function Reports() {
           {payload.map((entry, index) => (
             <p key={index} style={{ color: entry.color }} className="text-sm">
               {entry.name}: {entry.name.includes('ventas') || entry.name.includes('Ingresos')
-                ? formatCurrency(entry.value)
+                ? formatMoney(entry.value)
                 : entry.value}
             </p>
           ))}
@@ -2390,7 +2396,7 @@ export default function Reports() {
               <CardContent className="p-3 xl:p-4">
                 <p className="text-xs font-medium text-gray-500">Ingresos Totales</p>
                 <p className="text-base lg:text-lg xl:text-2xl font-bold text-gray-900 mt-1">
-                  {formatCurrency(stats.totalRevenue)}
+                  {formatMoney(stats.totalRevenue)}
                 </p>
                 {stats.revenueGrowth !== 0 && (
                   <div className="flex items-center mt-1">
@@ -2411,7 +2417,7 @@ export default function Reports() {
               <CardContent className="p-3 xl:p-4">
                 <p className="text-xs font-medium text-gray-500">Costo Total</p>
                 <p className="text-base lg:text-lg xl:text-2xl font-bold text-red-600 mt-1">
-                  {formatCurrency(stats.totalCost)}
+                  {formatMoney(stats.totalCost)}
                 </p>
               </CardContent>
             </Card>
@@ -2420,7 +2426,7 @@ export default function Reports() {
               <CardContent className="p-3 xl:p-4">
                 <p className="text-xs font-medium text-gray-500">Utilidad Total</p>
                 <p className="text-base lg:text-lg xl:text-2xl font-bold text-green-600 mt-1">
-                  {formatCurrency(stats.totalProfit)}
+                  {formatMoney(stats.totalProfit)}
                 </p>
                 <p className="text-xs text-gray-500 mt-0.5">
                   Margen: {stats.profitMargin.toFixed(1)}%
@@ -2444,7 +2450,7 @@ export default function Reports() {
               <CardContent className="p-3 xl:p-4">
                 <p className="text-xs font-medium text-gray-500">Ticket Promedio</p>
                 <p className="text-base lg:text-lg xl:text-2xl font-bold text-gray-900 mt-1">
-                  {formatCurrency(stats.avgTicket)}
+                  {formatMoney(stats.avgTicket)}
                 </p>
               </CardContent>
             </Card>
@@ -2612,7 +2618,7 @@ export default function Reports() {
                 <div>
                   <p className="text-sm font-medium text-gray-600">Total Ventas</p>
                   <p className="text-2xl font-bold text-gray-900 mt-2">
-                    {formatCurrency(stats.totalRevenue)}
+                    {formatMoney(stats.totalRevenue)}
                   </p>
                   <p className="text-sm text-gray-500 mt-1">{stats.totalInvoices} comprobantes</p>
                 </div>
@@ -2624,7 +2630,7 @@ export default function Reports() {
                 <div>
                   <p className="text-sm font-medium text-gray-600">Costo Total</p>
                   <p className="text-2xl font-bold text-red-600 mt-2">
-                    {formatCurrency(stats.totalCost)}
+                    {formatMoney(stats.totalCost)}
                   </p>
                   <p className="text-sm text-gray-500 mt-1">Productos vendidos</p>
                 </div>
@@ -2636,7 +2642,7 @@ export default function Reports() {
                 <div>
                   <p className="text-sm font-medium text-gray-600">Utilidad Total</p>
                   <p className="text-2xl font-bold text-green-600 mt-2">
-                    {formatCurrency(stats.totalProfit)}
+                    {formatMoney(stats.totalProfit)}
                   </p>
                   <p className="text-sm text-gray-500 mt-1">Margen: {stats.profitMargin.toFixed(1)}%</p>
                 </div>
@@ -2648,7 +2654,7 @@ export default function Reports() {
                 <div>
                   <p className="text-sm font-medium text-gray-600">Pagadas</p>
                   <p className="text-2xl font-bold text-green-600 mt-2">
-                    {formatCurrency(stats.paidRevenue)}
+                    {formatMoney(stats.paidRevenue)}
                   </p>
                   <p className="text-sm text-gray-500 mt-1">
                     {filteredInvoices.filter(inv => inv.status === 'paid').length} comprobantes
@@ -2662,7 +2668,7 @@ export default function Reports() {
                 <div>
                   <p className="text-sm font-medium text-gray-600">Pendientes</p>
                   <p className="text-2xl font-bold text-yellow-600 mt-2">
-                    {formatCurrency(stats.pendingRevenue)}
+                    {formatMoney(stats.pendingRevenue)}
                   </p>
                   <p className="text-sm text-gray-500 mt-1">
                     {filteredInvoices.filter(inv => inv.status === 'pending').length} comprobantes
@@ -2693,7 +2699,7 @@ export default function Reports() {
                         />
                       </div>
                       <p className="text-2xl font-bold text-gray-900">
-                        {formatCurrency(method.total)}
+                        {formatMoney(method.total)}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
                         {method.count} {method.count === 1 ? 'transacción' : 'transacciones'}
@@ -2747,7 +2753,7 @@ export default function Reports() {
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        label={({ name, percent, value }) => `${name}: ${formatCurrency(value)} (${(percent * 100).toFixed(0)}%)`}
+                        label={({ name, percent, value }) => `${name}: ${formatMoney(value)} (${(percent * 100).toFixed(0)}%)`}
                         outerRadius={120}
                         fill="#8884d8"
                         dataKey="value"
@@ -2757,7 +2763,7 @@ export default function Reports() {
                         ))}
                       </Pie>
                       <Tooltip
-                        formatter={(value) => formatCurrency(value)}
+                        formatter={(value) => formatMoney(value)}
                       />
                     </RePieChart>
                   </ResponsiveContainer>
@@ -2824,7 +2830,7 @@ export default function Reports() {
                           <p className="font-medium text-gray-900">{invoice.number}</p>
                           <p className="text-sm text-gray-600">{invoice.customer?.name || 'Cliente General'}</p>
                         </div>
-                        <p className="font-bold text-gray-900">{formatCurrency(invoice.total)}</p>
+                        <p className="font-bold text-gray-900">{formatMoney(invoice.total)}</p>
                       </div>
                       <div className="flex items-center gap-2 mt-2 flex-wrap">
                         <Badge variant={invoice.documentType === 'factura' ? 'primary' : invoice.documentType === 'nota_venta' ? 'warning' : 'default'}>
@@ -2852,7 +2858,7 @@ export default function Reports() {
                             </span>
                           ) : (
                             <>
-                              <span className="text-green-600">+{formatCurrency(invoice.profit || 0)}</span>
+                              <span className="text-green-600">+{formatMoney(invoice.profit || 0)}</span>
                               <span className={`font-medium ${(invoice.profitMargin || 0) >= 30 ? 'text-green-600' : (invoice.profitMargin || 0) >= 15 ? 'text-yellow-600' : 'text-red-600'}`}>
                                 {(invoice.profitMargin || 0).toFixed(1)}%
                               </span>
@@ -2935,17 +2941,17 @@ export default function Reports() {
                             <Badge variant="default">{paymentMethods}</Badge>
                           </TableCell>
                           <TableCell className="text-right font-semibold">
-                            {formatCurrency(invoice.total)}
+                            {formatMoney(invoice.total)}
                           </TableCell>
                           <TableCell className="text-right text-red-600">
                             {invoice.allItemsCustom
                               ? <span className="text-gray-400" title="Productos personalizados sin costo registrado">—</span>
-                              : formatCurrency(invoice.totalCost || 0)}
+                              : formatMoney(invoice.totalCost || 0)}
                           </TableCell>
                           <TableCell className="text-right font-semibold text-green-600">
                             {invoice.allItemsCustom
                               ? <span className="text-gray-400">—</span>
-                              : formatCurrency(invoice.profit || 0)}
+                              : formatMoney(invoice.profit || 0)}
                           </TableCell>
                           <TableCell className="text-right">
                             {invoice.allItemsCustom ? (
@@ -3204,13 +3210,13 @@ export default function Reports() {
                                     {product.sku && <span className="block text-xs text-gray-400">SKU: {product.sku}</span>}
                                   </div>
                                 </div>
-                                <span className="font-bold text-gray-900">{formatCurrency(product.revenue)}</span>
+                                <span className="font-bold text-gray-900">{formatMoney(product.revenue)}</span>
                               </div>
                               <div className="flex items-center justify-between mt-2 text-sm">
                                 <span className="text-gray-500">{product.quantity.toFixed(2)} uds</span>
                                 <div className="flex items-center gap-3">
                                   <span className={`font-medium ${product.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                    +{formatCurrency(product.profit)}
+                                    +{formatMoney(product.profit)}
                                   </span>
                                   <span className={`font-medium ${product.profitMargin >= 30 ? 'text-green-600' : product.profitMargin >= 15 ? 'text-yellow-600' : 'text-red-600'}`}>
                                     {product.profitMargin.toFixed(1)}%
@@ -3269,13 +3275,13 @@ export default function Reports() {
                                   <TableCell className="font-medium">{product.name}</TableCell>
                                   <TableCell className="text-right">{product.quantity.toFixed(2)}</TableCell>
                                   <TableCell className="text-right font-semibold">
-                                    {formatCurrency(product.revenue)}
+                                    {formatMoney(product.revenue)}
                                   </TableCell>
                                   <TableCell className="text-right text-gray-600">
-                                    {formatCurrency(product.cost)}
+                                    {formatMoney(product.cost)}
                                   </TableCell>
                                   <TableCell className={`text-right font-semibold ${product.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                    {formatCurrency(product.profit)}
+                                    {formatMoney(product.profit)}
                                   </TableCell>
                                   <TableCell className="text-right">
                                     <span className={`font-medium ${
@@ -3342,13 +3348,13 @@ export default function Reports() {
                     <div key={index} className="bg-white border rounded-lg px-4 py-3">
                       <div className="flex items-center justify-between">
                         <span className="font-medium text-gray-900">{category.name}</span>
-                        <span className="font-bold text-gray-900">{formatCurrency(category.revenue)}</span>
+                        <span className="font-bold text-gray-900">{formatMoney(category.revenue)}</span>
                       </div>
                       <div className="flex items-center justify-between mt-2 text-sm">
                         <span className="text-gray-500">{category.itemCount} ventas · {category.quantity.toFixed(0)} uds</span>
                         <div className="flex items-center gap-3">
                           <span className={`font-medium ${category.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            +{formatCurrency(category.profit)}
+                            +{formatMoney(category.profit)}
                           </span>
                           <span className={`font-medium ${category.profitMargin >= 30 ? 'text-green-600' : category.profitMargin >= 15 ? 'text-yellow-600' : 'text-red-600'}`}>
                             {category.profitMargin.toFixed(1)}%
@@ -3388,13 +3394,13 @@ export default function Reports() {
                           <TableCell className="text-right">{category.itemCount}</TableCell>
                           <TableCell className="text-right">{category.quantity.toFixed(0)}</TableCell>
                           <TableCell className="text-right font-semibold">
-                            {formatCurrency(category.revenue)}
+                            {formatMoney(category.revenue)}
                           </TableCell>
                           <TableCell className="text-right text-gray-600">
-                            {formatCurrency(category.cost)}
+                            {formatMoney(category.cost)}
                           </TableCell>
                           <TableCell className={`text-right font-semibold ${category.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {formatCurrency(category.profit)}
+                            {formatMoney(category.profit)}
                           </TableCell>
                           <TableCell className="text-right">
                             <span className={`font-medium ${
@@ -3431,13 +3437,13 @@ export default function Reports() {
                     <div key={index} className="bg-white border rounded-lg px-4 py-3">
                       <div className="flex items-center justify-between">
                         <span className="font-medium text-gray-900">{brand.name}</span>
-                        <span className="font-bold text-gray-900">{formatCurrency(brand.revenue)}</span>
+                        <span className="font-bold text-gray-900">{formatMoney(brand.revenue)}</span>
                       </div>
                       <div className="flex items-center justify-between mt-2 text-sm">
                         <span className="text-gray-500">{brand.itemCount} ventas · {brand.quantity.toFixed(0)} uds</span>
                         <div className="flex items-center gap-3">
                           <span className={`font-medium ${brand.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            +{formatCurrency(brand.profit)}
+                            +{formatMoney(brand.profit)}
                           </span>
                           <span className={`font-medium ${brand.profitMargin >= 30 ? 'text-green-600' : brand.profitMargin >= 15 ? 'text-yellow-600' : 'text-red-600'}`}>
                             {brand.profitMargin.toFixed(1)}%
@@ -3477,13 +3483,13 @@ export default function Reports() {
                           <TableCell className="text-right">{brand.itemCount}</TableCell>
                           <TableCell className="text-right">{brand.quantity.toFixed(0)}</TableCell>
                           <TableCell className="text-right font-semibold">
-                            {formatCurrency(brand.revenue)}
+                            {formatMoney(brand.revenue)}
                           </TableCell>
                           <TableCell className="text-right text-gray-600">
-                            {formatCurrency(brand.cost)}
+                            {formatMoney(brand.cost)}
                           </TableCell>
                           <TableCell className={`text-right font-semibold ${brand.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {formatCurrency(brand.profit)}
+                            {formatMoney(brand.profit)}
                           </TableCell>
                           <TableCell className="text-right">
                             <span className={`font-medium ${
@@ -3564,7 +3570,7 @@ export default function Reports() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-xs text-gray-500">Ingresos</p>
-                    <p className="text-xl font-bold text-gray-900">{formatCurrency(selectedBrandData.totalRevenue)}</p>
+                    <p className="text-xl font-bold text-gray-900">{formatMoney(selectedBrandData.totalRevenue)}</p>
                   </div>
                 </div>
               </CardContent>
@@ -3592,7 +3598,7 @@ export default function Reports() {
                   <div className="min-w-0 flex-1">
                     <p className="text-xs text-gray-500">Utilidad bruta</p>
                     <p className={`text-xl font-bold ${selectedBrandData.totalProfit >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
-                      {formatCurrency(selectedBrandData.totalProfit)}
+                      {formatMoney(selectedBrandData.totalProfit)}
                     </p>
                     <p className={`text-xs font-medium ${
                       selectedBrandData.avgMargin >= 30 ? 'text-green-600'
@@ -3615,7 +3621,7 @@ export default function Reports() {
                       {selectedBrandData.topProduct?.name || '-'}
                     </p>
                     {selectedBrandData.topProduct && (
-                      <p className="text-xs text-gray-500">{formatCurrency(selectedBrandData.topProduct.revenue)}</p>
+                      <p className="text-xs text-gray-500">{formatMoney(selectedBrandData.topProduct.revenue)}</p>
                     )}
                   </div>
                 </div>
@@ -3704,13 +3710,13 @@ export default function Reports() {
                                     {p.sku && <span className="block text-xs text-gray-400">SKU: {p.sku}</span>}
                                   </div>
                                 </div>
-                                <span className="font-bold text-gray-900">{formatCurrency(p.revenue)}</span>
+                                <span className="font-bold text-gray-900">{formatMoney(p.revenue)}</span>
                               </div>
                               <div className="flex items-center justify-between mt-2 text-sm">
                                 <span className="text-gray-500">{p.quantity.toFixed(0)} uds · {pct.toFixed(1)}%</span>
                                 <div className="flex items-center gap-3">
                                   <span className={`font-medium ${p.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                    +{formatCurrency(p.profit)}
+                                    +{formatMoney(p.profit)}
                                   </span>
                                   <span className={`font-medium ${p.profitMargin >= 30 ? 'text-green-600' : p.profitMargin >= 15 ? 'text-yellow-600' : 'text-red-600'}`}>
                                     {p.profitMargin.toFixed(1)}%
@@ -3765,10 +3771,10 @@ export default function Reports() {
                                   <TableCell className="text-gray-500 text-sm">{p.sku || '-'}</TableCell>
                                   <TableCell className="font-medium">{p.name}</TableCell>
                                   <TableCell className="text-right">{p.quantity.toFixed(2)}</TableCell>
-                                  <TableCell className="text-right font-semibold">{formatCurrency(p.revenue)}</TableCell>
-                                  <TableCell className="text-right text-gray-600">{formatCurrency(p.cost)}</TableCell>
+                                  <TableCell className="text-right font-semibold">{formatMoney(p.revenue)}</TableCell>
+                                  <TableCell className="text-right text-gray-600">{formatMoney(p.cost)}</TableCell>
                                   <TableCell className={`text-right font-semibold ${p.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                    {formatCurrency(p.profit)}
+                                    {formatMoney(p.profit)}
                                   </TableCell>
                                   <TableCell className="text-right">
                                     <span className={`font-medium ${
@@ -3865,7 +3871,7 @@ export default function Reports() {
                       {brandsTotals.topBrand?.name || '-'}
                     </p>
                     {brandsTotals.topBrand && (
-                      <p className="text-xs text-gray-500">{formatCurrency(brandsTotals.topBrand.revenue)}</p>
+                      <p className="text-xs text-gray-500">{formatMoney(brandsTotals.topBrand.revenue)}</p>
                     )}
                   </div>
                 </div>
@@ -3879,7 +3885,7 @@ export default function Reports() {
                   </div>
                   <div>
                     <p className="text-xs text-gray-500">Ingresos totales</p>
-                    <p className="text-xl font-bold text-gray-900">{formatCurrency(brandsTotals.totalRevenue)}</p>
+                    <p className="text-xl font-bold text-gray-900">{formatMoney(brandsTotals.totalRevenue)}</p>
                   </div>
                 </div>
               </CardContent>
@@ -3948,7 +3954,7 @@ export default function Reports() {
                           <Cell key={`pie-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(value) => formatCurrency(value)} />
+                      <Tooltip formatter={(value) => formatMoney(value)} />
                     </RePieChart>
                   </ResponsiveContainer>
                 )}
@@ -4011,13 +4017,13 @@ export default function Reports() {
                                     <span className="block text-xs text-gray-400">{pct.toFixed(1)}% del total · Ver detalle →</span>
                                   </div>
                                 </div>
-                                <span className="font-bold text-gray-900">{formatCurrency(brand.revenue)}</span>
+                                <span className="font-bold text-gray-900">{formatMoney(brand.revenue)}</span>
                               </div>
                               <div className="flex items-center justify-between mt-2 text-sm">
                                 <span className="text-gray-500">{brand.itemCount} ventas · {brand.quantity.toFixed(0)} uds</span>
                                 <div className="flex items-center gap-3">
                                   <span className={`font-medium ${brand.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                    +{formatCurrency(brand.profit)}
+                                    +{formatMoney(brand.profit)}
                                   </span>
                                   <span className={`font-medium ${brand.profitMargin >= 30 ? 'text-green-600' : brand.profitMargin >= 15 ? 'text-yellow-600' : 'text-red-600'}`}>
                                     {brand.profitMargin.toFixed(1)}%
@@ -4082,10 +4088,10 @@ export default function Reports() {
                                   <TableCell className="font-medium text-blue-700">{brand.name}</TableCell>
                                   <TableCell className="text-right">{brand.itemCount}</TableCell>
                                   <TableCell className="text-right">{brand.quantity.toFixed(0)}</TableCell>
-                                  <TableCell className="text-right font-semibold">{formatCurrency(brand.revenue)}</TableCell>
-                                  <TableCell className="text-right text-gray-600">{formatCurrency(brand.cost)}</TableCell>
+                                  <TableCell className="text-right font-semibold">{formatMoney(brand.revenue)}</TableCell>
+                                  <TableCell className="text-right text-gray-600">{formatMoney(brand.cost)}</TableCell>
                                   <TableCell className={`text-right font-semibold ${brand.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                    {formatCurrency(brand.profit)}
+                                    {formatMoney(brand.profit)}
                                   </TableCell>
                                   <TableCell className="text-right">
                                     <span className={`font-medium ${
@@ -4194,7 +4200,7 @@ export default function Reports() {
                           </div>
                           <span className="font-medium text-gray-900">{customer.name}</span>
                         </div>
-                        <span className="font-bold text-gray-900">{formatCurrency(customer.totalSpent || 0)}</span>
+                        <span className="font-bold text-gray-900">{formatMoney(customer.totalSpent || 0)}</span>
                       </div>
                       <div className="flex items-center justify-between mt-2 text-sm">
                         <div className="flex items-center gap-2">
@@ -4266,7 +4272,7 @@ export default function Reports() {
                             </div>
                           </TableCell>
                           <TableCell className="text-right font-semibold">
-                            {formatCurrency(customer.totalSpent || 0)}
+                            {formatMoney(customer.totalSpent || 0)}
                           </TableCell>
                         </TableRow>
                       ))
@@ -4326,7 +4332,7 @@ export default function Reports() {
                           </div>
                           <span className="font-medium text-gray-900">{zone.zone}</span>
                         </div>
-                        <span className="font-bold text-gray-900">{formatCurrency(zone.totalRevenue)}</span>
+                        <span className="font-bold text-gray-900">{formatMoney(zone.totalRevenue)}</span>
                       </div>
                       <div className="flex items-center justify-between mt-2 text-sm text-gray-500">
                         <span>{zone.uniqueCustomers} cliente{zone.uniqueCustomers !== 1 ? 's' : ''}</span>
@@ -4379,10 +4385,10 @@ export default function Reports() {
                             </div>
                           </TableCell>
                           <TableCell className="text-right font-semibold">
-                            {formatCurrency(zone.totalRevenue)}
+                            {formatMoney(zone.totalRevenue)}
                           </TableCell>
                           <TableCell className="text-right text-gray-600">
-                            {formatCurrency(zone.ordersCount > 0 ? zone.totalRevenue / zone.ordersCount : 0)}
+                            {formatMoney(zone.ordersCount > 0 ? zone.totalRevenue / zone.ordersCount : 0)}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -4469,7 +4475,7 @@ export default function Reports() {
                   <div>
                     <p className="text-sm font-medium text-gray-600">Ingresos Top Vendedor</p>
                     <p className="text-2xl font-bold text-gray-900 mt-2">
-                      {sellerStats.length > 0 ? formatCurrency(sellerStats[0].totalRevenue) : formatCurrency(0)}
+                      {sellerStats.length > 0 ? formatMoney(sellerStats[0].totalRevenue) : formatMoney(0)}
                     </p>
                   </div>
                   <DollarSign className="w-8 h-8 text-green-600" />
@@ -4519,7 +4525,7 @@ export default function Reports() {
                             {seller.email && <p className="text-xs text-gray-500">{seller.email}</p>}
                           </div>
                         </div>
-                        <span className="font-bold text-green-600">{formatCurrency(seller.totalRevenue)}</span>
+                        <span className="font-bold text-green-600">{formatMoney(seller.totalRevenue)}</span>
                       </div>
                       <div className="flex items-center gap-2 mt-2 flex-wrap">
                         <div className="inline-flex items-center justify-center px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
@@ -4606,7 +4612,7 @@ export default function Reports() {
                             <Badge variant="danger">{seller.notasDebito}</Badge>
                           </TableCell>
                           <TableCell className="text-right font-semibold text-green-600">
-                            {formatCurrency(seller.totalRevenue)}
+                            {formatMoney(seller.totalRevenue)}
                           </TableCell>
                         </TableRow>
                       ))
@@ -4643,7 +4649,7 @@ export default function Reports() {
                   <div>
                     <p className="text-sm font-medium text-gray-600">Total Gastos</p>
                     <p className="text-2xl font-bold text-red-600 mt-2">
-                      {formatCurrency(expenseStats.total)}
+                      {formatMoney(expenseStats.total)}
                     </p>
                     <p className="text-sm text-gray-500 mt-1">
                       {expenseStats.count} registros
@@ -4662,7 +4668,7 @@ export default function Reports() {
                   <div>
                     <p className="text-sm font-medium text-gray-600">Promedio por Gasto</p>
                     <p className="text-2xl font-bold text-gray-900 mt-2">
-                      {formatCurrency(expenseStats.avgExpense)}
+                      {formatMoney(expenseStats.avgExpense)}
                     </p>
                   </div>
                   <div className="p-3 bg-orange-100 rounded-lg">
@@ -4678,7 +4684,7 @@ export default function Reports() {
                   <div>
                     <p className="text-sm font-medium text-gray-600">Servicios</p>
                     <p className="text-2xl font-bold text-yellow-600 mt-2">
-                      {formatCurrency(expenseStats.byCategory.servicios?.total || 0)}
+                      {formatMoney(expenseStats.byCategory.servicios?.total || 0)}
                     </p>
                     <p className="text-sm text-gray-500 mt-1">
                       {expenseStats.byCategory.servicios?.count || 0} registros
@@ -4697,7 +4703,7 @@ export default function Reports() {
                   <div>
                     <p className="text-sm font-medium text-gray-600">Proveedores</p>
                     <p className="text-2xl font-bold text-blue-600 mt-2">
-                      {formatCurrency(expenseStats.byCategory.proveedores?.total || 0)}
+                      {formatMoney(expenseStats.byCategory.proveedores?.total || 0)}
                     </p>
                     <p className="text-sm text-gray-500 mt-1">
                       {expenseStats.byCategory.proveedores?.count || 0} registros
@@ -4739,7 +4745,7 @@ export default function Reports() {
                     <XAxis dataKey="period" tick={{ fontSize: 12 }} />
                     <YAxis tick={{ fontSize: 12 }} />
                     <Tooltip
-                      formatter={(value) => formatCurrency(value)}
+                      formatter={(value) => formatMoney(value)}
                       labelFormatter={(label) => `Período: ${label}`}
                     />
                     <Area
@@ -4778,7 +4784,7 @@ export default function Reports() {
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(value) => formatCurrency(value)} />
+                      <Tooltip formatter={(value) => formatMoney(value)} />
                     </RePieChart>
                   </ResponsiveContainer>
                 ) : (
@@ -4810,7 +4816,7 @@ export default function Reports() {
                       />
                     </div>
                     <p className="text-2xl font-bold text-gray-900">
-                      {formatCurrency(cat.value)}
+                      {formatMoney(cat.value)}
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
                       {cat.count} {cat.count === 1 ? 'registro' : 'registros'}
@@ -4841,7 +4847,7 @@ export default function Reports() {
                             <p className="font-medium text-gray-900">{expense.description}</p>
                             {expense.reference && <p className="text-xs text-gray-500">Ref: {expense.reference}</p>}
                           </div>
-                          <span className="font-bold text-red-600">{formatCurrency(expense.amount)}</span>
+                          <span className="font-bold text-red-600">{formatMoney(expense.amount)}</span>
                         </div>
                         <div className="flex items-center gap-2 mt-2 flex-wrap">
                           <Badge variant="default">{category?.name || expense.category}</Badge>
@@ -4904,7 +4910,7 @@ export default function Reports() {
                               <span className="text-sm capitalize">{expense.paymentMethod || 'Efectivo'}</span>
                             </TableCell>
                             <TableCell className="text-right font-semibold text-red-600">
-                              {formatCurrency(expense.amount)}
+                              {formatMoney(expense.amount)}
                             </TableCell>
                           </TableRow>
                         )
@@ -4948,7 +4954,7 @@ export default function Reports() {
                   <div>
                     <p className="text-sm font-medium text-gray-600">Total Ventas</p>
                     <p className="text-2xl font-bold text-blue-600 mt-2">
-                      {formatCurrency(profitabilityStats.totalVentas)}
+                      {formatMoney(profitabilityStats.totalVentas)}
                     </p>
                     <p className="text-sm text-gray-500 mt-1">
                       {stats.totalInvoices} ventas
@@ -4967,7 +4973,7 @@ export default function Reports() {
                   <div>
                     <p className="text-sm font-medium text-gray-600">Costo de Ventas</p>
                     <p className="text-2xl font-bold text-orange-600 mt-2">
-                      {formatCurrency(profitabilityStats.costoVentas)}
+                      {formatMoney(profitabilityStats.costoVentas)}
                     </p>
                     <p className="text-sm text-gray-500 mt-1">
                       {purchaseStats.count} compras
@@ -4986,7 +4992,7 @@ export default function Reports() {
                   <div>
                     <p className="text-sm font-medium text-gray-600">Utilidad Bruta</p>
                     <p className={`text-2xl font-bold mt-2 ${profitabilityStats.utilidadBruta >= 0 ? 'text-teal-600' : 'text-red-600'}`}>
-                      {formatCurrency(profitabilityStats.utilidadBruta)}
+                      {formatMoney(profitabilityStats.utilidadBruta)}
                     </p>
                     <p className="text-sm text-gray-500 mt-1">
                       Ventas - Costo ({profitabilityStats.margenBruto.toFixed(1)}%)
@@ -5006,7 +5012,7 @@ export default function Reports() {
                   <div>
                     <p className="text-sm font-medium text-gray-600">Total Gastos</p>
                     <p className="text-2xl font-bold text-red-600 mt-2">
-                      {formatCurrency(profitabilityStats.totalGastos)}
+                      {formatMoney(profitabilityStats.totalGastos)}
                     </p>
                     <p className="text-sm text-gray-500 mt-1">
                       {expenseStats.count} registros
@@ -5025,7 +5031,7 @@ export default function Reports() {
                   <div>
                     <p className="text-sm font-medium text-gray-600">Utilidad Operativa</p>
                     <p className={`text-2xl font-bold mt-2 ${profitabilityStats.utilidadOperativa >= 0 ? 'text-teal-600' : 'text-red-600'}`}>
-                      {formatCurrency(profitabilityStats.utilidadOperativa)}
+                      {formatMoney(profitabilityStats.utilidadOperativa)}
                     </p>
                     <p className="text-sm text-gray-500 mt-1">
                       U. Bruta - Gastos ({profitabilityStats.margenOperativo.toFixed(1)}%)
@@ -5062,14 +5068,14 @@ export default function Reports() {
           <Card className="bg-gray-50">
             <CardContent className="p-4">
               <div className="flex flex-wrap items-center justify-center gap-2 text-sm">
-                <span className="font-semibold text-blue-600">{formatCurrency(profitabilityStats.totalVentas)}</span>
+                <span className="font-semibold text-blue-600">{formatMoney(profitabilityStats.totalVentas)}</span>
                 <span className="text-gray-400">−</span>
-                <span className="font-semibold text-orange-600">{formatCurrency(profitabilityStats.costoVentas)}</span>
+                <span className="font-semibold text-orange-600">{formatMoney(profitabilityStats.costoVentas)}</span>
                 <span className="text-gray-400">−</span>
-                <span className="font-semibold text-red-600">{formatCurrency(profitabilityStats.totalGastos)}</span>
+                <span className="font-semibold text-red-600">{formatMoney(profitabilityStats.totalGastos)}</span>
                 <span className="text-gray-400">=</span>
                 <span className={`font-bold ${profitabilityStats.utilidadOperativa >= 0 ? 'text-teal-600' : 'text-red-600'}`}>
-                  {formatCurrency(profitabilityStats.utilidadOperativa)}
+                  {formatMoney(profitabilityStats.utilidadOperativa)}
                 </span>
                 <span className="text-gray-500 ml-2">(Utilidad Operativa)</span>
               </div>
@@ -5092,7 +5098,7 @@ export default function Reports() {
                         <div>
                           <p className="text-sm font-medium text-green-700">Otros Ingresos</p>
                           <p className="text-2xl font-bold text-green-600 mt-2">
-                            +{formatCurrency(profitabilityStats.otrosIngresos)}
+                            +{formatMoney(profitabilityStats.otrosIngresos)}
                           </p>
                           <p className="text-xs text-green-600 mt-1">
                             {profitabilityStats.detalleOtrosIngresos?.length || 0} movimientos
@@ -5112,7 +5118,7 @@ export default function Reports() {
                         <div>
                           <p className="text-sm font-medium text-red-700">Otros Egresos</p>
                           <p className="text-2xl font-bold text-red-600 mt-2">
-                            -{formatCurrency(profitabilityStats.otrosEgresos)}
+                            -{formatMoney(profitabilityStats.otrosEgresos)}
                           </p>
                           <p className="text-xs text-red-600 mt-1">
                             {profitabilityStats.detalleOtrosEgresos?.length || 0} movimientos
@@ -5132,7 +5138,7 @@ export default function Reports() {
                         <div>
                           <p className="text-sm font-medium text-gray-700">UTILIDAD TOTAL</p>
                           <p className={`text-2xl font-bold mt-2 ${profitabilityStats.utilidadTotal >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                            {formatCurrency(profitabilityStats.utilidadTotal)}
+                            {formatMoney(profitabilityStats.utilidadTotal)}
                           </p>
                           <p className="text-xs text-gray-500 mt-1">
                             Operativa + Otros Ing. - Otros Egr.
@@ -5151,15 +5157,15 @@ export default function Reports() {
                   <CardContent className="p-4">
                     <div className="flex flex-wrap items-center justify-center gap-2 text-sm">
                       <span className={`font-semibold ${profitabilityStats.utilidadOperativa >= 0 ? 'text-teal-600' : 'text-red-600'}`}>
-                        {formatCurrency(profitabilityStats.utilidadOperativa)}
+                        {formatMoney(profitabilityStats.utilidadOperativa)}
                       </span>
                       <span className="text-gray-400">+</span>
-                      <span className="font-semibold text-green-600">{formatCurrency(profitabilityStats.otrosIngresos)}</span>
+                      <span className="font-semibold text-green-600">{formatMoney(profitabilityStats.otrosIngresos)}</span>
                       <span className="text-gray-400">−</span>
-                      <span className="font-semibold text-red-600">{formatCurrency(profitabilityStats.otrosEgresos)}</span>
+                      <span className="font-semibold text-red-600">{formatMoney(profitabilityStats.otrosEgresos)}</span>
                       <span className="text-gray-400">=</span>
                       <span className={`font-bold text-lg ${profitabilityStats.utilidadTotal >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                        {formatCurrency(profitabilityStats.utilidadTotal)}
+                        {formatMoney(profitabilityStats.utilidadTotal)}
                       </span>
                       <span className="text-gray-500 ml-2">(Utilidad Total)</span>
                     </div>
@@ -5189,7 +5195,7 @@ export default function Reports() {
                   <XAxis dataKey="period" tick={{ fontSize: 11 }} angle={-45} textAnchor="end" height={80} />
                   <YAxis tick={{ fontSize: 12 }} />
                   <Tooltip
-                    formatter={(value) => formatCurrency(value)}
+                    formatter={(value) => formatMoney(value)}
                     labelFormatter={(label) => `Período: ${label}`}
                   />
                   <Legend />
@@ -5220,7 +5226,7 @@ export default function Reports() {
                     <XAxis dataKey="period" tick={{ fontSize: 11 }} />
                     <YAxis tick={{ fontSize: 12 }} />
                     <Tooltip
-                      formatter={(value) => formatCurrency(value)}
+                      formatter={(value) => formatMoney(value)}
                       labelFormatter={(label) => `Período: ${label}`}
                     />
                     <Area
@@ -5266,7 +5272,7 @@ export default function Reports() {
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(value) => formatCurrency(value)} />
+                      <Tooltip formatter={(value) => formatMoney(value)} />
                     </RePieChart>
                   </ResponsiveContainer>
                 ) : (
@@ -5297,13 +5303,13 @@ export default function Reports() {
                           <div className="flex items-center justify-between">
                             <span className="font-medium text-gray-900">{period.period}</span>
                             <span className={`font-bold ${period.utilidad >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                              {formatCurrency(period.utilidad)}
+                              {formatMoney(period.utilidad)}
                             </span>
                           </div>
                           <div className="flex items-center justify-between mt-2 text-sm">
                             <div className="flex items-center gap-3">
-                              <span className="text-blue-600">+{formatCurrency(period.ingresos)}</span>
-                              <span className="text-red-600">-{formatCurrency(period.gastos)}</span>
+                              <span className="text-blue-600">+{formatMoney(period.ingresos)}</span>
+                              <span className="text-red-600">-{formatMoney(period.gastos)}</span>
                             </div>
                             <span className={`font-medium ${margin >= 20 ? 'text-emerald-600' : margin >= 0 ? 'text-yellow-600' : 'text-red-600'}`}>
                               {margin.toFixed(1)}%
@@ -5317,13 +5323,13 @@ export default function Reports() {
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-gray-900">TOTAL</span>
                         <span className={`font-bold ${profitabilityStats.utilidadNeta >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-                          {formatCurrency(profitabilityStats.utilidadNeta)}
+                          {formatMoney(profitabilityStats.utilidadNeta)}
                         </span>
                       </div>
                       <div className="flex items-center justify-between mt-2 text-sm">
                         <div className="flex items-center gap-3">
-                          <span className="text-blue-700 font-semibold">+{formatCurrency(profitabilityStats.totalIngresos)}</span>
-                          <span className="text-red-700 font-semibold">-{formatCurrency(profitabilityStats.totalGastos)}</span>
+                          <span className="text-blue-700 font-semibold">+{formatMoney(profitabilityStats.totalIngresos)}</span>
+                          <span className="text-red-700 font-semibold">-{formatMoney(profitabilityStats.totalGastos)}</span>
                         </div>
                         <span className={`font-bold ${profitabilityStats.margenNeto >= 20 ? 'text-emerald-700' : profitabilityStats.margenNeto >= 0 ? 'text-yellow-600' : 'text-red-700'}`}>
                           {profitabilityStats.margenNeto.toFixed(1)}%
@@ -5361,13 +5367,13 @@ export default function Reports() {
                             <TableRow key={index}>
                               <TableCell className="font-medium">{period.period}</TableCell>
                               <TableCell className="text-right text-blue-600 font-semibold">
-                                {formatCurrency(period.ingresos)}
+                                {formatMoney(period.ingresos)}
                               </TableCell>
                               <TableCell className="text-right text-red-600 font-semibold">
-                                {formatCurrency(period.gastos)}
+                                {formatMoney(period.gastos)}
                               </TableCell>
                               <TableCell className={`text-right font-bold ${period.utilidad >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                {formatCurrency(period.utilidad)}
+                                {formatMoney(period.utilidad)}
                               </TableCell>
                               <TableCell className="text-right">
                                 <span className={`font-medium ${margin >= 20 ? 'text-emerald-600' : margin >= 0 ? 'text-yellow-600' : 'text-red-600'}`}>
@@ -5381,13 +5387,13 @@ export default function Reports() {
                         <TableRow className="bg-gray-50 border-t-2">
                           <TableCell className="font-bold">TOTAL</TableCell>
                           <TableCell className="text-right text-blue-700 font-bold">
-                            {formatCurrency(profitabilityStats.totalIngresos)}
+                            {formatMoney(profitabilityStats.totalIngresos)}
                           </TableCell>
                           <TableCell className="text-right text-red-700 font-bold">
-                            {formatCurrency(profitabilityStats.totalGastos)}
+                            {formatMoney(profitabilityStats.totalGastos)}
                           </TableCell>
                           <TableCell className={`text-right font-bold ${profitabilityStats.utilidadNeta >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-                            {formatCurrency(profitabilityStats.utilidadNeta)}
+                            {formatMoney(profitabilityStats.utilidadNeta)}
                           </TableCell>
                           <TableCell className="text-right">
                             <span className={`font-bold ${profitabilityStats.margenNeto >= 20 ? 'text-emerald-700' : profitabilityStats.margenNeto >= 0 ? 'text-yellow-600' : 'text-red-700'}`}>
@@ -5419,8 +5425,8 @@ export default function Reports() {
                 </h3>
                 <p className="text-sm text-gray-600 mt-2">
                   {profitabilityStats.utilidadNeta > 0
-                    ? `Tu negocio genera ${formatCurrency(profitabilityStats.utilidadNeta)} de utilidad`
-                    : `Tu negocio tiene una pérdida de ${formatCurrency(Math.abs(profitabilityStats.utilidadNeta))}`
+                    ? `Tu negocio genera ${formatMoney(profitabilityStats.utilidadNeta)} de utilidad`
+                    : `Tu negocio tiene una pérdida de ${formatMoney(Math.abs(profitabilityStats.utilidadNeta))}`
                   }
                 </p>
               </CardContent>
@@ -5666,7 +5672,7 @@ export default function Reports() {
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div>
                     <p className="text-sm text-gray-600">Hospedaje del período</p>
-                    <p className="text-3xl font-bold text-blue-700">{formatCurrency(totalReservationsAmount)}</p>
+                    <p className="text-3xl font-bold text-blue-700">{formatMoney(totalReservationsAmount)}</p>
                     <p className="text-xs text-gray-500 mt-1">
                       {totalReservationsCount} {totalReservationsCount === 1 ? 'reserva' : 'reservas'} · {totalNights} {totalNights === 1 ? 'noche' : 'noches'} · cada noche cuenta en su fecha
                     </p>
@@ -5674,19 +5680,19 @@ export default function Reports() {
                   <div className="flex flex-wrap gap-6">
                     <div className="text-center">
                       <p className="text-xs text-gray-500">Consumos / Productos</p>
-                      <p className="text-lg font-bold text-purple-600">{formatCurrency(consumoTotal)}</p>
+                      <p className="text-lg font-bold text-purple-600">{formatMoney(consumoTotal)}</p>
                     </div>
                     <div className="text-center">
                       <p className="text-xs text-gray-500">Total general</p>
-                      <p className="text-lg font-bold text-gray-900">{formatCurrency(totalReservationsAmount + consumoTotal)}</p>
+                      <p className="text-lg font-bold text-gray-900">{formatMoney(totalReservationsAmount + consumoTotal)}</p>
                     </div>
                     <div className="text-center">
                       <p className="text-xs text-gray-500">Cobrado</p>
-                      <p className="text-lg font-bold text-green-600">{formatCurrency(totalReservationsPaid)}</p>
+                      <p className="text-lg font-bold text-green-600">{formatMoney(totalReservationsPaid)}</p>
                     </div>
                     <div className="text-center">
                       <p className="text-xs text-gray-500">Pendiente</p>
-                      <p className="text-lg font-bold text-amber-600">{formatCurrency(totalReservationsPending)}</p>
+                      <p className="text-lg font-bold text-amber-600">{formatMoney(totalReservationsPending)}</p>
                     </div>
                   </div>
                 </div>
@@ -5705,21 +5711,21 @@ export default function Reports() {
               <Card>
                 <CardContent className="p-4 text-center">
                   <p className="text-xs text-gray-500">Tarifa Promedio (ADR)</p>
-                  <p className="text-2xl font-bold text-gray-900">{formatCurrency(adr)}</p>
+                  <p className="text-2xl font-bold text-gray-900">{formatMoney(adr)}</p>
                   <p className="text-xs text-gray-400">por noche</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="p-4 text-center">
                   <p className="text-xs text-gray-500">RevPAR</p>
-                  <p className="text-2xl font-bold text-gray-900">{formatCurrency(revpar)}</p>
+                  <p className="text-2xl font-bold text-gray-900">{formatMoney(revpar)}</p>
                   <p className="text-xs text-gray-400">ingreso/hab.</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="p-4 text-center">
                   <p className="text-xs text-gray-500">Ingresos Habitaciones</p>
-                  <p className="text-2xl font-bold text-green-600">{formatCurrency(totalRoomRevenue)}</p>
+                  <p className="text-2xl font-bold text-green-600">{formatMoney(totalRoomRevenue)}</p>
                   <p className="text-xs text-gray-400">{totalNights} noches del período</p>
                 </CardContent>
               </Card>
@@ -5769,9 +5775,9 @@ export default function Reports() {
                     <ResponsiveContainer width="100%" height={Math.max(180, revenueByRoomType.length * 56)}>
                       <BarChart data={revenueByRoomType} layout="vertical" margin={{ left: 10, right: 20 }}>
                         <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                        <XAxis type="number" tickFormatter={(v) => formatCurrency(v)} />
+                        <XAxis type="number" tickFormatter={(v) => formatMoney(v)} />
                         <YAxis type="category" dataKey="type" width={90} />
-                        <Tooltip formatter={(value) => formatCurrency(value)} />
+                        <Tooltip formatter={(value) => formatMoney(value)} />
                         <Bar dataKey="revenue" name="Ingresos" radius={[0, 4, 4, 0]}>
                           {revenueByRoomType.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -5796,14 +5802,14 @@ export default function Reports() {
                               <TableCell className="font-medium">{row.type}</TableCell>
                               <TableCell className="text-center">{row.reservations}</TableCell>
                               <TableCell className="text-center">{row.nights}</TableCell>
-                              <TableCell className="text-right font-semibold">{formatCurrency(row.revenue)}</TableCell>
+                              <TableCell className="text-right font-semibold">{formatMoney(row.revenue)}</TableCell>
                             </TableRow>
                           ))}
                           <TableRow className="bg-gray-50 font-bold">
                             <TableCell>Total</TableCell>
                             <TableCell className="text-center">{totalReservationsCount}</TableCell>
                             <TableCell className="text-center">{roomTypeNightsTotal}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(totalReservationsAmount)}</TableCell>
+                            <TableCell className="text-right">{formatMoney(totalReservationsAmount)}</TableCell>
                           </TableRow>
                         </TableBody>
                       </Table>
@@ -5827,9 +5833,9 @@ export default function Reports() {
                     <ResponsiveContainer width="100%" height={Math.max(180, revenueByRoom.length * 48)}>
                       <BarChart data={revenueByRoom} layout="vertical" margin={{ left: 10, right: 20 }}>
                         <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                        <XAxis type="number" tickFormatter={(v) => formatCurrency(v)} />
+                        <XAxis type="number" tickFormatter={(v) => formatMoney(v)} />
                         <YAxis type="category" dataKey="label" width={110} />
-                        <Tooltip formatter={(value) => formatCurrency(value)} />
+                        <Tooltip formatter={(value) => formatMoney(value)} />
                         <Bar dataKey="revenue" name="Ingresos" radius={[0, 4, 4, 0]}>
                           {revenueByRoom.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -5854,14 +5860,14 @@ export default function Reports() {
                               <TableCell className="font-medium">{row.label}</TableCell>
                               <TableCell className="text-center">{row.reservations}</TableCell>
                               <TableCell className="text-center">{row.nights}</TableCell>
-                              <TableCell className="text-right font-semibold">{formatCurrency(row.revenue)}</TableCell>
+                              <TableCell className="text-right font-semibold">{formatMoney(row.revenue)}</TableCell>
                             </TableRow>
                           ))}
                           <TableRow className="bg-gray-50 font-bold">
                             <TableCell>Total</TableCell>
                             <TableCell className="text-center">{totalReservationsCount}</TableCell>
                             <TableCell className="text-center">{roomTypeNightsTotal}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(totalReservationsAmount)}</TableCell>
+                            <TableCell className="text-right">{formatMoney(totalReservationsAmount)}</TableCell>
                           </TableRow>
                         </TableBody>
                       </Table>
@@ -5950,7 +5956,7 @@ export default function Reports() {
                               <TableCell className="text-sm">{res.checkIn ? new Date(res.checkIn + 'T00:00:00').toLocaleDateString('es-PE') : '-'}</TableCell>
                               <TableCell className="text-sm">{res.checkOut ? new Date(res.checkOut + 'T00:00:00').toLocaleDateString('es-PE') : '-'}</TableCell>
                               <TableCell className="text-center">{res.nights || '-'}</TableCell>
-                              <TableCell className="text-right font-semibold">{formatCurrency(res.totalAmount || 0)}</TableCell>
+                              <TableCell className="text-right font-semibold">{formatMoney(res.totalAmount || 0)}</TableCell>
                               <TableCell>
                                 <Badge variant={
                                   res.status === 'checked_in' ? 'success'

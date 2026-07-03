@@ -27,7 +27,7 @@ import MonthlyDailySalesChart from '@/components/charts/MonthlyDailySalesChart'
 import YearlyMonthlyChart from '@/components/charts/YearlyMonthlyChart'
 import PaymentMethodsPieChart from '@/components/charts/PaymentMethodsPieChart'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { getDocumentTotalInBase, getDocumentRate, isMultiCurrencyEnabled, normalizeCurrency } from '@/utils/currency'
+import { getDocumentTotalInBase, getDocumentRate, isMultiCurrencyEnabled, normalizeCurrency, getReportsCurrency, resolveReportsRate, convertBaseToDisplay } from '@/utils/currency'
 import { getRecentInvoices } from '@/services/firestoreService'
 import { useBranding } from '@/contexts/BrandingContext'
 import { getTables } from '@/services/tableService'
@@ -414,6 +414,19 @@ export default function Dashboard() {
     })
   }, [branchFilteredInvoices])
 
+  // Moneda de visualización de reportes (PEN por defecto; USD si el negocio lo eligió
+  // con multi-divisa activa). Los cálculos siguen en soles; esto es solo presentación.
+  const reportsCcy = getReportsCurrency(businessSettings)
+  const reportsRate = useMemo(
+    () => resolveReportsRate(businessSettings, validInvoicesForSales),
+    [businessSettings, validInvoicesForSales]
+  )
+  // Convierte un monto en soles a la moneda de reportes (para mostrar en tarjetas)
+  const toDisp = useCallback(
+    (solesAmount) => convertBaseToDisplay(solesAmount, reportsCcy, reportsRate),
+    [reportsCcy, reportsRate]
+  )
+
   // === Stats del día (memoized: un solo pase calcula hoy + ayer) ===
   const todayStats = useMemo(() => {
     const todayStart = getStartOfTodayPeru()
@@ -684,9 +697,10 @@ export default function Dashboard() {
     {
       title: 'Ventas del Día',
       subtitle: todayLabel,
-      value: showAmounts ? formatCurrency(todaysSales) : hiddenAmount,
-      // Multi-divisa: línea info "+ $ X USD" si hubo ventas USD hoy
-      usdSubtitle: dashMultiCurrencyOn && todaysSalesUSD > 0 && showAmounts
+      value: showAmounts ? formatCurrency(toDisp(todaysSales), reportsCcy) : hiddenAmount,
+      // Multi-divisa: línea info "+ $ X USD" si hubo ventas USD hoy. Se oculta si los
+      // reportes ya se muestran en USD (sería redundante).
+      usdSubtitle: dashMultiCurrencyOn && reportsCcy === 'PEN' && todaysSalesUSD > 0 && showAmounts
         ? `+ ${formatCurrency(todaysSalesUSD, 'USD')} USD (incluido en el total)`
         : null,
       icon: DollarSign,
@@ -695,16 +709,16 @@ export default function Dashboard() {
       isSalesAmount: true,
       // En modo restaurante, mostrar desglose Cerrado / Abierto / Total proyectado
       restaurantBreakdown: isRestaurantMode ? {
-        closed: showAmounts ? formatCurrency(todaysSales) : hiddenAmount,
-        open: showAmounts ? formatCurrency(openTablesAmount) : hiddenAmount,
-        projected: showAmounts ? formatCurrency(projectedDayTotal) : hiddenAmount,
+        closed: showAmounts ? formatCurrency(toDisp(todaysSales), reportsCcy) : hiddenAmount,
+        open: showAmounts ? formatCurrency(toDisp(openTablesAmount), reportsCcy) : hiddenAmount,
+        projected: showAmounts ? formatCurrency(toDisp(projectedDayTotal), reportsCcy) : hiddenAmount,
       } : null,
     },
     {
       title: 'Ventas del Mes',
       subtitle: monthRangeLabel,
-      value: showAmounts ? formatCurrency(monthSales) : hiddenAmount,
-      usdSubtitle: dashMultiCurrencyOn && monthSalesUSD > 0 && showAmounts
+      value: showAmounts ? formatCurrency(toDisp(monthSales), reportsCcy) : hiddenAmount,
+      usdSubtitle: dashMultiCurrencyOn && reportsCcy === 'PEN' && monthSalesUSD > 0 && showAmounts
         ? `+ ${formatCurrency(monthSalesUSD, 'USD')} USD (incluido en el total)`
         : null,
       icon: TrendingUp,
@@ -718,7 +732,7 @@ export default function Dashboard() {
     },
     {
       title: 'Ticket Promedio (mes)',
-      value: showAmounts ? formatCurrency(avgTicketMonth) : hiddenAmount,
+      value: showAmounts ? formatCurrency(toDisp(avgTicketMonth), reportsCcy) : hiddenAmount,
       icon: Receipt,
       change: monthSalesCount > 0 ? `Sobre ${monthSalesCount} venta${monthSalesCount !== 1 ? 's' : ''}` : 'Sin ventas',
       changeType: 'positive',
@@ -965,7 +979,7 @@ export default function Dashboard() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-gray-900 truncate">{p.name}</p>
-                      <p className="text-xs text-gray-500">{p.quantity} und · {showAmounts ? formatCurrency(p.total) : 'S/ ****'}</p>
+                      <p className="text-xs text-gray-500">{p.quantity} und · {showAmounts ? formatCurrency(toDisp(p.total), reportsCcy) : 'S/ ****'}</p>
                     </div>
                   </div>
                 ))}
@@ -1012,7 +1026,7 @@ export default function Dashboard() {
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-gray-900 truncate">{c.name}</p>
                       <p className="text-xs text-gray-500">
-                        {c.count} compra{c.count !== 1 ? 's' : ''} · {showAmounts ? formatCurrency(c.total) : 'S/ ****'}
+                        {c.count} compra{c.count !== 1 ? 's' : ''} · {showAmounts ? formatCurrency(toDisp(c.total), reportsCcy) : 'S/ ****'}
                       </p>
                     </div>
                   </div>

@@ -440,6 +440,7 @@ export default function Settings() {
   // selectores de moneda en compras, facturas y cotizaciones.
   const [multiCurrencyEnabled, setMultiCurrencyEnabled] = useState(false)
   const [defaultCurrency, setDefaultCurrency] = useState('PEN')
+  const [reportsCurrency, setReportsCurrency] = useState('PEN') // moneda de visualización de reportes
 
   const [showBulkRecalcModal, setShowBulkRecalcModal] = useState(false)
   const [isBulkRecalculating, setIsBulkRecalculating] = useState(false)
@@ -1289,6 +1290,7 @@ export default function Settings() {
         // Multi-divisa (USD) — opt-in
         setMultiCurrencyEnabled(businessData.multiCurrencyEnabled === true)
         setDefaultCurrency(businessData.defaultCurrency === 'USD' ? 'USD' : 'PEN')
+        setReportsCurrency(businessData.reportsCurrency === 'USD' ? 'USD' : 'PEN')
 
         // Cargar configuración de privacidad
         setHideDashboardDataFromSecondary(businessData.hideDashboardDataFromSecondary || false)
@@ -5542,6 +5544,43 @@ export default function Settings() {
                         </p>
                       </div>
 
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                          Moneda de reportes y dashboard
+                        </label>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setReportsCurrency('PEN')}
+                            className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                              reportsCurrency === 'PEN'
+                                ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                                : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            S/ &nbsp;Soles (PEN)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setReportsCurrency('USD')}
+                            className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                              reportsCurrency === 'USD'
+                                ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                                : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            $ &nbsp;Dólares (USD)
+                          </button>
+                        </div>
+                        <p className="text-[11px] text-gray-500 mt-1.5">
+                          En qué moneda se muestran el Dashboard, Reportes y la tarjeta de
+                          totales de Ventas. Es solo visualización: la base contable, los
+                          exports y los comprobantes a SUNAT siguen en Soles. Si eliges
+                          Dólares, los montos se convierten usando el tipo de cambio de
+                          referencia de tus ventas USD recientes.
+                        </p>
+                      </div>
+
                       <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-xs text-amber-900 leading-relaxed">
                         <strong>¿Cómo funciona?</strong> Cuando emitas una factura o
                         compra en USD, el sistema obtiene el tipo de cambio del día
@@ -5596,6 +5635,7 @@ export default function Settings() {
                       // Multi-divisa (USD) — Fase 0: solo flag + moneda por default.
                       multiCurrencyEnabled: multiCurrencyEnabled,
                       defaultCurrency: defaultCurrency,
+                      reportsCurrency: reportsCurrency,
                       presentationsEnabled: presentationsEnabled,
                       showDescriptionInPOS: showDescriptionInPOS,
                       updatedAt: serverTimestamp(),
