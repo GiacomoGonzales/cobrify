@@ -86,6 +86,13 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // AppConfig (versión publicada de la app para el aviso "actualiza desde la
+    // tienda"). Lectura para cualquier usuario logueado; escritura solo admin.
+    match /appConfig/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
     // AdminStats collection (estadísticas para panel de admin)
     match /adminStats/{docId} {
       // Solo admins pueden leer/escribir estadísticas

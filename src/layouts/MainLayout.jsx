@@ -10,6 +10,7 @@ import { getCompanySettings } from '@/services/firestoreService'
 import { createDeliveryRecord } from '@/services/motoristaService'
 import Sidebar from '@/components/Sidebar'
 import Navbar from '@/components/Navbar'
+import UpdateBanner from '@/components/UpdateBanner'
 import OfflineIndicator from '@/components/OfflineIndicator'
 import ReviewPrompt from '@/components/ReviewPrompt'
 import KitchenTicket from '@/components/KitchenTicket'
@@ -624,6 +625,9 @@ export default function MainLayout() {
         <div className={`flex-1 flex flex-col h-full overflow-hidden ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'}`}>
           {/* Navbar - Siempre fijo */}
           <Navbar />
+
+          {/* Banner de actualización integrado (web/PWA: reiniciar; app: tienda) */}
+          <UpdateBanner />
 
           {/* Banner global de alertas de pedidos desde el catálogo / menú digital */}
           {globalOrderAlerts.length > 0 && (
