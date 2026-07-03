@@ -507,16 +507,17 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   // Detectar modo farmacia — solo farmacia imprime la sub-línea con presentación/concentración.
   const isPharmacy = companySettings?.businessMode === 'pharmacy'
 
-  // Mostrar las columnas CÓDIGO, LABORATORIO y MARCA cuando sea farmacia/veterinaria
+  // Mostrar las columnas LABORATORIO y MARCA cuando sea farmacia/veterinaria
   // O cuando algún ítem de la orden traiga laboratorio o marca (negocios de salud que
   // no están en modo farmacia, como distribuidoras de dispositivos médicos).
-  const showDetailCols = isPharmacy ||
+  // La columna CÓDIGO se muestra SIEMPRE (el código/SKU del producto).
+  const showLabMarca = isPharmacy ||
     companySettings?.businessMode === 'veterinary' ||
     (order.items || []).some(it => (it.laboratoryName || '').trim() !== '' || (it.marca || '').trim() !== '')
 
-  // Detalle: CANT | U.M. | CÓDIGO | DESCRIPCIÓN | LAB | MARCA | P.UNIT | IMPORTE
-  // Normal:  CANT | U.M. | DESCRIPCIÓN | P.UNIT | IMPORTE
-  const colWidths = showDetailCols ? {
+  // Con LAB/MARCA: CANT | U.M. | CÓDIGO | DESCRIPCIÓN | LAB | MARCA | P.UNIT | IMPORTE
+  // Normal:        CANT | U.M. | CÓDIGO | DESCRIPCIÓN | P.UNIT | IMPORTE
+  const colWidths = showLabMarca ? {
     cant: CONTENT_WIDTH * 0.05,
     um: CONTENT_WIDTH * 0.05,
     code: CONTENT_WIDTH * 0.10,
@@ -526,14 +527,14 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
     pu: CONTENT_WIDTH * 0.13,
     total: CONTENT_WIDTH * 0.14
   } : {
-    cant: CONTENT_WIDTH * 0.08,
-    um: CONTENT_WIDTH * 0.08,
-    code: 0,
-    desc: CONTENT_WIDTH * 0.49,
+    cant: CONTENT_WIDTH * 0.07,
+    um: CONTENT_WIDTH * 0.07,
+    code: CONTENT_WIDTH * 0.13,
+    desc: CONTENT_WIDTH * 0.39,
     lab: 0,
     marca: 0,
-    pu: CONTENT_WIDTH * 0.17,
-    total: CONTENT_WIDTH * 0.18
+    pu: CONTENT_WIDTH * 0.15,
+    total: CONTENT_WIDTH * 0.19
   }
 
   let colX = MARGIN_LEFT
@@ -559,11 +560,9 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   const headerTextY = tableY + 12
   doc.text('CANT.', cols.cant + colWidths.cant / 2, headerTextY, { align: 'center' })
   doc.text('U.M.', cols.um + colWidths.um / 2, headerTextY, { align: 'center' })
-  if (showDetailCols) {
-    doc.text('CÓDIGO', cols.code + colWidths.code / 2, headerTextY, { align: 'center' })
-  }
+  doc.text('CÓDIGO', cols.code + colWidths.code / 2, headerTextY, { align: 'center' })
   doc.text('DESCRIPCIÓN', cols.desc + 5, headerTextY)
-  if (showDetailCols) {
+  if (showLabMarca) {
     doc.text('LABORATORIO', cols.lab + colWidths.lab / 2, headerTextY, { align: 'center' })
     doc.text('MARCA', cols.marca + colWidths.marca / 2, headerTextY, { align: 'center' })
   }
@@ -584,11 +583,13 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   for (let i = 0; i < items.length; i++) {
     const item = items[i]
 
-    // Descripción principal — en farmacia, el código va en su propia columna
+    // Descripción y código: el código (SKU) va SIEMPRE en su propia columna, así que
+    // la descripción es solo el nombre. Se usa sku||code para que coincida con el
+    // "SKU" que se ve en Inventario (los productos pueden tener sku y/o code).
     const itemName = item.name || ''
-    const rawCode = item.code || item.productCode || ''
+    const rawCode = item.sku || item.code || item.productCode || ''
     const isValidCode = rawCode && rawCode.trim() !== '' && rawCode.toUpperCase() !== 'CUSTOM'
-    const itemDesc = (isValidCode && !showDetailCols) ? `${rawCode} - ${itemName}` : itemName
+    const itemDesc = itemName
     doc.setFontSize(8)
     const descLines = doc.splitTextToSize(itemDesc, colWidths.desc - 8)
 
@@ -627,8 +628,8 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
     const unitCode = item.unit || 'UNIDAD'
     doc.text(unitLabels[unitCode] || unitCode, cols.um + colWidths.um / 2, centerY, { align: 'center' })
 
-    // Código (cuando hay columnas de detalle)
-    if (showDetailCols && isValidCode) {
+    // Código (SKU) — siempre en su columna
+    if (isValidCode) {
       doc.setFontSize(6.5)
       const codeLines = doc.splitTextToSize(rawCode, colWidths.code - 4)
       doc.text(codeLines[0], cols.code + colWidths.code / 2, centerY, { align: 'center' })
@@ -654,8 +655,8 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
       doc.setTextColor(...BLACK)
     }
 
-    // Laboratorio y Marca en columnas separadas (cuando hay columnas de detalle)
-    if (showDetailCols) {
+    // Laboratorio y Marca en columnas separadas (solo negocios de salud)
+    if (showLabMarca) {
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(6)
       const labText = item.laboratoryName || ''

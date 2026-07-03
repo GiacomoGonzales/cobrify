@@ -456,6 +456,8 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
         lineNumber: index + 1,
         productId: item.productId || '',
         code: products.find(p => p.id === item.productId)?.code || '',
+        // SKU del producto para el PDF (columna CÓDIGO); coincide con Inventario.
+        sku: products.find(p => p.id === item.productId)?.sku || '',
         name: item.name,
         quantity: parseFloat(item.quantity),
         unitPrice: parseFloat(item.unitPrice),

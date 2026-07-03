@@ -34,7 +34,7 @@ import {
   updatePurchaseOrderStatus,
   markPurchaseOrderAsSent,
 } from '@/services/purchaseOrderService'
-import { getCompanySettings, getSuppliers } from '@/services/firestoreService'
+import { getCompanySettings, getSuppliers, getProducts } from '@/services/firestoreService'
 import { generatePurchaseOrderPDF, previewPurchaseOrderPDF } from '@/utils/purchaseOrderPdfGenerator'
 import { preloadLogo } from '@/utils/pdfGenerator'
 import CreatePurchaseOrderModal from '@/components/CreatePurchaseOrderModal'
@@ -47,6 +47,7 @@ export default function PurchaseOrders() {
   const appNavigate = useAppNavigate()
   const [orders, setOrders] = useState([])
   const [suppliers, setSuppliers] = useState([])
+  const [products, setProducts] = useState([]) // para resolver el código/SKU en el PDF
   const [companySettings, setCompanySettings] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -79,14 +80,19 @@ export default function PurchaseOrders() {
         return
       }
 
-      const [ordersResult, settingsResult, suppliersResult] = await Promise.all([
+      const [ordersResult, settingsResult, suppliersResult, productsResult] = await Promise.all([
         getPurchaseOrders(getBusinessId()),
         getCompanySettings(getBusinessId()),
         getSuppliers(getBusinessId()),
+        getProducts(getBusinessId()),
       ])
 
       if (ordersResult.success) {
         setOrders(ordersResult.data || [])
+      }
+
+      if (productsResult.success) {
+        setProducts(productsResult.data || [])
       }
 
       if (settingsResult.success) {
@@ -127,10 +133,27 @@ export default function PurchaseOrders() {
     }
   }
 
+  // Rellena el código/SKU de cada ítem resolviéndolo por productId contra el
+  // catálogo actual. Arregla las órdenes VIEJAS (guardadas cuando el ítem no
+  // capturaba el sku, o cuando el code del producto estaba vacío) para que la
+  // columna CÓDIGO del PDF no salga en blanco.
+  const enrichOrderCodes = (order) => {
+    const byId = {}
+    products.forEach(p => { byId[p.id] = p })
+    return {
+      ...order,
+      items: (order.items || []).map(it => {
+        const p = it.productId ? byId[it.productId] : null
+        const resolved = it.sku || it.code || it.productCode || p?.sku || p?.code || ''
+        return { ...it, sku: resolved }
+      }),
+    }
+  }
+
   const handleDownloadPdf = async (order) => {
     setDownloadingPdf(order.id)
     try {
-      await generatePurchaseOrderPDF(order, companySettings, true, branding)
+      await generatePurchaseOrderPDF(enrichOrderCodes(order), companySettings, true, branding)
       toast.success('PDF generado correctamente')
     } catch (error) {
       console.error('Error al generar PDF:', error)
@@ -142,7 +165,7 @@ export default function PurchaseOrders() {
 
   const handlePreviewPdf = async (order) => {
     try {
-      await previewPurchaseOrderPDF(order, companySettings, branding)
+      await previewPurchaseOrderPDF(enrichOrderCodes(order), companySettings, branding)
     } catch (error) {
       console.error('Error al generar vista previa:', error)
       toast.error('Error al generar vista previa')
