@@ -5503,7 +5503,7 @@ export default function Settings() {
                     <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
                       <Info className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
                       <span className="text-xs text-blue-700 font-medium">
-                        Las boletas (B001) siempre serán en Soles — SUNAT no admite USD.
+                        Puedes emitir en Soles o Dólares. SUNAT admite ambas monedas en boletas y facturas.
                       </span>
                     </div>
                   </SettingToggle>

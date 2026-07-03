@@ -8049,15 +8049,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     <label className="text-xs font-medium text-gray-700">
                       Moneda de cobro
                     </label>
-                    {documentType === 'boleta' && (
-                      <span className="text-[9px] uppercase tracking-wide px-1 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 font-semibold">
-                        Boleta → solo PEN
-                      </span>
-                    )}
                   </div>
                   <div className="flex gap-1.5">
                     {SUPPORTED_CURRENCIES.map((ccy) => {
-                      const disabled = (documentType === 'boleta' && ccy === 'USD') || loadingRate
+                      // Boletas SÍ admiten USD (SUNAT lo permite). Solo se bloquea mientras carga el TC.
+                      const disabled = loadingRate
                       const active = currency === ccy
                       const isLoadingThis = loadingRate && ccy === 'USD'
                       return (

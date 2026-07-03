@@ -174,17 +174,10 @@ export default function CreateInvoice() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currency])
 
-  // SUNAT: las BOLETAS DE VENTA no admiten USD por norma. Si el usuario
-  // selecciona boleta con USD activo, forzamos a PEN con aviso.
-  useEffect(() => {
-    if (documentType === 'boleta' && currency === 'USD') {
-      setCurrency('PEN')
-      setExchangeRate(1)
-      setExchangeRateSource(null)
-      toast.info('Las boletas siempre se emiten en Soles (SUNAT).')
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [documentType])
+  // Nota: las BOLETAS DE VENTA sí admiten USD (SUNAT lo permite; el SEE-SOL deja
+  // elegir la moneda). Antes había un useEffect que forzaba PEN al elegir boleta+USD;
+  // se quitó porque era un supuesto incorrecto. El XML del servidor ya emite la
+  // moneda del comprobante para boleta igual que para factura.
 
   const loadData = async () => {
     if (!user?.uid) return
@@ -576,28 +569,21 @@ export default function CreateInvoice() {
                   <label className="text-sm font-medium text-gray-700">
                     Moneda
                   </label>
-                  {documentType === 'boleta' && (
-                    <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 font-semibold">
-                      Boleta → solo PEN
-                    </span>
-                  )}
                 </div>
 
                 <div className="flex gap-2">
                   {SUPPORTED_CURRENCIES.map((ccy) => {
-                    const disabled = documentType === 'boleta' && ccy === 'USD'
                     const active = currency === ccy
                     return (
                       <button
                         key={ccy}
                         type="button"
-                        disabled={disabled}
                         onClick={() => setCurrency(ccy)}
                         className={`flex-1 px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
                           active
                             ? 'bg-emerald-600 text-white border-emerald-600'
                             : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                        } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        }`}
                       >
                         {ccy === 'PEN' ? 'S/  Soles' : '$  Dólares'}
                       </button>

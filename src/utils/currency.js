@@ -16,8 +16,8 @@
  *    recalcula con TC actual. Cada factura/compra USD guarda el TC con el
  *    que se emitió (`exchangeRate`).
  *
- * 3) BOLETAS DE VENTA (documentType '03') no pueden emitirse en USD por
- *    norma SUNAT. Esto se validará al momento de emitir.
+ * 3) BOLETAS y FACTURAS pueden emitirse en USD (SUNAT lo permite; el SEE-SOL
+ *    deja elegir la moneda). Reportes/agregaciones siguen en PEN base.
  *
  * 4) NOTAS DE CRÉDITO / DÉBITO heredan la moneda y el TC del documento
  *    original. No se permite cambiar la moneda en la NC/ND.
