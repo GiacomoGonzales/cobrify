@@ -1032,12 +1032,15 @@ export default function POS() {
   // USD+boleta; se quitó porque era un supuesto incorrecto. El umbral de S/700 para
   // boletas se valida sobre el total en SOLES (amounts.totalInBase).
 
-  // Auto-seleccionar primer tipo de comprobante permitido si el actual no está permitido
+  // Red de seguridad: si el tipo de comprobante actual no está permitido para el
+  // usuario, caer al primero permitido. Depende también de `documentType` para que
+  // corrija CUALQUIER camino que deje un tipo inválido (ej: el default del negocio
+  // aplicado tarde), no solo cuando cambian los permisos.
   useEffect(() => {
     if (allowedDocumentTypes && allowedDocumentTypes.length > 0 && !allowedDocumentTypes.includes(documentType)) {
       setDocumentType(allowedDocumentTypes[0])
     }
-  }, [allowedDocumentTypes])
+  }, [allowedDocumentTypes, documentType])
 
   // Autofocus en barra de búsqueda solo en desktop/laptop.
   // Tablets quedan excluidos aunque tengan ancho >= 1024px (ej. iPad Pro,
@@ -2441,8 +2444,16 @@ export default function POS() {
           // Solo aplicar el default si el usuario aún no cambió manualmente el tipo de documento.
           // Evita race condition: el usuario abre el POS, cambia a "Factura", y cuando termina
           // el fetch async de businessData se pisaba con "boleta" (default).
+          // OJO: respetar los tipos permitidos del usuario. Si el default del negocio no está
+          // permitido (ej: sub-usuario que solo emite Notas de Venta y el default es Boleta),
+          // caer al primero permitido; si no, el <select> muestra un tipo pero el state queda
+          // en otro inválido (desync: se ve "Nota de Venta" pero internamente es "boleta").
           if (!hasDraft && businessData.defaultDocumentType && !userChangedDocTypeRef.current) {
-            setDocumentType(businessData.defaultDocumentType)
+            const def = businessData.defaultDocumentType
+            const safeDef = (allowedDocumentTypes && allowedDocumentTypes.length > 0 && !allowedDocumentTypes.includes(def))
+              ? allowedDocumentTypes[0]
+              : def
+            setDocumentType(safeDef)
           }
         }
 
@@ -4659,15 +4670,29 @@ export default function POS() {
   }
 
   // Actualizar tipo de documento del cliente cuando cambia el tipo de comprobante
+  const prevDocTypeRef = useRef(documentType)
   useEffect(() => {
-    // Solo forzar RUC en facturas, en boletas mantener el tipo seleccionado o default DNI
+    const prevDocType = prevDocTypeRef.current
+    prevDocTypeRef.current = documentType
+    // Factura fuerza RUC (obligatorio por SUNAT).
     if (documentType === 'factura') {
       setCustomerData(prev => ({
         ...prev,
         documentType: ID_TYPES.RUC
       }))
+    } else if (prevDocType === 'factura' && customerData.documentType === ID_TYPES.RUC) {
+      // Al SALIR de factura, el RUC que factura forzó ya no aplica: volver a DNI.
+      // Sin esto la interfaz seguía mostrando el campo RUC/razón social en la boleta
+      // (desync: se ve "factura" pero el comprobante es boleta) y la búsqueda de
+      // documento fallaba porque el número era un RUC pero se validaba como DNI.
+      // Solo se resetea en la TRANSICIÓN factura→otro; un RUC elegido a mano en
+      // boleta (prevDocType no es factura) se conserva.
+      setCustomerData(prev => ({
+        ...prev,
+        documentType: ID_TYPES.DNI
+      }))
     } else if (documentType === 'boleta' && !customerData.documentType) {
-      // Solo setear DNI por default si no hay tipo seleccionado
+      // Default DNI si no hay tipo seleccionado
       setCustomerData(prev => ({
         ...prev,
         documentType: ID_TYPES.DNI
