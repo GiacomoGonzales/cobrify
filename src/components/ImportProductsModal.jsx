@@ -4,6 +4,7 @@ import { Upload, Download, X, AlertCircle, CheckCircle, Loader2, Warehouse } fro
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
+import { isMultiCurrencyEnabled } from '@/utils/currency'
 import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
@@ -315,6 +316,13 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
         description: String(row.descripcion || row.Descripcion || row.DESCRIPCION || row.description || row.Description || row.DESCRIPTION || '').trim(),
         cost: row.costo || row.Costo || row.COSTO || row.cost || row.Cost || row.COST || row.valor_unitario || row.valor_Unitario || row.VALOR_UNITARIO || row.precio_unitario || row.Precio_Unitario || row.PRECIO_UNITARIO || null,
         price: parseFloat(row.precio || row.Precio || row.PRECIO || row.price || row.Price || row.PRICE || row.precio_compra || row.Precio_Compra || row.PRECIO_COMPRA || 0),
+        // Precio fijo en dólares (opcional, multi-divisa). Se guarda como priceUSD; el
+        // POS lo usa como ancla en USD (soles = priceUSD × TC). Solo si es un número > 0.
+        priceUSD: (() => {
+          const raw = row.precio_usd ?? row.Precio_USD ?? row.PRECIO_USD ?? row.precio_dolares ?? row.Precio_Dolares ?? row.PRECIO_DOLARES ?? row.price_usd ?? row.priceUSD ?? row.priceUsd
+          const n = parseFloat(raw)
+          return Number.isFinite(n) && n > 0 ? n : null
+        })(),
         price2: row.precio2 || row.Precio2 || row.PRECIO2 || row.price2 || row.Price2 || row.PRICE2 || null,
         price3: row.precio3 || row.Precio3 || row.PRECIO3 || row.price3 || row.Price3 || row.PRICE3 || null,
         price4: row.precio4 || row.Precio4 || row.PRECIO4 || row.price4 || row.Price4 || row.PRICE4 || null,
@@ -1320,6 +1328,16 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
       ]
     }
 
+    // Multi-divisa: agregar la columna opcional "precio_usd" (precio fijo en dólares).
+    // Solo aparece si el negocio activó multi-divisa; para el resto la plantilla queda igual.
+    if (isMultiCurrencyEnabled(businessSettings)) {
+      template = template.map((row, i) => ({
+        ...row,
+        // Ejemplo solo en la 1ra fila para que se entienda; el resto vacío.
+        precio_usd: i === 0 ? 25 : '',
+      }))
+    }
+
     const ws = XLSX.utils.json_to_sheet(template)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, isPharmaLike ? 'Medicamentos' : 'Productos')
@@ -1491,6 +1509,11 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           <p className="text-xs text-gray-500 mt-1">
             Columnas básicas: sku, codigo_barras, nombre, descripcion, costo, precio, precio2-4, stock, stock_minimo, trackStock (SI/NO), mostrar_en_catalogo (SI/NO), unidad, categoria, afectacion_igv
           </p>
+          {isMultiCurrencyEnabled(businessSettings) && (
+            <p className="text-xs text-gray-500 mt-1">
+              <strong>Precio en dólares:</strong> usa la columna <code>precio_usd</code> para fijar el precio en USD del producto. En el Punto de Venta, al cobrar en dólares se usará ese precio; <code>precio</code> (soles) sigue siendo el precio en moneda local.
+            </p>
+          )}
           <p className="text-xs text-gray-500 mt-1">
             <strong>Múltiples códigos de barra para un mismo producto:</strong> en <code>codigo_barras</code> separa los códigos con <code>|</code> (ej: <code>7501|7502|7503</code>).
             El primero queda como código principal y los demás se guardan como alternativos: al escanear cualquiera, se agrega ese mismo producto.
