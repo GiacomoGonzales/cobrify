@@ -17,6 +17,7 @@ import {
   saveAndShareExcel,
   formatDate as formatDateLocale,
 } from './excelStyles'
+import { getDocumentRate, getDocumentTotalInBase } from '@/utils/currency'
 
 // =================== HELPERS LOCALES ===================
 
@@ -79,12 +80,14 @@ const formatPayments = (invoice) => {
   return invoice.paymentMethod || 'Efectivo'
 }
 
-/** Desglose Op. Gravada/Exonerada/Inafecta a partir de items. */
+/** Desglose Op. Gravada/Exonerada/Inafecta a partir de items, en SOLES
+ *  (los docs en USD se convierten con su TC congelado para no mezclar monedas). */
 const computeTaxBuckets = (invoice) => {
+  const rate = getDocumentRate(invoice)
   let opGravada = 0, opExonerada = 0, opInafecta = 0
   if (invoice.items && Array.isArray(invoice.items)) {
     invoice.items.forEach(item => {
-      const itemTotal = (item.quantity || 1) * (item.price || item.unitPrice || 0)
+      const itemTotal = (item.quantity || 1) * (item.price || item.unitPrice || 0) * rate
       if (item.taxAffectation === '20') opExonerada += itemTotal
       else if (item.taxAffectation === '30') opInafecta += itemTotal
       else opGravada += itemTotal
@@ -131,11 +134,13 @@ const groupInvoicesBy = (invoices, getKey) => {
       map.set(key, { key, count: 0, subtotal: 0, igv: 0, discount: 0, total: 0, customers: new Set() })
     }
     const g = map.get(key)
+    // Montos en SOLES con el TC congelado de cada doc (no mezclar USD + PEN)
+    const rate = getDocumentRate(inv)
     g.count += 1
-    g.subtotal += (inv.subtotal || 0)
-    g.igv += (inv.igv || inv.tax || 0)
-    g.discount += (inv.discount || 0)
-    g.total += (inv.total || 0)
+    g.subtotal += (inv.subtotal || 0) * rate
+    g.igv += (inv.igv || inv.tax || 0) * rate
+    g.discount += (inv.discount || 0) * rate
+    g.total += getDocumentTotalInBase(inv)
     const cust = inv.customer?.documentNumber || inv.customer?.name
     if (cust) g.customers.add(cust)
   }
@@ -242,10 +247,12 @@ const appendItemsDetailSheet = (wb, { businessData, periodLabel, branchLabel, in
     const invDate = getInvoiceDate(inv)
     const customerName = inv.customer?.name || inv.customer?.businessName || 'Cliente General'
     const tipo = DOC_TYPE_LABELS[inv.documentType] || 'Boleta'
+    // Montos en SOLES (TC congelado del doc) para totalizar sin mezclar monedas
+    const rate = getDocumentRate(inv)
     for (const item of inv.items) {
       const qty = item.quantity || 1
-      const price = item.unitPrice || item.price || 0
-      const disc = item.discount || 0
+      const price = (item.unitPrice || item.price || 0) * rate
+      const disc = (item.discount || 0) * rate
       const sub = qty * price - disc
       const afect = item.taxAffectation === '20' ? 'EXONERADO' : item.taxAffectation === '30' ? 'INAFECTO' : 'GRAVADO'
       totalQty += qty
@@ -334,9 +341,11 @@ const appendCreditNotesSheet = (wb, { businessData, periodLabel, branchLabel, in
     const sunat = nc.documentType === 'nota_venta'
       ? 'N/A'
       : (SUNAT_STATUS_LABELS[nc.sunatStatus] || nc.sunatStatus || 'Pendiente')
-    sumSub += (nc.subtotal || 0)
-    sumIgv += (nc.igv || nc.tax || 0)
-    sumTotal += (nc.total || 0)
+    // Montos en SOLES con el TC congelado (no mezclar USD + PEN)
+    const rate = getDocumentRate(nc)
+    sumSub += (nc.subtotal || 0) * rate
+    sumIgv += (nc.igv || nc.tax || 0) * rate
+    sumTotal += getDocumentTotalInBase(nc)
     aoa.push([
       nc.number || 'N/A',
       invDate ? formatDateLocale(invDate) : 'N/A',
@@ -345,9 +354,9 @@ const appendCreditNotesSheet = (wb, { businessData, periodLabel, branchLabel, in
       nc.customer?.documentNumber || '-',
       nc.referenceNumber || nc.relatedInvoiceNumber || '-',
       nc.reason || nc.notes || '-',
-      Number((nc.subtotal || 0).toFixed(2)),
-      Number((nc.igv || nc.tax || 0).toFixed(2)),
-      Number((nc.total || 0).toFixed(2)),
+      Number(((nc.subtotal || 0) * rate).toFixed(2)),
+      Number(((nc.igv || nc.tax || 0) * rate).toFixed(2)),
+      Number(getDocumentTotalInBase(nc).toFixed(2)),
       sunat,
     ])
   })
@@ -400,7 +409,7 @@ const appendRfmSheet = (wb, { businessData, periodLabel, branchLabel, customers,
     if (!stats.has(docNum)) stats.set(docNum, { count: 0, total: 0, lastDate: null })
     const s = stats.get(docNum)
     s.count += 1
-    s.total += (inv.total || 0)
+    s.total += getDocumentTotalInBase(inv) // SOLES con TC congelado (no mezclar monedas)
     const d = getInvoiceDate(inv)
     if (d && (!s.lastDate || d > s.lastDate)) s.lastDate = d
   }
@@ -625,7 +634,7 @@ const appendInactiveSheet = (wb, { businessData, customers, invoices, daysThresh
     const d = getInvoiceDate(inv)
     if (!d) continue
     if (!lastByDoc.has(docNum) || d > lastByDoc.get(docNum).date) {
-      lastByDoc.set(docNum, { date: d, total: inv.total || 0 })
+      lastByDoc.set(docNum, { date: d, total: getDocumentTotalInBase(inv) })
     }
   }
 
@@ -700,7 +709,7 @@ const appendNewCustomersSheet = (wb, { businessData, periodLabel, customers, inv
     const d = getInvoiceDate(inv)
     if (!d) continue
     if (!firstByDoc.has(docNum) || d < firstByDoc.get(docNum).date) {
-      firstByDoc.set(docNum, { date: d, customerName: inv.customer?.name, total: inv.total || 0 })
+      firstByDoc.set(docNum, { date: d, customerName: inv.customer?.name, total: getDocumentTotalInBase(inv) })
     }
   }
   // "Nuevos" = todos los que tienen primera compra en este conjunto de invoices (ya filtrado por período)
@@ -992,7 +1001,7 @@ const appendHeatmapSheet = (wb, { businessData, periodLabel, branchLabel, invoic
     if (!d) continue
     const day = d.getDay()
     const hour = d.getHours()
-    const total = inv.total || 0
+    const total = getDocumentTotalInBase(inv) // SOLES con TC congelado
     byDay[day].count += 1
     byDay[day].total += total
     byHour[hour].count += 1

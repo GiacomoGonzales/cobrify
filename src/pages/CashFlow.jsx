@@ -1639,7 +1639,7 @@ export default function CashFlow() {
                           return (
                             <div key={inv.id} className="flex justify-between text-sm py-1 border-b border-green-200">
                               <span className="text-gray-600">{inv.customer?.name || 'Cliente'}</span>
-                              <span className="font-medium text-green-700">{formatCurrency(pending)}</span>
+                              <span className="font-medium text-green-700">{formatCurrency(pending, inv.currency)}</span>
                             </div>
                           )
                         })}

@@ -27,7 +27,7 @@ import MonthlyDailySalesChart from '@/components/charts/MonthlyDailySalesChart'
 import YearlyMonthlyChart from '@/components/charts/YearlyMonthlyChart'
 import PaymentMethodsPieChart from '@/components/charts/PaymentMethodsPieChart'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { getDocumentTotalInBase, isMultiCurrencyEnabled, normalizeCurrency } from '@/utils/currency'
+import { getDocumentTotalInBase, getDocumentRate, isMultiCurrencyEnabled, normalizeCurrency } from '@/utils/currency'
 import { getRecentInvoices } from '@/services/firestoreService'
 import { useBranding } from '@/contexts/BrandingContext'
 import { getTables } from '@/services/tableService'
@@ -86,8 +86,11 @@ export default function Dashboard() {
     loadMonthlyAggregates()
     // allowedBranches/allowedWarehouses en deps: si cambian los permisos del usuario
     // secundario, recargamos para re-saturar facturas y recomputar el gráfico de 12 meses.
+    // dashMultiCurrencyOn en deps: si businessSettings carga tarde y el negocio tiene
+    // multi-divisa, hay que recomputar el gráfico por el camino client-side (convierte
+    // USD→PEN con el TC congelado; el aggregate server-side no puede).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, isDemoMode, allowedBranches, allowedWarehouses])
+  }, [user, isDemoMode, allowedBranches, allowedWarehouses, dashMultiCurrencyOn])
 
   // Cargar aggregates mensuales para el gráfico de 12 meses.
   // Server-side: 12 queries paralelas de sum('total'), no descarga los invoices.
@@ -139,12 +142,13 @@ export default function Dashboard() {
     const businessId = getBusinessId()
     if (!businessId) return
 
-    // OPCIÓN A — Usuario secundario restringido a ciertas sucursales/almacenes:
-    // el aggregate server-side sum('total') NO se puede filtrar por ubicación, así que
-    // traemos las facturas de los últimos 12 meses y sumamos en el cliente SOLO las que
-    // pasan canAccess. Más caro en reads, pero correcto. Owner/admin y usuarios sin
-    // restricción siguen usando el aggregate (rápido) en el bloque de abajo.
-    if (restringido) {
+    // OPCIÓN A — Usuario secundario restringido a ciertas sucursales/almacenes,
+    // O negocio con MULTI-DIVISA activa: el aggregate server-side sum('total') no
+    // puede filtrar por ubicación NI convertir USD→PEN con el TC congelado de cada
+    // doc (sumaría USD como si fueran soles). En ambos casos traemos las facturas
+    // de los últimos 12 meses y sumamos en el cliente. Más caro en reads, pero
+    // correcto. El resto sigue usando el aggregate (rápido) del bloque de abajo.
+    if (restringido || dashMultiCurrencyOn) {
       // El inicio de la ventana más antigua (11 meses atrás) es nuestra fecha "desde".
       const since = windows[0].monthStart
       setMonthlyYearLoading(true)
@@ -162,7 +166,7 @@ export default function Dashboard() {
               : inv.createdAt?.toDate?.() || (inv.createdAt ? new Date(inv.createdAt) : null)
             if (!invDate) return acc
             if (invDate >= w.monthStart && invDate < w.monthEnd) {
-              return acc + (Number(inv.total) || 0)
+              return acc + getDocumentTotalInBase(inv) // SOLES con TC congelado
             }
             return acc
           }, 0)
@@ -475,7 +479,9 @@ export default function Dashboard() {
       const day = invDate.getDate()
       dailyMap[day] = (dailyMap[day] || 0) + totalBase
 
-      // Top productos (aggrega items)
+      // Top productos (aggrega items) — montos en SOLES con el TC congelado
+      // del doc (los items de ventas USD se convertían sin TC y mezclaban monedas)
+      const docRate = getDocumentRate(inv)
       const items = inv.items || []
       for (let j = 0; j < items.length; j++) {
         const item = items[j]
@@ -487,7 +493,7 @@ export default function Dashboard() {
         }
         const qty = Number(item.quantity) || 0
         entry.quantity += qty
-        entry.total += Number(item.total) || qty * (Number(item.price) || 0)
+        entry.total += (Number(item.total) || qty * (Number(item.price) || 0)) * docRate
       }
 
       // Top clientes
@@ -1065,7 +1071,7 @@ export default function Dashboard() {
                   <div className="flex items-center justify-between sm:justify-end sm:space-x-4 pl-11 sm:pl-0">
                     <div className="text-left sm:text-right">
                       <p className="font-semibold text-gray-900 text-sm sm:text-base">
-                        {formatCurrency(invoice.total)}
+                        {formatCurrency(invoice.total, invoice.currency)}
                       </p>
                       <p className="text-xs sm:text-sm text-gray-600">
                         {getInvoiceDate(invoice) ? formatDate(getInvoiceDate(invoice)) : 'N/A'}

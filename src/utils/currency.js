@@ -134,3 +134,19 @@ export function getDocumentTotalInBase(doc) {
   if (rate <= 0) return amount // sin TC, asumimos PEN para no inflar reportes
   return convertToBase(amount, currency, rate)
 }
+
+/**
+ * Tipo de cambio EFECTIVO de un documento para convertir sus montos a PEN:
+ * 1 si el documento está en PEN (o no tiene TC válido), su exchangeRate
+ * congelado si está en USD. Útil para convertir montos parciales del doc
+ * (items, pagos, buckets de IGV) en reportes y exports sin mezclar monedas.
+ *
+ * @param {Object} doc - documento con { currency, exchangeRate }
+ * @returns {number} factor multiplicador a PEN
+ */
+export function getDocumentRate(doc) {
+  const currency = normalizeCurrency(doc?.currency)
+  if (currency === BASE_CURRENCY) return 1
+  const rate = Number(doc?.exchangeRate)
+  return Number.isFinite(rate) && rate > 0 ? rate : 1
+}

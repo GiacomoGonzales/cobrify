@@ -8,6 +8,7 @@
  */
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { getDocumentRate, getDocumentTotalInBase, normalizeCurrency } from '@/utils/currency'
 import {
   XLSX,
   cellStyle, centerStyle, numberStyle,
@@ -40,7 +41,7 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
   const headers1 = [
     'Fecha', 'Tipo', 'Número', 'Cliente', 'RUC/DNI', 'Alumno', 'Productos',
     'Op. Gravada', 'Op. Exonerada', 'Op. Inafecta', 'Subtotal', 'Descuento',
-    'IGV', 'Total', 'Estado', 'Estado SUNAT', 'Método de Pago', 'Vendedor',
+    'IGV', 'Total', 'Moneda', 'T.C.', 'Estado', 'Estado SUNAT', 'Método de Pago', 'Vendedor',
   ]
   const totalCols1 = headers1.length
 
@@ -130,6 +131,10 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
       : (sunatStatusNames[invoice.sunatStatus] || invoice.sunatStatus || 'Pendiente')
 
     const sellerName = invoice.createdByName || invoice.sellerName || invoice.createdByEmail || 'Sin vendedor'
+    // Moneda del comprobante: los montos de la fila van en su moneda NATIVA;
+    // la fila de TOTALES convierte todo a soles con el TC congelado de cada doc.
+    const rowCurrency = normalizeCurrency(invoice.currency)
+    const rowRate = getDocumentRate(invoice)
 
     aoa1.push([
       invoice.createdAt?.toDate ? format(invoice.createdAt.toDate(), 'dd/MM/yyyy', { locale: es }) : 'N/A',
@@ -146,6 +151,8 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
       Number((invoice.discount || 0).toFixed(2)),
       Number((invoice.igv || invoice.tax || 0).toFixed(2)),
       Number((invoice.total || 0).toFixed(2)),
+      rowCurrency,
+      rowCurrency === 'PEN' ? '' : Number(rowRate.toFixed(3)),
       statusNames[invoice.status] || invoice.status || 'N/A',
       sunatStatus,
       formatPaymentMethods(invoice),
@@ -153,14 +160,16 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
     ])
   })
 
-  // Totales (gravada, exonerada, inafecta calculados desde items)
-  const subtotalSum = invoices.reduce((s, i) => s + (i.subtotal || 0), 0)
-  const discountSum = invoices.reduce((s, i) => s + (i.discount || 0), 0)
-  const taxSum = invoices.reduce((s, i) => s + (i.igv || i.tax || 0), 0)
-  const totalSum = invoices.reduce((s, i) => s + (i.total || 0), 0)
+  // Totales SIEMPRE en soles: cada documento se convierte con su TC congelado
+  // (antes se sumaban USD y PEN sin convertir → totales sin sentido si había USD).
+  const subtotalSum = invoices.reduce((s, i) => s + (i.subtotal || 0) * getDocumentRate(i), 0)
+  const discountSum = invoices.reduce((s, i) => s + (i.discount || 0) * getDocumentRate(i), 0)
+  const taxSum = invoices.reduce((s, i) => s + (i.igv || i.tax || 0) * getDocumentRate(i), 0)
+  const totalSum = invoices.reduce((s, i) => s + getDocumentTotalInBase(i), 0)
   const taxBuckets = invoices.reduce((acc, inv) => {
+    const rate = getDocumentRate(inv)
     inv.items?.forEach(item => {
-      const t = (item.quantity || 1) * (item.price || item.unitPrice || 0)
+      const t = (item.quantity || 1) * (item.price || item.unitPrice || 0) * rate
       if (item.taxAffectation === '20') acc.e += t
       else if (item.taxAffectation === '30') acc.i += t
       else acc.g += t
@@ -171,7 +180,7 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
   aoa1.push([])
   const totalRow = aoa1.length
   aoa1.push([
-    '', '', '', '', '', '', 'TOTALES:',
+    '', '', '', '', '', '', 'TOTALES (S/):',
     Number(taxBuckets.g.toFixed(2)),
     Number(taxBuckets.e.toFixed(2)),
     Number(taxBuckets.i.toFixed(2)),
@@ -179,14 +188,14 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
     Number(discountSum.toFixed(2)),
     Number(taxSum.toFixed(2)),
     Number(totalSum.toFixed(2)),
-    '', '', '', '',
+    '', '', '', '', '', '',
   ])
 
   // Crear worksheet
   const ws1 = XLSX.utils.aoa_to_sheet(aoa1)
 
   applyColumnWidths(ws1, [
-    12, 14, 14, 30, 14, 22, 45, 13, 14, 13, 12, 11, 10, 12, 12, 14, 30, 22,
+    12, 14, 14, 30, 14, 22, 45, 13, 14, 13, 12, 11, 10, 12, 9, 8, 12, 14, 30, 22,
   ])
 
   // Layout: título / metadata / subtítulo / header
@@ -207,10 +216,12 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
     setStyle(ws1, r, 5, cellStyle(i))         // Alumno
     setStyle(ws1, r, 6, cellStyle(i))         // Productos
     for (let c = 7; c <= 13; c++) setStyle(ws1, r, c, numberStyle(i))
-    setStyle(ws1, r, 14, statusStyle(i, aoa1[r][14]))
-    setStyle(ws1, r, 15, statusStyle(i, aoa1[r][15]))
-    setStyle(ws1, r, 16, cellStyle(i))
-    setStyle(ws1, r, 17, cellStyle(i)) // Vendedor
+    setStyle(ws1, r, 14, centerStyle(i)) // Moneda
+    setStyle(ws1, r, 15, numberStyle(i)) // T.C.
+    setStyle(ws1, r, 16, statusStyle(i, aoa1[r][16]))
+    setStyle(ws1, r, 17, statusStyle(i, aoa1[r][17]))
+    setStyle(ws1, r, 18, cellStyle(i))
+    setStyle(ws1, r, 19, cellStyle(i)) // Vendedor
   }
 
   // Fila de totales
@@ -273,10 +284,14 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
     const customerDocType = invoice.customer?.documentType || '0'
     const customerDocNumber = invoice.customer?.documentNumber || ''
 
+    // Registro de Ventas: los importes van SIEMPRE en soles (formato SUNAT).
+    // Los documentos en USD se convierten con su TC congelado y el TC se
+    // consigna en la columna "Tipo Cambio" (antes iba 1.000 fijo).
+    const sunatRate = getDocumentRate(invoice)
     let baseImponible = 0, importeExonerado = 0, importeInafecto = 0
     if (invoice.items && Array.isArray(invoice.items)) {
       invoice.items.forEach(item => {
-        const itemTotal = (item.quantity || 1) * (item.price || item.unitPrice || 0)
+        const itemTotal = (item.quantity || 1) * (item.price || item.unitPrice || 0) * sunatRate
         if (item.taxAffectation === '20') importeExonerado += itemTotal
         else if (item.taxAffectation === '30') importeInafecto += itemTotal
         else baseImponible += itemTotal
@@ -301,13 +316,13 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
       customerDocNumber,
       invoice.customer?.name || invoice.customer?.businessName || 'Cliente General',
       Number(baseImponible.toFixed(2)),
-      Number((invoice.discount || 0).toFixed(2)),
-      Number((invoice.igv || invoice.tax || 0).toFixed(2)),
+      Number(((invoice.discount || 0) * sunatRate).toFixed(2)),
+      Number(((invoice.igv || invoice.tax || 0) * sunatRate).toFixed(2)),
       Number(importeExonerado.toFixed(2)),
       Number(importeInafecto.toFixed(2)),
       0, 0,
-      Number((invoice.total || 0).toFixed(2)),
-      1.000,
+      Number(getDocumentTotalInBase(invoice).toFixed(2)),
+      Number(sunatRate.toFixed(3)),
       refDocType, refSerie, refNumero, estado,
     ])
   })
@@ -393,10 +408,12 @@ function appendItemsDetailSheet(wb, invoices, businessData, branchLabel) {
     const invDate = inv.createdAt?.toDate ? format(inv.createdAt.toDate(), 'dd/MM/yyyy', { locale: es }) : 'N/A'
     const customerName = inv.customer?.name || inv.customer?.businessName || 'Cliente General'
     const tipo = typeNames[inv.documentType] || 'Boleta'
+    // Montos en SOLES (TC congelado del doc) para poder totalizar sin mezclar monedas
+    const rate = getDocumentRate(inv)
     for (const item of inv.items) {
       const qty = item.quantity || 1
-      const price = item.unitPrice || item.price || 0
-      const disc = item.discount || 0
+      const price = (item.unitPrice || item.price || 0) * rate
+      const disc = (item.discount || 0) * rate
       const sub = qty * price - disc
       const afect = item.taxAffectation === '20' ? 'EXONERADO' : item.taxAffectation === '30' ? 'INAFECTO' : 'GRAVADO'
       totalQty += qty
@@ -451,6 +468,8 @@ function appendTopProductsSheet(wb, invoices, businessData, branchLabel) {
   // Agregar por nombre+sku
   const agg = new Map()
   for (const inv of invoices) {
+    // Ingresos en SOLES (TC congelado del doc) — sin esto se mezclaban USD y PEN
+    const rate = getDocumentRate(inv)
     for (const item of inv.items || []) {
       const name = item.name || item.description || 'Producto'
       const sku = item.sku || item.code || ''
@@ -458,8 +477,8 @@ function appendTopProductsSheet(wb, invoices, businessData, branchLabel) {
       if (!agg.has(key)) agg.set(key, { name, sku, qty: 0, count: 0, revenue: 0 })
       const e = agg.get(key)
       const qty = item.quantity || 1
-      const price = item.unitPrice || item.price || 0
-      const disc = item.discount || 0
+      const price = (item.unitPrice || item.price || 0) * rate
+      const disc = (item.discount || 0) * rate
       e.qty += qty
       e.count += 1
       e.revenue += qty * price - disc
@@ -536,20 +555,22 @@ function appendPaymentMethodsSheet(wb, invoices, businessData, branchLabel) {
 
   const agg = new Map()
   for (const inv of invoices) {
+    // Montos en SOLES (TC congelado del doc) — sin esto se mezclaban USD y PEN
+    const rate = getDocumentRate(inv)
     if (inv.payments && Array.isArray(inv.payments) && inv.payments.length > 0) {
       // Pagos múltiples: cada uno con su monto
       for (const p of inv.payments) {
         const method = p.method || 'Efectivo'
         if (!agg.has(method)) agg.set(method, { method, amount: 0, count: 0 })
         const e = agg.get(method)
-        e.amount += p.amount || 0
+        e.amount += (p.amount || 0) * rate
         e.count += 1
       }
     } else {
       const method = inv.paymentMethod || 'Efectivo'
       if (!agg.has(method)) agg.set(method, { method, amount: 0, count: 0 })
       const e = agg.get(method)
-      e.amount += inv.total || 0
+      e.amount += getDocumentTotalInBase(inv)
       e.count += 1
     }
   }
@@ -620,7 +641,8 @@ function appendSellersSheet(wb, invoices, businessData, branchLabel) {
     const seller = inv.createdByName || inv.sellerName || inv.createdByEmail || 'Sin vendedor'
     if (!agg.has(seller)) agg.set(seller, { seller, amount: 0, count: 0 })
     const e = agg.get(seller)
-    e.amount += inv.total || 0
+    // En SOLES con el TC congelado del doc (no mezclar monedas)
+    e.amount += getDocumentTotalInBase(inv)
     e.count += 1
   }
   if (agg.size === 0) return
