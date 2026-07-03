@@ -67,7 +67,8 @@ const reservationSchema = z.object({
   checkOutTime: z.string().optional(),
   ratePerNight: z.coerce.number().min(0, 'Tarifa inválida'),
   ratePerHour: z.coerce.number().min(0, 'Tarifa inválida').optional(),
-  guests: z.coerce.number().int().min(1).optional(),
+  guests: z.coerce.number().int().min(1).max(4, 'Máximo 4 huéspedes').optional(),
+  pets: z.coerce.number().int().min(0).optional(),
   notes: z.string().optional(),
 })
 
@@ -199,6 +200,7 @@ export default function HotelReservations() {
       ratePerNight: 0,
       ratePerHour: 0,
       guests: 1,
+      pets: 0,
       notes: '',
     },
   })
@@ -480,6 +482,7 @@ export default function HotelReservations() {
       ratePerNight: 0,
       ratePerHour: 0,
       guests: 1,
+      pets: 0,
       notes: '',
     })
     setIsModalOpen(true)
@@ -507,6 +510,7 @@ export default function HotelReservations() {
       ratePerNight: reservation.ratePerNight || 0,
       ratePerHour: reservation.ratePerHour || 0,
       guests: reservation.guests || 1,
+      pets: reservation.pets || 0,
       notes: reservation.notes || '',
     })
     // Sincronizar el toggle de modo con lo guardado en la reserva.
@@ -608,6 +612,7 @@ export default function HotelReservations() {
         nights: nightsCount,
         ratePerNight: Number(data.ratePerNight || 0),
         guests: resGuests,
+        pets: Math.max(0, Number(data.pets) || 0),
         baseGuests: resBaseGuests,
         extraGuestRate: resExtraGuestRate,
         extraGuestTotal,
@@ -1677,23 +1682,36 @@ export default function HotelReservations() {
                     )}
                   </div>
                 </div>
-                {extraGuestRate > 0 && (
-                  <div>
-                    <Input
-                      label={`Huéspedes (incluye ${baseGuests}; persona extra S/ ${extraGuestRate.toFixed(2)}/noche)`}
-                      type="number"
-                      min="1"
-                      {...register('guests')}
-                    />
-                    {extraGuests > 0 && nights > 0 && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        + {extraGuests} persona{extraGuests > 1 ? 's' : ''} adicional{extraGuests > 1 ? 'es' : ''} × {nights} noche{nights > 1 ? 's' : ''} = {formatCurrency(extraGuestNightly)}
-                      </p>
-                    )}
-                  </div>
-                )}
               </>
             )}
+            {/* Huéspedes (máx 4) y mascotas — aplica a ambos modos; también salen en la vista semanal */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Input
+                  label="Huéspedes (máx. 4)"
+                  type="number"
+                  min="1"
+                  max="4"
+                  {...register('guests')}
+                  error={errors.guests?.message}
+                />
+                {!isHourlyMode && extraGuestRate > 0 && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Incluye {baseGuests}; persona extra S/ {extraGuestRate.toFixed(2)}/noche
+                    {extraGuests > 0 && nights > 0 && ` · +${extraGuests} × ${nights} noche${nights > 1 ? 's' : ''} = ${formatCurrency(extraGuestNightly)}`}
+                  </p>
+                )}
+              </div>
+              <div>
+                <Input
+                  label="Mascotas"
+                  type="number"
+                  min="0"
+                  {...register('pets')}
+                  error={errors.pets?.message}
+                />
+              </div>
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Notas</label>
               <textarea

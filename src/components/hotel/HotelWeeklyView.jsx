@@ -101,7 +101,8 @@ export default function HotelWeeklyView({ rooms = [], reservations = [] }) {
         const list = cellFor(room, d)
         if (!list.length) return ''
         return list.map(r => {
-          const parts = [formatCurrency(nightPrice(r)), `${r.guests || 1} huésp.`, r.guestName || '']
+          const guestsLine = `${r.guests || 1} huésp.${Number(r.pets) > 0 ? ` · ${r.pets} masc.` : ''}`
+          const parts = [formatCurrency(nightPrice(r)), guestsLine, r.guestName || '']
           if (r.paymentMethod) parts.push(String(r.paymentMethod))
           return parts.filter(Boolean).join('\n')
         }).join('\n––\n')
@@ -194,7 +195,9 @@ export default function HotelWeeklyView({ rooms = [], reservations = [] }) {
                           {list.map((r, idx) => (
                             <div key={r.id || idx} className={`rounded border px-1.5 py-1 ${statusCellClass(r.status)}`}>
                               <div className="font-bold text-gray-900">{formatCurrency(nightPrice(r))}</div>
-                              <div className="text-[10px] text-gray-600">{r.guests || 1} huésp.</div>
+                              <div className="text-[10px] text-gray-600">
+                                {r.guests || 1} huésp.{Number(r.pets) > 0 ? ` · ${r.pets} masc.` : ''}
+                              </div>
                               <div className="text-[10px] text-gray-800 truncate" title={r.guestName}>{r.guestName || '—'}</div>
                               {r.paymentMethod && <div className="text-[9px] text-gray-500 uppercase">{r.paymentMethod}</div>}
                             </div>
