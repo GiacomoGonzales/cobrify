@@ -203,6 +203,8 @@ export default function InvoiceList() {
     sellers: [], // [] = todos; ids de vendedores (createdBy)
     paymentStatuses: [], // [] = todos; ej: ['paid', 'pending', ...]
     paymentMethods: [], // [] = todos; ej: ['Efectivo', 'Yape', ...]
+    branch: 'all', // 'all' | 'main' | branchId. El desplegable solo ofrece sucursales
+    // a las que el usuario tiene acceso; los datos ya vienen saneados por canAccessInvoice.
     startDate: '',
     endDate: '',
     excludeConverted: true, // Por defecto excluir boletas convertidas desde notas
@@ -1850,13 +1852,17 @@ Gracias por tu preferencia.`
         });
       }
 
-      // Filtrar por rango de fechas
+      // Filtrar por rango de fechas. IMPORTANTE: usar getInvoiceDate (prioriza
+      // emissionDate) — la MISMA fecha que usa la página. Antes se usaba createdAt,
+      // pero un comprobante emitido en junio pero cargado al sistema en julio (backdated
+      // o migrado) tiene createdAt en julio → el rango de junio lo excluía y el export
+      // salía vacío aunque la página sí lo mostraba.
       if (exportFilters.startDate) {
         // Crear fecha en zona horaria local (no UTC)
         const [year, month, day] = exportFilters.startDate.split('-').map(Number);
         const startDate = new Date(year, month - 1, day, 0, 0, 0, 0);
         filteredInvoices = filteredInvoices.filter(inv => {
-          const invDate = inv.createdAt?.toDate ? inv.createdAt.toDate() : new Date(inv.createdAt);
+          const invDate = getInvoiceDate(inv);
           return invDate && invDate >= startDate;
         });
       }
@@ -1866,18 +1872,22 @@ Gracias por tu preferencia.`
         const [year, month, day] = exportFilters.endDate.split('-').map(Number);
         const endDate = new Date(year, month - 1, day, 23, 59, 59, 999);
         filteredInvoices = filteredInvoices.filter(inv => {
-          const invDate = inv.createdAt?.toDate ? inv.createdAt.toDate() : new Date(inv.createdAt);
+          const invDate = getInvoiceDate(inv);
           return invDate && invDate <= endDate;
         });
       }
 
-      // Filtrar por sucursal seleccionada en la página
-      if (filterBranch !== 'all') {
+      // Filtrar por sucursal elegida EN EL MODAL de exportación. El acceso ya está
+      // garantizado: `invoices` viene saneado por canAccessInvoice y el desplegable
+      // solo ofrece sucursales permitidas. Si el usuario está restringido, "Todas"
+      // ya equivale a "todas mis sucursales".
+      const exportBranch = exportFilters.branch || 'all'
+      if (exportBranch !== 'all') {
         filteredInvoices = filteredInvoices.filter(inv => {
-          if (filterBranch === 'main') {
+          if (exportBranch === 'main') {
             return !inv.branchId
           }
-          return inv.branchId === filterBranch
+          return inv.branchId === exportBranch
         })
       }
 
@@ -1888,10 +1898,10 @@ Gracias por tu preferencia.`
 
       // Determinar nombre de sucursal para el Excel
       let branchLabel = null
-      if (filterBranch === 'main') {
+      if (exportBranch === 'main') {
         branchLabel = companySettings?.mainBranchName || 'Sucursal Principal'
-      } else if (filterBranch !== 'all') {
-        const branch = branches.find(b => b.id === filterBranch)
+      } else if (exportBranch !== 'all') {
+        const branch = branches.find(b => b.id === exportBranch)
         branchLabel = branch ? branch.name : null
       }
 
@@ -4897,6 +4907,28 @@ Gracias por tu preferencia.`
               })}
             </div>
           </div>
+
+          {/* Sucursal — solo se ofrecen las sucursales a las que el usuario tiene
+              acceso (`branches` ya viene filtrada; "Principal" solo si tiene acceso).
+              El dueño con acceso a todo puede elegir cualquiera; el restringido solo
+              las suyas. Los datos ya vienen saneados por canAccessInvoice. */}
+          {branches.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Sucursal</label>
+              <Select
+                value={exportFilters.branch}
+                onChange={(e) => setExportFilters({ ...exportFilters, branch: e.target.value })}
+              >
+                <option value="all">Todas las sucursales</option>
+                {hasMainBranchAccess && (
+                  <option value="main">{companySettings?.mainBranchName || 'Sucursal Principal'}</option>
+                )}
+                {branches.map(branch => (
+                  <option key={branch.id} value={branch.id}>{branch.name}</option>
+                ))}
+              </Select>
+            </div>
+          )}
 
           {/* Rango de fechas */}
           <div>
