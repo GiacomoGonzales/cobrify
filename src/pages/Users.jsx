@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Users as UsersIcon, Plus, Edit2, Shield, Loader2, Eye, EyeOff, UserCheck, Warehouse, Store, CheckCircle2, XCircle, ChevronDown, ChevronRight, DollarSign, Briefcase, Bell, Key, Trash2, AlertTriangle } from 'lucide-react'
+import { Users as UsersIcon, Plus, Edit2, Shield, Loader2, Eye, EyeOff, UserCheck, Warehouse, Store, CheckCircle2, XCircle, ChevronDown, ChevronRight, DollarSign, Briefcase, Bell, Key, Trash2, AlertTriangle, Archive, ArchiveRestore } from 'lucide-react'
 import { EMPLOYMENT_TYPES, HR_STATUSES } from '@/services/personnelService'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -39,6 +39,7 @@ export default function Users() {
   const [warehouses, setWarehouses] = useState([])
   const [branches, setBranches] = useState([])
   const [isLoading, setIsLoading] = useState(true)
+  const [showArchived, setShowArchived] = useState(false) // ver perfiles archivados (personal que ya no trabaja)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
   const [selectedUser, setSelectedUser] = useState(null)
@@ -611,6 +612,40 @@ export default function Users() {
     }
   }
 
+  // Archivar un perfil (personal que ya no trabaja): lo saca de la lista principal.
+  // Se marca archived + isActive:false → no puede iniciar sesión (AuthContext lo cierra).
+  // No se elimina: se conserva su historial y se puede desarchivar cuando se necesite.
+  const handleArchiveUser = async (userItem) => {
+    try {
+      const result = await updateUserData(userItem.id, { archived: true, isActive: false })
+      if (result.success) {
+        toast.success(`Perfil de "${userItem.displayName || userItem.email}" archivado`)
+        loadUsers()
+      } else {
+        toast.error(result.error || 'Error al archivar el perfil')
+      }
+    } catch (error) {
+      console.error('Error al archivar usuario:', error)
+      toast.error('Error al archivar el perfil')
+    }
+  }
+
+  // Desarchivar: vuelve a la lista principal (queda inactivo; se activa aparte si se requiere).
+  const handleUnarchiveUser = async (userItem) => {
+    try {
+      const result = await updateUserData(userItem.id, { archived: false })
+      if (result.success) {
+        toast.success(`Perfil de "${userItem.displayName || userItem.email}" restaurado`)
+        loadUsers()
+      } else {
+        toast.error(result.error || 'Error al restaurar el perfil')
+      }
+    } catch (error) {
+      console.error('Error al desarchivar usuario:', error)
+      toast.error('Error al restaurar el perfil')
+    }
+  }
+
   // Abrir/cerrar modal de eliminar usuario
   const openDeleteModal = (userToDelete) => {
     setDeleteTargetUser(userToDelete)
@@ -673,6 +708,10 @@ export default function Users() {
     )
   }
 
+  // Usuarios visibles según el modo (activos/normales vs. archivados)
+  const archivedCount = users.filter(u => u.archived === true).length
+  const visibleUsers = users.filter(u => (showArchived ? u.archived === true : u.archived !== true))
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -692,22 +731,46 @@ export default function Users() {
       {/* Usuarios */}
       <Card>
         <CardHeader>
-          <CardTitle>Usuarios Registrados ({users.length})</CardTitle>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <CardTitle>
+              {showArchived
+                ? `Perfiles Archivados (${visibleUsers.length})`
+                : `Usuarios Registrados (${visibleUsers.length})`}
+            </CardTitle>
+            {(archivedCount > 0 || showArchived) && (
+              <button
+                onClick={() => setShowArchived(v => !v)}
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-primary-600 transition-colors"
+              >
+                {showArchived ? (
+                  <><UsersIcon className="w-4 h-4" /> Ver usuarios activos</>
+                ) : (
+                  <><Archive className="w-4 h-4" /> Ver archivados ({archivedCount})</>
+                )}
+              </button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="p-0 sm:p-6">
           {/* Estado vacío */}
-          {users.length === 0 && (
+          {visibleUsers.length === 0 && (
             <div className="text-center py-8 text-gray-500 px-4">
               <UsersIcon className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-              <p>No hay usuarios creados</p>
-              <p className="text-sm">Crea tu primer usuario para comenzar</p>
+              {showArchived ? (
+                <p>No hay perfiles archivados</p>
+              ) : (
+                <>
+                  <p>No hay usuarios creados</p>
+                  <p className="text-sm">Crea tu primer usuario para comenzar</p>
+                </>
+              )}
             </div>
           )}
 
           {/* Vista móvil - Tarjetas */}
-          {users.length > 0 && (
+          {visibleUsers.length > 0 && (
             <div className="sm:hidden divide-y divide-gray-200">
-              {users.map((userItem) => (
+              {visibleUsers.map((userItem) => (
                 <div key={userItem.id} className="p-4 hover:bg-gray-50">
                   {/* Header: Nombre + Estado */}
                   <div className="flex items-start justify-between mb-3">
@@ -798,6 +861,21 @@ export default function Users() {
                     >
                       <Edit2 className="w-3.5 h-3.5" /> Editar
                     </button>
+                    {userItem.archived ? (
+                      <button
+                        onClick={() => handleUnarchiveUser(userItem)}
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                      >
+                        <ArchiveRestore className="w-3.5 h-3.5" /> Desarchivar
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleArchiveUser(userItem)}
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                      >
+                        <Archive className="w-3.5 h-3.5" /> Archivar
+                      </button>
+                    )}
                     <button
                       onClick={() => openDeleteModal(userItem)}
                       className="flex items-center gap-1 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -812,7 +890,7 @@ export default function Users() {
           )}
 
           {/* Vista desktop - Tabla */}
-          {users.length > 0 && (
+          {visibleUsers.length > 0 && (
             <div className="hidden sm:block overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -828,7 +906,7 @@ export default function Users() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {users.map((userItem) => (
+                  {visibleUsers.map((userItem) => (
                     <TableRow key={userItem.id}>
                       <TableCell className="font-medium">{userItem.displayName}</TableCell>
                       <TableCell>{userItem.email}</TableCell>
@@ -903,6 +981,23 @@ export default function Users() {
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
+                          {userItem.archived ? (
+                            <button
+                              onClick={() => handleUnarchiveUser(userItem)}
+                              className="p-2 hover:bg-green-100 text-green-600 rounded-lg transition-colors"
+                              title="Desarchivar (volver a la lista)"
+                            >
+                              <ArchiveRestore className="w-4 h-4" />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleArchiveUser(userItem)}
+                              className="p-2 hover:bg-gray-200 text-gray-600 rounded-lg transition-colors"
+                              title="Archivar (personal que ya no trabaja)"
+                            >
+                              <Archive className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
                             onClick={() => openDeleteModal(userItem)}
                             className="p-2 hover:bg-red-100 text-red-600 rounded-lg transition-colors"
