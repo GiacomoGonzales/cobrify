@@ -3328,7 +3328,10 @@ export default function Products() {
 
       for (const productId of selectedProducts) {
         try {
-          const result = await updateProduct(businessId, productId, { showInCatalog: show })
+          // El catálogo y el form individual usan `catalogVisible` como fuente de
+          // verdad; escribir solo `showInCatalog` no tenía efecto (ese era el bug).
+          // Guardamos ambos por retrocompatibilidad (igual que el import de Excel).
+          const result = await updateProduct(businessId, productId, { catalogVisible: show, showInCatalog: show })
           if (result.success) successCount++
           else errorCount++
         } catch (error) {
