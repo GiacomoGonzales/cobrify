@@ -9,6 +9,19 @@
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { getDocumentRate, getDocumentTotalInBase, normalizeCurrency } from '@/utils/currency'
+import { getInvoiceDate, parseLocalDateString } from '@/utils/invoiceDate'
+
+/** Formatea la fecha de un comprobante (prioriza emissionDate) como dd/MM/yyyy. */
+const fmtInvoiceDate = (invoice) => {
+  const d = getInvoiceDate(invoice)
+  return d ? format(d, 'dd/MM/yyyy', { locale: es }) : 'N/A'
+}
+
+/** Formatea una fecha "YYYY-MM-DD" (input date) como dd/MM/yyyy sin corrimiento UTC. */
+const fmtFilterDate = (str) => {
+  const d = parseLocalDateString(str)
+  return d ? format(d, 'dd/MM/yyyy', { locale: es }) : ''
+}
 import {
   XLSX,
   cellStyle, centerStyle, numberStyle,
@@ -58,8 +71,8 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
     }
     extra.push(['Tipo de Comprobante:', typeLabels[filters.type] || filters.type])
   }
-  if (filters?.startDate) extra.push(['Fecha Desde:', format(new Date(filters.startDate), 'dd/MM/yyyy', { locale: es })])
-  if (filters?.endDate) extra.push(['Fecha Hasta:', format(new Date(filters.endDate), 'dd/MM/yyyy', { locale: es })])
+  if (filters?.startDate) extra.push(['Fecha Desde:', fmtFilterDate(filters.startDate)])
+  if (filters?.endDate) extra.push(['Fecha Hasta:', fmtFilterDate(filters.endDate)])
   if (filters?.sellerLabel) extra.push(['Vendedor:', filters.sellerLabel])
   if (filters?.paymentStatusLabel) extra.push(['Estado de Pago:', filters.paymentStatusLabel])
   if (filters?.paymentMethodLabel) extra.push(['Método de Pago:', filters.paymentMethodLabel])
@@ -137,7 +150,7 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
     const rowRate = getDocumentRate(invoice)
 
     aoa1.push([
-      invoice.createdAt?.toDate ? format(invoice.createdAt.toDate(), 'dd/MM/yyyy', { locale: es }) : 'N/A',
+      fmtInvoiceDate(invoice),
       typeNames[docType] || docType || 'N/A',
       invoice.number || 'N/A',
       customerName,
@@ -252,7 +265,7 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
   aoa2.push(['RUC:', businessData?.ruc || 'N/A'])
   aoa2.push(['Razón Social:', businessData?.name || 'N/A'])
   aoa2.push(['Período:', filters?.startDate && filters?.endDate
-    ? `${format(new Date(filters.startDate), 'dd/MM/yyyy', { locale: es })} - ${format(new Date(filters.endDate), 'dd/MM/yyyy', { locale: es })}`
+    ? `${fmtFilterDate(filters.startDate)} - ${fmtFilterDate(filters.endDate)}`
     : format(new Date(), 'MM/yyyy', { locale: es })])
   const meta2End = aoa2.length - 1
   aoa2.push([])
@@ -268,14 +281,14 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
   const sunatIdTypeCodes = { '1': '1', '6': '6', '0': '0', '4': '4', '7': '7', A: 'A' }
 
   const sorted = [...invoices].sort((a, b) => {
-    const dA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0)
-    const dB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0)
+    const dA = getInvoiceDate(a) || new Date(0)
+    const dB = getInvoiceDate(b) || new Date(0)
     return dA - dB
   })
 
   const dataStart2 = aoa2.length
   sorted.forEach((invoice, index) => {
-    const invoiceDate = invoice.createdAt?.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt)
+    const invoiceDate = getInvoiceDate(invoice)
     const docType = invoice.documentType || 'boleta'
     const parts = (invoice.number || '').split('-')
     const serie = parts[0] || ''
@@ -405,7 +418,7 @@ function appendItemsDetailSheet(wb, invoices, businessData, branchLabel) {
 
   for (const inv of invoices) {
     if (!Array.isArray(inv.items)) continue
-    const invDate = inv.createdAt?.toDate ? format(inv.createdAt.toDate(), 'dd/MM/yyyy', { locale: es }) : 'N/A'
+    const invDate = fmtInvoiceDate(inv)
     const customerName = inv.customer?.name || inv.customer?.businessName || 'Cliente General'
     const tipo = typeNames[inv.documentType] || 'Boleta'
     // Montos en SOLES (TC congelado del doc) para poder totalizar sin mezclar monedas

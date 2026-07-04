@@ -57,6 +57,7 @@ import Select from '@/components/ui/Select'
 import Input from '@/components/ui/Input'
 import { formatCurrency, formatDate, formatDateTime, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import { getDocumentTotalInBase, getReportsCurrency, resolveReportsRate, convertBaseToDisplay } from '@/utils/currency'
+import { getInvoiceDate } from '@/utils/invoiceDate'
 import { getInvoices, getRecentInvoices, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat, updateProductStockTransaction } from '@/services/firestoreService'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, generateExitNotePDF, preloadLogo } from '@/utils/pdfGenerator'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
@@ -86,27 +87,9 @@ export default function InvoiceList() {
   const ticketRef = useRef()
 
   // Helper para manejar fechas - priorizar fecha de emisión sobre fecha de creación
-  const getInvoiceDate = (invoice) => {
-    // Usar emissionDate si existe (fecha de emisión configurada en el POS)
-    if (invoice?.emissionDate) {
-      if (invoice.emissionDate.toDate) return invoice.emissionDate.toDate()
-      if (typeof invoice.emissionDate === 'string') {
-        // emissionDate es solo fecha "YYYY-MM-DD", tomar la hora de createdAt
-        const createdAt = invoice.createdAt?.toDate?.() || (invoice.createdAt ? new Date(invoice.createdAt) : null)
-        if (createdAt) {
-          const [year, month, day] = invoice.emissionDate.split('-').map(Number)
-          const combined = new Date(createdAt)
-          combined.setFullYear(year, month - 1, day)
-          return combined
-        }
-        return new Date(invoice.emissionDate + 'T12:00:00')
-      }
-      return new Date(invoice.emissionDate)
-    }
-    // Fallback a createdAt
-    if (!invoice?.createdAt) return null
-    return invoice.createdAt.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt)
-  }
+  // getInvoiceDate: fuente de verdad compartida en @/utils/invoiceDate (prioriza
+  // emissionDate sobre createdAt). La usa también el servicio de exportación a
+  // Excel para que lo mostrado en pantalla y lo exportado coincidan.
 
   // Wrapper compatible web + native (usa Capacitor Filesystem + Share en app)
   const forceDownload = async (url, filename) => {
