@@ -449,6 +449,9 @@ export default function POS() {
   const [lastInvoiceData, setLastInvoiceData] = useState(null)
   const [saleCompleted, setSaleCompleted] = useState(false) // Bloquea el carrito después de una venta exitosa
   const [changeReminder, setChangeReminder] = useState(null) // Recordatorio de vuelto en efectivo (opcional)
+  // Recordatorio de vuelto que queda PENDIENTE de mostrar: cuando hay auto-impresión,
+  // el aviso se difiere hasta que el ticket haya salido (se dispara desde handlePrintTicket).
+  const pendingChangeReminderRef = useRef(null)
   const [postSaleModalOpen, setPostSaleModalOpen] = useState(false) // Modal de opciones post-venta
   const postSaleHandledRef = useRef(false) // Para abrir el modal una sola vez por venta
   const [isLookingUp, setIsLookingUp] = useState(false)
@@ -4466,15 +4469,11 @@ export default function POS() {
     clearDraft() // Limpiar borrador de localStorage
   }
 
-  // Cerrar el recordatorio de vuelto. Al cerrarlo, disparar la auto-impresión que se
-  // difirió mientras el aviso estaba abierto (si el negocio la tiene activada). El
-  // modal de opciones post-venta se abre solo, vía el efecto de abajo (depende de
-  // changeReminder), al quedar el recordatorio en null.
+  // Cerrar el recordatorio de vuelto. El ticket ya se imprimió ANTES del aviso (el
+  // aviso es lo último que ve el cajero), así que aquí solo se cierra. El modal de
+  // opciones post-venta ya está abierto debajo (o se abre vía el efecto de abajo).
   const dismissChangeReminder = () => {
     setChangeReminder(null)
-    if (companySettings?.autoPrintTicket && lastInvoiceData) {
-      setTimeout(() => handlePrintTicket(lastInvoiceData), 100)
-    }
   }
 
   // Abrir el modal de opciones post-venta al completar una venta (una sola vez por venta;
@@ -4487,8 +4486,9 @@ export default function POS() {
       postSaleHandledRef.current = false
       return
     }
-    // Si hay recordatorio de vuelto abierto, esperar a que el cajero lo cierre antes
-    // de mostrar las opciones de impresión (el recordatorio sale PRIMERO).
+    // Sin auto-impresión el recordatorio se muestra de inmediato: en ese caso esperar
+    // a que el cajero lo cierre antes de abrir las opciones post-venta. Con auto-impresión
+    // el aviso sale DESPUÉS del ticket (desde handlePrintTicket) y este modal ya está abierto.
     if (changeReminder) return
     if (!postSaleHandledRef.current) {
       postSaleHandledRef.current = true
@@ -5116,6 +5116,7 @@ export default function POS() {
     checkoutGuardRef.current = true
     setIsProcessing(true)
     setChangeReminder(null) // Limpiar recordatorio de vuelto de la venta anterior
+    pendingChangeReminderRef.current = null // ...y el que hubiera quedado pendiente de imprimir
 
     // Helper para abortar validación y desbloquear UI
     const abortCheckout = (msg, opts) => {
@@ -5971,9 +5972,8 @@ export default function POS() {
         setEditingInvoiceData(null)
         editInvoiceLoadedRef.current = false
 
-        // Auto-imprimir en modo edición. Si hay recordatorio de vuelto, se difiere
-        // hasta que el cajero lo cierre (se dispara desde dismissChangeReminder).
-        if (companySettings?.autoPrintTicket && !changeReminderData) {
+        // Auto-imprimir en modo edición (el recordatorio de vuelto no aplica al editar).
+        if (companySettings?.autoPrintTicket) {
           setTimeout(() => handlePrintTicket(invoiceData), 500)
         }
 
@@ -6021,7 +6021,15 @@ export default function POS() {
         setLastInvoiceNumber(numberResult.number)
         setLastInvoiceData(invoiceData)
         setSaleCompleted(true)
-        if (changeReminderData) setChangeReminder(changeReminderData)
+        if (changeReminderData) {
+          if (companySettings?.autoPrintTicket) {
+            // Con auto-impresión: imprimir PRIMERO y mostrar el aviso al terminar (handlePrintTicket)
+            pendingChangeReminderRef.current = changeReminderData
+          } else {
+            // Sin auto-impresión no hay nada que imprimir antes: mostrar el aviso de inmediato
+            setChangeReminder(changeReminderData)
+          }
+        }
 
         // Redimir saldo a favor: descontar de las notas de crédito del cliente
         // (FIFO) lo que se aplicó como pago "Saldo a favor". No bloquea la venta:
@@ -6121,9 +6129,9 @@ export default function POS() {
         // Limpiar borrador
         clearDraft()
 
-        // Auto-imprimir ticket. Si hay recordatorio de vuelto, se difiere hasta que
-        // el cajero lo cierre (se dispara desde dismissChangeReminder).
-        if (companySettings?.autoPrintTicket && !changeReminderData) {
+        // Auto-imprimir ticket. El recordatorio de vuelto (si aplica) queda pendiente y
+        // se muestra al terminar la impresión, para que el ticket salga PRIMERO.
+        if (companySettings?.autoPrintTicket) {
           setTimeout(() => handlePrintTicket(invoiceData), 100)
         }
 
@@ -6966,6 +6974,13 @@ export default function POS() {
       if (companySettings?.autoResetPOS) setTimeout(() => clearCart(), 1000)
     } finally {
       setIsPrintingTicket(false)
+      // Recordatorio de vuelto DESPUÉS de imprimir (pedido del usuario): el ticket sale
+      // primero y luego aparece el aviso. Solo una vez por venta (se limpia el ref).
+      if (pendingChangeReminderRef.current) {
+        const pending = pendingChangeReminderRef.current
+        pendingChangeReminderRef.current = null
+        setChangeReminder(pending)
+      }
     }
   }
 
