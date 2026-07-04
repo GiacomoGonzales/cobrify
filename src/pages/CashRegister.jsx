@@ -1361,8 +1361,43 @@ export default function CashRegister() {
   }
 
   // Imprime una CONSTANCIA de movimiento de caja (ingreso/egreso) con línea de firma,
-  // para control interno. Usa un iframe oculto + window.print (evita bloqueadores de popup).
-  const printCashMovementReceipt = (movement) => {
+  // para control interno. En web: iframe oculto + window.print. En app nativa el
+  // window.print() del WebView no imprime nada, así que se delega a la impresora
+  // térmica (mismo criterio que handlePrintTicket/handlePrintThermal).
+  const printCashMovementReceipt = async (movement) => {
+    if (isNative) {
+      if (!isPrinterConnected || !printerConfig) {
+        toast.error('No hay impresora conectada. Configúrala en Ajustes.')
+        return
+      }
+      setIsPrintingThermal(true)
+      try {
+        // Asegurar datos del negocio (nombre, RUC, dirección, logo) para el ticket
+        let business = companySettings
+        if (!business) {
+          const businessResult = await getCompanySettings(getBusinessId())
+          if (businessResult.success) { business = businessResult.data; setCompanySettings(businessResult.data) }
+        }
+        const { printCashMovementTicket, connectPrinter } = await import('@/services/thermalPrinterService')
+        const connectResult = await connectPrinter(printerConfig.address)
+        if (!connectResult.success) {
+          toast.error('No se pudo conectar a la impresora')
+          return
+        }
+        const branchName = selectedBranch?.name || currentSession?.branchName || null
+        const cajero = user?.displayName || user?.email || 'Usuario'
+        const result = await printCashMovementTicket(movement, business, printerConfig.paperWidth || 58, branchName, cajero)
+        if (result?.success) toast.success('Constancia impresa correctamente')
+        else toast.error(result?.error || 'Error al imprimir la constancia')
+      } catch (error) {
+        console.error('Error al imprimir constancia térmica:', error)
+        toast.error('Error al imprimir la constancia')
+      } finally {
+        setIsPrintingThermal(false)
+      }
+      return
+    }
+
     const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => (
       { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
     ))

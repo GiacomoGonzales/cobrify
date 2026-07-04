@@ -3852,6 +3852,172 @@ const printBLECashClosure = async (sessionData, movements, business, paperWidth,
 };
 
 // ============================================
+// CONSTANCIA DE MOVIMIENTO DE CAJA (ingreso/egreso individual)
+// ============================================
+
+/**
+ * Imprime la CONSTANCIA de un movimiento de caja (ingreso/egreso) en impresora
+ * térmica. En web se usa un iframe + window.print (ver CashRegister.jsx); esta
+ * función es la contraparte nativa (Android BT / WiFi / iOS BLE), que faltaba y
+ * por eso en la app el botón "imprimir" del movimiento no hacía nada.
+ */
+export const printCashMovementTicket = async (movement, business, paperWidth = 58, branchName = null, cajero = '') => {
+  const isNative = Capacitor.isNativePlatform();
+  if (!isNative || !isPrinterConnected) {
+    return { success: false, error: 'Impresora no conectada' };
+  }
+
+  // Datos comunes a los 3 caminos
+  const format = getFormat(paperWidth);
+  const lineWidth = format.charsPerLine;
+
+  const getDateFromTimestamp = (ts) => {
+    if (!ts) return null;
+    if (ts.toDate && typeof ts.toDate === 'function') return ts.toDate();
+    return ts instanceof Date ? ts : new Date(ts);
+  };
+  const formatDateTime = (dateValue) => {
+    const date = getDateFromTimestamp(dateValue);
+    if (!date) return '-';
+    return date.toLocaleDateString('es-PE', {
+      day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+  };
+  const symbol = movement?.currency === 'USD' ? '$' : 'S/';
+  const monto = `${symbol} ${Number(movement?.amount || 0).toFixed(2)}`;
+  const isIncome = movement?.type === 'income';
+  const tipo = isIncome ? 'INGRESO' : 'EGRESO';
+  const metodo = movement?.method === 'yape' ? 'Yape' : 'Efectivo';
+  const correlativo = (movement?.id || '').toString().slice(-8).toUpperCase();
+  const fechaStr = formatDateTime(movement?.createdAt);
+  const printedAt = formatDateTime(new Date());
+  const dotLine = ''.padEnd(Math.min(lineWidth, 30), '.');
+  const createLine = (label, value) => {
+    const valueStr = String(value);
+    const spaces = lineWidth - label.length - valueStr.length;
+    return `${label}${' '.repeat(Math.max(1, spaces))}${valueStr}`;
+  };
+
+  // ---------- WiFi / interna ----------
+  if (connectionType === 'wifi' || connectionType === 'internal') {
+    try {
+      const builder = new EscPosBuilder();
+      builder.alignCenter()
+        .bold(true).text(convertSpanishText(business?.tradeName || business?.name || 'MI EMPRESA')).newLine().bold(false)
+        .text(`RUC: ${business?.ruc || '00000000000'}`).newLine();
+      if (business?.address) builder.text(convertSpanishText(business.address)).newLine();
+      if (branchName) builder.text(`Sucursal: ${convertSpanishText(branchName)}`).newLine();
+      builder.newLine().bold(true).text('CONSTANCIA DE CAJA').newLine().bold(false)
+        .text(format.separator).newLine();
+      builder.alignLeft()
+        .text(createLine('N:', correlativo)).newLine()
+        .text(createLine('Fecha:', fechaStr)).newLine()
+        .text(format.separator).newLine();
+      builder.alignCenter().bold(true).text(tipo).newLine()
+        .doubleHeight(true).text(monto).newLine().doubleHeight(false).bold(false)
+        .text(format.separator).newLine();
+      builder.alignLeft()
+        .text(convertSpanishText(`Concepto: ${movement?.description || '-'}`)).newLine()
+        .text(convertSpanishText(`Categoria: ${movement?.category || '-'}`)).newLine()
+        .text(`Metodo: ${metodo}`).newLine()
+        .text(convertSpanishText(`Registrado por: ${cajero || '-'}`)).newLine()
+        .text(format.separator).newLine();
+      builder.alignCenter().newLine()
+        .text(dotLine).newLine().text('Entregado por (Nombre/DNI)').newLine().newLine()
+        .text(dotLine).newLine().text('Recibido por (Nombre/DNI)').newLine().newLine();
+      builder.text('Documento interno').newLine().text('Sin valor tributario').newLine()
+        .newLine().text(printedAt).newLine().feed(2).cut();
+      const result = await sendEscPosData(builder.toBase64());
+      return (result && result.success) ? { success: true } : { success: false, error: 'Error al imprimir constancia via WiFi' };
+    } catch (error) {
+      console.error('Error printing WiFi cash movement:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // ---------- iOS BLE ----------
+  if (useAlternativeBLE) {
+    try {
+      let t = '';
+      t += `${convertSpanishText(business?.tradeName || business?.name || 'MI EMPRESA')}\n`;
+      t += `RUC: ${business?.ruc || '00000000000'}\n`;
+      if (business?.address) t += `${convertSpanishText(business.address)}\n`;
+      if (branchName) t += `Sucursal: ${convertSpanishText(branchName)}\n`;
+      t += '\n*** CONSTANCIA DE CAJA ***\n';
+      t += format.separator + '\n';
+      t += createLine('N:', correlativo) + '\n';
+      t += createLine('Fecha:', fechaStr) + '\n';
+      t += format.separator + '\n';
+      t += `${tipo}\n`;
+      t += `${monto}\n`;
+      t += format.separator + '\n';
+      t += convertSpanishText(`Concepto: ${movement?.description || '-'}`) + '\n';
+      t += convertSpanishText(`Categoria: ${movement?.category || '-'}`) + '\n';
+      t += `Metodo: ${metodo}\n`;
+      t += convertSpanishText(`Registrado por: ${cajero || '-'}`) + '\n';
+      t += format.separator + '\n\n';
+      t += dotLine + '\n' + 'Entregado por (Nombre/DNI)\n\n';
+      t += dotLine + '\n' + 'Recibido por (Nombre/DNI)\n\n';
+      t += 'Documento interno\n';
+      t += 'Sin valor tributario\n\n';
+      t += printedAt + '\n\n\n';
+      return await BLEPrinter.printBLEText(t);
+    } catch (error) {
+      console.error('Error printing BLE cash movement:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // ---------- Android Bluetooth ----------
+  try {
+    let printer = CapacitorThermalPrinter.begin();
+    if (paperWidth === 80) printer = printer.lineSpacing(2);
+    printer = printer.align('center');
+    if (business?.logoUrl) {
+      try {
+        const logoConfig = await prepareLogoForPrinting(business.logoUrl, paperWidth, business.logoPrintScale);
+        if (logoConfig?.ready && logoConfig.base64) printer = printer.image(`data:image/png;base64,${logoConfig.base64}`);
+        else if (logoConfig?.ready && logoConfig.url) printer = printer.image(logoConfig.url);
+      } catch (logoError) { console.warn('No se pudo cargar el logo:', logoError); }
+    }
+    printer = printer
+      .bold(true).text(convertSpanishText(business?.tradeName || business?.name || 'MI EMPRESA') + '\n').bold(false)
+      .text(`RUC: ${business?.ruc || '00000000000'}\n`);
+    if (business?.address) printer = printer.text(convertSpanishText(business.address) + '\n');
+    if (branchName) printer = printer.text(`Sucursal: ${convertSpanishText(branchName)}\n`);
+    printer = printer
+      .text('\n').bold(true).text('CONSTANCIA DE CAJA\n').bold(false)
+      .text(format.separator + '\n');
+    printer = printer.align('left')
+      .text(createLine('N:', correlativo) + '\n')
+      .text(createLine('Fecha:', fechaStr) + '\n')
+      .text(format.separator + '\n');
+    printer = printer.align('center')
+      .bold(true).text(tipo + '\n')
+      .doubleHeight(true).text(monto + '\n').doubleHeight(false).bold(false)
+      .text(format.separator + '\n');
+    printer = printer.align('left')
+      .text(convertSpanishText(`Concepto: ${movement?.description || '-'}`) + '\n')
+      .text(convertSpanishText(`Categoria: ${movement?.category || '-'}`) + '\n')
+      .text(`Metodo: ${metodo}\n`)
+      .text(convertSpanishText(`Registrado por: ${cajero || '-'}`) + '\n')
+      .text(format.separator + '\n');
+    printer = printer.align('center').text('\n')
+      .text(dotLine + '\n').text('Entregado por (Nombre/DNI)\n').text('\n')
+      .text(dotLine + '\n').text('Recibido por (Nombre/DNI)\n').text('\n')
+      .text('Documento interno\n').text('Sin valor tributario\n').text('\n')
+      .text(printedAt + '\n');
+    const cutFeed = getCutFeedLines();
+    for (let i = 0; i < cutFeed; i++) printer = printer.text('\n');
+    await printer.cutPaper().write();
+    return { success: true };
+  } catch (error) {
+    console.error('Error printing cash movement ticket:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// ============================================
 // IMPRESIÓN DE GUÍA DE REMISIÓN (TICKET TÉRMICO)
 // ============================================
 
