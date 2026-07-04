@@ -201,19 +201,22 @@ function generateDocumentLine(doc) {
   // Generar TaxSubtotals según tipos de operación
   let taxSubtotals = ''
 
-  // TaxSubtotal para operaciones gravadas (IGV) - incluir si hay gravado o IGV
-  if (effectiveTaxableAmount > 0 || igv > 0) {
-    taxSubtotals += `<cac:TaxSubtotal>` +
-      `<cbc:TaxAmount currencyID="${currency}">${formatAmount(igv)}</cbc:TaxAmount>` +
-      `<cac:TaxCategory>` +
-      `<cac:TaxScheme>` +
-      `<cbc:ID>1000</cbc:ID>` +
-      `<cbc:Name>IGV</cbc:Name>` +
-      `<cbc:TaxTypeCode>VAT</cbc:TaxTypeCode>` +
-      `</cac:TaxScheme>` +
-      `</cac:TaxCategory>` +
-      `</cac:TaxSubtotal>`
-  }
+  // TaxSubtotal del IGV (tributo 1000): SIEMPRE presente, aunque el monto sea 0.
+  // La regla SUNAT 2278 del Resumen Diario exige en CADA línea un TaxTotal con
+  // TaxScheme 1000 (IGV) o 1016 (IVAP) — es obligatorio (M). Antes solo se emitía
+  // si había gravado/IGV, y las boletas 100% exoneradas/inafectas (solo 9997/9998)
+  // eran RECHAZADAS al anularse: "2278 - Debe indicar Información acerca del
+  // importe total de IGV/IVAP".
+  taxSubtotals += `<cac:TaxSubtotal>` +
+    `<cbc:TaxAmount currencyID="${currency}">${formatAmount(igv)}</cbc:TaxAmount>` +
+    `<cac:TaxCategory>` +
+    `<cac:TaxScheme>` +
+    `<cbc:ID>1000</cbc:ID>` +
+    `<cbc:Name>IGV</cbc:Name>` +
+    `<cbc:TaxTypeCode>VAT</cbc:TaxTypeCode>` +
+    `</cac:TaxScheme>` +
+    `</cac:TaxCategory>` +
+    `</cac:TaxSubtotal>`
 
   // TaxSubtotal para operaciones exoneradas - solo si hay monto
   if (effectiveExemptAmount > 0) {
@@ -238,20 +241,6 @@ function generateDocumentLine(doc) {
       `<cbc:ID>9998</cbc:ID>` +
       `<cbc:Name>INA</cbc:Name>` +
       `<cbc:TaxTypeCode>FRE</cbc:TaxTypeCode>` +
-      `</cac:TaxScheme>` +
-      `</cac:TaxCategory>` +
-      `</cac:TaxSubtotal>`
-  }
-
-  // Fallback: si no hay ningún TaxSubtotal, agregar uno de IGV con 0
-  if (!taxSubtotals) {
-    taxSubtotals = `<cac:TaxSubtotal>` +
-      `<cbc:TaxAmount currencyID="${currency}">0.00</cbc:TaxAmount>` +
-      `<cac:TaxCategory>` +
-      `<cac:TaxScheme>` +
-      `<cbc:ID>1000</cbc:ID>` +
-      `<cbc:Name>IGV</cbc:Name>` +
-      `<cbc:TaxTypeCode>VAT</cbc:TaxTypeCode>` +
       `</cac:TaxScheme>` +
       `</cac:TaxCategory>` +
       `</cac:TaxSubtotal>`
