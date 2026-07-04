@@ -552,6 +552,28 @@ export default function POS() {
   // Pagination for products
   const [visibleProductsCount, setVisibleProductsCount] = useState(12)
   const PRODUCTS_PER_PAGE = 12
+  // Nº de columnas del grid de productos (mismos breakpoints que tenían las clases
+  // columns-2 sm:columns-3 xl:columns-4/2). Se necesita en JS porque el masonry se
+  // reparte a mano (round-robin) para que el orden sea HORIZONTAL: producto 1 →
+  // col 1, producto 2 → col 2, etc. CSS multi-column llenaba columna por columna
+  // y con pocos productos quedaban apilados a la izquierda.
+  const [gridColumns, setGridColumns] = useState(2)
+  useEffect(() => {
+    const mqSm = window.matchMedia('(min-width: 640px)')
+    const mqXl = window.matchMedia('(min-width: 1280px)')
+    const update = () => {
+      if (mqXl.matches) setGridColumns(expandedCart ? 2 : 4)
+      else if (mqSm.matches) setGridColumns(3)
+      else setGridColumns(2)
+    }
+    update()
+    mqSm.addEventListener('change', update)
+    mqXl.addEventListener('change', update)
+    return () => {
+      mqSm.removeEventListener('change', update)
+      mqXl.removeEventListener('change', update)
+    }
+  }, [expandedCart])
 
   // Pagos múltiples - lista simple y vertical
   const [payments, setPayments] = useState([{ method: getDefaultPaymentMethod(), amount: '' }])
@@ -2823,10 +2845,14 @@ export default function POS() {
   //    cubrir el caso típico) sin colapsar el render con 4k productos.
   // En ambos casos el botón "Ver más" sigue disponible para cargar el resto.
   const renderCap = React.useMemo(() => {
+    // Opción de Configuración: mostrar SIEMPRE todos los productos (sin "Ver más").
+    // Pensada para catálogos chicos (restaurantes, etc.). Se lee de companySettings
+    // (mismo doc que autoPrint/autoReset) para evitar mismatch con businessSettings.
+    if (companySettings?.showAllProductsInPOS) return Infinity
     return deferredSearchTerm.trim()
       ? Math.max(visibleProductsCount, 60)
       : visibleProductsCount
-  }, [deferredSearchTerm, visibleProductsCount])
+  }, [deferredSearchTerm, visibleProductsCount, companySettings?.showAllProductsInPOS])
 
   const displayedProducts = React.useMemo(() => {
     return filteredProducts.slice(0, renderCap)
@@ -2834,14 +2860,28 @@ export default function POS() {
 
   const hasMoreProducts = filteredProducts.length > renderCap
 
+  // Columnas del masonry repartidas round-robin (orden horizontal): el producto i
+  // va a la columna i % N. Cada columna apila compacto (sin huecos) y con pocos
+  // productos quedan al costado, no uno encima de otro.
+  const productColumns = React.useMemo(() => {
+    const cols = Array.from({ length: gridColumns }, () => [])
+    displayedProducts.forEach((p, i) => cols[i % gridColumns].push(p))
+    return cols
+  }, [displayedProducts, gridColumns])
+
   const loadMoreProducts = () => {
     setVisibleProductsCount(prev => prev + PRODUCTS_PER_PAGE)
+  }
+
+  // "Ver todos": carga de una vez todo lo que queda (se usa con categoría seleccionada)
+  const loadAllProducts = () => {
+    setVisibleProductsCount(filteredProducts.length)
   }
 
   // Reset pagination when search or filter changes
   useEffect(() => {
     if (searchTerm || selectedCategoryFilter !== 'all' || selectedBrandFilter !== 'all') {
-      setVisibleProductsCount(6) // Reset to initial
+      setVisibleProductsCount(12) // Reset to initial
     }
   }, [searchTerm, selectedCategoryFilter, selectedBrandFilter])
 
@@ -7660,18 +7700,25 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               {hasMoreProducts && (
                 <div className="flex justify-center mt-4">
                   <button
-                    onClick={loadMoreProducts}
+                    onClick={selectedCategoryFilter !== 'all' ? loadAllProducts : loadMoreProducts}
                     className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
                   >
-                    Ver más productos ({filteredProducts.length - renderCap} restantes)
+                    {selectedCategoryFilter !== 'all'
+                      ? `Ver todos (${filteredProducts.length - renderCap} restantes)`
+                      : `Ver más productos (${filteredProducts.length - renderCap} restantes)`}
                   </button>
                 </div>
               )}
             </>
           ) : (
             <>
-              <div key={selectedCategoryFilter} className={`columns-2 sm:columns-3 ${expandedCart ? 'xl:columns-2' : 'xl:columns-4'} gap-3 [&>*]:overflow-visible ${saleCompleted ? 'opacity-50 pointer-events-none' : ''}`} style={{ overflow: 'visible' }}>
-                {displayedProducts.map(product => {
+              {/* Masonry round-robin: grid de N columnas flex-col. El reparto horizontal
+                  (producto i → columna i % N) lo hace productColumns; cada columna apila
+                  compacto sin huecos aunque unas cards tengan foto y otras no. */}
+              <div key={selectedCategoryFilter} className={`grid gap-3 ${saleCompleted ? 'opacity-50 pointer-events-none' : ''}`} style={{ overflow: 'visible', gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 1fr))` }}>
+                {productColumns.map((column, columnIndex) => (
+                <div key={columnIndex} className="flex flex-col gap-3 min-w-0" style={{ overflow: 'visible' }}>
+                {column.map(product => {
                   // Determinar si el producto debe estar deshabilitado
                   // Si allowNegativeStock es true, nunca deshabilitar por stock
                   // Si allowNegativeStock es false, deshabilitar si stock del almacén === 0
@@ -7707,7 +7754,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   onClick={() => addToCart(product)}
                   disabled={isDisabled}
                   style={{ overflow: 'visible' }}
-                  className={`w-full p-2 sm:p-3 bg-white border-2 rounded-lg transition-all text-left relative break-inside-avoid mb-3 touch-no-hover ${
+                  className={`w-full p-2 sm:p-3 bg-white border-2 rounded-lg transition-all text-left relative touch-no-hover ${
                     isExpired
                       ? 'border-red-300 bg-red-50 opacity-60 cursor-not-allowed'
                       : isOutOfStock
@@ -7871,16 +7918,20 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 </button>
                   )
                 })}
+                </div>
+                ))}
               </div>
 
               {/* Load More Button */}
               {hasMoreProducts && (
                 <div className="flex justify-center mt-4">
                   <button
-                    onClick={loadMoreProducts}
+                    onClick={selectedCategoryFilter !== 'all' ? loadAllProducts : loadMoreProducts}
                     className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
                   >
-                    Ver más productos ({filteredProducts.length - renderCap} restantes)
+                    {selectedCategoryFilter !== 'all'
+                      ? `Ver todos (${filteredProducts.length - renderCap} restantes)`
+                      : `Ver más productos (${filteredProducts.length - renderCap} restantes)`}
                   </button>
                 </div>
               )}

@@ -391,6 +391,7 @@ export default function Settings() {
   const [autoResetPOS, setAutoResetPOS] = useState(false)
   const [autoPrintTicket, setAutoPrintTicket] = useState(false)
   const [showChangeReminder, setShowChangeReminder] = useState(false)
+  const [showAllProductsInPOS, setShowAllProductsInPOS] = useState(false)
   const [enableCustomerDisplay, setEnableCustomerDisplay] = useState(false)
 
   // Estados para configuración de notas de venta
@@ -1244,6 +1245,7 @@ export default function Settings() {
         setAutoResetPOS(businessData.autoResetPOS || false)
         setAutoPrintTicket(businessData.autoPrintTicket || false)
         setShowChangeReminder(businessData.showChangeReminder || false)
+        setShowAllProductsInPOS(businessData.showAllProductsInPOS || false)
 
         // Cargar configuración de notas de venta
         setHideRucIgvInNotaVenta(businessData.hideRucIgvInNotaVenta || false)
@@ -5020,6 +5022,16 @@ export default function Settings() {
                       : '✗ Deshabilitado: No se mostrará ningún aviso de vuelto al completar la venta.'}
                   />
 
+                  {/* Mostrar todos los productos en el POS (sin botón "Ver más") */}
+                  <SettingToggle
+                    checked={showAllProductsInPOS}
+                    onChange={(e) => setShowAllProductsInPOS(e.target.checked)}
+                    title="Mostrar todos los productos en el POS"
+                    description={showAllProductsInPOS
+                      ? '✓ Habilitado: El catálogo del POS muestra todos los productos de una vez, sin botón "Ver más". Recomendado para catálogos de hasta ~300 productos; con muchos más, la pantalla puede sentirse lenta.'
+                      : '✗ Deshabilitado: El POS muestra los productos por partes y carga el resto con el botón "Ver más".'}
+                  />
+
                   {/* Tipo de documento por defecto en POS */}
                   <div className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
                     <div className="flex-1">
@@ -5620,6 +5632,7 @@ export default function Settings() {
                       autoResetPOS: autoResetPOS,
                       autoPrintTicket: autoPrintTicket,
                       showChangeReminder: showChangeReminder,
+                      showAllProductsInPOS: showAllProductsInPOS,
                       defaultDocumentType: defaultDocumentType,
                       defaultPaymentMethod: defaultPaymentMethod || '',
                       hideRucIgvInNotaVenta: hideRucIgvInNotaVenta,
