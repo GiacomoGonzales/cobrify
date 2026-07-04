@@ -157,17 +157,22 @@ export const productSchema = z.object({
   description: z.string().optional(),
   // Precio: permitir 0 para marcar el producto como bonificación/cortesía.
   // Con 0 se agrega al carrito sin costo y se imprime con la etiqueta BONIFICACIÓN.
+  // Precio en soles. Opcional cuando el producto tiene variantes O cuando se define
+  // un `priceUSD` (producto anclado al dólar: el precio en soles lo calcula el POS con
+  // el TC del momento). Un string vacío se transforma a undefined (no falla la validación).
   price: z
     .number({ required_error: 'Precio es requerido' })
     .nonnegative('El precio no puede ser negativo')
     .or(
       z
         .string()
-        .min(1, 'Precio es requerido')
-        .transform(val => parseFloat(val))
-        .pipe(z.number().nonnegative('El precio no puede ser negativo'))
+        .transform(val => {
+          if (val === '' || val == null) return undefined
+          const num = parseFloat(val)
+          return isNaN(num) ? undefined : num
+        })
     )
-    .optional(), // Optional when hasVariants is true
+    .optional(),
   // Precios adicionales (opcionales, para sistema de múltiples precios)
   price2: z
     .number()
@@ -318,8 +323,10 @@ export const productSchema = z.object({
   variantAttributes: z.array(z.string()).optional(), // ["size", "color", "material"]
   variants: z.array(productVariantSchema).optional(), // Array de variantes
 }).superRefine((data, ctx) => {
-  // Validar precio solo si NO tiene variantes (variantes se validan en onSubmit con state local)
-  if (!data.hasVariants && !data.price) {
+  // Validar precio solo si NO tiene variantes (variantes se validan en onSubmit con state
+  // local) Y NO hay precio en dólares. Si el producto está anclado al dólar (priceUSD),
+  // el precio en soles es opcional: el POS lo calcula con el TC del momento.
+  if (!data.hasVariants && !data.price && !data.priceUSD) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: 'Precio es requerido',

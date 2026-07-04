@@ -35,6 +35,7 @@ import { exportProductsForImport, exportProductsForRappi } from '@/services/prod
 import ImportProductsModal from '@/components/ImportProductsModal'
 import { getWarehouses, updateWarehouseStock, getDefaultWarehouse, createWarehouse, createStockMovement } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
+import { getRateForDate } from '@/services/exchangeRateService'
 import ProductModifiersSection from '@/components/ProductModifiersSection'
 import { uploadProductImage, deleteProductImage, createImagePreview, revokeImagePreview } from '@/services/productImageService'
 import ProductImagesManager, { productToImageItems, resolveImageUrls } from '@/components/product/ProductImagesManager'
@@ -363,6 +364,7 @@ export default function Products() {
     reset,
     setValue,
     watch,
+    getValues,
   } = useForm({
     resolver: zodResolver(productSchema),
     defaultValues: {
@@ -409,7 +411,28 @@ export default function Products() {
   // Solo aplica cuando priceCalculationBase === 'cost'. En modo 'public' los
   // precios 2/3/4 son derivados al servir y no requieren hidratación en el modal.
   const watchedCost = watch('cost')
+  const watchedPriceUSD = watch('priceUSD')
   const autoMarginHydratedRef = useRef(false)
+
+  // Producto anclado al dólar: al escribir el precio en USD, si el precio en soles
+  // está vacío, lo autocompletamos con el TC del día (SBS). Así el usuario no tiene
+  // que calcularlo a mano; en el POS el soles se recalcula con el TC del momento.
+  const autofillPenPriceFromUsd = async () => {
+    const usd = parseFloat(getValues('priceUSD'))
+    if (!Number.isFinite(usd) || usd <= 0) return
+    const currentPen = getValues('price')
+    if (currentPen !== '' && currentPen != null && parseFloat(currentPen) > 0) return // respetar valor puesto a mano
+    try {
+      const rate = await getRateForDate(new Date())
+      const tc = Number(rate?.sell)
+      if (Number.isFinite(tc) && tc > 0) {
+        setValue('price', Number((usd * tc).toFixed(2)), { shouldValidate: true })
+        toast.info(`Precio en soles calculado con el TC del día (S/ ${tc.toFixed(3)}). En el POS se recalcula con el tipo de cambio del momento.`, 5000)
+      }
+    } catch (e) {
+      console.warn('No se pudo obtener el TC para autocompletar el precio en soles:', e)
+    }
+  }
   const autoMarginPrevCostRef = useRef(null)
   useEffect(() => {
     if (!isModalOpen) {
@@ -1201,8 +1224,13 @@ export default function Products() {
         // Productos con variantes siempre manejan stock
         productData.trackStock = true
       } else {
-        // Regular product without variants
-        productData.price = parseFloat(data.price)
+        // Regular product without variants.
+        // Precio en soles: puede venir vacío si el producto está anclado al dólar
+        // (priceUSD). En ese caso se guarda null; el POS calcula el soles con el TC.
+        const rawPen = data.price
+        productData.price = (rawPen === '' || rawPen == null || Number.isNaN(parseFloat(rawPen)))
+          ? null
+          : parseFloat(rawPen)
 
         // Manejar stock e initialStock
         if (noStock) {
@@ -5804,13 +5832,15 @@ export default function Products() {
                     label={businessSettings?.multiplePricesEnabled ? (businessSettings?.priceLabels?.price1 || 'Precio 1') : "Precio de Venta"}
                     type="number"
                     step="any"
-                    required
+                    required={!(Number.isFinite(parseFloat(watchedPriceUSD)) && parseFloat(watchedPriceUSD) > 0)}
                     placeholder="0.00"
                     error={errors.price?.message}
                     {...register('price')}
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Deja el precio en <strong>0</strong> para usarlo como bonificación/cortesía al agregarlo al POS.
+                    {Number.isFinite(parseFloat(watchedPriceUSD)) && parseFloat(watchedPriceUSD) > 0
+                      ? <>Opcional: al tener un <strong>Precio fijo en USD</strong>, el precio en soles se calcula solo con el tipo de cambio. Déjalo vacío o ajústalo si quieres un valor fijo.</>
+                      : <>Deja el precio en <strong>0</strong> para usarlo como bonificación/cortesía al agregarlo al POS.</>}
                   </p>
                 </div>
               )}
@@ -5827,11 +5857,13 @@ export default function Products() {
                     step="any"
                     placeholder="0.00 (opcional)"
                     error={errors.priceUSD?.message}
-                    {...register('priceUSD')}
+                    {...register('priceUSD', {
+                      onBlur: () => autofillPenPriceFromUsd(),
+                    })}
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Si se especifica, en ventas en dólares se usa este precio en
-                    vez de convertir el precio en soles con el tipo de cambio.
+                    Si se especifica, en ventas en dólares se usa este precio. Puedes dejar
+                    el precio en soles vacío: se calcula solo con el tipo de cambio del día.
                   </p>
                 </div>
               )}
