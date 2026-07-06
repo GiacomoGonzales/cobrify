@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, EyeOff, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store, Copy, MoreVertical, Check, Printer, Layers, Boxes, Scale, Percent, Leaf, Ban, Utensils } from 'lucide-react'
 import JsBarcode from 'jsbarcode'
+import jsPDF from 'jspdf'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
 import { Camera as CapacitorCamera, CameraResultType, CameraSource } from '@capacitor/camera'
@@ -301,7 +302,7 @@ export default function Products() {
   // Estado para impresión de etiquetas
   const [labelModalOpen, setLabelModalOpen] = useState(false)
   const [labelQuantities, setLabelQuantities] = useState({}) // { productId: cantidad }
-  const [labelSize, setLabelSize] = useState('30x20') // Tamaño de etiqueta seleccionado
+  const [labelSize, setLabelSize] = useState('53x26') // Tamaño de etiqueta seleccionado
   // Estado para impresión en ticketera térmica (POS, 58/80mm con barcode nativo ESC/POS)
   const [thermalPaperWidth, setThermalPaperWidth] = useState(58)
   const [printingThermal, setPrintingThermal] = useState(false)
@@ -3072,10 +3073,10 @@ export default function Products() {
     setLabelModalOpen(true)
   }
 
-  const handlePrintLabels = () => {
-    const selectedProds = products.filter(p => selectedProducts.has(p.id))
-
-    // Configuración por tamaño de etiqueta (mm y parámetros de barcode)
+  // Etiquetas de tamaños clásicos (30x20, 50x38, 58x40): SOLO el código de barras,
+  // comportamiento original (HTML). NO llevan nombre ni datos del producto —
+  // a propósito, para no cambiar lo que ya estaba configurado y funcionando.
+  const handlePrintSimpleLabels = (selectedProds) => {
     const LABEL_CONFIGS = {
       '30x20': { width: 30, height: 20, barWidth: 1.5, barHeight: 80, fontSize: 10 },
       '50x38': { width: 50, height: 38, barWidth: 2, barHeight: 150, fontSize: 14 },
@@ -3083,7 +3084,6 @@ export default function Products() {
     }
     const cfg = LABEL_CONFIGS[labelSize] || LABEL_CONFIGS['30x20']
 
-    // Generar códigos de barras como SVG strings usando JsBarcode
     const generateBarcodeSVG = (code) => {
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
       try {
@@ -3109,7 +3109,6 @@ export default function Products() {
       const rawCode = product.code || product.sku || product.id.slice(-8)
       const code = rawCode.replace(/-/g, '')
       const barcodeSVG = generateBarcodeSVG(code)
-
       for (let i = 0; i < qty; i++) {
         labelsHTML += `
           <div class="label">
@@ -3148,6 +3147,201 @@ export default function Products() {
 
     setLabelModalOpen(false)
     toast.success('Preparando etiquetas para imprimir...')
+  }
+
+  // Etiqueta completa 53×26 mm (nombre, código, categoría, marca, variante,
+  // rango de precio y código de barras), generada como PDF.
+  const handlePrintRichLabels = (selectedProds) => {
+    // Dimensiones de página (mm). El layout se calcula proporcional al alto.
+    const SIZES = {
+      '53x26': [53, 26]
+    }
+    const [W, H] = SIZES[labelSize] || SIZES['53x26']
+
+    // Rango de precio: mín–máx entre los niveles configurados (Público,
+    // Mayorista, etc.). Si la variante no tiene precios propios, cae al producto.
+    const buildPriceText = (entity, parent) => {
+      const pick = (src) => ['price', 'price2', 'price3', 'price4']
+        .map(k => (src?.[k] === '' || src?.[k] == null) ? NaN : parseFloat(src[k]))
+        .filter(n => Number.isFinite(n) && n > 0)
+      let list = pick(entity)
+      if (list.length === 0 && parent) list = pick(parent)
+      if (list.length === 0) return ''
+      const min = Math.min(...list), max = Math.max(...list)
+      return min === max ? formatCurrency(min) : `${formatCurrency(min)} - ${formatCurrency(max)}`
+    }
+
+    // Barcode real (CODE128) renderizado a canvas → PNG para incrustar en el PDF.
+    const barcodeCache = {}
+    const barcodeDataURL = (code) => {
+      if (barcodeCache[code] !== undefined) return barcodeCache[code]
+      let url = null
+      try {
+        const canvas = document.createElement('canvas')
+        JsBarcode(canvas, code, { format: 'CODE128', displayValue: false, margin: 0, width: 2, height: 60 })
+        url = canvas.toDataURL('image/png')
+      } catch (e) {
+        console.error('Error generando barcode:', e)
+      }
+      barcodeCache[code] = url
+      return url
+    }
+
+    // Armar la lista de etiquetas: una por variante (si tiene) × su cantidad.
+    const items = []
+    for (const product of selectedProds) {
+      const qty = labelQuantities[product.id] || 1
+      const name = product.name || ''
+      const marca = product.marca || ''
+      // product.category guarda el ID de la categoría → resolver a su nombre.
+      // Si no se encuentra y parece un ID (cat-...), no mostrar nada; si es
+      // texto libre legado, mostrarlo tal cual.
+      const rawCat = product.category || ''
+      const category = getCategoryById(categories, rawCat)?.name || (/^cat[-_]/i.test(rawCat) ? '' : rawCat)
+      const baseSku = product.sku || product.code || ''
+      const hasVars = product.hasVariants && Array.isArray(product.variants) && product.variants.length > 0
+
+      if (hasVars) {
+        for (const v of product.variants) {
+          const variant = Object.entries(v.attributes || {}).map(([k, val]) => `${k}: ${val}`).join('  ')
+          const barcodeVal = String(v.barcode || v.sku || product.code || baseSku || product.id.slice(-8)).replace(/-/g, '')
+          const item = { name, marca, code: v.sku || baseSku, variant, category, number: barcodeVal, barcodeVal, priceText: buildPriceText(v, product) }
+          for (let i = 0; i < qty; i++) items.push(item)
+        }
+      } else {
+        const barcodeVal = String(product.code || baseSku || product.id.slice(-8)).replace(/-/g, '')
+        const item = { name, marca, code: baseSku, variant: '', category, number: barcodeVal, barcodeVal, priceText: buildPriceText(product, null) }
+        for (let i = 0; i < qty; i++) items.push(item)
+      }
+    }
+
+    if (items.length === 0) {
+      toast.error('No hay productos para imprimir')
+      return
+    }
+
+    // Reducir el tamaño de fuente hasta que el texto quepa en el ancho dado (mm).
+    const fitFontSize = (doc, text, maxWidthMm, startPt, minPt) => {
+      let pt = startPt
+      doc.setFontSize(pt)
+      while (pt > minPt && doc.getTextWidth(text) > maxWidthMm) {
+        pt -= 0.5
+        doc.setFontSize(pt)
+      }
+      return pt
+    }
+
+    const drawLabel = (doc, d) => {
+      const s = H / 26           // factor de escala (layout afinado para 53×26)
+      const MX = Math.max(2, W * 0.047)
+      const rightX = W - MX
+      const usable = W - 2 * MX
+      doc.setTextColor(0, 0, 0)
+
+      // Fila 1: nombre (izq, negrita, auto-ajuste) + marca (der, auto-ajuste)
+      let marcaPt = 0, marcaW = 0
+      if (d.marca) {
+        doc.setFont('helvetica', 'bold')
+        marcaPt = fitFontSize(doc, d.marca, usable * 0.4, 6.5 * s, 4.5)
+        doc.setFontSize(marcaPt)
+        marcaW = doc.getTextWidth(d.marca)
+      }
+      doc.setFont('helvetica', 'bold')
+      const nameMax = usable - (marcaW ? marcaW + 2 : 0)
+      const namePt = fitFontSize(doc, d.name, nameMax, 8.5 * s, 4.5)
+      doc.setFontSize(namePt)
+      doc.text(d.name, MX, H * 0.17)
+      if (d.marca) {
+        doc.setFontSize(marcaPt)
+        doc.text(d.marca, rightX, H * 0.165, { align: 'right' })
+      }
+
+      // Fila 2: código/SKU (izq, negrita) + variante (der) — cada uno a su
+      // columna con auto-ajuste, para que nunca se encimen.
+      const y2 = H * 0.35
+      if (d.code) {
+        doc.setFont('helvetica', 'bold')
+        const cPt = fitFontSize(doc, String(d.code), usable * 0.55, 7 * s, 4.5)
+        doc.setFontSize(cPt)
+        doc.text(String(d.code), MX, y2)
+      }
+      if (d.variant) {
+        doc.setFont('helvetica', 'normal')
+        const vPt = fitFontSize(doc, d.variant, usable * 0.42, 6.5 * s, 4.5)
+        doc.setFontSize(vPt)
+        doc.text(d.variant, rightX, y2, { align: 'right' })
+      }
+
+      // Fila 3: categoría (gris)
+      if (d.category) {
+        doc.setFont('helvetica', 'normal')
+        const catPt = fitFontSize(doc, String(d.category), usable, 5.5 * s, 4)
+        doc.setFontSize(catPt)
+        doc.setTextColor(90, 90, 90)
+        doc.text(String(d.category), MX, H * 0.485)
+        doc.setTextColor(0, 0, 0)
+      }
+
+      // Código de barras (ancho completo)
+      const img = barcodeDataURL(d.barcodeVal)
+      if (img) {
+        try { doc.addImage(img, 'PNG', MX, H * 0.53, usable, H * 0.30) } catch (e) { /* noop */ }
+      } else {
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(8 * s)
+        doc.text(String(d.barcodeVal), W / 2, H * 0.70, { align: 'center' })
+      }
+
+      // Fila final: número (izq) + rango de precio (der, negrita)
+      const y4 = H * 0.945
+      doc.setFont('helvetica', 'normal')
+      const nPt = fitFontSize(doc, String(d.number || ''), usable * 0.5, 6.5 * s, 4.5)
+      doc.setFontSize(nPt)
+      doc.text(String(d.number || ''), MX, y4)
+      if (d.priceText) {
+        doc.setFont('helvetica', 'bold')
+        const pPt = fitFontSize(doc, d.priceText, usable * 0.48, 8 * s, 5)
+        doc.setFontSize(pPt)
+        doc.text(d.priceText, rightX, y4, { align: 'right' })
+      }
+    }
+
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [W, H] })
+    items.forEach((d, i) => {
+      if (i > 0) doc.addPage([W, H], 'landscape')
+      drawLabel(doc, d)
+    })
+
+    // Imprimir como PDF (no lleva encabezados/pies del navegador: sin fecha,
+    // "about:blank" ni número de página). autoPrint abre el diálogo solo.
+    try {
+      doc.autoPrint()
+      const url = doc.output('bloburl')
+      const win = window.open(url, '_blank')
+      if (!win) {
+        toast.error('Permite ventanas emergentes para imprimir')
+        return
+      }
+    } catch (e) {
+      console.error('Error al generar PDF de etiquetas:', e)
+      toast.error('No se pudo generar las etiquetas')
+      return
+    }
+
+    setLabelModalOpen(false)
+    toast.success(`Preparando ${items.length} etiqueta${items.length === 1 ? '' : 's'} para imprimir...`)
+  }
+
+  // Dispatcher: solo 53×26 usa la etiqueta completa (nombre + datos, PDF).
+  // Los demás tamaños conservan el comportamiento original (solo código de barras).
+  const handlePrintLabels = () => {
+    const selectedProds = products.filter(p => selectedProducts.has(p.id))
+    if (selectedProds.length === 0) {
+      toast.error('Selecciona al menos un producto')
+      return
+    }
+    if (labelSize === '53x26') return handlePrintRichLabels(selectedProds)
+    return handlePrintSimpleLabels(selectedProds)
   }
 
   // Imprimir los códigos de barra de los productos seleccionados directamente en
@@ -8949,6 +9143,7 @@ export default function Products() {
               onChange={(e) => setLabelSize(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
             >
+              <option value="53x26">53 × 26 mm (5.3 × 2.6 cm)</option>
               <option value="30x20">30 × 20 mm (3 × 2 cm)</option>
               <option value="50x38">50 × 38 mm (5 × 3.8 cm)</option>
               <option value="58x40">58 × 40 mm (5.8 × 4 cm)</option>
@@ -8987,13 +9182,18 @@ export default function Products() {
           <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-xs text-blue-700">
               <strong>Tamaño seleccionado:</strong> {labelSize.replace('x', ' × ')} mm — Asegúrate de tener la impresora de etiquetas configurada en Windows con ese tamaño de papel.
-              Los productos sin código de barras usarán su SKU o un código generado automáticamente.
+              Cada etiqueta incluye nombre, código, categoría, marca, variante, rango de precio y código de barras. Los productos con variantes imprimen una etiqueta por variante.
+              Se genera un PDF para imprimir limpio (sin fecha ni "about:blank").
             </p>
           </div>
 
-          {/* Total */}
+          {/* Total (cuenta 1 etiqueta por variante × cantidad) */}
           <p className="text-sm text-gray-700">
-            Total: <strong>{Object.values(labelQuantities).reduce((a, b) => a + b, 0)}</strong> etiquetas de <strong>{selectedProducts.size}</strong> productos
+            Total: <strong>{products.filter(p => selectedProducts.has(p.id)).reduce((sum, p) => {
+              const qty = labelQuantities[p.id] || 1
+              const nVars = (p.hasVariants && Array.isArray(p.variants) && p.variants.length > 0) ? p.variants.length : 1
+              return sum + qty * nVars
+            }, 0)}</strong> etiquetas de <strong>{selectedProducts.size}</strong> productos
           </p>
 
           {/* Bloque alternativo: imprimir en ticketera térmica POS (58/80mm) */}
