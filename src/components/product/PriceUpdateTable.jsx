@@ -327,7 +327,11 @@ export default function PriceUpdateTable({
       if (candidate < base - 1e-9) candidate += 1
       next = candidate
     }
-    next = round2(next)
+    // No redondear a 2 decimales: un producto sub-céntimo (0.125, 0.095) se
+    // volvía 0.13 / 0.10 al aplicar un ajuste masivo %. Se preserva hasta 6
+    // decimales (el redondeo a céntimos ocurre al final, sobre el total de la
+    // venta). El modo 'round' (terminación fija) ya produce endings limpios.
+    next = roundPrice(next)
     return next < 0 ? 0 : next
   }
 
@@ -347,7 +351,7 @@ export default function PriceUpdateTable({
       if (bulkMode === 'margin') {
         const cost = Number(p.cost) || 0
         if (cost <= 0) { skippedNoCost++; return null }
-        return round2(applyMarginToCost(cost, pct, marginFormula))
+        return roundPrice(applyMarginToCost(cost, pct, marginFormula))
       }
       return adjustValue(Number(base) || 0, bulkMode, pct, ending)
     }
