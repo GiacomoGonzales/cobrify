@@ -3178,7 +3178,7 @@ export default function Products() {
       let url = null
       try {
         const canvas = document.createElement('canvas')
-        JsBarcode(canvas, code, { format: 'CODE128', displayValue: false, margin: 0, width: 2, height: 60 })
+        JsBarcode(canvas, code, { format: 'CODE128', displayValue: false, margin: 0, width: 3, height: 110 })
         url = canvas.toDataURL('image/png')
       } catch (e) {
         console.error('Error generando barcode:', e)
@@ -3231,76 +3231,71 @@ export default function Products() {
       return pt
     }
 
+    // Layout estilo etiqueta comercial: nombre arriba a todo lo ancho, código +
+    // marca en la 2ª fila, categoría + variante en la 3ª, código de barras ALTO
+    // llenando el centro, y número + precio grandes en la última línea.
     const drawLabel = (doc, d) => {
       const s = H / 26           // factor de escala (layout afinado para 53×26)
-      const MX = Math.max(2, W * 0.047)
+      const MX = Math.max(2, W * 0.045)
       const rightX = W - MX
       const usable = W - 2 * MX
       doc.setTextColor(0, 0, 0)
 
-      // Fila 1: nombre (izq, negrita, auto-ajuste) + marca (der, auto-ajuste)
-      let marcaPt = 0, marcaW = 0
-      if (d.marca) {
-        doc.setFont('helvetica', 'bold')
-        marcaPt = fitFontSize(doc, d.marca, usable * 0.4, 6.5 * s, 4.5)
-        doc.setFontSize(marcaPt)
-        marcaW = doc.getTextWidth(d.marca)
-      }
+      // Fila 1: nombre (negrita, a todo lo ancho)
       doc.setFont('helvetica', 'bold')
-      const nameMax = usable - (marcaW ? marcaW + 2 : 0)
-      const namePt = fitFontSize(doc, d.name, nameMax, 8.5 * s, 4.5)
+      const namePt = fitFontSize(doc, d.name, usable, 9 * s, 5)
       doc.setFontSize(namePt)
-      doc.text(d.name, MX, H * 0.17)
-      if (d.marca) {
-        doc.setFontSize(marcaPt)
-        doc.text(d.marca, rightX, H * 0.165, { align: 'right' })
-      }
+      doc.text(d.name, MX, H * 0.145)
 
-      // Fila 2: código/SKU (izq, negrita) + variante (der) — cada uno a su
-      // columna con auto-ajuste, para que nunca se encimen.
-      const y2 = H * 0.35
+      // Fila 2: código/SKU (izq, negrita) + marca (der, negrita)
+      const y2 = H * 0.29
       if (d.code) {
         doc.setFont('helvetica', 'bold')
-        const cPt = fitFontSize(doc, String(d.code), usable * 0.55, 7 * s, 4.5)
+        const cPt = fitFontSize(doc, String(d.code), usable * 0.55, 8.5 * s, 5)
         doc.setFontSize(cPt)
         doc.text(String(d.code), MX, y2)
       }
-      if (d.variant) {
-        doc.setFont('helvetica', 'normal')
-        const vPt = fitFontSize(doc, d.variant, usable * 0.42, 6.5 * s, 4.5)
-        doc.setFontSize(vPt)
-        doc.text(d.variant, rightX, y2, { align: 'right' })
+      if (d.marca) {
+        doc.setFont('helvetica', 'bold')
+        const mPt = fitFontSize(doc, d.marca, usable * 0.4, 9 * s, 5)
+        doc.setFontSize(mPt)
+        doc.text(d.marca, rightX, y2, { align: 'right' })
       }
 
-      // Fila 3: categoría (gris)
+      // Fila 3: categoría (izq) + variante (der)
+      const y3 = H * 0.425
       if (d.category) {
         doc.setFont('helvetica', 'normal')
-        const catPt = fitFontSize(doc, String(d.category), usable, 5.5 * s, 4)
+        const catPt = fitFontSize(doc, String(d.category), usable * 0.5, 8 * s, 4.5)
         doc.setFontSize(catPt)
-        doc.setTextColor(90, 90, 90)
-        doc.text(String(d.category), MX, H * 0.485)
-        doc.setTextColor(0, 0, 0)
+        doc.text(String(d.category), MX, y3)
+      }
+      if (d.variant) {
+        doc.setFont('helvetica', 'normal')
+        const vPt = fitFontSize(doc, d.variant, usable * 0.45, 8.5 * s, 4.5)
+        doc.setFontSize(vPt)
+        doc.text(d.variant, rightX, y3, { align: 'right' })
       }
 
-      // Código de barras (ancho completo)
+      // Código de barras alto llenando el centro (como etiqueta comercial)
       const img = barcodeDataURL(d.barcodeVal)
       if (img) {
-        try { doc.addImage(img, 'PNG', MX, H * 0.53, usable, H * 0.30) } catch (e) { /* noop */ }
+        try { doc.addImage(img, 'PNG', MX, H * 0.455, usable, H * 0.38) } catch (e) { /* noop */ }
       } else {
         doc.setFont('helvetica', 'bold')
-        doc.setFontSize(8 * s)
-        doc.text(String(d.barcodeVal), W / 2, H * 0.70, { align: 'center' })
+        doc.setFontSize(9 * s)
+        doc.text(String(d.barcodeVal), W / 2, H * 0.65, { align: 'center' })
       }
 
-      // Fila final: número (izq) + rango de precio (der, negrita)
-      const y4 = H * 0.945
+      // Fila final: número (izq) + rango de precio (der), ambos grandes
+      const y4 = H * 0.955
       doc.setFont('helvetica', 'normal')
-      const nPt = fitFontSize(doc, String(d.number || ''), usable * 0.5, 6.5 * s, 4.5)
+      const nPt = fitFontSize(doc, String(d.number || ''), usable * 0.42, 8.5 * s, 5)
       doc.setFontSize(nPt)
       doc.text(String(d.number || ''), MX, y4)
       if (d.priceText) {
         doc.setFont('helvetica', 'bold')
-        const pPt = fitFontSize(doc, d.priceText, usable * 0.48, 8 * s, 5)
+        const pPt = fitFontSize(doc, d.priceText, usable * 0.54, 9.5 * s, 5.5)
         doc.setFontSize(pPt)
         doc.text(d.priceText, rightX, y4, { align: 'right' })
       }
