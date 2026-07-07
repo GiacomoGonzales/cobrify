@@ -137,9 +137,16 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
     const map = new Map()
     for (const inv of pendingInvoices) {
       const cust = inv.customer || {}
-      const docNumber = cust.documentNumber ? String(cust.documentNumber).trim() : ''
+      const rawDoc = cust.documentNumber ? String(cust.documentNumber).trim() : ''
       const name = (cust.name || '').trim() || 'Cliente sin nombre'
-      const key = docNumber || name.toUpperCase()
+      // El documento genérico de "Cliente General" (todo ceros o vacío) NO
+      // identifica al cliente — muchos clientes distintos lo comparten. Si el
+      // doc es genérico, agrupar por NOMBRE (que es lo único que los distingue);
+      // si es un documento real (DNI/RUC), agrupar por documento. Se namespacian
+      // las claves (doc:/name:) para que un nombre nunca choque con un número.
+      const isGenericDoc = !rawDoc || /^0+$/.test(rawDoc)
+      const docNumber = isGenericDoc ? '' : rawDoc
+      const key = isGenericDoc ? `name:${name.toLowerCase()}` : `doc:${rawDoc}`
       if (!map.has(key)) map.set(key, { key, name, docNumber, count: 0, totals: { PEN: 0, USD: 0 }, docs: [] })
       const g = map.get(key)
       const ccy = inv.currency === 'USD' ? 'USD' : 'PEN'
