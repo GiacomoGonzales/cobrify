@@ -52,6 +52,7 @@ import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
+import PendingPaymentsReport from '@/components/PendingPaymentsReport'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import Select from '@/components/ui/Select'
 import Input from '@/components/ui/Input'
@@ -179,6 +180,7 @@ export default function InvoiceList() {
 
   // Estados para exportación
   const [showExportModal, setShowExportModal] = useState(false)
+  const [showPendingReport, setShowPendingReport] = useState(false) // Reporte de pagos pendientes por cliente
   // Todos los filtros multi-selección: array vacío = TODOS (sin filtrar).
   const [exportFilters, setExportFilters] = useState({
     types: ['factura', 'boleta', 'nota_venta', 'nota_credito', 'nota_debito'], // tipos seleccionados
@@ -2438,6 +2440,15 @@ Gracias por tu preferencia.`
             <FileMinus className="w-4 h-4 mr-2" />
             + Nota de Crédito
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => setShowPendingReport(true)}
+            className="w-full sm:w-auto"
+            title="Cuentas por cobrar agrupadas por cliente"
+          >
+            <Wallet className="w-4 h-4 mr-2" />
+            Pagos Pendientes
+          </Button>
           {!hidePrivateData && (
             <Button
               variant="outline"
@@ -4682,6 +4693,16 @@ Gracias por tu preferencia.`
           </div>
         )}
       </Modal>
+
+      {/* Reporte de Pagos Pendientes por cliente */}
+      <PendingPaymentsReport
+        isOpen={showPendingReport}
+        onClose={() => setShowPendingReport(false)}
+        businessId={isDemoMode ? null : getBusinessId()}
+        demoInvoices={isDemoMode ? (demoData?.invoices || []) : null}
+        canAccess={(inv) => canAccessInvoice(inv) && canAccessInvoiceBySeller(inv)}
+        companySettings={companySettings}
+      />
 
       {/* Export Modal */}
       <Modal
