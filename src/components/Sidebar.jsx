@@ -260,6 +260,13 @@ function Sidebar() {
           pageId: 'purchase-history',
           menuId: 'purchase-history',
         },
+        {
+          path: '/requerimientos',
+          icon: ClipboardCheck,
+          label: 'Requerimientos',
+          pageId: 'requirements',
+          menuId: 'requirements',
+        },
       ],
     },
 
@@ -632,6 +639,13 @@ function Sidebar() {
           label: 'Historial de Compras',
           pageId: 'purchase-history',
           menuId: 'purchase-history',
+        },
+        {
+          path: '/requerimientos',
+          icon: ClipboardCheck,
+          label: 'Requerimientos',
+          pageId: 'requirements',
+          menuId: 'requirements',
         },
       ],
     },

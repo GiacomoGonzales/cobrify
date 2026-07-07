@@ -83,6 +83,7 @@ import Ingredients from './pages/Ingredients'
 import Recipes from './pages/Recipes'
 import RegisterPurchase from './pages/RegisterPurchase'
 import PurchaseHistory from './pages/PurchaseHistory'
+import Requirements from './pages/Requirements'
 import MobileRedirect from './components/MobileRedirect'
 import DispatchGuides from './pages/DispatchGuides'
 import CarrierDispatchGuides from './pages/CarrierDispatchGuides'
@@ -254,6 +255,7 @@ function App() {
               <Route path="ingredientes" element={<Ingredients />} />
               <Route path="ingredientes/compra" element={<RegisterPurchase />} />
               <Route path="ingredientes/historial" element={<PurchaseHistory />} />
+              <Route path="requerimientos" element={<Requirements />} />
               <Route path="recetas" element={<Recipes />} />
               <Route path="produccion" element={<Production />} />
               <Route path="envios" element={<Envios />} />
@@ -295,6 +297,7 @@ function App() {
               <Route path="ingredientes" element={<Ingredients />} />
               <Route path="ingredientes/compra" element={<RegisterPurchase />} />
               <Route path="ingredientes/historial" element={<PurchaseHistory />} />
+              <Route path="requerimientos" element={<Requirements />} />
               <Route path="recetas" element={<Recipes />} />
               <Route path="produccion" element={<Production />} />
               <Route path="envios" element={<Envios />} />
@@ -495,6 +498,7 @@ function App() {
               <Route path="ingredientes" element={<Ingredients />} />
               <Route path="ingredientes/compra" element={<RegisterPurchase />} />
               <Route path="ingredientes/historial" element={<PurchaseHistory />} />
+              <Route path="requerimientos" element={<Requirements />} />
               <Route path="recetas" element={<Recipes />} />
               <Route path="produccion" element={<Production />} />
               <Route path="envios" element={<Envios />} />

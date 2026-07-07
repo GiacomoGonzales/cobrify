@@ -29,6 +29,7 @@ const RETAIL = [
     { id: 'purchases', label: 'Compras', description: 'Registro de compras' },
     { id: 'purchase-history', label: 'Historial de Compras', description: 'Registro de compras de insumos' },
     { id: 'purchase-orders', label: 'Órdenes de Compra', description: 'Pedidos a proveedores' },
+    { id: 'requirements', label: 'Requerimientos', description: 'Pedidos de insumos para comprar' },
   ] },
   { title: 'Producción', items: [
     { id: 'ingredients', label: 'Insumos', description: 'Materia prima y componentes' },
@@ -69,6 +70,7 @@ const RESTAURANT = [
   { id: 'purchases', label: 'Compras', description: 'Registro de compras a proveedores' },
   { id: 'purchase-history', label: 'Historial de Compras', description: 'Registro de compras de insumos' },
   { id: 'suppliers', label: 'Proveedores', description: 'Listado de proveedores' },
+  { id: 'requirements', label: 'Requerimientos', description: 'Pedidos de insumos para comprar' },
   { id: 'sellers', label: 'Vendedores', description: 'Gestión de vendedores y comisiones' },
   { id: 'waiters', label: 'Mozos', description: 'Gestión de personal de atención' },
   { id: 'envios', label: 'Envíos', description: 'Gestión de repartidores y entregas' },
