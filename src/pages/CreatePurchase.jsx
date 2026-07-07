@@ -2138,10 +2138,14 @@ export default function CreatePurchase() {
           // Helper: convertir precio de venta de la moneda de la compra a base (PEN).
           // product.price/price2/price3/price4 SIEMPRE se guarda en PEN (la moneda base);
           // si la compra está en USD, hay que dividir por el TC antes de persistir.
+          // NO redondear a 2 decimales: un precio sub-céntimo (0.125) se volvía 0.13
+          // al ingresar una compra, deshaciendo el precio real del producto (mismo
+          // criterio que el fix aef84c2/f938453: hasta 6 decimales; el redondeo a
+          // céntimos ocurre al final, sobre el total de la venta).
           const salePriceToBase = (raw) => {
             const v = parseFloat(raw)
             if (!Number.isFinite(v) || v <= 0) return null
-            return Math.round(convertToBase(v, currency, exchangeRate) * 100) / 100
+            return Math.round(convertToBase(v, currency, exchangeRate) * 1e6) / 1e6
           }
           // Valor crudo en USD (para fijar priceUSD sin convertir). Solo aplica en modo ancla.
           const salePriceUsdRaw = (raw) => {
@@ -2167,7 +2171,7 @@ export default function CreatePurchase() {
                   return {
                     ...v,
                     priceUSD: usd1 != null ? usd1 : (v.priceUSD ?? null),
-                    price: usd1 != null ? (Math.round(convertToBase(usd1, 'USD', exchangeRate) * 100) / 100) : v.price,
+                    price: usd1 != null ? (Math.round(convertToBase(usd1, 'USD', exchangeRate) * 1e6) / 1e6) : v.price,
                     price2: p2 != null ? p2 : v.price2,
                     price3: p3 != null ? p3 : v.price3,
                     price4: p4 != null ? p4 : v.price4,
@@ -2201,7 +2205,7 @@ export default function CreatePurchase() {
               const usd1 = salePriceUsdRaw(item.salePrice)
               if (usd1 != null) {
                 updates.priceUSD = usd1
-                updates.price = Math.round(convertToBase(usd1, 'USD', exchangeRate) * 100) / 100
+                updates.price = Math.round(convertToBase(usd1, 'USD', exchangeRate) * 1e6) / 1e6
               }
             } else {
               const p1 = salePriceToBase(item.salePrice)
@@ -2221,7 +2225,7 @@ export default function CreatePurchase() {
                   const usd = salePriceUsdRaw(raw)
                   if (usd == null) return p
                   presChanged = true
-                  return { ...p, priceUSD: usd, price: Math.round(convertToBase(usd, 'USD', exchangeRate) * 100) / 100 }
+                  return { ...p, priceUSD: usd, price: Math.round(convertToBase(usd, 'USD', exchangeRate) * 1e6) / 1e6 }
                 }
                 const base = salePriceToBase(raw)
                 if (base == null) return p
