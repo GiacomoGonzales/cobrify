@@ -1,6 +1,26 @@
 import { create } from 'xmlbuilder2'
 
 /**
+ * Sanitiza texto libre del usuario para campos SUNAT de UNA SOLA LÍNEA.
+ *
+ * Las reglas de validación de SUNAT para /Invoice/cbc:Note (leyenda, error 3006)
+ * y cac:DiscrepancyResponse/cbc:Description (motivo NC/ND, error 2135) permiten
+ * cualquier carácter INCLUIDO el espacio, pero NO permiten ningún otro
+ * "whitespace character": salto de línea, tab, fin de línea, etc.
+ * Si el usuario escribe las observaciones en varias líneas (Enter en el textarea
+ * del POS), el \n viaja dentro del CDATA y SUNAT rechaza el comprobante
+ * (caso real: FPP4-00000060, "TRASLADO CAMION..." en 2 líneas → error 3006).
+ *
+ * Reemplaza todo whitespace por espacio simple, colapsa repetidos y recorta.
+ * OJO: NO usar en descripciones de ítems (cac:Item/cbc:Description) — esas SÍ
+ * permiten saltos de línea según las mismas reglas.
+ */
+const sanitizeSunatLine = (text, maxLen) => {
+  const clean = (text || '').toString().replace(/\s+/g, ' ').trim()
+  return maxLen ? clean.slice(0, maxLen) : clean
+}
+
+/**
  * Mapeo de unidades de medida internas a códigos SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
  * Las unidades guardadas en la app pueden ser texto legible, pero SUNAT requiere códigos específicos
  */
@@ -398,10 +418,11 @@ export function generateInvoiceXML(invoiceData, businessData) {
   // formales) y SUNAT valida cada código contra el contenido del comprobante. Por ejemplo,
   // declarar languageLocaleID="2008" sobre una factura que no tiene operaciones exoneradas
   // hace que SUNAT rechace con código 3289 (ver Factura_F001-00003010 — 2026-05-20).
-  const userNotes = (invoiceData.notes || invoiceData.observaciones || '').toString().trim()
+  // sanitizeSunatLine: sin saltos de línea/tabs (regla 3006 — ver helper arriba).
+  const userNotes = sanitizeSunatLine(invoiceData.notes || invoiceData.observaciones || '', 100)
   if (userNotes && !isNote) {
     // Solo para facturas/boletas. Para NC/ND, el motivo va en cac:DiscrepancyResponse.
-    root.ele('cbc:Note').dat(userNotes.slice(0, 100))
+    root.ele('cbc:Note').dat(userNotes)
   }
 
   // Moneda
@@ -436,7 +457,8 @@ export function generateInvoiceXML(invoiceData, businessData) {
           'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo09' :  // Catálogo 09 - Notas de Crédito
           'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo10'    // Catálogo 10 - Notas de Débito
       }).txt(invoiceData.discrepancyCode)
-      discrepancyResponse.ele('cbc:Description').txt(invoiceData.discrepancyReason || invoiceData.notes || '')
+      // sanitizeSunatLine: el motivo no permite saltos de línea (regla 2135)
+      discrepancyResponse.ele('cbc:Description').txt(sanitizeSunatLine(invoiceData.discrepancyReason || invoiceData.notes || '', 500))
     }
   }
 
@@ -1299,9 +1321,10 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
   // En NC, el motivo va aparte en cac:DiscrepancyResponse — esto es para notas
   // adicionales (ej. observaciones del POS). NO usar languageLocaleID porque referencia
   // al Catálogo 52 y SUNAT rechaza el comprobante si el código no aplica al contenido.
-  const cnUserNotes = (creditNoteData.notes || creditNoteData.observaciones || '').toString().trim()
-  if (cnUserNotes && cnUserNotes !== (creditNoteData.discrepancyReason || '').toString().trim()) {
-    root.ele('cbc:Note').dat(cnUserNotes.slice(0, 100))
+  // sanitizeSunatLine: sin saltos de línea/tabs (regla 3006 — ver helper arriba).
+  const cnUserNotes = sanitizeSunatLine(creditNoteData.notes || creditNoteData.observaciones || '', 100)
+  if (cnUserNotes && cnUserNotes !== sanitizeSunatLine(creditNoteData.discrepancyReason || '')) {
+    root.ele('cbc:Note').dat(cnUserNotes)
   }
 
   // Moneda
@@ -1316,7 +1339,8 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
   const discrepancyResponse = root.ele('cac:DiscrepancyResponse')
   discrepancyResponse.ele('cbc:ReferenceID').txt(creditNoteData.referencedDocumentId) // Serie-Correlativo del doc original
   discrepancyResponse.ele('cbc:ResponseCode').txt(creditNoteData.discrepancyCode || '01') // Catálogo 09
-  discrepancyResponse.ele('cbc:Description').txt(creditNoteData.discrepancyReason || 'Anulación de la operación')
+  // sanitizeSunatLine: el motivo no permite saltos de línea (regla 2135)
+  discrepancyResponse.ele('cbc:Description').txt(sanitizeSunatLine(creditNoteData.discrepancyReason, 500) || 'Anulación de la operación')
 
   // Referencia de facturación (documento que se modifica)
   const billingReference = root.ele('cac:BillingReference')
@@ -1874,7 +1898,8 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
   const discrepancyResponse = root.ele('cac:DiscrepancyResponse')
   discrepancyResponse.ele('cbc:ReferenceID').txt(debitNoteData.referencedDocumentId)
   discrepancyResponse.ele('cbc:ResponseCode').txt(debitNoteData.discrepancyCode || '01') // Catálogo 10
-  discrepancyResponse.ele('cbc:Description').txt(debitNoteData.discrepancyReason || 'Intereses por mora')
+  // sanitizeSunatLine: el motivo no permite saltos de línea (regla 2135)
+  discrepancyResponse.ele('cbc:Description').txt(sanitizeSunatLine(debitNoteData.discrepancyReason, 500) || 'Intereses por mora')
 
   // Referencia de facturación (documento que se modifica)
   const billingReference = root.ele('cac:BillingReference')
