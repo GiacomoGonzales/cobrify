@@ -94,7 +94,7 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible: web
 
           .kitchen-ticket-container {
             position: ${a4SheetPrint ? 'static' : 'absolute'};
-            ${a4SheetPrint ? '' : 'left: 0;\n            top: 0;'}
+            ${a4SheetPrint ? '' : 'left: 50%;\n            top: 0;\n            transform: translateX(-50%);'}
             width: ${kitchenWidthMm}mm !important;
             max-width: ${kitchenWidthMm}mm !important;
             zoom: ${ticketZoom};
@@ -120,7 +120,7 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible: web
           }
           .kitchen-multi-ticket {
             position: ${a4SheetPrint ? 'static' : 'absolute'};
-            ${a4SheetPrint ? '' : 'left: 0;\n            top: 0;'}
+            ${a4SheetPrint ? '' : 'left: 50%;\n            top: 0;\n            transform: translateX(-50%);'}
           }
           .kitchen-multi-ticket .kitchen-ticket-container {
             position: static;
