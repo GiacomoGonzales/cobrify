@@ -169,6 +169,33 @@ function setCorsHeaders(res) {
 }
 
 /**
+ * ¿La respuesta de una comunicación de baja / resumen dice que el documento
+ * YA FUE dado de baja antes? (reintentos de anulación)
+ *
+ * SUNAT responde error 2323 "Existe documento ya informado anteriormente en una
+ * comunicacion de baja" (SIN tilde en el mensaje real de QPse — caso FPP4-00000064:
+ * el check anterior buscaba 'comunicación' con tilde y nunca matcheaba, dejando
+ * la factura atascada en 'voiding'). También cubre 1033 y variantes.
+ * Se normalizan las tildes antes de comparar.
+ */
+function isAlreadyVoidedResponse(qpseResult) {
+  const rawDesc = `${qpseResult?.description || ''} ${qpseResult?.notes || ''}`.toLowerCase()
+  // Quitar tildes/diacríticos: 'comunicación' → 'comunicacion'
+  const desc = rawDesc.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const code = String(qpseResult?.responseCode || '')
+  return (
+    code === '1033' || code.includes('1033') ||
+    code === '2323' || code.includes('2323') ||
+    desc.includes('2323') ||
+    desc.includes('ya informado') ||
+    desc.includes('ya fue comunicad') ||
+    (desc.includes('comunicacion de baja') && desc.includes('existe')) ||
+    desc.includes('already') ||
+    (desc.includes('registrad') && desc.includes('baja'))
+  )
+}
+
+/**
  * SEGURIDAD: verifica que una petición HTTP (onRequest) provenga de un ADMIN real.
  * Requiere el header `Authorization: Bearer <idToken>`, valida el token con Firebase
  * Auth y comprueba que el uid esté en /admins. Devuelve el uid del admin o null.
@@ -6595,8 +6622,16 @@ export const voidBoletaQPse = onRequest(
         return
       }
 
-      // Si está pendiente (código 98 o 99 - SUNAT aún procesando)
-      if (qpseResult.responseCode === '98' || qpseResult.responseCode === '99' || qpseResult.responseCode === 'PROCESANDO') {
+      // ¿La baja YA fue procesada antes? (reintento) — evaluar ANTES que la rama
+      // "pendiente": SUNAT responde el error 2323 ("ya informado anteriormente en
+      // una comunicacion de baja") con código 99, y el flujo anterior confundía el
+      // 99 con "procesando" → la boleta quedaba atascada en 'voiding' para siempre.
+      const isBoletaAlreadyVoided = isAlreadyVoidedResponse(qpseResult) ||
+        (qpseResult.description || qpseResult.notes || '').toLowerCase().includes('ya existe')
+
+      // Si está pendiente (código 98 - SUNAT aún procesando).
+      // OJO: 99 NO es "procesando" — en SUNAT 99 = el proceso terminó CON ERRORES.
+      if (!isBoletaAlreadyVoided && (qpseResult.responseCode === '98' || qpseResult.responseCode === 'PROCESANDO')) {
         await boletaRef.update({
           sunatStatus: 'voiding',
           voidingTicket: qpseResult.ticket || null,
@@ -6613,17 +6648,6 @@ export const voidBoletaQPse = onRequest(
         })
         return
       }
-
-      // Verificar si SUNAT dice que la baja ya fue procesada (reintento)
-      const boletaVoidDesc = (qpseResult.description || qpseResult.notes || '').toLowerCase()
-      const boletaVoidCode = String(qpseResult.responseCode || '')
-      const isBoletaAlreadyVoided = (
-        boletaVoidCode === '1033' || boletaVoidCode.includes('1033') ||
-        boletaVoidDesc.includes('ya fue comunicad') ||
-        boletaVoidDesc.includes('ya existe') ||
-        boletaVoidDesc.includes('already') ||
-        boletaVoidDesc.includes('registrad') && boletaVoidDesc.includes('baja')
-      )
 
       if (isBoletaAlreadyVoided) {
         console.log(`📋 [QPse] La baja de boleta ya fue procesada por SUNAT - tratando como ANULADO`)
@@ -7100,8 +7124,16 @@ export const voidInvoiceQPse = onRequest(
         return
       }
 
-      // Si está pendiente (código 98 o 99 - SUNAT aún procesando)
-      if (qpseResult.responseCode === '98' || qpseResult.responseCode === '99' || qpseResult.responseCode === 'PROCESANDO') {
+      // ¿La baja YA fue procesada antes? (reintento de anulación) — evaluar ANTES
+      // que la rama "pendiente": SUNAT responde el error 2323 ("Existe documento ya
+      // informado anteriormente en una comunicacion de baja") con código 99, y el
+      // flujo anterior confundía el 99 con "procesando" → la factura quedaba
+      // atascada en 'voiding' para siempre (caso real FPP4-00000064).
+      const isAlreadyVoided = isAlreadyVoidedResponse(qpseResult)
+
+      // Si está pendiente (código 98 - SUNAT aún procesando).
+      // OJO: 99 NO es "procesando" — en SUNAT 99 = el proceso terminó CON ERRORES.
+      if (!isAlreadyVoided && (qpseResult.responseCode === '98' || qpseResult.responseCode === 'PROCESANDO')) {
         await invoiceRef.update({
           sunatStatus: 'voiding',
           voidingTicket: qpseResult.ticket || null,
@@ -7118,17 +7150,6 @@ export const voidInvoiceQPse = onRequest(
         })
         return
       }
-
-      // Verificar si SUNAT dice que la baja ya fue procesada (reintento de anulación)
-      const voidDesc = (qpseResult.description || qpseResult.notes || '').toLowerCase()
-      const voidCode = String(qpseResult.responseCode || '')
-      const isAlreadyVoided = (
-        voidCode === '1033' || voidCode.includes('1033') ||
-        voidDesc.includes('ya fue comunicad') ||
-        voidDesc.includes('comunicación de baja') && voidDesc.includes('existe') ||
-        voidDesc.includes('already') ||
-        voidDesc.includes('registrad') && voidDesc.includes('baja')
-      )
 
       if (isAlreadyVoided) {
         console.log(`📋 [QPse] La baja ya fue procesada por SUNAT - tratando como ANULADO`)
