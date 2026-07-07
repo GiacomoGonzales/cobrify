@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Loader2, Printer, FileText, ChevronDown, ChevronRight, Search, Wallet } from 'lucide-react'
+import { Loader2, Printer, FileText, ChevronDown, ChevronRight, Search, Wallet, Filter } from 'lucide-react'
 import jsPDF from 'jspdf'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
@@ -59,14 +59,19 @@ const formatTotals = (totals) => {
 export default function PendingPaymentsReport({ isOpen, onClose, businessId, demoInvoices, canAccess, companySettings }) {
   const [isLoading, setIsLoading] = useState(false)
   const [allInvoices, setAllInvoices] = useState([])
+  const [dateFilter, setDateFilter] = useState('all') // 'all' | 'today' | 'yesterday' | '7days' | 'month' | 'custom'
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [expanded, setExpanded] = useState(() => new Set())
+  const [printMenuOpen, setPrintMenuOpen] = useState(false)
 
   // Cargar comprobantes al abrir (todos: las deudas antiguas son las que importan)
   useEffect(() => {
-    if (!isOpen) return
+    if (!isOpen) {
+      setPrintMenuOpen(false)
+      return
+    }
     let cancelled = false
     const load = async () => {
       if (demoInvoices) {
@@ -90,9 +95,30 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
 
   // Comprobantes pendientes visibles (permisos + rango de fecha)
   const pendingInvoices = useMemo(() => {
-    const start = startDate ? parseLocalDateString(startDate) : null
-    const end = endDate ? parseLocalDateString(endDate) : null
-    if (end) end.setHours(23, 59, 59, 999)
+    // Rango efectivo según el preset elegido (mismos chips que la página de Ventas)
+    let start = null
+    let end = null
+    const now = new Date()
+    const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
+    if (dateFilter === 'today') {
+      start = startOfDay(now)
+    } else if (dateFilter === 'yesterday') {
+      const y = new Date(now)
+      y.setDate(y.getDate() - 1)
+      start = startOfDay(y)
+      end = new Date(start)
+      end.setHours(23, 59, 59, 999)
+    } else if (dateFilter === '7days') {
+      const s = new Date(now)
+      s.setDate(s.getDate() - 6)
+      start = startOfDay(s)
+    } else if (dateFilter === 'month') {
+      start = new Date(now.getFullYear(), now.getMonth(), 1)
+    } else if (dateFilter === 'custom') {
+      start = startDate ? parseLocalDateString(startDate) : null
+      end = endDate ? parseLocalDateString(endDate) : null
+      if (end) end.setHours(23, 59, 59, 999)
+    }
     return allInvoices
       .filter(inv => (canAccess ? canAccess(inv) : true))
       .filter(isPendingInvoice)
@@ -104,7 +130,7 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
         if (end && d > end) return false
         return true
       })
-  }, [allInvoices, canAccess, startDate, endDate])
+  }, [allInvoices, canAccess, dateFilter, startDate, endDate])
 
   // Agrupar por cliente
   const customers = useMemo(() => {
@@ -165,9 +191,16 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
   }
 
   const businessName = companySettings?.tradeName || companySettings?.businessName || ''
-  const rangeLabel = startDate || endDate
-    ? `${startDate ? formatDate(parseLocalDateString(startDate)) : 'Inicio'} — ${endDate ? formatDate(parseLocalDateString(endDate)) : 'Hoy'}`
-    : 'Todas las fechas'
+  const rangeLabel = (() => {
+    if (dateFilter === 'today') return 'Hoy'
+    if (dateFilter === 'yesterday') return 'Ayer'
+    if (dateFilter === '7days') return 'Últimos 7 días'
+    if (dateFilter === 'month') return 'Este mes'
+    if (dateFilter === 'custom' && (startDate || endDate)) {
+      return `${startDate ? formatDate(parseLocalDateString(startDate)) : 'Inicio'} — ${endDate ? formatDate(parseLocalDateString(endDate)) : 'Hoy'}`
+    }
+    return 'Todas las fechas'
+  })()
 
   const openPdf = (doc) => {
     try {
@@ -322,35 +355,71 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Pagos pendientes por cliente" size="3xl">
       <div className="space-y-4">
-        {/* Filtros */}
-        <div className="flex flex-col sm:flex-row gap-2">
+        {/* Filtro de período (mismos chips que la página de Ventas) */}
+        <div className="flex flex-col sm:flex-row gap-3">
           <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-600 whitespace-nowrap">Desde</label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
+            <Filter className="w-4 h-4 text-gray-500" />
+            <span className="text-sm text-gray-600 font-medium">Período:</span>
           </div>
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-600 whitespace-nowrap">Hasta</label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
+          <div className="flex flex-wrap gap-2">
+            {[
+              { value: 'all', label: 'Todo' },
+              { value: 'today', label: 'Hoy' },
+              { value: 'yesterday', label: 'Ayer' },
+              { value: '7days', label: '7 días' },
+              { value: 'month', label: 'Este mes' },
+              { value: 'custom', label: 'Personalizado' },
+            ].map((option) => (
+              <button
+                key={option.value}
+                onClick={() => setDateFilter(option.value)}
+                className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                  dateFilter === option.value
+                    ? 'bg-primary-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Buscar cliente..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
+        </div>
+
+        {/* Fechas personalizadas (solo con "Personalizado") + buscador */}
+        <div className={`grid grid-cols-2 gap-3 items-end ${dateFilter === 'custom' ? 'sm:grid-cols-[150px_150px_1fr]' : 'sm:grid-cols-1'}`}>
+          {dateFilter === 'custom' && (
+            <>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Desde</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full h-10 px-3 border border-gray-300 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Hasta</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full h-10 px-3 border border-gray-300 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                />
+              </div>
+            </>
+          )}
+          <div className="col-span-2 sm:col-span-1">
+            <div className="relative">
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Buscar por nombre o documento..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full h-10 pl-9 pr-3 border border-gray-300 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
+            </div>
           </div>
         </div>
 
@@ -363,7 +432,7 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
         ) : visibleCustomers.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
             <Wallet className="w-10 h-10 mx-auto mb-2 text-gray-300" />
-            <p className="text-sm">No hay pagos pendientes{(startDate || endDate || searchTerm) ? ' con los filtros aplicados' : ''}.</p>
+            <p className="text-sm">No hay pagos pendientes{(dateFilter !== 'all' || searchTerm) ? ' con los filtros aplicados' : ''}.</p>
           </div>
         ) : (
           <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-[50vh] overflow-y-auto">
@@ -382,7 +451,7 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
                       {c.docNumber ? `${c.docNumber} · ` : ''}{c.count} comprobante{c.count === 1 ? '' : 's'}
                     </p>
                   </div>
-                  <span className="text-sm font-bold text-orange-600 whitespace-nowrap">{formatTotals(c.totals)}</span>
+                  <span className="text-sm font-bold text-primary-600 whitespace-nowrap">{formatTotals(c.totals)}</span>
                 </button>
                 {expanded.has(c.key) && (
                   <div className="px-9 pb-2.5 space-y-1">
@@ -390,7 +459,7 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
                       <div key={d.id} className="flex items-center justify-between text-xs text-gray-600 gap-2">
                         <span className="truncate">{d.type} {d.number} · {d.date ? formatDate(d.date) : '—'}</span>
                         <span className="whitespace-nowrap">
-                          Pagado {formatCurrency(d.paid, d.ccy)} · <span className="font-semibold text-orange-600">Debe {formatCurrency(d.pending, d.ccy)}</span>
+                          <span className="text-green-600">Pagado {formatCurrency(d.paid, d.ccy)}</span> · <span className="font-semibold text-primary-600">Debe {formatCurrency(d.pending, d.ccy)}</span>
                         </span>
                       </div>
                     ))}
@@ -403,25 +472,56 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
 
         {/* Total general */}
         {!isLoading && visibleCustomers.length > 0 && (
-          <div className="flex items-center justify-between p-3 bg-orange-50 border border-orange-200 rounded-lg">
-            <p className="text-sm font-medium text-orange-800">
+          <div className="flex items-center justify-between px-4 py-3 bg-primary-50 border border-primary-100 rounded-xl">
+            <p className="text-sm font-medium text-primary-900">
               {visibleCustomers.length} cliente{visibleCustomers.length === 1 ? '' : 's'} · {grandTotals.docs} comprobante{grandTotals.docs === 1 ? '' : 's'}
             </p>
-            <p className="text-base font-bold text-orange-700">{formatTotals(grandTotals)}</p>
+            <p className="text-lg font-bold text-primary-700">{formatTotals(grandTotals)}</p>
           </div>
         )}
 
         {/* Acciones */}
         <div className="flex flex-col sm:flex-row justify-end gap-2">
           <Button variant="outline" onClick={onClose}>Cerrar</Button>
-          <Button variant="outline" onClick={handlePrintTicket} disabled={isLoading || visibleCustomers.length === 0}>
-            <Printer className="w-4 h-4 mr-2" />
-            Ticket 80mm
-          </Button>
-          <Button onClick={handleDownloadPdf} disabled={isLoading || visibleCustomers.length === 0}>
-            <FileText className="w-4 h-4 mr-2" />
-            PDF
-          </Button>
+          <div className="relative">
+            <Button
+              onClick={() => setPrintMenuOpen((o) => !o)}
+              disabled={isLoading || visibleCustomers.length === 0}
+              className="w-full sm:w-auto"
+            >
+              <Printer className="w-4 h-4 mr-2" />
+              Imprimir
+              <ChevronDown className={`w-4 h-4 ml-2 transition-transform ${printMenuOpen ? 'rotate-180' : ''}`} />
+            </Button>
+            {printMenuOpen && (
+              <>
+                {/* Backdrop invisible para cerrar al hacer click fuera */}
+                <div className="fixed inset-0 z-10" onClick={() => setPrintMenuOpen(false)} />
+                <div className="absolute right-0 bottom-full mb-2 z-20 w-64 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden py-1">
+                  <button
+                    onClick={() => { setPrintMenuOpen(false); handlePrintTicket() }}
+                    className="w-full flex items-start gap-3 px-4 py-2.5 hover:bg-gray-50 text-left"
+                  >
+                    <Printer className="w-4 h-4 text-primary-600 mt-0.5 shrink-0" />
+                    <span>
+                      <span className="block text-sm font-medium text-gray-900">Ticket 80mm</span>
+                      <span className="block text-xs text-gray-500">Resumen compacto para impresora térmica</span>
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => { setPrintMenuOpen(false); handleDownloadPdf() }}
+                    className="w-full flex items-start gap-3 px-4 py-2.5 hover:bg-gray-50 text-left"
+                  >
+                    <FileText className="w-4 h-4 text-primary-600 mt-0.5 shrink-0" />
+                    <span>
+                      <span className="block text-sm font-medium text-gray-900">PDF A4</span>
+                      <span className="block text-xs text-gray-500">Con el detalle de cada comprobante</span>
+                    </span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </Modal>
