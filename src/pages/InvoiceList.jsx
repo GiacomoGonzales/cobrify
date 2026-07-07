@@ -73,10 +73,10 @@ import { Share } from '@capacitor/share'
 import { printInvoiceTicket, connectPrinter, getPrinterConfig } from '@/services/thermalPrinterService'
 import { shortenUrl } from '@/services/urlShortenerService'
 import { getActiveBranches } from '@/services/branchService'
-import { useLocationAccess } from '@/utils/locationAccess'
+import { useLocationAccess, useSellerScope } from '@/utils/locationAccess'
 
 export default function InvoiceList() {
-  const { user, isDemoMode, demoData, getBusinessId, businessSettings, businessMode, filterBranchesByAccess, hasMainBranchAccess, isBusinessOwner, isAdmin, allowedBranches, allowedWarehouses } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessSettings, businessMode, filterBranchesByAccess, hasMainBranchAccess, isBusinessOwner, isAdmin, allowedBranches, allowedWarehouses, assignedSellerId } = useAppContext()
   const hidePrivateData = useHidePrivateData()
   const { branding } = useBranding()
   const navigate = useNavigate()
@@ -602,7 +602,7 @@ Gracias por tu preferencia.`
   useEffect(() => {
     loadInvoices()
     loadBranches()
-  }, [user, allowedBranches, allowedWarehouses])
+  }, [user, allowedBranches, allowedWarehouses, assignedSellerId])
 
   // Recargar facturas cuando cambia el filtro de fecha (porque la query de Firestore cambia)
   useEffect(() => {
@@ -627,6 +627,11 @@ Gracias por tu preferencia.`
   // Filtro de seguridad: ¿el usuario puede ver esta factura según su sucursal/almacén habilitado?
   // (helper compartido en src/utils/locationAccess.js — usa allowedBranches/allowedWarehouses del usuario)
   const canAccessInvoice = useLocationAccess()
+
+  // Filtro de visibilidad por vendedor: un usuario secundario con un VENDEDOR
+  // asignado (assignedSellerId) solo ve SUS ventas (helper compartido con
+  // Reportes/Dashboard en src/utils/locationAccess.js).
+  const canAccessInvoiceBySeller = useSellerScope()
 
   const loadInvoices = async () => {
     if (!user?.uid) return
@@ -657,7 +662,8 @@ Gracias por tu preferencia.`
       if (invoicesResult.success) {
         // Filtrar por sucursales/almacenes permitidos del usuario (seguridad de usuarios secundarios).
         // Sanea el estado base, por lo que tabla, totales, exportación y selección lo respetan.
-        setInvoices((invoicesResult.data || []).filter(canAccessInvoice))
+        // Además, sub-usuario con vendedor asignado solo ve las ventas de su vendedor.
+        setInvoices((invoicesResult.data || []).filter(canAccessInvoice).filter(canAccessInvoiceBySeller))
       } else {
         console.error('Error al cargar facturas:', invoicesResult.error)
       }
@@ -2172,6 +2178,7 @@ Gracias por tu preferencia.`
   // Filtrar facturas
   const filteredInvoices = invoices
     .filter(canAccessInvoice) // Seguridad: respetar sucursal/almacén permitido (defensa adicional al saneo de carga)
+    .filter(canAccessInvoiceBySeller) // Sub-usuario con vendedor asignado: solo sus ventas (defensa adicional)
     .filter(inv => showArchived ? inv.archived === true : inv.archived !== true)
     .filter(filterByDateRange) // Primero filtrar por período
     .filter(invoice => {

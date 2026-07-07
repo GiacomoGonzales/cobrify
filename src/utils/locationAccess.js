@@ -70,3 +70,29 @@ export function useLocationAccess() {
   const ctx = { isBusinessOwner, isAdmin, allowedBranches, allowedWarehouses, hasMainBranchAccess }
   return (record, opts) => canAccessByLocation(record, ctx, opts)
 }
+
+/**
+ * Hook de visibilidad por VENDEDOR para usuarios secundarios.
+ *
+ * Un sub-usuario con vendedor asignado (assignedSellerId) solo debe ver las
+ * VENTAS de su vendedor. El dueño (isBusinessOwner) y el super admin ven todo;
+ * un sub-usuario SIN vendedor asignado tampoco se restringe. Como en el POS el
+ * selector de vendedor queda bloqueado al assignedSellerId, todas sus ventas
+ * llevan ese sellerId → basta comparar sellerId.
+ *
+ * OJO: aplicar SOLO a ventas/comprobantes (registros con semántica de sellerId).
+ * NO usarlo sobre compras/gastos/movimientos: no tienen sellerId y se ocultarían
+ * todos. Por eso va separado de useLocationAccess.
+ *
+ * Es filtro de UI (igual que el de sucursal); la seguridad dura está en las
+ * reglas de Firestore.
+ *
+ * Uso:
+ *   const canSeeSale = useSellerScope()
+ *   const visibles = ventas.filter(canSeeSale)
+ */
+export function useSellerScope() {
+  const { isBusinessOwner, isAdmin, assignedSellerId } = useAppContext()
+  const restrict = !isBusinessOwner && !isAdmin && !!assignedSellerId
+  return (record) => !restrict || record?.sellerId === assignedSellerId
+}

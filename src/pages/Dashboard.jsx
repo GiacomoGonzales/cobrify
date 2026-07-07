@@ -31,16 +31,22 @@ import { getDocumentTotalInBase, getDocumentRate, isMultiCurrencyEnabled, normal
 import { getRecentInvoices } from '@/services/firestoreService'
 import { useBranding } from '@/contexts/BrandingContext'
 import { getTables } from '@/services/tableService'
-import { useLocationAccess } from '@/utils/locationAccess'
+import { useLocationAccess, useSellerScope } from '@/utils/locationAccess'
 import HotelDashboard from '@/components/hotel/HotelDashboard'
 
 export default function Dashboard() {
-  const { user, isDemoMode, demoData, getBusinessId, isAdmin, isBusinessOwner, businessMode, businessSettings, allowedBranches, allowedWarehouses, branchScope } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, isAdmin, isBusinessOwner, businessMode, businessSettings, allowedBranches, allowedWarehouses, branchScope, assignedSellerId } = useAppContext()
   // Filtro de seguridad por ubicación (sucursal/almacén) para usuarios secundarios.
   // Mismo helper compartido que usa Ventas/InvoiceList — usa allowedBranches/allowedWarehouses.
   const canAccess = useLocationAccess()
+  // Sub-usuario con vendedor asignado: solo ve las VENTAS de su vendedor
+  // (helper compartido con Ventas/Reportes en src/utils/locationAccess.js).
+  const canSeeSale = useSellerScope()
   // ¿El usuario está restringido a ciertas sucursales/almacenes? (owner/admin nunca lo están)
   const restringido = !isBusinessOwner && !isAdmin && ((allowedBranches?.length > 0) || (allowedWarehouses?.length > 0))
+  // ¿Restringido por vendedor asignado? Fuerza el camino client-side del gráfico
+  // de 12 meses (el aggregate server-side no puede filtrar por sellerId).
+  const sellerRestricted = !isBusinessOwner && !isAdmin && !!assignedSellerId
   // Multi-divisa: solo si el negocio activó la flag en Configuración.
   const dashMultiCurrencyOn = isMultiCurrencyEnabled(businessSettings)
   const { branding } = useBranding()
@@ -90,7 +96,7 @@ export default function Dashboard() {
     // multi-divisa, hay que recomputar el gráfico por el camino client-side (convierte
     // USD→PEN con el TC congelado; el aggregate server-side no puede).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, isDemoMode, allowedBranches, allowedWarehouses, dashMultiCurrencyOn])
+  }, [user, isDemoMode, allowedBranches, allowedWarehouses, dashMultiCurrencyOn, assignedSellerId])
 
   // Cargar aggregates mensuales para el gráfico de 12 meses.
   // Server-side: 12 queries paralelas de sum('total'), no descarga los invoices.
@@ -148,7 +154,7 @@ export default function Dashboard() {
     // doc (sumaría USD como si fueran soles). En ambos casos traemos las facturas
     // de los últimos 12 meses y sumamos en el cliente. Más caro en reads, pero
     // correcto. El resto sigue usando el aggregate (rápido) del bloque de abajo.
-    if (restringido || dashMultiCurrencyOn) {
+    if (restringido || sellerRestricted || dashMultiCurrencyOn) {
       // El inicio de la ventana más antigua (11 meses atrás) es nuestra fecha "desde".
       const since = windows[0].monthStart
       setMonthlyYearLoading(true)
@@ -158,7 +164,7 @@ export default function Dashboard() {
         if (!result.success) throw new Error(result.error || 'getRecentInvoices falló')
         // Mismo cálculo de fecha que la rama demo (emissionDate → mediodía, sino createdAt)
         // para bucketear coherente con monthStart/monthEnd.
-        const invoicesIn12m = (result.data || []).filter(canAccess)
+        const invoicesIn12m = (result.data || []).filter(canAccess).filter(canSeeSale)
         const data = windows.map(w => {
           const ventas = invoicesIn12m.reduce((acc, inv) => {
             const invDate = inv.emissionDate
@@ -299,7 +305,8 @@ export default function Dashboard() {
       if (invoicesResult.success) {
         // Filtrar por sucursales/almacenes permitidos del usuario (seguridad de usuarios secundarios).
         // Sanea el estado base → KPIs, gráficos, top productos/clientes/pagos lo respetan.
-        setInvoices((invoicesResult.data || []).filter(canAccess))
+        // Además, sub-usuario con vendedor asignado solo ve las ventas de su vendedor.
+        setInvoices((invoicesResult.data || []).filter(canAccess).filter(canSeeSale))
       }
 
       // El monto de mesas abiertas (modo restaurante) se calcula en un useEffect
@@ -390,7 +397,7 @@ export default function Dashboard() {
   // re-filtramos por canAccess como red de seguridad (idempotente para usuarios sin
   // restricción).
   const branchFilteredInvoices = useMemo(() => {
-    const base = invoices.filter(canAccess)
+    const base = invoices.filter(canAccess).filter(canSeeSale)
     return filterBranch === 'all'
       ? base
       : filterBranch === 'main'

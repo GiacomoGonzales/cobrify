@@ -36,7 +36,7 @@ import { getInvoices, getRecentInvoices, getCustomersWithStats, getProducts, get
 import { getRecipes } from '@/services/recipeService'
 import { getActiveBranches } from '@/services/branchService'
 import { getWarehouses } from '@/services/warehouseService'
-import { useLocationAccess } from '@/utils/locationAccess'
+import { useLocationAccess, useSellerScope } from '@/utils/locationAccess'
 import {
   exportGeneralReport,
   exportSalesReport,
@@ -152,11 +152,14 @@ const getInvoiceDate = (invoice) => {
 }
 
 export default function Reports() {
-  const { user, isDemoMode, demoData, getBusinessId, hasFeature, businessMode, filterBranchesByAccess, hasMainBranchAccess, allowedBranches, allowedWarehouses, isBusinessOwner, isAdmin, businessSettings } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, hasFeature, businessMode, filterBranchesByAccess, hasMainBranchAccess, allowedBranches, allowedWarehouses, isBusinessOwner, isAdmin, businessSettings, assignedSellerId } = useAppContext()
   const hidePrivateData = useHidePrivateData()
   // Filtro de seguridad por ubicación (sucursal/almacén) para usuarios secundarios.
   // Debe declararse antes de cualquier return condicional para no romper el orden de hooks.
   const canAccess = useLocationAccess()
+  // Sub-usuario con vendedor asignado: solo ve las VENTAS de su vendedor.
+  // Solo se aplica a facturas (las compras/gastos/movimientos no tienen sellerId).
+  const canSeeSale = useSellerScope()
 
   // Si estamos en modo inmobiliaria, renderizar el componente especializado
   if (businessMode === 'real_estate') {
@@ -223,8 +226,9 @@ export default function Reports() {
     loadData()
     loadBranches()
     // allowedBranches/allowedWarehouses en deps: si cambian los permisos del usuario,
-    // recargar y re-sanear los datos visibles.
-  }, [user, allowedBranches, allowedWarehouses])
+    // recargar y re-sanear los datos visibles. assignedSellerId: si llega tarde,
+    // re-sanear para que el sub-usuario con vendedor asignado solo vea sus ventas.
+  }, [user, allowedBranches, allowedWarehouses, assignedSellerId])
 
   // Recargar datos cuando el rango cambia a uno más amplio
   const [loadedRange, setLoadedRange] = useState(null)
@@ -324,7 +328,7 @@ export default function Reports() {
       // con el helper compartido. Facturas también traen warehouseId.
       // Las compras NO tienen branchId (su sucursal se deriva del almacén): se filtran
       // en filteredPurchases con allowedWarehouseIds. Los clientes son globales (no se filtran).
-      if (invoicesResult.success) setInvoices((invoicesResult.data || []).filter(canAccess))
+      if (invoicesResult.success) setInvoices((invoicesResult.data || []).filter(canAccess).filter(canSeeSale))
       if (customersResult.success) setCustomers(customersResult.data || [])
       if (productsResult.success) setProducts(productsResult.data || [])
       if (recipesResult.success) setRecipes(recipesResult.data || [])
@@ -446,6 +450,8 @@ export default function Reports() {
       // Seguridad (defensa adicional): respetar siempre los permisos de ubicación del
       // usuario, sin importar el dropdown de sucursal (que arranca en 'all').
       if (!canAccess(invoice)) return false
+      // Sub-usuario con vendedor asignado: solo sus ventas (defensa adicional)
+      if (!canSeeSale(invoice)) return false
       // Comprobantes archivados manualmente desde Ventas: no aparecen en reportes ni totales
       if (invoice.archived === true) {
         return false
@@ -550,7 +556,7 @@ export default function Reports() {
         return invoiceDate >= filterDate
       })
       .map(addCostCalculations)
-  }, [invoices, dateRange, customStartDate, customEndDate, calculateItemCost, isCustomItem, filterBranch, canAccess])
+  }, [invoices, dateRange, customStartDate, customEndDate, calculateItemCost, isCustomItem, filterBranch, canAccess, canSeeSale])
 
   // Función helper para calcular revenue del período anterior
   const getPreviousPeriodRevenue = useCallback(() => {
