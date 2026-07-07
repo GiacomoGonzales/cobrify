@@ -230,6 +230,20 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
         row.controlSeries || row.track_serials || row.trackSerials,
         false
       )
+      // Números de serie (opcional). Dos formatos:
+      //   A) Lista en una fila: "SN-100, SN-200, SN-300" (separadas por coma/; )
+      //   B) UNA serie por fila: filas repetidas con el mismo SKU/nombre, cada
+      //      una con su serie — se fusionan en un producto (ver merge abajo).
+      // Si vienen series, control_series se activa solo y el stock se cuadra
+      // con la cantidad de series.
+      const serialsRaw = row.series ?? row.Series ?? row.SERIES
+        ?? row.serie ?? row.Serie ?? row.SERIE
+        ?? row.numeros_serie ?? row.Numeros_Serie ?? row.NUMEROS_SERIE
+        ?? row.numero_serie ?? row.numeroSerie ?? row.NUMERO_SERIE
+        ?? row.serial ?? row.serials ?? row.serialNumbers
+      const serialNumbers = (serialsRaw !== undefined && serialsRaw !== null && String(serialsRaw).trim() !== '')
+        ? String(serialsRaw).split(/[,;\n]+/).map(s => s.trim()).filter(Boolean)
+        : []
       const expirationDate = trackExpiration ? parseExcelDate(
         row.fecha_vencimiento || row.Fecha_Vencimiento || row.FECHA_VENCIMIENTO ||
         row.fechaVencimiento || row.expiration_date || row.expirationDate
@@ -358,7 +372,9 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
             warehouseId: null,
           }]
         }),
-        trackSerials,
+        // Si vienen series, activar el control de series automáticamente
+        trackSerials: trackSerials || serialNumbers.length > 0,
+        serialNumbers,
         // Catálogo público
         catalogVisible,
         catalogComparePrice: catalogVisible ? catalogComparePrice : null,
@@ -656,7 +672,58 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
       p.expirationDate = sorted[0].expirationDate || p.expirationDate
     }
 
-    return { validProducts: afterBatchMerge, errors }
+    // Agrupación por SERIES (formato B: una fila por unidad física, como los
+    // Excel de inventarios serializados). Filas repetidas del mismo producto
+    // (mismo SKU o mismo nombre), cada una con su número de serie, se fusionan
+    // en un solo producto acumulando serialNumbers[].
+    // Solo aplica a productos no-variantes con series (mismo criterio que lotes).
+    const groupedBySerial = new Map()
+    const afterSerialMerge = []
+    for (const p of afterBatchMerge) {
+      if (p.hasVariants || !p.serialNumbers?.length) {
+        afterSerialMerge.push(p)
+        continue
+      }
+      const key = (p.sku || '').trim().toLowerCase() || (p.name || '').trim().toLowerCase()
+      if (!key) {
+        afterSerialMerge.push(p)
+        continue
+      }
+      if (groupedBySerial.has(key)) {
+        groupedBySerial.get(key).serialNumbers.push(...p.serialNumbers)
+      } else {
+        groupedBySerial.set(key, p)
+        afterSerialMerge.push(p)
+      }
+    }
+
+    // Post-proceso de productos serializados.
+    // - Series repetidas en el archivo = ERROR (bloquea): suele ser una fila
+    //   duplicada o un typo; importarlas en silencio crearía stock fantasma.
+    // - Stock ≠ cantidad de series = auto-corrección: para un producto con
+    //   series, el stock ES la cantidad de series (documentado en la guía).
+    for (const p of afterSerialMerge) {
+      if (!p.serialNumbers?.length) continue
+      const seen = new Set()
+      const dupes = new Set()
+      for (const sn of p.serialNumbers) {
+        const k = sn.toUpperCase()
+        if (seen.has(k)) dupes.add(sn)
+        else seen.add(k)
+      }
+      if (dupes.size > 0) {
+        errors.push(`"${p.name}": series repetidas en el Excel (${[...dupes].slice(0, 5).join(', ')}${dupes.size > 5 ? '…' : ''}). Corrige el archivo: cada número de serie debe aparecer una sola vez.`)
+        continue
+      }
+      p.trackSerials = true
+      if (p.trackStock !== false && p.stock !== null && p.stock !== undefined && p.stock !== p.serialNumbers.length) {
+        console.warn(`Importación: "${p.name}" stock del Excel (${p.stock}) ≠ series (${p.serialNumbers.length}); se usa la cantidad de series`)
+      }
+      p.trackStock = true
+      p.stock = p.serialNumbers.length
+    }
+
+    return { validProducts: afterSerialMerge, errors }
   }
 
   const handleImport = async () => {
@@ -1155,6 +1222,9 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           control_vencimiento: 'NO',
           fecha_vencimiento: '',
           control_series: 'SI',         // CLAVE: pedirá serial al ingresar/vender
+          // Series de las 5 unidades (separadas por coma). Alternativa: repetir
+          // la fila del producto, una por unidad, con UNA serie en esta columna.
+          series: 'SN-A1001, SN-A1002, SN-A1003, SN-A1004, SN-A1005',
           mostrar_en_catalogo: 'SI',
           precio_comparacion: 3500.00,  // se ve "antes 3500" tachado en catálogo
           imagen_url: '',
@@ -1529,6 +1599,11 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           <p className="text-xs text-gray-500 mt-1">
             <strong>Múltiples lotes del mismo producto:</strong> repetí el SKU (o el nombre) en varias filas, cada una con su propio numero_lote, fecha_vencimiento y stock.
             El sistema fusiona los lotes en el mismo producto, suma los stocks y aplica FEFO al lote más próximo a vencer.
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            <strong>Números de serie (columna <code>series</code>):</strong> escribe las series separadas por coma en la fila del producto
+            (ej. <code>SN-100, SN-200</code>), o repite el producto en varias filas con UNA serie por fila (una fila por unidad física) — se fusionan solas.
+            Con series, control_series se activa automáticamente y el <strong>stock = cantidad de series</strong>.
           </p>
           <details className="mt-2 text-xs text-gray-600">
             <summary className="cursor-pointer text-primary-600 hover:text-primary-700 select-none">

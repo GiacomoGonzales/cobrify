@@ -2259,6 +2259,45 @@ export default function Products() {
               }
             }
 
+            // Mergear NÚMEROS DE SERIE si el Excel trae series (dedupe por
+            // serialNumber vs las ya existentes — reimportar el mismo archivo es
+            // idempotente). Cada serie nueva nace 'available' en el almacén
+            // destino, con el mismo shape que crea Compras (CreatePurchase).
+            // El stock del producto serializado es INCREMENTAL: stock previo en
+            // el almacén + series NUEVAS; sobrescribimos product.stock para que
+            // el bloque genérico de stock y el movimiento de auditoría de abajo
+            // usen ese valor (y no el absoluto del Excel).
+            if (Array.isArray(product.serialNumbers) && product.serialNumbers.length > 0
+              && !(existingProduct.hasVariants || updates.hasVariants)) {
+              const existingSerials = Array.isArray(existingProduct.serials) ? existingProduct.serials : []
+              const seenSerials = new Set(existingSerials.map(s => String(s.serialNumber || '').trim().toUpperCase()))
+              const newSerialObjs = []
+              for (const sn of product.serialNumbers) {
+                const k = String(sn).trim().toUpperCase()
+                if (!k || seenSerials.has(k)) continue
+                seenSerials.add(k)
+                newSerialObjs.push({
+                  id: `serial-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                  serialNumber: String(sn).trim(),
+                  status: 'available',
+                  warehouseId: targetWarehouse?.id || null,
+                  purchaseId: null,
+                  purchaseDate: null,
+                  saleId: null,
+                  variantSku: null,
+                  createdAt: new Date(),
+                })
+              }
+              if (newSerialObjs.length > 0) {
+                updates.serials = [...existingSerials, ...newSerialObjs]
+                updates.trackSerials = true
+              }
+              if (product.trackStock && targetWarehouse) {
+                const prevWS = (existingProduct.warehouseStocks || []).find(ws => ws.warehouseId === targetWarehouse.id)
+                product.stock = (prevWS?.stock || 0) + newSerialObjs.length
+              }
+            }
+
             // Actualizar stock si corresponde.
             // Saltamos este bloque si el producto tiene variantes: el stock se calcula
             // como suma de stocks de variantes (ya seteado arriba).
@@ -2445,6 +2484,26 @@ export default function Products() {
               product.stock = null
               product.initialStock = null
             }
+
+            // Convertir los números de serie del Excel (strings) en objetos
+            // serials[] con el mismo shape que crea Compras. CRÍTICO: cada serie
+            // lleva warehouseId, o el POS no la ofrece al vender por almacén.
+            if (Array.isArray(product.serialNumbers) && product.serialNumbers.length > 0) {
+              product.serials = product.serialNumbers.map(sn => ({
+                id: `serial-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                serialNumber: String(sn).trim(),
+                status: 'available',
+                warehouseId: targetWarehouse?.id || null,
+                purchaseId: null,
+                purchaseDate: null,
+                saleId: null,
+                variantSku: null,
+                createdAt: new Date(),
+              }))
+              product.trackSerials = true
+            }
+            // No persistir el array crudo del Excel en Firestore
+            delete product.serialNumbers
 
             const result = await createProduct(getBusinessId(), product)
 
