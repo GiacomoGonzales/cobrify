@@ -35,8 +35,20 @@ import {
   saveAndShareExcel,
 } from './excelStyles'
 
-/** Formatea los métodos de pago de una factura. */
+/**
+ * Formatea los métodos de pago de una factura.
+ * Prioriza paymentHistory (ventas al crédito/parciales cobradas con "Registrar
+ * Pago"): ahí queda el método real (ej. Yape); paymentMethod/payments guardan
+ * el método elegido en el POS al emitir, que en una venta al crédito no
+ * representa ningún pago. Mismo criterio que el cuadre de caja.
+ */
 const formatPaymentMethods = (invoice) => {
+  if (invoice.paymentHistory && Array.isArray(invoice.paymentHistory) && invoice.paymentHistory.length > 0) {
+    if (invoice.paymentHistory.length === 1) return invoice.paymentHistory[0].method || 'Efectivo'
+    return invoice.paymentHistory.map(p => `${p.method}: S/${(p.amount || 0).toFixed(2)}`).join(' + ')
+  }
+  // Venta al crédito sin pagos registrados aún: no hay método real.
+  if (invoice.paymentStatus === 'pending') return 'Crédito'
   if (invoice.payments && Array.isArray(invoice.payments) && invoice.payments.length > 0) {
     if (invoice.payments.length === 1) return invoice.payments[0].method || 'Efectivo'
     return invoice.payments.map(p => `${p.method}: S/${(p.amount || 0).toFixed(2)}`).join(' + ')
@@ -567,24 +579,29 @@ function appendPaymentMethodsSheet(wb, invoices, businessData, branchLabel) {
   if (!invoices || invoices.length === 0) return
 
   const agg = new Map()
+  const addTo = (method, amount) => {
+    if (!agg.has(method)) agg.set(method, { method, amount: 0, count: 0 })
+    const e = agg.get(method)
+    e.amount += amount
+    e.count += 1
+  }
   for (const inv of invoices) {
     // Montos en SOLES (TC congelado del doc) — sin esto se mezclaban USD y PEN
     const rate = getDocumentRate(inv)
-    if (inv.payments && Array.isArray(inv.payments) && inv.payments.length > 0) {
-      // Pagos múltiples: cada uno con su monto
-      for (const p of inv.payments) {
-        const method = p.method || 'Efectivo'
-        if (!agg.has(method)) agg.set(method, { method, amount: 0, count: 0 })
-        const e = agg.get(method)
-        e.amount += (p.amount || 0) * rate
-        e.count += 1
-      }
+    // Fuente de pagos: prioriza paymentHistory (pagos REALES de ventas al
+    // crédito/parciales registrados con "Registrar Pago" — ej. Yape); si no
+    // hay, payments (ventas normales). Mismo criterio que el cuadre de caja.
+    const history = Array.isArray(inv.paymentHistory) && inv.paymentHistory.length > 0 ? inv.paymentHistory : null
+    const payments = Array.isArray(inv.payments) && inv.payments.length > 0 ? inv.payments : null
+    if (history) {
+      for (const p of history) addTo(p.method || 'Efectivo', (p.amount || 0) * rate)
+    } else if (inv.paymentStatus === 'pending') {
+      // Venta al crédito sin ningún pago aún: agrupar como Crédito (por cobrar)
+      addTo('Crédito', getDocumentTotalInBase(inv))
+    } else if (payments) {
+      for (const p of payments) addTo(p.method || 'Efectivo', (p.amount || 0) * rate)
     } else {
-      const method = inv.paymentMethod || 'Efectivo'
-      if (!agg.has(method)) agg.set(method, { method, amount: 0, count: 0 })
-      const e = agg.get(method)
-      e.amount += getDocumentTotalInBase(inv)
-      e.count += 1
+      addTo(inv.paymentMethod || 'Efectivo', getDocumentTotalInBase(inv))
     }
   }
   if (agg.size === 0) return

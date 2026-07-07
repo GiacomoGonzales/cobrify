@@ -635,6 +635,24 @@ Gracias por tu preferencia.`
   // Reportes/Dashboard en src/utils/locationAccess.js).
   const canAccessInvoiceBySeller = useSellerScope()
 
+  // Métodos de pago REALES de un comprobante (para mostrar y filtrar).
+  // Prioriza paymentHistory: en ventas al crédito/parciales, los pagos hechos
+  // con "Registrar Pago" (ej. Yape) quedan SOLO ahí — paymentMethod/payments
+  // conservan el método que estaba seleccionado en el POS al emitir, que en
+  // una venta al crédito no representa ningún pago real. Mismo criterio que
+  // el cuadre de caja (cashReportService.formatPaymentMethods).
+  const getRealPaymentMethods = (invoice) => {
+    if (Array.isArray(invoice.paymentHistory) && invoice.paymentHistory.length > 0) {
+      return [...new Set(invoice.paymentHistory.map(p => p.method || 'Efectivo'))]
+    }
+    // Venta al crédito sin ningún pago registrado aún: no hay método real.
+    if (invoice.paymentStatus === 'pending') return ['Crédito']
+    if (Array.isArray(invoice.payments) && invoice.payments.length > 0) {
+      return [...new Set(invoice.payments.map(p => p.method || 'Efectivo'))]
+    }
+    return [invoice.paymentMethod || 'Efectivo']
+  }
+
   const loadInvoices = async () => {
     if (!user?.uid) return
 
@@ -1824,12 +1842,10 @@ Gracias por tu preferencia.`
       // Filtrar por método de pago (multi, con soporte de pago múltiple)
       if (exportFilters.paymentMethods && exportFilters.paymentMethods.length > 0) {
         const wanted = exportFilters.paymentMethods.map(m => m.toLowerCase());
-        filteredInvoices = filteredInvoices.filter(inv => {
-          if (inv.payments && inv.payments.length > 1) {
-            return inv.payments.some(p => wanted.includes((p.method || '').toLowerCase()));
-          }
-          return wanted.includes((inv.paymentMethod || 'Efectivo').toLowerCase());
-        });
+        // Métodos reales (prioriza pagos registrados de ventas al crédito/parciales)
+        filteredInvoices = filteredInvoices.filter(inv =>
+          getRealPaymentMethods(inv).some(m => wanted.includes(m.toLowerCase()))
+        );
       }
 
       // Excluir boletas convertidas desde notas de venta (si está activado)
@@ -2202,17 +2218,12 @@ Gracias por tu preferencia.`
         }
       }
 
-      // Filtrar por método de pago
+      // Filtrar por método de pago (métodos reales: prioriza pagos registrados,
+      // así una venta al crédito cobrada por Yape aparece al filtrar por Yape)
       let matchesPayment = true
       if (filterPaymentMethod !== 'all') {
-        const invoiceMethod = (invoice.paymentMethod || 'Efectivo').toLowerCase()
         const filterMethod = filterPaymentMethod.toLowerCase()
-        if (invoice.payments && invoice.payments.length > 1) {
-          // Pago múltiple: buscar si alguno coincide
-          matchesPayment = invoice.payments.some(p => (p.method || '').toLowerCase() === filterMethod)
-        } else {
-          matchesPayment = invoiceMethod === filterMethod
-        }
+        matchesPayment = getRealPaymentMethods(invoice).some(m => m.toLowerCase() === filterMethod)
       }
 
       // Filtrar por conversión (notas de venta)
@@ -2846,12 +2857,10 @@ Gracias por tu preferencia.`
                     </div>
                   </div>
 
-                  {/* Método de pago */}
+                  {/* Método de pago (real: prioriza pagos registrados) */}
                   <div className="mt-1">
                     <span className="text-xs text-gray-500">
-                      {invoice.payments && invoice.payments.length > 1
-                        ? invoice.payments.map(p => p.method).join(' + ')
-                        : invoice.paymentMethod || 'Efectivo'}
+                      {getRealPaymentMethods(invoice).join(' + ')}
                     </span>
                   </div>
 
@@ -2997,9 +3006,7 @@ Gracias por tu preferencia.`
                     </TableCell>
                     <TableCell className="py-2.5 px-3">
                       <span className="text-xs text-gray-600 whitespace-nowrap">
-                        {invoice.payments && invoice.payments.length > 1
-                          ? invoice.payments.map(p => p.method).join(' + ')
-                          : invoice.paymentMethod || 'Efectivo'}
+                        {getRealPaymentMethods(invoice).join(' + ')}
                       </span>
                     </TableCell>
                     <TableCell className="py-2.5 px-2">
