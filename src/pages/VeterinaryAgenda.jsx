@@ -86,7 +86,8 @@ export default function VeterinaryAgenda() {
   const [newClient, setNewClient] = useState({ documentType: ID_TYPES.DNI, documentNumber: '', name: '', phone: '' })
   const [newPet, setNewPet] = useState({ name: '', species: '' })
   const [lookingUpDoc, setLookingUpDoc] = useState(false)
-  const [walkInService, setWalkInService] = useState({ serviceId: '', serviceName: '', price: '' })
+  // Servicios del walk-in: array (una mascota puede llevar baño + corte + movilidad, etc.)
+  const [walkInServices, setWalkInServices] = useState([{ serviceId: '', serviceName: '', price: '' }])
   // Servicios reales del negocio (Productos y Servicios) para el dropdown del walk-in
   const [serviceOptions, setServiceOptions] = useState([])
   const [savingWalkIn, setSavingWalkIn] = useState(false)
@@ -303,7 +304,7 @@ export default function VeterinaryAgenda() {
     setWalkInPetIdx(0)
     setNewClient({ documentType: ID_TYPES.DNI, documentNumber: '', name: '', phone: '' })
     setNewPet({ name: '', species: '' })
-    setWalkInService({ serviceId: '', serviceName: '', price: '' })
+    setWalkInServices([{ serviceId: '', serviceName: '', price: '' }])
     setWalkInOpen(true)
     if (customers.length === 0) {
       try {
@@ -357,6 +358,15 @@ export default function VeterinaryAgenda() {
     }
   }
 
+  // ----- Helpers de servicios del walk-in (multi) -----
+  const updateWalkInService = (idx, patch) =>
+    setWalkInServices(list => list.map((s, i) => (i === idx ? { ...s, ...patch } : s)))
+  const addWalkInService = () =>
+    setWalkInServices(list => [...list, { serviceId: '', serviceName: '', price: '' }])
+  const removeWalkInService = (idx) =>
+    setWalkInServices(list => (list.length > 1 ? list.filter((_, i) => i !== idx) : list))
+  const walkInTotal = walkInServices.reduce((sum, s) => sum + (parseFloat(s.price) || 0), 0)
+
   const handleCreateWalkIn = async () => {
     const businessId = getBusinessId()
 
@@ -402,8 +412,15 @@ export default function VeterinaryAgenda() {
         }
       }
 
-      const price = parseFloat(walkInService.price) || 0
-      const svcName = (walkInService.serviceName || '').trim()
+      // Servicios: array (baño + corte + movilidad...). Se toman los que tengan
+      // nombre; el precio puede ser 0. serviceName/servicePrice quedan como
+      // resumen (nombres unidos con " + " y suma) para las tarjetas y el POS,
+      // que ya consume el array services[] (un ítem de carrito por servicio).
+      const services = walkInServices
+        .map(s => ({ name: (s.serviceName || '').trim(), price: parseFloat(s.price) || 0 }))
+        .filter(s => s.name)
+      const price = services.reduce((sum, s) => sum + s.price, 0)
+      const svcName = services.map(s => s.name).join(' + ')
       const now = new Date()
       const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
       const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
@@ -411,7 +428,7 @@ export default function VeterinaryAgenda() {
         customerId, customerName, petName, petSpecies, petId, phone,
         serviceName: svcName,
         servicePrice: price,
-        services: svcName ? [{ name: svcName, price }] : [],
+        services,
         scheduledDate: dateStr,
         scheduledTime: timeStr,
         notes: 'Atención directa (walk-in)',
@@ -1020,56 +1037,85 @@ export default function VeterinaryAgenda() {
             </>
           )}
 
-          {/* ===== SERVICIO + PRECIO ===== */}
-          <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-100">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Servicio</label>
-              <select
-                value={walkInService.serviceId}
-                onChange={(e) => {
-                  const val = e.target.value
-                  if (val === 'custom') {
-                    setWalkInService(s => ({ ...s, serviceId: 'custom', serviceName: '' }))
-                  } else if (!val) {
-                    setWalkInService(s => ({ ...s, serviceId: '', serviceName: '', price: '' }))
-                  } else {
-                    const prod = serviceOptions.find(p => p.id === val)
-                    setWalkInService(s => ({
-                      ...s,
-                      serviceId: val,
-                      serviceName: prod?.name || '',
-                      price: prod?.price != null ? String(prod.price) : s.price,
-                    }))
-                  }
-                }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-              >
-                <option value="">Selecciona un servicio</option>
-                {serviceOptions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                <option value="custom">Otro (personalizado)</option>
-              </select>
+          {/* ===== SERVICIOS + PRECIOS (multi: baño + corte + movilidad...) ===== */}
+          <div className="pt-3 border-t border-gray-100 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-sm font-medium text-gray-700">Servicios</label>
               {serviceOptions.length === 0 && (
-                <p className="text-xs text-gray-400 mt-1">No tienes servicios creados. Créalos en Productos y Servicios o usa "Otro".</p>
+                <span className="text-xs text-gray-400">Créalos en Productos y Servicios o usa "Otro".</span>
               )}
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Precio (S/)</label>
-              <input type="number" min="0" step="0.01" value={walkInService.price} onChange={(e) => setWalkInService(s => ({ ...s, price: e.target.value }))} placeholder="0.00" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+
+            {walkInServices.map((svc, idx) => (
+              <div key={idx} className="space-y-2">
+                <div className="flex items-start gap-2">
+                  <select
+                    value={svc.serviceId}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      if (val === 'custom') {
+                        updateWalkInService(idx, { serviceId: 'custom', serviceName: '' })
+                      } else if (!val) {
+                        updateWalkInService(idx, { serviceId: '', serviceName: '', price: '' })
+                      } else {
+                        const prod = serviceOptions.find(p => p.id === val)
+                        updateWalkInService(idx, {
+                          serviceId: val,
+                          serviceName: prod?.name || '',
+                          price: prod?.price != null ? String(prod.price) : svc.price,
+                        })
+                      }
+                    }}
+                    className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  >
+                    <option value="">Selecciona un servicio</option>
+                    {serviceOptions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    <option value="custom">Otro (personalizado)</option>
+                  </select>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={svc.price}
+                    onChange={(e) => updateWalkInService(idx, { price: e.target.value })}
+                    placeholder="0.00"
+                    className="w-24 px-3 py-2 border border-gray-300 rounded-lg text-sm text-right"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeWalkInService(idx)}
+                    disabled={walkInServices.length === 1}
+                    title="Quitar servicio"
+                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gray-400"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+                {svc.serviceId === 'custom' && (
+                  <input
+                    type="text"
+                    value={svc.serviceName}
+                    onChange={(e) => updateWalkInService(idx, { serviceName: e.target.value })}
+                    placeholder="Nombre del servicio (ej. Consulta general)"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  />
+                )}
+              </div>
+            ))}
+
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={addWalkInService}
+                className="inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-700"
+              >
+                <Plus className="w-4 h-4" /> Agregar servicio
+              </button>
+              {walkInTotal > 0 && (
+                <span className="text-sm font-semibold text-gray-900">Total: S/ {walkInTotal.toFixed(2)}</span>
+              )}
             </div>
           </div>
-
-          {walkInService.serviceId === 'custom' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del servicio</label>
-              <input
-                type="text"
-                value={walkInService.serviceName}
-                onChange={(e) => setWalkInService(s => ({ ...s, serviceName: e.target.value }))}
-                placeholder="Ej. Consulta general"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-              />
-            </div>
-          )}
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setWalkInOpen(false)} disabled={savingWalkIn}>Cancelar</Button>
