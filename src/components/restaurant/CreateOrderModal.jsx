@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import { X, ShoppingBag, Bike, Smartphone, User, Phone, AlertTriangle, Clock, Tag, MapPin, Wallet } from 'lucide-react'
+import { X, ShoppingBag, Bike, Smartphone, User, Phone, AlertTriangle, Clock, Tag, MapPin, Wallet, Search, Loader2, CreditCard } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
-import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
+import { useToast } from '@/contexts/ToastContext'
+import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 
 const ORDER_SOURCES = [
   { value: 'counter', label: 'Mostrador' },
@@ -18,11 +19,18 @@ const ORDER_SOURCES = [
 ]
 
 export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = [] }) {
+  const toast = useToast()
   const [orderType, setOrderType] = useState('takeaway') // 'takeaway' or 'delivery'
   const [source, setSource] = useState('counter')
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
   const [customerAddress, setCustomerAddress] = useState('') // dirección de entrega (delivery)
+  // Documento para el comprobante (opcional). Se arrastra al POS al cobrar, así
+  // no se re-teclea. Con lupita RENIEC/SUNAT (mismo servicio que el POS).
+  const [documentType, setDocumentType] = useState('DNI') // 'DNI' | 'RUC'
+  const [documentNumber, setDocumentNumber] = useState('')
+  const [fiscalAddress, setFiscalAddress] = useState('') // dirección fiscal (RUC/SUNAT) para factura
+  const [isLookingUp, setIsLookingUp] = useState(false)
   const [priority, setPriority] = useState('normal') // 'normal' or 'urgent'
   const [brandId, setBrandId] = useState('') // Brand selection
   // Estado de pago del pedido: false = por cobrar (el repartidor/cajero cobra), true = pagado
@@ -36,8 +44,42 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
     }
   }, [brands])
 
+  // Lupita RENIEC/SUNAT: autocompleta nombre/razón social (y dirección fiscal en RUC).
+  const handleLookupDocument = async () => {
+    const doc = documentNumber.trim()
+    if (documentType === 'DNI' && doc.length !== 8) { toast.error('El DNI debe tener 8 dígitos'); return }
+    if (documentType === 'RUC' && doc.length !== 11) { toast.error('El RUC debe tener 11 dígitos'); return }
+    setIsLookingUp(true)
+    try {
+      if (documentType === 'DNI') {
+        const res = await consultarDNI(doc)
+        if (res.success) {
+          setCustomerName(res.data.nombreCompleto || customerName)
+          toast.success('Datos encontrados en RENIEC')
+        } else {
+          toast.error(res.error || 'No se encontró el DNI')
+        }
+      } else {
+        const res = await consultarRUC(doc)
+        if (res.success) {
+          setCustomerName(res.data.razonSocial || customerName)
+          if (res.data.direccion) setFiscalAddress(res.data.direccion)
+          toast.success('Datos encontrados en SUNAT')
+        } else {
+          toast.error(res.error || 'No se encontró el RUC')
+        }
+      }
+    } catch (e) {
+      console.error('Error consultando documento:', e)
+      toast.error('Error al consultar el documento')
+    } finally {
+      setIsLookingUp(false)
+    }
+  }
+
   const handleConfirm = () => {
     const selectedBrand = brands.find(b => b.id === brandId)
+    const docNum = documentNumber.trim()
     const orderData = {
       orderType,
       source: ORDER_SOURCES.find(s => s.value === source)?.label || source,
@@ -45,6 +87,12 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
       customerPhone: customerPhone.trim() || null,
       // La dirección solo aplica a delivery
       customerAddress: orderType === 'delivery' ? (customerAddress.trim() || null) : null,
+      // Documento para el comprobante (se arrastra al POS). businessName = razón
+      // social cuando es RUC; fiscalAddress = dirección SUNAT (para factura).
+      documentType,
+      documentNumber: docNum || null,
+      businessName: (documentType === 'RUC' && docNum) ? (customerName.trim() || null) : null,
+      fiscalAddress: (documentType === 'RUC' && docNum) ? (fiscalAddress.trim() || null) : null,
       priority,
       brandId: brandId || null,
       brandName: selectedBrand?.name || null,
@@ -62,6 +110,9 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
     setCustomerName('')
     setCustomerPhone('')
     setCustomerAddress('')
+    setDocumentType('DNI')
+    setDocumentNumber('')
+    setFiscalAddress('')
     setPriority('normal')
     setBrandId(brands.length === 1 ? brands[0].id : '')
     setPaid(false)
@@ -74,6 +125,9 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
     setCustomerName('')
     setCustomerPhone('')
     setCustomerAddress('')
+    setDocumentType('DNI')
+    setDocumentNumber('')
+    setFiscalAddress('')
     setPriority('normal')
     setBrandId(brands.length === 1 ? brands[0].id : '')
     setPaid(false)
@@ -107,7 +161,7 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => setOrderType('takeaway')}
-              className={`p-4 rounded-lg border-2 transition-all ${
+              className={`p-4 rounded-xl border-2 transition-all ${
                 orderType === 'takeaway'
                   ? 'border-green-500 bg-green-50'
                   : 'border-gray-200 hover:border-gray-300'
@@ -128,7 +182,7 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
 
             <button
               onClick={() => setOrderType('delivery')}
-              className={`p-4 rounded-lg border-2 transition-all ${
+              className={`p-4 rounded-xl border-2 transition-all ${
                 orderType === 'delivery'
                   ? 'border-blue-500 bg-blue-50'
                   : 'border-gray-200 hover:border-gray-300'
@@ -220,54 +274,87 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
         )}
 
         {/* Datos del Cliente (Opcional) */}
-        <div className="bg-gray-50 rounded-lg p-4 space-y-4">
-          <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
-            <User className="w-4 h-4" />
-            Datos del Cliente (Opcional)
+        <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 space-y-4">
+          <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+            <User className="w-4 h-4 text-gray-400" />
+            Datos del cliente <span className="font-normal text-gray-400">(opcional)</span>
           </h3>
 
+          {/* Documento (para el comprobante) + lupita RENIEC/SUNAT */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Nombre
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1.5">
+              <CreditCard className="w-4 h-4 text-gray-400" />
+              Documento (para el comprobante)
             </label>
-            <Input
+            <div className="flex items-stretch gap-2">
+              <select
+                value={documentType}
+                onChange={(e) => setDocumentType(e.target.value)}
+                className="w-24 shrink-0 px-3 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+              >
+                <option value="DNI">DNI</option>
+                <option value="RUC">RUC</option>
+              </select>
+              <input
+                value={documentNumber}
+                onChange={(e) => setDocumentNumber(e.target.value.replace(/\D/g, ''))}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleLookupDocument() } }}
+                placeholder={documentType === 'RUC' ? '11 dígitos' : '8 dígitos'}
+                inputMode="numeric"
+                maxLength={documentType === 'RUC' ? 11 : 8}
+                className="flex-1 min-w-0 px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+              />
+              <button
+                type="button"
+                onClick={handleLookupDocument}
+                disabled={isLookingUp || (documentType === 'DNI' ? documentNumber.trim().length !== 8 : documentNumber.trim().length !== 11)}
+                title="Buscar en RENIEC/SUNAT"
+                className="shrink-0 w-11 flex items-center justify-center bg-white border border-gray-300 rounded-lg text-gray-500 hover:bg-primary-50 hover:text-primary-600 hover:border-primary-300 disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-gray-500 disabled:hover:border-gray-300 transition-colors"
+              >
+                {isLookingUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mt-1.5">Opcional. Se usará al emitir el comprobante; la lupita autocompleta el nombre.</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              {documentType === 'RUC' ? 'Razón social' : 'Nombre'}
+            </label>
+            <input
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
-              placeholder="Ej: Juan Pérez"
-              className="w-full"
+              placeholder={documentType === 'RUC' ? 'Ej: Comercial Los Andes S.A.C.' : 'Ej: Juan Pérez'}
+              className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <div className="flex items-center gap-2">
-                <Phone className="w-4 h-4" />
-                Teléfono
-              </div>
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1.5">
+              <Phone className="w-4 h-4 text-gray-400" />
+              Teléfono
             </label>
-            <Input
+            <input
               value={customerPhone}
               onChange={(e) => setCustomerPhone(e.target.value)}
               placeholder="Ej: 987 654 321"
               type="tel"
-              className="w-full"
+              className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
             />
           </div>
 
           {/* Dirección de entrega (solo delivery) */}
           {orderType === 'delivery' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4" />
-                  Dirección de entrega
-                </div>
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1.5">
+                <MapPin className="w-4 h-4 text-gray-400" />
+                Dirección de entrega
               </label>
-              <Input
+              <input
                 value={customerAddress}
                 onChange={(e) => setCustomerAddress(e.target.value)}
                 placeholder="Ej: Av. Las Viñas 123, Ref. frente al parque"
-                className="w-full"
+                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
               />
             </div>
           )}
@@ -285,7 +372,7 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
             <button
               type="button"
               onClick={() => setPaid(false)}
-              className={`p-4 rounded-lg border-2 transition-all ${
+              className={`p-4 rounded-xl border-2 transition-all ${
                 !paid ? 'border-amber-500 bg-amber-50' : 'border-gray-200 hover:border-gray-300'
               }`}
             >
@@ -299,7 +386,7 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
             <button
               type="button"
               onClick={() => setPaid(true)}
-              className={`p-4 rounded-lg border-2 transition-all ${
+              className={`p-4 rounded-xl border-2 transition-all ${
                 paid ? 'border-green-500 bg-green-50' : 'border-gray-200 hover:border-gray-300'
               }`}
             >

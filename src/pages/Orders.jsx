@@ -545,6 +545,7 @@ export default function Orders() {
         markAsPaidOnComplete: true,
         // Sede de la orden: el POS fija sucursal+almacén (comprobante/serie/caja/stock correctos)
         branchId: orderToClose.branchId ?? null,
+        ...orderCustomerState(orderToClose),
       }
     })
     setShowCloseOrderModal(false)
@@ -629,6 +630,7 @@ export default function Orders() {
         markAsPaidOnComplete: true,
         // Sede de la orden: el POS fija sucursal+almacén (comprobante/serie/caja/stock correctos)
         branchId: orderToClose.branchId ?? null,
+        ...orderCustomerState(orderToClose),
       },
     })
     setIsIndividualPaymentModalOpen(false)
@@ -1016,6 +1018,18 @@ export default function Orders() {
   }
 
   // Ir al POS para cobrar una orden
+  // Datos del cliente de la orden que se pasan al POS (state) para precargar el
+  // comprobante. Solo se incluyen los que existen. `customerAddress` es la de
+  // ENTREGA (delivery) y no va al comprobante; la fiscal (RUC) es customerFiscalAddress.
+  const orderCustomerState = (order) => ({
+    customerName: order.customerName || null,
+    customerPhone: order.customerPhone || null,
+    customerDocumentType: order.customerDocumentType || null,
+    customerDocumentNumber: order.customerDocumentNumber || null,
+    customerBusinessName: order.customerBusinessName || null,
+    customerFiscalAddress: order.customerFiscalAddress || null,
+  })
+
   const handleGoToPayment = (order) => {
     appNavigate('pos', {
       state: {
@@ -1033,6 +1047,9 @@ export default function Orders() {
         waiterName: order.waiterName || null,
         // Sede de la orden: el POS fija sucursal+almacén (comprobante/serie/caja/stock correctos)
         branchId: order.branchId ?? null,
+        // Datos del cliente capturados al crear la orden → el POS los precarga
+        // para no re-teclear al emitir el comprobante.
+        ...orderCustomerState(order),
       }
     })
   }

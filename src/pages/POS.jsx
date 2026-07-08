@@ -1610,6 +1610,21 @@ export default function POS() {
       // Establecer tipo de orden
       setOrderType(orderInfo.orderType || 'takeaway')
 
+      // Precargar datos del cliente capturados al crear la orden, para no
+      // re-teclearlos al emitir el comprobante. Solo se sobreescribe lo que
+      // vino en la orden (el resto de customerData queda como estaba).
+      if (orderInfo.customerName || orderInfo.customerDocumentNumber || orderInfo.customerPhone) {
+        setCustomerData(prev => ({
+          ...prev,
+          ...(orderInfo.customerDocumentType && { documentType: orderInfo.customerDocumentType }),
+          ...(orderInfo.customerDocumentNumber && { documentNumber: orderInfo.customerDocumentNumber }),
+          ...(orderInfo.customerName && { name: orderInfo.customerName }),
+          ...(orderInfo.customerBusinessName && { businessName: orderInfo.customerBusinessName }),
+          ...(orderInfo.customerFiscalAddress && { address: orderInfo.customerFiscalAddress }),
+          ...(orderInfo.customerPhone && { phone: orderInfo.customerPhone }),
+        }))
+      }
+
       // Forzar la sede (y su almacén) a la de la orden, para cobrar/descontar stock en la sucursal correcta
       if ('branchId' in orderInfo) {
         setPendingBranchSelection({ branchId: orderInfo.branchId ?? null })

@@ -223,6 +223,11 @@ export const createOrder = async (businessId, orderData) => {
       ...(orderData.customerName && { customerName: orderData.customerName }),
       ...(orderData.customerPhone && { customerPhone: orderData.customerPhone }),
       ...(orderData.customerAddress && { customerAddress: orderData.customerAddress }),
+      // Documento para el comprobante (se arrastra al POS al cobrar)
+      ...(orderData.documentType && { customerDocumentType: orderData.documentType }),
+      ...(orderData.documentNumber && { customerDocumentNumber: orderData.documentNumber }),
+      ...(orderData.businessName && { customerBusinessName: orderData.businessName }),
+      ...(orderData.fiscalAddress && { customerFiscalAddress: orderData.fiscalAddress }),
 
       // Marca (para dark kitchens / multi-marca)
       ...(orderData.brandId && { brandId: orderData.brandId }),
