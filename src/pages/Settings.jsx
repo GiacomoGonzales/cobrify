@@ -413,6 +413,8 @@ export default function Settings() {
 
   // Estados para múltiples precios
   const [multiplePricesEnabled, setMultiplePricesEnabled] = useState(false)
+  // Precios de venta por sucursal (overrides por producto; ver src/utils/branchPricing.js)
+  const [branchPricingEnabled, setBranchPricingEnabled] = useState(false)
   const [priceLabels, setPriceLabels] = useState({
     price1: 'Público',
     price2: 'Mayorista',
@@ -1265,6 +1267,7 @@ export default function Settings() {
 
         // Cargar configuración de múltiples precios
         setMultiplePricesEnabled(businessData.multiplePricesEnabled || false)
+        setBranchPricingEnabled(businessData.branchPricingEnabled || false)
         // Cargar configuración de presentaciones de venta
         setPresentationsEnabled(businessData.presentationsEnabled || false)
         setShowDescriptionInPOS(businessData.showDescriptionInPOS || false)
@@ -5166,6 +5169,18 @@ export default function Settings() {
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
 
+              {/* Precios de venta por sucursal */}
+              <div>
+                <SettingToggle
+                  checked={branchPricingEnabled}
+                  onChange={(e) => setBranchPricingEnabled(e.target.checked)}
+                  title="Precios de venta por sucursal"
+                  description={branchPricingEnabled
+                    ? '✓ Habilitado: al editar un producto verás la sección "Precios por sucursal". El POS usará el precio de la sucursal en la que estás vendiendo; si el producto no tiene precio para esa sucursal, usa el precio general. La Sucursal Principal siempre usa el precio general.'
+                    : '✗ Deshabilitado: todos los locales venden con el mismo precio (el precio general del producto).'}
+                />
+              </div>
+
               {/* Múltiples precios por producto */}
               <div>
                 <h3 className="text-base font-semibold text-gray-900 mb-1">Múltiples Precios por Producto</h3>
@@ -5641,6 +5656,7 @@ export default function Settings() {
                       cardCommissionEnabled: cardCommissionEnabled,
                       cardCommissionRate: Number(cardCommissionRate) || 0,
                       multiplePricesEnabled: multiplePricesEnabled,
+                      branchPricingEnabled: branchPricingEnabled,
                       priceLabels: priceLabels,
                       pricePercentages: pricePercentages,
                       priceCalculationBase: priceCalculationBase,

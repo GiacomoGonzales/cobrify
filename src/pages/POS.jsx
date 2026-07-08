@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useDeferredValue } from 'react'
+import React, { useState, useEffect, useRef, useMemo, useDeferredValue } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import {
@@ -61,6 +61,7 @@ import {
   BASE_CURRENCY,
 } from '@/utils/currency'
 import { getRateForDate } from '@/services/exchangeRateService'
+import { applyBranchPricing } from '@/utils/branchPricing'
 import { calculateInvoiceAmounts, calculateMixedInvoiceAmounts, calculateRecargoConsumo, ID_TYPES, DETRACTION_TYPES, DETRACTION_MIN_AMOUNT } from '@/utils/peruUtils'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
 import { Share } from '@capacitor/share'
@@ -325,7 +326,10 @@ export default function POS() {
     return ''
   }
 
-  const [products, setProducts] = useState([])
+  // productsRaw = productos tal cual vienen de Firestore. `products` (más abajo,
+  // tras selectedBranch) es la vista EFECTIVA con los precios por sucursal
+  // aplicados — todo el POS lee de `products`, así los overrides aplican solos.
+  const [productsRaw, setProductsRaw] = useState([])
   const [productsLoading, setProductsLoading] = useState(true)
   // Set<productId> de platos con receta cuyos insumos no alcanzan para 1 unidad.
   // Se calcula lazy (después del primer paint) y sólo si `!allowNegativeStock`.
@@ -471,6 +475,17 @@ export default function POS() {
   const [selectedBranch, setSelectedBranch] = useState(null)
   // Sede pendiente de aplicar al cobrar una mesa/orden (se resuelve cuando cargan sucursales/almacenes)
   const [pendingBranchSelection, setPendingBranchSelection] = useState(null)
+
+  // Precios por sucursal (businessSettings.branchPricingEnabled): `products` es la
+  // vista EFECTIVA con price/price2/3/4 reemplazados por el override de la sucursal
+  // activa. Sin feature o en Sucursal Principal (sin branchId) → lista original tal
+  // cual (misma referencia, no invalida memos aguas abajo).
+  const products = useMemo(() => {
+    if (!businessSettings?.branchPricingEnabled) return productsRaw
+    const branchId = selectedBranch?.id || null
+    if (!branchId) return productsRaw
+    return productsRaw.map(p => applyBranchPricing(p, branchId))
+  }, [productsRaw, selectedBranch, businessSettings?.branchPricingEnabled])
 
   // Estado para edición de documento existente
   const [editingInvoiceId, setEditingInvoiceId] = useState(null)
@@ -2381,7 +2396,7 @@ export default function POS() {
     getCachedProducts(businessId).then((cached) => {
       if (cancelled) return
       if (cached && cached.length > 0) {
-        setProducts(cached)
+        setProductsRaw(cached)
         setProductsLoading(false) // UX inmediata, aunque el listener siga sincronizando
       }
     }).catch(() => {})
@@ -2392,7 +2407,7 @@ export default function POS() {
       if (cancelled) return
       if (result.success) {
         const list = result.data || []
-        setProducts(list)
+        setProductsRaw(list)
         // Fire-and-forget: no bloquear el snapshot por la escritura del caché.
         setCachedProducts(businessId, list).catch(() => {})
       }
@@ -2413,7 +2428,7 @@ export default function POS() {
     try {
       if (isDemoMode && demoData) {
         // Cargar datos de demo
-        setProducts(demoData.products || [])
+        setProductsRaw(demoData.products || [])
         setCustomers(demoData.customers || [])
         setCompanySettings(demoData.business || null)
         setCategories(demoData.categories || [])
@@ -6127,7 +6142,7 @@ export default function POS() {
         }
 
         // Actualizar stock localmente
-        setProducts(prev => prev.map(product => {
+        setProductsRaw(prev => prev.map(product => {
           // Buscar TODOS los items del carrito que correspondan a este producto
           const cartItems = cart.filter(ci => ci.id === product.id || ci.productId === product.id)
           if (cartItems.length === 0) return product

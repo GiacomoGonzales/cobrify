@@ -36,6 +36,7 @@ import { exportProductsForImport, exportProductsForRappi } from '@/services/prod
 import ImportProductsModal from '@/components/ImportProductsModal'
 import { getWarehouses, updateWarehouseStock, getDefaultWarehouse, createWarehouse, createStockMovement } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
+import { cleanBranchPrices } from '@/utils/branchPricing'
 import { getRateForDate } from '@/services/exchangeRateService'
 import ProductModifiersSection from '@/components/ProductModifiersSection'
 import { uploadProductImage, deleteProductImage, createImagePreview, revokeImagePreview } from '@/services/productImageService'
@@ -194,6 +195,9 @@ export default function Products() {
   // la cantidad en el carrito, usando los mínimos configurados por producto.
   const [useAutoPriceByQty, setUseAutoPriceByQty] = useState(false)
   const [priceMinQtys, setPriceMinQtys] = useState({ price2: '', price3: '', price4: '' })
+  // Precios por sucursal (overrides): { [branchId]: { price:'', price2:'', price3:'', price4:'' } } — strings del form
+  const [branchPrices, setBranchPrices] = useState({})
+  const [branchPricesOpen, setBranchPricesOpen] = useState(false) // sección colapsable del modal
   const [catalogHidePrice, setCatalogHidePrice] = useState(false) // Ocultar precio en catálogo
   const [catalogComparePrice, setCatalogComparePrice] = useState('') // Precio tachado en catálogo
   const [isFeatured, setIsFeatured] = useState(false) // Producto destacado en catálogo
@@ -607,6 +611,8 @@ export default function Products() {
     setCatalogComparePrice('')
     setUseAutoPriceByQty(false)
     setPriceMinQtys({ price2: '', price3: '', price4: '' })
+    setBranchPrices({})
+    setBranchPricesOpen(false)
     setHasVariants(false)
     setVariantAttributes([])
     setVariants([])
@@ -749,6 +755,17 @@ export default function Products() {
     setCatalogComparePrice(product.catalogComparePrice?.toString() || '')
     setIsFeatured(product.isFeatured || false)
 
+    // Precios por sucursal existentes (números en Firestore → strings del form)
+    setBranchPrices(product.branchPrices
+      ? Object.fromEntries(Object.entries(product.branchPrices).map(([bId, p]) => [bId, {
+          price: p?.price != null ? String(p.price) : '',
+          price2: p?.price2 != null ? String(p.price2) : '',
+          price3: p?.price3 != null ? String(p.price3) : '',
+          price4: p?.price4 != null ? String(p.price4) : '',
+        }]))
+      : {})
+    setBranchPricesOpen(!!product.branchPrices && Object.keys(product.branchPrices).length > 0)
+
     // Load auto-precio por cantidad (opt-in por producto)
     setUseAutoPriceByQty(product.useAutoPriceByQty === true)
     setPriceMinQtys({
@@ -889,6 +906,17 @@ export default function Products() {
     setCatalogHidePrice(product.catalogHidePrice || false)
     setCatalogComparePrice(product.catalogComparePrice?.toString() || '')
     setIsFeatured(product.isFeatured || false)
+
+    // Precios por sucursal existentes (números en Firestore → strings del form)
+    setBranchPrices(product.branchPrices
+      ? Object.fromEntries(Object.entries(product.branchPrices).map(([bId, p]) => [bId, {
+          price: p?.price != null ? String(p.price) : '',
+          price2: p?.price2 != null ? String(p.price2) : '',
+          price3: p?.price3 != null ? String(p.price3) : '',
+          price4: p?.price4 != null ? String(p.price4) : '',
+        }]))
+      : {})
+    setBranchPricesOpen(!!product.branchPrices && Object.keys(product.branchPrices).length > 0)
 
     // Auto-precio por cantidad (copia configuración del producto duplicado)
     setUseAutoPriceByQty(product.useAutoPriceByQty === true)
@@ -1295,6 +1323,13 @@ export default function Products() {
       productData.price2 = data.price2 && data.price2 !== '' ? parseFloat(data.price2) : null
       productData.price3 = data.price3 && data.price3 !== '' ? parseFloat(data.price3) : null
       productData.price4 = data.price4 && data.price4 !== '' ? parseFloat(data.price4) : null
+
+      // Precios por sucursal (overrides; null = sin overrides, se limpia el campo).
+      // Solo si el negocio tiene la feature activa — si está apagada no tocamos
+      // lo guardado (para no borrar overrides al editar con la feature OFF).
+      if (businessSettings?.branchPricingEnabled) {
+        productData.branchPrices = cleanBranchPrices(branchPrices)
+      }
 
       // Multi-divisa: precio fijo en USD. Solo se persiste si el negocio
       // tiene multi-divisa activada. Para negocios PEN-only siempre null,
@@ -6224,6 +6259,80 @@ export default function Products() {
                   <p className="text-xs text-blue-700 bg-blue-50 px-3 py-2 rounded-lg">
                     Los precios adicionales se configuran directamente en cada variante.
                   </p>
+                </div>
+              )}
+
+              {/* Precios por sucursal (overrides opcionales; feature branchPricingEnabled) */}
+              {businessSettings?.branchPricingEnabled && branches.length > 0 && !hasVariants && (
+                <div className="col-span-2 border border-gray-200 rounded-lg overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setBranchPricesOpen(o => !o)}
+                    className="w-full flex items-center justify-between px-3 py-2.5 bg-gray-50 hover:bg-gray-100 text-left transition-colors"
+                  >
+                    <span className="text-sm font-medium text-gray-900">Precios por sucursal</span>
+                    <span className="text-xs text-gray-500 flex items-center gap-2">
+                      {(() => {
+                        const n = Object.keys(cleanBranchPrices(branchPrices) || {}).length
+                        return n > 0 ? `${n} sucursal${n === 1 ? '' : 'es'} con precio propio` : 'Opcional'
+                      })()}
+                      <ChevronDown className={`w-4 h-4 transition-transform ${branchPricesOpen ? 'rotate-180' : ''}`} />
+                    </span>
+                  </button>
+                  {branchPricesOpen && (
+                    <div className="p-3 space-y-3">
+                      <p className="text-xs text-gray-500">
+                        Deja en blanco para usar el precio general. La Sucursal Principal siempre vende con el precio general.
+                      </p>
+                      {branches.map(b => (
+                        <div key={b.id} className="space-y-1">
+                          <p className="text-xs font-medium text-gray-700">{b.name}</p>
+                          <div className={`grid gap-2 ${businessSettings?.multiplePricesEnabled ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2'}`}>
+                            <input
+                              type="number"
+                              step="any"
+                              min="0"
+                              placeholder={businessSettings?.priceLabels?.price1 || 'Precio'}
+                              value={branchPrices[b.id]?.price || ''}
+                              onChange={(e) => setBranchPrices(prev => ({ ...prev, [b.id]: { ...prev[b.id], price: e.target.value } }))}
+                              className="px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            />
+                            {businessSettings?.multiplePricesEnabled && (
+                              <>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  min="0"
+                                  placeholder={businessSettings?.priceLabels?.price2 || 'Precio 2'}
+                                  value={branchPrices[b.id]?.price2 || ''}
+                                  onChange={(e) => setBranchPrices(prev => ({ ...prev, [b.id]: { ...prev[b.id], price2: e.target.value } }))}
+                                  className="px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                />
+                                <input
+                                  type="number"
+                                  step="any"
+                                  min="0"
+                                  placeholder={businessSettings?.priceLabels?.price3 || 'Precio 3'}
+                                  value={branchPrices[b.id]?.price3 || ''}
+                                  onChange={(e) => setBranchPrices(prev => ({ ...prev, [b.id]: { ...prev[b.id], price3: e.target.value } }))}
+                                  className="px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                />
+                                <input
+                                  type="number"
+                                  step="any"
+                                  min="0"
+                                  placeholder={businessSettings?.priceLabels?.price4 || 'Precio 4'}
+                                  value={branchPrices[b.id]?.price4 || ''}
+                                  onChange={(e) => setBranchPrices(prev => ({ ...prev, [b.id]: { ...prev[b.id], price4: e.target.value } }))}
+                                  className="px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                />
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
