@@ -6120,7 +6120,11 @@ export default function Products() {
                   {...register('cost')}
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  {editingProduct?.hasRecipe ? 'Se calcula desde la receta (insumos)' : 'Opcional'}
+                  {editingProduct?.hasRecipe
+                    ? 'Se calcula desde la receta (insumos)'
+                    : parseFloat(editingProduct?.costUSD) > 0
+                      ? <>Opcional · Último costo en dólares: <strong>{formatCurrency(editingProduct.costUSD, 'USD')}</strong> (de compras en USD)</>
+                      : 'Opcional'}
                 </p>
               </div>
 

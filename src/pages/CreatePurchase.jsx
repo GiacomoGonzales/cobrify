@@ -1667,6 +1667,7 @@ export default function CreatePurchase() {
             variantSku: item.variantSku || null,
             totalQuantity: 0,
             totalCost: 0, // Suma de (cantidad * costo) para calcular promedio ponderado
+            totalCostNative: 0, // Suma en la MONEDA de la compra (para costUSD si es USD)
             items: [] // Guardar items originales para lotes
           }
         }
@@ -1685,6 +1686,7 @@ export default function CreatePurchase() {
         const costInBase = convertToBase(cost, currency, exchangeRate)
         groupedProducts[groupKey].totalQuantity += qty
         groupedProducts[groupKey].totalCost += qty * costInBase
+        groupedProducts[groupKey].totalCostNative += qty * cost
         groupedProducts[groupKey].items.push(item)
       })
 
@@ -1746,11 +1748,24 @@ export default function CreatePurchase() {
           // evita el descuadre de valuación de inventario por redondear el unitario a 2).
           const roundedAverageCost = Math.round(averageCost * 1e6) / 1e6
 
+          // costUSD = "último costo unitario en DÓLARES" (solo compras en USD).
+          // Semántica simple a propósito: NO es promedio ponderado — es el costo de
+          // esta compra en USD, para que el margen de un producto "dólar" no se
+          // distorsione cuando el TC se mueve. `cost` (soles) sigue siendo el
+          // canónico para valuación de inventario. Compras en soles NO lo tocan
+          // (el producto conserva su último costo en dólares conocido).
+          const newCostUSD = (currency === 'USD' && newQuantity > 0 && grouped.totalCostNative > 0)
+            ? Math.round((grouped.totalCostNative / newQuantity) * 1e6) / 1e6
+            : null
+
           // Preparar datos extra (costo, proveedor, lotes)
           // Si el producto se costea por RECETA (hasRecipe), la compra del terminado NO
           // pisa su costo: manda la receta. Igual se actualiza stock/proveedor/lotes.
           const extraUpdates = {
-            ...(product.hasRecipe ? {} : { cost: roundedAverageCost }),
+            ...(product.hasRecipe ? {} : {
+              cost: roundedAverageCost,
+              ...(newCostUSD != null && { costUSD: newCostUSD }),
+            }),
             ...(selectedSupplier && {
               lastSupplier: {
                 id: selectedSupplier.id || '',
@@ -2516,6 +2531,12 @@ export default function CreatePurchase() {
                     )
                   })}
                 </div>
+
+                <p className="text-xs text-gray-500">
+                  La moneda aplica a TODA la compra (la factura del proveedor viene en una sola moneda).
+                  ¿Compraste unos productos en dólares y otros en soles? Regístralos como <strong>dos compras</strong>, una por moneda.
+                  {currency === 'USD' && <> En compras en dólares, el costo del producto se guarda también en <strong>US$</strong> (además del costo en soles).</>}
+                </p>
 
                 {currency === 'USD' && (
                   <div className="space-y-1.5">
