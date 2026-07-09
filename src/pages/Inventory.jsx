@@ -62,6 +62,8 @@ import { getIngredients, updateIngredient, transferIngredientStock } from '@/ser
 import { generateProductsExcel } from '@/services/productExportService'
 import { getWarehouses, createStockMovement, updateWarehouseStock, getOrphanStockProducts, migrateOrphanStock, getOrphanStock, getDeletedWarehouseStock, getStockMovements, getInventoryCounts, recalculateStockFromMovements, bulkRecalculateStock, getLatestActiveStockBackup, revertStockBackup, createStockBackup, buildStockBackupItems } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
+import { isMultiCurrencyEnabled } from '@/utils/currency'
+import { getRateForDate } from '@/services/exchangeRateService'
 import InventoryCountModal from '@/components/InventoryCountModal'
 import InventoryExportModal from '@/components/InventoryExportModal'
 import MassTransferModal from '@/components/MassTransferModal'
@@ -175,6 +177,34 @@ export default function Inventory() {
     }
   }
   const appNavigate = useAppNavigate()
+
+  // Multi-divisa (Fase 3): doble lectura del valor de inventario "S/ X ≈ US$ Y".
+  // Solo visualización — la valuación contable sigue SIEMPRE en soles. TC de
+  // referencia: el configurado en reportes (reportsExchangeRate) o el del día (SBS).
+  const invMultiCurrencyOn = isMultiCurrencyEnabled(businessSettings)
+  const [usdRefRate, setUsdRefRate] = useState(0)
+  useEffect(() => {
+    if (!invMultiCurrencyOn) return
+    const configured = Number(businessSettings?.reportsExchangeRate)
+    if (Number.isFinite(configured) && configured > 0) {
+      setUsdRefRate(configured)
+      return
+    }
+    let cancelled = false
+    getRateForDate(new Date())
+      .then(rate => {
+        const tc = Number(rate?.sell)
+        if (!cancelled && Number.isFinite(tc) && tc > 0) setUsdRefRate(tc)
+      })
+      .catch(() => { /* sin TC: no se muestra el equivalente */ })
+    return () => { cancelled = true }
+  }, [invMultiCurrencyOn, businessSettings?.reportsExchangeRate])
+  // "≈ US$ X" para un monto en soles (null si no hay TC disponible)
+  const usdEquivText = (soles) => {
+    if (!invMultiCurrencyOn || !(usdRefRate > 0) || !(soles > 0)) return null
+    return `≈ ${formatCurrency(soles / usdRefRate, 'USD')}`
+  }
+
   const [products, setProducts] = useState([])
   const [ingredients, setIngredients] = useState([])
   const [productCategories, setProductCategories] = useState([])
@@ -2124,8 +2154,11 @@ export default function Inventory() {
                   <p className="text-lg sm:text-2xl font-bold text-gray-900 mt-1">
                     {formatCurrency(totalValue)}
                   </p>
+                  {usdEquivText(totalValue) && (
+                    <p className="text-xs font-semibold text-emerald-600">{usdEquivText(totalValue)}</p>
+                  )}
                   <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
-                    Costo: {formatCurrency(totalCostValue)}
+                    Costo: {formatCurrency(totalCostValue)}{usdEquivText(totalCostValue) ? ` (${usdEquivText(totalCostValue)})` : ''}
                     <button
                       type="button"
                       onClick={handleRecalcCosts}
@@ -2689,7 +2722,14 @@ export default function Inventory() {
                                 {item.isIngredient || !Number.isInteger(realStock) ? Number(realStock).toFixed(2) : realStock} {getItemUnitLabel(item, 'uds').toLowerCase()}
                               </span>
                             )}
-                            <span className="text-sm text-gray-700">{isProduct ? formatProductPrice(item) : formatCurrency(item.averageCost || 0)}</span>
+                            <span className="text-sm text-gray-700">
+                              {isProduct ? formatProductPrice(item) : formatCurrency(item.averageCost || 0)}
+                              {invMultiCurrencyOn && isProduct && parseFloat(item.priceUSD) > 0 && (
+                                <span className="ml-1 text-[10px] font-semibold text-emerald-600" title={`Precio anclado al dólar: ${formatCurrency(item.priceUSD, 'USD')}`}>
+                                  ({formatCurrency(item.priceUSD, 'USD')})
+                                </span>
+                              )}
+                            </span>
                             {realStock !== null && (
                               <span className="text-sm font-semibold">{formatCurrency(isProduct && item.hasVariants ? item.variants?.reduce((sum, v) => sum + (Number(v.stock) || 0) * (Number(v.price) || 0), 0) || 0 : realStock * (isProduct ? (Number(item.price) || 0) : (item.averageCost || 0)))}</span>
                             )}
@@ -3228,6 +3268,11 @@ export default function Inventory() {
                           <span className="text-sm">
                             {isProduct ? formatProductPrice(item) : formatCurrency(item.averageCost || 0)}
                           </span>
+                          {invMultiCurrencyOn && isProduct && parseFloat(item.priceUSD) > 0 && (
+                            <span className="block text-[10px] font-semibold text-emerald-600 whitespace-nowrap" title="Precio anclado al dólar">
+                              {formatCurrency(item.priceUSD, 'USD')}
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell className="text-right lg:w-[10%]">
                           {(() => {
@@ -3924,12 +3969,18 @@ export default function Inventory() {
                   <p className="text-xl font-bold text-primary-600">
                     {formatCurrency(totalValue)}
                   </p>
+                  {usdEquivText(totalValue) && (
+                    <p className="text-xs font-semibold text-emerald-600 mt-0.5">{usdEquivText(totalValue)}</p>
+                  )}
                 </div>
                 <div className="p-4 bg-gray-50 rounded-lg">
                   <p className="text-gray-600 mb-1">Valor Costo Inventario</p>
                   <p className="text-xl font-bold text-green-700">
                     {formatCurrency(totalCostValue)}
                   </p>
+                  {usdEquivText(totalCostValue) && (
+                    <p className="text-xs font-semibold text-emerald-600 mt-0.5">{usdEquivText(totalCostValue)}</p>
+                  )}
                 </div>
               </>
             )}
