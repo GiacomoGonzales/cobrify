@@ -446,12 +446,27 @@ export default function Products() {
     }
   }
 
-  // Cambiar la moneda del precio principal (selector S/ | $ del formulario)
-  const switchPriceCurrency = (ccy) => {
+  // Cambiar la moneda del precio principal (selector S/ | $ del formulario).
+  // NO se toca priceUSD aquí: el ancla se decide al GUARDAR según priceCurrency.
+  // Así alternar S/ ↔ $ conserva ambos valores y no se pierde el precio en dólares.
+  const switchPriceCurrency = async (ccy) => {
     setPriceCurrency(ccy)
-    if (ccy === 'PEN') {
-      // Volver a soles: se quita el ancla USD (el precio en soles queda tal cual)
-      setValue('priceUSD', '')
+    // Al pasar a $: si no hay precio en dólares pero sí en soles, derivar el USD
+    // con el TC del día (comodidad: "tengo el precio en soles, quiero verlo en $").
+    if (ccy === 'USD') {
+      const usd = parseFloat(getValues('priceUSD'))
+      if (Number.isFinite(usd) && usd > 0) return // ya hay ancla, respetarla
+      const pen = parseFloat(getValues('price'))
+      if (!Number.isFinite(pen) || pen <= 0) return
+      try {
+        const rate = await getRateForDate(new Date())
+        const tc = Number(rate?.sell)
+        if (Number.isFinite(tc) && tc > 0) {
+          setValue('priceUSD', Number((pen / tc).toFixed(2)), { shouldValidate: true })
+        }
+      } catch (e) {
+        console.warn('No se pudo derivar el precio en dólares:', e)
+      }
     }
   }
   const autoMarginPrevCostRef = useRef(null)
@@ -1352,10 +1367,12 @@ export default function Products() {
         productData.branchPrices = cleanBranchPrices(branchPrices)
       }
 
-      // Multi-divisa: precio fijo en USD. Solo se persiste si el negocio
-      // tiene multi-divisa activada. Para negocios PEN-only siempre null,
-      // así no se ensucia el documento con campos que no aplican.
-      if (businessSettings?.multiCurrencyEnabled) {
+      // Multi-divisa: precio fijo en USD (ancla). Solo se persiste si el negocio
+      // tiene multi-divisa activada. El ancla se decide por el SELECTOR de moneda
+      // (priceCurrency), NO por el valor residual del form: en modo soles el ancla
+      // se anula aunque el campo priceUSD conserve un valor viejo (así alternar
+      // S/ ↔ $ no deja anclas fantasma). Para negocios PEN-only siempre null.
+      if (businessSettings?.multiCurrencyEnabled && priceCurrency === 'USD') {
         const usdRaw = data.priceUSD
         const usdVal = usdRaw === '' || usdRaw == null ? null : parseFloat(usdRaw)
         productData.priceUSD = Number.isFinite(usdVal) && usdVal > 0 ? usdVal : null
@@ -6175,6 +6192,7 @@ export default function Products() {
                   {priceCurrency === 'USD' && businessSettings?.multiCurrencyEnabled ? (
                     <>
                       <Input
+                        key="price-usd"
                         type="number"
                         step="any"
                         required
@@ -6196,6 +6214,7 @@ export default function Products() {
                   ) : (
                     <>
                       <Input
+                        key="price-pen"
                         type="number"
                         step="any"
                         required={!(Number.isFinite(parseFloat(watchedPriceUSD)) && parseFloat(watchedPriceUSD) > 0)}
