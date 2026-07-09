@@ -198,6 +198,9 @@ export default function Products() {
   // Precios por sucursal (overrides): { [branchId]: { price:'', price2:'', price3:'', price4:'' } } — strings del form
   const [branchPrices, setBranchPrices] = useState({})
   const [branchPricesOpen, setBranchPricesOpen] = useState(false) // sección colapsable del modal
+  // Moneda del precio principal (solo con multidivisa): 'PEN' clásico | 'USD' = el
+  // precio tecleado es el ancla priceUSD y el soles se calcula con el TC del día.
+  const [priceCurrency, setPriceCurrency] = useState('PEN')
   const [catalogHidePrice, setCatalogHidePrice] = useState(false) // Ocultar precio en catálogo
   const [catalogComparePrice, setCatalogComparePrice] = useState('') // Precio tachado en catálogo
   const [isFeatured, setIsFeatured] = useState(false) // Producto destacado en catálogo
@@ -422,20 +425,33 @@ export default function Products() {
   // Producto anclado al dólar: al escribir el precio en USD, si el precio en soles
   // está vacío, lo autocompletamos con el TC del día (SBS). Así el usuario no tiene
   // que calcularlo a mano; en el POS el soles se recalcula con el TC del momento.
-  const autofillPenPriceFromUsd = async () => {
+  // `force`: en el modo "precio en $" (selector de moneda) el soles no es editable,
+  // así que SIEMPRE se re-sincroniza desde el USD (sin respetar valores previos).
+  const autofillPenPriceFromUsd = async (force = false) => {
     const usd = parseFloat(getValues('priceUSD'))
     if (!Number.isFinite(usd) || usd <= 0) return
     const currentPen = getValues('price')
-    if (currentPen !== '' && currentPen != null && parseFloat(currentPen) > 0) return // respetar valor puesto a mano
+    if (!force && currentPen !== '' && currentPen != null && parseFloat(currentPen) > 0) return // respetar valor puesto a mano
     try {
       const rate = await getRateForDate(new Date())
       const tc = Number(rate?.sell)
       if (Number.isFinite(tc) && tc > 0) {
         setValue('price', Number((usd * tc).toFixed(2)), { shouldValidate: true })
-        toast.info(`Precio en soles calculado con el TC del día (S/ ${tc.toFixed(3)}). En el POS se recalcula con el tipo de cambio del momento.`, 5000)
+        if (!force) {
+          toast.info(`Precio en soles calculado con el TC del día (S/ ${tc.toFixed(3)}). En el POS se recalcula con el tipo de cambio del momento.`, 5000)
+        }
       }
     } catch (e) {
       console.warn('No se pudo obtener el TC para autocompletar el precio en soles:', e)
+    }
+  }
+
+  // Cambiar la moneda del precio principal (selector S/ | $ del formulario)
+  const switchPriceCurrency = (ccy) => {
+    setPriceCurrency(ccy)
+    if (ccy === 'PEN') {
+      // Volver a soles: se quita el ancla USD (el precio en soles queda tal cual)
+      setValue('priceUSD', '')
     }
   }
   const autoMarginPrevCostRef = useRef(null)
@@ -613,6 +629,7 @@ export default function Products() {
     setPriceMinQtys({ price2: '', price3: '', price4: '' })
     setBranchPrices({})
     setBranchPricesOpen(false)
+    setPriceCurrency('PEN')
     setHasVariants(false)
     setVariantAttributes([])
     setVariants([])
@@ -765,6 +782,8 @@ export default function Products() {
         }]))
       : {})
     setBranchPricesOpen(!!product.branchPrices && Object.keys(product.branchPrices).length > 0)
+    // Moneda del precio: si el producto tiene ancla USD, el form abre en dólares
+    setPriceCurrency(parseFloat(product.priceUSD) > 0 ? 'USD' : 'PEN')
 
     // Load auto-precio por cantidad (opt-in por producto)
     setUseAutoPriceByQty(product.useAutoPriceByQty === true)
@@ -917,6 +936,8 @@ export default function Products() {
         }]))
       : {})
     setBranchPricesOpen(!!product.branchPrices && Object.keys(product.branchPrices).length > 0)
+    // Moneda del precio: si el producto tiene ancla USD, el form abre en dólares
+    setPriceCurrency(parseFloat(product.priceUSD) > 0 ? 'USD' : 'PEN')
 
     // Auto-precio por cantidad (copia configuración del producto duplicado)
     setUseAutoPriceByQty(product.useAutoPriceByQty === true)
@@ -5177,7 +5198,14 @@ export default function Products() {
                             </div>
                           ) : (
                             <div>
-                              <span className="text-sm font-semibold truncate block">{formatCurrency(product.price)}</span>
+                              {parseFloat(product.priceUSD) > 0 ? (
+                                <span className="text-sm font-semibold truncate block whitespace-nowrap" title={`Precio anclado al dólar (≈ ${formatCurrency(product.price)} al TC del día)`}>
+                                  {formatCurrency(product.priceUSD, 'USD')}
+                                  <span className="ml-1 text-[9px] px-1 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold align-middle">USD</span>
+                                </span>
+                              ) : (
+                                <span className="text-sm font-semibold truncate block">{formatCurrency(product.price)}</span>
+                              )}
                               <p className="text-xs text-gray-500 truncate">{product.unit}</p>
                             </div>
                           )}
@@ -6108,46 +6136,74 @@ export default function Products() {
                 <p className="text-xs text-gray-500 mt-1">Opcional</p>
               </div>
 
-              {/* Precio principal - ocultar cuando tiene variantes (cada variante tiene su precio) */}
+              {/* Precio principal - ocultar cuando tiene variantes (cada variante tiene su precio).
+                  Con multidivisa: selector de moneda S/ | $ — la moneda es un atributo
+                  del precio. En $ el valor tecleado es el ancla priceUSD y el soles se
+                  sincroniza con el TC del día (en el POS se recalcula con el TC del momento). */}
               {!hasVariants && (
                 <div>
-                  <Input
-                    label={businessSettings?.multiplePricesEnabled ? (businessSettings?.priceLabels?.price1 || 'Precio 1') : "Precio de Venta"}
-                    type="number"
-                    step="any"
-                    required={!(Number.isFinite(parseFloat(watchedPriceUSD)) && parseFloat(watchedPriceUSD) > 0)}
-                    placeholder="0.00"
-                    error={errors.price?.message}
-                    {...register('price')}
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    {Number.isFinite(parseFloat(watchedPriceUSD)) && parseFloat(watchedPriceUSD) > 0
-                      ? <>Opcional: al tener un <strong>Precio fijo en USD</strong>, el precio en soles se calcula solo con el tipo de cambio. Déjalo vacío o ajústalo si quieres un valor fijo.</>
-                      : <>Deja el precio en <strong>0</strong> para usarlo como bonificación/cortesía al agregarlo al POS.</>}
-                  </p>
-                </div>
-              )}
-
-              {/* Precio fijo USD - solo si el negocio tiene multi-divisa activada.
-                  Cuando se especifica, en sesiones USD el POS/catálogo usa este
-                  precio directamente en vez de convertir el precio PEN con el TC.
-                  Útil para productos importados o pricing en dólar. */}
-              {businessSettings?.multiCurrencyEnabled && !hasVariants && (
-                <div>
-                  <Input
-                    label="Precio fijo en USD"
-                    type="number"
-                    step="any"
-                    placeholder="0.00 (opcional)"
-                    error={errors.priceUSD?.message}
-                    {...register('priceUSD', {
-                      onBlur: () => autofillPenPriceFromUsd(),
-                    })}
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Si se especifica, en ventas en dólares se usa este precio. Puedes dejar
-                    el precio en soles vacío: se calcula solo con el tipo de cambio del día.
-                  </p>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-medium text-gray-700">
+                      {businessSettings?.multiplePricesEnabled ? (businessSettings?.priceLabels?.price1 || 'Precio 1') : 'Precio de Venta'}
+                      {priceCurrency === 'PEN' && <span className="text-red-500 ml-1">*</span>}
+                    </label>
+                    {businessSettings?.multiCurrencyEnabled && (
+                      <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-bold">
+                        <button
+                          type="button"
+                          onClick={() => switchPriceCurrency('PEN')}
+                          title="Precio en soles"
+                          className={`px-2.5 py-1 transition-colors ${priceCurrency === 'PEN' ? 'bg-primary-600 text-white' : 'bg-white text-gray-400 hover:bg-gray-50'}`}
+                        >
+                          S/
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => switchPriceCurrency('USD')}
+                          title="Precio en dólares (el soles se calcula con el tipo de cambio)"
+                          className={`px-2.5 py-1 transition-colors ${priceCurrency === 'USD' ? 'bg-emerald-600 text-white' : 'bg-white text-gray-400 hover:bg-gray-50'}`}
+                        >
+                          $
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  {priceCurrency === 'USD' && businessSettings?.multiCurrencyEnabled ? (
+                    <>
+                      <Input
+                        type="number"
+                        step="any"
+                        required
+                        placeholder="0.00"
+                        error={errors.priceUSD?.message}
+                        {...register('priceUSD', {
+                          onBlur: () => autofillPenPriceFromUsd(true),
+                        })}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Precio en dólares.
+                        {(() => {
+                          const pen = parseFloat(watch('price'))
+                          return Number.isFinite(pen) && pen > 0 ? <> ≈ <strong>S/ {pen.toFixed(2)}</strong> con el TC del día;</> : null
+                        })()}
+                        {' '}en el POS y catálogo el soles se recalcula con el tipo de cambio del momento.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <Input
+                        type="number"
+                        step="any"
+                        required={!(Number.isFinite(parseFloat(watchedPriceUSD)) && parseFloat(watchedPriceUSD) > 0)}
+                        placeholder="0.00"
+                        error={errors.price?.message}
+                        {...register('price')}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Deja el precio en <strong>0</strong> para usarlo como bonificación/cortesía al agregarlo al POS.
+                      </p>
+                    </>
+                  )}
                 </div>
               )}
 
