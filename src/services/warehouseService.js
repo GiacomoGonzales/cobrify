@@ -443,6 +443,27 @@ export const getStockMovements = async (businessId, filters = {}) => {
 }
 
 /**
+ * Movimientos de un comprobante específico (por referenceId), sin paginación.
+ * El guard de anulación necesita ver los movimientos de la venta original aunque
+ * sean más viejos que la ventana de 200 que devuelve getStockMovements sin filtros.
+ */
+export const getStockMovementsByReference = async (businessId, referenceId) => {
+  try {
+    const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
+    const q = query(movementsRef, where('referenceId', '==', referenceId))
+    const snapshot = await getDocs(q)
+    const movements = []
+    snapshot.forEach((doc) => {
+      movements.push({ id: doc.id, ...doc.data() })
+    })
+    return { success: true, data: movements }
+  } catch (error) {
+    console.error('Error al obtener movimientos por referencia:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * Crear un movimiento de transferencia entre almacenes
  */
 export const createTransfer = async (businessId, transferData) => {

@@ -844,7 +844,7 @@ export const updateProduct = async (userId, productId, updates) => {
  * Actualizar stock de un producto usando transacción de Firestore (atómico)
  * Evita race conditions cuando dos ventas simultáneas descuentan stock del mismo producto
  */
-export const updateProductStockTransaction = async (userId, productId, warehouseId, quantity, extraUpdates = {}, variantSku = null, serialToMarkSold = null, allowNegative = false) => {
+export const updateProductStockTransaction = async (userId, productId, warehouseId, quantity, extraUpdates = {}, variantSku = null, serialToMarkSold = null, allowNegative = false, batchRestores = null) => {
   try {
     const docRef = doc(db, 'businesses', userId, 'products', productId)
     await runTransaction(db, async (transaction) => {
@@ -873,6 +873,57 @@ export const updateProductStockTransaction = async (userId, productId, warehouse
           return { ...s, status: 'sold', saleId: match.saleId || null, saleDate: match.saleDate }
         })
         finalExtraUpdates = { ...extraUpdates, serials: updatedSerials }
+      }
+
+      // Restaurar (o re-descontar, con cantidades negativas) lotes DENTRO de la
+      // transacción desde el estado FRESCO del producto. Positivas: anulación de venta
+      // (devolver al lote). Negativas: anulación de NC (quitar del lote lo que la NC
+      // devolvió). El caller pasa el desglose por lote — batchBreakdown de la venta o
+      // el lote único del item — en vez de un array batches[] precalculado: con 2+
+      // líneas del mismo producto en el comprobante, el precalculado venía de un
+      // snapshot stale y cada línea pisaba la restauración de lotes de la anterior.
+      if (Array.isArray(batchRestores) && batchRestores.length > 0 &&
+          ((product.batches?.length > 0) || product.trackExpiration)) {
+        const normalizeBn = (s) => String(s || '').trim().toLowerCase()
+        const updatedBatches = [...(product.batches || [])]
+        for (const br of batchRestores) {
+          const brQty = br.quantity || 0
+          const brLot = br.lotNumber || br.batchNumber
+          if (!brQty || !brLot) continue
+          // Mismo criterio de matching que el descuento en venta: número normalizado y
+          // mismo almacén (lotes legacy sin warehouseId, o venta sin almacén, matchean).
+          const idx = updatedBatches.findIndex(b =>
+            normalizeBn(b.lotNumber || b.batchNumber || b.id) === normalizeBn(brLot) &&
+            (!b.warehouseId || !warehouseId || b.warehouseId === warehouseId)
+          )
+          if (idx >= 0) {
+            updatedBatches[idx] = { ...updatedBatches[idx], quantity: Math.max(0, (updatedBatches[idx].quantity || 0) + brQty) }
+          } else if (brQty > 0) {
+            // El lote se agotó y fue removido de batches[]: recrearlo para no
+            // descuadrar el total vs el detalle por lote al anular. (Si es un
+            // descuento y el lote ya no existe, no hay nada que quitar.)
+            updatedBatches.push({
+              batchNumber: brLot,
+              lotNumber: brLot,
+              quantity: brQty,
+              warehouseId: warehouseId || null,
+              ...(br.expirationDate ? { expirationDate: br.expirationDate } : {}),
+            })
+          }
+        }
+        finalExtraUpdates = { ...finalExtraUpdates, batches: updatedBatches }
+
+        // Actualizar fecha de vencimiento más próxima / lote a nivel producto
+        const activeBatches = updatedBatches.filter(b => (b.quantity || 0) > 0 && (b.expirationDate || b.expiryDate))
+        if (activeBatches.length > 0) {
+          activeBatches.sort((a, b) => {
+            const dateA = (a.expirationDate || a.expiryDate)?.toDate?.() || new Date(a.expirationDate || a.expiryDate || '2099-12-31')
+            const dateB = (b.expirationDate || b.expiryDate)?.toDate?.() || new Date(b.expirationDate || b.expiryDate || '2099-12-31')
+            return dateA - dateB
+          })
+          finalExtraUpdates.expirationDate = activeBatches[0].expirationDate || activeBatches[0].expiryDate
+          finalExtraUpdates.batchNumber = activeBatches[0].lotNumber || activeBatches[0].batchNumber
+        }
       }
 
       // Producto con variantes: actualizar stock a nivel de variante

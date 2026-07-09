@@ -753,7 +753,7 @@ Gracias por tu preferencia.`
         // Devolver el stock de los productos
         if (voidingInvoice.items && voidingInvoice.items.length > 0) {
           // Importar funciones de manejo de stock
-          const { updateWarehouseStock, createStockMovement, getStockMovements } = await import('@/services/warehouseService')
+          const { updateWarehouseStock, createStockMovement, getStockMovementsByReference } = await import('@/services/warehouseService')
           const { getProducts, updateProduct } = await import('@/services/firestoreService')
 
           // Obtener productos actuales
@@ -765,11 +765,11 @@ Gracias por tu preferencia.`
 
           // Idempotencia: solo devolver stock/insumos si la venta original registró
           // movimientos (mismo criterio que la anulación SUNAT). Evita doble restauración.
-          const movementsResult = await getStockMovements(businessId)
-          const allMovements = movementsResult.success ? movementsResult.data : []
-          const hasSaleMovements = allMovements.some(m =>
-            m.referenceId === voidingInvoice.id && m.type === 'sale'
-          )
+          // Query directa por referenceId: la query general pagina a 200 movimientos y
+          // dejaba fuera ventas viejas (anular no devolvía stock en negocios activos).
+          const movementsResult = await getStockMovementsByReference(businessId, voidingInvoice.id)
+          const invoiceMovements = movementsResult.success ? movementsResult.data : []
+          const hasSaleMovements = invoiceMovements.some(m => m.type === 'sale')
           if (alreadyRestored) {
             toast.info('El stock de este comprobante ya había sido restaurado antes (no se duplica).')
           } else if (!hasSaleMovements) {
@@ -798,42 +798,24 @@ Gracias por tu preferencia.`
                 // Calcular cantidad a restaurar (considerando factor de presentación)
                 const quantityToRestore = item.quantity * (item.presentationFactor || 1)
 
-                // Restaurar cantidad del lote si el item tenía lote
-                const batchExtraUpdates = {}
-                if (item.batchNumber && (productData.batches?.length > 0 || productData.trackExpiration)) {
-                  let found = false
-                  const updatedBatches = (productData.batches || []).map(b => {
-                    const bId = b.lotNumber || b.batchNumber || b.id
-                    if (bId === item.batchNumber && (!b.warehouseId || b.warehouseId === warehouseId)) {
-                      found = true
-                      return { ...b, quantity: (b.quantity || 0) + quantityToRestore }
-                    }
-                    return b
-                  })
-                  if (!found) {
-                    // El lote se agotó y fue removido de batches[]: recrearlo para no
-                    // descuadrar el total vs el detalle por lote al anular.
-                    updatedBatches.push({
-                      batchNumber: item.batchNumber,
-                      lotNumber: item.batchNumber,
-                      quantity: quantityToRestore,
-                      warehouseId: warehouseId || null,
-                      ...(item.expirationDate ? { expirationDate: item.expirationDate } : {}),
-                    })
-                  }
-                  batchExtraUpdates.batches = updatedBatches
-
-                  // Actualizar fecha de vencimiento más próxima
-                  const activeBatches = updatedBatches.filter(b => b.quantity > 0 && (b.expirationDate || b.expiryDate))
-                  if (activeBatches.length > 0) {
-                    activeBatches.sort((a, b) => {
-                      const dateA = (a.expirationDate || a.expiryDate)?.toDate?.() || new Date(a.expirationDate || a.expiryDate || '2099-12-31')
-                      const dateB = (b.expirationDate || b.expiryDate)?.toDate?.() || new Date(b.expirationDate || b.expiryDate || '2099-12-31')
-                      return dateA - dateB
-                    })
-                    batchExtraUpdates.expirationDate = activeBatches[0].expirationDate || activeBatches[0].expiryDate
-                    batchExtraUpdates.batchNumber = activeBatches[0].lotNumber || activeBatches[0].batchNumber
-                  }
+                // Desglose de lotes a restaurar: usar el batchBreakdown real de la venta
+                // (el FEFO pudo consumir varios lotes) y caer al lote único del item para
+                // ventas antiguas sin desglose. La restauración de batches[] se hace DENTRO
+                // de la transacción con lotes frescos: con 2+ líneas del mismo producto,
+                // el array precalculado de un snapshot stale pisaba la línea anterior.
+                let batchRestores = null
+                if (Array.isArray(item.batchBreakdown) && item.batchBreakdown.length > 0) {
+                  batchRestores = item.batchBreakdown.map(bb => ({
+                    lotNumber: bb.lotNumber || bb.batchNumber,
+                    quantity: bb.quantity || 0,
+                    expirationDate: bb.expirationDate || null,
+                  }))
+                } else if (item.batchNumber) {
+                  batchRestores = [{
+                    lotNumber: item.batchNumber,
+                    quantity: quantityToRestore,
+                    expirationDate: item.expirationDate || null,
+                  }]
                 }
 
                 // Si el item se vendió con número de serie, devolverlo a 'available'
@@ -842,19 +824,24 @@ Gracias por tu preferencia.`
                   ? [{ serialNumber: item.serialNumber, restore: true }]
                   : null
 
-                // Actualizar stock usando transacción atómica
+                // Actualizar stock usando transacción atómica (lotes incluidos)
                 const variantSku = item.variantSku || item.variantName || null
                 await updateProductStockTransaction(
                   businessId,
                   item.productId,
                   warehouseId,
                   quantityToRestore,
-                  batchExtraUpdates,
+                  {},
                   variantSku,
-                  serialsToRestore
+                  serialsToRestore,
+                  false,
+                  batchRestores
                 )
 
                 // Registrar movimiento de stock
+                const lotsNote = batchRestores && batchRestores.length > 0
+                  ? ` (Lote${batchRestores.length > 1 ? 's' : ''}: ${batchRestores.map(br => `${br.lotNumber} +${br.quantity}`).join(', ')})`
+                  : ''
                 await createStockMovement(businessId, {
                   productId: item.productId,
                   warehouseId: warehouseId,
@@ -867,7 +854,7 @@ Gracias por tu preferencia.`
                   userId: user.uid,
                   ...(item.batchNumber && { batchNumber: item.batchNumber }),
                   ...(variantSku && { variantSku }),
-                  notes: `Stock devuelto por anulación de ${voidingInvoice.number}${item.batchNumber ? ` (Lote: ${item.batchNumber})` : ''}`
+                  notes: `Stock devuelto por anulación de ${voidingInvoice.number}${lotsNote}`
                 })
 
                 console.log(`✅ Stock restaurado para ${item.name}: +${quantityToRestore}`)
@@ -981,6 +968,366 @@ Gracias por tu preferencia.`
     }
   }
 
+  // Reversa de una NC ANULADA: al crearse, una NC de devolución (códigos 01/06/07)
+  // devolvió stock al inventario; si SUNAT confirma la baja de la NC, esa devolución
+  // queda sin sustento y hay que re-descontarla — con almacén, lotes, variantes y
+  // series, no solo el total. Fuente de verdad: los movimientos 'credit_note' que la
+  // NC registró al crearse; si no existen (NC de solo descuento/ajuste, o la NC no
+  // devolvió stock por idempotencia), no se descuenta nada. También restaura la
+  // factura/boleta original (estado previo + limpiar stockRestored, para que una
+  // futura NC/anulación pueda volver a devolver stock).
+  const revertCreditNoteStockReturn = async (creditNote) => {
+    const businessId = getBusinessId()
+    const { createStockMovement, getStockMovementsByReference } = await import('@/services/warehouseService')
+    const { getProducts } = await import('@/services/firestoreService')
+    const { doc, getDoc, updateDoc, deleteField, collection, query, where, limit, getDocs } = await import('firebase/firestore')
+    const { db } = await import('@/lib/firebase')
+
+    // Buscar la factura/boleta original: por ID directo (NCs nuevas) o por número (legacy)
+    let originalInvoice = null
+    try {
+      if (creditNote.referencedInvoiceFirestoreId) {
+        const snap = await getDoc(doc(db, 'businesses', businessId, 'invoices', creditNote.referencedInvoiceFirestoreId))
+        if (snap.exists()) originalInvoice = { id: snap.id, ...snap.data() }
+      }
+      if (!originalInvoice && creditNote.referencedDocumentId) {
+        const q = query(
+          collection(db, 'businesses', businessId, 'invoices'),
+          where('number', '==', creditNote.referencedDocumentId),
+          limit(1)
+        )
+        const qs = await getDocs(q)
+        if (!qs.empty) originalInvoice = { id: qs.docs[0].id, ...qs.docs[0].data() }
+      }
+    } catch (e) {
+      console.warn('No se pudo cargar el documento original de la NC:', e)
+    }
+
+    // Re-descontar el stock SOLO si la NC realmente lo devolvió al crearse
+    const movementsResult = await getStockMovementsByReference(businessId, creditNote.id)
+    const ncMovements = movementsResult.success ? movementsResult.data : []
+    const ncReturnedStock = ncMovements.some(m => m.referenceType === 'credit_note')
+
+    if (ncReturnedStock && creditNote.items?.length > 0) {
+      const productsResult = await getProducts(businessId)
+      const products = productsResult.success ? productsResult.data : []
+      // La NC devolvió el stock al almacén de la factura original
+      const warehouseId = originalInvoice?.warehouseId || creditNote.warehouseId || ''
+
+      for (const item of creditNote.items) {
+        if (!item.productId || item.isGlobalDiscount || String(item.productId).startsWith('custom-')) continue
+        try {
+          const productData = products.find(p => p.id === item.productId)
+          if (!productData) continue
+          if (productData.trackStock === false) continue
+
+          const quantityToDeduct = item.quantity * (item.presentationFactor || 1)
+
+          // Lote que la NC incrementó/recreó: quitárselo de vuelta (negativo, clamp a 0)
+          const batchRestores = item.batchNumber
+            ? [{ lotNumber: item.batchNumber, quantity: -quantityToDeduct }]
+            : null
+
+          // Serie que la NC devolvió a 'available': volver a marcarla como vendida
+          const serialsToMark = item.serialNumber
+            ? [{ serialNumber: item.serialNumber, saleId: originalInvoice?.id || null, saleDate: new Date() }]
+            : null
+
+          const variantSku = item.variantSku || null
+          await updateProductStockTransaction(
+            businessId,
+            item.productId,
+            warehouseId,
+            -quantityToDeduct,
+            {},
+            variantSku,
+            serialsToMark,
+            false,
+            batchRestores
+          )
+
+          await createStockMovement(businessId, {
+            productId: item.productId,
+            warehouseId: warehouseId,
+            type: 'exit',
+            quantity: quantityToDeduct,
+            reason: 'Anulación de nota de crédito',
+            referenceType: 'credit_note_void',
+            referenceId: creditNote.id,
+            referenceNumber: creditNote.number,
+            userId: user.uid,
+            ...(item.batchNumber && { batchNumber: item.batchNumber }),
+            ...(variantSku && { variantSku }),
+            notes: `Stock re-descontado por anulación de NC ${creditNote.number}${item.batchNumber ? ` (Lote: ${item.batchNumber})` : ''}`
+          })
+
+          console.log(`✅ Stock re-descontado para ${item.name}: -${quantityToDeduct}`)
+        } catch (stockError) {
+          console.warn(`No se pudo re-descontar stock para producto ${item.productId}:`, stockError)
+        }
+      }
+    } else if (!ncReturnedStock) {
+      console.log(`NC ${creditNote.number} no registró devolución de stock: nada que re-descontar.`)
+    }
+
+    // Restaurar la factura/boleta original: estado previo, quitar referencia a la NC
+    // pendiente y LIMPIAR stockRestored (antes quedaba en true y bloqueaba para siempre
+    // cualquier restauración futura). El server hace lo mismo (sin limpiar el flag)
+    // solo para facturas y solo si la baja confirma en la llamada original — esto
+    // cubre boletas y confirmación diferida (polling/reintento).
+    if (originalInvoice) {
+      try {
+        let newStatus = 'paid'
+        if (originalInvoice.previousStatus) {
+          newStatus = originalInvoice.previousStatus
+        } else if (originalInvoice.paymentStatus === 'pending' || originalInvoice.status === 'pending') {
+          newStatus = 'pending'
+        }
+        await updateDoc(doc(db, 'businesses', businessId, 'invoices', originalInvoice.id), {
+          status: newStatus,
+          pendingCreditNoteId: deleteField(),
+          pendingCreditNoteNumber: deleteField(),
+          pendingCreditNoteTotal: deleteField(),
+          stockRestored: deleteField(),
+          creditNoteVoidedAt: new Date(),
+          creditNoteVoidedId: creditNote.id,
+          creditNoteVoidedNumber: creditNote.number,
+          updatedAt: new Date(),
+        })
+        console.log(`✅ Documento original ${originalInvoice.number} restaurado (estado ${newStatus}, stockRestored limpiado)`)
+      } catch (e) {
+        console.warn('No se pudo restaurar el documento original de la NC:', e)
+      }
+    } else {
+      console.warn(`No se encontró el documento original de la NC ${creditNote.number}`)
+    }
+  }
+
+  // Efectos colaterales de una baja SUNAT CONFIRMADA: devolver stock/insumos, revertir
+  // métricas del vendedor y notas de venta convertidas, y marcar stockRestored.
+  // Se llama desde el flujo directo, el polling y el reintento — SOLO cuando SUNAT ya
+  // confirmó la baja (antes se restauraba stock con la baja aún en 'pending'; si SUNAT
+  // la rechazaba después, el stock quedaba inflado sin reversa). Idempotente: lee el
+  // comprobante FRESCO de Firestore y si stockRestored ya está marcado no aplica nada
+  // (protege contra polling + reintento simultáneos y reintentos de bajas ya procesadas).
+  const applySunatVoidSideEffects = async (invoice) => {
+    if (!invoice) return
+    const businessId = getBusinessId()
+
+    let freshInvoice = invoice
+    try {
+      const { doc, getDoc } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+      const snap = await getDoc(doc(db, 'businesses', businessId, 'invoices', invoice.id))
+      if (snap.exists()) freshInvoice = { id: snap.id, ...snap.data() }
+    } catch (e) {
+      console.warn('No se pudo leer el comprobante fresco, usando el de la lista:', e)
+    }
+
+    if (freshInvoice.stockRestored === true) {
+      toast.info('El stock de este comprobante ya había sido restaurado antes (no se duplica).')
+      return
+    }
+
+    const series = invoice.series || invoice.number?.split('-')[0] || ''
+    const docTypeName = series.toUpperCase().startsWith('B') ? 'Boleta' : 'Factura'
+
+    if (invoice.documentType === 'nota_credito') {
+      // Anular una NC va en la dirección CONTRARIA a anular una venta: no devuelve
+      // stock, re-descuenta lo que la NC devolvió y restaura el documento original.
+      await revertCreditNoteStockReturn(invoice)
+    // Devolver el stock de los productos (igual que notas de venta)
+    } else if (invoice.items && invoice.items.length > 0) {
+      const { createStockMovement, getStockMovementsByReference } = await import('@/services/warehouseService')
+      const { getProducts } = await import('@/services/firestoreService')
+
+      const productsResult = await getProducts(businessId)
+      const products = productsResult.success ? productsResult.data : []
+      const warehouseId = invoice.warehouseId || ''
+
+      // Idempotencia: solo devolver stock si la venta original registró movimientos.
+      // Si no los registró (por bug o conversión desde nota de venta sin mov.), devolver
+      // stock generaría un descuadre — mejor saltar y avisar al usuario.
+      // Query directa por referenceId: la query general pagina a 200 movimientos y
+      // dejaba fuera ventas viejas (anular no devolvía stock en negocios activos).
+      const movementsResult = await getStockMovementsByReference(businessId, invoice.id)
+      const invoiceMovements = movementsResult.success ? movementsResult.data : []
+      const hasSaleMovements = invoiceMovements.some(m => m.type === 'sale')
+
+      if (!hasSaleMovements) {
+        console.warn(`⚠️ Venta ${invoice.number} sin movimientos de stock originales. Se omite la devolución para evitar descuadre.`)
+        toast.warning(
+          'La venta original no registró movimientos de stock. No se devolvió stock al anular para evitar descuadre. Revisá el inventario manualmente.',
+          8000
+        )
+      }
+
+      for (const item of hasSaleMovements ? invoice.items : []) {
+        if (item.productId) {
+          try {
+            const productData = products.find(p => p.id === item.productId)
+            if (!productData) continue
+            if (productData.trackStock === false) continue
+
+            const quantityToRestore = item.quantity * (item.presentationFactor || 1)
+
+            // Desglose de lotes a restaurar: usar el batchBreakdown real de la venta
+            // (el FEFO pudo consumir varios lotes) y caer al lote único del item para
+            // ventas antiguas sin desglose. La restauración de batches[] se hace DENTRO
+            // de la transacción con lotes frescos: con 2+ líneas del mismo producto,
+            // el array precalculado de un snapshot stale pisaba la línea anterior.
+            let batchRestores = null
+            if (Array.isArray(item.batchBreakdown) && item.batchBreakdown.length > 0) {
+              batchRestores = item.batchBreakdown.map(bb => ({
+                lotNumber: bb.lotNumber || bb.batchNumber,
+                quantity: bb.quantity || 0,
+                expirationDate: bb.expirationDate || null,
+              }))
+            } else if (item.batchNumber) {
+              batchRestores = [{
+                lotNumber: item.batchNumber,
+                quantity: quantityToRestore,
+                expirationDate: item.expirationDate || null,
+              }]
+            }
+
+            // Si el item se vendió con número de serie, devolverlo a 'available'
+            const serialsToRestore = item.serialNumber
+              ? [{ serialNumber: item.serialNumber, restore: true }]
+              : null
+
+            const variantSku = item.variantSku || item.variantName || null
+            await updateProductStockTransaction(
+              businessId,
+              item.productId,
+              warehouseId,
+              quantityToRestore,
+              {},
+              variantSku,
+              serialsToRestore,
+              false,
+              batchRestores
+            )
+
+            const lotsNote = batchRestores && batchRestores.length > 0
+              ? ` (Lote${batchRestores.length > 1 ? 's' : ''}: ${batchRestores.map(br => `${br.lotNumber} +${br.quantity}`).join(', ')})`
+              : ''
+            await createStockMovement(businessId, {
+              productId: item.productId,
+              warehouseId: warehouseId,
+              type: 'entry',
+              quantity: quantityToRestore,
+              reason: `Anulación de ${docTypeName.toLowerCase()}`,
+              referenceType: 'sunat_void',
+              referenceId: invoice.id,
+              referenceNumber: invoice.number,
+              userId: user.uid,
+              ...(item.batchNumber && { batchNumber: item.batchNumber }),
+              ...(variantSku && { variantSku }),
+              notes: `Stock devuelto por anulación SUNAT de ${invoice.number}${lotsNote}`
+            })
+
+            console.log(`✅ Stock restaurado para ${item.name}: +${quantityToRestore}`)
+          } catch (stockError) {
+            console.warn(`No se pudo devolver stock para producto ${item.productId}:`, stockError)
+          }
+        }
+      }
+
+      // Revertir ingredientes descontados por recetas con deductOnSale.
+      // Usa el mismo default que POS para mantener consistencia con recetas legacy.
+      try {
+        const { getRecipeByProductId, shouldDeductIngredients } = await import('@/services/recipeService')
+        const { restoreIngredients } = await import('@/services/ingredientService')
+
+        // Mismo guard de idempotencia que el stock de producto: si la venta original no
+        // registró movimientos, NO restaurar insumos (evita doble restauración / inflado).
+        for (const item of hasSaleMovements ? invoice.items : []) {
+          if (!item.productId || item.isCustom) continue
+          try {
+            const recipeResult = await getRecipeByProductId(businessId, item.productId)
+            if (recipeResult.success && recipeResult.data && shouldDeductIngredients(recipeResult.data, businessMode)) {
+              const recipe = recipeResult.data
+              const ingredientsToRestore = recipe.ingredients.map(ing => ({
+                ...ing,
+                quantity: ing.quantity * item.quantity * (item.presentationFactor || 1)
+              }))
+              await restoreIngredients(businessId, ingredientsToRestore, warehouseId)
+              console.log(`✅ Ingredientes restaurados para ${item.name}`)
+            }
+          } catch (err) {
+            console.warn(`No se pudo restaurar ingredientes para ${item.name}:`, err)
+          }
+        }
+      } catch (err) {
+        console.warn('No se pudo cargar módulo de recetas/ingredientes:', err)
+      }
+    }
+
+    // Revertir métricas del vendedor si la venta tenía un vendedor asignado
+    if (invoice.sellerId) {
+      try {
+        const { doc, updateDoc, increment } = await import('firebase/firestore')
+        const { db } = await import('@/lib/firebase')
+
+        const sellerRef = doc(db, 'businesses', businessId, 'sellers', invoice.sellerId)
+        const saleTotal = invoice.total || invoice.amounts?.total || 0
+
+        // Verificar si la venta fue hoy para restar de todaySales/todayOrders
+        const saleDate = invoice.createdAt?.toDate?.() || invoice.createdAt
+        const today = new Date()
+        const isToday = saleDate &&
+          saleDate.getDate() === today.getDate() &&
+          saleDate.getMonth() === today.getMonth() &&
+          saleDate.getFullYear() === today.getFullYear()
+
+        const updateData = {
+          totalSales: increment(-saleTotal),
+          totalOrders: increment(-1),
+        }
+
+        // Solo restar de los contadores diarios si la venta fue hoy
+        if (isToday) {
+          updateData.todaySales = increment(-saleTotal)
+          updateData.todayOrders = increment(-1)
+        }
+
+        await updateDoc(sellerRef, updateData)
+        console.log(`✅ Métricas del vendedor ${invoice.sellerName || invoice.sellerId} actualizadas: -${saleTotal}`)
+      } catch (sellerError) {
+        console.warn('No se pudo actualizar métricas del vendedor:', sellerError)
+        // No fallar la anulación si no se puede actualizar las métricas
+      }
+    }
+
+    // Revertir notas de venta si el comprobante fue convertido desde notas
+    if (invoice.convertedFrom) {
+      try {
+        const { doc, updateDoc, deleteField } = await import('firebase/firestore')
+        const { db } = await import('@/lib/firebase')
+
+        // Soportar una o múltiples notas
+        const notaIds = invoice.convertedFrom.ids
+          || (invoice.convertedFrom.id ? [invoice.convertedFrom.id] : [])
+
+        for (const notaId of notaIds) {
+          try {
+            const notaRef = doc(db, 'businesses', businessId, 'invoices', notaId)
+            await updateDoc(notaRef, { convertedTo: deleteField(), updatedAt: new Date() })
+            console.log(`✅ Nota de venta ${notaId} revertida a no convertida`)
+          } catch (revertError) {
+            console.warn(`No se pudo revertir nota ${notaId}:`, revertError)
+          }
+        }
+      } catch (error) {
+        console.warn('Error al revertir notas de venta:', error)
+      }
+    }
+
+    // Marcar al final, después de aplicar los efectos
+    try { await updateInvoice(businessId, invoice.id, { stockRestored: true }) } catch (e) { /* flag no crítico */ }
+  }
+
   // Función para anular factura/boleta en SUNAT (Comunicación de Baja o Resumen Diario)
   const handleVoidSunatInvoice = async () => {
     if (!voidingSunatInvoice || !user?.uid) return
@@ -1027,224 +1374,33 @@ Gracias por tu preferencia.`
         emissionMethod
       )
 
-      if (result.success || result.status === 'voided') {
-        // Devolver el stock de los productos (igual que notas de venta)
-        if (voidingSunatInvoice.items && voidingSunatInvoice.items.length > 0) {
-          const { updateWarehouseStock, createStockMovement, getStockMovements } = await import('@/services/warehouseService')
-          const { getProducts, updateProduct } = await import('@/services/firestoreService')
+      // Solo aplicar los efectos de la baja (stock, insumos, métricas, notas convertidas)
+      // cuando SUNAT CONFIRMÓ la anulación. OJO: la CF devuelve success:true también con
+      // status:'pending' (timeout del ticket), así que result.success NO alcanza — antes
+      // eso restauraba el stock con la baja aún en proceso y, si SUNAT la rechazaba
+      // después, el stock quedaba inflado sin reversa. checkVoidStatus devuelve 'accepted'
+      // cuando la baja ya había sido procesada antes: tratarlo como confirmado también.
+      const isConfirmedVoid = result.status === 'voided' || result.status === 'accepted' ||
+        (result.success === true && !result.status)
 
-          const productsResult = await getProducts(businessId)
-          const products = productsResult.success ? productsResult.data : []
-          const warehouseId = voidingSunatInvoice.warehouseId || ''
-          // Idempotencia (Fase 2): no devolver stock si ya se restauró (NC/anulación previa).
-          const alreadyRestored = voidingSunatInvoice.stockRestored === true
-
-          // Idempotencia: solo devolver stock si la venta original registró movimientos.
-          // Si no los registró (por bug o conversión desde nota de venta sin mov.), devolver
-          // stock generaría un descuadre — mejor saltar y avisar al usuario.
-          const movementsResult = await getStockMovements(businessId)
-          const allMovements = movementsResult.success ? movementsResult.data : []
-          const hasSaleMovements = allMovements.some(m =>
-            m.referenceId === voidingSunatInvoice.id && m.type === 'sale'
-          )
-
-          if (alreadyRestored) {
-            toast.info('El stock de este comprobante ya había sido restaurado antes (no se duplica).')
-          } else if (!hasSaleMovements) {
-            console.warn(`⚠️ Venta ${voidingSunatInvoice.number} sin movimientos de stock originales. Se omite la devolución para evitar descuadre.`)
-            toast.warning(
-              'La venta original no registró movimientos de stock. No se devolvió stock al anular para evitar descuadre. Revisá el inventario manualmente.',
-              8000
-            )
-          }
-
-          for (const item of (hasSaleMovements && !alreadyRestored) ? voidingSunatInvoice.items : []) {
-            if (item.productId) {
-              try {
-                const productData = products.find(p => p.id === item.productId)
-                if (!productData) continue
-                if (productData.trackStock === false) continue
-
-                const quantityToRestore = item.quantity * (item.presentationFactor || 1)
-
-                // Restaurar cantidad del lote si el item tenía lote
-                const batchExtraUpdates = {}
-                if (item.batchNumber && (productData.batches?.length > 0 || productData.trackExpiration)) {
-                  let found = false
-                  const updatedBatches = (productData.batches || []).map(b => {
-                    const bId = b.lotNumber || b.batchNumber || b.id
-                    if (bId === item.batchNumber && (!b.warehouseId || b.warehouseId === warehouseId)) {
-                      found = true
-                      return { ...b, quantity: (b.quantity || 0) + quantityToRestore }
-                    }
-                    return b
-                  })
-                  if (!found) {
-                    // El lote se agotó y fue removido de batches[]: recrearlo para no
-                    // descuadrar el total vs el detalle por lote al anular.
-                    updatedBatches.push({
-                      batchNumber: item.batchNumber,
-                      lotNumber: item.batchNumber,
-                      quantity: quantityToRestore,
-                      warehouseId: warehouseId || null,
-                      ...(item.expirationDate ? { expirationDate: item.expirationDate } : {}),
-                    })
-                  }
-                  batchExtraUpdates.batches = updatedBatches
-
-                  const activeBatches = updatedBatches.filter(b => b.quantity > 0 && (b.expirationDate || b.expiryDate))
-                  if (activeBatches.length > 0) {
-                    activeBatches.sort((a, b) => {
-                      const dateA = (a.expirationDate || a.expiryDate)?.toDate?.() || new Date(a.expirationDate || a.expiryDate || '2099-12-31')
-                      const dateB = (b.expirationDate || b.expiryDate)?.toDate?.() || new Date(b.expirationDate || b.expiryDate || '2099-12-31')
-                      return dateA - dateB
-                    })
-                    batchExtraUpdates.expirationDate = activeBatches[0].expirationDate || activeBatches[0].expiryDate
-                    batchExtraUpdates.batchNumber = activeBatches[0].lotNumber || activeBatches[0].batchNumber
-                  }
-                }
-
-                // Si el item se vendió con número de serie, devolverlo a 'available'
-                const serialsToRestore = item.serialNumber
-                  ? [{ serialNumber: item.serialNumber, restore: true }]
-                  : null
-
-                const variantSku = item.variantSku || item.variantName || null
-                await updateProductStockTransaction(
-                  businessId,
-                  item.productId,
-                  warehouseId,
-                  quantityToRestore,
-                  batchExtraUpdates,
-                  variantSku,
-                  serialsToRestore
-                )
-
-                await createStockMovement(businessId, {
-                  productId: item.productId,
-                  warehouseId: warehouseId,
-                  type: 'entry',
-                  quantity: quantityToRestore,
-                  reason: `Anulación de ${docTypeName.toLowerCase()}`,
-                  referenceType: 'sunat_void',
-                  referenceId: voidingSunatInvoice.id,
-                  referenceNumber: voidingSunatInvoice.number,
-                  userId: user.uid,
-                  ...(item.batchNumber && { batchNumber: item.batchNumber }),
-                  ...(variantSku && { variantSku }),
-                  notes: `Stock devuelto por anulación SUNAT de ${voidingSunatInvoice.number}${item.batchNumber ? ` (Lote: ${item.batchNumber})` : ''}`
-                })
-
-                console.log(`✅ Stock restaurado para ${item.name}: +${quantityToRestore}`)
-              } catch (stockError) {
-                console.warn(`No se pudo devolver stock para producto ${item.productId}:`, stockError)
-              }
-            }
-          }
-
-          // Revertir ingredientes descontados por recetas con deductOnSale.
-          // Usa el mismo default que POS para mantener consistencia con recetas legacy.
-          try {
-            const { getRecipeByProductId, shouldDeductIngredients } = await import('@/services/recipeService')
-            const { restoreIngredients } = await import('@/services/ingredientService')
-
-            // Mismo guard de idempotencia que el stock de producto: si la venta original no
-            // registró movimientos, NO restaurar insumos (evita doble restauración / inflado).
-            for (const item of (hasSaleMovements && !alreadyRestored) ? voidingSunatInvoice.items : []) {
-              if (!item.productId || item.isCustom) continue
-              try {
-                const recipeResult = await getRecipeByProductId(businessId, item.productId)
-                if (recipeResult.success && recipeResult.data && shouldDeductIngredients(recipeResult.data, businessMode)) {
-                  const recipe = recipeResult.data
-                  const ingredientsToRestore = recipe.ingredients.map(ing => ({
-                    ...ing,
-                    quantity: ing.quantity * item.quantity * (item.presentationFactor || 1)
-                  }))
-                  await restoreIngredients(businessId, ingredientsToRestore, warehouseId)
-                  console.log(`✅ Ingredientes restaurados para ${item.name}`)
-                }
-              } catch (err) {
-                console.warn(`No se pudo restaurar ingredientes para ${item.name}:`, err)
-              }
-            }
-          } catch (err) {
-            console.warn('No se pudo cargar módulo de recetas/ingredientes:', err)
-          }
-        }
-
-        // Revertir métricas del vendedor si la venta tenía un vendedor asignado
-        if (voidingSunatInvoice.sellerId) {
-          try {
-            const { doc, updateDoc, increment } = await import('firebase/firestore')
-            const { db } = await import('@/lib/firebase')
-
-            const sellerRef = doc(db, 'businesses', businessId, 'sellers', voidingSunatInvoice.sellerId)
-            const saleTotal = voidingSunatInvoice.total || voidingSunatInvoice.amounts?.total || 0
-
-            // Verificar si la venta fue hoy para restar de todaySales/todayOrders
-            const saleDate = voidingSunatInvoice.createdAt?.toDate?.() || voidingSunatInvoice.createdAt
-            const today = new Date()
-            const isToday = saleDate &&
-              saleDate.getDate() === today.getDate() &&
-              saleDate.getMonth() === today.getMonth() &&
-              saleDate.getFullYear() === today.getFullYear()
-
-            const updateData = {
-              totalSales: increment(-saleTotal),
-              totalOrders: increment(-1),
-            }
-
-            // Solo restar de los contadores diarios si la venta fue hoy
-            if (isToday) {
-              updateData.todaySales = increment(-saleTotal)
-              updateData.todayOrders = increment(-1)
-            }
-
-            await updateDoc(sellerRef, updateData)
-            console.log(`✅ Métricas del vendedor ${voidingSunatInvoice.sellerName || voidingSunatInvoice.sellerId} actualizadas: -${saleTotal}`)
-          } catch (sellerError) {
-            console.warn('No se pudo actualizar métricas del vendedor:', sellerError)
-            // No fallar la anulación si no se puede actualizar las métricas
-          }
-        }
-
-        // Revertir notas de venta si el comprobante fue convertido desde notas
-        if (voidingSunatInvoice.convertedFrom) {
-          try {
-            const { doc, updateDoc, deleteField } = await import('firebase/firestore')
-            const { db } = await import('@/lib/firebase')
-
-            // Soportar una o múltiples notas
-            const notaIds = voidingSunatInvoice.convertedFrom.ids
-              || (voidingSunatInvoice.convertedFrom.id ? [voidingSunatInvoice.convertedFrom.id] : [])
-
-            for (const notaId of notaIds) {
-              try {
-                const notaRef = doc(db, 'businesses', businessId, 'invoices', notaId)
-                await updateDoc(notaRef, { convertedTo: deleteField(), updatedAt: new Date() })
-                console.log(`✅ Nota de venta ${notaId} revertida a no convertida`)
-              } catch (revertError) {
-                console.warn(`No se pudo revertir nota ${notaId}:`, revertError)
-              }
-            }
-          } catch (error) {
-            console.warn('Error al revertir notas de venta:', error)
-          }
-        }
+      if (isConfirmedVoid) {
+        await applySunatVoidSideEffects(voidingSunatInvoice)
 
         // Mensaje específico según tipo de documento
         if (voidingSunatInvoice.documentType === 'nota_credito') {
-          toast.success(`Nota de Crédito anulada exitosamente. La factura ${voidingSunatInvoice.referencedDocumentId || 'original'} ha sido restaurada.`)
+          toast.success(`Nota de Crédito anulada exitosamente. El documento ${voidingSunatInvoice.referencedDocumentId || 'original'} fue restaurado y el stock devuelto por la NC se re-descontó.`)
         } else {
           toast.success(`${docTypeName} anulada exitosamente en SUNAT.${voidingSunatInvoice.convertedFrom ? ' Notas de venta revertidas.' : ''} Stock restaurado.`)
         }
-        try { await updateInvoice(businessId, voidingSunatInvoice.id, { stockRestored: true }) } catch (e) { /* flag no crítico */ }
         setVoidingSunatInvoice(null)
         setVoidSunatReason('')
         loadInvoices()
       } else if (result.status === 'pending') {
-        // Polling automático: reintentar checkVoidStatus hasta que SUNAT responda
-        toast.info('SUNAT está procesando la anulación. Consultando estado...')
+        // Polling automático: reintentar checkVoidStatus hasta que SUNAT responda.
+        // El stock NO se devuelve todavía: recién cuando SUNAT confirme la baja
+        // (si SUNAT la rechaza, el comprobante sigue válido y no hay nada que revertir).
+        toast.info('SUNAT está procesando la anulación. El stock se devolverá cuando SUNAT confirme. Consultando estado...')
+        const invoiceBeingVoided = voidingSunatInvoice
         const voidedDocumentId = result.voidedDocumentId
         if (voidedDocumentId) {
           let pollAttempts = 0
@@ -1255,11 +1411,13 @@ Gracias por tu preferencia.`
             pollAttempts++
             try {
               const statusResult = await checkVoidStatus(businessId, voidedDocumentId, idToken)
-              if (statusResult.status === 'voided') {
-                toast.success(`${docTypeName} anulada exitosamente en SUNAT.`)
+              if (statusResult.status === 'voided' || statusResult.status === 'accepted') {
+                await applySunatVoidSideEffects(invoiceBeingVoided)
+                toast.success(`${docTypeName} anulada exitosamente en SUNAT. Stock restaurado.`)
                 loadInvoices()
                 return
               } else if (statusResult.status === 'rejected' || statusResult.error) {
+                // Baja rechazada: el stock nunca se tocó, no hay nada que revertir.
                 toast.error(statusResult.error || 'SUNAT rechazó la anulación')
                 loadInvoices()
                 return
@@ -1271,12 +1429,12 @@ Gracias por tu preferencia.`
               console.warn('Error consultando estado:', e)
             }
             // Timeout final
-            toast.info('La anulación sigue en proceso. Recarga la página en unos minutos para ver el estado actualizado.')
+            toast.info('La anulación sigue en proceso. Use "Reintentar" en unos minutos: el stock se devolverá cuando SUNAT confirme la baja.')
             loadInvoices()
           }
           setTimeout(pollStatus, pollInterval)
         } else {
-          toast.info('La anulación está siendo procesada por SUNAT. Consulte el estado en unos minutos.')
+          toast.info('La anulación está siendo procesada por SUNAT. Consulte el estado en unos minutos: el stock se devolverá cuando SUNAT confirme.')
           loadInvoices()
         }
         setVoidingSunatInvoice(null)
@@ -1320,8 +1478,12 @@ Gracias por tu preferencia.`
             console.log(`🔍 checkVoidStatus intento ${attempt}/3, voidedDocumentId: ${voidDocId}`)
             const statusResult = await checkVoidStatus(businessId, voidDocId, idToken)
             console.log('📋 checkVoidStatus resultado:', JSON.stringify(statusResult))
-            if (statusResult.status === 'voided') {
-              toast.success(`${docTypeName} ya fue anulada en SUNAT. Estado actualizado.`)
+            // 'accepted' = la baja ya había sido procesada por SUNAT en una consulta previa.
+            // Aplicar los efectos acá: si la anulación quedó pendiente y el usuario cerró la
+            // página antes de la confirmación, el stock recién se devuelve en este reintento.
+            if (statusResult.status === 'voided' || statusResult.status === 'accepted') {
+              await applySunatVoidSideEffects(invoice)
+              toast.success(`${docTypeName} ya fue anulada en SUNAT. Estado actualizado y stock restaurado.`)
               loadInvoices()
               return
             } else if (statusResult.status === 'rejected') {
@@ -1354,8 +1516,9 @@ Gracias por tu preferencia.`
 
       console.log('📋 Resultado de reenviar anulación:', JSON.stringify(result))
 
-      if (result.status === 'voided') {
-        toast.success(`${docTypeName} anulada exitosamente en SUNAT.`)
+      if (result.status === 'voided' || result.status === 'accepted' || (result.success === true && !result.status)) {
+        await applySunatVoidSideEffects(invoice)
+        toast.success(`${docTypeName} anulada exitosamente en SUNAT. Stock restaurado.`)
         loadInvoices()
       } else if (result.status === 'pending' && result.voidedDocumentId) {
         // Polling con el nuevo voidedDocumentId
@@ -1366,8 +1529,9 @@ Gracias por tu preferencia.`
             console.log(`🔍 Polling intento ${attempt}/4...`)
             const statusResult = await checkVoidStatus(businessId, result.voidedDocumentId, idToken)
             console.log('📋 Polling resultado:', JSON.stringify(statusResult))
-            if (statusResult.status === 'voided') {
-              toast.success(`${docTypeName} anulada exitosamente en SUNAT.`)
+            if (statusResult.status === 'voided' || statusResult.status === 'accepted') {
+              await applySunatVoidSideEffects(invoice)
+              toast.success(`${docTypeName} anulada exitosamente en SUNAT. Stock restaurado.`)
               loadInvoices()
               return
             } else if (statusResult.status === 'rejected') {
