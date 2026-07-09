@@ -246,9 +246,15 @@ export default function CreateInvoice() {
         // Multi-divisa: el precio del producto está en PEN (moneda base).
         // Si la factura es USD, convertimos al momento de cargar el item
         // usando el TC actual. El usuario puede editar el precio luego.
+        // EXCEPCIÓN: producto anclado al dólar (priceUSD) → en USD se usa el
+        // ancla TAL CUAL (un producto de exactamente $10 debe facturar $10,
+        // no $9.97 por redondeo de la conversión soles→dólares).
         const priceInBase = product.hasVariants ? (product.basePrice || 0) : (product.price || 0)
+        const usdAnchor = !product.hasVariants ? parseFloat(product.priceUSD) : NaN
         newItems[index].unitPrice = currency === 'USD' && exchangeRate > 0
-          ? Number(convertFromBase(priceInBase, 'USD', exchangeRate).toFixed(2))
+          ? (Number.isFinite(usdAnchor) && usdAnchor > 0
+            ? usdAnchor
+            : Number(convertFromBase(priceInBase, 'USD', exchangeRate).toFixed(2)))
           : priceInBase
         newItems[index].unit = product.unit || 'UNIDAD'
         newItems[index].taxAffectation = product.taxAffectation || '10'
@@ -671,9 +677,11 @@ export default function CreateInvoice() {
                           // El precio del producto vive en PEN; lo mostramos en
                           // el dropdown en la moneda actual de la factura para
                           // que el usuario vea cómo quedará al cargar el item.
+                          // Anclado al dólar → mostrar el ancla exacta en USD.
                           const priceInBase = product.hasVariants ? (product.basePrice || 0) : (product.price || 0)
+                          const ddUsdAnchor = !product.hasVariants ? parseFloat(product.priceUSD) : NaN
                           const displayPrice = currency === 'USD' && exchangeRate > 0
-                            ? convertFromBase(priceInBase, 'USD', exchangeRate)
+                            ? (Number.isFinite(ddUsdAnchor) && ddUsdAnchor > 0 ? ddUsdAnchor : convertFromBase(priceInBase, 'USD', exchangeRate))
                             : priceInBase
                           return (
                             <option key={product.id} value={product.id}>

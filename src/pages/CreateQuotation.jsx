@@ -292,6 +292,11 @@ export default function CreateQuotation() {
     setQuotationItems(prev => prev.map(item => {
       const oldPrice = Number(item.unitPrice) || 0
       if (oldPrice === 0) return item
+      // Producto anclado al dólar: en USD manda el ancla exacta (no la conversión)
+      const anchorUSD = parseFloat(item.basePriceUSD)
+      if (newCurrency === 'USD' && Number.isFinite(anchorUSD) && anchorUSD > 0) {
+        return { ...item, unitPrice: anchorUSD }
+      }
       const baseInPEN = Number(item.basePrice)
       const hasBase = Number.isFinite(baseInPEN) && baseInPEN > 0
       let newPrice = oldPrice
@@ -317,6 +322,8 @@ export default function CreateQuotation() {
     if (!quoteMultiCurrencyOn) return
     if (currency !== 'USD' || !exchangeRate || exchangeRate <= 0) return
     setQuotationItems(prev => prev.map(item => {
+      // Producto anclado al dólar: su precio USD es fijo, el TC no lo mueve
+      if (parseFloat(item.basePriceUSD) > 0) return item
       const baseInPEN = Number(item.basePrice)
       if (!Number.isFinite(baseInPEN) || baseInPEN <= 0) return item
       const newPrice = Number(convertFromBase(baseInPEN, 'USD', exchangeRate).toFixed(2))
@@ -814,12 +821,23 @@ export default function CreateQuotation() {
     let finalName = product.name
     let finalUnit = product.unit || 'UNIDAD'
     let presentationInfo = ''
+    // Ancla al dólar (priceUSD): solo aplica cuando se usa el precio PRINCIPAL
+    // (los niveles 2/3/4 no tienen ancla). En cotizaciones USD, el ancla se usa
+    // TAL CUAL en vez de convertir el precio en soles con el TC (un producto de
+    // exactamente $10 debe cotizar $10, no $9.97 por redondeo de conversión).
+    const usdAnchorOf = (src, mainPrice) => {
+      if (selectedPrice && Number(selectedPrice) !== Number(mainPrice)) return null
+      const usd = parseFloat(src?.priceUSD)
+      return Number.isFinite(usd) && usd > 0 ? usd : null
+    }
+    let anchorUSD = usdAnchorOf(product, product.price)
 
     // Si se seleccionó una variante (talla, color, etc.)
     if (selectedVariant) {
       finalPrice = selectedPrice || selectedVariant.price
       const attrs = Object.entries(selectedVariant.attributes || {}).map(([k, v]) => v).join(' / ')
       finalName = `${product.name} (${attrs})`
+      anchorUSD = usdAnchorOf(selectedVariant, selectedVariant.price)
     }
 
     // Si se seleccionó una presentación
@@ -827,6 +845,8 @@ export default function CreateQuotation() {
       finalPrice = selectedPresentation.price
       finalName = `${product.name} (${selectedPresentation.name})`
       presentationInfo = selectedPresentation.name
+      const presUsd = parseFloat(selectedPresentation.priceUSD)
+      anchorUSD = Number.isFinite(presUsd) && presUsd > 0 ? presUsd : null
     }
 
     const newItems = [...quotationItems]
@@ -835,8 +855,10 @@ export default function CreateQuotation() {
     newItems[index].description = product.description || ''
     // Multi-divisa: finalPrice viene del catálogo (PEN). Guardar basePrice
     // como source of truth y convertir unitPrice si la sesión es USD.
+    // basePriceUSD = ancla (si existe): en USD manda el ancla, no la conversión.
     newItems[index].basePrice = Number(finalPrice) || 0
-    newItems[index].unitPrice = toSessionCurrency(finalPrice)
+    newItems[index].basePriceUSD = anchorUSD
+    newItems[index].unitPrice = (currency === 'USD' && anchorUSD != null) ? anchorUSD : toSessionCurrency(finalPrice)
     newItems[index].unit = finalUnit
     newItems[index].searchTerm = finalName
     newItems[index].presentationName = presentationInfo

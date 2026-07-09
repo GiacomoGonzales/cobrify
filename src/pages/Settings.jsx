@@ -5512,10 +5512,12 @@ export default function Settings() {
                   </span>
                 </div>
                 <p className="text-xs text-gray-600 leading-relaxed -mt-1">
-                  Permite registrar <strong>compras y facturas en Dólares (USD)</strong> además
-                  de Soles. Los reportes se siguen mostrando en Soles, convirtiendo
-                  cada documento con su tipo de cambio congelado. Solo actívalo si
-                  tu negocio opera con proveedores o clientes en USD.
+                  Para negocios que compran o venden en <strong>dólares</strong>. Al activarlo:
+                  cada producto puede tener su precio en <strong>S/ o en $</strong> (selector en el
+                  formulario del producto), las compras se registran en la moneda de la factura
+                  del proveedor (guardando el costo también en dólares), y las ventas, cotizaciones
+                  y facturas pueden emitirse en $. <strong>La contabilidad y SUNAT siguen en Soles</strong>:
+                  cada documento en dólares guarda su tipo de cambio del día y se convierte solo.
                 </p>
 
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
@@ -5524,7 +5526,7 @@ export default function Settings() {
                     onChange={(e) => setMultiCurrencyEnabled(e.target.checked)}
                     title="Activar soporte multi-divisa"
                     description={multiCurrencyEnabled
-                      ? '✓ Activado: podrás elegir PEN o USD en compras y facturas (los selectores aparecerán cuando se publiquen las próximas fases del módulo).'
+                      ? '✓ Activado: verás el selector S/ | $ en el precio de los productos, la moneda en compras/cotizaciones/facturas, y el inventario mostrará su equivalente en dólares.'
                       : '✗ Desactivado: todo el sistema opera 100% en Soles (PEN), como hasta ahora.'}
                   >
                     <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
