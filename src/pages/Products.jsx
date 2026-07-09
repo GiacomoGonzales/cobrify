@@ -446,6 +446,22 @@ export default function Products() {
     }
   }
 
+  // USD → soles con el TC del día (para variantes/presentaciones ancladas al
+  // dólar cuando el usuario deja el precio en soles vacío). Devuelve null si
+  // no hay TC disponible.
+  const usdToPenToday = async (usd) => {
+    const v = parseFloat(usd)
+    if (!Number.isFinite(v) || v <= 0) return null
+    try {
+      const rate = await getRateForDate(new Date())
+      const tc = Number(rate?.sell)
+      if (Number.isFinite(tc) && tc > 0) return Number((v * tc).toFixed(2))
+    } catch (e) {
+      console.warn('No se pudo obtener el TC:', e)
+    }
+    return null
+  }
+
   // Cambiar la moneda del precio principal (selector S/ | $ del formulario).
   // NO se toca priceUSD aquí: el ancla se decide al GUARDAR según priceCurrency.
   // Así alternar S/ ↔ $ conserva ambos valores y no se pierde el precio en dólares.
@@ -3904,14 +3920,24 @@ export default function Products() {
     }))
   }
 
-  const handleAddVariant = () => {
+  const handleAddVariant = async () => {
     // Validate all attributes are filled
     if (!newVariant.sku.trim()) {
       toast.error('El SKU es requerido')
       return
     }
 
-    if (!newVariant.price || parseFloat(newVariant.price) <= 0) {
+    // Variante anclada al dólar sin precio en soles: derivarlo con el TC del día
+    // (paridad con el precio principal — el usuario solo teclea el precio en $).
+    let variantPen = newVariant.price
+    if ((!variantPen || parseFloat(variantPen) <= 0) && parseFloat(newVariant.priceUSD) > 0) {
+      const pen = await usdToPenToday(newVariant.priceUSD)
+      if (pen != null) {
+        variantPen = String(pen)
+        toast.info(`Precio en soles calculado con el TC del día: S/ ${pen.toFixed(2)}`, 4000)
+      }
+    }
+    if (!variantPen || parseFloat(variantPen) <= 0) {
       toast.error('El precio debe ser mayor a 0')
       return
     }
@@ -3933,7 +3959,7 @@ export default function Products() {
       sku: newVariant.sku.trim(),
       barcode: newVariant.barcode?.trim() || null,
       attributes: { ...newVariant.attributes },
-      price: parseFloat(newVariant.price),
+      price: parseFloat(variantPen),
       price2: newVariant.price2 ? parseFloat(newVariant.price2) : null,
       price3: newVariant.price3 ? parseFloat(newVariant.price3) : null,
       price4: newVariant.price4 ? parseFloat(newVariant.price4) : null,
@@ -3981,12 +4007,21 @@ export default function Products() {
     })
   }
 
-  const handleSaveEditVariant = () => {
+  const handleSaveEditVariant = async () => {
     if (!editingVariant.sku.trim()) {
       toast.error('El SKU es requerido')
       return
     }
-    if (!editingVariant.price || parseFloat(editingVariant.price) <= 0) {
+    // Anclada al dólar sin soles: derivar con el TC del día (ver handleAddVariant)
+    let editPen = editingVariant.price
+    if ((!editPen || parseFloat(editPen) <= 0) && parseFloat(editingVariant.priceUSD) > 0) {
+      const pen = await usdToPenToday(editingVariant.priceUSD)
+      if (pen != null) {
+        editPen = String(pen)
+        toast.info(`Precio en soles calculado con el TC del día: S/ ${pen.toFixed(2)}`, 4000)
+      }
+    }
+    if (!editPen || parseFloat(editPen) <= 0) {
       toast.error('El precio debe ser mayor a 0')
       return
     }
@@ -4001,7 +4036,7 @@ export default function Products() {
       sku: editingVariant.sku.trim(),
       barcode: editingVariant.barcode?.trim() || null,
       attributes: { ...editingVariant.attributes },
-      price: parseFloat(editingVariant.price),
+      price: parseFloat(editPen),
       price2: editingVariant.price2 ? parseFloat(editingVariant.price2) : null,
       price3: editingVariant.price3 ? parseFloat(editingVariant.price3) : null,
       price4: editingVariant.price4 ? parseFloat(editingVariant.price4) : null,
@@ -6689,7 +6724,7 @@ export default function Products() {
                             />
                           </div>
                           <div>
-                            <span className="text-xs text-gray-500">Precio</span>
+                            <span className="text-xs text-gray-500">{businessSettings?.multiCurrencyEnabled ? 'Precio (S/)' : 'Precio'}</span>
                             <input
                               type="number"
                               step="any"
@@ -6700,7 +6735,7 @@ export default function Products() {
                           </div>
                           {businessSettings?.multiCurrencyEnabled && (
                             <div>
-                              <span className="text-xs text-gray-500">Precio USD</span>
+                              <span className="text-xs text-gray-500">Precio ($)</span>
                               <input
                                 type="number"
                                 step="any"
@@ -6722,12 +6757,12 @@ export default function Products() {
                             <p className="text-sm font-medium">×{pres.factor}</p>
                           </div>
                           <div>
-                            <span className="text-xs text-gray-500">Precio</span>
+                            <span className="text-xs text-gray-500">{businessSettings?.multiCurrencyEnabled ? 'Precio (S/)' : 'Precio'}</span>
                             <p className="text-sm font-medium">S/ {parseFloat(pres.price || 0).toFixed(2)}</p>
                           </div>
                           {businessSettings?.multiCurrencyEnabled && (
                             <div>
-                              <span className="text-xs text-gray-500">Precio USD</span>
+                              <span className="text-xs text-gray-500">Precio ($)</span>
                               <p className="text-sm font-medium">{pres.priceUSD != null ? `$${parseFloat(pres.priceUSD).toFixed(2)}` : '-'}</p>
                             </div>
                           )}
@@ -6796,7 +6831,7 @@ export default function Products() {
                   />
                 </div>
                 <div className="w-24">
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Precio</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">{businessSettings?.multiCurrencyEnabled ? 'Precio (S/)' : 'Precio'}</label>
                   <input
                     type="number"
                     step="any"
@@ -6808,7 +6843,7 @@ export default function Products() {
                 </div>
                 {businessSettings?.multiCurrencyEnabled && (
                   <div className="w-24">
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Precio USD</label>
+                    <label className="block text-xs font-medium text-gray-700 mb-1" title="Ancla al dólar: si dejas el precio en soles vacío, se calcula con el TC del día">Precio ($)</label>
                     <input
                       type="number"
                       step="any"
@@ -6821,7 +6856,7 @@ export default function Products() {
                 )}
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     if (!newPresentation.name.trim()) {
                       toast.error('Ingresa un nombre para la presentación')
                       return
@@ -6830,14 +6865,23 @@ export default function Products() {
                       toast.error('El factor debe ser mayor a 0')
                       return
                     }
-                    if (!newPresentation.price || parseFloat(newPresentation.price) <= 0) {
+                    // Presentación anclada al dólar sin soles: derivar con el TC del día
+                    let presPen = newPresentation.price
+                    if ((!presPen || parseFloat(presPen) <= 0) && parseFloat(newPresentation.priceUSD) > 0) {
+                      const pen = await usdToPenToday(newPresentation.priceUSD)
+                      if (pen != null) {
+                        presPen = String(pen)
+                        toast.info(`Precio en soles calculado con el TC del día: S/ ${pen.toFixed(2)}`, 4000)
+                      }
+                    }
+                    if (!presPen || parseFloat(presPen) <= 0) {
                       toast.error('Ingresa un precio válido')
                       return
                     }
                     setPresentations([...presentations, {
                       name: newPresentation.name.trim(),
                       factor: parseFloat(newPresentation.factor),
-                      price: parseFloat(newPresentation.price),
+                      price: parseFloat(presPen),
                       priceUSD: (businessSettings?.multiCurrencyEnabled && newPresentation.priceUSD) ? parseFloat(newPresentation.priceUSD) : null
                     }])
                     setNewPresentation({ name: '', factor: '', price: '', priceUSD: '' })
@@ -7526,6 +7570,7 @@ export default function Products() {
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
                             {businessSettings?.multiplePricesEnabled ? (businessSettings?.priceLabels?.price1 || 'Precio 1') : 'Precio'}
+                            {businessSettings?.multiCurrencyEnabled && <span className="text-gray-400"> (S/)</span>}
                           </label>
                           <input
                             type="number"
@@ -7608,7 +7653,7 @@ export default function Products() {
                         {businessSettings?.multiCurrencyEnabled && (
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Precio USD <span className="text-xs text-gray-400">(opcional)</span>
+                              Precio ($) <span className="text-xs text-gray-400">(opcional, ancla al dólar)</span>
                             </label>
                             <input
                               type="number"
@@ -7618,6 +7663,7 @@ export default function Products() {
                               placeholder="0.00"
                               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                             />
+                            <p className="text-[11px] text-gray-400 mt-0.5">Si dejas el precio en soles vacío, se calcula solo con el TC del día.</p>
                           </div>
                         )}
                       </div>
