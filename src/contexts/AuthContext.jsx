@@ -10,6 +10,7 @@ import { getUserData } from '@/services/userManagementService'
 import { getActiveBranches } from '@/services/branchService'
 import { initializePushNotifications, cleanupPushNotifications } from '@/services/notificationService'
 import { setBusinessInfo, clearBusinessInfo } from '@/plugins/businessStorage'
+import { getFirstAllowedRoute } from '@/utils/pageRoutes'
 import SubscriptionBlockedModal from '@/components/SubscriptionBlockedModal'
 
 const AuthContext = createContext(null)
@@ -528,39 +529,11 @@ export const AuthProvider = ({ children }) => {
           if (pages.includes('pos')) {
             navigate('/app/pos')
           } else if (pages.length > 0) {
-            // Ir a la primera página permitida
-            const pageRouteMap = {
-              'dashboard': '/app/dashboard',
-              'pos': '/app/pos',
-              'invoices': '/app/facturas',
-              'customers': '/app/clientes',
-              'products': '/app/productos',
-              'cash-register': '/app/caja',
-              'reports': '/app/reportes',
-              'expenses': '/app/gastos',
-              'cash-flow': '/app/flujo-caja',
-              'settings': '/app/configuracion',
-              'sellers': '/app/vendedores',
-              'quotations': '/app/cotizaciones',
-              'dispatch-guides': '/app/guias-remision',
-              'carrier-dispatch-guides': '/app/guias-transportista',
-              'inventory': '/app/inventario',
-              'warehouses': '/app/almacenes',
-              'stock-movements': '/app/movimientos',
-              'purchases': '/app/compras',
-              'purchase-orders': '/app/ordenes-compra',
-              'suppliers': '/app/proveedores',
-              'complaints': '/app/reclamos',
-              'tables': '/app/mesas',
-              'orders': '/app/ordenes',
-              'kitchen': '/app/cocina',
-              'waiters': '/app/mozos',
-              'loans': '/app/prestamos',
-              'certificates': '/app/certificados',
-              'attendance': '/app/asistencia',
-            }
-            const firstRoute = pageRouteMap[pages[0]] || '/app/pos'
-            navigate(firstRoute)
+            // Primera página permitida con ruta conocida (mapa compartido en
+            // pageRoutes.js — incluye TODOS los modos de negocio). Antes se usaba
+            // un mapa local sin las páginas de logística y el sub-usuario sin POS
+            // aterrizaba en /app/pos sin permiso → página en blanco.
+            navigate(getFirstAllowedRoute(pages))
           } else {
             navigate('/app/dashboard')
           }

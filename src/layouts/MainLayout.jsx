@@ -22,57 +22,10 @@ import { getAudioContext } from '@/lib/globalAudio'
 import { useToast } from '@/contexts/ToastContext'
 
 // Mapeo de rutas a pageIds para verificación de permisos
-const routeToPageId = {
-  '/app/dashboard': 'dashboard',
-  '/app/pos': 'pos',
-  '/app/facturas': 'invoices',
-  '/app/clientes': 'customers',
-  '/app/productos': 'products',
-  '/app/caja': 'cash-register',
-  '/app/reportes': 'reports',
-  '/app/gastos': 'expenses',
-  '/app/flujo-caja': 'cash-flow',
-  '/app/configuracion': 'settings',
-  '/app/vendedores': 'sellers',
-  '/app/cotizaciones': 'quotations',
-  '/app/guias-remision': 'dispatch-guides',
-  '/app/guias-transportista': 'carrier-dispatch-guides',
-  '/app/inventario': 'inventory',
-  '/app/almacenes': 'warehouses',
-  '/app/movimientos': 'stock-movements',
-  '/app/compras': 'purchases',
-  '/app/ordenes-compra': 'purchase-orders',
-  '/app/proveedores': 'suppliers',
-  '/app/reclamos': 'complaints',
-  '/app/mesas': 'tables',
-  '/app/ordenes': 'orders',
-  '/app/pedidos-online': 'online-orders',
-  '/app/cocina': 'kitchen',
-  '/app/mozos': 'waiters',
-  '/app/envios': 'envios',
-  '/app/prestamos': 'loans',
-  '/app/certificados': 'certificates',
-  '/app/ingredientes': 'ingredients',
-  '/app/recetas': 'recipes',
-  '/app/laboratorios': 'laboratories',
-  '/app/alertas-vencimiento': 'expiry-alerts',
-  '/app/control-lotes': 'batch-control',
-  '/app/propiedades': 'properties',
-  '/app/agentes': 'agents',
-  '/app/operaciones': 'operations',
-  '/app/comisiones': 'commissions',
-  '/app/proyectos': 'projects',
-  '/app/salidas-almacen': 'warehouse-exits',
-  '/app/retornos-almacen': 'warehouse-returns',
-  '/app/reportes-logisticos': 'logistics-reports',
-  '/app/control-pagos-alumnos': 'student-payment-control',
-  '/app/nota-credito': 'invoices',
-  '/app/nota-debito': 'invoices',
-  '/app/alertas-veterinaria': 'vet-alerts',
-  '/app/agenda-veterinaria': 'vet-agenda',
-  '/app/contabilidad': 'accounting',
-  '/app/asistencia': 'attendance',
-}
+// Mapa ruta→pageId de permisos: vive en src/utils/pageRoutes.js (única fuente de
+// verdad, compartida con la redirección post-login de AuthContext). Registrar
+// páginas nuevas AHÍ, no en mapas locales.
+import { routeToPageId, getFirstAllowedRoute } from '@/utils/pageRoutes'
 
 export default function MainLayout() {
   const { user, isAuthenticated, isLoading, hasAccess, isAdmin, subscription, isBusinessOwner, hasPageAccess, allowedPages, getBusinessId, isInGracePeriod, businessMode } = useAuth()
@@ -522,53 +475,16 @@ export default function MainLayout() {
     const pageId = routeToPageId[location.pathname] || routeToPageId[basePath]
 
     if (pageId && !hasPageAccess(pageId)) {
-      // Redirigir a la primera página permitida
-      const pageRouteMap = {
-        'pos': '/app/pos',
-        'dashboard': '/app/dashboard',
-        'invoices': '/app/facturas',
-        'customers': '/app/clientes',
-        'products': '/app/productos',
-        'cash-register': '/app/caja',
-        'reports': '/app/reportes',
-        'sellers': '/app/vendedores',
-        'expenses': '/app/gastos',
-        'cash-flow': '/app/flujo-caja',
-        'settings': '/app/configuracion',
-        'quotations': '/app/cotizaciones',
-        'dispatch-guides': '/app/guias-remision',
-        'carrier-dispatch-guides': '/app/guias-transportista',
-        'inventory': '/app/inventario',
-        'warehouses': '/app/almacenes',
-        'stock-movements': '/app/movimientos',
-        'purchases': '/app/compras',
-        'purchase-orders': '/app/ordenes-compra',
-        'suppliers': '/app/proveedores',
-        'complaints': '/app/reclamos',
-        'tables': '/app/mesas',
-        'orders': '/app/ordenes',
-        'kitchen': '/app/cocina',
-        'waiters': '/app/mozos',
-        'envios': '/app/envios',
-        'loans': '/app/prestamos',
-        'certificates': '/app/certificados',
-        'ingredients': '/app/ingredientes',
-        'recipes': '/app/recetas',
-        'laboratories': '/app/laboratorios',
-        'expiry-alerts': '/app/alertas-vencimiento',
-        'batch-control': '/app/control-lotes',
-        'properties': '/app/propiedades',
-        'agents': '/app/agentes',
-        'operations': '/app/operaciones',
-        'commissions': '/app/comisiones',
-        'student-payment-control': '/app/control-pagos-alumnos',
-        'vet-alerts': '/app/alertas-veterinaria',
-        'vet-agenda': '/app/agenda-veterinaria',
-        'accounting': '/app/contabilidad',
-        'attendance': '/app/asistencia',
+      // Redirigir a la PRIMERA página permitida con ruta conocida (mapa compartido
+      // en pageRoutes.js). Antes se usaba un mapa local desactualizado: para páginas
+      // nuevas (p.ej. logística) devolvía undefined, caía al fallback /app/pos y, si
+      // el sub-usuario no tenía POS, este guard redirigía en bucle a la misma ruta →
+      // página en blanco al ingresar.
+      const firstAllowedRoute = getFirstAllowedRoute(allowedPages)
+      // Anti-bucle: solo navegar si el destino es distinto a la ruta actual.
+      if (firstAllowedRoute !== location.pathname) {
+        return <Navigate to={firstAllowedRoute} replace />
       }
-      const firstAllowedRoute = pageRouteMap[allowedPages[0]] || '/app/pos'
-      return <Navigate to={firstAllowedRoute} replace />
     }
   }
 
