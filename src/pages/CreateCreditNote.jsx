@@ -90,12 +90,18 @@ export default function CreateCreditNote() {
   const [globalDiscountMode, setGlobalDiscountMode] = useState(false)
   const [globalDiscountAmount, setGlobalDiscountAmount] = useState('')
 
-  // Forma de compensación al cliente:
-  //   - 'refund'       → se le devuelve el efectivo (comportamiento histórico).
-  //   - 'store_credit' → el cliente NO recibe dinero; la NC queda como saldo a
-  //                      favor para usar en compras futuras (se aplica como
-  //                      método de pago en el POS). No altera el XML de la NC.
-  const [compensationType, setCompensationType] = useState('refund')
+  // Forma de compensación al cliente (OPCIONAL). Por defecto la NC solo corrige/anula
+  // el comprobante sin ningún encuadre de dinero — cubre el caso más común (anulación
+  // por error, factura a crédito no pagada). La compensación se muestra plegada y solo
+  // aparece si el usuario la activa.
+  //   - 'none'         → solo se emite la nota; sin devolución ni saldo (default).
+  //   - 'refund'       → se le devuelve el efectivo al cliente (informativo; misma data
+  //                      que 'none' — no registra caja ni altera el XML de la NC).
+  //   - 'store_credit' → el cliente NO recibe dinero; la NC queda como saldo a favor
+  //                      para usar en compras futuras (método de pago en el POS).
+  const [compensationType, setCompensationType] = useState('none')
+  // Controla si la sección de compensación (devolución / saldo a favor) está desplegada.
+  const [showCompensation, setShowCompensation] = useState(false)
 
   // Form data para factura externa
   const [externalData, setExternalData] = useState({
@@ -979,48 +985,71 @@ export default function CreateCreditNote() {
   const activeTotal = mode === CREDIT_NOTE_MODES.EXTERNAL ? externalTotals.total : totals.total
   const activeCurrency = mode === CREDIT_NOTE_MODES.EXTERNAL ? 'PEN' : selectedInvoice?.currency
 
-  // Selector "Forma de compensación al cliente" — compartido por ambos formularios.
-  // Determina si la NC genera saldo a favor (store credit) o es devolución de efectivo.
+  // Sección "Compensación al cliente" — OPCIONAL y compartida por ambos formularios.
+  // Por defecto la NC solo se emite (sin devolución ni saldo). El usuario puede activar
+  // la compensación para elegir devolución de efectivo (informativa) o saldo a favor
+  // (crea store credit). Al desactivarla vuelve a 'none'; al activarla arranca en 'refund'.
+  const toggleCompensation = (enabled) => {
+    setShowCompensation(enabled)
+    setCompensationType(enabled ? 'refund' : 'none')
+  }
+
   const compensationSelector = (
     <Card>
-      <CardHeader>
-        <CardTitle>Forma de compensación al cliente</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className={`flex items-start gap-2.5 p-3 border rounded-lg cursor-pointer transition-colors ${compensationType === 'refund' ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:border-gray-300'}`}>
-            <input
-              type="radio"
-              name="compensationType"
-              checked={compensationType === 'refund'}
-              onChange={() => setCompensationType('refund')}
-              className="mt-0.5 flex-shrink-0"
-            />
-            <div>
-              <div className="flex items-center gap-1.5 font-medium text-gray-900 text-sm">
-                <Banknote className="w-4 h-4 text-gray-500" /> Devolución de efectivo
+      <CardContent className="py-4">
+        <label className="flex items-start gap-2.5 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showCompensation}
+            onChange={e => toggleCompensation(e.target.checked)}
+            className="mt-0.5 flex-shrink-0"
+          />
+          <div>
+            <div className="font-medium text-gray-900 text-sm">Compensación al cliente (opcional)</div>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {showCompensation
+                ? 'Elige cómo se compensa al cliente.'
+                : 'La nota solo corrige o anula el comprobante. Actívalo si además devuelves dinero o dejas saldo a favor.'}
+            </p>
+          </div>
+        </label>
+
+        {showCompensation && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+            <label className={`flex items-start gap-2.5 p-3 border rounded-lg cursor-pointer transition-colors ${compensationType === 'refund' ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:border-gray-300'}`}>
+              <input
+                type="radio"
+                name="compensationType"
+                checked={compensationType === 'refund'}
+                onChange={() => setCompensationType('refund')}
+                className="mt-0.5 flex-shrink-0"
+              />
+              <div>
+                <div className="flex items-center gap-1.5 font-medium text-gray-900 text-sm">
+                  <Banknote className="w-4 h-4 text-gray-500" /> Devolución de efectivo
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5">Le devuelves el dinero al cliente. No queda saldo pendiente.</p>
               </div>
-              <p className="text-xs text-gray-500 mt-0.5">Le devuelves el dinero al cliente. No queda saldo pendiente.</p>
-            </div>
-          </label>
-          <label className={`flex items-start gap-2.5 p-3 border rounded-lg cursor-pointer transition-colors ${compensationType === 'store_credit' ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:border-gray-300'}`}>
-            <input
-              type="radio"
-              name="compensationType"
-              checked={compensationType === 'store_credit'}
-              onChange={() => setCompensationType('store_credit')}
-              className="mt-0.5 flex-shrink-0"
-            />
-            <div>
-              <div className="flex items-center gap-1.5 font-medium text-gray-900 text-sm">
-                <Wallet className="w-4 h-4 text-primary-600" /> Saldo a favor del cliente
+            </label>
+            <label className={`flex items-start gap-2.5 p-3 border rounded-lg cursor-pointer transition-colors ${compensationType === 'store_credit' ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:border-gray-300'}`}>
+              <input
+                type="radio"
+                name="compensationType"
+                checked={compensationType === 'store_credit'}
+                onChange={() => setCompensationType('store_credit')}
+                className="mt-0.5 flex-shrink-0"
+              />
+              <div>
+                <div className="flex items-center gap-1.5 font-medium text-gray-900 text-sm">
+                  <Wallet className="w-4 h-4 text-primary-600" /> Saldo a favor del cliente
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  El cliente conserva {activeTotal > 0 ? formatCurrency(activeTotal, activeCurrency) : 'el monto'} para usar en compras futuras.
+                </p>
               </div>
-              <p className="text-xs text-gray-500 mt-0.5">
-                El cliente conserva {activeTotal > 0 ? formatCurrency(activeTotal, activeCurrency) : 'el monto'} para usar en compras futuras.
-              </p>
-            </div>
-          </label>
-        </div>
+            </label>
+          </div>
+        )}
       </CardContent>
     </Card>
   )
