@@ -2387,7 +2387,7 @@ export default function Reports() {
           <div className="flex justify-end">
             {!hidePrivateData && (
             <button
-              onClick={async () => await exportGeneralReport({ stats, salesByMonth: salesByPeriod, topProducts, topCustomers, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate, branchLabel: getBranchLabel() })}
+              onClick={async () => await exportGeneralReport({ stats, salesByMonth: salesByPeriod, topProducts, topCustomers, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
               <Download className="w-4 h-4" />
@@ -2608,7 +2608,7 @@ export default function Reports() {
           <div className="flex justify-end">
             {!hidePrivateData && (
             <button
-              onClick={async () => await exportSalesReport({ stats, salesByMonth: salesByPeriod, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate, branchLabel: getBranchLabel() })}
+              onClick={async () => await exportSalesReport({ stats, salesByMonth: salesByPeriod, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
               <Download className="w-4 h-4" />
@@ -3000,7 +3000,7 @@ export default function Reports() {
           <div className="flex justify-end">
             {!hidePrivateData && (
             <button
-              onClick={async () => await exportProductsReport({ topProducts, salesByCategory, salesByBrand, products, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel() })}
+              onClick={async () => await exportProductsReport({ topProducts, salesByCategory, salesByBrand, products, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
               <Download className="w-4 h-4" />
@@ -3555,7 +3555,7 @@ export default function Reports() {
               </select>
               {!hidePrivateData && (
               <button
-                onClick={async () => await exportBrandDetailReport({ brandData: selectedBrandData, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel() })}
+                onClick={async () => await exportBrandDetailReport({ brandData: selectedBrandData, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })}
                 disabled={selectedBrandData.products.length === 0}
                 className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -3840,7 +3840,7 @@ export default function Reports() {
           <div className="flex justify-end">
             {!hidePrivateData && (
             <button
-              onClick={async () => await exportBrandsReport({ salesByBrand, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel() })}
+              onClick={async () => await exportBrandsReport({ salesByBrand, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })}
               disabled={salesByBrand.length === 0}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -4159,7 +4159,7 @@ export default function Reports() {
           <div className="flex justify-end">
             {!hidePrivateData && (
             <button
-              onClick={async () => await exportCustomersReport({ topCustomers, customers, filteredInvoices, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel() })}
+              onClick={async () => await exportCustomersReport({ topCustomers, customers, filteredInvoices, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
               <Download className="w-4 h-4" />
