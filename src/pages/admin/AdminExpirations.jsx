@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { collection, query, where, getDocs, orderBy, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, query, where, getDocs, doc, getDoc, updateDoc, serverTimestamp, documentId } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { PLANS, suspendUser, registerPayment } from '@/services/subscriptionService'
 import { useAuth } from '@/contexts/AuthContext'
@@ -75,51 +75,57 @@ export default function AdminExpirations() {
     setLoading(true)
     try {
       const subsRef = collection(db, 'subscriptions')
-      const q = query(subsRef, where('status', '==', 'active'), orderBy('currentPeriodEnd', 'asc'))
-      const snapshot = await getDocs(q)
 
-      // Also get expired/suspended ones
-      const expiredQuery = query(subsRef, where('status', 'in', ['active', 'suspended']))
-      const expiredSnapshot = await getDocs(expiredQuery)
+      // La query `status in ['active','suspended']` ya cubre TODOS los activos, así que
+      // la query anterior de solo-activos era redundante (el orderBy se descartaba porque
+      // el orden final se calcula en cliente). Esta query y la de sub-usuarios son
+      // independientes → se lanzan en paralelo.
+      const [subsSnapshot, usersSnapshot] = await Promise.all([
+        getDocs(query(subsRef, where('status', 'in', ['active', 'suspended']))),
+        // Filtrar sub-usuarios: los que tienen un ownerId en la colección users
+        getDocs(query(collection(db, 'users'), where('ownerId', '!=', ''))),
+      ])
 
       const allSubs = new Map()
-
-      // Merge both queries
-      expiredSnapshot.forEach(docSnap => {
+      subsSnapshot.forEach(docSnap => {
         const data = docSnap.data()
-        // Skip enterprise plans and sub-users
+        // Skip enterprise plans
         if (data.plan === 'enterprise') return
         allSubs.set(docSnap.id, { id: docSnap.id, ...data })
       })
 
-      snapshot.forEach(docSnap => {
-        const data = docSnap.data()
-        if (data.plan === 'enterprise') return
-        allSubs.set(docSnap.id, { id: docSnap.id, ...data })
-      })
-
-      // Filter out sub-users by checking if they have an ownerId in users collection
-      const usersQuery = query(collection(db, 'users'), where('ownerId', '!=', ''))
-      const usersSnapshot = await getDocs(usersQuery)
       const subUserIds = new Set()
-      usersSnapshot.forEach(doc => subUserIds.add(doc.id))
+      usersSnapshot.forEach(docSnap => subUserIds.add(docSnap.id))
 
       const filtered = Array.from(allSubs.values()).filter(sub => !subUserIds.has(sub.id))
 
       // Adjuntar el teléfono de cada negocio para mostrarlo en su columna. Se
       // prefiere el teléfono de contacto del dueño (businesses/{uid}.contactPhone);
-      // si no tiene, cae al teléfono del negocio (el que imprime en el ticket)
-      // para no dejar la celda vacía. Lectura por negocio en paralelo; es una
-      // página de admin de uso esporádico.
-      const withPhones = await Promise.all(filtered.map(async sub => {
-        try {
-          const bizSnap = await getDoc(doc(db, 'businesses', sub.id))
-          const biz = bizSnap.exists() ? bizSnap.data() : {}
-          return { ...sub, phone: (biz.contactPhone || biz.phone || '') }
-        } catch {
-          return { ...sub, phone: '' }
-        }
-      }))
+      // si no tiene, cae al teléfono del negocio (el que imprime en el ticket).
+      // Antes se hacía UN getDoc por negocio (cientos de round-trips serializados por
+      // el SDK → la página tardaba mucho). Ahora se leen en lote con `documentId() in`
+      // (chunks de 30, el máximo de Firestore) y los chunks corren en paralelo:
+      // de N lecturas se pasa a ceil(N/30) queries. El id de la suscripción es el uid
+      // del dueño = id del doc de businesses.
+      const ids = filtered.map(sub => sub.id)
+      const chunks = []
+      for (let i = 0; i < ids.length; i += 30) chunks.push(ids.slice(i, i + 30))
+
+      const phoneById = new Map()
+      const bizSnaps = await Promise.all(
+        chunks.map(chunk =>
+          getDocs(query(collection(db, 'businesses'), where(documentId(), 'in', chunk)))
+            .catch(() => null)
+        )
+      )
+      bizSnaps.forEach(snap => {
+        snap?.forEach(bizDoc => {
+          const biz = bizDoc.data()
+          phoneById.set(bizDoc.id, biz.contactPhone || biz.phone || '')
+        })
+      })
+
+      const withPhones = filtered.map(sub => ({ ...sub, phone: phoneById.get(sub.id) || '' }))
 
       setSubscriptions(withPhones)
     } catch (error) {
