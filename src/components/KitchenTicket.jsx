@@ -94,7 +94,7 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible: web
 
           .kitchen-ticket-container {
             position: ${a4SheetPrint ? 'static' : 'absolute'};
-            ${a4SheetPrint ? '' : 'left: 50%;\n            top: 0;\n            transform: translateX(-50%);'}
+            ${a4SheetPrint ? '' : 'left: 0;\n            right: 0;\n            top: 0;'}
             width: ${kitchenWidthMm}mm !important;
             max-width: ${kitchenWidthMm}mm !important;
             zoom: ${ticketZoom};
@@ -110,7 +110,7 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible: web
             line-height: ${webPrintLegible ? '1.4' : '1.25'};
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
-            overflow: ${a4SheetPrint ? 'visible' : 'hidden'};
+            overflow: visible;
           }
 
           /* Cuando hay múltiples tickets (multi-estación), no usar position absolute */
@@ -120,7 +120,7 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible: web
           }
           .kitchen-multi-ticket {
             position: ${a4SheetPrint ? 'static' : 'absolute'};
-            ${a4SheetPrint ? '' : 'left: 50%;\n            top: 0;\n            transform: translateX(-50%);'}
+            ${a4SheetPrint ? '' : 'left: 0;\n            right: 0;\n            top: 0;'}
           }
           .kitchen-multi-ticket .kitchen-ticket-container {
             position: static;
