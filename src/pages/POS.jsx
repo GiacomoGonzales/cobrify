@@ -11363,6 +11363,14 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 price: item.unitPrice,
                 unit: item.unit, // unidad de medida (para que el ticket no caiga a "UNIDAD" genérico)
                 observations: item.observations,
+                // Descuento por ítem: sin esto el ticket post-venta mostraba solo el
+                // descuento total abajo (parecía global) aunque fuera individual.
+                ...(item.itemDiscount > 0 && { itemDiscount: item.itemDiscount }),
+                // Lote/vencimiento para que el ticket los muestre (farmacia)
+                ...(item.batchNumber && { batchNumber: item.batchNumber }),
+                ...(item.batchExpiryDate && { batchExpiryDate: item.batchExpiryDate }),
+                // Variante (talla, color, ...) para mostrarla en el ticket
+                ...(item.isVariant && { isVariant: true, variantSku: item.variantSku, variantAttributes: item.variantAttributes }),
                 // Presentación elegida (CAJA, PACK, ...): el ticket la antepone con showItemUnit
                 ...(item.presentationName && { presentationName: item.presentationName, presentationFactor: item.presentationFactor }),
                 ...(item.serialNumber && { serialNumber: item.serialNumber }),

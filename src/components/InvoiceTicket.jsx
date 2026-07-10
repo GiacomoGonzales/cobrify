@@ -947,6 +947,12 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
                 {item.code && companySettings?.showProductCodeInInvoices !== false && (
                   <div className="item-code">Código: {item.code}</div>
                 )}
+                {item.isVariant && item.variantAttributes && (() => {
+                  const attrs = Object.entries(item.variantAttributes)
+                    .map(([key, value]) => `${key.charAt(0).toUpperCase() + key.slice(1)}: ${value}`)
+                    .join(', ');
+                  return attrs ? <div className="item-code">{attrs}</div> : null;
+                })()}
                 {item.batchNumber && !companySettings?.hideBatchAndExpiryInDocuments && (
                   <div className="item-code">
                     Lote: {item.batchNumber}

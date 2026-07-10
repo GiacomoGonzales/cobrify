@@ -968,6 +968,14 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
           commands.push(ESCPOSCommands.text('Codigo: ' + convertSpanishText(item.code) + '\n'));
         }
 
+        // Variante (talla, color, ...) si existe
+        if (item.isVariant && item.variantAttributes) {
+          const vAttrs = Object.entries(item.variantAttributes)
+            .map(([k, v]) => `${k.charAt(0).toUpperCase() + k.slice(1)}: ${v}`)
+            .join(', ');
+          if (vAttrs) commands.push(ESCPOSCommands.text(convertSpanishText(vAttrs) + '\n'));
+        }
+
         // Número de serie si existe
         if (item.serialNumber) {
           commands.push(ESCPOSCommands.text('S/N: ' + convertSpanishText(item.serialNumber) + '\n'));

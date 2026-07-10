@@ -829,6 +829,14 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
           itemsText += `Codigo: ${convertSpanishText(item.code)}\n`;
         }
 
+        // Variante (talla, color, ...) si existe
+        if (item.isVariant && item.variantAttributes) {
+          const vAttrs = Object.entries(item.variantAttributes)
+            .map(([k, v]) => `${k.charAt(0).toUpperCase() + k.slice(1)}: ${v}`)
+            .join(', ');
+          if (vAttrs) itemsText += `${convertSpanishText(vAttrs)}\n`;
+        }
+
         // Línea 4: Información del lote si existe (modo farmacia)
         if (item.batchNumber && !business?.hideBatchAndExpiryInDocuments) {
           let batchLine = `Lote: ${item.batchNumber}`;
@@ -885,6 +893,14 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
         // Línea 3: Código si existe (alineado a la izquierda, respeta showProductCodeInInvoices)
         if (item.code && business?.showProductCodeInInvoices !== false) {
           itemsText += `Codigo: ${convertSpanishText(item.code)}\n`;
+        }
+
+        // Variante (talla, color, ...) si existe
+        if (item.isVariant && item.variantAttributes) {
+          const vAttrs = Object.entries(item.variantAttributes)
+            .map(([k, v]) => `${k.charAt(0).toUpperCase() + k.slice(1)}: ${v}`)
+            .join(', ');
+          if (vAttrs) itemsText += `${convertSpanishText(vAttrs)}\n`;
         }
 
         // Línea 4: Información del lote si existe (modo farmacia)
@@ -2537,6 +2553,14 @@ const buildTicketEscPos = async (invoice, business, paperWidth = 58) => {
         builder.text(`Dsct.`)
           .text(`  -${currencySymbol} ${itemDiscount.toFixed(2)}`)
           .newLine();
+      }
+
+      // Variante (talla, color, ...) si existe
+      if (item.isVariant && item.variantAttributes) {
+        const vAttrs = Object.entries(item.variantAttributes)
+          .map(([k, v]) => `${k.charAt(0).toUpperCase() + k.slice(1)}: ${v}`)
+          .join(', ');
+        if (vAttrs) builder.text(convertSpanishText(vAttrs)).newLine();
       }
 
       // Información del lote si existe (modo farmacia)
