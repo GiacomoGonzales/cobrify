@@ -38,6 +38,10 @@ export default function CashRegister() {
   // no es dueño/admin, escondemos el monto esperado y la diferencia para que el cajero
   // no lo vea — solo cuente y reporte. El dueño podrá comparar después.
   const hideExpectedForCashier = !isAdmin && !isBusinessOwner && !!businessSettings?.hideCashExpectedFromCashier
+  // Bloqueo del cuadre en el historial de caja (Configuración > Ventas): si está activo,
+  // NO se puede editar el monto inicial, el efectivo contado ni los movimientos de una
+  // sesión cerrada (integridad del cierre diario). Aplica a todos.
+  const lockHistoryEdit = !!businessSettings?.lockCashRegisterHistory
   const hidePrivateData = useHidePrivateData()
   const toast = useToast()
   const [isLoading, setIsLoading] = useState(true)
@@ -2957,8 +2961,8 @@ export default function CashRegister() {
           <div className="space-y-6">
             {/* Fecha y hora + Botón Editar */}
             <div className="text-center py-4 bg-gray-50 rounded-lg relative">
-              {/* TEMPORAL: Botón de editar */}
-              {!isEditingHistory && (
+              {/* Botón de editar — oculto si el cuadre está bloqueado (Config > Ventas) */}
+              {!isEditingHistory && !lockHistoryEdit && (
                 <button
                   onClick={startEditingHistory}
                   className="absolute top-2 right-2 p-2 text-gray-500 hover:text-primary-600 hover:bg-white rounded-lg transition-colors"
@@ -3229,21 +3233,25 @@ export default function CashRegister() {
                             <span className={`font-semibold ${movement.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
                               {movement.type === 'income' ? '+' : '-'}{formatCurrency(movement.amount)}
                             </span>
-                            {/* TEMPORAL: Botones editar/eliminar */}
-                            <button
-                              onClick={() => handleEditHistoryMovement(movement)}
-                              className="p-1 text-gray-400 hover:text-primary-600"
-                              title="Editar"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteHistoryMovement(movement)}
-                              className="p-1 text-gray-400 hover:text-red-600"
-                              title="Eliminar"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {/* Botones editar/eliminar — ocultos si el cuadre está bloqueado (Config > Ventas) */}
+                            {!lockHistoryEdit && (
+                              <>
+                                <button
+                                  onClick={() => handleEditHistoryMovement(movement)}
+                                  className="p-1 text-gray-400 hover:text-primary-600"
+                                  title="Editar"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteHistoryMovement(movement)}
+                                  className="p-1 text-gray-400 hover:text-red-600"
+                                  title="Eliminar"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            )}
                           </div>
                         </div>
                       )}

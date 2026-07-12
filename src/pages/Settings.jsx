@@ -391,6 +391,7 @@ export default function Settings() {
   const [autoResetPOS, setAutoResetPOS] = useState(false)
   const [autoPrintTicket, setAutoPrintTicket] = useState(false)
   const [showChangeReminder, setShowChangeReminder] = useState(false)
+  const [lockCashRegisterHistory, setLockCashRegisterHistory] = useState(false)
   const [showAllProductsInPOS, setShowAllProductsInPOS] = useState(false)
   const [enableCustomerDisplay, setEnableCustomerDisplay] = useState(false)
 
@@ -1247,6 +1248,7 @@ export default function Settings() {
         setAutoResetPOS(businessData.autoResetPOS || false)
         setAutoPrintTicket(businessData.autoPrintTicket || false)
         setShowChangeReminder(businessData.showChangeReminder || false)
+        setLockCashRegisterHistory(businessData.lockCashRegisterHistory || false)
         setShowAllProductsInPOS(businessData.showAllProductsInPOS || false)
 
         // Cargar configuración de notas de venta
@@ -5025,6 +5027,16 @@ export default function Settings() {
                       : '✗ Deshabilitado: No se mostrará ningún aviso de vuelto al completar la venta.'}
                   />
 
+                  {/* Bloquear edición del cuadre de caja en el historial */}
+                  <SettingToggle
+                    checked={lockCashRegisterHistory}
+                    onChange={(e) => setLockCashRegisterHistory(e.target.checked)}
+                    title="Bloquear edición del cuadre de caja"
+                    description={lockCashRegisterHistory
+                      ? '✓ Habilitado: En el historial de caja diario NO se puede editar el monto inicial, el efectivo contado ni los movimientos de una sesión cerrada. Protege la integridad del cierre.'
+                      : '✗ Deshabilitado: Se puede editar el cuadre de una sesión cerrada desde el historial de caja.'}
+                  />
+
                   {/* Mostrar todos los productos en el POS (sin botón "Ver más") */}
                   <SettingToggle
                     checked={showAllProductsInPOS}
@@ -5649,6 +5661,7 @@ export default function Settings() {
                       autoResetPOS: autoResetPOS,
                       autoPrintTicket: autoPrintTicket,
                       showChangeReminder: showChangeReminder,
+                      lockCashRegisterHistory: lockCashRegisterHistory,
                       showAllProductsInPOS: showAllProductsInPOS,
                       defaultDocumentType: defaultDocumentType,
                       defaultPaymentMethod: defaultPaymentMethod || '',
