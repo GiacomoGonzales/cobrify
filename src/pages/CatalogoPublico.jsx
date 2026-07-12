@@ -2377,9 +2377,45 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState(null)
   const [selectedSubcategory, setSelectedSubcategory] = useState(null)
+  // Menú lateral de categorías (móvil): árbol completo de categorías/subcategorías
+  // sin ocupar pantalla; complementa la fila deslizable de chips.
+  const [categoryDrawerOpen, setCategoryDrawerOpen] = useState(false)
+  const [drawerExpandedCategory, setDrawerExpandedCategory] = useState(null)
   const [selectedProduct, setSelectedProduct] = useState(null)
-  const [cart, setCart] = useState([])
+  // Carrito persistido en localStorage por catálogo (slug): sin esto se borraba
+  // al recargar/actualizar la página. Se expira a las 24h para no resucitar
+  // pedidos abandonados hace días.
+  const cartStorageKey = `catalog_cart_${slug || 'default'}`
+  const [cart, setCart] = useState(() => {
+    try {
+      const raw = localStorage.getItem(`catalog_cart_${slug || 'default'}`)
+      if (!raw) return []
+      const parsed = JSON.parse(raw)
+      if (parsed && Array.isArray(parsed.items) && typeof parsed.savedAt === 'number'
+          && Date.now() - parsed.savedAt < 24 * 60 * 60 * 1000) {
+        return parsed.items
+      }
+      return []
+    } catch {
+      return []
+    }
+  })
   const [cartOpen, setCartOpen] = useState(false)
+
+  // Persistir el carrito en localStorage ante cualquier cambio (agregar, quitar,
+  // cambiar cantidad). Al vaciarse (pedido enviado) se limpia la clave.
+  useEffect(() => {
+    try {
+      if (cart.length > 0) {
+        localStorage.setItem(cartStorageKey, JSON.stringify({ items: cart, savedAt: Date.now() }))
+      } else {
+        localStorage.removeItem(cartStorageKey)
+      }
+    } catch {
+      // localStorage no disponible (modo incógnito/bloqueado): ignorar.
+    }
+  }, [cart, cartStorageKey])
+
   const [viewMode, setViewMode] = useState('grid') // 'grid' | 'list'
   const [isLogoHorizontal, setIsLogoHorizontal] = useState(false)
 
@@ -2598,6 +2634,11 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       .filter(cat => cat.parentId === selectedCategory && cat.showInCatalog !== false)
       .sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
   }, [categories, selectedCategory])
+
+  // Subcategorías visibles de CUALQUIER categoría (para el árbol del menú lateral)
+  const getVisibleSubcategories = (parentId) => categories
+    .filter(cat => cat.parentId === parentId && cat.showInCatalog !== false)
+    .sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
 
 
   // Función para obtener todos los IDs de subcategorías de una categoría
@@ -3296,6 +3337,15 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           <div className="max-w-7xl mx-auto px-4">
             {/* Categorías raíz - móvil: 1 fila scroll edge-to-edge, desktop: wrap centrado */}
             <div className="flex md:flex-wrap md:justify-center overflow-x-auto md:overflow-x-visible gap-2 py-3 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
+              {/* Menú lateral de categorías (solo móvil): abre el árbol completo de
+                  categorías y subcategorías sin ocupar pantalla. */}
+              <button
+                onClick={() => { setDrawerExpandedCategory(selectedCategory); setCategoryDrawerOpen(true) }}
+                className={`md:hidden px-3 py-2 rounded-full text-sm font-medium whitespace-nowrap flex-shrink-0 flex items-center gap-1.5 ${thCatInactive}`}
+                aria-label="Ver todas las categorías"
+              >
+                <Filter className="w-4 h-4" />
+              </button>
               {/* Botón "Todos": oculto en modo onlyCarousels cuando estamos en la vista principal,
                   para forzar al cliente a entrar a una categoría. Dentro de una categoría sí se muestra. */}
               {(!onlyCarousels || selectedCategory || searchQuery) && (
@@ -3327,12 +3377,11 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               ))}
             </div>
             {/* Subcategorías de la categoría seleccionada.
-                Wrap en TODAS las pantallas: antes era una sola fila con scroll
-                horizontal y barra oculta → las subcategorías que no entraban se
-                cortaban y el cliente no sabía que podía deslizar. Ahora se acomodan
-                en varias líneas y se ven todas. */}
+                Móvil: UNA fila deslizable (el wrap multilínea comía media pantalla
+                con negocios de muchas subcategorías); el árbol completo se ve en el
+                menú lateral (botón de filtro). Desktop: wrap, hay espacio de sobra. */}
             {activeSubcategories.length > 0 && (
-              <div className="flex flex-wrap gap-2 pb-3">
+              <div className="flex flex-nowrap md:flex-wrap overflow-x-auto md:overflow-x-visible gap-2 pb-3 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
                 <button
                   onClick={() => setSelectedSubcategory(null)}
                   className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
@@ -3358,6 +3407,72 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Menú lateral de categorías (móvil): árbol Todos → categorías → subcategorías.
+          Tocar el nombre selecciona y cierra; el chevron expande las subcategorías. */}
+      {categoryDrawerOpen && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setCategoryDrawerOpen(false)} />
+          <div className={`absolute left-0 top-0 bottom-0 w-72 max-w-[85vw] ${thCard} shadow-2xl flex flex-col`}>
+            <div className={`flex items-center justify-between px-4 py-3 border-b ${thBorderColor} flex-shrink-0`}>
+              <span className="font-semibold">Categorías</span>
+              <button onClick={() => setCategoryDrawerOpen(false)} className="p-2 -mr-2" aria-label="Cerrar">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto py-2">
+              <button
+                onClick={() => { setSelectedCategory(null); setSelectedSubcategory(null); setCategoryDrawerOpen(false) }}
+                className="w-full text-left px-4 py-2.5 text-sm font-semibold"
+                style={!selectedCategory ? { color: business?.catalogColor || '#10B981' } : {}}
+              >
+                Todos
+              </button>
+              {rootCategories.map(category => {
+                const subs = getVisibleSubcategories(category.id)
+                const isExpanded = drawerExpandedCategory === category.id
+                const isActive = selectedCategory === category.id
+                return (
+                  <div key={category.id}>
+                    <div className="flex items-center">
+                      <button
+                        onClick={() => { setSelectedCategory(category.id); setSelectedSubcategory(null); setCategoryDrawerOpen(false) }}
+                        className="flex-1 text-left px-4 py-2.5 text-sm font-semibold"
+                        style={isActive ? { color: business?.catalogColor || '#10B981' } : {}}
+                      >
+                        {category.name}
+                      </button>
+                      {subs.length > 0 && (
+                        <button
+                          onClick={() => setDrawerExpandedCategory(isExpanded ? null : category.id)}
+                          className="p-2.5 mr-2 flex-shrink-0"
+                          aria-label={isExpanded ? 'Contraer subcategorías' : 'Ver subcategorías'}
+                        >
+                          <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                        </button>
+                      )}
+                    </div>
+                    {isExpanded && subs.length > 0 && (
+                      <div className="pb-1">
+                        {subs.map(sub => (
+                          <button
+                            key={sub.id}
+                            onClick={() => { setSelectedCategory(category.id); setSelectedSubcategory(sub.id); setCategoryDrawerOpen(false) }}
+                            className="w-full text-left pl-8 pr-4 py-2 text-sm opacity-90"
+                            style={isActive && selectedSubcategory === sub.id ? { color: business?.catalogColor || '#10B981', fontWeight: 600, opacity: 1 } : {}}
+                          >
+                            {sub.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           </div>
         </div>
       )}
