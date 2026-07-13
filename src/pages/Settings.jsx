@@ -3856,6 +3856,7 @@ export default function Settings() {
                           { id: 'purchases', label: 'Compras', description: 'Registro de compras' },
                           { id: 'purchase-history', label: 'Historial de Compras', description: 'Registro de compras de insumos' },
                           { id: 'purchase-orders', label: 'Órdenes de Compra', description: 'Pedidos a proveedores' },
+                          { id: 'requirements', label: 'Requerimientos', description: 'Solicitudes de insumos y materiales' },
                         ] },
                         { title: 'Producción', items: [
                           { id: 'ingredients', label: 'Insumos', description: 'Materia prima y componentes' },
@@ -3929,6 +3930,7 @@ export default function Settings() {
                         { id: 'warehouses', label: 'Almacenes', description: 'Múltiples ubicaciones de stock' },
                         { id: 'purchases', label: 'Compras', description: 'Registro de compras a proveedores' },
                         { id: 'purchase-history', label: 'Historial de Compras', description: 'Registro de compras de insumos' },
+                        { id: 'requirements', label: 'Requerimientos', description: 'Solicitudes de insumos y materiales' },
                         { id: 'suppliers', label: 'Proveedores', description: 'Listado de proveedores' },
                         { id: 'sellers', label: 'Vendedores', description: 'Gestión de vendedores y comisiones' },
                         { id: 'waiters', label: 'Mozos', description: 'Gestión de personal de atención' },
@@ -4091,6 +4093,7 @@ export default function Settings() {
                         { id: 'purchases', label: 'Compras', description: 'Registro de compras' },
                         { id: 'purchase-history', label: 'Historial de Compras', description: 'Registro de compras de insumos' },
                         { id: 'purchase-orders', label: 'Órdenes de Compra', description: 'Pedidos a proveedores' },
+                        { id: 'requirements', label: 'Requerimientos', description: 'Solicitudes de insumos y materiales' },
                         { id: 'ingredients', label: 'Insumos', description: 'Materia prima y componentes' },
                         { id: 'recipes', label: 'Composición', description: 'Productos compuestos' },
                         { id: 'production', label: 'Producción', description: 'Producción y transformación de productos' },
