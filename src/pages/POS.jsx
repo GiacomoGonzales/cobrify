@@ -2867,6 +2867,9 @@ export default function POS() {
 
       return matchesSearch && matchesCategory && matchesBrand
     })
+    // Orden alfabético por nombre (mismo criterio que la página de Productos).
+    // Antes el POS respetaba el orden crudo de Firestore.
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' }))
   }, [products, deferredSearchTerm, productSearchIndex, selectedCategoryFilter, selectedBrandFilter, categories, businessSettings?.posCustomFields?.hideOutOfStockInPOS, selectedWarehouse])
 
   // Cap del render para que el grid no explote en pantallas con miles de
