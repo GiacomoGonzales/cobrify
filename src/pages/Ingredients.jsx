@@ -6,6 +6,7 @@ import { useHidePrivateData } from '@/hooks/useHidePrivateData'
 import { useToast } from '@/contexts/ToastContext'
 import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import ModifiersPanel from '@/components/ModifiersPanel'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
@@ -113,6 +114,10 @@ export default function Ingredients() {
     loadingText: isRestaurantMode ? 'Cargando ingredientes...' : 'Cargando insumos...',
     emptySearchTitle: isRestaurantMode ? 'No se encontraron ingredientes' : 'No se encontraron insumos',
   }
+
+  // Vista de la página (solo restaurante): Ingredientes | Modificadores
+  // (reporte de modificadores vendidos + plantillas reutilizables)
+  const [pageView, setPageView] = useState('ingredients')
 
   const [ingredients, setIngredients] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -925,6 +930,48 @@ export default function Ingredients() {
     )
   }
 
+  // Switcher de vistas (solo restaurante): Ingredientes | Modificadores
+  const viewSwitcher = isRestaurantMode ? (
+    <div className="flex gap-2 p-1 bg-gray-100 rounded-lg w-full sm:w-auto sm:inline-flex">
+      <button
+        type="button"
+        onClick={() => setPageView('ingredients')}
+        className={`flex-1 sm:flex-none px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+          pageView === 'ingredients' ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+        }`}
+      >
+        Ingredientes
+      </button>
+      <button
+        type="button"
+        onClick={() => setPageView('modifiers')}
+        className={`flex-1 sm:flex-none px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+          pageView === 'modifiers' ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+        }`}
+      >
+        Modificadores
+      </button>
+    </div>
+  ) : null
+
+  // Vista Modificadores: reporte de vendidos + plantillas
+  if (isRestaurantMode && pageView === 'modifiers') {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Modificadores</h1>
+            <p className="text-sm sm:text-base text-gray-600 mt-1">
+              Qué opciones piden más tus clientes y plantillas reutilizables para tus productos
+            </p>
+          </div>
+          {viewSwitcher}
+        </div>
+        <ModifiersPanel companySettings={businessSettings} />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -934,6 +981,7 @@ export default function Ingredients() {
           <p className="text-sm sm:text-base text-gray-600 mt-1">
             {texts.pageDescription}
           </p>
+          {viewSwitcher && <div className="mt-3">{viewSwitcher}</div>}
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
           {!hidePrivateData && (

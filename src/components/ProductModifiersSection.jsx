@@ -1,17 +1,104 @@
-import { useState } from 'react'
-import { Plus, Trash2, X, Edit2, Check, ChevronDown, ChevronRight, ChevronUp, GripVertical } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Plus, Trash2, X, Edit2, Check, ChevronDown, ChevronRight, ChevronUp, GripVertical, Copy, BarChart3 } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
+import { useAppContext } from '@/hooks/useAppContext'
+import { getModifierTemplates } from '@/services/modifierTemplateService'
 
 /**
  * Componente para gestionar modificadores de productos en modo restaurante
  * Los modificadores permiten que los productos tengan opciones personalizables
  * como: término de la carne, ingredientes adicionales, tipo de pan, etc.
+ *
+ * Props extra:
+ * - enableTemplates: muestra "Desde plantilla" (insertar una copia de una
+ *   plantilla guardada en Insumos > Modificadores). false cuando el propio
+ *   componente se usa para EDITAR las plantillas.
+ * - title/description: textos del encabezado (por defecto, los de producto).
  */
-export default function ProductModifiersSection({ modifiers, onChange }) {
+export default function ProductModifiersSection({
+  modifiers,
+  onChange,
+  enableTemplates = true,
+  title = 'Modificadores (Modo Restaurante)',
+  description = 'Agrega opciones personalizables como término de la carne, ingredientes adicionales, tipo de pan, etc.',
+}) {
+  const { getBusinessId, isDemoMode } = useAppContext()
   const [editingModifierId, setEditingModifierId] = useState(null)
   const [expandedModifierId, setExpandedModifierId] = useState(null)
   const [dragOptionData, setDragOptionData] = useState(null) // { modifierId, optionIndex }
+  const [templates, setTemplates] = useState([])
+  const [showTemplateMenu, setShowTemplateMenu] = useState(false)
+
+  // Cargar plantillas de modificadores (definidas en Insumos > Modificadores)
+  useEffect(() => {
+    if (!enableTemplates || isDemoMode) return
+    let cancelled = false
+    getModifierTemplates(getBusinessId()).then(res => {
+      if (!cancelled && res.success) setTemplates(res.data || [])
+    })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enableTemplates, isDemoMode])
+
+  // Insertar una COPIA de la plantilla en el producto (con ids nuevos y
+  // templateId de referencia). Editar la plantilla después no toca el producto.
+  const insertTemplate = (tpl) => {
+    const ts = Date.now()
+    const copy = {
+      id: `mod-${ts}`,
+      name: tpl.name || '',
+      required: !!tpl.required,
+      maxSelection: tpl.maxSelection || 1,
+      allowRepeat: !!tpl.allowRepeat,
+      ...(tpl.trackUsage ? { trackUsage: true } : {}),
+      ...(tpl.id ? { templateId: tpl.id } : {}),
+      options: (tpl.options || []).map((o, i) => ({
+        id: `opt-${ts}-${i}`,
+        name: o.name || '',
+        priceAdjustment: o.priceAdjustment || 0,
+      })),
+    }
+    onChange([...modifiers, copy])
+    setShowTemplateMenu(false)
+    setExpandedModifierId(copy.id)
+  }
+
+  // Botón + menú "Desde plantilla" (solo si hay plantillas guardadas)
+  const templateButton = enableTemplates && templates.length > 0 && (
+    <div className="relative">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => setShowTemplateMenu(o => !o)}
+      >
+        <Copy className="w-4 h-4 mr-2" />
+        Desde plantilla
+      </Button>
+      {showTemplateMenu && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setShowTemplateMenu(false)} />
+          <div className="absolute left-0 top-full mt-1 z-20 w-64 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden py-1 max-h-60 overflow-y-auto">
+            {templates.map(tpl => (
+              <button
+                key={tpl.id}
+                type="button"
+                onClick={() => insertTemplate(tpl)}
+                className="w-full px-3 py-2 text-left hover:bg-gray-50 border-b border-gray-100 last:border-0"
+              >
+                <p className="text-sm font-medium text-gray-900 truncate">{tpl.name || 'Sin nombre'}</p>
+                <p className="text-xs text-gray-500">
+                  {(tpl.options || []).length} opción{(tpl.options || []).length !== 1 ? 'es' : ''}
+                  {tpl.trackUsage ? ' · con control' : ''}
+                </p>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
 
   // Agregar nuevo modificador
   const handleAddModifier = () => {
@@ -129,10 +216,10 @@ export default function ProductModifiersSection({ modifiers, onChange }) {
     <div className="border-t border-gray-200 pt-4">
       <div className="mb-4">
         <h3 className="text-sm font-semibold text-gray-900 mb-1">
-          Modificadores (Modo Restaurante)
+          {title}
         </h3>
         <p className="text-xs text-gray-600">
-          Agrega opciones personalizables como término de la carne, ingredientes adicionales, tipo de pan, etc.
+          {description}
         </p>
       </div>
 
@@ -141,15 +228,18 @@ export default function ProductModifiersSection({ modifiers, onChange }) {
           <p className="text-sm text-gray-600 mb-3">
             Este producto no tiene modificadores. Los modificadores permiten personalizar el pedido.
           </p>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleAddModifier}
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Agregar Modificador
-          </Button>
+          <div className="flex items-center justify-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleAddModifier}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Agregar Modificador
+            </Button>
+            {templateButton}
+          </div>
         </div>
       ) : (
         <div className="space-y-3">
@@ -203,6 +293,14 @@ export default function ProductModifiersSection({ modifiers, onChange }) {
                             <>
                               <span className="text-xs text-gray-400">•</span>
                               <span className="text-xs text-primary-600 font-medium">Multi-opción</span>
+                            </>
+                          )}
+                          {modifier.trackUsage && (
+                            <>
+                              <span className="text-xs text-gray-400">•</span>
+                              <span className="text-xs text-green-600 font-medium inline-flex items-center gap-0.5">
+                                <BarChart3 className="w-3 h-3" /> Control
+                              </span>
                             </>
                           )}
                           <span className="text-xs text-gray-400">•</span>
@@ -270,6 +368,20 @@ export default function ProductModifiersSection({ modifiers, onChange }) {
                           </label>
                           <p className="text-xs text-gray-500 mt-1 ml-6">
                             Permite repetir la misma opción varias veces (ej: 3x huevo frito)
+                          </p>
+                        </div>
+                        <div>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={modifier.trackUsage || false}
+                              onChange={(e) => handleUpdateModifier(modifier.id, 'trackUsage', e.target.checked)}
+                              className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                            />
+                            <span className="text-sm text-gray-700">Llevar control</span>
+                          </label>
+                          <p className="text-xs text-gray-500 mt-1 ml-6">
+                            Incluye este grupo en el reporte de modificadores (Insumos &gt; Modificadores). Ideal para toppings, cremas y extras; no para preguntas tipo "¿desea cubiertos?".
                           </p>
                         </div>
                       </div>
@@ -394,16 +506,19 @@ export default function ProductModifiersSection({ modifiers, onChange }) {
             )
           })}
 
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleAddModifier}
-            className="w-full"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Agregar Otro Modificador
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleAddModifier}
+              className="flex-1"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Agregar Otro Modificador
+            </Button>
+            {templateButton}
+          </div>
         </div>
       )}
     </div>
