@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { Plus, Trash2, Save, Loader2, ArrowLeft, UserPlus, X, Search, Tag, Package, Hash, User, FileText, Store, DollarSign, RefreshCw } from 'lucide-react'
+import { Plus, Trash2, Save, Loader2, ArrowLeft, UserPlus, X, Search, Tag, Package, Hash, User, FileText, Store, DollarSign, RefreshCw, CheckCircle } from 'lucide-react'
 import { useNavigate, useParams, useSearchParams, useLocation } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useAuth } from '@/contexts/AuthContext'
@@ -143,6 +143,17 @@ export default function CreateQuotation() {
   })
   const [showNewCustomerModal, setShowNewCustomerModal] = useState(false)
   const [isCreatingCustomer, setIsCreatingCustomer] = useState(false)
+  // Estado propio del modal "Nuevo Cliente" — aislado del formulario principal
+  // (que ahora usa manualCustomer directamente, estilo POS). Sin esto, crear un
+  // cliente reseteaba manualCustomer y borraba lo escrito en el formulario.
+  const [newCustomerForm, setNewCustomerForm] = useState({
+    documentType: 'DNI',
+    documentNumber: '',
+    name: '',
+    email: '',
+    phone: '',
+    address: '',
+  })
   const [isLookingUpDocument, setIsLookingUpDocument] = useState(false)
 
   // Cotización
@@ -557,20 +568,17 @@ export default function CreateQuotation() {
           if (q.customer) {
             // Verificar si el cliente existe en la lista
             const existingCustomer = customersResult.data?.find(c => c.id === q.customer.id)
-            if (existingCustomer) {
-              setCustomerMode('select')
-              setSelectedCustomer(existingCustomer)
-            } else {
-              setCustomerMode('manual')
-              setManualCustomer({
-                documentType: q.customer.documentType || 'DNI',
-                documentNumber: q.customer.documentNumber || '',
-                name: q.customer.name || '',
-                email: q.customer.email || '',
-                phone: q.customer.phone || '',
-                address: q.customer.address || '',
-              })
-            }
+            // Formulario único: siempre llenar los campos con los datos guardados;
+            // si el cliente sigue registrado, además vincularlo (id/nivel de precio).
+            setSelectedCustomer(existingCustomer || null)
+            setManualCustomer({
+              documentType: q.customer.documentType || 'DNI',
+              documentNumber: q.customer.documentNumber || '',
+              name: q.customer.name || '',
+              email: q.customer.email || '',
+              phone: q.customer.phone || '',
+              address: q.customer.address || '',
+            })
           }
 
           // Cargar items (preservar metadata de variante/presentación para que
@@ -659,20 +667,17 @@ export default function CreateQuotation() {
           // Cargar datos del cliente
           if (q.customer) {
             const existingCustomer = customersResult.data?.find(c => c.id === q.customer.id)
-            if (existingCustomer) {
-              setCustomerMode('select')
-              setSelectedCustomer(existingCustomer)
-            } else {
-              setCustomerMode('manual')
-              setManualCustomer({
-                documentType: q.customer.documentType || 'DNI',
-                documentNumber: q.customer.documentNumber || '',
-                name: q.customer.name || '',
-                email: q.customer.email || '',
-                phone: q.customer.phone || '',
-                address: q.customer.address || '',
-              })
-            }
+            // Formulario único: siempre llenar los campos con los datos guardados;
+            // si el cliente sigue registrado, además vincularlo (id/nivel de precio).
+            setSelectedCustomer(existingCustomer || null)
+            setManualCustomer({
+              documentType: q.customer.documentType || 'DNI',
+              documentNumber: q.customer.documentNumber || '',
+              name: q.customer.name || '',
+              email: q.customer.email || '',
+              phone: q.customer.phone || '',
+              address: q.customer.address || '',
+            })
           }
 
           // Cargar items (preservar metadata de variante/presentación para que
@@ -1054,10 +1059,38 @@ export default function CreateQuotation() {
     setSelectedCustomer(customer || null)
   }
 
-  // Buscar datos de DNI o RUC automáticamente
-  const handleLookupDocument = async () => {
-    const docNumber = manualCustomer.documentNumber
-    const docType = manualCustomer.documentType
+  // Editar un campo del formulario de cliente. Si había un cliente registrado
+  // vinculado, se desvincula (ya no es exactamente ese registro) — pero los
+  // datos escritos se conservan como snapshot manual de la cotización.
+  const updateManualField = (field, value) => {
+    setManualCustomer(prev => ({ ...prev, [field]: value }))
+    if (selectedCustomer) setSelectedCustomer(null)
+  }
+
+  // Al elegir un cliente registrado del buscador: llenar el formulario con sus
+  // datos (quedan editables) y guardar el vínculo (id/nivel de precio).
+  const handleSelectRegistered = (customer) => {
+    if (!customer) return
+    setSelectedCustomer(customer)
+    setManualCustomer({
+      documentType: customer.documentType || 'DNI',
+      documentNumber: customer.documentNumber || '',
+      name: customer.name || customer.businessName || '',
+      email: customer.email || '',
+      phone: customer.phone || '',
+      address: customer.address || '',
+    })
+    setCustomerSearchTerm('')
+    setShowCustomerDropdown(false)
+  }
+
+  // Buscar datos de DNI o RUC automáticamente. `useNewForm=true` opera sobre el
+  // formulario del modal "Nuevo Cliente"; por defecto, sobre el formulario principal.
+  const handleLookupDocument = async (useNewForm = false) => {
+    const form = useNewForm ? newCustomerForm : manualCustomer
+    const setForm = useNewForm ? setNewCustomerForm : setManualCustomer
+    const docNumber = form.documentNumber
+    const docType = form.documentType
 
     if (!docNumber) {
       toast.error('Ingrese un número de documento para buscar')
@@ -1098,14 +1131,14 @@ export default function CreateQuotation() {
         // Autocompletar datos
         if (docNumber.length === 8) {
           // Datos de DNI
-          setManualCustomer(prev => ({
+          setForm(prev => ({
             ...prev,
             name: result.data.nombreCompleto || '',
           }))
           toast.success(`Datos encontrados: ${result.data.nombreCompleto}`)
         } else {
           // Datos de RUC
-          setManualCustomer(prev => ({
+          setForm(prev => ({
             ...prev,
             name: result.data.razonSocial || '',
             address: result.data.direccion || '',
@@ -1125,18 +1158,18 @@ export default function CreateQuotation() {
 
   const handleCreateCustomer = async () => {
     // Solo el nombre es obligatorio. El documento es opcional para cotizaciones.
-    if (!manualCustomer.name?.trim()) {
+    if (!newCustomerForm.name?.trim()) {
       toast.error('El nombre es obligatorio')
       return
     }
 
     // Si ingresaron documento, validar la longitud según el tipo
-    if (manualCustomer.documentNumber) {
-      if (manualCustomer.documentType === 'DNI' && manualCustomer.documentNumber.length !== 8) {
+    if (newCustomerForm.documentNumber) {
+      if (newCustomerForm.documentType === 'DNI' && newCustomerForm.documentNumber.length !== 8) {
         toast.error('El DNI debe tener 8 dígitos')
         return
       }
-      if (manualCustomer.documentType === 'RUC' && manualCustomer.documentNumber.length !== 11) {
+      if (newCustomerForm.documentType === 'RUC' && newCustomerForm.documentNumber.length !== 11) {
         toast.error('El RUC debe tener 11 dígitos')
         return
       }
@@ -1145,7 +1178,7 @@ export default function CreateQuotation() {
     setIsCreatingCustomer(true)
 
     try {
-      const result = await createCustomer(getBusinessId(), manualCustomer)
+      const result = await createCustomer(getBusinessId(), newCustomerForm)
 
       if (result.success) {
         toast.success('Cliente creado exitosamente')
@@ -1155,16 +1188,13 @@ export default function CreateQuotation() {
         if (customersResult.success) {
           setCustomers(customersResult.data || [])
 
-          // Seleccionar el cliente recién creado
+          // Vincular el cliente recién creado al formulario principal
           const newCustomer = customersResult.data.find(c => c.id === result.id)
-          if (newCustomer) {
-            setSelectedCustomer(newCustomer)
-            setCustomerMode('select')
-          }
+          if (newCustomer) handleSelectRegistered(newCustomer)
         }
 
         setShowNewCustomerModal(false)
-        setManualCustomer({
+        setNewCustomerForm({
           documentType: 'DNI',
           documentNumber: '',
           name: '',
@@ -1184,39 +1214,25 @@ export default function CreateQuotation() {
   }
 
   const getCustomerData = () => {
-    if (customerMode === 'select' && selectedCustomer) {
-      return {
-        id: selectedCustomer.id,
-        documentType: selectedCustomer.documentType,
-        documentNumber: selectedCustomer.documentNumber,
-        name: selectedCustomer.name,
-        businessName: selectedCustomer.businessName || '',
-        email: selectedCustomer.email || '',
-        phone: selectedCustomer.phone || '',
-        address: selectedCustomer.address || '',
-      }
-    } else if (customerMode === 'manual') {
-      return {
-        documentType: manualCustomer.documentType,
-        documentNumber: manualCustomer.documentNumber,
-        name: manualCustomer.name,
-        businessName: '',
-        email: manualCustomer.email || '',
-        phone: manualCustomer.phone || '',
-        address: manualCustomer.address || '',
-      }
+    // Formulario único (estilo POS): los datos vienen de manualCustomer. Si hay
+    // un cliente registrado vinculado (elegido del buscador y sin editar), se
+    // conserva su id y razón social. El nombre cae a "Cliente" si va vacío.
+    const name = (manualCustomer.name || '').trim()
+    return {
+      ...(selectedCustomer?.id ? { id: selectedCustomer.id } : {}),
+      documentType: manualCustomer.documentType,
+      documentNumber: manualCustomer.documentNumber || '',
+      name: name || 'Cliente',
+      businessName: selectedCustomer?.businessName || '',
+      email: manualCustomer.email || '',
+      phone: manualCustomer.phone || '',
+      address: manualCustomer.address || '',
     }
-    return null
   }
 
   const validateForm = () => {
-    // Validar que haya datos de cliente. El documento es opcional —
-    // solo el nombre es requerido para emitir una cotización.
-    const customerData = getCustomerData()
-    if (!customerData || !customerData.name) {
-      toast.error('Debe ingresar al menos el nombre del cliente')
-      return false
-    }
+    // Cliente sin campos obligatorios (igual que el POS): si no se escribe nada,
+    // la cotización sale a nombre de "Cliente". No se bloquea por falta de datos.
 
     // Validar que haya al menos un item
     if (quotationItems.length === 0) {
@@ -1638,232 +1654,155 @@ export default function CreateQuotation() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {/* Tabs para seleccionar modo */}
-                <div className="flex gap-2 p-1 bg-gray-100 rounded-lg">
-                  <button
-                    type="button"
-                    onClick={() => setCustomerMode('select')}
-                    className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                      customerMode === 'select'
-                        ? 'bg-white text-primary-600 shadow-sm'
-                        : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    Cliente Registrado
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCustomerMode('manual')}
-                    className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                      customerMode === 'manual'
-                        ? 'bg-white text-primary-600 shadow-sm'
-                        : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    Datos Manuales
-                  </button>
-                </div>
-
-                {/* Modo: Seleccionar cliente — buscador con autocomplete (mismo
-                    patrón que el POS). Reemplaza el <select> plano que era
-                    imposible de usar con muchos clientes. */}
-                {customerMode === 'select' && (
-                  <>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Cliente *</label>
-                    {!selectedCustomer ? (
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                        <input
-                          type="text"
-                          value={customerSearchTerm}
-                          onChange={e => {
-                            setCustomerSearchTerm(e.target.value)
-                            setShowCustomerDropdown(true)
-                          }}
-                          onFocus={() => setShowCustomerDropdown(true)}
-                          onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 150)}
-                          placeholder="Buscar por nombre o documento..."
-                          className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        />
-                        {showCustomerDropdown && (
-                          <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                            {(() => {
-                              const term = customerSearchTerm.trim().toLowerCase()
-                              const filtered = !term
-                                ? customers.slice(0, 8)
-                                : customers.filter(c =>
-                                    (c.name || '').toLowerCase().includes(term) ||
-                                    (c.businessName || '').toLowerCase().includes(term) ||
-                                    (c.documentNumber || '').includes(term)
-                                  ).slice(0, 20)
-                              if (filtered.length === 0) {
-                                return (
-                                  <div className="px-3 py-3 text-sm text-gray-500 text-center">
-                                    No se encontraron clientes
-                                  </div>
-                                )
-                              }
-                              return filtered.map(customer => (
-                                <button
-                                  key={customer.id}
-                                  type="button"
-                                  onMouseDown={(e) => e.preventDefault()}
-                                  onClick={() => {
-                                    handleCustomerChange(customer.id)
-                                    setCustomerSearchTerm('')
-                                    setShowCustomerDropdown(false)
-                                  }}
-                                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0"
-                                >
-                                  <p className="font-medium text-gray-900 truncate">{customer.name || customer.businessName}</p>
-                                  <p className="text-xs text-gray-500">{customer.documentNumber || 'Sin documento'}</p>
-                                </button>
-                              ))
-                            })()}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="p-4 bg-gray-50 rounded-lg space-y-2 relative">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedCustomer(null)
-                            setCustomerSearchTerm('')
-                          }}
-                          className="absolute top-2 right-2 text-gray-400 hover:text-gray-600"
-                          title="Cambiar cliente"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                        <div className="grid grid-cols-2 gap-2 text-sm pr-6">
-                          <div>
-                            <span className="text-gray-600">Nombre:</span>
-                            <span className="ml-2 font-medium">{selectedCustomer.name}</span>
-                          </div>
-                          <div>
-                            <span className="text-gray-600">Documento:</span>
-                            <span className="ml-2 font-medium">
-                              {selectedCustomer.documentType} {selectedCustomer.documentNumber}
-                            </span>
-                          </div>
-                          {selectedCustomer.email && (
-                            <div>
-                              <span className="text-gray-600">Email:</span>
-                              <span className="ml-2 font-medium">{selectedCustomer.email}</span>
-                            </div>
-                          )}
-                          {selectedCustomer.phone && (
-                            <div>
-                              <span className="text-gray-600">Teléfono:</span>
-                              <span className="ml-2 font-medium">{selectedCustomer.phone}</span>
-                            </div>
-                          )}
-                        </div>
+                {/* Buscador de cliente registrado (estilo POS): al elegir uno, se
+                    llenan los campos de abajo, que quedan editables. Si no, se
+                    escriben a mano. Nada es obligatorio. */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Buscar cliente registrado <span className="text-gray-400 font-normal">(opcional)</span>
+                  </label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={customerSearchTerm}
+                      onChange={e => {
+                        setCustomerSearchTerm(e.target.value)
+                        setShowCustomerDropdown(true)
+                      }}
+                      onFocus={() => setShowCustomerDropdown(true)}
+                      onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 150)}
+                      placeholder="Buscar por nombre o documento para autocompletar..."
+                      className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    />
+                    {showCustomerDropdown && (
+                      <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {(() => {
+                          const term = customerSearchTerm.trim().toLowerCase()
+                          const filtered = !term
+                            ? customers.slice(0, 8)
+                            : customers.filter(c =>
+                                (c.name || '').toLowerCase().includes(term) ||
+                                (c.businessName || '').toLowerCase().includes(term) ||
+                                (c.documentNumber || '').includes(term)
+                              ).slice(0, 20)
+                          if (filtered.length === 0) {
+                            return (
+                              <div className="px-3 py-3 text-sm text-gray-500 text-center">
+                                No se encontraron clientes
+                              </div>
+                            )
+                          }
+                          return filtered.map(customer => (
+                            <button
+                              key={customer.id}
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => handleSelectRegistered(customer)}
+                              className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0"
+                            >
+                              <p className="font-medium text-gray-900 truncate">{customer.name || customer.businessName}</p>
+                              <p className="text-xs text-gray-500">{customer.documentNumber || 'Sin documento'}</p>
+                            </button>
+                          ))
+                        })()}
                       </div>
                     )}
-                  </>
-                )}
-
-                {/* Modo: Datos manuales */}
-                {customerMode === 'manual' && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Select
-                      label="Tipo de Documento *"
-                      value={manualCustomer.documentType}
-                      onChange={e =>
-                        setManualCustomer({ ...manualCustomer, documentType: e.target.value })
-                      }
-                    >
-                      <option value="DNI">DNI</option>
-                      <option value="RUC">RUC</option>
-                      <option value="CE">Carnet de Extranjería</option>
-                      <option value="PASSPORT">Pasaporte</option>
-                    </Select>
-
-                    {/* Campo Número de Documento con botón de búsqueda */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Número de Documento <span className="text-gray-400 font-normal">(opcional)</span>
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={manualCustomer.documentNumber}
-                          onChange={e =>
-                            setManualCustomer({ ...manualCustomer, documentNumber: e.target.value })
-                          }
-                          placeholder={
-                            manualCustomer.documentType === 'DNI'
-                              ? '12345678'
-                              : manualCustomer.documentType === 'RUC'
-                              ? '20123456789'
-                              : 'Número'
-                          }
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                        />
-                        <button
-                          type="button"
-                          onClick={handleLookupDocument}
-                          disabled={isLookingUpDocument}
-                          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
-                          title="Buscar datos del documento"
-                        >
-                          {isLookingUpDocument ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Search className="w-4 h-4" />
-                          )}
-                        </button>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Si lo ingresas, podemos buscar los datos automáticamente con la lupa.
-                      </p>
-                    </div>
-
-                    <div className="sm:col-span-2">
-                      <Input
-                        label="Nombre / Razón Social *"
-                        value={manualCustomer.name}
-                        onChange={e =>
-                          setManualCustomer({ ...manualCustomer, name: e.target.value })
-                        }
-                        placeholder="Nombre completo o razón social"
-                      />
-                    </div>
-
-                    <Input
-                      type="email"
-                      label="Email"
-                      value={manualCustomer.email}
-                      onChange={e =>
-                        setManualCustomer({ ...manualCustomer, email: e.target.value })
-                      }
-                      placeholder="cliente@email.com"
-                    />
-
-                    <Input
-                      type="tel"
-                      label="Teléfono"
-                      value={manualCustomer.phone}
-                      onChange={e =>
-                        setManualCustomer({ ...manualCustomer, phone: e.target.value })
-                      }
-                      placeholder="987654321"
-                    />
-
-                    <div className="sm:col-span-2">
-                      <Input
-                        label="Dirección"
-                        value={manualCustomer.address}
-                        onChange={e =>
-                          setManualCustomer({ ...manualCustomer, address: e.target.value })
-                        }
-                        placeholder="Dirección completa"
-                      />
-                    </div>
                   </div>
-                )}
+                  {selectedCustomer && (
+                    <p className="text-xs text-green-600 mt-1.5 flex items-center gap-1">
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      Vinculado a cliente registrado: {selectedCustomer.name || selectedCustomer.businessName}
+                    </p>
+                  )}
+                </div>
+
+                {/* Datos del cliente (siempre visibles y editables, como el POS) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Select
+                    label="Tipo de Documento"
+                    className="text-sm"
+                    value={manualCustomer.documentType}
+                    onChange={e => updateManualField('documentType', e.target.value)}
+                  >
+                    <option value="DNI">DNI</option>
+                    <option value="RUC">RUC</option>
+                    <option value="CE">Carnet de Extranjería</option>
+                    <option value="PASSPORT">Pasaporte</option>
+                  </Select>
+
+                  {/* Campo Número de Documento con botón de búsqueda RENIEC/SUNAT */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Número de Documento <span className="text-gray-400 font-normal">(opcional)</span>
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={manualCustomer.documentNumber}
+                        onChange={e => updateManualField('documentNumber', e.target.value)}
+                        placeholder={
+                          manualCustomer.documentType === 'DNI'
+                            ? '12345678'
+                            : manualCustomer.documentType === 'RUC'
+                            ? '20123456789'
+                            : 'Número'
+                        }
+                        className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleLookupDocument(false)}
+                        disabled={isLookingUpDocument}
+                        className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+                        title="Buscar datos del documento"
+                      >
+                        {isLookingUpDocument ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Search className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Si lo ingresas, podemos buscar los datos automáticamente con la lupa.
+                    </p>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <Input
+                      label="Nombre / Razón Social"
+                      value={manualCustomer.name}
+                      onChange={e => updateManualField('name', e.target.value)}
+                      placeholder="Nombre completo o razón social"
+                    />
+                  </div>
+
+                  <Input
+                    type="email"
+                    label="Email"
+                    value={manualCustomer.email}
+                    onChange={e => updateManualField('email', e.target.value)}
+                    placeholder="cliente@email.com"
+                  />
+
+                  <Input
+                    type="tel"
+                    label="Teléfono"
+                    value={manualCustomer.phone}
+                    onChange={e => updateManualField('phone', e.target.value)}
+                    placeholder="987654321"
+                  />
+
+                  <div className="sm:col-span-2">
+                    <Input
+                      label="Dirección"
+                      value={manualCustomer.address}
+                      onChange={e => updateManualField('address', e.target.value)}
+                      placeholder="Dirección completa"
+                    />
+                  </div>
+                </div>
 
                 {/* Destinatario (dentro del card de cliente) */}
                 <div className="pt-4 mt-4 border-t border-gray-200">
@@ -2608,12 +2547,7 @@ export default function CreateQuotation() {
                   <p>
                     <strong>Validez:</strong> {validityDays} días
                   </p>
-                  {customerMode === 'select' && selectedCustomer && (
-                    <p>
-                      <strong>Cliente:</strong> {selectedCustomer.name}
-                    </p>
-                  )}
-                  {customerMode === 'manual' && manualCustomer.name && (
+                  {manualCustomer.name?.trim() && (
                     <p>
                       <strong>Cliente:</strong> {manualCustomer.name}
                     </p>
@@ -2654,9 +2588,9 @@ export default function CreateQuotation() {
             <div className="w-full sm:w-36 flex-shrink-0">
               <Select
                 label="Tipo *"
-                value={manualCustomer.documentType}
+                value={newCustomerForm.documentType}
                 onChange={e =>
-                  setManualCustomer({ ...manualCustomer, documentType: e.target.value })
+                  setNewCustomerForm({ ...newCustomerForm, documentType: e.target.value })
                 }
               >
                 <option value="DNI">DNI</option>
@@ -2672,14 +2606,14 @@ export default function CreateQuotation() {
               <div className="flex gap-1.5">
                 <input
                   type="text"
-                  value={manualCustomer.documentNumber}
+                  value={newCustomerForm.documentNumber}
                   onChange={e =>
-                    setManualCustomer({ ...manualCustomer, documentNumber: e.target.value })
+                    setNewCustomerForm({ ...newCustomerForm, documentNumber: e.target.value })
                   }
                   placeholder={
-                    manualCustomer.documentType === 'DNI'
+                    newCustomerForm.documentType === 'DNI'
                       ? '12345678'
-                      : manualCustomer.documentType === 'RUC'
+                      : newCustomerForm.documentType === 'RUC'
                       ? '20123456789'
                       : 'Número'
                   }
@@ -2687,7 +2621,7 @@ export default function CreateQuotation() {
                 />
                 <button
                   type="button"
-                  onClick={handleLookupDocument}
+                  onClick={() => handleLookupDocument(true)}
                   disabled={isLookingUpDocument}
                   className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center flex-shrink-0 transition-colors"
                   title="Buscar datos del documento"
@@ -2704,8 +2638,8 @@ export default function CreateQuotation() {
 
           <Input
             label="Nombre / Razón Social *"
-            value={manualCustomer.name}
-            onChange={e => setManualCustomer({ ...manualCustomer, name: e.target.value })}
+            value={newCustomerForm.name}
+            onChange={e => setNewCustomerForm({ ...newCustomerForm, name: e.target.value })}
             placeholder="Nombre completo o razón social"
           />
 
@@ -2713,23 +2647,23 @@ export default function CreateQuotation() {
             <Input
               type="email"
               label="Email"
-              value={manualCustomer.email}
-              onChange={e => setManualCustomer({ ...manualCustomer, email: e.target.value })}
+              value={newCustomerForm.email}
+              onChange={e => setNewCustomerForm({ ...newCustomerForm, email: e.target.value })}
               placeholder="cliente@email.com"
             />
             <Input
               type="tel"
               label="Teléfono"
-              value={manualCustomer.phone}
-              onChange={e => setManualCustomer({ ...manualCustomer, phone: e.target.value })}
+              value={newCustomerForm.phone}
+              onChange={e => setNewCustomerForm({ ...newCustomerForm, phone: e.target.value })}
               placeholder="987654321"
             />
           </div>
 
           <Input
             label="Dirección"
-            value={manualCustomer.address}
-            onChange={e => setManualCustomer({ ...manualCustomer, address: e.target.value })}
+            value={newCustomerForm.address}
+            onChange={e => setNewCustomerForm({ ...newCustomerForm, address: e.target.value })}
             placeholder="Dirección completa"
           />
 
