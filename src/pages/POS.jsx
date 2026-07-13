@@ -4011,19 +4011,28 @@ export default function POS() {
       price = price * (1 + customIgvRate / 100)
     }
 
-    // Multi-divisa: el precio pudo ingresarse en S/ o $ (selector del modal). El
-    // carrito trabaja en la moneda de la SESIÓN: convertir si difieren, y calcular
-    // basePrice (PEN exacto) cuando la sesión es USD — igual que los productos del
-    // catálogo, para que los totales en base no pierdan precisión por redondeo.
+    // Multi-divisa: el precio pudo ingresarse en S/ o $ (selector del modal).
+    // Se ANCLA a la moneda tecleada (igual que los productos del catálogo):
+    //  - Tecleado en $  → fixedPriceUSD: el dólar queda fijo; el equivalente en
+    //    soles = USD × TC. Al cambiar el TC cambian los soles, NO el dólar ni su
+    //    IGV en dólares.
+    //  - Tecleado en S/ → ancla en soles (basePrice); en sesión USD el dólar se
+    //    deriva del sol y sí varía con el TC.
+    // basePrice (PEN exacto) se guarda para que los totales en base no pierdan
+    // precisión por redondeo.
     let customBasePrice = null
+    let customFixedUSD = null
     if (posMultiCurrencyOn) {
       const entryCcy = customProduct.priceCurrency || currency
-      const baseInPEN = entryCcy === 'USD' ? convertToBase(price, 'USD', exchangeRate) : price
-      if (currency === 'USD') {
-        price = entryCcy === 'USD' ? price : Number(convertFromBase(baseInPEN, 'USD', exchangeRate).toFixed(2))
-        customBasePrice = Number(Number(baseInPEN).toFixed(2))
+      if (entryCcy === 'USD') {
+        customFixedUSD = Number(Number(price).toFixed(2))
+        customBasePrice = Number(convertToBase(price, 'USD', exchangeRate).toFixed(2))
+        price = currency === 'USD' ? customFixedUSD : customBasePrice
       } else {
-        price = Number(Number(baseInPEN).toFixed(2))
+        customBasePrice = Number(Number(price).toFixed(2))
+        price = currency === 'USD'
+          ? Number(convertFromBase(customBasePrice, 'USD', exchangeRate).toFixed(2))
+          : customBasePrice
       }
     }
 
@@ -4056,6 +4065,8 @@ export default function POS() {
       ...(customProduct.isBonificacion && { isBonificacion: true }),
       // Multi-divisa: PEN exacto del precio para los totales en base (sesión USD)
       ...(customBasePrice != null && customBasePrice > 0 && { basePrice: customBasePrice }),
+      // Anclado al dólar cuando se tecleó en $: el USD queda fijo al cambiar el TC
+      ...(customFixedUSD != null && customFixedUSD > 0 && { fixedPriceUSD: customFixedUSD }),
     }
 
     setCart([...cart, customProductItem])
