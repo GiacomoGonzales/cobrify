@@ -6,6 +6,7 @@ import Button from '@/components/ui/Button'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getInvoices, updateInvoice } from '@/services/firestoreService'
 import { getInvoiceDate, parseLocalDateString } from '@/utils/invoiceDate'
+import { downloadBlob } from '@/utils/nativeDownload'
 import { useToast } from '@/contexts/ToastContext'
 import {
   XLSX,
@@ -333,6 +334,7 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
     return 'Todas las fechas'
   })()
 
+  // Abre el PDF con diálogo de impresión (para el ticket 80mm, que sí es para imprimir).
   const openPdf = (doc) => {
     try {
       doc.autoPrint()
@@ -346,8 +348,28 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
     }
   }
 
+  // DESCARGA el PDF (web) o abre COMPARTIR (móvil), sin diálogo de impresión.
+  // Los A4 (resumen/detallado) son para guardar/enviar; imprimir es opcional.
+  const savePdf = async (doc, filename) => {
+    try {
+      await downloadBlob(doc.output('blob'), filename, {
+        title: 'Pagos Pendientes',
+        dialogTitle: 'Guardar o compartir PDF',
+      })
+    } catch (e) {
+      console.error('Error descargando PDF de pagos pendientes:', e)
+      toast.error('No se pudo generar el PDF. Inténtalo nuevamente.')
+    }
+  }
+
+  // Sufijo YYYY-MM-DD para el nombre de archivo
+  const fileDate = (() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  })()
+
   // ===== PDF A4: lista por cliente con detalle de comprobantes =====
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
     const doc = new jsPDF({ unit: 'mm', format: 'a4' })
     const W = 210, MX = 14
     let y = 16
@@ -411,7 +433,7 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
     doc.text(`TOTAL (${visibleCustomers.length} cliente${visibleCustomers.length === 1 ? '' : 's'}, ${grandTotals.docs} comprobante${grandTotals.docs === 1 ? '' : 's'})`, MX, y)
     doc.text(formatTotals(grandTotals), W - MX, y, { align: 'right' })
 
-    openPdf(doc)
+    await savePdf(doc, `Pagos-Pendientes-Detallado_${fileDate}.pdf`)
   }
 
   // ===== Ticket 80mm: resumen compacto por cliente, alto dinámico =====
@@ -484,7 +506,7 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
   }
 
   // ===== PDF A4 RESUMEN: una fila por cliente (nombre · #comp · total) =====
-  const handleDownloadSummaryPdf = () => {
+  const handleDownloadSummaryPdf = async () => {
     const doc = new jsPDF({ unit: 'mm', format: 'a4' })
     const W = 210, MX = 14
     let y = 16
@@ -541,7 +563,7 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
     doc.text(`TOTAL (${visibleCustomers.length} cliente${visibleCustomers.length === 1 ? '' : 's'}, ${grandTotals.docs} comprobante${grandTotals.docs === 1 ? '' : 's'})`, MX, y)
     doc.text(formatTotals(grandTotals), W - MX, y, { align: 'right' })
 
-    openPdf(doc)
+    await savePdf(doc, `Pagos-Pendientes-Resumen_${fileDate}.pdf`)
   }
 
   // ===== Excel: hoja Resumen (una fila por cliente) + hoja Detalle =====
