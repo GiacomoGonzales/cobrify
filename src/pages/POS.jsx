@@ -353,10 +353,12 @@ export default function POS() {
   const [cart, setCart] = useState([])
 
   // ===== Multi-divisa (USD) — solo en modo retail con flag activa ======
-  // Restaurant, hotel, etc. quedan SIEMPRE en PEN. Si el negocio activó
-  // multi-divisa en Configuración Y está en retail, aparece el selector.
+  // Multi-divisa en el POS para retail y transporte (modos que venden/facturan en
+  // USD). El resto de pantallas (compras, cotizaciones, facturas, inventario,
+  // reportes) ya respetan el toggle sin mirar el modo; el POS era el único que lo
+  // limitaba a retail. Restaurant/hotel se dejan en PEN (su POS usa mesas/órdenes).
   const posMultiCurrencyOn = React.useMemo(
-    () => businessMode === 'retail' && isMultiCurrencyEnabled(businessSettings),
+    () => (businessMode === 'retail' || businessMode === 'transport') && isMultiCurrencyEnabled(businessSettings),
     [businessMode, businessSettings]
   )
   const [currency, setCurrency] = useState(
