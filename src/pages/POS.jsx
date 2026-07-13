@@ -4011,6 +4011,22 @@ export default function POS() {
       price = price * (1 + customIgvRate / 100)
     }
 
+    // Multi-divisa: el precio pudo ingresarse en S/ o $ (selector del modal). El
+    // carrito trabaja en la moneda de la SESIÓN: convertir si difieren, y calcular
+    // basePrice (PEN exacto) cuando la sesión es USD — igual que los productos del
+    // catálogo, para que los totales en base no pierdan precisión por redondeo.
+    let customBasePrice = null
+    if (posMultiCurrencyOn) {
+      const entryCcy = customProduct.priceCurrency || currency
+      const baseInPEN = entryCcy === 'USD' ? convertToBase(price, 'USD', exchangeRate) : price
+      if (currency === 'USD') {
+        price = entryCcy === 'USD' ? price : Number(convertFromBase(baseInPEN, 'USD', exchangeRate).toFixed(2))
+        customBasePrice = Number(Number(baseInPEN).toFixed(2))
+      } else {
+        price = Number(Number(baseInPEN).toFixed(2))
+      }
+    }
+
     // SUNAT regla 3462: No se permite mezclar tasas de IGV en la misma venta
     if (taxConfig.taxType === 'standard' && (customProduct.taxAffectation || '10') === '10') {
       const existingGravado = cart.find(item => (item.taxAffectation || '10') === '10')
@@ -4038,6 +4054,8 @@ export default function POS() {
       stock: null, // Productos personalizados no tienen control de stock
       isCustom: true,
       ...(customProduct.isBonificacion && { isBonificacion: true }),
+      // Multi-divisa: PEN exacto del precio para los totales en base (sesión USD)
+      ...(customBasePrice != null && customBasePrice > 0 && { basePrice: customBasePrice }),
     }
 
     setCart([...cart, customProductItem])
@@ -10447,9 +10465,23 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 Precio Unitario {!customProduct.isBonificacion && <span className="text-red-500">*</span>}
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">
-                  S/
-                </span>
+                {/* Multi-divisa: elegir la moneda del precio (S/ o $), igual que en
+                    los productos del catálogo. Sin multidivisa, S/ fijo como antes. */}
+                {posMultiCurrencyOn ? (
+                  <select
+                    value={customProduct.priceCurrency || currency}
+                    onChange={(e) => setCustomProduct({ ...customProduct, priceCurrency: e.target.value })}
+                    className="absolute left-1.5 top-1/2 -translate-y-1/2 text-sm text-gray-600 bg-transparent border-0 focus:outline-none focus:ring-0 cursor-pointer"
+                    title="Moneda del precio"
+                  >
+                    <option value="PEN">S/</option>
+                    <option value="USD">$</option>
+                  </select>
+                ) : (
+                  <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">
+                    S/
+                  </span>
+                )}
                 <input
                   type="number"
                   step="0.01"
@@ -10457,7 +10489,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   value={customProduct.price}
                   onChange={(e) => setCustomProduct({ ...customProduct, price: e.target.value })}
                   placeholder="0.00"
-                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className={`w-full ${posMultiCurrencyOn ? 'pl-16' : 'pl-10'} pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500`}
                 />
               </div>
             </div>
