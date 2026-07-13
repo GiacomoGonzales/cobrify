@@ -504,7 +504,8 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible: web
           margin-top: 0 !important;
           padding: 1px 4px !important;
           font-size: 7pt !important;
-          background: #333 !important;
+          background: none !important;
+          color: #000 !important;
           border: none !important;
         }
         .modifier-label {
