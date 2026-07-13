@@ -13,19 +13,54 @@ export default function TermsAndConditions() {
   const contactEmail = branding.supportEmail || branding.contactEmail || 'soporte@cobrify.com'
   const contactWebsite = branding.websiteUrl || (window.location.hostname !== 'localhost' ? window.location.hostname : 'cobrifyperu.com')
 
-  // Precios dinámicos
-  const priceMonthly = branding.priceMonthly ?? 29.90
-  const priceSemester = branding.priceSemester ?? 149.90
-  const priceAnnual = branding.priceAnnual ?? 199.90
-
-  // Calcular ahorros
-  const savingSemester = (priceMonthly * 6) - priceSemester
-  const savingSemesterPercent = Math.round((savingSemester / (priceMonthly * 6)) * 100)
-  const monthlyEquivSemester = (priceSemester / 6).toFixed(2)
-
-  const savingAnnual = (priceMonthly * 12) - priceAnnual
-  const savingAnnualPercent = Math.round((savingAnnual / (priceMonthly * 12)) * 100)
-  const monthlyEquivAnnual = (priceAnnual / 12).toFixed(2)
+  // Planes de suscripción. Precio base en Soles (sin IGV) + precio con IGV (18%).
+  const plans = [
+    {
+      name: 'Plan Básico',
+      period: '/mes',
+      price: '19.90',
+      priceIgv: '23.50',
+      badge: null,
+      highlight: false,
+      desc: 'Diseñado para microempresas. Incluye hasta 100 comprobantes electrónicos al mes (boletas y facturas) y notas de venta ilimitadas.',
+    },
+    {
+      name: 'Plan Mensual',
+      period: '/mes',
+      price: '29.90',
+      priceIgv: '35.30',
+      badge: null,
+      highlight: false,
+      desc: 'Pago mes a mes, sin compromisos largos. Incluye todas las funcionalidades completas.',
+    },
+    {
+      name: 'Plan Semestral',
+      period: '/6 meses',
+      price: '149.90',
+      priceIgv: '176.90',
+      badge: 'MÁS POPULAR',
+      highlight: true,
+      desc: 'Pago cada 6 meses. Las mismas funcionalidades completas; solo cambia el período de suscripción.',
+    },
+    {
+      name: 'Plan Anual',
+      period: '/año',
+      price: '199.90',
+      priceIgv: '235.90',
+      badge: 'MEJOR AHORRO',
+      highlight: false,
+      desc: 'Pago anual. Las mismas funcionalidades completas; solo cambia el período de suscripción.',
+    },
+    {
+      name: 'Plan Todo Ilimitado',
+      period: '/año',
+      price: '299.90',
+      priceIgv: '353.90',
+      badge: 'SIN CERTIFICADO PROPIO',
+      highlight: false,
+      desc: 'Facturación ilimitada a SUNAT sin necesidad de contar con tu propio certificado digital tributario (CDT). Pago anual.',
+    },
+  ]
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -96,132 +131,75 @@ export default function TermsAndConditions() {
             </ul>
           </section>
 
-          {/* Planes de Servicio y Prueba Gratuita */}
+          {/* Planes de Servicio */}
           <section className="mb-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">3. Planes de Servicio y Prueba Gratuita</h2>
-
-            {/* Prueba Gratuita */}
-            <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-6 mb-6 border-2 border-green-200">
-              <h3 className="text-xl font-bold text-gray-900 mb-3 flex items-center">
-                <span className="bg-green-500 text-white px-3 py-1 rounded-full text-sm mr-3">PRUEBA GRATIS</span>
-                Prueba Gratuita de 1 Día
-              </h3>
-              <p className="text-gray-700 mb-4">
-                Al registrarte en {companyName}, obtienes acceso completo a todas las funcionalidades de la plataforma durante 1 día sin costo alguno.
-              </p>
-              <ul className="space-y-2">
-                <li className="flex items-start text-gray-700">
-                  <Check className="w-5 h-5 text-green-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span><strong>Acceso completo</strong> a todas las funcionalidades</span>
-                </li>
-                <li className="flex items-start text-gray-700">
-                  <Check className="w-5 h-5 text-green-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span>Duración: <strong>1 día</strong> desde el registro</span>
-                </li>
-                <li className="flex items-start text-gray-700">
-                  <Check className="w-5 h-5 text-green-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span>Sin tarjeta de crédito requerida</span>
-                </li>
-                <li className="flex items-start text-gray-700">
-                  <Check className="w-5 h-5 text-green-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span>Acceso a demos interactivas (Retail y Restaurante)</span>
-                </li>
-              </ul>
-              <p className="text-gray-600 mt-4 text-sm italic">
-                * Después del período de prueba, debes contratar un plan de pago para continuar usando el servicio.
-              </p>
-            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">3. Planes de Servicio</h2>
 
             <p className="text-gray-700 leading-relaxed mb-6">
-              {companyName} ofrece tres planes de suscripción con las mismas funcionalidades completas. La diferencia está en el período de facturación y el ahorro:
+              {companyName} ofrece los siguientes planes de suscripción. Salvo el Plan Básico —pensado para microempresas—, todos los planes incluyen las mismas funcionalidades completas y solo se diferencian en el período de suscripción. Las notas de venta son ilimitadas en todos los planes, sin excepción.
             </p>
 
-            {/* Plan Mensual */}
-            <div className="bg-white rounded-lg p-6 mb-4 border-2 border-gray-200">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xl font-bold text-gray-900">Plan Mensual</h3>
-                <div className="text-right">
-                  <p className="text-3xl font-bold text-gray-900">S/{priceMonthly.toFixed(2)}</p>
-                  <p className="text-sm text-gray-500">/mes</p>
+            {/* Tarjetas de planes */}
+            <div className="space-y-4 mb-6">
+              {plans.map((plan) => (
+                <div
+                  key={plan.name}
+                  className={`rounded-lg p-6 border-2 ${plan.highlight ? 'bg-primary-50 border-primary-500' : 'bg-white border-gray-200'}`}
+                >
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <h3 className="text-xl font-bold text-gray-900">{plan.name}</h3>
+                      {plan.badge && (
+                        <span className="bg-yellow-400 text-gray-900 px-3 py-1 rounded-full text-xs font-bold">{plan.badge}</span>
+                      )}
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-3xl font-bold text-gray-900">S/{plan.price}</p>
+                      <p className="text-sm text-gray-500">{plan.period}</p>
+                      <p className="text-xs text-gray-500 mt-1">S/{plan.priceIgv} con IGV</p>
+                    </div>
+                  </div>
+                  <p className="text-gray-600">{plan.desc}</p>
                 </div>
-              </div>
-              <p className="text-gray-600 mb-4">Pago mes a mes. Ideal para empezar sin compromisos largos.</p>
-            </div>
-
-            {/* Plan Semestral */}
-            <div className="bg-primary-50 rounded-lg p-6 mb-4 border-2 border-primary-500">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <h3 className="text-xl font-bold text-gray-900">Plan Semestral</h3>
-                  <span className="bg-yellow-400 text-gray-900 px-3 py-1 rounded-full text-xs font-bold">MÁS POPULAR</span>
-                </div>
-                <div className="text-right">
-                  <p className="text-3xl font-bold text-gray-900">S/{priceSemester.toFixed(2)}</p>
-                  <p className="text-sm text-gray-500">/6 meses</p>
-                </div>
-              </div>
-              <p className="text-gray-600 mb-2">Pago cada 6 meses. Ahorra S/{savingSemester.toFixed(2)} ({savingSemesterPercent}% de descuento).</p>
-              <p className="text-sm text-primary-700 font-semibold">Equivalente a S/{monthlyEquivSemester}/mes</p>
-            </div>
-
-            {/* Plan Anual */}
-            <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-6 mb-6 border-2 border-green-500">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <h3 className="text-xl font-bold text-gray-900">Plan Anual</h3>
-                  <span className="bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold">MEJOR AHORRO</span>
-                </div>
-                <div className="text-right">
-                  <p className="text-3xl font-bold text-gray-900">S/{priceAnnual.toFixed(2)}</p>
-                  <p className="text-sm text-gray-500">/año</p>
-                </div>
-              </div>
-              <p className="text-gray-600 mb-2">Pago anual. Ahorra S/{savingAnnual.toFixed(2)} ({savingAnnualPercent}% de descuento).</p>
-              <p className="text-sm text-green-700 font-semibold">Equivalente a S/{monthlyEquivAnnual}/mes</p>
+              ))}
             </div>
 
             {/* Características incluidas en todos los planes */}
             <div className="bg-blue-50 rounded-lg p-6 border border-blue-200">
               <h4 className="font-bold text-gray-900 mb-4">Todas las suscripciones incluyen:</h4>
               <div className="grid md:grid-cols-2 gap-3">
-                <div className="flex items-start">
-                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700">Facturación ilimitada SUNAT</span>
-                </div>
-                <div className="flex items-start">
-                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700">Control de stock completo</span>
-                </div>
-                <div className="flex items-start">
-                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700">Múltiples usuarios</span>
-                </div>
-                <div className="flex items-start">
-                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700">Soporte prioritario</span>
-                </div>
-                <div className="flex items-start">
-                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700">Software a medida</span>
-                </div>
-                <div className="flex items-start">
-                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700">100% Web (sin instalación)</span>
-                </div>
-                <div className="flex items-start">
-                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700">Reportes avanzados exportables</span>
-                </div>
-                <div className="flex items-start">
-                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700">Adaptado a cualquier negocio</span>
-                </div>
+                {[
+                  'Facturación electrónica SUNAT (boletas y facturas)',
+                  'Notas de venta ilimitadas',
+                  'Control de stock completo',
+                  'Múltiples usuarios',
+                  'Soporte prioritario',
+                  'Software a medida',
+                  '100% Web (sin instalación)',
+                  'App para iPhone y Android',
+                  'Reportes avanzados exportables',
+                  'Catálogo digital',
+                  'Adaptado a cualquier negocio',
+                ].map((feature) => (
+                  <div key={feature} className="flex items-start">
+                    <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
+                    <span className="text-gray-700">{feature}</span>
+                  </div>
+                ))}
               </div>
             </div>
 
-            <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200 mt-6">
+            {/* Nota: certificado digital y límites de facturación */}
+            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 mt-6">
+              <p className="text-gray-700 text-sm">
+                <strong>Sobre la facturación ilimitada y el certificado digital:</strong> La facturación ilimitada a SUNAT requiere contar con un certificado digital tributario (CDT) propio. Si no cuentas con certificado propio, el límite es de 500 comprobantes electrónicos mensuales (boletas y facturas). El <strong>Plan Todo Ilimitado</strong> incluye facturación ilimitada sin necesidad de tu propio certificado. El <strong>Plan Básico</strong> está limitado a 100 comprobantes electrónicos mensuales. En todos los casos, las notas de venta son ilimitadas.
+              </p>
+            </div>
+
+            {/* Nota: precios e IGV */}
+            <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200 mt-4">
               <p className="text-yellow-900 text-sm">
-                <strong>Nota:</strong> Los precios están en Soles Peruanos (PEN) y están sujetos a cambios. Los usuarios con suscripción activa mantendrán su tarifa durante la vigencia de su plan contratado.
+                <strong>Nota:</strong> Los precios están expresados en Soles Peruanos (PEN). El precio base no incluye IGV; junto a cada plan se indica el precio con IGV (18%). Los precios están sujetos a cambios; los usuarios con suscripción activa mantendrán su tarifa durante la vigencia de su plan contratado.
               </p>
             </div>
           </section>
@@ -250,7 +228,7 @@ export default function TermsAndConditions() {
             <h2 className="text-2xl font-bold text-gray-900 mb-4">5. Facturación y Pagos</h2>
             <h3 className="text-lg font-semibold text-gray-800 mb-3">5.1 Planes de Pago</h3>
             <p className="text-gray-700 leading-relaxed mb-4">
-              Los planes de pago se renuevan automáticamente al final de cada período de facturación (mensual o anual) a menos que se cancelen antes de la fecha de renovación.
+              Los planes de pago se renuevan automáticamente al final de cada período de suscripción (mensual, semestral o anual, según el plan contratado) a menos que se cancelen antes de la fecha de renovación.
             </p>
 
             <h3 className="text-lg font-semibold text-gray-800 mb-3">5.2 Cambios en los Precios</h3>
