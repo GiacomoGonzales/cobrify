@@ -435,19 +435,27 @@ export default function ProductModifiersSection({
                           {modifier.options.map((option, optIndex) => (
                             <div
                               key={option.id}
-                              draggable
-                              onDragStart={() => handleDragStart(modifier.id, optIndex)}
                               onDragOver={(e) => handleDragOver(e, modifier.id, optIndex)}
-                              onDragEnd={handleDragEnd}
                               className={`flex items-center gap-1.5 p-2 bg-gray-50 rounded border transition-colors ${
                                 dragOptionData?.modifierId === modifier.id && dragOptionData?.optionIndex === optIndex
                                   ? 'border-primary-400 bg-primary-50'
                                   : 'border-gray-200'
                               }`}
                             >
-                              {/* Grip + Botones de reordenar */}
+                              {/* Grip (arrastrable) + botones de reordenar.
+                                  Solo el grip es draggable: antes lo era toda la fila, y
+                                  al intentar seleccionar el texto del precio se disparaba
+                                  el arrastre. */}
                               <div className="flex items-center gap-0.5">
-                                <GripVertical className="w-3.5 h-3.5 text-gray-300 cursor-grab active:cursor-grabbing flex-shrink-0" />
+                                <span
+                                  draggable
+                                  onDragStart={() => handleDragStart(modifier.id, optIndex)}
+                                  onDragEnd={handleDragEnd}
+                                  className="cursor-grab active:cursor-grabbing flex-shrink-0"
+                                  title="Arrastrar para reordenar"
+                                >
+                                  <GripVertical className="w-3.5 h-3.5 text-gray-300" />
+                                </span>
                                 <div className="flex flex-col">
                                 <button
                                   type="button"
@@ -479,11 +487,22 @@ export default function ProductModifiersSection({
                               <div className="flex items-center gap-1">
                                 <span className="text-xs text-gray-500">+S/</span>
                                 <input
-                                  type="number"
-                                  step="0.01"
-                                  value={option.priceAdjustment}
-                                  onChange={(e) => handleUpdateOption(modifier.id, option.id, 'priceAdjustment', parseFloat(e.target.value) || 0)}
-                                  placeholder="0.00"
+                                  type="text"
+                                  inputMode="decimal"
+                                  // Vacío = sin recargo (0). En blanco cuando el valor es 0
+                                  // (no un "0" molesto de borrar). Durante la edición se guarda
+                                  // el texto crudo (permite vaciarlo y escribir decimales como
+                                  // 0.50, que con type=number fallan en Chrome); al salir se
+                                  // normaliza a número.
+                                  value={option.priceAdjustment === 0 ? '' : option.priceAdjustment}
+                                  onChange={(e) => {
+                                    const raw = e.target.value.replace(',', '.')
+                                    if (raw === '' || /^\d*\.?\d*$/.test(raw)) {
+                                      handleUpdateOption(modifier.id, option.id, 'priceAdjustment', raw)
+                                    }
+                                  }}
+                                  onBlur={(e) => handleUpdateOption(modifier.id, option.id, 'priceAdjustment', parseFloat(e.target.value) || 0)}
+                                  placeholder="0"
                                   className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                                 />
                               </div>
