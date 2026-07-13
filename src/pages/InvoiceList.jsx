@@ -4873,6 +4873,8 @@ Gracias por tu preferencia.`
         demoInvoices={isDemoMode ? (demoData?.invoices || []) : null}
         canAccess={(inv) => canAccessInvoice(inv) && canAccessInvoiceBySeller(inv)}
         companySettings={companySettings}
+        currentUser={user}
+        onPaymentsRegistered={loadInvoices}
       />
 
       {/* Export Modal */}
