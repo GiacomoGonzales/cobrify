@@ -10592,6 +10592,10 @@ ${companySettings?.businessName || 'Tu Empresa'}`
           {customProduct.name && customProduct.price > 0 && (() => {
             const basePrice = parseFloat(customProduct.price)
             const quantity = parseFloat(customProduct.quantity) || 1
+            // Multidivisa: la vista previa se muestra en la MISMA moneda del selector
+            // de precio (lo que el usuario tecleó), no siempre en soles.
+            const previewCcy = posMultiCurrencyOn ? (customProduct.priceCurrency || currency) : 'PEN'
+            const fmt = (n) => formatCurrency(n, previewCcy)
             const igvRate = taxConfig.taxType === 'standard' ? (customProduct.igvRate || 18) : (taxConfig.igvRate || 18)
             const isGravado = customProduct.taxAffectation === '10' && !taxConfig.igvExempt
             const shouldAddIgv = customProduct.addIgv && isGravado
@@ -10632,7 +10636,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   <div>
                     <p className="font-semibold text-gray-900">{customProduct.name}</p>
                     <p className="text-sm text-gray-600">
-                      Cantidad: {quantity} × {formatCurrency(totalUnit)}
+                      Cantidad: {quantity} × {fmt(totalUnit)}
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
                       {customProduct.taxAffectation === '10' ? `Gravado (${igvRate}%)` : customProduct.taxAffectation === '20' ? 'Exonerado' : 'Inafecto'}
@@ -10641,15 +10645,15 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   <div className="text-right space-y-1">
                     <div className="flex justify-between gap-4 text-sm">
                       <span className="text-gray-600">Subtotal:</span>
-                      <span className="font-medium">{formatCurrency(subtotalTotal)}</span>
+                      <span className="font-medium">{fmt(subtotalTotal)}</span>
                     </div>
                     <div className="flex justify-between gap-4 text-sm">
                       <span className="text-gray-600">IGV ({isGravado ? igvRate : 0}%):</span>
-                      <span className="font-medium">{formatCurrency(igvTotal)}</span>
+                      <span className="font-medium">{fmt(igvTotal)}</span>
                     </div>
                     <div className="flex justify-between gap-4 text-base border-t border-primary-200 pt-1 mt-1">
                       <span className="font-semibold text-gray-700">Total:</span>
-                      <span className="font-bold text-primary-600">{formatCurrency(totalFinal)}</span>
+                      <span className="font-bold text-primary-600">{fmt(totalFinal)}</span>
                     </div>
                   </div>
                 </div>
