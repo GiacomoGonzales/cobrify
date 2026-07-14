@@ -2690,7 +2690,10 @@ Gracias por tu preferencia.`
         </div>
       </div>
 
-      {/* Stats - Ocultar para usuarios secundarios si está configurado */}
+      {/* Stats - Ocultar para usuarios secundarios si está configurado.
+          Mientras el historial sigue llegando por lotes (isBackgroundLoading),
+          los totales muestran un spinner: números que crecen en vivo parecen
+          un error. La tabla sí se usa desde el primer lote. */}
       {!hidePrivateData && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
@@ -2700,9 +2703,15 @@ Gracias por tu preferencia.`
                 {dateFilter !== 'all' && (
                   <p className="text-xs text-primary-600">({getFilterLabel()})</p>
                 )}
-                <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-2">{stats.total}</p>
-                {dateFilter !== 'all' && (
-                  <p className="text-xs text-gray-500 mt-1">de {stats.totalAll} en total</p>
+                {isBackgroundLoading ? (
+                  <Loader2 className="w-6 h-6 animate-spin text-gray-300 mt-2" />
+                ) : (
+                  <>
+                    <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-2">{stats.total}</p>
+                    {dateFilter !== 'all' && (
+                      <p className="text-xs text-gray-500 mt-1">de {stats.totalAll} en total</p>
+                    )}
+                  </>
                 )}
               </div>
             </CardContent>
@@ -2711,7 +2720,11 @@ Gracias por tu preferencia.`
             <CardContent className="p-4 sm:p-6">
               <div>
                 <p className="text-xs sm:text-sm font-medium text-gray-600">Pagadas</p>
-                <p className="text-xl sm:text-2xl font-bold text-green-600 mt-2">{stats.paid}</p>
+                {isBackgroundLoading ? (
+                  <Loader2 className="w-6 h-6 animate-spin text-gray-300 mt-2" />
+                ) : (
+                  <p className="text-xl sm:text-2xl font-bold text-green-600 mt-2">{stats.paid}</p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -2719,7 +2732,11 @@ Gracias por tu preferencia.`
             <CardContent className="p-4 sm:p-6">
               <div>
                 <p className="text-xs sm:text-sm font-medium text-gray-600">Pendientes</p>
-                <p className="text-xl sm:text-2xl font-bold text-yellow-600 mt-2">{stats.pending}</p>
+                {isBackgroundLoading ? (
+                  <Loader2 className="w-6 h-6 animate-spin text-gray-300 mt-2" />
+                ) : (
+                  <p className="text-xl sm:text-2xl font-bold text-yellow-600 mt-2">{stats.pending}</p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -2730,9 +2747,13 @@ Gracias por tu preferencia.`
                 {dateFilter !== 'all' && (
                   <p className="text-xs text-primary-600">({getFilterLabel()})</p>
                 )}
-                <p className="text-lg sm:text-xl font-bold text-primary-600 mt-2">
-                  {formatCurrency(toDisp(stats.totalAmount), reportsCcy)}
-                </p>
+                {isBackgroundLoading ? (
+                  <Loader2 className="w-6 h-6 animate-spin text-gray-300 mt-2" />
+                ) : (
+                  <p className="text-lg sm:text-xl font-bold text-primary-600 mt-2">
+                    {formatCurrency(toDisp(stats.totalAmount), reportsCcy)}
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>
