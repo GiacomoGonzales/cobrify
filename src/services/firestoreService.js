@@ -176,9 +176,13 @@ export const getRecentInvoices = async (userId, sinceDate) => {
  * @param {{ pageSize?: number, startAfterDoc?: any }} options
  * @returns {{ success, data, lastDoc, hasMore }}
  */
-export const getInvoicesPage = async (userId, { pageSize = 100, startAfterDoc = null } = {}) => {
+export const getInvoicesPage = async (userId, { pageSize = 100, startAfterDoc = null, sinceDate = null } = {}) => {
   try {
-    const constraints = [orderBy('createdAt', 'desc')]
+    // sinceDate: rango sobre el MISMO campo del orderBy (createdAt) → sigue
+    // usando el índice single-field, sin índices compuestos que desplegar.
+    const constraints = []
+    if (sinceDate) constraints.push(where('createdAt', '>=', sinceDate))
+    constraints.push(orderBy('createdAt', 'desc'))
     if (startAfterDoc) constraints.push(startAfter(startAfterDoc))
     constraints.push(limit(pageSize))
     const q = query(collection(db, 'businesses', userId, 'invoices'), ...constraints)

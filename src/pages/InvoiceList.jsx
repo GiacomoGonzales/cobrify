@@ -59,7 +59,7 @@ import Input from '@/components/ui/Input'
 import { formatCurrency, formatDate, formatDateTime, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import { getDocumentTotalInBase, getReportsCurrency, resolveReportsRate, convertBaseToDisplay } from '@/utils/currency'
 import { getInvoiceDate } from '@/utils/invoiceDate'
-import { getInvoices, getRecentInvoices, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat, updateProductStockTransaction } from '@/services/firestoreService'
+import { getInvoicesPage, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat, updateProductStockTransaction } from '@/services/firestoreService'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, generateExitNotePDF, preloadLogo } from '@/utils/pdfGenerator'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { doc, updateDoc } from 'firebase/firestore'
@@ -601,6 +601,14 @@ Gracias por tu preferencia.`
     }
   }
 
+  // Carga progresiva: número de secuencia para descartar cargas obsoletas (si el
+  // usuario cambia de filtro o una acción recarga mientras aún llegan lotes).
+  const loadSeqRef = useRef(0)
+  // El efecto de filtros también corre al montar; sin este skip la página
+  // descargaba TODO dos veces al entrar (una por cada useEffect).
+  const skipFilterEffectRef = useRef(true)
+  const [isBackgroundLoading, setIsBackgroundLoading] = useState(false)
+
   useEffect(() => {
     loadInvoices()
     loadBranches()
@@ -608,6 +616,10 @@ Gracias por tu preferencia.`
 
   // Recargar facturas cuando cambia el filtro de fecha (porque la query de Firestore cambia)
   useEffect(() => {
+    if (skipFilterEffectRef.current) {
+      skipFilterEffectRef.current = false
+      return
+    }
     if (user?.uid) loadInvoices()
   }, [dateFilter, filterStartDate, filterEndDate])
 
@@ -653,10 +665,23 @@ Gracias por tu preferencia.`
     return [invoice.paymentMethod || 'Efectivo']
   }
 
+  // Carga PROGRESIVA por lotes (cuentas con miles de comprobantes): el primer
+  // lote pinta la tabla de inmediato y el resto sigue llegando en background
+  // (indicador "cargando historial"). Al terminar, el dataset queda COMPLETO en
+  // memoria, así búsqueda global, totales y exportación funcionan igual que antes.
+  // Si hay filtro de fecha, la query lleva el rango (createdAt >= inicio); igual
+  // se pagina porque un negocio muy activo acumula miles incluso en 30 días.
+  const INVOICES_FETCH_BATCH = 500
+
   const loadInvoices = async () => {
     if (!user?.uid) return
 
+    // Invalida cualquier carga anterior aún en curso (cambio de filtro, recarga
+    // tras anular/pagar): solo la secuencia más reciente escribe estado.
+    const seq = ++loadSeqRef.current
+
     setIsLoading(true)
+    setIsBackgroundLoading(false)
     try {
       if (isDemoMode && demoData) {
         // Cargar datos de demo
@@ -667,38 +692,60 @@ Gracias por tu preferencia.`
       }
 
       const businessId = getBusinessId()
-
-      // Optimización: si hay filtro de fecha, usar query con rango para no traer todo
       const dateRange = getDateRange()
-      const invoicesFetcher = dateRange
-        ? getRecentInvoices(businessId, dateRange.start)
-        : getInvoices(businessId)
 
-      const [invoicesResult, settingsResult] = await Promise.all([
-        invoicesFetcher,
-        getCompanySettings(businessId)
-      ])
+      // Settings en paralelo con el primer lote (no bloquea la tabla)
+      getCompanySettings(businessId).then(settingsResult => {
+        if (loadSeqRef.current !== seq) return
+        if (settingsResult.success) {
+          setCompanySettings(settingsResult.data)
+          // Pre-cargar logo en background
+          if (settingsResult.data?.logoUrl) {
+            preloadLogo(settingsResult.data.logoUrl).catch(() => {})
+          }
+        }
+      }).catch(() => {})
 
-      if (invoicesResult.success) {
+      let accumulated = []
+      let startAfterDoc = null
+      let firstBatch = true
+
+      while (true) {
+        const result = await getInvoicesPage(businessId, {
+          pageSize: INVOICES_FETCH_BATCH,
+          startAfterDoc,
+          sinceDate: dateRange?.start || null,
+        })
+        if (loadSeqRef.current !== seq) return // llegó una carga más nueva: abortar
+
+        if (!result.success) {
+          console.error('Error al cargar facturas:', result.error)
+          break
+        }
+
+        accumulated = accumulated.concat(result.data || [])
         // Filtrar por sucursales/almacenes permitidos del usuario (seguridad de usuarios secundarios).
         // Sanea el estado base, por lo que tabla, totales, exportación y selección lo respetan.
         // Además, sub-usuario con vendedor asignado solo ve las ventas de su vendedor.
-        setInvoices((invoicesResult.data || []).filter(canAccessInvoice).filter(canAccessInvoiceBySeller))
-      } else {
-        console.error('Error al cargar facturas:', invoicesResult.error)
-      }
+        setInvoices(accumulated.filter(canAccessInvoice).filter(canAccessInvoiceBySeller))
 
-      if (settingsResult.success) {
-        setCompanySettings(settingsResult.data)
-        // Pre-cargar logo en background
-        if (settingsResult.data?.logoUrl) {
-          preloadLogo(settingsResult.data.logoUrl).catch(() => {})
+        if (firstBatch) {
+          // Con el primer lote ya se puede usar la página
+          setIsLoading(false)
+          firstBatch = false
         }
+
+        if (!result.hasMore) break
+        setIsBackgroundLoading(true)
+        startAfterDoc = result.lastDoc
       }
     } catch (error) {
       console.error('Error:', error)
     } finally {
-      setIsLoading(false)
+      if (loadSeqRef.current === seq) {
+        setIsLoading(false)
+        setIsBackgroundLoading(false)
+      }
     }
   }
 
@@ -2604,6 +2651,12 @@ Gracias por tu preferencia.`
           <p className="text-sm sm:text-base text-gray-600 mt-1">
             Visualiza y gestiona todas tus facturas y boletas emitidas
           </p>
+          {isBackgroundLoading && (
+            <p className="text-xs text-primary-600 mt-1 flex items-center gap-1.5">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Cargando el historial completo… los comprobantes recientes ya están disponibles.
+            </p>
+          )}
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           <Button
