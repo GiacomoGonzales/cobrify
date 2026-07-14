@@ -749,18 +749,38 @@ Gracias por tu preferencia.`
     }
   }
 
+  // Refresca UN comprobante desde Firestore y lo reemplaza en la lista. Se usa
+  // tras acciones sobre un solo documento (anular en SUNAT, reintentar, enviar):
+  // el estado final lo escribe el servidor, así que hay que releerlo — pero solo
+  // ESE, no los miles de la colección como hacía loadInvoices().
+  const refreshOneInvoice = async (invoiceId) => {
+    if (!invoiceId || isDemoMode) return
+    try {
+      const { doc, getDoc } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+      const snap = await getDoc(doc(db, 'businesses', getBusinessId(), 'invoices', invoiceId))
+      if (!snap.exists()) return
+      const fresh = { id: snap.id, ...snap.data() }
+      setInvoices(prev => prev.map(inv => (inv.id === invoiceId ? fresh : inv)))
+    } catch (e) {
+      console.warn('No se pudo refrescar el comprobante:', e)
+    }
+  }
+
   const handleDelete = async () => {
     if (!deletingInvoice || !user?.uid) return
 
     const businessId = getBusinessId()
+    const deletedId = deletingInvoice.id
     setIsDeleting(true)
     try {
-      const result = await deleteInvoice(businessId, deletingInvoice.id)
+      const result = await deleteInvoice(businessId, deletedId)
 
       if (result.success) {
         toast.success('Factura eliminada exitosamente')
         setDeletingInvoice(null)
-        loadInvoices()
+        // Quitarlo de la lista en memoria (evita recargar toda la colección)
+        setInvoices(prev => prev.filter(inv => inv.id !== deletedId))
       } else {
         throw new Error(result.error)
       }
@@ -978,6 +998,7 @@ Gracias por tu preferencia.`
         }
 
         // Revertir notas de venta si el comprobante fue convertido desde notas
+        const revertedNotaIds = []
         if (voidingInvoice.convertedFrom) {
           try {
             const { doc, updateDoc, deleteField } = await import('firebase/firestore')
@@ -990,6 +1011,7 @@ Gracias por tu preferencia.`
               try {
                 const notaRef = doc(db, 'businesses', businessId, 'invoices', notaId)
                 await updateDoc(notaRef, { convertedTo: deleteField(), updatedAt: new Date() })
+                revertedNotaIds.push(notaId)
                 console.log(`✅ Nota de venta ${notaId} revertida a no convertida`)
               } catch (revertError) {
                 console.warn(`No se pudo revertir nota ${notaId}:`, revertError)
@@ -1003,7 +1025,19 @@ Gracias por tu preferencia.`
         toast.success(`Nota de venta anulada y stock restaurado exitosamente${voidingInvoice.convertedFrom ? '. Notas origen revertidas.' : ''}`)
         setVoidingInvoice(null)
         setVoidReason('')
-        loadInvoices()
+        // Actualizar la lista EN MEMORIA en vez de recargar todo: loadInvoices()
+        // vuelve a bajar la colección completa, así que anular se sentía lento solo
+        // en cuentas con miles de comprobantes. La anulación solo cambia este
+        // comprobante y, si vino de notas convertidas, esas notas — que es
+        // exactamente lo que refrescamos acá (mismos datos, sin releer nada).
+        setInvoices(prev => prev.map(inv => {
+          if (inv.id === voidingInvoice.id) return { ...inv, ...voidData }
+          if (revertedNotaIds.includes(inv.id)) {
+            const { convertedTo, ...rest } = inv
+            return rest
+          }
+          return inv
+        }))
       } else {
         throw new Error(result.error)
       }
@@ -1441,7 +1475,7 @@ Gracias por tu preferencia.`
         }
         setVoidingSunatInvoice(null)
         setVoidSunatReason('')
-        loadInvoices()
+        await refreshOneInvoice(voidingSunatInvoice.id)
       } else if (result.status === 'pending') {
         // Polling automático: reintentar checkVoidStatus hasta que SUNAT responda.
         // El stock NO se devuelve todavía: recién cuando SUNAT confirme la baja
@@ -1461,12 +1495,12 @@ Gracias por tu preferencia.`
               if (statusResult.status === 'voided' || statusResult.status === 'accepted') {
                 await applySunatVoidSideEffects(invoiceBeingVoided)
                 toast.success(`${docTypeName} anulada exitosamente en SUNAT. Stock restaurado.`)
-                loadInvoices()
+                await refreshOneInvoice(invoiceBeingVoided.id)
                 return
               } else if (statusResult.status === 'rejected' || statusResult.error) {
                 // Baja rechazada: el stock nunca se tocó, no hay nada que revertir.
                 toast.error(statusResult.error || 'SUNAT rechazó la anulación')
-                loadInvoices()
+                await refreshOneInvoice(invoiceBeingVoided.id)
                 return
               } else if (pollAttempts < maxPollAttempts) {
                 setTimeout(pollStatus, pollInterval)
@@ -1477,12 +1511,12 @@ Gracias por tu preferencia.`
             }
             // Timeout final
             toast.info('La anulación sigue en proceso. Use "Reintentar" en unos minutos: el stock se devolverá cuando SUNAT confirme la baja.')
-            loadInvoices()
+            await refreshOneInvoice(invoiceBeingVoided.id)
           }
           setTimeout(pollStatus, pollInterval)
         } else {
           toast.info('La anulación está siendo procesada por SUNAT. Consulte el estado en unos minutos: el stock se devolverá cuando SUNAT confirme.')
-          loadInvoices()
+          await refreshOneInvoice(invoiceBeingVoided.id)
         }
         setVoidingSunatInvoice(null)
         setVoidSunatReason('')
@@ -1531,11 +1565,11 @@ Gracias por tu preferencia.`
             if (statusResult.status === 'voided' || statusResult.status === 'accepted') {
               await applySunatVoidSideEffects(invoice)
               toast.success(`${docTypeName} ya fue anulada en SUNAT. Estado actualizado y stock restaurado.`)
-              loadInvoices()
+              await refreshOneInvoice(invoice.id)
               return
             } else if (statusResult.status === 'rejected') {
               toast.error(statusResult.error || 'SUNAT rechazó la anulación.')
-              loadInvoices()
+              await refreshOneInvoice(invoice.id)
               return
             }
             // Si pending, esperar y reintentar
@@ -1566,7 +1600,7 @@ Gracias por tu preferencia.`
       if (result.status === 'voided' || result.status === 'accepted' || (result.success === true && !result.status)) {
         await applySunatVoidSideEffects(invoice)
         toast.success(`${docTypeName} anulada exitosamente en SUNAT. Stock restaurado.`)
-        loadInvoices()
+        await refreshOneInvoice(invoice.id)
       } else if (result.status === 'pending' && result.voidedDocumentId) {
         // Polling con el nuevo voidedDocumentId
         toast.info('SUNAT está procesando. Consultando estado...')
@@ -1579,11 +1613,11 @@ Gracias por tu preferencia.`
             if (statusResult.status === 'voided' || statusResult.status === 'accepted') {
               await applySunatVoidSideEffects(invoice)
               toast.success(`${docTypeName} anulada exitosamente en SUNAT. Stock restaurado.`)
-              loadInvoices()
+              await refreshOneInvoice(invoice.id)
               return
             } else if (statusResult.status === 'rejected') {
               toast.error(statusResult.error || 'SUNAT rechazó la anulación.')
-              loadInvoices()
+              await refreshOneInvoice(invoice.id)
               return
             }
           } catch (e) {
@@ -1591,10 +1625,10 @@ Gracias por tu preferencia.`
           }
         }
         toast.info('SUNAT aún no confirma. Reintente en unos minutos.')
-        loadInvoices()
+        await refreshOneInvoice(invoice.id)
       } else {
         toast.error(result.error || 'Error al anular. Reintente más tarde.')
-        loadInvoices()
+        await refreshOneInvoice(invoice.id)
       }
     } catch (error) {
       console.error('Error al reintentar anulación:', error)
