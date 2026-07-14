@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { optimizeImageUrl } from '@/utils/cloudinary'
 import { getCatalogThemeClasses } from '@/themes/catalogThemes'
 import { useParams, useSearchParams } from 'react-router-dom'
-import { collection, query, where, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, setDoc } from 'firebase/firestore'
+import { collection, query, where, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, setDoc, orderBy, limit, startAfter, documentId } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { getCatalogMinQty, formatCurrency } from '@/lib/utils'
 import { isMultiCurrencyEnabled, convertFromBase, normalizeCurrency, BASE_CURRENCY } from '@/utils/currency'
@@ -2373,6 +2373,12 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // pedidos cuando el dueño tiene el servicio cortado.
   const [businessSuspended, setBusinessSuspended] = useState(false)
   const [products, setProducts] = useState([])
+  // Carga progresiva: true mientras siguen llegando lotes de productos en background
+  const [loadingMoreProducts, setLoadingMoreProducts] = useState(false)
+  // Render incremental: cuántas tarjetas se pintan (crece con el scroll). Con
+  // catálogos de cientos de productos, pintar todo de una congela el móvil.
+  const [visibleCount, setVisibleCount] = useState(40)
+  const loadMoreSentinelRef = useRef(null)
   const [categories, setCategories] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState(null)
@@ -2514,27 +2520,43 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           }
         }
 
-        // Cargar productos visibles en catálogo/menú
-        const productsQuery = query(
-          collection(db, 'businesses', businessData.id, 'products'),
-          where('catalogVisible', '==', true)
-        )
-        const productsSnap = await getDocs(productsQuery)
-        const productsData = productsSnap.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }))
-        setProducts(productsData)
+        // Cargar categorías ANTES que los productos (vienen del doc del negocio,
+        // ya en memoria) para que los chips pinten con el primer lote.
+        setCategories(businessData.productCategories || [])
 
-        // Cargar categorías desde el campo productCategories del negocio
-        const categoriesData = businessData.productCategories || []
-        setCategories(categoriesData)
+        // Cargar productos visibles EN LOTES (carga progresiva): con catálogos de
+        // cientos de productos, esperar a que baje todo dejaba la pantalla en
+        // "cargando" varios segundos. El primer lote pinta el catálogo de una y
+        // el resto sigue llegando en background. Se pagina con orderBy(documentId())
+        // (índice single-field de Firestore — no requiere índices compuestos).
+        const productsRef = collection(db, 'businesses', businessData.id, 'products')
+        const BATCH = 120
+        let lastDoc = null
+        let accumulated = []
+        let firstBatch = true
+        while (true) {
+          const constraints = [where('catalogVisible', '==', true), orderBy(documentId())]
+          if (lastDoc) constraints.push(startAfter(lastDoc))
+          constraints.push(limit(BATCH))
+          const snap = await getDocs(query(productsRef, ...constraints))
+          accumulated = accumulated.concat(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+          setProducts(accumulated)
+          if (firstBatch) {
+            setLoading(false) // el catálogo ya es usable con el primer lote
+            firstBatch = false
+          }
+          if (snap.docs.length < BATCH) break
+          setLoadingMoreProducts(true)
+          lastDoc = snap.docs[snap.docs.length - 1]
+        }
+        setLoadingMoreProducts(false)
 
       } catch (err) {
         console.error('Error loading catalog:', err)
         setError(isRestaurantMenu ? 'Error al cargar el menú' : 'Error al cargar el catálogo')
       } finally {
         setLoading(false)
+        setLoadingMoreProducts(false)
       }
     }
 
@@ -2728,6 +2750,30 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const featuredProducts = useMemo(() => {
     return filteredProducts.filter(p => p.isFeatured)
   }, [filteredProducts])
+
+  // Render incremental: solo se pintan `visibleCount` tarjetas; al llegar al
+  // final (sentinel) se suman 40 más. Reset al cambiar búsqueda/categoría.
+  const displayedProducts = useMemo(
+    () => filteredProducts.slice(0, visibleCount),
+    [filteredProducts, visibleCount]
+  )
+
+  useEffect(() => {
+    setVisibleCount(40)
+  }, [searchQuery, selectedCategory, selectedSubcategory, viewMode])
+
+  useEffect(() => {
+    const sentinel = loadMoreSentinelRef.current
+    if (!sentinel) return
+    if (visibleCount >= filteredProducts.length) return
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some(e => e.isIntersecting)) {
+        setVisibleCount(prev => prev + 40)
+      }
+    }, { rootMargin: '600px' }) // empezar a cargar antes de que el usuario llegue al final
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [visibleCount, filteredProducts.length, viewMode])
 
   // Configuración de visibilidad de precios
   const showPrices = business?.catalogShowPrices !== false
@@ -3712,9 +3758,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             <p className={thTextFaint}>Intenta con otra búsqueda o categoría</p>
           </div>
         ) : viewMode === 'grid' ? (
-          // Vista Grid
+          // Vista Grid (render incremental: displayedProducts crece con el scroll)
           <div className="columns-2 md:columns-3 lg:columns-4 gap-4 md:gap-6">
-            {filteredProducts.map((product, index) => {
+            {displayedProducts.map((product, index) => {
               const cartQty = getCartQuantity(product.id)
               const outOfStock = isProductOutOfStock(product, ignoreStock)
               const priceRange = getProductPriceRange(product, business)
@@ -3826,9 +3872,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             })}
           </div>
         ) : (
-          // Vista Lista
+          // Vista Lista (render incremental: displayedProducts crece con el scroll)
           <div className="space-y-4">
-            {filteredProducts.map((product, index) => {
+            {displayedProducts.map((product, index) => {
               const cartQty = getCartQuantity(product.id)
               const outOfStock = isProductOutOfStock(product, ignoreStock)
               const priceRange = getProductPriceRange(product, business)
@@ -3943,6 +3989,28 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               )
             })}
           </div>
+        )}
+
+        {/* Sentinel del scroll infinito + fallback "Ver más" (por si el
+            IntersectionObserver no dispara en algún navegador antiguo).
+            Solo cuando la grilla/lista está visible (no en modo solo-carruseles). */}
+        {!(onlyCarousels && groupByCategory && !selectedCategory && !searchQuery) && displayedProducts.length < filteredProducts.length && (
+          <div ref={loadMoreSentinelRef} className="text-center py-6">
+            <button
+              onClick={() => setVisibleCount(prev => prev + 40)}
+              className={`px-5 py-2.5 rounded-full text-sm font-medium ${thCatInactive}`}
+            >
+              Ver más productos ({filteredProducts.length - displayedProducts.length} restantes)
+            </button>
+          </div>
+        )}
+
+        {/* Indicador de carga en background (siguen llegando productos) */}
+        {loadingMoreProducts && (
+          <p className={`text-center text-xs py-3 flex items-center justify-center gap-1.5 ${thTextFaint}`}>
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            Cargando más productos…
+          </p>
         )}
       </main>
 
