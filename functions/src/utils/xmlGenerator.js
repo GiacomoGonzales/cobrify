@@ -871,9 +871,29 @@ export function generateInvoiceXML(invoiceData, businessData) {
     if (globalDiscountIGV > sumIGVGravadas) globalDiscountIGV = sumIGVGravadas
 
     // Reducir la base gravada y su IGV correspondiente para que el TaxSubtotal del
-    // documento refleje el efecto del descuento global.
+    // documento refleje el efecto del descuento global (regla 3277: el TaxableAmount
+    // del tributo 1000 SÍ resta los descuentos globales código 02).
     sumGravadas = Math.round((sumGravadas - globalDiscountBase) * 100) / 100
     sumIGVGravadas = Math.round((sumIGVGravadas - globalDiscountIGV) * 100) / 100
+  } else if (discountWithIGV > 0 && (sumExoneradas > 0 || sumInafectas > 0)) {
+    // === Documento SIN operaciones gravadas (ej. negocio exonerado por Ley de la
+    // Selva / Amazonía, o venta 100% exonerada/inafecta) ===
+    // Antes este caso se saltaba por completo (la condición exigía sumGravadas > 0)
+    // y la factura llegaba a SUNAT SIN el descuento global (total completo).
+    //
+    // Sin IGV que desagregar: la base del descuento ES el monto tal cual.
+    // Reglas SUNAT (Excel de validaciones 24.04.2026):
+    //  - 3278: el Total valor de venta (LegalMonetaryTotal/LineExtensionAmount)
+    //    SÍ resta los descuentos globales código 02 → taxableAmount/totalAmount
+    //    de abajo ya lo hacen (restan globalDiscountBase).
+    //  - 3275: el TaxableAmount del tributo 9997 (EXO) = suma de líneas exoneradas
+    //    SIN restar el 02 (solo resta anticipos código 05) → NO tocar
+    //    sumExoneradas/sumInafectas (a diferencia del caso gravado).
+    globalDiscountBase = Math.round(discountWithIGV * 100) / 100
+    globalDiscountIGV = 0
+    // Acotar al total disponible (defensivo)
+    const maxBase = Math.round((sumExoneradas + sumInafectas) * 100) / 100
+    if (globalDiscountBase > maxBase) globalDiscountBase = maxBase
   }
 
   // Los valores globales ya incorporan el descuento por línea; el descuento global
