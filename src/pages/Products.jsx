@@ -401,15 +401,26 @@ export default function Products() {
   })
 
   // Cargar productos, almacenes y sucursales
+  // Carga principal UNA sola vez por usuario. OJO: antes dependía también de
+  // businessMode, que inicia en null y se hidrata después → al entrar directo o
+  // recargar, la página descargaba TODO dos veces (productos + categorías +
+  // marcas + almacenes + sucursales). Los laboratorios (lo único que depende
+  // del modo) van en su propio efecto.
   useEffect(() => {
     loadProducts()
     loadWarehouses()
     loadBranches()
-    // Cargar laboratorios solo en modo farmacia
-    if (businessMode === 'pharmacy') {
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid])
+
+  // Laboratorios solo en modo farmacia (businessMode se hidrata async; este
+  // efecto liviano corre cuando el modo real llega, sin recargar lo demás)
+  useEffect(() => {
+    if (user?.uid && businessMode === 'pharmacy') {
       loadLaboratories()
     }
-  }, [user, businessMode])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid, businessMode])
 
   // Auto-cálculo de precios por margen sobre costo (Configuración > Ventas).
   // - Al abrir el modal: hidrata los precios habilitados que estén VACÍOS (no
