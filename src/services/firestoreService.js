@@ -2678,11 +2678,16 @@ export const createFinancialMovement = async (userId, movementData) => {
 /**
  * Obtener todos los movimientos financieros
  */
-export const getFinancialMovements = async (userId) => {
+export const getFinancialMovements = async (userId, sinceDate = null) => {
   try {
-    const snapshot = await getDocs(
-      collection(db, 'businesses', userId, 'financialMovements')
-    )
+    // PERF: con sinceDate trae solo movimientos desde esa fecha (Reportes es por
+    // período). Filtra por createdAt (fecha de registro): un movimiento registrado
+    // hace mucho con `date` manual reciente quedaría fuera — caso raro y mismo
+    // criterio que getPurchases/getAllCashMovements. Sin sinceDate = todos.
+    const ref = collection(db, 'businesses', userId, 'financialMovements')
+    const snapshot = sinceDate
+      ? await getDocs(query(ref, where('createdAt', '>=', sinceDate), orderBy('createdAt', 'desc')))
+      : await getDocs(ref)
 
     const movements = snapshot.docs
       .map(doc => ({

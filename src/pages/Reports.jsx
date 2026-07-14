@@ -277,12 +277,11 @@ export default function Reports() {
         return
       }
 
-      // Cargar facturas: ajustar rango según el filtro seleccionado
-      let invoicesFetcher
-      if (dateRange === 'all') {
-        invoicesFetcher = getInvoices(getBusinessId())
-      } else {
-        const sinceDate = new Date()
+      // Rango de carga según el filtro seleccionado (con margen para la
+      // comparación contra el período anterior). null = todo el historial.
+      let sinceDate = null
+      if (dateRange !== 'all') {
+        sinceDate = new Date()
         if (dateRange === 'today' || dateRange === 'week') {
           sinceDate.setDate(sinceDate.getDate() - 14) // 2 semanas (para comparación con período anterior)
         } else if (dateRange === 'month') {
@@ -296,10 +295,15 @@ export default function Reports() {
           sinceDate.setDate(1)
         }
         sinceDate.setHours(0, 0, 0, 0)
-        invoicesFetcher = getRecentInvoices(getBusinessId(), sinceDate)
       }
+      const invoicesFetcher = sinceDate
+        ? getRecentInvoices(getBusinessId(), sinceDate)
+        : getInvoices(getBusinessId())
 
-      // Cargar todo en paralelo
+      // Cargar todo en paralelo. PERF: compras y movimientos financieros/de caja
+      // también van por rango — antes bajaban el HISTORIAL COMPLETO aunque el
+      // usuario mirara "este mes" (todas las vistas los filtran por período, así
+      // que traer solo desde sinceDate da los mismos resultados).
       const promises = [
         invoicesFetcher,
         getCustomersWithStats(getBusinessId()),
@@ -307,10 +311,10 @@ export default function Reports() {
         getRecipes(getBusinessId()),
         getProductCategories(getBusinessId()),
         getProductBrands(getBusinessId()),
-        getPurchases(getBusinessId()),
+        getPurchases(getBusinessId(), { sinceDate }),
         Promise.all([
-          getFinancialMovements(getBusinessId()),
-          getAllCashMovements(getBusinessId())
+          getFinancialMovements(getBusinessId(), sinceDate),
+          getAllCashMovements(getBusinessId(), sinceDate)
         ]),
       ]
       if (hasFeature && hasFeature('expenseManagement')) {
