@@ -173,6 +173,13 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
       // truthiness porque 0 es falsy: validar que el campo exista y no este vacio.
       const hasRowPrice = [row.precio, row.Precio, row.PRECIO, row.price, row.Price, row.PRICE]
         .some(v => v !== undefined && v !== null && String(v).trim() !== '')
+      // Precio fijo en dólares: para negocios que trabajan 100% en USD, `precio`
+      // (soles) puede venir vacío y el ancla es `precio_usd`. El soles se deriva
+      // después con el TC del día (mismo criterio que el formulario de producto).
+      const hasRowPriceUSD = parseFloat(
+        row.precio_usd ?? row.Precio_USD ?? row.PRECIO_USD ?? row.precio_dolares ??
+        row.Precio_Dolares ?? row.PRECIO_DOLARES ?? row.price_usd ?? row.priceUSD ?? row.priceUsd ?? 0
+      ) > 0
       // Detectar si la fila lleva alguna variante con precio válido
       let hasVariantPrice = false
       const unnumberedPrice = parseFloat(row.variante_precio || row.Variante_Precio || row.VARIANTE_PRECIO || 0)
@@ -184,8 +191,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
         }
       }
 
-      if (!hasRowPrice && !hasVariantPrice) {
-        errors.push(`Fila ${rowNum}: Falta el precio (a nivel de producto o de variante)`)
+      if (!hasRowPrice && !hasRowPriceUSD && !hasVariantPrice) {
+        errors.push(`Fila ${rowNum}: Falta el precio (en soles, en dólares o de variante)`)
         return
       }
 
@@ -1581,7 +1588,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           </p>
           {isMultiCurrencyEnabled(businessSettings) && (
             <p className="text-xs text-gray-500 mt-1">
-              <strong>Precio en dólares:</strong> usa la columna <code>precio_usd</code> para fijar el precio en USD del producto. En el Punto de Venta, al cobrar en dólares se usará ese precio; <code>precio</code> (soles) sigue siendo el precio en moneda local.
+              <strong>Precio en dólares:</strong> usa la columna <code>precio_usd</code> para fijar el precio en USD del producto. En el Punto de Venta, al cobrar en dólares se usará ese precio.
+              Si tu negocio trabaja solo en dólares, puedes dejar <code>precio</code> (soles) <strong>vacío</strong>: se calcula solo con el tipo de cambio del día y se recalcula al vender.
             </p>
           )}
           <p className="text-xs text-gray-500 mt-1">

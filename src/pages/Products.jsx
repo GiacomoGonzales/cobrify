@@ -1937,6 +1937,30 @@ export default function Products() {
     let successCount = 0
 
     try {
+      // Productos anclados al dólar: si la fila trae `precio_usd` pero el precio en
+      // soles vino vacío (empresas que trabajan 100% en USD), derivar el soles con
+      // el TC del día — mismo criterio que el formulario de producto y las variantes.
+      // El ancla sigue siendo priceUSD: el POS recalcula el soles con el TC del momento.
+      {
+        const needsPen = productsToImport.filter(p => !(parseFloat(p.price) > 0) && parseFloat(p.priceUSD) > 0)
+        if (needsPen.length > 0) {
+          let tc = null
+          try {
+            const rate = await getRateForDate(new Date())
+            const v = Number(rate?.sell)
+            if (Number.isFinite(v) && v > 0) tc = v
+          } catch (e) {
+            console.warn('No se pudo obtener el TC para los precios en dólares:', e)
+          }
+          if (tc) {
+            needsPen.forEach(p => { p.price = Number((parseFloat(p.priceUSD) * tc).toFixed(2)) })
+            toast.info(`${needsPen.length} producto(s) con precio en dólares: su precio en soles se calculó con el TC del día (S/ ${tc.toFixed(3)}). En el POS se recalcula con el tipo de cambio del momento.`, 6000)
+          } else {
+            // Sin TC no se puede derivar; se importan igual (el POS usa el ancla USD).
+            toast.warning('No se pudo obtener el tipo de cambio: los productos con precio en dólares quedaron con precio en soles 0. Se corrige al editarlos o al vender en dólares.', 7000)
+          }
+        }
+      }
       // Obtener almacenes existentes
       const warehousesResult = await getWarehouses(getBusinessId())
       const existingWarehouses = warehousesResult.success ? warehousesResult.data : []
