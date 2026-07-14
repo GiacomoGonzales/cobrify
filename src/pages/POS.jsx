@@ -421,6 +421,9 @@ export default function POS() {
   // selector ni forzar Nota de Venta antes de tiempo; al cargar queda el valor real.
   const hasSunatConnection = ['qpse', 'sunat_direct'].includes(companySettings?.emissionMethod)
   const canEmitFiscal = isDemoMode || !companySettings || hasSunatConnection || companySettings.allowInvoicingWithoutSunat === true
+  // Campo "Alumno" activo (colegios): habilita buscar al apoderado por el nombre
+  // del alumno y mostrarlo en el desplegable de clientes.
+  const showStudentField = companySettings?.posCustomFields?.showStudentField === true
   // Obtener fecha local en formato YYYY-MM-DD (sin usar toISOString que convierte a UTC)
   const getLocalDateString = (date = new Date()) => {
     const year = date.getFullYear()
@@ -5072,11 +5075,13 @@ export default function POS() {
       const matchesSearch =
         c.name?.toLowerCase().includes(searchLower) ||
         c.businessName?.toLowerCase().includes(searchLower) ||
-        c.documentNumber?.includes(customerSearchTerm)
+        c.documentNumber?.includes(customerSearchTerm) ||
+        // Colegios: buscar al apoderado por el nombre del alumno
+        (showStudentField && c.studentName?.toLowerCase().includes(searchLower))
 
       return matchesDocType && matchesSearch
     })
-  }, [customers, customerSearchTerm, documentType])
+  }, [customers, customerSearchTerm, documentType, showStudentField])
 
   // Actualizar método de pago
   const handlePaymentMethodChange = (index, method) => {
@@ -8407,6 +8412,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             >
                               <p className="font-medium text-gray-900 truncate">{customer.name || customer.businessName}</p>
                               <p className="text-xs text-gray-500">{customer.documentNumber}</p>
+                              {showStudentField && customer.studentName && (
+                                <p className="text-xs text-primary-600 truncate">Alumno: {customer.studentName}</p>
+                              )}
                             </button>
                           ))
                         )}

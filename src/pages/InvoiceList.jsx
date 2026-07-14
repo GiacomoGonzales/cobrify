@@ -87,6 +87,10 @@ export default function InvoiceList() {
   const [companySettings, setCompanySettings] = useState(null)
   const ticketRef = useRef()
 
+  // Campo "Alumno" activo (colegios): agrega la columna Alumno a la tabla y
+  // permite buscar el comprobante por el nombre del alumno.
+  const showStudentField = businessSettings?.posCustomFields?.showStudentField === true
+
   // Helper para manejar fechas - priorizar fecha de emisión sobre fecha de creación
   // getInvoiceDate: fuente de verdad compartida en @/utils/invoiceDate (prioriza
   // emissionDate sobre createdAt). La usa también el servicio de exportación a
@@ -2432,11 +2436,13 @@ Gracias por tu preferencia.`
         invoice.number,
         invoice.customer?.name,
         invoice.customer?.documentNumber,
+        // Colegios: buscar el comprobante por el nombre del alumno
+        showStudentField ? invoice.customer?.studentName : null,
         ...itemFields
       ))
     }
     return map
-  }, [invoices])
+  }, [invoices, showStudentField])
 
   // Filtrar facturas
   const filteredInvoices = invoices
@@ -3109,6 +3115,11 @@ Gracias por tu preferencia.`
                       <span className="text-xs text-gray-500 flex-shrink-0">{invoice.customer.documentNumber}</span>
                     )}
                   </div>
+                  {showStudentField && invoice.customer?.studentName && (
+                    <p className="text-xs text-gray-600 truncate mt-0.5">
+                      Alumno: {invoice.customer.studentName}
+                    </p>
+                  )}
 
                   {/* Fila inferior: Total + fecha + badges */}
                   <div className="flex items-center justify-between mt-2">
@@ -3193,6 +3204,7 @@ Gracias por tu preferencia.`
                   <TableHead className="py-2.5 px-3">Número</TableHead>
                   <TableHead className="py-2.5 px-3">Tipo</TableHead>
                   <TableHead className="py-2.5 px-3">Cliente</TableHead>
+                  {showStudentField && <TableHead className="py-2.5 px-3">Alumno</TableHead>}
                   <TableHead className="py-2.5 px-3">Fecha Emisión</TableHead>
                   <TableHead className="py-2.5 px-3">Total</TableHead>
                   <TableHead className="py-2.5 px-3">Pago</TableHead>
@@ -3246,6 +3258,13 @@ Gracias por tu preferencia.`
                         <p className="text-xs text-gray-500 truncate">{invoice.customer?.documentNumber}</p>
                       </div>
                     </TableCell>
+                    {showStudentField && (
+                      <TableCell className="py-2.5 px-3">
+                        <p className="text-sm truncate max-w-[140px]">
+                          {invoice.customer?.studentName || <span className="text-gray-400">—</span>}
+                        </p>
+                      </TableCell>
+                    )}
                     <TableCell className="py-2.5 px-3">
                       <span className="text-sm whitespace-nowrap">
                         {getInvoiceDate(invoice)
