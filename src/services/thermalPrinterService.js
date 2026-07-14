@@ -27,6 +27,46 @@ let connectedPrinterAddress = null;
 let connectionType = 'bluetooth'; // 'bluetooth', 'wifi' o 'internal'
 let useAlternativeBLE = false; // Usar servicio alternativo BLE (iOS o Android con impresoras solo-BLE)
 
+// Tope de ancho de imagen con el que arranca el plugin de Bluetooth Clásico
+// (begin() -> clearFormatting() -> setBimtapLimitWidth(48*8)). Tras subirlo para
+// imprimir el logo hay que devolverlo a este valor: aplica a TODAS las imágenes
+// siguientes y el QR del pie depende de él para no salir gigante en 80mm.
+const PLUGIN_IMAGE_LIMIT_MM = 48;
+
+/**
+ * Imprime el logo en la ruta de Bluetooth Clásico respetando el tamaño configurado
+ * (logoPrintScale).
+ *
+ * El plugin no acepta un ancho en .image(): imprime el bitmap a su tamaño natural,
+ * pero recortado por un tope que arranca en 48mm. En papel de 80mm el bitmap del
+ * logo mide 72mm al 100%, así que SIEMPRE se recortaba a 48mm y mover el control
+ * no hacía nada entre 67% y 150%. En 58mm nunca se notó porque hasta el 150% son
+ * 36mm, por debajo del tope.
+ *
+ * La solución es usar ese tope como el ancho deseado (la librería reescala el
+ * bitmap hacia abajo hasta él), con el MISMO cálculo que la ruta BLE para que el
+ * logo salga igual por las dos vías. Al terminar se restaura el default, del que
+ * dependen el QR del pie y cualquier otra imagen.
+ */
+const printClassicLogo = (printer, logoConfig, paperWidth, logoPrintScale) => {
+  if (!logoConfig?.ready) return printer;
+  const source = logoConfig.base64
+    ? `data:image/png;base64,${logoConfig.base64}`
+    : logoConfig.url;
+  if (!source) return printer;
+
+  const pct = Math.max(30, Math.min(150, Number(logoPrintScale) || 100)) / 100;
+  const baseLogoWidth = paperWidth === 58 ? 192 : 288; // baseline "100%", igual que BLE
+  const paperMaxDots = paperWidth === 58 ? 384 : 576;
+  const logoDots = Math.min(paperMaxDots, Math.max(48, Math.round(baseLogoWidth * pct)));
+
+  // El plugin recibe milímetros y los convierte a puntos (x8, a 203dpi).
+  return printer
+    .limitWidth(Math.round(logoDots / 8))
+    .image(source)
+    .limitWidth(PLUGIN_IMAGE_LIMIT_MM);
+};
+
 /**
  * Constantes de formato según ancho de papel
  * Los separadores se ajustan al ancho real de la impresora
@@ -960,21 +1000,9 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
       try {
         const logoConfig = await prepareLogoForPrinting(headerLogoUrl, paperWidth, business.logoPrintScale);
 
-        // Determinar ancho en milímetros según papel (30% más pequeño)
-        const logoWidthMm = paperWidth === 58 ? 32 : 46;
-        console.log(`📏 Ancho de logo: ${logoWidthMm}mm para papel de ${paperWidth}mm`);
-
-        if (logoConfig.ready && logoConfig.base64) {
-          // Convertir base64 a data URL para el plugin
-          const dataUrl = `data:image/png;base64,${logoConfig.base64}`;
-          console.log('✅ Logo listo (base64). Ancho:', logoWidthMm, 'mm');
-          printer = printer
-            .image(dataUrl);
-        } else if (logoConfig.ready && logoConfig.url) {
-          // Fallback: intentar con URL directa
-          console.log('⚠️ Intentando imprimir logo desde URL...');
-          printer = printer
-            .image(logoConfig.url);
+        if (logoConfig.ready) {
+          console.log('✅ Logo listo. Escala:', business.logoPrintScale ?? 100, '%');
+          printer = printClassicLogo(printer, logoConfig, paperWidth, business.logoPrintScale);
         } else {
           console.warn('⚠️ Logo no disponible, usando header de texto');
         }
@@ -3307,12 +3335,7 @@ export const printCashClosureTicket = async (sessionData, movements = [], busine
     if (business?.logoUrl) {
       try {
         const logoConfig = await prepareLogoForPrinting(business.logoUrl, paperWidth, business.logoPrintScale);
-        if (logoConfig?.ready && logoConfig.base64) {
-          const dataUrl = `data:image/png;base64,${logoConfig.base64}`;
-          printer = printer.image(dataUrl);
-        } else if (logoConfig?.ready && logoConfig.url) {
-          printer = printer.image(logoConfig.url);
-        }
+        printer = printClassicLogo(printer, logoConfig, paperWidth, business.logoPrintScale);
       } catch (logoError) {
         console.warn('No se pudo cargar el logo:', logoError);
       }
@@ -4000,8 +4023,7 @@ export const printCashMovementTicket = async (movement, business, paperWidth = 5
     if (business?.logoUrl) {
       try {
         const logoConfig = await prepareLogoForPrinting(business.logoUrl, paperWidth, business.logoPrintScale);
-        if (logoConfig?.ready && logoConfig.base64) printer = printer.image(`data:image/png;base64,${logoConfig.base64}`);
-        else if (logoConfig?.ready && logoConfig.url) printer = printer.image(logoConfig.url);
+        printer = printClassicLogo(printer, logoConfig, paperWidth, business.logoPrintScale);
       } catch (logoError) { console.warn('No se pudo cargar el logo:', logoError); }
     }
     printer = printer
