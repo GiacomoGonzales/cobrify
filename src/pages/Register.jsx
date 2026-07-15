@@ -5,6 +5,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { z } from 'zod'
 import { Search, Loader2, Building2, User, ArrowRight, ArrowLeft, MapPin } from 'lucide-react'
 import { registerUser } from '@/services/authService'
+import { PLANS, SELLABLE_PLAN_IDS } from '@/services/subscriptionService'
 import { consultarRUC } from '@/services/documentLookupService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 import Input from '@/components/ui/Input'
@@ -43,6 +44,23 @@ export default function Register() {
   const [departmentCode, setDepartmentCode] = useState('15') // Lima por defecto
   const [provinceCode, setProvinceCode] = useState('01') // Lima por defecto
   const [districtCode, setDistrictCode] = useState('')
+
+  // Plan contratado + pago inicial (el cliente ya pagó manualmente ANTES del
+  // alta — esta página la usa solo el superadmin). La cuenta nace activa con
+  // ese plan y el monto queda congelado como precio pactado (renewalPrice).
+  const REGISTER_PLAN_IDS = SELLABLE_PLAN_IDS.filter(id => !PLANS[id]?.isAddon)
+  const [selectedPlan, setSelectedPlan] = useState('')
+  const [paidAmount, setPaidAmount] = useState('')
+  const [paidAmountTouched, setPaidAmountTouched] = useState(false)
+  const [payMethod, setPayMethod] = useState('yape')
+
+  const handlePlanChange = (planId) => {
+    setSelectedPlan(planId)
+    // Prellenar el monto con el precio de catálogo mientras no lo hayan editado
+    if (!paidAmountTouched) {
+      setPaidAmount(planId && PLANS[planId] ? String(PLANS[planId].totalPrice) : '')
+    }
+  }
 
   const {
     register,
@@ -185,6 +203,17 @@ export default function Register() {
       return
     }
 
+    // Validar plan contratado (el pago ya se cobró manualmente antes del alta)
+    if (!selectedPlan || !PLANS[selectedPlan]) {
+      setError('Selecciona el plan que contrató el cliente')
+      return
+    }
+    const amountNum = Number(paidAmount)
+    if (!paidAmount || isNaN(amountNum) || amountNum <= 0) {
+      setError('Ingresa el monto que pagó el cliente')
+      return
+    }
+
     setIsLoading(true)
     setError('')
     setSuccess('')
@@ -205,7 +234,12 @@ export default function Register() {
         ubigeo: ubigeo,
       }
 
-      const result = await registerUser(data.email, data.password, data.name, businessData)
+      const result = await registerUser(data.email, data.password, data.name, businessData, {
+        plan: selectedPlan,
+        initialPayment: { amount: amountNum, method: payMethod },
+        // El monto pagado queda congelado como precio pactado de renovación
+        renewalPrice: amountNum,
+      })
 
       if (result.success) {
         setSuccess('Cuenta creada exitosamente. Redirigiendo...')
@@ -437,6 +471,56 @@ export default function Register() {
                         <span className="text-xs text-green-600">Calculado automáticamente</span>
                       </div>
                     )}
+
+                    {/* Plan contratado + pago inicial (cobrado manualmente antes del alta) */}
+                    <div className="pt-3 border-t border-gray-200 space-y-3">
+                      <p className="text-sm font-semibold text-gray-700">Plan contratado</p>
+                      <Select
+                        label="Plan"
+                        value={selectedPlan}
+                        onChange={(e) => handlePlanChange(e.target.value)}
+                      >
+                        <option value="">Seleccione el plan pagado</option>
+                        {REGISTER_PLAN_IDS.map(id => (
+                          <option key={id} value={id}>
+                            {PLANS[id].name} — S/ {PLANS[id].totalPrice.toFixed(2)}
+                          </option>
+                        ))}
+                      </Select>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <Input
+                          label="Monto pagado (S/)"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={paidAmount}
+                          onChange={(e) => {
+                            setPaidAmount(e.target.value)
+                            setPaidAmountTouched(true)
+                          }}
+                          placeholder="0.00"
+                        />
+                        <Select
+                          label="Método de pago"
+                          value={payMethod}
+                          onChange={(e) => setPayMethod(e.target.value)}
+                        >
+                          <option value="yape">Yape</option>
+                          <option value="plin">Plin</option>
+                          <option value="transferencia">Transferencia</option>
+                          <option value="efectivo">Efectivo</option>
+                          <option value="tarjeta">Tarjeta</option>
+                          <option value="otro">Otro</option>
+                        </Select>
+                      </div>
+
+                      {selectedPlan && Number(paidAmount) > 0 && (
+                        <p className="text-xs text-gray-500">
+                          La cuenta nace activa hasta {PLANS[selectedPlan].months === 1 ? 'dentro de 1 mes' : `dentro de ${PLANS[selectedPlan].months} meses`}. El monto queda registrado como su primer pago y como su precio pactado de renovación.
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </>
               )}

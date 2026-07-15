@@ -37,7 +37,13 @@ export const loginWithEmail = async (email, password) => {
 /**
  * Registrar nuevo usuario con datos del negocio
  */
-export const registerUser = async (email, password, displayName, businessData = null) => {
+/**
+ * subscriptionOptions (opcional): { plan, initialPayment: { amount, method }, renewalPrice }.
+ * Sin esto la cuenta nace en trial (compatibilidad). Desde la página de registro
+ * (uso interno del superadmin) se pasa el plan que el cliente YA pagó manualmente,
+ * para que la cuenta nazca activa con su precio pactado congelado — sin trial.
+ */
+export const registerUser = async (email, password, displayName, businessData = null, subscriptionOptions = null) => {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password)
 
@@ -80,17 +86,19 @@ export const registerUser = async (email, password, displayName, businessData = 
       }
     }
 
-    // Crear suscripción de prueba de 1 día automáticamente
+    // Crear la suscripción: con el plan pagado si viene del alta manual del
+    // superadmin, o trial de 1 día si no se indicó plan (compatibilidad).
     try {
       await createSubscription(
         userCredential.user.uid,
         email,
         displayName || email,
-        'trial'
+        subscriptionOptions?.plan || 'trial',
+        subscriptionOptions || {}
       )
-      console.log('✅ Suscripción de prueba creada automáticamente')
+      console.log('✅ Suscripción creada:', subscriptionOptions?.plan || 'trial')
     } catch (subscriptionError) {
-      console.error('Error al crear suscripción de prueba:', subscriptionError)
+      console.error('Error al crear suscripción:', subscriptionError)
       // No fallar el registro si hay error en la suscripción
     }
 

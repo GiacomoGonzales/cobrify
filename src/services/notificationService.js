@@ -464,13 +464,15 @@ export const notifyPlanChanged = async (userId, oldPlan, newPlan) => {
 };
 
 // Crear notificación de bienvenida
-export const notifyWelcome = async (userId, userName) => {
+export const notifyWelcome = async (userId, userName, isTrial = true) => {
   try {
     await createNotification(
       userId,
       NOTIFICATION_TYPES.WELCOME,
       '¡Bienvenido a Cobrify!',
-      `Hola ${userName}, gracias por unirte a Cobrify. Tu período de prueba gratuito ha comenzado.`,
+      isTrial
+        ? `Hola ${userName}, gracias por unirte a Cobrify. Tu período de prueba gratuito ha comenzado.`
+        : `Hola ${userName}, gracias por unirte a Cobrify. Tu suscripción ya está activa.`,
       { userName }
     );
   } catch (error) {

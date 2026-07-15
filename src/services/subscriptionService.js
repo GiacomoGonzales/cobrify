@@ -76,6 +76,18 @@ export const PLANS = {
     emissionMethod: "qpse",
     limits: { maxInvoicesPerMonth: 1000, maxCustomers: -1, maxProducts: -1, maxBranches: -1, sunatIntegration: true, multiUser: true }
   },
+  // Todo ilimitado sin CDT propio (emite por QPse). Formaliza el plan "custom"
+  // que se venía asignando a mano y coincide con los términos publicados
+  // (299.90 sin IGV / 353.90 con IGV).
+  ilimitado_mensual: {
+    name: "Plan Ilimitado - 1 Mes",
+    category: "qpse",
+    months: 1,
+    pricePerMonth: 299.90,
+    totalPrice: 299.90,
+    emissionMethod: "qpse",
+    limits: { maxInvoicesPerMonth: -1, maxCustomers: -1, maxProducts: -1, maxBranches: -1, sunatIntegration: true, multiUser: true }
+  },
 
   // ============================================
   // PLAN BÁSICO QPSE (100 comprobantes/mes)
@@ -415,7 +427,7 @@ export const PLANS = {
 // El resto de entradas de PLANS quedan SOLO por compatibilidad: resolver nombre y límites
 // de clientes existentes parados en planes viejos. No se ofrecen más en los selectores.
 // ============================================
-export const SELLABLE_PLAN_IDS = ['basico_mensual', 'mensual', 'semestral', 'anual', 'addon_500_comprobantes'];
+export const SELLABLE_PLAN_IDS = ['basico_mensual', 'mensual', 'semestral', 'anual', 'ilimitado_mensual', 'addon_500_comprobantes'];
 // Planes internos del sistema (no se venden pero son válidos):
 export const SYSTEM_PLAN_IDS = ['trial', 'enterprise'];
 
@@ -446,7 +458,15 @@ export const getSubscription = async (userId) => {
 };
 
 // Crear suscripción inicial para un nuevo usuario
-export const createSubscription = async (userId, email, businessName, plan = 'trial') => {
+/**
+ * options (opcional):
+ *  - initialPayment: { amount, method } — primer pago cobrado manualmente
+ *    (Yape/transferencia). Queda como paymentHistory[0] y fija lastPaymentDate.
+ *  - renewalPrice: precio PACTADO con este cliente, congelado en su suscripción.
+ *    La renovación (manual o pasarela) cobra esto, NO el catálogo: si mañana
+ *    cambian los precios de PLANS, los clientes existentes no se ven afectados.
+ */
+export const createSubscription = async (userId, email, businessName, plan = 'trial', options = {}) => {
   try {
     const planConfig = PLANS[plan];
     const now = new Date();
@@ -455,8 +475,20 @@ export const createSubscription = async (userId, email, businessName, plan = 'tr
     if (plan === 'trial') {
       periodEnd.setDate(now.getDate() + planConfig.duration);
     } else {
-      periodEnd.setMonth(now.getMonth() + 1);
+      // Duración real del plan en meses calendario (antes era SIEMPRE 1 mes:
+      // un semestral/anual creado por acá vencía al mes).
+      periodEnd.setMonth(now.getMonth() + (planConfig.months || 1));
     }
+
+    const initialPayment = options.initialPayment && Number(options.initialPayment.amount) > 0
+      ? {
+          amount: Number(options.initialPayment.amount),
+          method: options.initialPayment.method || 'manual',
+          date: Timestamp.fromDate(now),
+          plan,
+          note: 'Pago inicial (alta)',
+        }
+      : null;
 
     const subscriptionData = {
       userId,
@@ -468,10 +500,13 @@ export const createSubscription = async (userId, email, businessName, plan = 'tr
       currentPeriodStart: Timestamp.fromDate(now),
       currentPeriodEnd: Timestamp.fromDate(periodEnd),
       trialEndsAt: plan === 'trial' ? Timestamp.fromDate(periodEnd) : null,
-      lastPaymentDate: null,
+      lastPaymentDate: initialPayment ? Timestamp.fromDate(now) : null,
       nextPaymentDate: Timestamp.fromDate(periodEnd),
-      paymentMethod: null,
+      paymentMethod: initialPayment?.method || null,
       monthlyPrice: planConfig.pricePerMonth,
+      // Precio pactado congelado (ver doc de options). Null = cobra catálogo.
+      renewalPrice: options.renewalPrice != null ? Number(options.renewalPrice) : null,
+      pricingFrozenAt: options.renewalPrice != null ? serverTimestamp() : null,
       accessBlocked: false,
       blockReason: null,
       blockedAt: null,
@@ -485,7 +520,7 @@ export const createSubscription = async (userId, email, businessName, plan = 'tr
       features: {
         productImages: false
       },
-      paymentHistory: [],
+      paymentHistory: initialPayment ? [initialPayment] : [],
       notes: '',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
@@ -494,10 +529,8 @@ export const createSubscription = async (userId, email, businessName, plan = 'tr
     const subscriptionRef = doc(db, 'subscriptions', userId);
     await setDoc(subscriptionRef, subscriptionData);
 
-    // Enviar notificación de bienvenida
-    if (plan === 'trial') {
-      await notifyWelcome(userId, businessName || email);
-    }
+    // Enviar notificación de bienvenida (texto según sea prueba o alta pagada)
+    await notifyWelcome(userId, businessName || email, plan === 'trial');
 
     return subscriptionData;
   } catch (error) {
