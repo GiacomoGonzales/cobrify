@@ -141,6 +141,21 @@ const getStoragePathFromUrl = (url) => {
 }
 
 /**
+ * Adivina el mime por la extensión de la URL (camino nativo: CapacitorHttp
+ * devuelve base64 pelado, sin content-type utilizable). Antes solo contemplaba
+ * .png y etiquetaba TODO lo demás como image/jpeg — un .webp (formato en que
+ * se comprimen las imágenes al subir desde mayo 2026) quedaba como JPEG y
+ * jsPDF fallaba al decodificarlo: el ítem salía sin imagen en el PDF.
+ */
+const guessMimeFromUrl = (url) => {
+  const u = (url || '').toLowerCase()
+  if (u.includes('.png')) return 'image/png'
+  if (u.includes('.webp')) return 'image/webp'
+  if (u.includes('.gif')) return 'image/gif'
+  return 'image/jpeg'
+}
+
+/**
  * Carga una imagen desde Firebase Storage y la convierte a base64
  * Utiliza caché para mejorar rendimiento
  */
@@ -172,8 +187,7 @@ const loadImageAsBase64 = async (url) => {
 
         if (response.status === 200 && response.data) {
           const base64Data = response.data
-          const mimeType = url.toLowerCase().includes('.png') ? 'image/png' : 'image/jpeg'
-          const result = `data:${mimeType};base64,${base64Data}`
+          const result = `data:${guessMimeFromUrl(url)};base64,${base64Data}`
           saveLogoToCache(url, result)
           return result
         }
@@ -235,7 +249,11 @@ const loadImageAsBase64 = async (url) => {
  * NO usa el caché del logo para no invalidarlo. Usa caché en memoria para repetidos en la misma sesión.
  * Retorna null si falla (no lanza para no bloquear el PDF).
  */
-const loadProductImageAsBase64 = async (url, timeout = 8000) => {
+// Timeout 15s (antes 8s): las imágenes migradas a R2 son originales sin
+// miniaturas — en conexiones lentas las pesadas morían justo en el corte y
+// el producto salía sin imagen. Corren en paralelo, así que el peor caso
+// solo estira la espera total una vez.
+const loadProductImageAsBase64 = async (url, timeout = 15000) => {
   if (!url) return null
   if (_productImageMemoryCache.has(url)) {
     return _productImageMemoryCache.get(url)
@@ -254,8 +272,7 @@ const loadProductImageAsBase64 = async (url, timeout = 8000) => {
           }
           const response = await CapacitorHttp.get({ url: downloadUrl, responseType: 'blob' })
           if (response.status === 200 && response.data) {
-            const mimeType = url.toLowerCase().includes('.png') ? 'image/png' : 'image/jpeg'
-            return `data:${mimeType};base64,${response.data}`
+            return `data:${guessMimeFromUrl(url)};base64,${response.data}`
           }
         } catch (e) {
           // fallthrough a la ruta SDK
@@ -299,10 +316,21 @@ const loadProductImageAsBase64 = async (url, timeout = 8000) => {
 }
 
 /**
- * Detecta el formato de imagen a partir del data URL para pasarlo a jsPDF.addImage.
+ * Detecta el formato de imagen para jsPDF.addImage mirando los MAGIC BYTES del
+ * contenido (primeros caracteres del base64), no el mime del data URL: el mime
+ * puede venir mal — objetos en R2 guardados como application/octet-stream, o el
+ * camino nativo que etiqueta por extensión de la URL. Si el formato declarado
+ * no coincide con los bytes, jsPDF lanza y el ítem sale sin imagen en el PDF.
+ * base64: PNG→"iVBOR", JPEG→"/9j/", WEBP(RIFF)→"UklGR", GIF→"R0lGO".
  */
 const detectImageFormat = (dataUrl) => {
   if (!dataUrl) return 'JPEG'
+  const i = dataUrl.indexOf('base64,')
+  const head = i >= 0 ? dataUrl.slice(i + 7, i + 12) : ''
+  if (head.startsWith('iVBOR')) return 'PNG'
+  if (head.startsWith('/9j/')) return 'JPEG'
+  if (head.startsWith('UklGR')) return 'WEBP'
+  if (head.startsWith('R0lGO')) return 'GIF'
   if (dataUrl.startsWith('data:image/png')) return 'PNG'
   if (dataUrl.startsWith('data:image/webp')) return 'WEBP'
   return 'JPEG'
