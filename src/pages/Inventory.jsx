@@ -1343,6 +1343,13 @@ export default function Inventory() {
         bgColor: 'bg-orange-50',
         variant: 'warning',
       },
+      discharge: {
+        label: 'Descarga de Stock',
+        icon: AlertTriangle,
+        color: 'text-red-600',
+        bgColor: 'bg-red-50',
+        variant: 'danger',
+      },
       adjustment: {
         label: 'Ajuste',
         icon: Package,

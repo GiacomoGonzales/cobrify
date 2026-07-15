@@ -1030,22 +1030,25 @@ export const transferIngredientStock = async (businessId, ingredientId, fromWare
       throw new Error('El ingrediente no tiene stock en el almacén origen')
     }
 
-    // Agregar al almacén destino
-    const toIdx = updatedWarehouseStocks.findIndex(ws => ws.warehouseId === toWarehouseId)
-    const toBefore = toIdx >= 0 ? (updatedWarehouseStocks[toIdx].stock || 0) : 0
-    if (toIdx >= 0) {
-      updatedWarehouseStocks[toIdx] = {
-        ...updatedWarehouseStocks[toIdx],
-        stock: toBefore + quantity
+    // Agregar al almacén destino. Si no hay destino (toWarehouseId null) es una
+    // DESCARGA: el stock sale del origen y no entra a ningún lado.
+    if (toWarehouseId) {
+      const toIdx = updatedWarehouseStocks.findIndex(ws => ws.warehouseId === toWarehouseId)
+      const toBefore = toIdx >= 0 ? (updatedWarehouseStocks[toIdx].stock || 0) : 0
+      if (toIdx >= 0) {
+        updatedWarehouseStocks[toIdx] = {
+          ...updatedWarehouseStocks[toIdx],
+          stock: toBefore + quantity
+        }
+      } else {
+        updatedWarehouseStocks.push({
+          warehouseId: toWarehouseId,
+          stock: quantity
+        })
       }
-    } else {
-      updatedWarehouseStocks.push({
-        warehouseId: toWarehouseId,
-        stock: quantity
-      })
     }
 
-    // El stock total no cambia en una transferencia
+    // En un traslado el total no cambia; en una descarga baja por la cantidad descargada.
     const newTotalStock = updatedWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
 
     // NOTA: NO se registran movimientos acá. Los dos callers (Inventory.jsx transferencia

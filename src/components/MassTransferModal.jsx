@@ -23,6 +23,10 @@ export default function MassTransferModal({
   onTransferCompleted,
 }) {
   const { branding } = useBranding()
+  // Descarga de stock: descuenta del origen SIN mandarlo a otro almacén (descartar
+  // mercadería). Solo si el negocio activó la opción en Configuración > Inventario.
+  const dischargeAllowed = companySettings?.stockDischargeEnabled === true
+  const [isDischarge, setIsDischarge] = useState(false)
   const [fromWarehouse, setFromWarehouse] = useState('')
   const [toWarehouse, setToWarehouse] = useState('')
   const [items, setItems] = useState([])
@@ -290,6 +294,7 @@ export default function MassTransferModal({
   }
 
   const resetForm = () => {
+    setIsDischarge(false)
     setFromWarehouse('')
     setToWarehouse('')
     setItems([])
@@ -304,7 +309,9 @@ export default function MassTransferModal({
     onClose()
   }
 
-  const canTransfer = fromWarehouse && toWarehouse && fromWarehouse !== toWarehouse && items.length > 0 &&
+  // En una descarga no se exige destino (el stock no va a ningún almacén).
+  const destinationOk = isDischarge || (toWarehouse && fromWarehouse !== toWarehouse)
+  const canTransfer = fromWarehouse && destinationOk && items.length > 0 &&
     items.every(i => i.quantity > 0 && (!i.hasBatches || i.batchNumber) && (!i.hasSerials || i.selectedSerials?.length > 0))
 
   const totalItems = items.reduce((sum, i) => sum + i.quantity, 0)
@@ -316,10 +323,11 @@ export default function MassTransferModal({
       const toWh = warehouseList.find(w => w.id === toWarehouse)
 
       const result = await createMassTransfer(businessId, {
+        isDischarge,
         fromWarehouseId: fromWarehouse,
         fromWarehouseName: fromWh?.name || '',
-        toWarehouseId: toWarehouse,
-        toWarehouseName: toWh?.name || '',
+        toWarehouseId: isDischarge ? null : toWarehouse,
+        toWarehouseName: isDischarge ? null : (toWh?.name || ''),
         items: items.map(i => ({
           productId: i.productId,
           productName: i.productName,
@@ -344,8 +352,9 @@ export default function MassTransferModal({
       if (result.success) {
         setLastTransfer({
           number: result.number,
+          isDischarge,
           fromWarehouseName: fromWh?.name,
-          toWarehouseName: toWh?.name,
+          toWarehouseName: isDischarge ? null : toWh?.name,
           items: items.map(i => ({
             productId: i.productId,
             productName: i.productName,
@@ -405,10 +414,14 @@ export default function MassTransferModal({
           <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <Package className="w-8 h-8 text-green-600" />
           </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Transferencia Completada</h2>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">
+            {lastTransfer.isDischarge ? 'Descarga Completada' : 'Transferencia Completada'}
+          </h2>
           <p className="text-2xl font-bold text-primary-600 mb-2">{lastTransfer.number}</p>
           <p className="text-sm text-gray-600 mb-1">
-            {lastTransfer.fromWarehouseName} → {lastTransfer.toWarehouseName}
+            {lastTransfer.isDischarge
+              ? `Descargado de ${lastTransfer.fromWarehouseName}`
+              : `${lastTransfer.fromWarehouseName} → ${lastTransfer.toWarehouseName}`}
           </p>
           <p className="text-sm text-gray-600 mb-6">
             {lastTransfer.totalProducts} producto{lastTransfer.totalProducts !== 1 ? 's' : ''} - {lastTransfer.totalItems} unidades
@@ -436,12 +449,14 @@ export default function MassTransferModal({
       <div className="fixed inset-0 z-[9999] bg-black/50 flex items-center justify-center p-4">
         <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-6">
           <div className="flex items-center gap-3 mb-4">
-            <AlertTriangle className="w-6 h-6 text-amber-500" />
-            <h2 className="text-lg font-bold">Confirmar Transferencia</h2>
+            <AlertTriangle className={`w-6 h-6 ${isDischarge ? 'text-red-500' : 'text-amber-500'}`} />
+            <h2 className="text-lg font-bold">{isDischarge ? 'Confirmar Descarga de Stock' : 'Confirmar Transferencia'}</h2>
           </div>
           <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm">
             <p><strong>Origen:</strong> {fromWh?.name}</p>
-            <p><strong>Destino:</strong> {toWh?.name}</p>
+            {isDischarge
+              ? <p className="text-red-700"><strong>Destino:</strong> ninguno — el stock se descuenta y no se puede recuperar</p>
+              : <p><strong>Destino:</strong> {toWh?.name}</p>}
             <p><strong>Productos:</strong> {items.length} - <strong>Total:</strong> {totalItems} unidades</p>
           </div>
           <div className="border rounded-lg overflow-hidden mb-4">
@@ -471,7 +486,9 @@ export default function MassTransferModal({
               Cancelar
             </Button>
             <Button onClick={handleTransfer} className="flex-1" disabled={isTransferring}>
-              {isTransferring ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Transfiriendo...</> : 'Confirmar'}
+              {isTransferring
+                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {isDischarge ? 'Descargando...' : 'Transfiriendo...'}</>
+                : 'Confirmar'}
             </Button>
           </div>
         </div>
@@ -488,7 +505,7 @@ export default function MassTransferModal({
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b flex-shrink-0">
             <div>
-              <h2 className="text-lg font-bold text-gray-900">Transferencia Masiva</h2>
+              <h2 className="text-lg font-bold text-gray-900">{isDischarge ? 'Descarga de Stock' : 'Transferencia Masiva'}</h2>
               <p className="text-sm text-gray-500">Transfiere múltiples productos entre almacenes</p>
             </div>
             <button onClick={handleClose} className="p-2 hover:bg-gray-100 rounded-lg">
@@ -498,8 +515,36 @@ export default function MassTransferModal({
 
           {/* Body */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {/* Tipo de operación (solo si el negocio habilitó la descarga de stock) */}
+            {dischargeAllowed && (
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setIsDischarge(false); setItems([]) }}
+                  className={`p-3 border-2 rounded-lg text-sm font-medium transition-all ${
+                    !isDischarge ? 'border-primary-600 bg-primary-50 text-primary-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                  }`}
+                >
+                  <ArrowRight className="w-4 h-4 mx-auto mb-1" />
+                  Traslado
+                  <span className="block text-xs font-normal mt-0.5 opacity-80">De un almacén a otro</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setIsDischarge(true); setToWarehouse(''); setItems([]) }}
+                  className={`p-3 border-2 rounded-lg text-sm font-medium transition-all ${
+                    isDischarge ? 'border-red-600 bg-red-50 text-red-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                  }`}
+                >
+                  <AlertTriangle className="w-4 h-4 mx-auto mb-1" />
+                  Descarga de stock
+                  <span className="block text-xs font-normal mt-0.5 opacity-80">Descuenta sin enviar a otro almacén</span>
+                </button>
+              </div>
+            )}
+
             {/* Selección de almacenes */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className={`grid grid-cols-1 gap-4 ${isDischarge ? '' : 'sm:grid-cols-2'}`}>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Almacén Origen *</label>
                 <select
@@ -520,26 +565,38 @@ export default function MassTransferModal({
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Almacén Destino *</label>
-                <select
-                  value={toWarehouse}
-                  onChange={e => setToWarehouse(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
-                >
-                  <option value="">Seleccionar...</option>
-                  {Object.entries(groupedWarehouses).map(([group, whs]) => (
-                    <optgroup key={group} label={group}>
-                      {whs.filter(w => w.id !== fromWarehouse).map(w => (
-                        <option key={w.id} value={w.id}>{w.name}</option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
-              </div>
+              {/* En una descarga no hay destino: el stock no va a ningún lado */}
+              {!isDischarge && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Almacén Destino *</label>
+                  <select
+                    value={toWarehouse}
+                    onChange={e => setToWarehouse(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">Seleccionar...</option>
+                    {Object.entries(groupedWarehouses).map(([group, whs]) => (
+                      <optgroup key={group} label={group}>
+                        {whs.filter(w => w.id !== fromWarehouse).map(w => (
+                          <option key={w.id} value={w.id}>{w.name}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
-            {fromWarehouse && toWarehouse && fromWarehouse !== toWarehouse && (
+            {isDischarge && fromWarehouse && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2 text-sm text-red-800">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                <span>
+                  Se descontará el stock de <strong>{warehouseList.find(w => w.id === fromWarehouse)?.name}</strong> sin enviarlo a otro almacén. Esta operación no se puede deshacer.
+                </span>
+              </div>
+            )}
+
+            {!isDischarge && fromWarehouse && toWarehouse && fromWarehouse !== toWarehouse && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-2 text-sm text-blue-800">
                 <ArrowRight className="w-4 h-4 flex-shrink-0" />
                 <span>
@@ -843,8 +900,8 @@ export default function MassTransferModal({
           <div className="flex justify-end gap-3 p-4 border-t flex-shrink-0">
             <Button variant="outline" onClick={handleClose}>Cancelar</Button>
             <Button onClick={() => setShowConfirm(true)} disabled={!canTransfer}>
-              <ArrowRight className="w-4 h-4 mr-2" />
-              Transferir ({items.length} producto{items.length !== 1 ? 's' : ''})
+              {isDischarge ? <AlertTriangle className="w-4 h-4 mr-2" /> : <ArrowRight className="w-4 h-4 mr-2" />}
+              {isDischarge ? 'Descargar' : 'Transferir'} ({items.length} producto{items.length !== 1 ? 's' : ''})
             </Button>
           </div>
         </div>

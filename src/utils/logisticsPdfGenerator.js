@@ -163,7 +163,13 @@ export const generateLogisticsMovementPDF = async (movement, business = {}, type
 
   if (isTransfer) {
     drawField('Almacén Origen', movement.fromWarehouseName || '-', margin, halfW)
-    drawField('Almacén Destino', movement.toWarehouseName || '-', margin + halfW, halfW)
+    // En una descarga de stock no hay destino: el stock se descuenta y no va a otro almacén.
+    drawField(
+      'Almacén Destino',
+      movement.isDischarge ? 'DESCARGA DE STOCK' : (movement.toWarehouseName || '-'),
+      margin + halfW,
+      halfW
+    )
     y += 28
     drawField('Registrado por', movement.userName || '-', margin, halfW)
     y += 28

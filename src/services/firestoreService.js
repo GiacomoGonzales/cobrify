@@ -1058,7 +1058,11 @@ export const updateProductStockTransaction = async (userId, productId, warehouse
  */
 export const transferProductStockTransaction = async (userId, productId, fromWarehouseId, toWarehouseId, quantity, options = {}) => {
   const { variantSku = null, batchNumber = null, isNoLot = false, serialNumbers = [], allowNegative = true } = options
-  if (!fromWarehouseId || !toWarehouseId || fromWarehouseId === toWarehouseId) {
+  // DESCARGA de stock: toWarehouseId null/vacío = el stock sale del origen y no
+  // entra a ningún lado (se descarta). Mismo recorrido que el traslado —
+  // variantes, lotes y series — pero sin la pata de entrada.
+  const isDischarge = !toWarehouseId
+  if (!fromWarehouseId || (!isDischarge && fromWarehouseId === toWarehouseId)) {
     return { success: false, error: 'Almacén origen/destino inválido' }
   }
   try {
@@ -1084,7 +1088,7 @@ export const transferProductStockTransaction = async (userId, productId, fromWar
           else { vws.push({ warehouseId: whId, stock: delta, minStock: 0 }) }
         }
         moveWs(fromWarehouseId, -quantity)
-        moveWs(toWarehouseId, quantity)
+        if (!isDischarge) moveWs(toWarehouseId, quantity)
         variant.warehouseStocks = vws
         variant.stock = vws.reduce((sum, ws) => sum + (ws.stock || 0), 0)
         variants[vIdx] = variant
@@ -1110,7 +1114,7 @@ export const transferProductStockTransaction = async (userId, productId, fromWar
         else { ws.push({ warehouseId: whId, stock: delta, minStock: 0 }) }
       }
       moveWs(fromWarehouseId, -quantity)
-      moveWs(toWarehouseId, quantity)
+      if (!isDischarge) moveWs(toWarehouseId, quantity)
       updateData.warehouseStocks = ws
       updateData.stock = ws.reduce((sum, x) => sum + (x.stock || 0), 0)
 
@@ -1123,31 +1127,38 @@ export const transferProductStockTransaction = async (userId, productId, fromWar
           srcBatch.quantity = (srcBatch.quantity || 0) - quantity
           srcBatch.warehouseId = srcBatch.warehouseId || fromWarehouseId
         }
-        const destBatch = batches.find(b => bId(b) === batchNumber && b.warehouseId === toWarehouseId)
-        if (destBatch) {
-          destBatch.quantity = (destBatch.quantity || 0) + quantity
-        } else {
-          const meta = srcBatch || {}
-          batches.push({
-            ...meta,
-            id: `batch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            batchNumber: meta.batchNumber || batchNumber,
-            lotNumber: meta.lotNumber || batchNumber,
-            quantity,
-            warehouseId: toWarehouseId,
-          })
+        // En una descarga el lote solo se reduce en el origen: no hay lote destino.
+        if (!isDischarge) {
+          const destBatch = batches.find(b => bId(b) === batchNumber && b.warehouseId === toWarehouseId)
+          if (destBatch) {
+            destBatch.quantity = (destBatch.quantity || 0) + quantity
+          } else {
+            const meta = srcBatch || {}
+            batches.push({
+              ...meta,
+              id: `batch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              batchNumber: meta.batchNumber || batchNumber,
+              lotNumber: meta.lotNumber || batchNumber,
+              quantity,
+              warehouseId: toWarehouseId,
+            })
+          }
         }
         updateData.batches = batches.filter(b => (b.quantity || 0) > 0)
       }
 
-      // --- SERIES: cambiar warehouseId del origen al destino ---
+      // --- SERIES: cambiar warehouseId del origen al destino. En una descarga la
+      // serie no se mueve: se marca 'discarded' para que deje de estar disponible
+      // (sin borrarla, así queda el rastro de qué se descargó y cuándo).
       if (serialNumbers && serialNumbers.length > 0 && Array.isArray(product.serials)) {
         const wanted = new Set(serialNumbers)
-        updateData.serials = product.serials.map(s =>
-          (wanted.has(s.serialNumber) && s.status === 'available' && (s.warehouseId === fromWarehouseId || !s.warehouseId))
-            ? { ...s, warehouseId: toWarehouseId }
-            : s
-        )
+        updateData.serials = product.serials.map(s => {
+          const match = wanted.has(s.serialNumber) && s.status === 'available' && (s.warehouseId === fromWarehouseId || !s.warehouseId)
+          if (!match) return s
+          return isDischarge
+            ? { ...s, status: 'discarded', dischargedAt: new Date().toISOString() }
+            : { ...s, warehouseId: toWarehouseId }
+        })
       }
 
       transaction.update(docRef, updateData)

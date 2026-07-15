@@ -49,21 +49,31 @@ export const getMassTransfers = async (businessId) => {
 /**
  * Crear transferencia masiva
  * @param {string} businessId
- * @param {Object} transferData - { fromWarehouseId, fromWarehouseName, toWarehouseId, toWarehouseName, items, notes, userId, userName }
+ * @param {Object} transferData - { fromWarehouseId, fromWarehouseName, toWarehouseId, toWarehouseName, items, notes, userId, userName, isDischarge }
  * items: [{ productId, productName, productCode, quantity, unit, batchNumber?, batchData?, batches? }]
+ *
+ * isDischarge: DESCARGA DE STOCK — el stock sale del origen y no entra a ningún
+ * almacén (se descarta). Mismo flujo y documento que un traslado, pero sin
+ * destino ni movimiento de entrada.
  */
 export const createMassTransfer = async (businessId, transferData) => {
   try {
+    const isDischarge = transferData.isDischarge === true
     const number = await getNextTransferNumber(businessId)
     const totalItems = transferData.items.reduce((sum, item) => sum + item.quantity, 0)
+    // En una descarga no hay destino: se fuerza null aunque el caller mande algo.
+    const toWarehouseId = isDischarge ? null : transferData.toWarehouseId
+    const toWarehouseName = isDischarge ? null : transferData.toWarehouseName
+    const reasonLabel = isDischarge ? 'Descarga de stock' : 'Transferencia masiva'
 
     // Guardar documento de transferencia masiva
     const docRef = await addDoc(collection(db, 'businesses', businessId, 'massTransfers'), {
       number,
+      isDischarge,
       fromWarehouseId: transferData.fromWarehouseId,
       fromWarehouseName: transferData.fromWarehouseName,
-      toWarehouseId: transferData.toWarehouseId,
-      toWarehouseName: transferData.toWarehouseName,
+      toWarehouseId,
+      toWarehouseName,
       items: transferData.items.map(item => ({
         productId: item.productId,
         productName: item.productName,
@@ -103,12 +113,12 @@ export const createMassTransfer = async (businessId, transferData) => {
           businessId,
           item.productId,
           transferData.fromWarehouseId,
-          transferData.toWarehouseId,
+          toWarehouseId,
           item.quantity
         )
 
         if (!ingredientResult.success) {
-          console.error(`Error al transferir ingrediente ${item.productName}:`, ingredientResult.error)
+          console.error(`Error al ${isDischarge ? 'descargar' : 'transferir'} ingrediente ${item.productName}:`, ingredientResult.error)
           failedItems.push({ productId: item.productId, productName: item.productName, error: ingredientResult.error || 'Error al transferir insumo' })
           continue
         }
@@ -118,34 +128,36 @@ export const createMassTransfer = async (businessId, transferData) => {
           ingredientId: item.productId,
           ingredientName: item.productName,
           warehouseId: transferData.fromWarehouseId,
-          type: 'transfer_out',
+          type: isDischarge ? 'discharge' : 'transfer_out',
           quantity: -item.quantity,
           unit: item.unit || 'und',
-          reason: 'Transferencia masiva',
+          reason: reasonLabel,
           referenceType: 'mass_transfer',
           referenceId: docRef.id,
-          toWarehouse: transferData.toWarehouseId,
+          ...(!isDischarge && { toWarehouse: toWarehouseId }),
           userId: transferData.userId,
           isIngredient: true,
-          notes: `${number} → ${transferData.toWarehouseName}`,
+          notes: isDischarge ? `${number} (descarga)` : `${number} → ${toWarehouseName}`,
         })
 
-        // Movimiento de entrada para ingrediente
-        await createStockMovement(businessId, {
-          ingredientId: item.productId,
-          ingredientName: item.productName,
-          warehouseId: transferData.toWarehouseId,
-          type: 'transfer_in',
-          quantity: item.quantity,
-          unit: item.unit || 'und',
-          reason: 'Transferencia masiva',
-          referenceType: 'mass_transfer',
-          referenceId: docRef.id,
-          fromWarehouse: transferData.fromWarehouseId,
-          userId: transferData.userId,
-          isIngredient: true,
-          notes: `${number} ← ${transferData.fromWarehouseName}`,
-        })
+        // Movimiento de entrada para ingrediente (no aplica en descarga)
+        if (!isDischarge) {
+          await createStockMovement(businessId, {
+            ingredientId: item.productId,
+            ingredientName: item.productName,
+            warehouseId: toWarehouseId,
+            type: 'transfer_in',
+            quantity: item.quantity,
+            unit: item.unit || 'und',
+            reason: reasonLabel,
+            referenceType: 'mass_transfer',
+            referenceId: docRef.id,
+            fromWarehouse: transferData.fromWarehouseId,
+            userId: transferData.userId,
+            isIngredient: true,
+            notes: `${number} ← ${transferData.fromWarehouseName}`,
+          })
+        }
 
         continue
       }
@@ -158,7 +170,7 @@ export const createMassTransfer = async (businessId, transferData) => {
         businessId,
         item.productId,
         transferData.fromWarehouseId,
-        transferData.toWarehouseId,
+        toWarehouseId, // null en descarga: solo descuenta del origen
         item.quantity,
         {
           variantSku: item.variantSku || null,
@@ -169,7 +181,7 @@ export const createMassTransfer = async (businessId, transferData) => {
         }
       )
       if (!transferRes.success) {
-        console.error(`Error al transferir ${item.productName}:`, transferRes.error)
+        console.error(`Error al ${isDischarge ? 'descargar' : 'transferir'} ${item.productName}:`, transferRes.error)
         failedItems.push({ productId: item.productId, productName: item.productName, error: transferRes.error || 'Error al transferir stock' })
         continue
       }
@@ -178,39 +190,43 @@ export const createMassTransfer = async (businessId, transferData) => {
       const serialNote = (item.serialNumbers && item.serialNumbers.length > 0)
         ? ` (Series: ${item.serialNumbers.join(', ')})` : ''
 
+      const detailNote = `${item.batchNumber === '__NO_LOT__' ? ' (Sin lote)' : item.batchNumber ? ` (Lote: ${item.batchNumber})` : ''}${variantNote}${serialNote}`
+
       // Movimiento de salida
       await createStockMovement(businessId, {
         productId: item.productId,
         warehouseId: transferData.fromWarehouseId,
-        type: 'transfer_out',
+        type: isDischarge ? 'discharge' : 'transfer_out',
         quantity: -item.quantity,
-        reason: 'Transferencia masiva',
+        reason: reasonLabel,
         referenceType: 'mass_transfer',
         referenceId: docRef.id,
-        toWarehouse: transferData.toWarehouseId,
+        ...(!isDischarge && { toWarehouse: toWarehouseId }),
         userId: transferData.userId,
         ...(item.batchNumber && item.batchNumber !== '__NO_LOT__' && { batchNumber: item.batchNumber }),
         ...(item.variantSku && { variantSku: item.variantSku }),
         ...(item.serialNumbers?.length > 0 && { serialNumbers: item.serialNumbers }),
-        notes: `${number} → ${transferData.toWarehouseName}${item.batchNumber === '__NO_LOT__' ? ' (Sin lote)' : item.batchNumber ? ` (Lote: ${item.batchNumber})` : ''}${variantNote}${serialNote}`,
+        notes: `${number}${isDischarge ? ' (descarga)' : ` → ${toWarehouseName}`}${detailNote}`,
       })
 
-      // Movimiento de entrada
-      await createStockMovement(businessId, {
-        productId: item.productId,
-        warehouseId: transferData.toWarehouseId,
-        type: 'transfer_in',
-        quantity: item.quantity,
-        reason: 'Transferencia masiva',
-        referenceType: 'mass_transfer',
-        referenceId: docRef.id,
-        fromWarehouse: transferData.fromWarehouseId,
-        userId: transferData.userId,
-        ...(item.batchNumber && item.batchNumber !== '__NO_LOT__' && { batchNumber: item.batchNumber }),
-        ...(item.variantSku && { variantSku: item.variantSku }),
-        ...(item.serialNumbers?.length > 0 && { serialNumbers: item.serialNumbers }),
-        notes: `${number} ← ${transferData.fromWarehouseName}${item.batchNumber === '__NO_LOT__' ? ' (Sin lote)' : item.batchNumber ? ` (Lote: ${item.batchNumber})` : ''}${variantNote}${serialNote}`,
-      })
+      // Movimiento de entrada (no aplica en descarga: el stock no va a ningún lado)
+      if (!isDischarge) {
+        await createStockMovement(businessId, {
+          productId: item.productId,
+          warehouseId: toWarehouseId,
+          type: 'transfer_in',
+          quantity: item.quantity,
+          reason: reasonLabel,
+          referenceType: 'mass_transfer',
+          referenceId: docRef.id,
+          fromWarehouse: transferData.fromWarehouseId,
+          userId: transferData.userId,
+          ...(item.batchNumber && item.batchNumber !== '__NO_LOT__' && { batchNumber: item.batchNumber }),
+          ...(item.variantSku && { variantSku: item.variantSku }),
+          ...(item.serialNumbers?.length > 0 && { serialNumbers: item.serialNumbers }),
+          notes: `${number} ← ${transferData.fromWarehouseName}${detailNote}`,
+        })
+      }
     }
 
     // Reflejar el resultado real en el documento (antes quedaba 'completed' siempre).

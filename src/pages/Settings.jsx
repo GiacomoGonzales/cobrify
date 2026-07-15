@@ -384,6 +384,7 @@ export default function Settings() {
   const [enableProductImages, setEnableProductImages] = useState(false)
   const [enableProductLocation, setEnableProductLocation] = useState(false)
   const [enableManualStockEdit, setEnableManualStockEdit] = useState(false)
+  const [stockDischargeEnabled, setStockDischargeEnabled] = useState(false)
   const [dispatchGuidesEnabled, setDispatchGuidesEnabled] = useState(false)
   const [exitNoteEnabled, setExitNoteEnabled] = useState(false)
   const [defaultDocumentType, setDefaultDocumentType] = useState('boleta') // boleta, factura, nota_venta
@@ -1237,6 +1238,7 @@ export default function Settings() {
         setEnableProductImages(businessData.enableProductImages || false)
         setEnableProductLocation(businessData.enableProductLocation || false)
         setEnableManualStockEdit(businessData.enableManualStockEdit || false)
+        setStockDischargeEnabled(businessData.stockDischargeEnabled || false)
         setEnableCustomerDisplay(businessData.enableCustomerDisplay || false)
         setDispatchGuidesEnabled(businessData.dispatchGuidesEnabled || false)
         setExitNoteEnabled(businessData.exitNoteEnabled || false)
@@ -3714,6 +3716,16 @@ export default function Settings() {
                       : '✗ Deshabilitado: El stock de productos e insumos solo se modifica vía ventas, compras, transferencias y movimientos en su página específica. Recomendado para mantener historial limpio.'}
                   />
 
+                  {/* Descarga de stock en el traslado masivo del inventario */}
+                  <SettingToggle
+                    checked={stockDischargeEnabled}
+                    onChange={(e) => setStockDischargeEnabled(e.target.checked)}
+                    title="Permitir descarga de stock (traslado masivo)"
+                    description={stockDischargeEnabled
+                      ? '✓ Habilitado: En Inventario > Traslado Masivo aparecerá la opción "Descarga de stock", que descuenta el stock de un almacén SIN enviarlo a otro (para descartar mercadería). Queda registrado como movimiento auditable.'
+                      : '✗ Deshabilitado: El traslado masivo solo mueve stock de un almacén a otro.'}
+                  />
+
                   {/* Control de Lotes y Vencimientos - solo para modos que no son farmacia */}
                   {businessMode !== 'pharmacy' && (
                     <SettingToggle
@@ -4415,6 +4427,7 @@ export default function Settings() {
                       enableProductImages: enableProductImages,
                       enableProductLocation: enableProductLocation,
                       enableManualStockEdit: enableManualStockEdit,
+                      stockDischargeEnabled: stockDischargeEnabled,
                       defaultTaxAffectation: defaultTaxAffectation,
                       enableCustomerDisplay: enableCustomerDisplay,
                       hiddenMenuItems: hiddenMenuItems,
