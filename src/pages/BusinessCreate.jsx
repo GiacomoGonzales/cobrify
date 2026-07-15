@@ -7,6 +7,7 @@ import { Building2, Loader2, CheckCircle, ArrowLeft } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
 import { createWarehouse } from '@/services/warehouseService'
+import { DEFAULT_SERIES } from '@/services/authService'
 import { db } from '@/lib/firebase'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -113,19 +114,8 @@ export default function BusinessCreate() {
         ownerId: user.uid,
         // Series por defecto COMPLETAS (todos los tipos de documento), para que la
         // cuenta nueva quede lista sin tener que entrar a Configuración > Series a
-        // "Editar y Guardar". Mismas series que el default de Configuración.
-        series: {
-          factura: { serie: 'F001', lastNumber: 0 },
-          boleta: { serie: 'B001', lastNumber: 0 },
-          nota_venta: { serie: 'N001', lastNumber: 0 },
-          cotizacion: { serie: 'C001', lastNumber: 0 },
-          nota_credito_factura: { serie: 'FN01', lastNumber: 0 },
-          nota_credito_boleta: { serie: 'BN01', lastNumber: 0 },
-          nota_debito_factura: { serie: 'FD01', lastNumber: 0 },
-          nota_debito_boleta: { serie: 'BD01', lastNumber: 0 },
-          guia_remision: { serie: 'T001', lastNumber: 0 },
-          guia_transportista: { serie: 'V001', lastNumber: 0 },
-        },
+        // "Editar y Guardar". Única fuente: DEFAULT_SERIES en authService.
+        series: DEFAULT_SERIES,
         // SUNAT deshabilitado por defecto
         sunat: {
           enabled: false,

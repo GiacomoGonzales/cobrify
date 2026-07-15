@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate, Link } from 'react-router-dom'
 import { z } from 'zod'
 import { Search, Loader2, Building2, User, ArrowRight, ArrowLeft, MapPin } from 'lucide-react'
-import { registerUser } from '@/services/authService'
+import { registerBusinessAsAdmin } from '@/services/authService'
 import { PLANS, SELLABLE_PLAN_IDS } from '@/services/subscriptionService'
 import { consultarRUC } from '@/services/documentLookupService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
@@ -69,9 +69,22 @@ export default function Register() {
     setValue,
     watch,
     trigger,
+    reset,
   } = useForm({
     resolver: zodResolver(registerSchema),
   })
+
+  // Tras crear una cuenta el admin sigue logueado (y suele crear varias
+  // seguidas), así que se limpia el formulario en vez de navegar.
+  const resetForm = () => {
+    reset()
+    setStep(1)
+    setSelectedPlan('')
+    setPaidAmount('')
+    setPaidAmountTouched(false)
+    setPayMethod('yape')
+    setDistrictCode('')
+  }
 
   // Obtener provincias según departamento
   const getProvincias = (deptCode) => {
@@ -234,7 +247,10 @@ export default function Register() {
         ubigeo: ubigeo,
       }
 
-      const result = await registerUser(data.email, data.password, data.name, businessData, {
+      // registerBusinessAsAdmin (no registerUser): crea la cuenta COMPLETA
+      // — series, almacén principal y suscripción activa — usando la instancia
+      // secundaria de Auth, así que NO cierra la sesión del admin que la crea.
+      const result = await registerBusinessAsAdmin(data.email, data.password, data.name, businessData, {
         plan: selectedPlan,
         initialPayment: { amount: amountNum, method: payMethod },
         // El monto pagado queda congelado como precio pactado de renovación
@@ -242,10 +258,8 @@ export default function Register() {
       })
 
       if (result.success) {
-        setSuccess('Cuenta creada exitosamente. Redirigiendo...')
-        setTimeout(() => {
-          navigate('/app/dashboard')
-        }, 1500)
+        setSuccess(`Cuenta creada para ${data.email}. Ya puede iniciar sesión: su plan está activo y sus series listas.`)
+        resetForm()
       } else {
         setError(result.error || 'Error al crear la cuenta')
       }

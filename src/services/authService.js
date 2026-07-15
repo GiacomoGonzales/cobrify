@@ -110,6 +110,29 @@ export const registerUser = async (email, password, displayName, businessData = 
 }
 
 /**
+ * Series por defecto de una cuenta nueva.
+ *
+ * Van DUPLICADAS (FF01, BB01…) a propósito, no F001/B001: casi todos los
+ * clientes vienen de otro sistema donde ya emitieron con las series estándar,
+ * y arrancar de nuevo en F001-00000001 duplicaría números ya declarados —
+ * SUNAT rechaza el comprobante. Las series de notas deben empezar con F o B
+ * según el documento que afectan (regla SUNAT), así que esas no se duplican.
+ * Todas son de 4 caracteres: letra + 3 alfanuméricos.
+ */
+export const DEFAULT_SERIES = {
+  factura: { serie: 'FF01', lastNumber: 0 },
+  boleta: { serie: 'BB01', lastNumber: 0 },
+  nota_venta: { serie: 'NN01', lastNumber: 0 },
+  cotizacion: { serie: 'CC01', lastNumber: 0 },
+  nota_credito_factura: { serie: 'FC01', lastNumber: 0 },
+  nota_credito_boleta: { serie: 'BC01', lastNumber: 0 },
+  nota_debito_factura: { serie: 'FD01', lastNumber: 0 },
+  nota_debito_boleta: { serie: 'BD01', lastNumber: 0 },
+  guia_remision: { serie: 'TT01', lastNumber: 0 },
+  guia_transportista: { serie: 'VV01', lastNumber: 0 },
+}
+
+/**
  * Crear una cuenta de negocio COMPLETA desde el panel de administración, SIN
  * desloguear al admin actual.
  *
@@ -119,7 +142,7 @@ export const registerUser = async (email, password, displayName, businessData = 
  * users/businesses/subscriptions). Crea el negocio COMPLETO (series + datos) y el almacén
  * principal, porque el nuevo usuario NO pasará por el flujo de BusinessCreate.
  */
-export const registerBusinessAsAdmin = async (email, password, displayName, businessData = null) => {
+export const registerBusinessAsAdmin = async (email, password, displayName, businessData = null, subscriptionOptions = null) => {
   try {
     // 1. Crear el usuario en la instancia SECUNDARIA (no afecta la sesión del admin).
     const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password)
@@ -205,18 +228,7 @@ export const registerBusinessAsAdmin = async (email, password, displayName, busi
         ...(businessData?.allowDeleteInvoices !== undefined && { allowDeleteInvoices: businessData.allowDeleteInvoices }),
         ...(businessData?.hideDashboardDataFromSecondary !== undefined && { hideDashboardDataFromSecondary: businessData.hideDashboardDataFromSecondary }),
         ...(businessData?.hideCashExpectedFromCashier !== undefined && { hideCashExpectedFromCashier: businessData.hideCashExpectedFromCashier }),
-        series: {
-          factura: { serie: 'F001', lastNumber: 0 },
-          boleta: { serie: 'B001', lastNumber: 0 },
-          nota_venta: { serie: 'N001', lastNumber: 0 },
-          cotizacion: { serie: 'C001', lastNumber: 0 },
-          nota_credito_factura: { serie: 'FN01', lastNumber: 0 },
-          nota_credito_boleta: { serie: 'BN01', lastNumber: 0 },
-          nota_debito_factura: { serie: 'FD01', lastNumber: 0 },
-          nota_debito_boleta: { serie: 'BD01', lastNumber: 0 },
-          guia_remision: { serie: 'T001', lastNumber: 0 },
-          guia_transportista: { serie: 'V001', lastNumber: 0 },
-        },
+        series: DEFAULT_SERIES,
         sunat: { enabled: false, environment: 'beta', solUser: '', homologated: false },
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -225,11 +237,17 @@ export const registerBusinessAsAdmin = async (email, password, displayName, busi
       console.error('Error al guardar datos del negocio:', businessError)
     }
 
-    // 4. Suscripción de prueba.
+    // 4. Suscripción: con el plan ya pagado si se indicó, o trial si no.
     try {
-      await createSubscription(newUid, email, displayName || email, 'trial')
+      await createSubscription(
+        newUid,
+        email,
+        displayName || email,
+        subscriptionOptions?.plan || 'trial',
+        subscriptionOptions || {}
+      )
     } catch (subscriptionError) {
-      console.error('Error al crear suscripción de prueba:', subscriptionError)
+      console.error('Error al crear suscripción:', subscriptionError)
     }
 
     // 5. Almacén principal por defecto.

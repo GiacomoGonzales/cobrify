@@ -42,7 +42,6 @@ import AdminResellers from './pages/admin/AdminResellers'
 import AdminExpirations from './pages/admin/AdminExpirations'
 import AdminPlanDistribution from './pages/admin/AdminPlanDistribution'
 import AdminNotifications from './pages/admin/AdminNotifications'
-import AdminCreateAccount from './pages/admin/AdminCreateAccount'
 // Reseller pages
 import ResellerLayout from './layouts/ResellerLayout'
 import ResellerDashboard from './pages/reseller/ResellerDashboard'
@@ -545,7 +544,6 @@ function App() {
               <Route index element={<AdminDashboard />} />
               <Route path="dashboard" element={<AdminDashboard />} />
               <Route path="users" element={<AdminUsers />} />
-              <Route path="create-account" element={<AdminCreateAccount />} />
               <Route path="resellers" element={<AdminResellers />} />
               <Route path="expirations" element={<AdminExpirations />} />
               <Route path="plan-distribution" element={<AdminPlanDistribution />} />
