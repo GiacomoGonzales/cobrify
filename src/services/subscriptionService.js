@@ -76,14 +76,14 @@ export const PLANS = {
     emissionMethod: "qpse",
     limits: { maxInvoicesPerMonth: 1000, maxCustomers: -1, maxProducts: -1, maxBranches: -1, sunatIntegration: true, multiUser: true }
   },
-  // Todo ilimitado sin CDT propio (emite por QPse). Formaliza el plan "custom"
-  // que se venía asignando a mano y coincide con los términos publicados
-  // (299.90 sin IGV / 353.90 con IGV).
-  ilimitado_mensual: {
-    name: "Plan Ilimitado - 1 Mes",
+  // Todo ilimitado por 12 meses, sin CDT propio (emite por QPse). Formaliza el
+  // plan "custom" que se venía asignando a mano y coincide con los términos
+  // publicados (299.90 sin IGV / 353.90 con IGV).
+  ilimitado_anual: {
+    name: "Plan Ilimitado - 12 Meses",
     category: "qpse",
-    months: 1,
-    pricePerMonth: 299.90,
+    months: 12,
+    pricePerMonth: 24.99, // 299.90 / 12
     totalPrice: 299.90,
     emissionMethod: "qpse",
     limits: { maxInvoicesPerMonth: -1, maxCustomers: -1, maxProducts: -1, maxBranches: -1, sunatIntegration: true, multiUser: true }
@@ -427,7 +427,7 @@ export const PLANS = {
 // El resto de entradas de PLANS quedan SOLO por compatibilidad: resolver nombre y límites
 // de clientes existentes parados en planes viejos. No se ofrecen más en los selectores.
 // ============================================
-export const SELLABLE_PLAN_IDS = ['basico_mensual', 'mensual', 'semestral', 'anual', 'ilimitado_mensual', 'addon_500_comprobantes'];
+export const SELLABLE_PLAN_IDS = ['basico_mensual', 'mensual', 'semestral', 'anual', 'ilimitado_anual', 'addon_500_comprobantes'];
 // Planes internos del sistema (no se venden pero son válidos):
 export const SYSTEM_PLAN_IDS = ['trial', 'enterprise'];
 
