@@ -427,7 +427,9 @@ export const PLANS = {
 // El resto de entradas de PLANS quedan SOLO por compatibilidad: resolver nombre y límites
 // de clientes existentes parados en planes viejos. No se ofrecen más en los selectores.
 // ============================================
-export const SELLABLE_PLAN_IDS = ['basico_mensual', 'mensual', 'semestral', 'anual', 'ilimitado_anual', 'addon_500_comprobantes'];
+// El addon_500_comprobantes salió del catálogo (15-jul-2026): los comprobantes
+// extra ahora se ajustan a mano en el límite del cliente, sin registrar pago.
+export const SELLABLE_PLAN_IDS = ['basico_mensual', 'mensual', 'semestral', 'anual', 'ilimitado_anual'];
 // Planes internos del sistema (no se venden pero son válidos):
 export const SYSTEM_PLAN_IDS = ['trial', 'enterprise'];
 
@@ -683,6 +685,23 @@ export const registerPayment = async (userId, amount, method = 'Transferencia', 
     // Para planes normales: extender suscripción
     const monthsToAdd = planConfig?.months || 3;
 
+    // ¿Renovación del MISMO plan o cambio de plan? Define qué pasa con los
+    // límites personalizados y con el precio pactado (renewalPrice):
+    //  - Mismo plan: se CONSERVAN los limits del doc (hay ~30 clientes con
+    //    ajustes a mano: 2000 docs, 3 sucursales, etc. — antes esta función los
+    //    pisaba con el catálogo en cada renovación) y se conserva su precio
+    //    pactado (si no tenía, queda congelado el monto cobrado ahora).
+    //  - Cambio de plan: contrato nuevo — limits del catálogo y el monto
+    //    cobrado pasa a ser su nuevo precio pactado.
+    const isSamePlan = selectedPlan === subscription.plan;
+    const amountNum = Number(amount) || 0;
+    const newLimits = isSamePlan
+      ? (subscription.limits || planConfig?.limits)
+      : (planConfig?.limits || subscription.limits);
+    const newRenewalPrice = isSamePlan
+      ? (subscription.renewalPrice ?? (amountNum > 0 ? amountNum : null))
+      : (amountNum > 0 ? amountNum : null);
+
     let newPeriodEnd;
 
     // Si se proporciona una fecha personalizada, usarla
@@ -724,7 +743,9 @@ export const registerPayment = async (userId, amount, method = 'Transferencia', 
       currentPeriodEnd: Timestamp.fromDate(newPeriodEnd),
       nextPaymentDate: Timestamp.fromDate(newPeriodEnd),
       monthlyPrice: planConfig?.pricePerMonth || 0,
-      limits: planConfig?.limits || subscription.limits,
+      limits: newLimits,
+      renewalPrice: newRenewalPrice,
+      ...(newRenewalPrice !== (subscription.renewalPrice ?? null) ? { pricingFrozenAt: serverTimestamp() } : {}),
       paymentHistory: updatedHistory,
       updatedAt: serverTimestamp()
     });

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { db, auth } from '@/lib/firebase'
 import { collection, getDocs, query, where, doc, getDoc, updateDoc, setDoc, deleteDoc, Timestamp, arrayUnion, increment, serverTimestamp } from 'firebase/firestore'
-import { PLANS, updateUserFeatures, updateMaxBranches } from '@/services/subscriptionService'
+import { PLANS, SELLABLE_PLAN_IDS, updateUserFeatures, updateMaxBranches } from '@/services/subscriptionService'
 import { getCustomPlans } from '@/services/customPlanService'
 import { notifyPaymentReceived } from '@/services/notificationService'
 import { getVendedores, createVendedor, updateVendedor, deleteVendedor } from '@/services/vendedorService'
@@ -2081,7 +2081,8 @@ export default function AdminUsers() {
               className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
               <option value="all">Plan</option>
-              {Object.entries(PLANS).map(([key, plan]) => (
+              {/* Solo el catálogo vigente: tras la migración (15-jul-2026) ya no hay usuarios en planes legacy */}
+              {Object.entries(PLANS).filter(([key]) => SELLABLE_PLAN_IDS.includes(key) || key === 'enterprise' || key === 'trial').map(([key, plan]) => (
                 <option key={key} value={key}>{plan.name}</option>
               ))}
             </select>

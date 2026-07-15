@@ -20,7 +20,7 @@ import {
   Plus
 } from 'lucide-react';
 import { getUserStats } from '@/services/userStatsService';
-import { PLANS } from '@/services/subscriptionService';
+import { PLANS, SELLABLE_PLAN_IDS } from '@/services/subscriptionService';
 import { doc, updateDoc, setDoc, getDoc, increment } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getEmissionSecrets, saveEmissionSecrets } from '@/services/emissionSecretsService';
@@ -31,8 +31,12 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
   const [savingLimit, setSavingLimit] = useState(false);
   const [editingLimit, setEditingLimit] = useState(false);
   const [newLimit, setNewLimit] = useState(user.limits?.maxInvoicesPerMonth || 500);
-  const [selectedPlanForPayment, setSelectedPlanForPayment] = useState('qpse_1_month');
-  const [paymentAmount, setPaymentAmount] = useState(PLANS['qpse_1_month']?.totalPrice || 0);
+  // Arranca con el plan ACTUAL del cliente (post-migración siempre es uno del
+  // catálogo vendible): renovar = abrir el modal y registrar, sin re-elegir.
+  const [selectedPlanForPayment, setSelectedPlanForPayment] = useState(
+    SELLABLE_PLAN_IDS.includes(user.plan) ? user.plan : 'mensual'
+  );
+  const [paymentAmount, setPaymentAmount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState('Transferencia');
   const [selectedPlan, setSelectedPlan] = useState(user.plan);
   const [showPasswords, setShowPasswords] = useState(false);
@@ -71,11 +75,15 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
   // Unificar planes estándar + personalizados
   const allPlans = { ...PLANS, ...customPlans };
 
-  // Actualizar precio cuando cambia el plan seleccionado
+  // Actualizar precio cuando cambia el plan seleccionado. Si renueva SU mismo
+  // plan y tiene precio pactado (renewalPrice, congelado en la migración o al
+  // registrarse), se sugiere ESE monto — no el catálogo. Editable igual.
   useEffect(() => {
     const plan = allPlans[selectedPlanForPayment];
     if (plan) {
-      const base = plan.totalPrice || 0;
+      const base = (selectedPlanForPayment === user.plan && user.renewalPrice != null)
+        ? user.renewalPrice
+        : (plan.totalPrice || 0);
       setPaymentAmount(addIgv ? parseFloat((base * 1.18).toFixed(2)) : base);
     }
   }, [selectedPlanForPayment, addIgv]);
@@ -684,14 +692,14 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                   Seleccionar Plan
                 </label>
 
-                {/* Planes QPse */}
+                {/* Planes vendibles (catálogo actual — los legacy ya migraron y no se ofrecen) */}
                 <div className="mb-4">
                   <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
                     <Shield className="w-4 h-4 text-blue-600" />
-                    Planes con QPse
+                    Planes
                   </h4>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {Object.entries(PLANS).filter(([key, plan]) => plan.category === 'qpse').map(([key, plan]) => (
+                    {Object.entries(PLANS).filter(([key, plan]) => SELLABLE_PLAN_IDS.includes(key) && !plan.isAddon).map(([key, plan]) => (
                       <button
                         key={key}
                         type="button"
@@ -727,123 +735,9 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                   </div>
                 </div>
 
-                {/* Planes SUNAT Directo */}
-                <div className="mb-4">
-                  <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-green-600" />
-                    Planes SUNAT Directo (Comprobantes ILIMITADOS)
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {Object.entries(PLANS).filter(([key, plan]) => plan.category === 'sunat_direct').map(([key, plan]) => (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => setSelectedPlanForPayment(key)}
-                        className={`p-4 border-2 rounded-lg transition-all ${
-                          selectedPlanForPayment === key
-                            ? 'border-green-600 bg-green-50'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                      >
-                        <div className="text-center">
-                          {plan.badge && (
-                            <span className="inline-block px-2 py-1 text-xs font-semibold bg-yellow-100 text-yellow-800 rounded-full mb-2">
-                              {plan.badge}
-                            </span>
-                          )}
-                          <p className="font-bold text-gray-900">{plan.months} {plan.months === 1 ? 'Mes' : 'Meses'}</p>
-                          <p className="text-2xl font-bold text-green-600 my-2">
-                            S/ {plan.totalPrice}
-                          </p>
-                          <p className="text-xs text-gray-600">
-                            S/ {plan.pricePerMonth.toFixed(2)}/mes
-                          </p>
-                          <p className="text-xs text-green-600 font-medium mt-1">
-                            ∞ Ilimitados
-                          </p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Add-ons (Paquetes adicionales) */}
-                <div>
-                  <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                    <Plus className="w-4 h-4 text-purple-600" />
-                    Paquetes Adicionales (No cambia plan ni fechas)
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {Object.entries(PLANS).filter(([key, plan]) => plan.category === 'addon').map(([key, plan]) => (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => setSelectedPlanForPayment(key)}
-                        className={`p-4 border-2 rounded-lg transition-all ${
-                          selectedPlanForPayment === key
-                            ? 'border-purple-600 bg-purple-50'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                      >
-                        <div className="text-center">
-                          <p className="font-bold text-gray-900">{plan.name}</p>
-                          <p className="text-2xl font-bold text-purple-600 my-2">
-                            S/ {plan.totalPrice}
-                          </p>
-                          <p className="text-xs text-purple-600 font-medium mt-1">
-                            +{plan.addonAmount} comprobantes
-                          </p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            Se suma al límite actual
-                          </p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Planes Personalizados */}
-                {Object.keys(customPlans).length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                      <Shield className="w-4 h-4 text-amber-600" />
-                      Planes Personalizados
-                    </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      {Object.entries(customPlans).map(([key, plan]) => (
-                        <button
-                          key={key}
-                          type="button"
-                          onClick={() => setSelectedPlanForPayment(key)}
-                          className={`p-4 border-2 rounded-lg transition-all ${
-                            selectedPlanForPayment === key
-                              ? 'border-amber-600 bg-amber-50'
-                              : 'border-amber-200 hover:border-amber-300 bg-amber-50/30'
-                          }`}
-                        >
-                          <div className="text-center">
-                            <span className="inline-block px-2 py-0.5 text-xs font-semibold bg-amber-100 text-amber-800 rounded-full mb-1">
-                              Custom
-                            </span>
-                            <p className="font-bold text-gray-900 text-sm">{plan.name}</p>
-                            <p className="text-2xl font-bold text-amber-600 my-2">
-                              S/ {plan.totalPrice}
-                            </p>
-                            <p className="text-xs text-gray-600">
-                              {plan.months} {plan.months === 1 ? 'mes' : 'meses'} - S/ {plan.pricePerMonth?.toFixed?.(2) || '0.00'}/mes
-                            </p>
-                            <p className="text-xs text-amber-600 font-medium mt-1">
-                              {plan.limits?.maxInvoicesPerMonth === -1 ? '∞ Ilimitados' : `${plan.limits?.maxInvoicesPerMonth} compr./mes`}
-                            </p>
-                            {plan.notes && (
-                              <p className="text-xs text-gray-400 mt-1 truncate">{plan.notes}</p>
-                            )}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {/* Los add-ons y planes personalizados ya no se ofrecen (15-jul-2026):
+                    los comprobantes extra se ajustan a mano en el límite (sin registrar
+                    pago) y los custom quedaron absorbidos por el catálogo (ilimitado_anual). */}
               </div>
 
               {/* Monto Total (editable) */}
@@ -1058,21 +952,13 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
                 >
                   <optgroup label="Planes Estándar">
-                    {Object.entries(PLANS).filter(([key, plan]) => !plan.isAddon).map(([key, plan]) => (
+                    {Object.entries(PLANS).filter(([key, plan]) => (SELLABLE_PLAN_IDS.includes(key) || key === 'enterprise') && !plan.isAddon).map(([key, plan]) => (
                       <option key={key} value={key}>
                         {plan.name} - S/ {plan.pricePerMonth}/mes
                       </option>
                     ))}
                   </optgroup>
-                  {Object.keys(customPlans).length > 0 && (
-                    <optgroup label="Planes Personalizados">
-                      {Object.entries(customPlans).map(([key, plan]) => (
-                        <option key={key} value={key}>
-                          {plan.name} - S/ {plan.pricePerMonth?.toFixed?.(2) || '0.00'}/mes
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
+                  {/* Los planes personalizados ya no se ofrecen (absorbidos por el catálogo, 15-jul-2026) */}
                 </select>
               </div>
 

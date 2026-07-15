@@ -233,16 +233,19 @@ export default function AdminExpirations() {
     }
   }
 
-  async function handleQuickRenew(userId, plan) {
+  async function handleQuickRenew(userId, plan, renewalPrice = null) {
     const planConfig = PLANS[plan]
     if (!planConfig) {
       alert('Plan no válido')
       return
     }
-    if (!confirm(`¿Renovar con plan ${planConfig.name} (S/ ${planConfig.totalPrice})?`)) return
+    // Cobrar el precio PACTADO del cliente (congelado en su suscripción); el
+    // catálogo solo si no tiene uno.
+    const amount = renewalPrice != null ? renewalPrice : planConfig.totalPrice
+    if (!confirm(`¿Renovar con plan ${planConfig.name} (S/ ${amount})?`)) return
     setActionLoading(userId)
     try {
-      await registerPayment(userId, planConfig.totalPrice, 'Admin - Renovación rápida', plan)
+      await registerPayment(userId, amount, 'Admin - Renovación rápida', plan)
       await loadSubscriptions()
     } catch (error) {
       console.error('Error:', error)
@@ -477,7 +480,7 @@ export default function AdminExpirations() {
                                 <ArchiveRestore className="w-4 h-4" />
                               </button>
                               <button
-                                onClick={() => handleQuickRenew(sub.id, sub.plan || 'qpse_1_month')}
+                                onClick={() => handleQuickRenew(sub.id, sub.plan || 'mensual', sub.renewalPrice ?? null)}
                                 className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                                 title="Renovar (mismo plan)"
                               >
@@ -487,7 +490,7 @@ export default function AdminExpirations() {
                           ) : (
                             <>
                               <button
-                                onClick={() => handleQuickRenew(sub.id, sub.plan || 'qpse_1_month')}
+                                onClick={() => handleQuickRenew(sub.id, sub.plan || 'mensual', sub.renewalPrice ?? null)}
                                 className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                                 title="Renovar (mismo plan)"
                               >
