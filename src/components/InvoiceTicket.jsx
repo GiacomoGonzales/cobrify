@@ -1177,8 +1177,9 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
       </div>
       )}
 
-      {/* Condiciones de Pago para Facturas al Crédito */}
-      {invoice.documentType === 'factura' && invoice.paymentType === 'credito' && (
+      {/* Condiciones de crédito: facturas y también notas de venta al crédito
+          cuando el negocio activó vencimiento/cuotas (Config > Ventas). */}
+      {(invoice.documentType === 'factura' || invoice.documentType === 'nota_venta') && invoice.paymentType === 'credito' && (
         <div className="ticket-section" style={{ borderTop: '2px dashed #000', paddingTop: '8px', marginTop: '8px' }}>
           <div className="section-title">CONDICIONES DE CRÉDITO</div>
           <div className="info-row">

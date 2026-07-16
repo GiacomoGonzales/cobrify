@@ -50,6 +50,34 @@ const getPendingAmount = (inv) => {
   return 0
 }
 
+// Fecha de vencimiento pactada del comprobante (facturas al crédito y notas de
+// venta con términos activados). Con cuotas: la primera aún no vencida; si ya
+// vencieron todas, la última — lo relevante es a partir de cuándo está en mora.
+// Devuelve Date o null. Las fechas se guardan como 'YYYY-MM-DD' (sin hora).
+const getDueDate = (inv) => {
+  const parse = (s) => {
+    if (!s || typeof s !== 'string') return null
+    const d = new Date(s + 'T00:00:00')
+    return isNaN(d) ? null : d
+  }
+  const cuotas = Array.isArray(inv?.paymentInstallments) ? inv.paymentInstallments : []
+  if (cuotas.length > 0) {
+    const dates = cuotas.map(c => parse(c?.dueDate)).filter(Boolean).sort((a, b) => a - b)
+    if (dates.length > 0) {
+      const today = new Date(); today.setHours(0, 0, 0, 0)
+      return dates.find(d => d >= today) || dates[dates.length - 1]
+    }
+  }
+  return parse(inv?.paymentDueDate)
+}
+
+// ¿La fecha de vencimiento ya pasó? (comparación por día, sin hora)
+const isOverdue = (dueDate) => {
+  if (!dueDate) return false
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  return dueDate < today
+}
+
 const isPendingInvoice = (inv) =>
   (inv.documentType === 'nota_venta' || inv.documentType === 'factura') &&
   inv.status !== 'cancelled' &&
@@ -184,6 +212,10 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
         paid: Number(inv.amountPaid) || 0,
         pending,
         ccy,
+        // Vencimiento pactado (facturas al crédito y notas de venta con términos).
+        // Con cuotas se muestra la más próxima aún no vencida... o la última:
+        // lo útil es saber para cuándo se comprometió a pagar.
+        dueDate: getDueDate(inv),
       })
     }
     const list = [...map.values()]
@@ -411,7 +443,8 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
       for (const d of c.docs) {
         ensureSpace(5)
         doc.setFontSize(8)
-        doc.text(`${d.type} ${d.number}  ·  ${d.date ? formatDate(d.date) : '—'}`, MX + 4, y)
+        const dueTxt = d.dueDate ? `  ·  Vence ${formatDate(d.dueDate)}${isOverdue(d.dueDate) ? ' (VENCIDO)' : ''}` : ''
+        doc.text(`${d.type} ${d.number}  ·  ${d.date ? formatDate(d.date) : '—'}${dueTxt}`, MX + 4, y)
         doc.text(
           `Total ${formatCurrency(d.total, d.ccy)}  ·  Pagado ${formatCurrency(d.paid, d.ccy)}  ·  Debe ${formatCurrency(d.pending, d.ccy)}`,
           W - MX, y, { align: 'right' }
@@ -828,7 +861,14 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
                           onChange={() => toggleDocSelected(d.id)}
                           className="w-3.5 h-3.5 text-primary-600 border-gray-300 rounded focus:ring-primary-500 shrink-0 cursor-pointer"
                         />
-                        <span className="truncate flex-1">{d.type} {d.number} · {d.date ? formatDate(d.date) : '—'}</span>
+                        <span className="truncate flex-1">
+                          {d.type} {d.number} · {d.date ? formatDate(d.date) : '—'}
+                          {d.dueDate && (
+                            <span className={isOverdue(d.dueDate) ? 'text-red-600 font-medium' : 'text-gray-500'}>
+                              {' · '}Vence {formatDate(d.dueDate)}{isOverdue(d.dueDate) ? ' (vencido)' : ''}
+                            </span>
+                          )}
+                        </span>
                         <span className="whitespace-nowrap">
                           <span className="text-green-600">Pagado {formatCurrency(d.paid, d.ccy)}</span> · <span className="font-semibold text-primary-600">Debe {formatCurrency(d.pending, d.ccy)}</span>
                         </span>

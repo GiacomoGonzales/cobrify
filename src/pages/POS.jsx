@@ -5060,6 +5060,41 @@ export default function POS() {
 
   const { totalPaid, remaining, amountToPay } = paymentTotals
 
+  // ===== Vencimiento y cuotas en notas de venta al crédito (opcional) =====
+  // Reusa paymentDueDate/paymentInstallments (los mismos campos de la factura),
+  // pero las cuotas van contra el SALDO pendiente, no contra el total.
+  const notaVentaCreditTermsOn =
+    documentType === 'nota_venta' &&
+    enablePartialPayment &&
+    companySettings?.notaVentaCreditTerms === true
+  const notaVentaBalance = React.useMemo(() => {
+    if (!enablePartialPayment) return 0
+    const partial = parseFloat(partialPaymentAmount) || 0
+    return Math.max(0, (amounts.total || 0) - partial)
+  }, [enablePartialPayment, partialPaymentAmount, amounts.total])
+  const installmentsTotal = React.useMemo(
+    () => paymentInstallments.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0),
+    [paymentInstallments]
+  )
+
+  // Al desmarcar el crédito (o cambiar de tipo de documento) limpiar los términos
+  // para no arrastrar fecha/cuotas a una venta al contado.
+  useEffect(() => {
+    if (!notaVentaCreditTermsOn && documentType === 'nota_venta') {
+      if (paymentDueDate) setPaymentDueDate('')
+      if (paymentInstallments.length > 0) setPaymentInstallments([])
+    }
+  }, [notaVentaCreditTermsOn, documentType])
+
+  // Al activar el crédito con términos, sugerir vencimiento a 30 días.
+  useEffect(() => {
+    if (notaVentaCreditTermsOn && !paymentDueDate) {
+      const d = new Date()
+      d.setDate(d.getDate() + 30)
+      setPaymentDueDate(getLocalDateString(d))
+    }
+  }, [notaVentaCreditTermsOn])
+
   // Filtrar clientes (optimizado con useMemo)
   const filteredCustomers = React.useMemo(() => {
     if (!customerSearchTerm) return []
@@ -5946,6 +5981,18 @@ export default function POS() {
         branchLogoUrl: selectedBranch?.logoUrl || null,
         branchAddress: selectedBranch?.address || null,
         branchPhone: selectedBranch?.phone || null,
+        // Nota de venta al crédito con términos (opcional, Config > Ventas):
+        // vencimiento + cuotas del SALDO. Usa los mismos campos que la factura,
+        // así el PDF/ticket y el reporte de Pagos Pendientes los leen igual.
+        ...(notaVentaCreditTermsOn && notaVentaBalance > 0 && {
+          paymentType: 'credito',
+          paymentDueDate: paymentDueDate || null,
+          paymentInstallments: paymentInstallments.map(inst => ({
+            number: inst.number,
+            amount: parseFloat(inst.amount) || 0,
+            dueDate: inst.dueDate,
+          })),
+        }),
         // Forma de pago (solo para facturas) - Contado/Crédito con cuotas
         ...(documentType === 'factura' && {
           paymentType: paymentType, // 'contado' o 'credito'
@@ -10141,6 +10188,112 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           <p className="text-xs text-red-600">
                             El monto no puede ser mayor que el total
                           </p>
+                        )}
+
+                        {/* Vencimiento y cuotas del saldo (opcional, se activa en
+                            Configuración > Ventas). A diferencia de la factura, acá
+                            las cuotas se calculan sobre el SALDO pendiente, no sobre
+                            el total: lo que ya pagó al inicio no se debe. */}
+                        {notaVentaCreditTermsOn && notaVentaBalance > 0 && (
+                          <div className="pt-2 mt-1 border-t border-gray-200 space-y-2">
+                            <div>
+                              <label className="text-xs text-gray-600 mb-0.5 block">Fecha de vencimiento del saldo</label>
+                              <input
+                                type="date"
+                                value={paymentDueDate}
+                                onChange={e => {
+                                  setPaymentDueDate(e.target.value)
+                                  if (paymentInstallments.length === 1) {
+                                    setPaymentInstallments([{ ...paymentInstallments[0], dueDate: e.target.value }])
+                                  }
+                                }}
+                                min={emissionDate}
+                                disabled={lastInvoiceData !== null}
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                              />
+                            </div>
+
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="text-xs text-gray-600">Cuotas (opcional)</label>
+                                <button
+                                  type="button"
+                                  disabled={lastInvoiceData !== null}
+                                  onClick={() => {
+                                    const yaAsignado = paymentInstallments.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0)
+                                    const restante = Math.max(0, notaVentaBalance - yaAsignado)
+                                    setPaymentInstallments([...paymentInstallments, {
+                                      number: paymentInstallments.length + 1,
+                                      amount: paymentInstallments.length === 0 ? notaVentaBalance.toFixed(2) : (restante > 0 ? restante.toFixed(2) : ''),
+                                      dueDate: paymentDueDate || getLocalDateString(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)),
+                                    }])
+                                  }}
+                                  className="text-xs text-primary-600 hover:text-primary-700 font-medium disabled:opacity-50"
+                                >
+                                  + Agregar cuota
+                                </button>
+                              </div>
+
+                              {paymentInstallments.length > 0 && (
+                                <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                                  {paymentInstallments.map((installment, index) => (
+                                    <div key={index} className="flex items-center gap-1.5 bg-gray-50 p-1.5 rounded">
+                                      <span className="text-xs text-gray-500 w-12">Cuota {installment.number}</span>
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        value={installment.amount}
+                                        onChange={e => {
+                                          const updated = [...paymentInstallments]
+                                          updated[index].amount = e.target.value
+                                          setPaymentInstallments(updated)
+                                        }}
+                                        placeholder="Monto"
+                                        disabled={lastInvoiceData !== null}
+                                        className="flex-1 min-w-0 px-1.5 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                      />
+                                      <input
+                                        type="date"
+                                        value={installment.dueDate}
+                                        onChange={e => {
+                                          const updated = [...paymentInstallments]
+                                          updated[index].dueDate = e.target.value
+                                          setPaymentInstallments(updated)
+                                        }}
+                                        min={emissionDate}
+                                        disabled={lastInvoiceData !== null}
+                                        className="w-28 px-1.5 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                      />
+                                      <button
+                                        type="button"
+                                        disabled={lastInvoiceData !== null}
+                                        onClick={() => {
+                                          setPaymentInstallments(
+                                            paymentInstallments.filter((_, i) => i !== index).map((inst, i) => ({ ...inst, number: i + 1 }))
+                                          )
+                                        }}
+                                        className="text-red-500 hover:text-red-700 p-0.5 disabled:opacity-50"
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Aviso si las cuotas no cuadran con el saldo */}
+                              {paymentInstallments.length > 0 && Math.abs(installmentsTotal - notaVentaBalance) > 0.01 && (
+                                <p className="text-xs text-amber-600 mt-1">
+                                  Las cuotas suman {formatCurrency(installmentsTotal, currency)} y el saldo es {formatCurrency(notaVentaBalance, currency)}.
+                                </p>
+                              )}
+                              {paymentInstallments.length === 0 && (
+                                <p className="text-xs text-gray-500">
+                                  Sin cuotas: el saldo vence completo en la fecha indicada.
+                                </p>
+                              )}
+                            </div>
+                          </div>
                         )}
                       </div>
                     )}

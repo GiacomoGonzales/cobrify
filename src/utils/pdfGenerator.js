@@ -1253,8 +1253,10 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.text(paymentForm, rightValueX, rightY)
     rightY += dataLineHeight
 
-    // Fecha de vencimiento (solo si es crédito)
-    if (invoice.documentType === 'factura' && invoice.paymentType === 'credito' && invoice.paymentDueDate) {
+    // Fecha de vencimiento (solo si es crédito). También en notas de venta al
+    // crédito cuando el negocio activó vencimiento/cuotas (Config > Ventas).
+    if ((invoice.documentType === 'factura' || invoice.documentType === 'nota_venta') &&
+        invoice.paymentType === 'credito' && invoice.paymentDueDate) {
       const dueDate = new Date(invoice.paymentDueDate + 'T00:00:00')
       const dueDateStr = dueDate.toLocaleDateString('es-PE')
       doc.setFont('helvetica', 'bold')
@@ -2794,6 +2796,61 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
     footerY = qrBoxY + qrBoxHeight + 5
   } else {
+    // Nota de venta al crédito con términos (opción Config > Ventas): vencimiento
+    // + cuotas del saldo. Las cuotas de factura viven dentro del recuadro del QR,
+    // que la nota de venta no tiene — por eso acá se dibuja su propio recuadro.
+    const nvInstallments = Array.isArray(invoice.paymentInstallments) ? invoice.paymentInstallments : []
+    const nvHasTerms = invoice.paymentType === 'credito' && (invoice.paymentDueDate || nvInstallments.length > 0)
+    if (nvHasTerms) {
+      const termsBoxY = footerY
+      const termsBoxHeight = 32 + (nvInstallments.length > 0 ? nvInstallments.length * 11 : 11)
+
+      doc.setDrawColor(...BLACK)
+      doc.setLineWidth(0.5)
+      doc.rect(MARGIN_LEFT, termsBoxY, CONTENT_WIDTH, termsBoxHeight)
+
+      doc.setFillColor(...ACCENT_COLOR)
+      doc.rect(MARGIN_LEFT, termsBoxY, CONTENT_WIDTH, 18, 'F')
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(9)
+      doc.setTextColor(...WHITE)
+      doc.text('CONDICIONES DE CRÉDITO', MARGIN_LEFT + 5, termsBoxY + 12)
+
+      let termsY = termsBoxY + 30
+      doc.setFontSize(8)
+      doc.setTextColor(...BLACK)
+
+      if (nvInstallments.length > 0) {
+        doc.setFont('helvetica', 'bold')
+        doc.text('CUOTAS:', MARGIN_LEFT + 5, termsY)
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(7)
+        doc.setTextColor(...DARK_GRAY)
+        termsY += 11
+        nvInstallments.forEach((cuota, index) => {
+          const num = cuota.number || index + 1
+          const amount = parseFloat(cuota.amount || 0).toFixed(2)
+          let due = '-'
+          if (cuota.dueDate) {
+            const [y, m, d] = cuota.dueDate.split('-')
+            due = `${d}/${m}/${y}`
+          }
+          doc.text(`• Cuota ${num}: ${CCY} ${amount} - Vence: ${due}`, MARGIN_LEFT + 8, termsY)
+          termsY += 11
+        })
+      } else {
+        const [y, m, d] = invoice.paymentDueDate.split('-')
+        doc.setFont('helvetica', 'normal')
+        doc.setTextColor(...DARK_GRAY)
+        doc.text('Vencimiento del saldo:', MARGIN_LEFT + 5, termsY)
+        doc.setFont('helvetica', 'bold')
+        doc.setTextColor(...BLACK)
+        doc.text(`${d}/${m}/${y}`, MARGIN_LEFT + 90, termsY)
+      }
+
+      footerY = termsBoxY + termsBoxHeight + 10
+    }
+
     // Para notas de venta: mostrar estado de pago si hay pagos parciales
     if (invoice.paymentStatus && invoice.paymentHistory && invoice.paymentHistory.length > 0) {
       const paymentBoxY = footerY

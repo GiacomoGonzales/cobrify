@@ -385,6 +385,7 @@ export default function Settings() {
   const [enableProductLocation, setEnableProductLocation] = useState(false)
   const [enableManualStockEdit, setEnableManualStockEdit] = useState(false)
   const [stockDischargeEnabled, setStockDischargeEnabled] = useState(false)
+  const [notaVentaCreditTerms, setNotaVentaCreditTerms] = useState(false)
   const [dispatchGuidesEnabled, setDispatchGuidesEnabled] = useState(false)
   const [exitNoteEnabled, setExitNoteEnabled] = useState(false)
   const [defaultDocumentType, setDefaultDocumentType] = useState('boleta') // boleta, factura, nota_venta
@@ -1239,6 +1240,7 @@ export default function Settings() {
         setEnableProductLocation(businessData.enableProductLocation || false)
         setEnableManualStockEdit(businessData.enableManualStockEdit || false)
         setStockDischargeEnabled(businessData.stockDischargeEnabled || false)
+        setNotaVentaCreditTerms(businessData.notaVentaCreditTerms || false)
         setEnableCustomerDisplay(businessData.enableCustomerDisplay || false)
         setDispatchGuidesEnabled(businessData.dispatchGuidesEnabled || false)
         setExitNoteEnabled(businessData.exitNoteEnabled || false)
@@ -4968,6 +4970,16 @@ export default function Settings() {
                   Configura el comportamiento del punto de venta
                 </p>
                 <div className="space-y-4">
+                  {/* Vencimiento y cuotas en notas de venta al crédito */}
+                  <SettingToggle
+                    checked={notaVentaCreditTerms}
+                    onChange={(e) => setNotaVentaCreditTerms(e.target.checked)}
+                    title="Vencimiento y cuotas en notas de venta al crédito"
+                    description={notaVentaCreditTerms
+                      ? '✓ Habilitado: Al marcar "Pago parcial o al crédito" en una nota de venta podrás fijar una fecha de vencimiento y dividir el saldo en cuotas, igual que en las facturas. Se imprimen en el PDF y el ticket, y aparecen en el reporte de Pagos Pendientes.'
+                      : '✗ Deshabilitado: Las notas de venta al crédito solo registran el saldo pendiente, sin fecha de compromiso ni cuotas.'}
+                  />
+
                   <SettingToggle
                     checked={allowCustomProducts}
                     onChange={(e) => setAllowCustomProducts(e.target.checked)}
@@ -5669,6 +5681,7 @@ export default function Settings() {
                       posCustomFields: posCustomFields,
                       allowNegativeStock: allowNegativeStock,
                       stockDischargeEnabled: stockDischargeEnabled,
+                      notaVentaCreditTerms: notaVentaCreditTerms,
                       allowCustomProducts: allowCustomProducts,
                       allowPriceEdit: allowPriceEdit,
                       allowNameEdit: allowNameEdit,
