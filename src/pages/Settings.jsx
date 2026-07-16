@@ -3716,16 +3716,6 @@ export default function Settings() {
                       : '✗ Deshabilitado: El stock de productos e insumos solo se modifica vía ventas, compras, transferencias y movimientos en su página específica. Recomendado para mantener historial limpio.'}
                   />
 
-                  {/* Descarga de stock en el traslado masivo del inventario */}
-                  <SettingToggle
-                    checked={stockDischargeEnabled}
-                    onChange={(e) => setStockDischargeEnabled(e.target.checked)}
-                    title="Permitir descarga de stock (traslado masivo)"
-                    description={stockDischargeEnabled
-                      ? '✓ Habilitado: En Inventario > Traslado Masivo aparecerá la opción "Descarga de stock", que descuenta el stock de un almacén SIN enviarlo a otro (para descartar mercadería). Queda registrado como movimiento auditable.'
-                      : '✗ Deshabilitado: El traslado masivo solo mueve stock de un almacén a otro.'}
-                  />
-
                   {/* Control de Lotes y Vencimientos - solo para modos que no son farmacia */}
                   {businessMode !== 'pharmacy' && (
                     <SettingToggle
@@ -4427,7 +4417,6 @@ export default function Settings() {
                       enableProductImages: enableProductImages,
                       enableProductLocation: enableProductLocation,
                       enableManualStockEdit: enableManualStockEdit,
-                      stockDischargeEnabled: stockDischargeEnabled,
                       defaultTaxAffectation: defaultTaxAffectation,
                       enableCustomerDisplay: enableCustomerDisplay,
                       hiddenMenuItems: hiddenMenuItems,
@@ -4955,6 +4944,16 @@ export default function Settings() {
                     description={allowNegativeStock
                       ? '✓ Habilitado: Los productos se pueden vender incluso si el stock está en 0 o negativo. El stock puede quedar en números negativos. Útil para negocios bajo pedido o dropshipping.'
                       : '✗ Deshabilitado: Los productos con stock en 0 aparecerán deshabilitados en el punto de venta y no se podrán agregar al carrito. Recomendado para control estricto de inventario.'}
+                  />
+
+                  {/* Descarga de stock en el traslado masivo del inventario */}
+                  <SettingToggle
+                    checked={stockDischargeEnabled}
+                    onChange={(e) => setStockDischargeEnabled(e.target.checked)}
+                    title="Permitir descarga de stock (traslado masivo)"
+                    description={stockDischargeEnabled
+                      ? '✓ Habilitado: En Inventario > Traslado Masivo aparecerá la opción "Descarga de stock", que descuenta el stock de un almacén SIN enviarlo a otro (para descartar mercadería). Queda registrado como movimiento auditable.'
+                      : '✗ Deshabilitado: El traslado masivo solo mueve stock de un almacén a otro.'}
                   />
                 </div>
               </div>
@@ -5669,6 +5668,7 @@ export default function Settings() {
                       restaurantConfig: restaurantConfig,
                       posCustomFields: posCustomFields,
                       allowNegativeStock: allowNegativeStock,
+                      stockDischargeEnabled: stockDischargeEnabled,
                       allowCustomProducts: allowCustomProducts,
                       allowPriceEdit: allowPriceEdit,
                       allowNameEdit: allowNameEdit,

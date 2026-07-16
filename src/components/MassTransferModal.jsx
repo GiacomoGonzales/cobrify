@@ -609,8 +609,8 @@ export default function MassTransferModal({
               </div>
             )}
 
-            {/* Buscador de productos */}
-            {fromWarehouse && toWarehouse && fromWarehouse !== toWarehouse && (
+            {/* Buscador de productos (en descarga no hay destino: basta el origen) */}
+            {fromWarehouse && destinationOk && (
               <div className="relative">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Agregar Productos</label>
                 <div className="relative">

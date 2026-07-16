@@ -388,6 +388,21 @@ service cloud.firestore {
         allow read, write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
+      // Subcollection: Stock Backups (respaldo previo de las herramientas masivas
+      // de inventario — Verificar/Corregir stock — y su botón "Revertir").
+      // SOLO EL DUEÑO: esas herramientas son solo-dueño por diseño (blindaje Fase 1).
+      // Sin este match el backup fallaba en silencio para todos ("Missing or
+      // insufficient permissions"): en estas reglas, sin match explícito = denegado.
+      match /stockBackups/{backupId} {
+        allow read, write: if isAdmin();
+        allow read, write: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
+
+        match /chunks/{chunkId} {
+          allow read, write: if isAdmin();
+          allow read, write: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
+        }
+      }
+
       // Subcollection: Tables (Mesas - para modo restaurante)
       match /tables/{tableId} {
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);

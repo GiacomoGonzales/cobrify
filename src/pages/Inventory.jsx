@@ -347,8 +347,10 @@ export default function Inventory() {
   }, [user])
 
   // Cargar el último backup activo de verificación masiva (si existe y no expiró).
+  // Solo el DUEÑO: el botón "Revertir" y las reglas de stockBackups son solo-dueño;
+  // consultarlo como sub-usuario solo genera un error de permisos en la consola.
   const loadLatestStockBackup = async () => {
-    if (!user?.uid || isDemoMode) return
+    if (!user?.uid || isDemoMode || !isBusinessOwner) return
     try {
       const businessId = getBusinessId()
       const backup = await getLatestActiveStockBackup(businessId)
