@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet, History, Eye, ChevronRight, Edit2, Trash2, Store, Clock, Printer, Loader2, User, FileText, AlertTriangle } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useHidePrivateData } from '@/hooks/useHidePrivateData'
@@ -113,6 +113,10 @@ export default function CashRegister() {
   // Modal states
   const [showOpenModal, setShowOpenModal] = useState(false)
   const [showCloseModal, setShowCloseModal] = useState(false)
+  // Throttle del refresco de sesión + ref a la última versión de la función
+  // (el listener de foco vive entre renders; sin el ref capturaría un closure viejo)
+  const lastSessionRefreshRef = useRef(0)
+  const refreshSessionDataRef = useRef(null)
   const [showMovementModal, setShowMovementModal] = useState(false)
   const [closedSuccessfully, setClosedSuccessfully] = useState(false)
   const [closedSessionData, setClosedSessionData] = useState(null)
@@ -340,36 +344,8 @@ export default function CashRegister() {
         targetUserUid = user.uid
       }
       const isViewingAll = selectedCashUser === 'all'
-
-      // Construir set de UIDs cuyas ventas se suman a esta caja
-      // Owner "Mi Caja": incluir su UID + UIDs de sub-usuarios sin caja independiente
-      // Sub-usuario compartido: no filtrar (ver todas las ventas de la sesión)
-      let allowedCreatedByUids = null // null = no filtrar por createdBy
-      // Conjunto paralelo para ATRIBUIR pagos diferidos (cobros hechos en esta sesión
-      // sobre ventas creadas en sesiones anteriores). Se compara contra
-      // payment.recordedBy, que puede ser email o uid del que registró el cobro.
-      let allowedRecordedBy = null
-      if (!isSharedCashUser && !isViewingAll) {
-        if (isOwner && !selectedCashUser) {
-          // Owner viendo "Mi Caja": incluir ventas propias + sub-usuarios compartidos
-          const sharedSubUsers = subUsers.filter(u => !u.independentCashRegister)
-          const sharedSubUserUids = sharedSubUsers.map(u => u.uid || u.id)
-          allowedCreatedByUids = new Set([user.uid, ...sharedSubUserUids])
-          allowedRecordedBy = new Set([
-            user.uid, user.email,
-            ...sharedSubUsers.flatMap(u => [u.uid || u.id, u.email])
-          ].filter(Boolean))
-        } else if (selectedCashUser && selectedCashUser !== 'all') {
-          // Owner viendo caja de un sub-usuario específico (con caja independiente)
-          allowedCreatedByUids = new Set([selectedCashUser])
-          const su = subUsers.find(u => (u.uid || u.id) === selectedCashUser)
-          allowedRecordedBy = new Set([selectedCashUser, su?.email].filter(Boolean))
-        } else if (!isOwner && !isSharedCashUser) {
-          // Sub-usuario con caja independiente: solo sus propias ventas
-          allowedCreatedByUids = new Set([user.uid])
-          allowedRecordedBy = new Set([user.uid, user.email].filter(Boolean))
-        }
-      }
+      // El filtro de usuarios de esta caja (allowedCreatedByUids/allowedRecordedBy)
+      // vive en buildCajaUserFilters(); lo aplica fetchSessionInvoices.
 
       // Obtener sesión actual para la sucursal seleccionada y el usuario objetivo
       const branchId = selectedBranch?.id || null
@@ -394,33 +370,12 @@ export default function CashRegister() {
           setMovements([])
         }
 
-        // Obtener facturas de la sesión actual (desde apertura hasta ahora)
-        // Pasar fecha de apertura a Firestore para no traer todas las facturas
+        // Obtener facturas de la sesión actual (desde apertura hasta ahora).
+        // fetchSessionInvoices aplica la query acotada por fecha + el filtro de
+        // usuarios de esta caja (conservando pagos diferidos).
         if (sessionResult.success && sessionResult.data) {
-          const sessionOpenedAt = sessionResult.data.openedAt?.toDate
-            ? sessionResult.data.openedAt.toDate()
-            : new Date(sessionResult.data.openedAt)
-
-          const invoicesResult = await getInvoicesByBranch(getBusinessId(), branchId, sessionOpenedAt)
-          if (invoicesResult.success) {
-            // Filtrar por usuario que creó la factura — pero CONSERVAR los pagos
-            // diferidos: ventas viejas (creadas por otra caja/usuario) que recibieron
-            // un cobro en ESTA sesión registrado por un usuario de ESTA caja. Ese
-            // efectivo pertenece a esta caja y debe entrar al efectivo esperado.
-            const sessionInvoicesList = (invoicesResult.data || []).filter(invoice => {
-              if (!allowedCreatedByUids) return true
-              if (!invoice.createdBy || allowedCreatedByUids.has(invoice.createdBy)) return true
-              // Pago diferido cobrado por un usuario de esta caja durante la sesión
-              const ph = Array.isArray(invoice.paymentHistory) ? invoice.paymentHistory : []
-              return ph.some(p => {
-                const pd = p?.date?.toDate ? p.date.toDate() : (p?.date ? new Date(p.date) : null)
-                const inSession = pd && sessionOpenedAt && pd >= sessionOpenedAt
-                const byThisCaja = allowedRecordedBy && p?.recordedBy && allowedRecordedBy.has(p.recordedBy)
-                return inSession && byThisCaja
-              })
-            })
-            setTodayInvoices(sessionInvoicesList)
-          }
+          const sessionInvoicesList = await fetchSessionInvoices(sessionResult.data)
+          if (sessionInvoicesList) setTodayInvoices(sessionInvoicesList)
         } else {
           setTodayInvoices([])
         }
@@ -432,6 +387,97 @@ export default function CashRegister() {
       setIsLoading(false)
     }
   }
+
+  // Construye el filtro de usuarios cuyas ventas pertenecen a ESTA caja.
+  // Mismo criterio que usa loadData (única fuente: se extrajo de ahí).
+  const buildCajaUserFilters = () => {
+    const isSubUser = userPermissions && userPermissions.ownerId
+    const isSharedCashUser = isSubUser && !independentCashRegister
+    const isViewingAll = selectedCashUser === 'all'
+    let allowedCreatedByUids = null // null = no filtrar por createdBy
+    let allowedRecordedBy = null
+    if (!isSharedCashUser && !isViewingAll) {
+      if (isOwner && !selectedCashUser) {
+        const sharedSubUsers = subUsers.filter(u => !u.independentCashRegister)
+        const sharedSubUserUids = sharedSubUsers.map(u => u.uid || u.id)
+        allowedCreatedByUids = new Set([user.uid, ...sharedSubUserUids])
+        allowedRecordedBy = new Set([
+          user.uid, user.email,
+          ...sharedSubUsers.flatMap(u => [u.uid || u.id, u.email])
+        ].filter(Boolean))
+      } else if (selectedCashUser && selectedCashUser !== 'all') {
+        allowedCreatedByUids = new Set([selectedCashUser])
+        const su = subUsers.find(u => (u.uid || u.id) === selectedCashUser)
+        allowedRecordedBy = new Set([selectedCashUser, su?.email].filter(Boolean))
+      } else if (!isOwner && !isSharedCashUser) {
+        allowedCreatedByUids = new Set([user.uid])
+        allowedRecordedBy = new Set([user.uid, user.email].filter(Boolean))
+      }
+    }
+    return { allowedCreatedByUids, allowedRecordedBy }
+  }
+
+  // Trae FRESCOS desde Firestore los comprobantes de la sesión (misma query y
+  // filtros que loadData). Se usa al cerrar caja y al volver la página al foco:
+  // el estado en memoria se carga una vez y NO ve anulaciones/ventas hechas
+  // desde otra máquina — cerrar con ese snapshot congelaba totales inflados en
+  // el cierre (y una "diferencia faltante" fantasma en el arqueo).
+  const fetchSessionInvoices = async (session) => {
+    if (!session) return null
+    const sessionOpenedAt = toDate(session.openedAt)
+    if (!sessionOpenedAt) return null
+    const branchId = session.branchId ?? selectedBranch?.id ?? null
+    const { allowedCreatedByUids, allowedRecordedBy } = buildCajaUserFilters()
+    const invoicesResult = await getInvoicesByBranch(getBusinessId(), branchId, sessionOpenedAt)
+    if (!invoicesResult.success) return null
+    return (invoicesResult.data || []).filter(invoice => {
+      if (!allowedCreatedByUids) return true
+      if (!invoice.createdBy || allowedCreatedByUids.has(invoice.createdBy)) return true
+      // Pago diferido cobrado por un usuario de esta caja durante la sesión
+      const ph = Array.isArray(invoice.paymentHistory) ? invoice.paymentHistory : []
+      return ph.some(p => {
+        const pd = p?.date?.toDate ? p.date.toDate() : (p?.date ? new Date(p.date) : null)
+        const inSession = pd && sessionOpenedAt && pd >= sessionOpenedAt
+        const byThisCaja = allowedRecordedBy && p?.recordedBy && allowedRecordedBy.has(p.recordedBy)
+        return inSession && byThisCaja
+      })
+    })
+  }
+
+  // Refresca comprobantes y movimientos de la sesión abierta (throttle 15s
+  // salvo force). Lo disparan el listener de foco y el botón Cerrar Caja.
+  const refreshSessionData = async (force = false) => {
+    if (isDemoMode || !currentSession?.id) return
+    const now = Date.now()
+    if (!force && now - lastSessionRefreshRef.current < 15000) return
+    lastSessionRefreshRef.current = now
+    try {
+      const fresh = await fetchSessionInvoices(currentSession)
+      if (fresh) setTodayInvoices(fresh)
+      const mv = await getCashMovements(getBusinessId(), currentSession.id)
+      if (mv.success) setMovements(mv.data || [])
+    } catch (e) {
+      console.warn('No se pudo refrescar los datos de la sesión:', e)
+    }
+  }
+  refreshSessionDataRef.current = refreshSessionData
+
+  // Al volver la página a primer plano, refrescar la sesión: así la cajera ve
+  // reflejadas las anulaciones/ventas hechas desde otras máquinas antes de
+  // contar el dinero.
+  useEffect(() => {
+    if (isDemoMode) return
+    const onFocus = () => {
+      if (document.hidden) return
+      refreshSessionDataRef.current?.()
+    }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onFocus)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onFocus)
+    }
+  }, [isDemoMode])
 
   const loadHistory = async () => {
     setIsLoadingHistory(true)
@@ -837,6 +883,29 @@ export default function CashRegister() {
 
     setIsClosing(true)
     try {
+      // FOTO FRESCA: re-leer comprobantes y movimientos de la sesión ANTES de
+      // calcular los totales que quedan CONGELADOS en el cierre. El estado en
+      // memoria se cargó al abrir la página y no ve cambios remotos: una venta
+      // anulada desde otra máquina seguía sumando — el PDF salía con el total
+      // inflado y una "diferencia faltante" fantasma en el arqueo.
+      let invoicesForClose = todayInvoices
+      let movementsForClose = movements
+      try {
+        const freshInvoices = await fetchSessionInvoices(currentSession)
+        if (freshInvoices) {
+          invoicesForClose = freshInvoices
+          setTodayInvoices(freshInvoices)
+        }
+        const freshMovs = await getCashMovements(getBusinessId(), currentSession.id)
+        if (freshMovs.success) {
+          movementsForClose = freshMovs.data || []
+          setMovements(movementsForClose)
+        }
+      } catch (e) {
+        console.warn('No se pudo refrescar la sesión antes del cierre; se usa el estado en memoria:', e)
+      }
+      const totalsClose = calculateTotals(invoicesForClose, movementsForClose)
+
       // Cargar datos del negocio para la impresión del ticket
       const businessResult = await getCompanySettings(getBusinessId())
       if (businessResult.success) {
@@ -846,8 +915,8 @@ export default function CashRegister() {
       // que entraron por haber recibido pagos hoy — esas van como deferredPayments).
       const sessionOnlyInvoicesCount = (() => {
         const openedAt = toDate(currentSession?.openedAt)
-        if (!openedAt) return todayInvoices.length
-        return todayInvoices.filter(inv => {
+        if (!openedAt) return invoicesForClose.length
+        return invoicesForClose.filter(inv => {
           const c = toDate(inv.createdAt)
           return !c || c >= openedAt
         }).length
@@ -861,7 +930,7 @@ export default function CashRegister() {
       //   - `closingCash, closingCard, ...` → consumido por el PDF/Ticket
       //     cuando reciben el closedData en memoria (antes de re-fetchar).
       const closingAmountUSD = cashUSD + cardUSD + transferUSD + yapeUSD + plinUSD + rappiUSD + pedidosYaUSD + diDiFoodUSD
-      const usdBlock = totals.usd ? {
+      const usdBlock = totalsClose.usd ? {
         openingAmount: currentSession.openingAmountUSD || 0,
         cash: cashUSD,
         card: cardUSD,
@@ -882,26 +951,26 @@ export default function CashRegister() {
         closingRappi: rappiUSD,
         closingPedidosYa: pedidosYaUSD,
         closingDiDiFood: diDiFoodUSD,
-        totalSales: totals.usd.sales,
-        salesCash: totals.usd.salesCash,
-        salesCard: totals.usd.salesCard,
-        salesTransfer: totals.usd.salesTransfer,
-        salesYape: totals.usd.salesYape,
-        salesPlin: totals.usd.salesPlin,
-        salesRappi: totals.usd.salesRappi,
-        salesPedidosYa: totals.usd.salesPedidosYa,
-        salesDiDiFood: totals.usd.salesDiDiFood,
-        totalIncome: totals.usd.income,
-        totalExpense: totals.usd.expense,
-        expectedAmount: totals.usd.expected,
-        difference: cashUSD - (totals.usd.expected || 0),
+        totalSales: totalsClose.usd.sales,
+        salesCash: totalsClose.usd.salesCash,
+        salesCard: totalsClose.usd.salesCard,
+        salesTransfer: totalsClose.usd.salesTransfer,
+        salesYape: totalsClose.usd.salesYape,
+        salesPlin: totalsClose.usd.salesPlin,
+        salesRappi: totalsClose.usd.salesRappi,
+        salesPedidosYa: totalsClose.usd.salesPedidosYa,
+        salesDiDiFood: totalsClose.usd.salesDiDiFood,
+        totalIncome: totalsClose.usd.income,
+        totalExpense: totalsClose.usd.expense,
+        expectedAmount: totalsClose.usd.expected,
+        difference: cashUSD - (totalsClose.usd.expected || 0),
       } : null
 
       // Yape: cálculo paralelo del esperado y diferencia. Si no hubo actividad
       // Yape, expectedAmountYape será 0 y differenceYape también, y al persistir
       // se omite el campo (en firestoreService) para no contaminar el doc.
       const openingAmountYape = currentSession.openingAmountYape || 0
-      const expectedAmountYape = openingAmountYape + totals.salesYape + (totals.incomeYape || 0) - (totals.expenseYape || 0)
+      const expectedAmountYape = openingAmountYape + totalsClose.salesYape + (totalsClose.incomeYape || 0) - (totalsClose.expenseYape || 0)
       const differenceYape = yape - expectedAmountYape
 
       // Guardar datos de la sesión cerrada con hora de cierre
@@ -918,26 +987,26 @@ export default function CashRegister() {
         closingDiDiFood: diDiFood,
         closingAmount: cash + card + transfer + yape + plin + rappi + pedidosYa + diDiFood,
         closedAt: new Date(), // Hora de cierre
-        totalSales: totals.sales,
-        salesCash: totals.salesCash,
-        salesCard: totals.salesCard,
-        salesTransfer: totals.salesTransfer,
-        salesYape: totals.salesYape,
-        salesPlin: totals.salesPlin,
-        salesRappi: totals.salesRappi,
-        salesPedidosYa: totals.salesPedidosYa,
-        salesDiDiFood: totals.salesDiDiFood,
-        totalIncome: totals.income,
-        totalExpense: totals.expense,
-        totalIncomeYape: totals.incomeYape || 0,
-        totalExpenseYape: totals.expenseYape || 0,
-        expectedAmount: totals.expected,
-        difference: cash - totals.expected,
+        totalSales: totalsClose.sales,
+        salesCash: totalsClose.salesCash,
+        salesCard: totalsClose.salesCard,
+        salesTransfer: totalsClose.salesTransfer,
+        salesYape: totalsClose.salesYape,
+        salesPlin: totalsClose.salesPlin,
+        salesRappi: totalsClose.salesRappi,
+        salesPedidosYa: totalsClose.salesPedidosYa,
+        salesDiDiFood: totalsClose.salesDiDiFood,
+        totalIncome: totalsClose.income,
+        totalExpense: totalsClose.expense,
+        totalIncomeYape: totalsClose.incomeYape || 0,
+        totalExpenseYape: totalsClose.expenseYape || 0,
+        expectedAmount: totalsClose.expected,
+        difference: cash - totalsClose.expected,
         expectedAmountYape,
         differenceYape,
         invoiceCount: sessionOnlyInvoicesCount,
-        deferredPayments: totals.deferredPayments || [],
-        deferredTotal: totals.deferredTotal || 0,
+        deferredPayments: totalsClose.deferredPayments || [],
+        deferredTotal: totalsClose.deferredTotal || 0,
       }
 
       // MODO DEMO: Simular cierre sin guardar en Firebase
@@ -960,29 +1029,29 @@ export default function CashRegister() {
         rappi,
         pedidosYa,
         diDiFood,
-        totalSales: totals.sales,
-        salesCash: totals.salesCash,
-        salesCard: totals.salesCard,
-        salesTransfer: totals.salesTransfer,
-        salesYape: totals.salesYape,
-        salesPlin: totals.salesPlin,
-        salesRappi: totals.salesRappi,
-        salesPedidosYa: totals.salesPedidosYa,
-        salesDiDiFood: totals.salesDiDiFood,
-        totalIncome: totals.income,
-        totalExpense: totals.expense,
-        expectedAmount: totals.expected,
-        difference: cash - totals.expected,
+        totalSales: totalsClose.sales,
+        salesCash: totalsClose.salesCash,
+        salesCard: totalsClose.salesCard,
+        salesTransfer: totalsClose.salesTransfer,
+        salesYape: totalsClose.salesYape,
+        salesPlin: totalsClose.salesPlin,
+        salesRappi: totalsClose.salesRappi,
+        salesPedidosYa: totalsClose.salesPedidosYa,
+        salesDiDiFood: totalsClose.salesDiDiFood,
+        totalIncome: totalsClose.income,
+        totalExpense: totalsClose.expense,
+        expectedAmount: totalsClose.expected,
+        difference: cash - totalsClose.expected,
         // Yape: paralelos al cálculo de efectivo. firestoreService omite estos
         // campos si todo es 0 + no hay closingYape, para mantener limpios los
         // docs de cajas sin Yape.
-        totalIncomeYape: totals.incomeYape || 0,
-        totalExpenseYape: totals.expenseYape || 0,
+        totalIncomeYape: totalsClose.incomeYape || 0,
+        totalExpenseYape: totalsClose.expenseYape || 0,
         expectedAmountYape,
         differenceYape,
         invoiceCount: sessionOnlyInvoicesCount,
-        deferredPayments: totals.deferredPayments || [],
-        deferredTotal: totals.deferredTotal || 0,
+        deferredPayments: totalsClose.deferredPayments || [],
+        deferredTotal: totalsClose.deferredTotal || 0,
         // Multi-divisa: bloque USD si hubo actividad
         ...(usdBlock && { usd: usdBlock }),
       }, user.uid, user.displayName || user.email || 'Usuario')
@@ -1564,8 +1633,9 @@ export default function CashRegister() {
     return new Date(v)
   }
 
-  // Cálculos
-  const calculateTotals = () => {
+  // Cálculos. Acepta listas explícitas para poder calcular sobre datos FRESCOS
+  // (el cierre de caja re-lee de Firestore antes de congelar los totales).
+  const calculateTotals = (invoicesList = todayInvoices, movementsList = movements) => {
     if (!currentSession) return {
       sales: 0,
       salesCash: 0,
@@ -1622,7 +1692,7 @@ export default function CashRegister() {
     // - Incluir notas de débito pagadas (son cobros adicionales)
     // - Excluir notas de venta ya convertidas a boleta/factura (para no duplicar)
     // - Excluir documentos anulados (notas de venta, boletas, facturas)
-    const validInvoices = todayInvoices.filter(invoice => {
+    const validInvoices = invoicesList.filter(invoice => {
       // Excluir notas de crédito (no son ventas, son devoluciones)
       if (invoice.documentType === 'nota_credito') {
         return false
@@ -1745,7 +1815,7 @@ export default function CashRegister() {
     // Multi-divisa: PEN y USD por separado.
     let pendingTotal = 0
     let pendingCount = 0
-    todayInvoices.forEach(invoice => {
+    invoicesList.forEach(invoice => {
       // Excluir notas de crédito y notas convertidas y anuladas
       if (invoice.documentType === 'nota_credito') return
       // Notas de débito pagadas ya se contaron arriba, excluir pendientes
@@ -1778,7 +1848,7 @@ export default function CashRegister() {
     // saldo en billetera digital. Movimientos legacy sin .method → 'cash'.
     let income = 0, expense = 0, incomeUSD = 0, expenseUSD = 0
     let incomeYape = 0, expenseYape = 0
-    movements.forEach(m => {
+    movementsList.forEach(m => {
       const amt = Number(m.amount) || 0
       const isUSD = m.currency === 'USD'
       const isYape = m.method === 'yape'
@@ -1952,7 +2022,16 @@ export default function CashRegister() {
                   <Plus className="w-4 h-4 mr-2" />
                   Movimiento
                 </Button>
-                <Button variant="danger" onClick={() => setShowCloseModal(true)} className="flex-1 sm:flex-initial">
+                <Button
+                  variant="danger"
+                  onClick={() => {
+                    setShowCloseModal(true)
+                    // Refrescar en background: el esperado que ve la cajera al
+                    // contar debe incluir anulaciones/ventas de otras máquinas.
+                    refreshSessionData(true)
+                  }}
+                  className="flex-1 sm:flex-initial"
+                >
                   <Lock className="w-4 h-4 mr-2" />
                   Cerrar Caja
                 </Button>

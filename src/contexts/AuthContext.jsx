@@ -506,6 +506,43 @@ export const AuthProvider = ({ children }) => {
     }
   }, [subscriptionOwnerId])
 
+  // Listener en tiempo real de PERMISOS del sub-usuario (mismo patrón que el de
+  // suscripción). Antes los permisos se leían UNA vez al iniciar sesión: si el
+  // dueño bloqueaba una página o desactivaba al usuario desde otra máquina, el
+  // cambio recién se aplicaba cuando el sub-usuario recargaba el sistema.
+  useEffect(() => {
+    if (!user?.uid || isAdmin || isBusinessOwner) return
+
+    const userRef = doc(db, 'users', user.uid)
+    const unsubscribePerms = onSnapshot(userRef, (snap) => {
+      if (!snap.exists()) return
+      const userData = snap.data()
+
+      // Usuario desactivado por el dueño: cerrar la sesión al instante
+      if (userData.isActive === false) {
+        console.warn('🔒 Usuario desactivado en tiempo real, cerrando sesión')
+        logoutService()
+        return
+      }
+
+      setUserPermissions(userData)
+      setAllowedPages(userData.allowedPages || EMPTY_PERMS)
+      setAllowedWarehouses(userData.allowedWarehouses || EMPTY_PERMS)
+      setAllowedBranches(userData.allowedBranches || EMPTY_PERMS)
+      setAllowedDocumentTypes(userData.allowedDocumentTypes || EMPTY_PERMS)
+      setAllowedPaymentMethods(userData.allowedPaymentMethods || EMPTY_PERMS)
+      setAssignedSellerId(userData.assignedSellerId || null)
+      setAssignedSellerName(userData.assignedSellerName || null)
+      setIndependentCashRegister(userData.independentCashRegister || false)
+      setHideStockInPOS(userData.hideStockInPOS || false)
+      setHideDiscountInPOS(userData.hideDiscountInPOS || false)
+    }, (error) => {
+      console.warn('Error en listener de permisos (se mantienen los cargados):', error)
+    })
+
+    return () => unsubscribePerms()
+  }, [user?.uid, isAdmin, isBusinessOwner])
+
   const login = async (email, password) => {
     try {
       const result = await loginWithEmail(email, password)
