@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Grid3x3, Plus, Users, Clock, CheckCircle, XCircle, Edit, Trash2, Loader2, Receipt } from 'lucide-react'
+import { Grid3x3, Plus, Users, Clock, CheckCircle, XCircle, Edit, Trash2, Loader2, Receipt, Wine } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -26,6 +26,7 @@ import {
   getTables,
   getTablesStats,
   createTable,
+  createBarTab,
   updateTable,
   deleteTable,
   occupyTable,
@@ -135,7 +136,15 @@ export default function Tables() {
     branchId: null,
   })
 
+  // 'Barra' agrupa las cuentas de barra (creadas al vuelo, no son mesas fijas);
+  // no se ofrece al crear una mesa normal.
   const zones = ['Salón Principal', 'Terraza', 'Salón VIP', 'Bar', 'Exterior']
+  const zonesWithBar = [...zones, 'Barra']
+
+  // Cuenta de barra: se crea con el nombre del cliente y se abre al toque
+  const [showBarTabModal, setShowBarTabModal] = useState(false)
+  const [barTabName, setBarTabName] = useState('')
+  const [isCreatingBarTab, setIsCreatingBarTab] = useState(false)
 
   // Cargar configuración de impuestos al inicio
   useEffect(() => {
@@ -569,6 +578,40 @@ export default function Tables() {
       setIsDeleting(false)
       setDeleteConfirm({ isOpen: false, tableId: null, tableNumber: '' })
       setDeleteInput('')
+    }
+  }
+
+  // Crear una cuenta de barra y abrirla de una: el cliente ya está pidiendo.
+  const handleCreateBarTab = async () => {
+    const name = barTabName.trim()
+    if (!name) {
+      toast.error('Ingresa el nombre del cliente')
+      return
+    }
+    if (isDemoMode) {
+      toast.info('Función no disponible en modo demo')
+      return
+    }
+    setIsCreatingBarTab(true)
+    try {
+      const result = await createBarTab(getBusinessId(), {
+        name,
+        branchId: selectedBranchId || null,
+      })
+      if (!result.success) {
+        toast.error(result.error || 'No se pudo crear la cuenta de barra')
+        return
+      }
+      setShowBarTabModal(false)
+      setBarTabName('')
+      await loadTables()
+      // Abrir directo el modal de productos para tomar el pedido
+      handleTableClick(result.table)
+    } catch (error) {
+      console.error('Error al crear cuenta de barra:', error)
+      toast.error('No se pudo crear la cuenta de barra')
+    } finally {
+      setIsCreatingBarTab(false)
     }
   }
 
@@ -1617,6 +1660,14 @@ export default function Tables() {
               ))}
             </Select>
           )}
+          <Button
+            variant="outline"
+            onClick={() => { setBarTabName(''); setShowBarTabModal(true) }}
+            className="flex items-center gap-2 w-full md:w-auto"
+          >
+            <Wine className="w-4 h-4" />
+            Nueva cuenta de barra
+          </Button>
           <Button onClick={openCreateModal} className="flex items-center gap-2 w-full md:w-auto">
             <Plus className="w-4 h-4" />
             Nueva Mesa
@@ -1700,17 +1751,23 @@ export default function Tables() {
         </Card>
       ) : (
         <div className="space-y-6">
-          {zones.map((zone) => {
+          {zonesWithBar.map((zone) => {
             const zoneTables = tables.filter((t) => t.zone === zone)
             if (zoneTables.length === 0) return null
+            const isBarZone = zone === 'Barra'
 
             return (
               <Card key={zone}>
                 <CardHeader>
                   <div className="flex items-center justify-between">
-                    <CardTitle>{zone}</CardTitle>
+                    <CardTitle className="flex items-center gap-2">
+                      {isBarZone && <Wine className="w-5 h-5 text-amber-600" />}
+                      {zone}
+                    </CardTitle>
                     <span className="text-sm text-gray-500">
-                      {zoneTables.length} {zoneTables.length === 1 ? 'mesa' : 'mesas'}
+                      {isBarZone
+                        ? `${zoneTables.length} ${zoneTables.length === 1 ? 'cuenta' : 'cuentas'}`
+                        : `${zoneTables.length} ${zoneTables.length === 1 ? 'mesa' : 'mesas'}`}
                     </span>
                   </div>
                 </CardHeader>
@@ -1909,6 +1966,53 @@ export default function Tables() {
           })}
         </div>
       )}
+
+      {/* Modal Nueva cuenta de barra: solo pide el nombre del cliente */}
+      <Modal
+        isOpen={showBarTabModal}
+        onClose={() => setShowBarTabModal(false)}
+        title="Nueva cuenta de barra"
+      >
+        <form
+          onSubmit={(e) => { e.preventDefault(); handleCreateBarTab() }}
+          className="space-y-4"
+        >
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Nombre del cliente *
+            </label>
+            <input
+              type="text"
+              value={barTabName}
+              onChange={(e) => setBarTabName(e.target.value)}
+              placeholder="Ej: Juan, Barra 1, Señor de la gorra"
+              autoFocus
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              La cuenta acumula el consumo como una mesa. Al cobrarla se cierra y desaparece de la barra.
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowBarTabModal(false)}
+              className="flex-1"
+              disabled={isCreatingBarTab}
+            >
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={isCreatingBarTab} className="flex-1">
+              {isCreatingBarTab ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creando...</>
+              ) : (
+                'Crear y tomar pedido'
+              )}
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Modal Crear/Editar */}
       <Modal

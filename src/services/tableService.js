@@ -201,8 +201,49 @@ export const occupyTable = async (businessId, tableId, occupyData) => {
 }
 
 /**
+ * Crear una CUENTA DE BARRA: una mesa efímera identificada por el nombre del
+ * cliente en vez de un número, para atender a quien consume parado/en barra y
+ * paga al final (acumula igual que una mesa: rondas, división, precuenta).
+ *
+ * Reusa el modelo de mesa a propósito — cobro, comandas, stock y permisos por
+ * sucursal ya están resueltos ahí. La diferencia: `isBarTab: true` hace que al
+ * cobrarla se ELIMINE (releaseTable) en vez de volver a "disponible", así la
+ * barra no se llena de puestos fantasma.
+ */
+export const createBarTab = async (businessId, { name, branchId = null }) => {
+  try {
+    const tablesRef = collection(db, 'businesses', businessId, 'tables')
+    const newTab = {
+      number: name, // el nombre del cliente ES el identificador visible
+      isBarTab: true,
+      capacity: 1,
+      zone: 'Barra',
+      branchId: branchId || null,
+      status: 'available',
+      isActive: true,
+      currentOrder: null,
+      waiter: null,
+      waiterId: null,
+      startTime: null,
+      amount: 0,
+      reservedFor: null,
+      reservedBy: null,
+      reservationTime: null,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }
+    const docRef = await addDoc(tablesRef, newTab)
+    return { success: true, id: docRef.id, table: { id: docRef.id, ...newTab } }
+  } catch (error) {
+    console.error('Error al crear cuenta de barra:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * Liberar una mesa (cerrar orden y completarla).
  * Si la mesa pertenece a un grupo (fusión), libera TODAS las mesas del grupo.
+ * Las cuentas de barra (isBarTab) se ELIMINAN al liberarse: son efímeras.
  */
 export const releaseTable = async (businessId, tableId) => {
   try {
@@ -233,25 +274,30 @@ export const releaseTable = async (businessId, tableId) => {
       }
     }
 
-    // PRIMERO: liberar todas las mesas inmediatamente (UI rápida)
+    // PRIMERO: liberar todas las mesas inmediatamente (UI rápida).
+    // Las cuentas de barra se BORRAN: no son puestos fijos, existen solo mientras
+    // el cliente consume. Las mesas físicas vuelven a "disponible" como siempre.
     await Promise.all(
       tablesToRelease.map((t) =>
-        updateDoc(doc(db, 'businesses', businessId, 'tables', t.id), {
-          status: 'available',
-          currentOrder: null,
-          waiter: null,
-          waiterId: null,
-          startTime: null,
-          amount: 0,
-          groupId: null,
-          isGroupPrimary: false,
-          groupTableNumbers: null,
-          allItemsServed: false,
-          // Limpiar marca de precuenta impresa (la próxima ocupación de
-          // la mesa arranca sin el indicador).
-          preBillPrintedAt: null,
-          updatedAt: serverTimestamp(),
-        }).catch((err) => console.warn(`No se pudo liberar mesa ${t.id}:`, err))
+        (t.isBarTab
+          ? deleteDoc(doc(db, 'businesses', businessId, 'tables', t.id))
+          : updateDoc(doc(db, 'businesses', businessId, 'tables', t.id), {
+              status: 'available',
+              currentOrder: null,
+              waiter: null,
+              waiterId: null,
+              startTime: null,
+              amount: 0,
+              groupId: null,
+              isGroupPrimary: false,
+              groupTableNumbers: null,
+              allItemsServed: false,
+              // Limpiar marca de precuenta impresa (la próxima ocupación de
+              // la mesa arranca sin el indicador).
+              preBillPrintedAt: null,
+              updatedAt: serverTimestamp(),
+            })
+        ).catch((err) => console.warn(`No se pudo liberar mesa ${t.id}:`, err))
       )
     )
 

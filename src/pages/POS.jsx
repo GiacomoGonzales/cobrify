@@ -90,6 +90,7 @@ import {
   redeemStoreCredit,
 } from '@/services/firestoreService'
 import ModifierSelectorModal from '@/components/restaurant/ModifierSelectorModal'
+import VariantSelectorModal from '@/components/product/VariantSelectorModal'
 import { consultarDNI, consultarRUC, consultarEstablecimientos } from '@/services/documentLookupService'
 import { deductIngredients } from '@/services/ingredientService'
 import { getRecipeByProductId, checkRecipeStock, shouldDeductIngredients, getRecipes } from '@/services/recipeService'
@@ -10896,86 +10897,19 @@ ${companySettings?.businessName || 'Tu Empresa'}`
         </div>
       </Modal>
 
-      {/* Variant Selection Modal */}
-      <Modal
+      {/* Selector de variante (componente compartido con los flujos de restaurante) */}
+      <VariantSelectorModal
         isOpen={showVariantModal}
         onClose={() => {
           setShowVariantModal(false)
           setSelectedProductForVariant(null)
         }}
-        title={`Seleccionar variante - ${selectedProductForVariant?.name || ''}`}
-        size="md"
-      >
-        {selectedProductForVariant && (
-          <div className="space-y-4">
-            <p className="text-sm text-gray-600">
-              Selecciona la variante del producto que deseas agregar al carrito:
-            </p>
-
-            {/* Variants Grid */}
-            <div className="grid grid-cols-1 gap-3 max-h-96 overflow-y-auto">
-              {selectedProductForVariant.variants?.map((variant, index) => {
-                // Calcular stock según almacén seleccionado
-                const variantStock = selectedWarehouse
-                  ? ((variant.warehouseStocks || []).find(ws => ws.warehouseId === selectedWarehouse.id)?.stock || 0)
-                  : (variant.stock || 0)
-                const noStock = variantStock <= 0 && !companySettings?.allowNegativeStock
-
-                return (
-                  <button
-                    key={index}
-                    onClick={() => addVariantToCart(selectedProductForVariant, variant)}
-                    disabled={noStock}
-                    className={`p-4 border-2 rounded-lg text-left transition-all ${
-                      noStock
-                        ? 'border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed'
-                        : 'border-gray-200 hover:border-primary-500 hover:bg-primary-50'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <p className="font-mono text-xs text-gray-500 mb-1">{variant.sku}</p>
-                        <div className="flex flex-wrap gap-2 mb-2">
-                          {Object.entries(variant.attributes).map(([key, value]) => (
-                            <Badge key={key} variant="default" className="text-xs">
-                              {key.charAt(0).toUpperCase() + key.slice(1)}: {value}
-                            </Badge>
-                          ))}
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <p className="text-lg font-bold text-primary-600">
-                            {formatCurrency(variant.price)}
-                          </p>
-                          <span
-                            className={`text-xs font-semibold ${
-                              variantStock >= 4
-                                ? 'text-green-600'
-                                : variantStock > 0
-                                ? 'text-yellow-600'
-                                : 'text-red-600'
-                            }`}
-                          >
-                            {variantStock > 0 ? `Stock: ${Number.isInteger(variantStock) ? variantStock : parseFloat(variantStock.toFixed(2))}` : 'Sin stock'}
-                          </span>
-                        </div>
-                      </div>
-                      {!noStock && (
-                        <Plus className="w-5 h-5 text-primary-600 flex-shrink-0" />
-                      )}
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-
-            {selectedProductForVariant.variants?.length === 0 && (
-              <div className="text-center py-8">
-                <p className="text-gray-500">No hay variantes disponibles para este producto.</p>
-              </div>
-            )}
-          </div>
-        )}
-      </Modal>
+        product={selectedProductForVariant}
+        onSelect={addVariantToCart}
+        warehouse={selectedWarehouse}
+        allowNegativeStock={companySettings?.allowNegativeStock}
+        formatCurrency={formatCurrency}
+      />
 
       {/* Modal de opciones post-venta (Ticket/Preview/PDF/WhatsApp/Nueva venta) */}
       <PostSaleModal

@@ -9,6 +9,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
 import ModifierSelectorModal from '@/components/restaurant/ModifierSelectorModal'
+import VariantSelectorModal from '@/components/product/VariantSelectorModal'
 import { computeProductsWithoutIngredients, hasAnyRecipe } from '@/utils/recipeAvailability'
 import { cn } from '@/lib/utils'
 
@@ -52,6 +53,9 @@ export default function OrderItemsModal({
   // Price selection state (multiple prices)
   const [showPriceModal, setShowPriceModal] = useState(false)
   const [productForPriceSelection, setProductForPriceSelection] = useState(null)
+  // Selector de variante (ej. Vino: Copa / Botella)
+  const [showVariantModal, setShowVariantModal] = useState(false)
+  const [productForVariant, setProductForVariant] = useState(null)
 
   // Colapso de la seccion de categorias (como en el POS). Persiste en localStorage.
   const [categoriesCollapsed, setCategoriesCollapsed] = useState(() => {
@@ -279,9 +283,18 @@ export default function OrderItemsModal({
     }
   }
 
-  const addToCart = (product, selectedPrice = null) => {
+  const addToCart = (product, selectedPrice = null, variant = null) => {
+    // Si tiene variantes (ej. Vino: Copa / Botella) y no se eligió una, preguntar
+    // primero: cada variante tiene su propio precio y stock. Va ANTES de precios y
+    // modificadores, igual que en el POS.
+    if (!variant && product.hasVariants && Array.isArray(product.variants) && product.variants.length > 0) {
+      setProductForVariant(product)
+      setShowVariantModal(true)
+      return
+    }
+
     // Si tiene múltiples precios y no se ha seleccionado uno, mostrar selector primero
-    if (isNewOrder && !selectedPrice && (product.price2 || product.price3 || product.price4)) {
+    if (isNewOrder && !selectedPrice && !variant && (product.price2 || product.price3 || product.price4)) {
       setProductForPriceSelection(product)
       setShowPriceModal(true)
       return
@@ -289,22 +302,32 @@ export default function OrderItemsModal({
 
     // Si el producto tiene modificadores, abrir modal de selección
     if (product.modifiers && product.modifiers.length > 0) {
-      setProductForModifiers({ ...product, _selectedPrice: selectedPrice ?? product.price })
+      setProductForModifiers({
+        ...product,
+        _selectedPrice: selectedPrice ?? variant?.price ?? product.price,
+        ...(variant && { _variant: variant }),
+      })
       setIsModifierModalOpen(true)
       return
     }
 
     // En mesas siempre usar precio principal (precio 1), no mostrar selector de precios
-    const price = selectedPrice ?? product.price ?? 0
+    const price = selectedPrice ?? variant?.price ?? product.price ?? 0
 
-    // Si no tiene modificadores, agregar directamente al carrito
-    const existingItem = cart.find((item) => item.productId === product.id && !item.modifiers && item.price === price)
+    // Las variantes del mismo producto son líneas distintas: se identifican por SKU
+    const matchesLine = (item) =>
+      item.productId === product.id &&
+      !item.modifiers &&
+      item.price === price &&
+      (item.variantSku || null) === (variant?.sku || null)
+
+    const existingItem = cart.find(matchesLine)
 
     if (existingItem) {
       // Incrementar cantidad
       setCart(
         cart.map((item) =>
-          item.productId === product.id && !item.modifiers && item.price === price
+          matchesLine(item)
             ? { ...item, quantity: item.quantity + 1, total: (item.quantity + 1) * item.price }
             : item
         )
@@ -316,15 +339,29 @@ export default function OrderItemsModal({
         {
           productId: product.id,
           name: product.name,
-          code: product.code,
+          code: variant?.sku || product.code,
           price: price,
           quantity: 1,
           total: price,
           notes: '',
           category: getCategoryName(product.category),
+          // Variante: el nombre lleva el detalle para que cocina y el ticket lo vean
+          ...(variant && {
+            variantSku: variant.sku,
+            variantAttributes: variant.attributes,
+            isVariant: true,
+            name: `${product.name} (${Object.values(variant.attributes || {}).join(' / ')})`,
+          }),
         },
       ])
     }
+  }
+
+  // Variante elegida en el modal: sigue el flujo normal (precio/modificadores)
+  const handleVariantSelection = (product, variant) => {
+    setShowVariantModal(false)
+    setProductForVariant(null)
+    addToCart(product, null, variant)
   }
 
   // Manejar selección de precio desde el modal
@@ -352,10 +389,11 @@ export default function OrderItemsModal({
     const { selectedModifiers, totalPrice } = data
     const basePrice = productForModifiers._selectedPrice ?? productForModifiers.price
 
-    // Crear un identificador único basado en los modificadores seleccionados + precio base
+    // Identificador único: modificadores + precio base + variante (dos variantes
+    // con el mismo precio y modificadores seguirían siendo líneas distintas)
     const modifierKey = selectedModifiers
       .map(m => `${m.modifierId}:${m.options.map(o => o.optionId).join(',')}`)
-      .join('|') + `|p:${basePrice}`
+      .join('|') + `|p:${basePrice}` + (productForModifiers._variant ? `|v:${productForModifiers._variant.sku}` : '')
 
     // El totalPrice del ModifierSelectorModal ya incluye el precio base seleccionado + ajustes
     const finalPrice = totalPrice
@@ -377,13 +415,17 @@ export default function OrderItemsModal({
         )
       )
     } else {
-      // Agregar nuevo item con modificadores
+      // Agregar nuevo item con modificadores. Si venía de elegir variante
+      // (_variant), se conserva: un vino en copa con extras sigue siendo la copa.
+      const mVariant = productForModifiers._variant || null
       setCart([
         ...cart,
         {
           productId: productForModifiers.id,
-          name: productForModifiers.name,
-          code: productForModifiers.code,
+          name: mVariant
+            ? `${productForModifiers.name} (${Object.values(mVariant.attributes || {}).join(' / ')})`
+            : productForModifiers.name,
+          code: mVariant?.sku || productForModifiers.code,
           price: finalPrice, // Precio base seleccionado + modificadores
           basePrice: basePrice, // Precio base seleccionado (puede ser price2, price3, etc.)
           quantity: 1,
@@ -392,6 +434,11 @@ export default function OrderItemsModal({
           modifiers: selectedModifiers, // Guardar modificadores seleccionados
           modifierKey: modifierKey, // Para identificar items únicos
           category: getCategoryName(productForModifiers.category), // Categoría para filtrado por estación
+          ...(mVariant && {
+            variantSku: mVariant.sku,
+            variantAttributes: mVariant.attributes,
+            isVariant: true,
+          }),
         },
       ])
     }
@@ -779,6 +826,19 @@ export default function OrderItemsModal({
           </div>
         </div>
       </div>
+
+      {/* Modal de selección de variante (ej. Vino: Copa / Botella) */}
+      <VariantSelectorModal
+        isOpen={showVariantModal}
+        onClose={() => {
+          setShowVariantModal(false)
+          setProductForVariant(null)
+        }}
+        product={productForVariant}
+        onSelect={handleVariantSelection}
+        allowNegativeStock={businessSettings?.allowNegativeStock}
+        formatCurrency={(v) => `S/ ${(Number(v) || 0).toFixed(2)}`}
+      />
 
       {/* Modal de selección de modificadores */}
       <ModifierSelectorModal
