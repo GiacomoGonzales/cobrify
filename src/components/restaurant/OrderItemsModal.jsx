@@ -357,6 +357,21 @@ export default function OrderItemsModal({
     }
   }
 
+  // Rango de precios y stock total de un producto con variantes (el padre no
+  // tiene precio ni stock propios: viven en cada variante). Devuelve null si el
+  // producto no maneja variantes.
+  const getVariantInfo = (product) => {
+    if (!product?.hasVariants || !Array.isArray(product.variants) || product.variants.length === 0) return null
+    const prices = product.variants.map(v => Number(v.price) || 0).filter(p => p > 0)
+    if (prices.length === 0) return null
+    return {
+      min: Math.min(...prices),
+      max: Math.max(...prices),
+      count: product.variants.length,
+      stock: product.variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0),
+    }
+  }
+
   // Variante elegida en el modal: sigue el flujo normal (precio/modificadores)
   const handleVariantSelection = (product, variant) => {
     setShowVariantModal(false)
@@ -738,17 +753,41 @@ export default function OrderItemsModal({
                         <p className="text-[10px] text-gray-400 mt-0.5 truncate">Cód: {product.code}</p>
                       )}
                       <div className="mt-auto pt-1.5">
-                        <p className="text-sm font-bold text-primary-600">
-                          S/ {(product.price || 0).toFixed(2)}
-                          {isNewOrder && (product.price2 || product.price3 || product.price4) && (
-                            <span className="text-[10px] font-normal text-gray-400 ml-1">
-                              - S/ {(product.price2 || product.price3 || product.price4 || 0).toFixed(2)}
-                            </span>
-                          )}
-                        </p>
-                        {product.stock !== undefined && (
-                          <p className="text-[10px] text-gray-400">Stock: {product.stock}</p>
-                        )}
+                        {(() => {
+                          // Productos con variantes: el precio y el stock viven en las
+                          // variantes, no en el padre (que sale en 0). Mostrar el rango
+                          // y el stock sumado en vez de "S/ 0.00" y un stock vacío.
+                          const vInfo = getVariantInfo(product)
+                          if (vInfo) {
+                            return (
+                              <>
+                                <p className="text-sm font-bold text-primary-600">
+                                  {vInfo.min === vInfo.max
+                                    ? `S/ ${vInfo.min.toFixed(2)}`
+                                    : `S/ ${vInfo.min.toFixed(2)} - ${vInfo.max.toFixed(2)}`}
+                                </p>
+                                <p className="text-[10px] text-gray-400">
+                                  {vInfo.count} variantes · Stock: {vInfo.stock}
+                                </p>
+                              </>
+                            )
+                          }
+                          return (
+                            <>
+                              <p className="text-sm font-bold text-primary-600">
+                                S/ {(product.price || 0).toFixed(2)}
+                                {isNewOrder && (product.price2 || product.price3 || product.price4) && (
+                                  <span className="text-[10px] font-normal text-gray-400 ml-1">
+                                    - S/ {(product.price2 || product.price3 || product.price4 || 0).toFixed(2)}
+                                  </span>
+                                )}
+                              </p>
+                              {product.stock !== undefined && (
+                                <p className="text-[10px] text-gray-400">Stock: {product.stock}</p>
+                              )}
+                            </>
+                          )
+                        })()}
                       </div>
                     </button>
                   )
