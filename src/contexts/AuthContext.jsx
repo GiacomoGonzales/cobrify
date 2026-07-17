@@ -332,6 +332,15 @@ export const AuthProvider = ({ children }) => {
               // en el documento de Firestore, para no alterar el catálogo público, que lee
               // el flag del doc para decidir si muestra precios mayorista/VIP al cliente final.
               setBusinessSettings({ ...businessData, multiplePricesEnabled: true, presentationsEnabled: true })
+              // Espejar la Impresora de Caja (compartida por negocio en Firestore)
+              // a localStorage: el servicio de impresión la lee de ahí al imprimir
+              // desde Ventas/POS. Sin esto, un dispositivo que nunca abrió
+              // Configuración imprimía la prueba pero no el ticket real.
+              try {
+                if (businessData.cajaPrinter) {
+                  localStorage.setItem('factuya_documentPrinterConfig', JSON.stringify(businessData.cajaPrinter))
+                }
+              } catch (e) { void e }
 
               console.log('✅ businessMode establecido a:', mode)
 

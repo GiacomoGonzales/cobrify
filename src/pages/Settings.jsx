@@ -1398,6 +1398,13 @@ export default function Settings() {
         if (businessData.cajaPrinter) {
           setDocumentPrinterConfig(businessData.cajaPrinter)
           setBusinessCajaPrinter(businessData.cajaPrinter.enabled ? businessData.cajaPrinter : null)
+          // CRÍTICO: espejar en localStorage. El servicio de impresión
+          // (getDocumentPrinterConfig, usado al imprimir desde Ventas/POS) lee de
+          // localStorage, NO del estado de React. Sin esto, un dispositivo que solo
+          // CARGA la config compartida (no la configuró él) tenía el "Probar" OK
+          // (lee estado) pero Ventas no imprimía nada (localStorage vacío → cae en
+          // "Printer not connected" sin error visible).
+          saveDocumentPrinterConfig(businessData.cajaPrinter)
         } else {
           const savedDocPrinter = getDocumentPrinterConfig()
           if (savedDocPrinter) {
