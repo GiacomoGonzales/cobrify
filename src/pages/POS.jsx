@@ -5449,8 +5449,9 @@ export default function POS() {
 
     // Detectar si es venta al crédito:
     // 1. Nota de venta con pago parcial habilitado y monto 0
-    // 2. Factura con forma de pago "crédito"
-    const isCreditSale = (enablePartialPayment && amountToPay === 0) || (documentType === 'factura' && paymentType === 'credito')
+    // 2. Factura o boleta con forma de pago "crédito"
+    const isCreditSale = (enablePartialPayment && amountToPay === 0) ||
+      ((documentType === 'factura' || documentType === 'boleta') && paymentType === 'credito')
 
     // Si hidePaymentMethods está activo, usar efectivo automáticamente
     const isHidePaymentMethods = hasFeature('hidePaymentMethods')
@@ -5783,7 +5784,9 @@ export default function POS() {
       // Calcular datos de pago parcial y ventas al crédito
       const partialAmount = parseFloat(partialPaymentAmount) || 0
       const isCreditSaleForNotaVenta = enablePartialPayment && partialAmount === 0 && documentType === 'nota_venta'
-      const isCreditSaleForFactura = documentType === 'factura' && paymentType === 'credito'
+      // Factura O boleta al crédito: mismo tratamiento (paymentStatus pending +
+      // balance) para que entren al reporte de Pagos Pendientes.
+      const isCreditSaleForFactura = (documentType === 'factura' || documentType === 'boleta') && paymentType === 'credito'
       const isCreditSaleForInvoice = isCreditSaleForNotaVenta || isCreditSaleForFactura
       const isPartialPayment = enablePartialPayment && partialAmount > 0 && documentType === 'nota_venta'
 
@@ -5992,6 +5995,19 @@ export default function POS() {
             amount: parseFloat(inst.amount) || 0,
             dueDate: inst.dueDate,
           })),
+        }),
+        // Boleta: forma de pago Contado/Crédito con cuotas, igual que factura
+        // (el XML la declara con el mismo bloque FormaPago; SUNAT la acepta
+        // aunque solo la valide en facturas). Sin detracción/retención (no
+        // aplican a boletas).
+        ...(documentType === 'boleta' && {
+          paymentType: paymentType,
+          paymentDueDate: paymentType === 'credito' ? paymentDueDate : null,
+          paymentInstallments: paymentType === 'credito' ? paymentInstallments.map(inst => ({
+            number: inst.number,
+            amount: parseFloat(inst.amount) || 0,
+            dueDate: inst.dueDate
+          })) : [],
         }),
         // Forma de pago (solo para facturas) - Contado/Crédito con cuotas
         ...(documentType === 'factura' && {
@@ -7377,6 +7393,192 @@ ${companySettings?.businessName || 'Tu Empresa'}`
     )
   }
 
+  // Selector Contado/Crédito + vencimiento + cuotas. Compartido por FACTURA y
+  // BOLETA (SUNAT no exige la forma de pago en boletas — reglas 3244-3248 solo
+  // existen para factura — pero tampoco la prohíbe: el XML la declara igual).
+  // Las ramas de detracción son inertes en boleta (hasDetraction solo se
+  // activa en factura).
+  const formaPagoCreditoBlock = (
+    <>
+      <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1.5">
+        <CreditCard className="w-3.5 h-3.5" />
+        Forma de Pago
+      </label>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            setPaymentType('contado')
+            setPaymentDueDate('')
+            setPaymentInstallments([])
+          }}
+          className={`flex-1 py-1.5 px-2 text-xs font-medium rounded-lg border transition-colors ${
+            paymentType === 'contado'
+              ? 'bg-primary-50 border-primary-500 text-primary-700'
+              : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          Contado
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setPaymentType('credito')
+            // Establecer fecha de vencimiento por defecto a 30 días
+            const defaultDueDate = new Date()
+            defaultDueDate.setDate(defaultDueDate.getDate() + 30)
+            setPaymentDueDate(getLocalDateString(defaultDueDate))
+          }}
+          className={`flex-1 py-1.5 px-2 text-xs font-medium rounded-lg border transition-colors ${
+            paymentType === 'credito'
+              ? 'bg-primary-50 border-primary-500 text-primary-700'
+              : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          Crédito
+        </button>
+      </div>
+
+      {/* Campos adicionales para Crédito */}
+      {paymentType === 'credito' && (
+        <div className="mt-2 space-y-2">
+          <div>
+            <label className="text-xs text-gray-500 mb-0.5 block">Fecha de Vencimiento</label>
+            <input
+              type="date"
+              value={paymentDueDate}
+              onChange={e => {
+                setPaymentDueDate(e.target.value)
+                // Si hay una sola cuota, actualizar su fecha también
+                if (paymentInstallments.length === 1) {
+                  setPaymentInstallments([{ ...paymentInstallments[0], dueDate: e.target.value }])
+                }
+              }}
+              min={emissionDate}
+              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+            />
+          </div>
+
+          {/* Cuotas */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs text-gray-500">Cuotas (opcional)</label>
+              <button
+                type="button"
+                onClick={() => {
+                  // Calcular el monto correcto (con detracción si aplica)
+                  let montoInicial = amounts.total
+                  if (hasDetraction && detractionType && paymentInstallments.length === 0) {
+                    const detractionRate = DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0
+                    const detractionAmt = Math.round((amounts.total * detractionRate) / 100)
+                    montoInicial = amounts.total - detractionAmt
+                  }
+                  const newInstallment = {
+                    number: paymentInstallments.length + 1,
+                    amount: paymentInstallments.length === 0 ? montoInicial.toFixed(2) : '',
+                    dueDate: paymentDueDate || getLocalDateString(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000))
+                  }
+                  setPaymentInstallments([...paymentInstallments, newInstallment])
+                }}
+                className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+              >
+                + Agregar cuota
+              </button>
+            </div>
+
+            {/* Una sola cuota - mostrar campo simple con opción de editar */}
+            {paymentInstallments.length === 1 && (
+              <div className="flex items-center gap-2 bg-gray-50 p-2 rounded">
+                <span className="text-xs text-gray-500">{currency === 'USD' ? '$' : 'S/'}</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={paymentInstallments[0].amount}
+                  onChange={e => {
+                    setPaymentInstallments([{ ...paymentInstallments[0], amount: e.target.value }])
+                  }}
+                  placeholder="Monto a pagar"
+                  className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Calcular el neto a pagar (con detracción si aplica)
+                    let montoNeto = amounts.total
+                    if (hasDetraction && detractionType) {
+                      const detractionRate = DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0
+                      const detractionAmt = Math.round((amounts.total * detractionRate) / 100)
+                      montoNeto = amounts.total - detractionAmt
+                    }
+                    setPaymentInstallments([{ ...paymentInstallments[0], amount: montoNeto.toFixed(2) }])
+                  }}
+                  className="text-xs text-primary-600 hover:text-primary-700 px-2 py-1 bg-primary-50 rounded"
+                  title="Usar neto a pagar"
+                >
+                  Neto
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentInstallments([])
+                  }}
+                  className="text-red-500 hover:text-red-700 p-0.5"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {/* Múltiples cuotas - mostrar lista */}
+            {paymentInstallments.length > 1 && (
+              <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                {paymentInstallments.map((installment, index) => (
+                  <div key={index} className="flex items-center gap-1.5 bg-gray-50 p-1.5 rounded">
+                    <span className="text-xs text-gray-500 w-12">Cuota {installment.number}</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={installment.amount}
+                      onChange={e => {
+                        const updated = [...paymentInstallments]
+                        updated[index].amount = e.target.value
+                        setPaymentInstallments(updated)
+                      }}
+                      placeholder="Monto"
+                      className="flex-1 px-1.5 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    />
+                    <input
+                      type="date"
+                      value={installment.dueDate}
+                      onChange={e => {
+                        const updated = [...paymentInstallments]
+                        updated[index].dueDate = e.target.value
+                        setPaymentInstallments(updated)
+                      }}
+                      min={emissionDate}
+                      className="w-28 px-1.5 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = paymentInstallments.filter((_, i) => i !== index)
+                          .map((inst, i) => ({ ...inst, number: i + 1 }))
+                        setPaymentInstallments(updated)
+                      }}
+                      className="text-red-500 hover:text-red-700 p-0.5"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  )
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -8655,184 +8857,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       />
                     )}
 
-                    {/* Forma de Pago - Solo Facturas */}
+                    {/* Forma de Pago (bloque compartido con boleta: formaPagoCreditoBlock) */}
                     <div className="mt-2 pt-2 border-t border-gray-200">
-                      <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1.5">
-                        <CreditCard className="w-3.5 h-3.5" />
-                        Forma de Pago
-                      </label>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setPaymentType('contado')
-                            setPaymentDueDate('')
-                            setPaymentInstallments([])
-                          }}
-                          className={`flex-1 py-1.5 px-2 text-xs font-medium rounded-lg border transition-colors ${
-                            paymentType === 'contado'
-                              ? 'bg-primary-50 border-primary-500 text-primary-700'
-                              : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
-                          }`}
-                        >
-                          Contado
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setPaymentType('credito')
-                            // Establecer fecha de vencimiento por defecto a 30 días
-                            const defaultDueDate = new Date()
-                            defaultDueDate.setDate(defaultDueDate.getDate() + 30)
-                            setPaymentDueDate(getLocalDateString(defaultDueDate))
-                          }}
-                          className={`flex-1 py-1.5 px-2 text-xs font-medium rounded-lg border transition-colors ${
-                            paymentType === 'credito'
-                              ? 'bg-primary-50 border-primary-500 text-primary-700'
-                              : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
-                          }`}
-                        >
-                          Crédito
-                        </button>
-                      </div>
-
-                      {/* Campos adicionales para Crédito */}
-                      {paymentType === 'credito' && (
-                        <div className="mt-2 space-y-2">
-                          <div>
-                            <label className="text-xs text-gray-500 mb-0.5 block">Fecha de Vencimiento</label>
-                            <input
-                              type="date"
-                              value={paymentDueDate}
-                              onChange={e => {
-                                setPaymentDueDate(e.target.value)
-                                // Si hay una sola cuota, actualizar su fecha también
-                                if (paymentInstallments.length === 1) {
-                                  setPaymentInstallments([{ ...paymentInstallments[0], dueDate: e.target.value }])
-                                }
-                              }}
-                              min={emissionDate}
-                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
-                            />
-                          </div>
-
-                          {/* Cuotas */}
-                          <div>
-                            <div className="flex items-center justify-between mb-1">
-                              <label className="text-xs text-gray-500">Cuotas (opcional)</label>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  // Calcular el monto correcto (con detracción si aplica)
-                                  let montoInicial = amounts.total
-                                  if (hasDetraction && detractionType && paymentInstallments.length === 0) {
-                                    const detractionRate = DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0
-                                    const detractionAmt = Math.round((amounts.total * detractionRate) / 100)
-                                    montoInicial = amounts.total - detractionAmt
-                                  }
-                                  const newInstallment = {
-                                    number: paymentInstallments.length + 1,
-                                    amount: paymentInstallments.length === 0 ? montoInicial.toFixed(2) : '',
-                                    dueDate: paymentDueDate || getLocalDateString(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000))
-                                  }
-                                  setPaymentInstallments([...paymentInstallments, newInstallment])
-                                }}
-                                className="text-xs text-primary-600 hover:text-primary-700 font-medium"
-                              >
-                                + Agregar cuota
-                              </button>
-                            </div>
-
-                            {/* Una sola cuota - mostrar campo simple con opción de editar */}
-                            {paymentInstallments.length === 1 && (
-                              <div className="flex items-center gap-2 bg-gray-50 p-2 rounded">
-                                <span className="text-xs text-gray-500">{currency === 'USD' ? '$' : 'S/'}</span>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  value={paymentInstallments[0].amount}
-                                  onChange={e => {
-                                    setPaymentInstallments([{ ...paymentInstallments[0], amount: e.target.value }])
-                                  }}
-                                  placeholder="Monto a pagar"
-                                  className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    // Calcular el neto a pagar (con detracción si aplica)
-                                    let montoNeto = amounts.total
-                                    if (hasDetraction && detractionType) {
-                                      const detractionRate = DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0
-                                      const detractionAmt = Math.round((amounts.total * detractionRate) / 100)
-                                      montoNeto = amounts.total - detractionAmt
-                                    }
-                                    setPaymentInstallments([{ ...paymentInstallments[0], amount: montoNeto.toFixed(2) }])
-                                  }}
-                                  className="text-xs text-primary-600 hover:text-primary-700 px-2 py-1 bg-primary-50 rounded"
-                                  title="Usar neto a pagar"
-                                >
-                                  Neto
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setPaymentInstallments([])
-                                  }}
-                                  className="text-red-500 hover:text-red-700 p-0.5"
-                                >
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            )}
-
-                            {/* Múltiples cuotas - mostrar lista */}
-                            {paymentInstallments.length > 1 && (
-                              <div className="space-y-1.5 max-h-32 overflow-y-auto">
-                                {paymentInstallments.map((installment, index) => (
-                                  <div key={index} className="flex items-center gap-1.5 bg-gray-50 p-1.5 rounded">
-                                    <span className="text-xs text-gray-500 w-12">Cuota {installment.number}</span>
-                                    <input
-                                      type="number"
-                                      step="0.01"
-                                      value={installment.amount}
-                                      onChange={e => {
-                                        const updated = [...paymentInstallments]
-                                        updated[index].amount = e.target.value
-                                        setPaymentInstallments(updated)
-                                      }}
-                                      placeholder="Monto"
-                                      className="flex-1 px-1.5 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                                    />
-                                    <input
-                                      type="date"
-                                      value={installment.dueDate}
-                                      onChange={e => {
-                                        const updated = [...paymentInstallments]
-                                        updated[index].dueDate = e.target.value
-                                        setPaymentInstallments(updated)
-                                      }}
-                                      min={emissionDate}
-                                      className="w-28 px-1.5 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const updated = paymentInstallments.filter((_, i) => i !== index)
-                                          .map((inst, i) => ({ ...inst, number: i + 1 }))
-                                        setPaymentInstallments(updated)
-                                      }}
-                                      className="text-red-500 hover:text-red-700 p-0.5"
-                                    >
-                                      <X className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
+                      {formaPagoCreditoBlock}
 
                       {/* Campos opcionales de referencia */}
                       <div className="mt-3 pt-2 border-t border-gray-100">
@@ -9267,6 +9294,13 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         placeholder="Teléfono"
                         className="w-24 shrink-0 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
+                    </div>
+
+                    {/* Forma de Pago: boletas también pueden venderse al crédito
+                        (SUNAT no exige ni prohíbe la forma de pago en boletas;
+                        las reglas 3244-3248 son solo de factura). */}
+                    <div className="mt-2 pt-2 border-t border-gray-200">
+                      {formaPagoCreditoBlock}
                     </div>
                   </>
                 ) : (

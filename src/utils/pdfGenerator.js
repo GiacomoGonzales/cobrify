@@ -1253,9 +1253,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.text(paymentForm, rightValueX, rightY)
     rightY += dataLineHeight
 
-    // Fecha de vencimiento (solo si es crédito). También en notas de venta al
-    // crédito cuando el negocio activó vencimiento/cuotas (Config > Ventas).
-    if ((invoice.documentType === 'factura' || invoice.documentType === 'nota_venta') &&
+    // Fecha de vencimiento (solo si es crédito). Aplica a factura, boleta y
+    // nota de venta al crédito (en notas requiere la opción de Config > Ventas).
+    if ((invoice.documentType === 'factura' || invoice.documentType === 'boleta' || invoice.documentType === 'nota_venta') &&
         invoice.paymentType === 'credito' && invoice.paymentDueDate) {
       const dueDate = new Date(invoice.paymentDueDate + 'T00:00:00')
       const dueDateStr = dueDate.toLocaleDateString('es-PE')
@@ -2707,8 +2707,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     footerY = _termsY + 4
   }
 
-  // Verificar si hay cuotas para mostrar
-  const hasCuotas = invoice.documentType === 'factura' &&
+  // Verificar si hay cuotas para mostrar (factura y boleta comparten el recuadro
+  // del QR; la nota de venta dibuja su propio recuadro más abajo)
+  const hasCuotas = (invoice.documentType === 'factura' || invoice.documentType === 'boleta') &&
                     invoice.paymentType === 'credito' &&
                     invoice.paymentInstallments &&
                     invoice.paymentInstallments.length > 0

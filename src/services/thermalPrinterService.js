@@ -1349,8 +1349,8 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
       }
     }
 
-    // ========== Condiciones de Crédito (facturas y notas de venta al crédito) ==========
-    if ((invoice.documentType === 'factura' || invoice.documentType === 'nota_venta') && invoice.paymentType === 'credito') {
+    // ========== Condiciones de Crédito (facturas, boletas y notas de venta al crédito) ==========
+    if ((invoice.documentType === 'factura' || invoice.documentType === 'boleta' || invoice.documentType === 'nota_venta') && invoice.paymentType === 'credito') {
       printer = addSeparator(printer, format.separator, paperWidth, 'left');
 
       printer = printer

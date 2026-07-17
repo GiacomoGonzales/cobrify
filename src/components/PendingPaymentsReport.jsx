@@ -79,7 +79,7 @@ const isOverdue = (dueDate) => {
 }
 
 const isPendingInvoice = (inv) =>
-  (inv.documentType === 'nota_venta' || inv.documentType === 'factura') &&
+  (inv.documentType === 'nota_venta' || inv.documentType === 'factura' || inv.documentType === 'boleta') &&
   inv.status !== 'cancelled' &&
   inv.status !== 'voided' &&
   inv.archived !== true &&
@@ -87,7 +87,7 @@ const isPendingInvoice = (inv) =>
   (inv.paymentStatus === 'pending' || inv.paymentStatus === 'partial') &&
   getPendingAmount(inv) > 0.01
 
-const DOC_TYPE_LABEL = { nota_venta: 'N. Venta', factura: 'Factura' }
+const DOC_TYPE_LABEL = { nota_venta: 'N. Venta', factura: 'Factura', boleta: 'Boleta' }
 
 // "S/ 120.00" o "S/ 120.00 + US$ 30.00" según las monedas presentes
 const formatTotals = (totals) => {
