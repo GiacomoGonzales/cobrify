@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
-import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, ChevronDown, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer, X, ShoppingCart, Truck, PackageCheck, Edit2, MoreVertical, FileText, Split, UserMinus } from 'lucide-react'
+import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, ChevronDown, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer, X, ShoppingCart, Truck, PackageCheck, Edit2, MoreVertical, FileText, Split, UserMinus, Wine } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
@@ -10,6 +10,7 @@ import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import { getActiveOrders, getOrdersStats, updateOrderStatus, createOrder, completeOrder, markOrderAsPaid, updateOrder, getOrder } from '@/services/orderService'
 import { getActiveBranches } from '@/services/branchService'
+import { createBarTab, occupyTable } from '@/services/tableService'
 import { useLocationAccess } from '@/utils/locationAccess'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -65,6 +66,13 @@ export default function Orders() {
   const [showCreateOrderModal, setShowCreateOrderModal] = useState(false)
   const [showOrderItemsModal, setShowOrderItemsModal] = useState(false)
   const [newOrderData, setNewOrderData] = useState(null)
+  // Cuenta de barra creada desde acá: es una mesa efímera (zona Barra) que
+  // acumula como una mesa. Se toma el pedido al toque; las rondas siguientes y
+  // el cobro se hacen desde Mesas > Barra.
+  const [showBarTabModal, setShowBarTabModal] = useState(false)
+  const [barTabName, setBarTabName] = useState('')
+  const [isCreatingBarTab, setIsCreatingBarTab] = useState(false)
+  const [barTab, setBarTab] = useState(null) // { table, order }
 
   // Estado para impresión de comanda
   const [companySettings, setCompanySettings] = useState(null)
@@ -468,6 +476,50 @@ export default function Orders() {
 
   const handleCreateOrderClick = () => {
     setShowCreateOrderModal(true)
+  }
+
+  // Crear una cuenta de barra desde Órdenes: crea la mesa efímera, la ocupa
+  // (eso genera la orden) y abre el pedido de una. Las rondas siguientes y el
+  // cobro se manejan desde Mesas > Barra, donde vive la cuenta.
+  const handleCreateBarTab = async () => {
+    const name = barTabName.trim()
+    if (!name) {
+      toast.error('Ingresa el nombre del cliente')
+      return
+    }
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+    setIsCreatingBarTab(true)
+    try {
+      const created = await createBarTab(getBusinessId(), { name, branchId: selectedBranchId || null })
+      if (!created.success) {
+        toast.error(created.error || 'No se pudo crear la cuenta de barra')
+        return
+      }
+      // Ocupar la cuenta crea la orden a la que se le agregan los productos
+      const occupied = await occupyTable(getBusinessId(), created.id, {
+        waiterId: null,
+        waiterName: null,
+        customerName: name,
+      })
+      if (!occupied.success) {
+        toast.error(occupied.error || 'No se pudo abrir la cuenta de barra')
+        return
+      }
+      setBarTab({
+        table: { ...created.table, id: created.id, status: 'occupied', currentOrder: occupied.orderId },
+        order: { id: occupied.orderId, items: [], tableNumber: name, orderType: 'dine_in' },
+      })
+      setShowBarTabModal(false)
+      setBarTabName('')
+    } catch (error) {
+      console.error('Error al crear cuenta de barra:', error)
+      toast.error('No se pudo crear la cuenta de barra')
+    } finally {
+      setIsCreatingBarTab(false)
+    }
   }
 
   const handleOrderTypeSelected = (orderData) => {
@@ -1199,6 +1251,15 @@ export default function Orders() {
               ))}
             </Select>
           )}
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={() => { setBarTabName(''); setShowBarTabModal(true) }}
+            className="w-full sm:w-auto"
+          >
+            <Wine className="w-5 h-5 mr-2" />
+            Cuenta de barra
+          </Button>
           <Button onClick={handleCreateOrderClick} size="lg" className="w-full sm:w-auto">
             <Plus className="w-5 h-5 mr-2" />
             Nueva Orden
@@ -1740,6 +1801,67 @@ export default function Orders() {
         onConfirm={handleOrderTypeSelected}
         brands={brands}
       />
+
+      {/* Modal Nueva cuenta de barra: solo pide el nombre del cliente */}
+      <Modal
+        isOpen={showBarTabModal}
+        onClose={() => setShowBarTabModal(false)}
+        title="Nueva cuenta de barra"
+      >
+        <form
+          onSubmit={(e) => { e.preventDefault(); handleCreateBarTab() }}
+          className="space-y-4"
+        >
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Nombre del cliente *
+            </label>
+            <input
+              type="text"
+              value={barTabName}
+              onChange={(e) => setBarTabName(e.target.value)}
+              placeholder="Ej: Juan, Barra 1, Señor de la gorra"
+              autoFocus
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              La cuenta acumula el consumo como una mesa. Para agregar más rondas o cobrarla, entra a <strong>Mesas &gt; Barra</strong>.
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowBarTabModal(false)}
+              className="flex-1"
+              disabled={isCreatingBarTab}
+            >
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={isCreatingBarTab} className="flex-1">
+              {isCreatingBarTab ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creando...</>
+              ) : (
+                'Crear y tomar pedido'
+              )}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Pedido de la cuenta de barra recién creada */}
+      {barTab && (
+        <OrderItemsModal
+          isOpen={!!barTab}
+          onClose={() => setBarTab(null)}
+          table={barTab.table}
+          order={barTab.order}
+          onSuccess={() => {
+            setBarTab(null)
+            toast.success('Cuenta de barra abierta. Continúa en Mesas > Barra.')
+          }}
+        />
+      )}
 
       {/* Modal para agregar items a la orden */}
       {showOrderItemsModal && newOrderData && (
