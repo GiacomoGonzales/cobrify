@@ -200,6 +200,22 @@ export default function CreateCreditNote() {
             setGlobalDiscountMode(false)
             setGlobalDiscountAmount('')
           }
+          // DESCUENTOS: los items de la factura guardan subtotal BRUTO
+          // (price × quantity) y los descuentos aparte (itemDiscount por línea +
+          // invoice.globalDiscount sobre el total). La NC sumaba los brutos, así
+          // que salía por MÁS de lo que el cliente pagó (ej. factura $245 con
+          // descuento → NC $332). Acá se convierte cada ítem a su valor EFECTIVO
+          // pagado: se resta itemDiscount y se prorratea el descuento global,
+          // replicando la fórmula del POS (amounts). Con price/unitPrice/subtotal
+          // /basePrice ya netos, el resto de la página (totales, cantidades
+          // parciales, equivalente PEN, XML) cuadra sin cambios.
+          const grossTotal = invoice.items.reduce(
+            (s, it) => s + Math.max(0, (Number(it.price) || 0) * (Number(it.quantity) || 0) - (Number(it.itemDiscount) || 0)),
+            0
+          )
+          const globalDisc = Number(invoice.globalDiscount) || 0
+          const globalRatio = grossTotal > 0 ? Math.max(0, grossTotal - globalDisc) / grossTotal : 1
+
           return {
             ...prev,
             // Preservar la cantidad original como `originalQuantity` para que
@@ -207,11 +223,28 @@ export default function CreateCreditNote() {
             // referencie el valor de la factura original — no la cantidad
             // actual ya editada. Sin esto, al bajar de 5 a 4, el usuario no
             // podía volver a subir a 5 porque el cap caía al valor actual.
-            items: invoice.items.map(item => ({
-              ...item,
-              selected: true,
-              originalQuantity: item.quantity,
-            })),
+            items: invoice.items.map(item => {
+              const qty = Number(item.quantity) || 0
+              const lineGross = (Number(item.price) || 0) * qty
+              const lineAfterItemDisc = Math.max(0, lineGross - (Number(item.itemDiscount) || 0))
+              const lineEffective = lineAfterItemDisc * globalRatio
+              const unitEffective = qty > 0 ? lineEffective / qty : (Number(item.price) || 0)
+              // basePrice (PEN exacto, ventas USD): aplicar la misma proporción
+              // de descuento para que el equivalente PEN también sea neto.
+              const lineRatio = lineGross > 0 ? lineEffective / lineGross : 1
+              const baseEffective = Number(item.basePrice) > 0
+                ? Number(item.basePrice) * lineRatio
+                : null
+              return {
+                ...item,
+                selected: true,
+                originalQuantity: qty,
+                price: unitEffective,
+                unitPrice: unitEffective,
+                subtotal: Number(lineEffective.toFixed(2)),
+                ...(baseEffective != null && { basePrice: baseEffective }),
+              }
+            }),
             discrepancyCode: newCode,
             discrepancyReason: CREDIT_NOTE_REASONS.find(r => r.code === newCode)?.description || ''
           }
@@ -739,10 +772,16 @@ export default function CreateCreditNote() {
               // Flag para identificar este item como descuento global
               isGlobalDiscount: true,
             }]
-          : selectedItems.map(item => ({
-              ...item,
-              originalQuantity: item.quantity // Guardar cantidad original para referencia
-            })),
+          : selectedItems.map(item => {
+              // Quitar itemDiscount: el price/unitPrice del ítem YA es el efectivo
+              // (neto de descuentos, ver precarga). Si viajara, el xmlGenerator
+              // (común con facturas) lo restaría OTRA vez → doble descuento.
+              const { itemDiscount, itemDiscountType, ...rest } = item
+              return {
+                ...rest,
+                originalQuantity: item.quantity // Guardar cantidad original para referencia
+              }
+            }),
 
         // Totales
         subtotal,
