@@ -10,6 +10,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
 import ModifierSelectorModal from '@/components/restaurant/ModifierSelectorModal'
 import VariantSelectorModal from '@/components/product/VariantSelectorModal'
+import PresentationSelectorModal from '@/components/product/PresentationSelectorModal'
 import { computeProductsWithoutIngredients, hasAnyRecipe } from '@/utils/recipeAvailability'
 import { cn } from '@/lib/utils'
 
@@ -56,6 +57,9 @@ export default function OrderItemsModal({
   // Selector de variante (ej. Vino: Copa / Botella)
   const [showVariantModal, setShowVariantModal] = useState(false)
   const [productForVariant, setProductForVariant] = useState(null)
+  // Selector de presentación (ej. Ron: Vaso / Botella)
+  const [showPresentationModal, setShowPresentationModal] = useState(false)
+  const [productForPresentation, setProductForPresentation] = useState(null)
 
   // Colapso de la seccion de categorias (como en el POS). Persiste en localStorage.
   const [categoriesCollapsed, setCategoriesCollapsed] = useState(() => {
@@ -283,7 +287,7 @@ export default function OrderItemsModal({
     }
   }
 
-  const addToCart = (product, selectedPrice = null, variant = null) => {
+  const addToCart = (product, selectedPrice = null, variant = null, presentation = null) => {
     // Si tiene variantes (ej. Vino: Copa / Botella) y no se eligió una, preguntar
     // primero: cada variante tiene su propio precio y stock. Va ANTES de precios y
     // modificadores, igual que en el POS.
@@ -293,8 +297,19 @@ export default function OrderItemsModal({
       return
     }
 
+    // Si tiene presentaciones (ej. Ron: Vaso / Botella) y no se eligió una,
+    // preguntar: cada presentación tiene su precio y su factor (unidades que
+    // consume del stock base). El "presentation" ya seleccionado no re-pregunta.
+    const hasPresentations = businessSettings?.presentationsEnabled &&
+      Array.isArray(product.presentations) && product.presentations.length > 0
+    if (!variant && !presentation && !selectedPrice && hasPresentations) {
+      setProductForPresentation(product)
+      setShowPresentationModal(true)
+      return
+    }
+
     // Si tiene múltiples precios y no se ha seleccionado uno, mostrar selector primero
-    if (isNewOrder && !selectedPrice && !variant && (product.price2 || product.price3 || product.price4)) {
+    if (isNewOrder && !selectedPrice && !variant && !presentation && (product.price2 || product.price3 || product.price4)) {
       setProductForPriceSelection(product)
       setShowPriceModal(true)
       return
@@ -304,22 +319,24 @@ export default function OrderItemsModal({
     if (product.modifiers && product.modifiers.length > 0) {
       setProductForModifiers({
         ...product,
-        _selectedPrice: selectedPrice ?? variant?.price ?? product.price,
+        _selectedPrice: selectedPrice ?? variant?.price ?? presentation?.price ?? product.price,
         ...(variant && { _variant: variant }),
+        ...(presentation && { _presentation: presentation }),
       })
       setIsModifierModalOpen(true)
       return
     }
 
     // En mesas siempre usar precio principal (precio 1), no mostrar selector de precios
-    const price = selectedPrice ?? variant?.price ?? product.price ?? 0
+    const price = selectedPrice ?? variant?.price ?? presentation?.price ?? product.price ?? 0
 
-    // Las variantes del mismo producto son líneas distintas: se identifican por SKU
+    // Cada variante/presentación del mismo producto es una línea distinta
     const matchesLine = (item) =>
       item.productId === product.id &&
       !item.modifiers &&
       item.price === price &&
-      (item.variantSku || null) === (variant?.sku || null)
+      (item.variantSku || null) === (variant?.sku || null) &&
+      (item.presentationName || null) === (presentation?.name || null)
 
     const existingItem = cart.find(matchesLine)
 
@@ -352,9 +369,33 @@ export default function OrderItemsModal({
             isVariant: true,
             name: `${product.name} (${Object.values(variant.attributes || {}).join(' / ')})`,
           }),
+          // Presentación: nombre + factor (el POS lo lee al facturar para
+          // descontar factor × cantidad del stock base)
+          ...(presentation && {
+            presentationName: presentation.name,
+            presentationFactor: presentation.factor || 1,
+            name: `${product.name} (${presentation.name})`,
+          }),
         },
       ])
     }
+  }
+
+  // Presentación elegida en el modal: sigue el flujo (precio/modificadores)
+  const handlePresentationSelection = (presentation) => {
+    const product = productForPresentation
+    setShowPresentationModal(false)
+    setProductForPresentation(null)
+    if (product) addToCart(product, null, null, presentation)
+  }
+
+  // Vender por unidad base (salta el selector de presentación)
+  const handleSellAsBaseUnit = () => {
+    const product = productForPresentation
+    setShowPresentationModal(false)
+    setProductForPresentation(null)
+    // presentation = {} evita re-preguntar; sin presentationName no marca presentación
+    if (product) addToCart(product, product.price ?? 0, null, null)
   }
 
   // Rango de precios y stock total de un producto con variantes (el padre no
@@ -369,6 +410,23 @@ export default function OrderItemsModal({
       max: Math.max(...prices),
       count: product.variants.length,
       stock: product.variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0),
+    }
+  }
+
+  // Rango de precios (unidad base + presentaciones) y conteo, para la tarjeta.
+  // Devuelve null si el producto no maneja presentaciones.
+  const getPresentationInfo = (product) => {
+    if (!businessSettings?.presentationsEnabled) return null
+    if (!Array.isArray(product?.presentations) || product.presentations.length === 0) return null
+    const prices = [
+      Number(product.price) || 0,
+      ...product.presentations.map(p => Number(p.price) || 0),
+    ].filter(p => p > 0)
+    if (prices.length === 0) return null
+    return {
+      min: Math.min(...prices),
+      max: Math.max(...prices),
+      count: product.presentations.length + 1, // + la unidad base
     }
   }
 
@@ -404,11 +462,14 @@ export default function OrderItemsModal({
     const { selectedModifiers, totalPrice } = data
     const basePrice = productForModifiers._selectedPrice ?? productForModifiers.price
 
-    // Identificador único: modificadores + precio base + variante (dos variantes
-    // con el mismo precio y modificadores seguirían siendo líneas distintas)
+    // Identificador único: modificadores + precio base + variante/presentación
+    // (dos variantes o presentaciones con mismo precio y modificadores siguen
+    // siendo líneas distintas)
     const modifierKey = selectedModifiers
       .map(m => `${m.modifierId}:${m.options.map(o => o.optionId).join(',')}`)
-      .join('|') + `|p:${basePrice}` + (productForModifiers._variant ? `|v:${productForModifiers._variant.sku}` : '')
+      .join('|') + `|p:${basePrice}`
+      + (productForModifiers._variant ? `|v:${productForModifiers._variant.sku}` : '')
+      + (productForModifiers._presentation ? `|pr:${productForModifiers._presentation.name}` : '')
 
     // El totalPrice del ModifierSelectorModal ya incluye el precio base seleccionado + ajustes
     const finalPrice = totalPrice
@@ -430,16 +491,20 @@ export default function OrderItemsModal({
         )
       )
     } else {
-      // Agregar nuevo item con modificadores. Si venía de elegir variante
-      // (_variant), se conserva: un vino en copa con extras sigue siendo la copa.
+      // Agregar nuevo item con modificadores. Si venía de elegir variante o
+      // presentación, se conserva: un ron en vaso con extras sigue siendo el vaso.
       const mVariant = productForModifiers._variant || null
+      const mPres = productForModifiers._presentation || null
+      const detailName = mVariant
+        ? `${productForModifiers.name} (${Object.values(mVariant.attributes || {}).join(' / ')})`
+        : mPres
+        ? `${productForModifiers.name} (${mPres.name})`
+        : productForModifiers.name
       setCart([
         ...cart,
         {
           productId: productForModifiers.id,
-          name: mVariant
-            ? `${productForModifiers.name} (${Object.values(mVariant.attributes || {}).join(' / ')})`
-            : productForModifiers.name,
+          name: detailName,
           code: mVariant?.sku || productForModifiers.code,
           price: finalPrice, // Precio base seleccionado + modificadores
           basePrice: basePrice, // Precio base seleccionado (puede ser price2, price3, etc.)
@@ -453,6 +518,10 @@ export default function OrderItemsModal({
             variantSku: mVariant.sku,
             variantAttributes: mVariant.attributes,
             isVariant: true,
+          }),
+          ...(mPres && {
+            presentationName: mPres.name,
+            presentationFactor: mPres.factor || 1,
           }),
         },
       ])
@@ -772,6 +841,25 @@ export default function OrderItemsModal({
                               </>
                             )
                           }
+                          // Productos con presentaciones (ej. Vaso / Botella): el
+                          // precio base SÍ es real, pero conviene mostrar el rango
+                          // hasta la presentación más cara y cuántas hay.
+                          const pInfo = getPresentationInfo(product)
+                          if (pInfo) {
+                            return (
+                              <>
+                                <p className="text-sm font-bold text-primary-600">
+                                  {pInfo.min === pInfo.max
+                                    ? `S/ ${pInfo.min.toFixed(2)}`
+                                    : `S/ ${pInfo.min.toFixed(2)} - ${pInfo.max.toFixed(2)}`}
+                                </p>
+                                <p className="text-[10px] text-gray-400">
+                                  {pInfo.count} presentaciones
+                                  {product.stock !== undefined ? ` · Stock: ${product.stock}` : ''}
+                                </p>
+                              </>
+                            )
+                          }
                           return (
                             <>
                               <p className="text-sm font-bold text-primary-600">
@@ -876,6 +964,19 @@ export default function OrderItemsModal({
         product={productForVariant}
         onSelect={handleVariantSelection}
         allowNegativeStock={businessSettings?.allowNegativeStock}
+        formatCurrency={(v) => `S/ ${(Number(v) || 0).toFixed(2)}`}
+      />
+
+      {/* Modal de selección de presentación (ej. Ron: Vaso / Botella) */}
+      <PresentationSelectorModal
+        isOpen={showPresentationModal}
+        onClose={() => {
+          setShowPresentationModal(false)
+          setProductForPresentation(null)
+        }}
+        product={productForPresentation}
+        onSelectBase={handleSellAsBaseUnit}
+        onSelectPresentation={handlePresentationSelection}
         formatCurrency={(v) => `S/ ${(Number(v) || 0).toFixed(2)}`}
       />
 
