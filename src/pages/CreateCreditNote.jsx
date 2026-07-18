@@ -209,8 +209,18 @@ export default function CreateCreditNote() {
           // replicando la fórmula del POS (amounts). Con price/unitPrice/subtotal
           // /basePrice ya netos, el resto de la página (totales, cantidades
           // parciales, equivalente PEN, XML) cuadra sin cambios.
+          // Precio unitario BRUTO del ítem. Verificado contra un doc real
+          // (FP03-00000006 de TODOTIRO): el POS guarda los items con `unitPrice`
+          // (SIN `price`), así que leer solo `price` dejaba todo en $0.00.
+          // Cadena robusta: price → unitPrice → subtotal ÷ cantidad.
+          const unitGrossOf = (it) => {
+            const qty = Number(it.quantity) || 0
+            if (Number(it.price) > 0) return Number(it.price)
+            if (Number(it.unitPrice) > 0) return Number(it.unitPrice)
+            return qty > 0 ? (Number(it.subtotal) || 0) / qty : 0
+          }
           const grossTotal = invoice.items.reduce(
-            (s, it) => s + Math.max(0, (Number(it.price) || 0) * (Number(it.quantity) || 0) - (Number(it.itemDiscount) || 0)),
+            (s, it) => s + Math.max(0, unitGrossOf(it) * (Number(it.quantity) || 0) - (Number(it.itemDiscount) || 0)),
             0
           )
           const globalDisc = Number(invoice.globalDiscount) || 0
@@ -225,10 +235,10 @@ export default function CreateCreditNote() {
             // podía volver a subir a 5 porque el cap caía al valor actual.
             items: invoice.items.map(item => {
               const qty = Number(item.quantity) || 0
-              const lineGross = (Number(item.price) || 0) * qty
+              const lineGross = unitGrossOf(item) * qty
               const lineAfterItemDisc = Math.max(0, lineGross - (Number(item.itemDiscount) || 0))
               const lineEffective = lineAfterItemDisc * globalRatio
-              const unitEffective = qty > 0 ? lineEffective / qty : (Number(item.price) || 0)
+              const unitEffective = qty > 0 ? lineEffective / qty : unitGrossOf(item)
               // basePrice (PEN exacto, ventas USD): aplicar la misma proporción
               // de descuento para que el equivalente PEN también sea neto.
               const lineRatio = lineGross > 0 ? lineEffective / lineGross : 1
@@ -407,9 +417,12 @@ export default function CreateCreditNote() {
   }
 
   // Multi-divisa: calcula los equivalentes PEN exactos para una NC USD.
-  // Prioridad: 1) item.basePrice (PEN exacto guardado en cada item); si
-  // no existe → 2) totalInBase proporcional de la factura padre; si tampoco
-  // → 3) conversión directa TC × USD (último recurso, puede redondear).
+  // Prioridad: 1) proporción del totalInBase de la factura (los *InBase
+  // guardados son el PEN REAL con descuentos incluidos: anulación total →
+  // idéntico al de la factura; parcial → proporción exacta); si no existe →
+  // 2) suma de item.basePrice (ya efectivo, neto de descuentos desde la
+  // precarga — puede diferir centavos por redondeo del basePrice unitario);
+  // → 3) conversión directa TC × USD (último recurso).
   const calculatePENBaseTotals = () => {
     if (!selectedInvoice || normalizeCurrency(selectedInvoice.currency) !== 'USD') {
       const t = calculateTotals()
@@ -419,7 +432,24 @@ export default function CreateCreditNote() {
     const igvRate = selectedInvoice?.taxConfig?.igvRate ?? 18
     const igvExempt = selectedInvoice?.taxConfig?.igvExempt ?? false
 
-    // 1) Items con basePrice (PEN exacto guardado en venta nueva): suma exacta.
+    // 1) Proporción del totalInBase original (el PEN real de la factura).
+    {
+      const totalUSD = selectedItems.reduce((sum, item) => sum + item.subtotal, 0)
+      const invTotal = Number(selectedInvoice.total) || 0
+      const invTotBase = Number(selectedInvoice.totalInBase) || 0
+      const invSubBase = Number(selectedInvoice.subtotalInBase) || 0
+      const invIgvBase = Number(selectedInvoice.igvInBase) || 0
+      if (invTotal > 0 && invTotBase > 0) {
+        const ratio = totalUSD / invTotal
+        return {
+          subtotalInBase: Number((invSubBase * ratio).toFixed(2)),
+          igvInBase: Number((invIgvBase * ratio).toFixed(2)),
+          totalInBase: Number((invTotBase * ratio).toFixed(2)),
+        }
+      }
+    }
+
+    // 2) Items con basePrice (PEN por unidad, ya neto desde la precarga).
     const allHaveBase = selectedItems.length > 0 && selectedItems.every(it => Number(it.basePrice) > 0)
     if (allHaveBase) {
       const totalConIgvBase = selectedItems.reduce(
@@ -434,22 +464,8 @@ export default function CreateCreditNote() {
       }
     }
 
-    // 2) Proporción del totalInBase original (facturas pre-fix de POS).
-    const totalUSD = selectedItems.reduce((sum, item) => sum + item.subtotal, 0)
-    const invTotal = Number(selectedInvoice.total) || 0
-    const invTotBase = Number(selectedInvoice.totalInBase) || 0
-    const invSubBase = Number(selectedInvoice.subtotalInBase) || 0
-    const invIgvBase = Number(selectedInvoice.igvInBase) || 0
-    if (invTotal > 0 && invTotBase > 0) {
-      const ratio = totalUSD / invTotal
-      return {
-        subtotalInBase: Number((invSubBase * ratio).toFixed(2)),
-        igvInBase: Number((invIgvBase * ratio).toFixed(2)),
-        totalInBase: Number((invTotBase * ratio).toFixed(2)),
-      }
-    }
-
     // 3) Fallback: conversión directa.
+    const totalUSD = selectedItems.reduce((sum, item) => sum + item.subtotal, 0)
     const rate = Number(selectedInvoice.exchangeRate) || 1
     const subtotalUSD = igvExempt ? totalUSD : totalUSD / (1 + igvRate / 100)
     const igvUSD = igvExempt ? 0 : totalUSD - subtotalUSD
