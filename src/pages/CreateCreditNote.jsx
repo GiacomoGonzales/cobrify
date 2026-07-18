@@ -20,7 +20,12 @@ const CREDIT_NOTE_MODES = {
   EXTERNAL: 'external'
 }
 
-// Catálogo 09 - Tipos de nota de crédito SUNAT (completo)
+// Catálogo 09 - Tipos de nota de crédito SUNAT, con las descripciones
+// OFICIALES (hoja "Catálogos" del Excel de reglas de validación de SUNAT).
+// OJO: hasta jul-2026 las etiquetas de 12 y 13 estaban cruzadas — el 12 real
+// es "Ajustes afectos al IVAP" (arroz pilado: exige TODOS los ítems con
+// afectación 17, si no SUNAT rechaza con error 2644) y el ajuste de
+// montos/fechas de pago es el 13, no el 12.
 const CREDIT_NOTE_REASONS = [
   { code: '01', description: 'Anulación de la operación' },
   { code: '02', description: 'Anulación por error en el RUC' },
@@ -31,11 +36,20 @@ const CREDIT_NOTE_REASONS = [
   { code: '07', description: 'Devolución por ítem' },
   { code: '08', description: 'Bonificación' },
   { code: '09', description: 'Disminución en el valor' },
-  { code: '10', description: 'Otros conceptos tributarios' },
+  { code: '10', description: 'Otros conceptos' },
   { code: '11', description: 'Ajustes de operaciones de exportación' },
-  { code: '12', description: 'Ajustes - montos y/o fechas de pago' },
-  { code: '13', description: 'Otros conceptos' },
+  { code: '12', description: 'Ajustes afectos al IVAP' },
+  { code: '13', description: 'Corrección del monto pendiente de pago / fechas de cuotas' },
 ]
+
+// Motivos que el sistema puede emitir correctamente hoy. Los demás exigen
+// estructuras XML que no generamos y SUNAT los rechaza SIEMPRE:
+//  - 10 exige "Otros documentos relacionados" (error 2535)
+//  - 11 es solo para operaciones de exportación (errores 3194/2116)
+//  - 12 es solo IVAP: todos los ítems con afectación 17 (error 2644)
+//  - 13 exige Importe Total = 0 + bloque FormaPago con el nuevo cronograma
+//    de cuotas (errores 3315/3257) y solo aplica a facturas al crédito (3259)
+const SUPPORTED_CODES = ['01', '02', '03', '04', '05', '06', '07', '08', '09']
 
 // Códigos de motivo que permiten "Descuento global por monto fijo".
 // Cuando el usuario elige uno de estos, aparece la opción de ingresar un monto
@@ -140,11 +154,25 @@ export default function CreateCreditNote() {
       setGlobalDiscountMode(true)
       setGlobalDiscountAmount(String(editingNC.total || ''))
     }
+    // Si la NC rechazada traía un motivo NO soportado (p.ej. el 12-IVAP que
+    // antes estaba mal etiquetado como "ajustes de montos/fechas"), no lo
+    // heredamos: se resetea a 01 y se avisa para que el usuario elija el
+    // motivo correcto antes de reemitir.
+    const inheritedCode = editingNC.discrepancyCode || '01'
+    const codeSupported = SUPPORTED_CODES.includes(inheritedCode)
+    if (!codeSupported) {
+      setMessage({
+        type: 'warning',
+        text: `El motivo original de esta NC (${inheritedCode}) requiere condiciones especiales que el sistema no genera y por eso SUNAT la rechazó. Elige el motivo correcto (01 al 09) antes de reemitir.`,
+      })
+    }
     setFormData(prev => ({
       ...prev,
       referencedInvoiceId: parent.id,
-      discrepancyCode: editingNC.discrepancyCode || '01',
-      discrepancyReason: editingNC.discrepancyReason || '',
+      discrepancyCode: codeSupported ? inheritedCode : '01',
+      discrepancyReason: codeSupported
+        ? (editingNC.discrepancyReason || '')
+        : (CREDIT_NOTE_REASONS.find(r => r.code === '01')?.description || ''),
     }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingNC, invoices])
@@ -372,10 +400,21 @@ export default function CreateCreditNote() {
 
   const handleReasonChange = (code) => {
     const reason = CREDIT_NOTE_REASONS.find(r => r.code === code)
+    // 01/02/06 son anulaciones/devoluciones TOTALES: seleccionar todos los
+    // ítems con sus cantidades completas (la validación pre-envío lo exige).
+    // NO en modo edición de NC rechazada — ahí las cantidades vienen bloqueadas
+    // porque el stock ya se devolvió con la selección original.
+    const isTotalCode = ['01', '02', '06'].includes(code) && !editingNC
     setFormData(prev => ({
       ...prev,
       discrepancyCode: code,
-      discrepancyReason: reason?.description || ''
+      discrepancyReason: reason?.description || '',
+      ...(isTotalCode && {
+        items: prev.items.map(item => {
+          const fullQty = item.originalQuantity || item.quantity
+          return { ...item, selected: true, quantity: fullQty, subtotal: fullQty * item.unitPrice }
+        }),
+      }),
     }))
     // Si el nuevo motivo NO admite "descuento global", desactivar ese modo
     // para volver al flujo de items.
@@ -571,6 +610,22 @@ export default function CreateCreditNote() {
       return
     }
 
+    // Coherencia serie ↔ tipo de documento (reglas SUNAT 2116/2399): las
+    // series F/E son facturas y las B/EB boletas. Un cruce = rechazo seguro.
+    {
+      const serie = externalData.documentNumber.toUpperCase()
+      const looksBoleta = serie.startsWith('B') || serie.startsWith('EB')
+      const looksFactura = serie.startsWith('F') || (serie.startsWith('E') && !serie.startsWith('EB'))
+      if (looksBoleta && externalData.documentType === '01') {
+        setMessage({ type: 'error', text: `La serie ${serie.split('-')[0]} corresponde a una BOLETA, pero elegiste Factura como tipo de documento. Corrige el tipo o el número.` })
+        return
+      }
+      if (looksFactura && externalData.documentType === '03') {
+        setMessage({ type: 'error', text: `La serie ${serie.split('-')[0]} corresponde a una FACTURA, pero elegiste Boleta como tipo de documento. Corrige el tipo o el número.` })
+        return
+      }
+    }
+
     if (!externalData.customerDocNumber || !externalData.customerName) {
       setMessage({ type: 'error', text: 'Debes ingresar los datos del cliente' })
       return
@@ -580,6 +635,31 @@ export default function CreateCreditNote() {
     if (validItems.length === 0) {
       setMessage({ type: 'error', text: 'Debes ingresar al menos un ítem con descripción y monto' })
       return
+    }
+
+    // Validaciones contra reglas SUNAT (mismas que el modo Cobrify, adaptadas
+    // a referencia externa donde no conocemos el total del doc original)
+    if (!SUPPORTED_CODES.includes(externalData.discrepancyCode)) {
+      setMessage({ type: 'error', text: `El motivo ${externalData.discrepancyCode} requiere condiciones especiales que el sistema no genera y SUNAT lo rechazaría. Usa un motivo del 01 al 09.` })
+      return
+    }
+    if (!externalData.discrepancyReason?.trim()) {
+      setMessage({ type: 'error', text: 'La descripción del motivo (sustento) es obligatoria.' })
+      return
+    }
+    if (externalData.documentType === '03' && BOLETA_DISALLOWED_CODES.includes(externalData.discrepancyCode)) {
+      setMessage({ type: 'error', text: 'SUNAT no permite descuento global (04), descuento por ítem (05) ni bonificación (08) sobre boletas. Usa el motivo 09 - Disminución en el valor.' })
+      return
+    }
+    // La fecha del documento original no puede ser futura: SUNAT exige que la
+    // NC se emita en fecha >= a la del documento que modifica (error 2885).
+    if (externalData.issueDate) {
+      const d = new Date()
+      const hoy = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      if (externalData.issueDate > hoy) {
+        setMessage({ type: 'error', text: 'La fecha del documento original no puede ser futura: SUNAT exige que la nota de crédito se emita en una fecha igual o posterior a la del documento que modifica (error 2885).' })
+        return
+      }
     }
 
     // Determinar qué serie usar según el tipo de documento referenciado
@@ -739,6 +819,54 @@ export default function CreateCreditNote() {
     }
   }
 
+  // Validación PRE-ENVÍO contra las reglas oficiales de SUNAT (Excel de
+  // validaciones, hoja NotaCredito2_0 + guía XML NC UBL 2.1). Devuelve el
+  // mensaje de error o null si todo está bien. La idea es que una NC mal
+  // armada NUNCA llegue a SUNAT: el rechazo se explica aquí, en español y
+  // ANTES de consumir un correlativo.
+  const validateSunatRules = (total) => {
+    const code = formData.discrepancyCode
+
+    // Motivo emitible por el sistema (ver SUPPORTED_CODES)
+    if (!SUPPORTED_CODES.includes(code)) {
+      const label = CREDIT_NOTE_REASONS.find(r => r.code === code)?.description || ''
+      return `El motivo ${code} (${label}) requiere condiciones especiales que el sistema no genera (documentos relacionados, exportación, IVAP o cronogramas de crédito) y SUNAT lo rechazaría. Usa un motivo del 01 al 09.`
+    }
+
+    // Sustento obligatorio (cbc:Description del DiscrepancyResponse)
+    if (!formData.discrepancyReason?.trim()) {
+      return 'La descripción del motivo (sustento) es obligatoria.'
+    }
+
+    // Sobre boletas SUNAT prohíbe 04/05/08 (guía XML NC, sección 8)
+    if (selectedInvoice?.documentType === 'boleta' && BOLETA_DISALLOWED_CODES.includes(code)) {
+      return 'SUNAT no permite descuento global (04), descuento por ítem (05) ni bonificación (08) sobre boletas. Usa el motivo 09 - Disminución en el valor.'
+    }
+
+    // Total > 0 y sin exceder el documento modificado (error 3286 de SUNAT)
+    if (!(total > 0)) {
+      return 'El total de la nota de crédito debe ser mayor a 0. Revisa los ítems o el monto.'
+    }
+    if (selectedInvoice && total > Number(selectedInvoice.total) + 0.01) {
+      return `La nota de crédito (${formatCurrency(total, selectedInvoice.currency)}) no puede exceder el total del documento que modifica (${formatCurrency(selectedInvoice.total, selectedInvoice.currency)}). SUNAT la rechaza (error 3286).`
+    }
+
+    // 01 (anulación), 02 (error en RUC) y 06 (devolución total) son TOTALES:
+    // deben incluir todos los ítems con sus cantidades completas. Para acreditar
+    // una parte están 07 (devolución por ítem) o 09 (disminución en el valor).
+    if (['01', '02', '06'].includes(code) && !globalDiscountMode) {
+      const isTotal = formData.items.length > 0 && formData.items.every(item =>
+        item.selected && Number(item.quantity) >= Number(item.originalQuantity || item.quantity)
+      )
+      if (!isTotal) {
+        const label = CREDIT_NOTE_REASONS.find(r => r.code === code)?.description || ''
+        return `El motivo ${code} (${label}) es una anulación/devolución TOTAL: debes incluir todos los ítems con sus cantidades completas. Si solo quieres acreditar una parte, usa 07 - Devolución por ítem o 09 - Disminución en el valor.`
+      }
+    }
+
+    return null
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
 
@@ -787,6 +915,17 @@ export default function CreateCreditNote() {
       return
     }
 
+    // Validación contra reglas SUNAT — bloquea ANTES de consumir correlativo
+    // o tocar el documento (aplica tanto a emisión nueva como a reemisión).
+    {
+      const { total: ncTotal } = calculateTotals()
+      const sunatError = validateSunatRules(ncTotal)
+      if (sunatError) {
+        setMessage({ type: 'error', text: sunatError })
+        return
+      }
+    }
+
     // ===== REEMISIÓN de NC rechazada: actualizar el doc existente (MISMO
     // número) y reenviar. No toca serie ni stock (la emisión original ya lo
     // devolvió con estas mismas cantidades — por eso van bloqueadas). =====
@@ -794,11 +933,8 @@ export default function CreateCreditNote() {
       submitGuardRef.current = true
       setIsSaving(true)
       try {
+        // (total ya validado contra reglas SUNAT en validateSunatRules)
         const { subtotal, igv, total, igvRate, igvExempt } = calculateTotals()
-        if (total > Number(selectedInvoice.total) + 0.01) {
-          setMessage({ type: 'error', text: `La NC (${formatCurrency(total, selectedInvoice.currency)}) no puede exceder el total de la factura (${formatCurrency(selectedInvoice.total, selectedInvoice.currency)})` })
-          return
-        }
         const hoy = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })()
 
         const updateData = {
@@ -1289,8 +1425,8 @@ export default function CreateCreditNote() {
       {/* Messages */}
       {message && (
         <Alert
-          variant={message.type === 'success' ? 'success' : 'danger'}
-          title={message.type === 'success' ? 'Éxito' : 'Error'}
+          variant={message.type === 'success' ? 'success' : message.type === 'warning' ? 'warning' : 'danger'}
+          title={message.type === 'success' ? 'Éxito' : message.type === 'warning' ? 'Atención' : 'Error'}
         >
           {message.text}
         </Alert>
@@ -1425,6 +1561,9 @@ export default function CreateCreditNote() {
               >
                 {CREDIT_NOTE_REASONS
                   .filter(reason => {
+                    // Solo motivos que el sistema emite correctamente (los
+                    // 10-13 exigen XML especial y SUNAT los rechaza siempre).
+                    if (!SUPPORTED_CODES.includes(reason.code)) return false
                     // Sobre boletas, SUNAT no permite motivos 04/05/08.
                     if (selectedInvoice?.documentType === 'boleta' && BOLETA_DISALLOWED_CODES.includes(reason.code)) {
                       return false
@@ -1439,7 +1578,7 @@ export default function CreateCreditNote() {
               </Select>
               {selectedInvoice?.documentType === 'boleta' && (
                 <p className="text-xs text-gray-500 mt-1">
-                  ℹ️ SUNAT no permite descuento global (04), descuento por ítem (05) ni bonificación (08) sobre boletas.
+                  SUNAT no permite descuento global (04), descuento por ítem (05) ni bonificación (08) sobre boletas.
                   Para descontar sobre boleta usa el motivo <strong>09 - Disminución en el valor</strong>.
                 </p>
               )}
@@ -1687,7 +1826,20 @@ export default function CreateCreditNote() {
                   </label>
                   <Select
                     value={externalData.documentType}
-                    onChange={e => setExternalData(prev => ({ ...prev, documentType: e.target.value }))}
+                    onChange={e => setExternalData(prev => {
+                      const newType = e.target.value
+                      // Al pasar a boleta, si el motivo elegido está prohibido
+                      // sobre boletas (04/05/08), resetear a 01.
+                      const codeInvalid = newType === '03' && BOLETA_DISALLOWED_CODES.includes(prev.discrepancyCode)
+                      return {
+                        ...prev,
+                        documentType: newType,
+                        ...(codeInvalid && {
+                          discrepancyCode: '01',
+                          discrepancyReason: CREDIT_NOTE_REASONS.find(r => r.code === '01')?.description || '',
+                        }),
+                      }
+                    })}
                     required
                   >
                     <option value="01">Factura</option>
@@ -1799,12 +1951,27 @@ export default function CreateCreditNote() {
                   onChange={e => handleExternalReasonChange(e.target.value)}
                   required
                 >
-                  {CREDIT_NOTE_REASONS.map(reason => (
-                    <option key={reason.code} value={reason.code}>
-                      {reason.code} - {reason.description}
-                    </option>
-                  ))}
+                  {CREDIT_NOTE_REASONS
+                    .filter(reason => {
+                      if (!SUPPORTED_CODES.includes(reason.code)) return false
+                      // Sobre boletas, SUNAT no permite motivos 04/05/08.
+                      if (externalData.documentType === '03' && BOLETA_DISALLOWED_CODES.includes(reason.code)) {
+                        return false
+                      }
+                      return true
+                    })
+                    .map(reason => (
+                      <option key={reason.code} value={reason.code}>
+                        {reason.code} - {reason.description}
+                      </option>
+                    ))}
                 </Select>
+                {externalData.documentType === '03' && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    SUNAT no permite descuento global (04), descuento por ítem (05) ni bonificación (08) sobre boletas.
+                    Para descontar sobre boleta usa el motivo <strong>09 - Disminución en el valor</strong>.
+                  </p>
+                )}
               </div>
 
               <div>
