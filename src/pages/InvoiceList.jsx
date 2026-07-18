@@ -666,6 +666,12 @@ Gracias por tu preferencia.`
     if (Array.isArray(invoice.payments) && invoice.payments.length > 0) {
       return [...new Set(invoice.payments.map(p => p.method || 'Efectivo'))]
     }
+    // Array de pagos EXPLÍCITAMENTE vacío: típico de notas de venta provisionales
+    // que no capturaron ningún pago real. El POS guarda paymentMethod:'Efectivo'
+    // por defecto aunque no haya cobro, así que en vez de heredar ese relleno
+    // mostramos un guion (no hay método real). Los documentos ANTIGUOS no tienen
+    // el campo `payments`; para esos seguimos usando su paymentMethod histórico.
+    if (Array.isArray(invoice.payments)) return ['—']
     return [invoice.paymentMethod || 'Efectivo']
   }
 
