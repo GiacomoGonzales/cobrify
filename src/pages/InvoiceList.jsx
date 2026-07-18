@@ -3607,12 +3607,40 @@ Gracias por tu preferencia.`
                     </button>
                   )}
 
+                  {/* Editar y reemitir NC RECHAZADA (mismo número). Una NC
+                      rechazada no existe para SUNAT: se corrige y reenvía. */}
+                  {invoice.documentType === 'nota_credito' && invoice.sunatStatus === 'rejected' && (
+                    <button
+                      onClick={() => {
+                        setOpenMenuId(null)
+                        appNavigate(`nota-credito?editNC=${invoice.id}`)
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-amber-50 flex items-center gap-3"
+                    >
+                      <Edit className="w-4 h-4 text-amber-600" />
+                      <span className="text-amber-700 font-medium">Editar y reemitir (mismo número)</span>
+                    </button>
+                  )}
+
                   {/* Reenviar Nota de Crédito a SUNAT (rechazada, firmada o atascada) */}
                   {invoice.documentType === 'nota_credito' &&
                    (invoice.sunatStatus === 'rejected' || invoice.sunatStatus === 'SIGNED' || invoice.sunatStatus === 'signed' || invoice.sunatStatus === 'sending') && (
                     <button
                       onClick={() => {
                         setOpenMenuId(null)
+                        // Guard: si la NC excede el total de la factura referenciada
+                        // (caso típico: NC emitida con el bug de descuentos), advertir —
+                        // reintentarla tal cual podría terminar en una ACEPTACIÓN errada.
+                        const parent = invoices.find(inv =>
+                          inv.id === invoice.referencedInvoiceFirestoreId || inv.number === invoice.referencedDocumentId
+                        )
+                        if (parent && Number(invoice.total) > Number(parent.total) + 0.01) {
+                          const ok = window.confirm(
+                            `ATENCIÓN: esta NC (${formatCurrency(invoice.total, invoice.currency)}) EXCEDE el total de la factura ${parent.number} (${formatCurrency(parent.total, parent.currency)}).\n\n` +
+                            `Reenviarla así puede terminar en una aceptación por un monto incorrecto. Lo recomendado es usar "Editar y reemitir (mismo número)".\n\n¿Reenviar de todos modos?`
+                          )
+                          if (!ok) return
+                        }
                         handleSendCreditNoteToSunat(invoice.id)
                       }}
                       disabled={sendingToSunat === invoice.id}

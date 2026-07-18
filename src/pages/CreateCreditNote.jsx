@@ -90,6 +90,65 @@ export default function CreateCreditNote() {
   const [globalDiscountMode, setGlobalDiscountMode] = useState(false)
   const [globalDiscountAmount, setGlobalDiscountAmount] = useState('')
 
+  // ===== Modo EDICIÓN de una NC RECHAZADA (?editNC=<id>) =====
+  // Una NC rechazada no existe para SUNAT, así que puede corregirse y
+  // reenviarse con el MISMO número (práctica estándar). Acá se recalculan los
+  // montos (con la lógica de descuentos ya corregida) y se ACTUALIZA el doc
+  // existente en vez de crear uno nuevo — sin tocar la serie ni el stock (la
+  // emisión original ya lo devolvió con estas mismas cantidades; por eso las
+  // cantidades van bloqueadas: para otras cantidades, emitir una NC nueva).
+  const editNCParam = searchParams.get('editNC')
+  const [editingNC, setEditingNC] = useState(null)
+
+  useEffect(() => {
+    if (!editNCParam || !user?.uid) return
+    ;(async () => {
+      try {
+        const { doc, getDoc } = await import('firebase/firestore')
+        const { db } = await import('@/lib/firebase')
+        const snap = await getDoc(doc(db, 'businesses', getBusinessId(), 'invoices', editNCParam))
+        if (!snap.exists()) {
+          setMessage({ type: 'error', text: 'No se encontró la nota de crédito a editar' })
+          return
+        }
+        const nc = { id: snap.id, ...snap.data() }
+        if (nc.documentType !== 'nota_credito' || nc.sunatStatus !== 'rejected') {
+          setMessage({ type: 'error', text: 'Solo se puede editar una Nota de Crédito RECHAZADA por SUNAT' })
+          return
+        }
+        setEditingNC(nc)
+      } catch (e) {
+        console.error('Error cargando NC a editar:', e)
+        setMessage({ type: 'error', text: 'No se pudo cargar la nota de crédito' })
+      }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editNCParam, user?.uid])
+
+  // Con la NC cargada y la lista de facturas lista: fijar la factura referenciada
+  // y heredar motivo (la precarga de items corre en el efecto de referencedInvoiceId).
+  useEffect(() => {
+    if (!editingNC || invoices.length === 0 || formData.referencedInvoiceId) return
+    const parent = invoices.find(inv => inv.id === editingNC.referencedInvoiceFirestoreId)
+      || invoices.find(inv => inv.number === editingNC.referencedDocumentId)
+    if (!parent) {
+      setMessage({ type: 'error', text: `No se encontró la factura ${editingNC.referencedDocumentId} referenciada por esta NC` })
+      return
+    }
+    // NC original en modo "descuento global": restaurar ese modo con su monto
+    if (editingNC.items?.[0]?.isGlobalDiscount) {
+      setGlobalDiscountMode(true)
+      setGlobalDiscountAmount(String(editingNC.total || ''))
+    }
+    setFormData(prev => ({
+      ...prev,
+      referencedInvoiceId: parent.id,
+      discrepancyCode: editingNC.discrepancyCode || '01',
+      discrepancyReason: editingNC.discrepancyReason || '',
+    }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingNC, invoices])
+
   // Forma de compensación al cliente (OPCIONAL). Por defecto la NC solo corrige/anula
   // el comprobante sin ningún encuadre de dinero — cubre el caso más común (anulación
   // por error, factura a crédito no pagada). La compensación se muestra plegada y solo
@@ -245,13 +304,22 @@ export default function CreateCreditNote() {
               const baseEffective = Number(item.basePrice) > 0
                 ? Number(item.basePrice) * lineRatio
                 : null
+              // Modo edición de NC rechazada: replicar la selección y cantidades
+              // de la NC original (los PRECIOS son los recalculados, netos).
+              const ncItem = editingNC && !editingNC.items?.[0]?.isGlobalDiscount
+                ? (editingNC.items || []).find(n =>
+                    (n.productId && n.productId === item.productId) || n.name === item.name
+                  )
+                : null
+              const ncQty = ncItem ? Math.min(Number(ncItem.quantity) || 0, qty) : null
               return {
                 ...item,
-                selected: true,
+                selected: editingNC && !editingNC.items?.[0]?.isGlobalDiscount ? !!ncItem : true,
                 originalQuantity: qty,
                 price: unitEffective,
                 unitPrice: unitEffective,
-                subtotal: Number(lineEffective.toFixed(2)),
+                subtotal: Number((ncQty != null ? unitEffective * ncQty : lineEffective).toFixed(2)),
+                ...(ncQty != null && { quantity: ncQty }),
                 ...(baseEffective != null && { basePrice: baseEffective }),
               }
             }),
@@ -716,6 +784,86 @@ export default function CreateCreditNote() {
       }
     } else if (selectedItems.length === 0) {
       setMessage({ type: 'error', text: 'Debes seleccionar al menos un ítem' })
+      return
+    }
+
+    // ===== REEMISIÓN de NC rechazada: actualizar el doc existente (MISMO
+    // número) y reenviar. No toca serie ni stock (la emisión original ya lo
+    // devolvió con estas mismas cantidades — por eso van bloqueadas). =====
+    if (editingNC) {
+      submitGuardRef.current = true
+      setIsSaving(true)
+      try {
+        const { subtotal, igv, total, igvRate, igvExempt } = calculateTotals()
+        if (total > Number(selectedInvoice.total) + 0.01) {
+          setMessage({ type: 'error', text: `La NC (${formatCurrency(total, selectedInvoice.currency)}) no puede exceder el total de la factura (${formatCurrency(selectedInvoice.total, selectedInvoice.currency)})` })
+          return
+        }
+        const hoy = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })()
+
+        const updateData = {
+          items: globalDiscountMode
+            ? [{
+                productId: null,
+                code: '',
+                name: 'Descuento global',
+                description: formData.discrepancyReason || 'Descuento aplicado a factura',
+                quantity: 1,
+                unit: 'NIU',
+                unitPrice: Number(total.toFixed(2)),
+                subtotal: Number(total.toFixed(2)),
+                isGlobalDiscount: true,
+              }]
+            : selectedItems.map(item => {
+                const { itemDiscount, itemDiscountType, ...rest } = item
+                return { ...rest, originalQuantity: item.quantity }
+              }),
+          subtotal,
+          igv,
+          total,
+          currency: normalizeCurrency(selectedInvoice.currency),
+          exchangeRate: Number(selectedInvoice.exchangeRate) > 0 ? Number(selectedInvoice.exchangeRate) : 1,
+          ...calculatePENBaseTotals(),
+          taxConfig: {
+            igvRate: igvRate,
+            igvExempt: igvExempt,
+            exemptionReason: selectedInvoice?.taxConfig?.exemptionReason || ''
+          },
+          discrepancyCode: formData.discrepancyCode,
+          discrepancyReason: formData.discrepancyReason,
+          issueDate: new Date(),
+          emissionDate: hoy,
+          sunatStatus: 'pending',
+          sunatErrorMessage: null,
+        }
+        const upd = await updateInvoice(getBusinessId(), editingNC.id, updateData)
+        if (!upd.success) throw new Error(upd.error || 'No se pudo actualizar la NC')
+
+        // Sincronizar la factura padre con el total corregido
+        const isFullCancellation = Math.abs(selectedInvoice.total - total) < 0.01
+        await updateInvoice(getBusinessId(), selectedInvoice.id, {
+          status: isFullCancellation ? 'pending_cancellation' : 'partial_refund_pending',
+          pendingCreditNoteId: editingNC.id,
+          pendingCreditNoteNumber: editingNC.number,
+          pendingCreditNoteTotal: total,
+          ...((isFullCancellation && ['01', '06', '07'].includes(formData.discrepancyCode)) ? { stockRestored: true } : {})
+        })
+
+        // Reenviar a SUNAT con el mismo número
+        const sendRes = await sendCreditNoteToSunat(getBusinessId(), editingNC.id)
+        if (sendRes?.success) {
+          setMessage({ type: 'success', text: `Nota de Crédito ${editingNC.number} corregida y reenviada a SUNAT.` })
+        } else {
+          setMessage({ type: 'error', text: `NC corregida, pero SUNAT respondió: ${sendRes?.error || sendRes?.message || 'error desconocido'}. Puedes reintentar el envío desde Ventas.` })
+        }
+        setTimeout(() => appNavigate('facturas'), 2500)
+      } catch (error) {
+        console.error('Error al reemitir NC:', error)
+        setMessage({ type: 'error', text: error.message || 'Error al reemitir la nota de crédito' })
+      } finally {
+        setIsSaving(false)
+        submitGuardRef.current = false
+      }
       return
     }
 
@@ -1186,6 +1334,19 @@ export default function CreateCreditNote() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Banner de modo edición de NC rechazada */}
+            {editingNC && (
+              <div className="p-4 bg-amber-50 border border-amber-300 rounded-lg">
+                <p className="text-sm font-semibold text-amber-800">
+                  Editando la Nota de Crédito rechazada {editingNC.number}
+                </p>
+                <p className="text-xs text-amber-700 mt-1">
+                  Se corregirán los montos y se reenviará a SUNAT con el <strong>mismo número</strong> (una NC rechazada no existe para SUNAT).
+                  Las cantidades se mantienen de la emisión original; si necesitas otras cantidades, emite una NC nueva.
+                </p>
+              </div>
+            )}
+
             {/* Seleccionar factura original */}
             <Card>
               <CardHeader>
@@ -1200,7 +1361,7 @@ export default function CreateCreditNote() {
                     value={formData.referencedInvoiceId}
                     onChange={e => setFormData(prev => ({ ...prev, referencedInvoiceId: e.target.value }))}
                     required
-                    disabled={invoices.length === 0}
+                    disabled={invoices.length === 0 || !!editingNC}
                   >
                     <option value="">Seleccionar documento...</option>
                     {invoices.map(inv => (
@@ -1399,6 +1560,7 @@ export default function CreateCreditNote() {
                         type="checkbox"
                         checked={item.selected}
                         onChange={() => handleItemToggle(index)}
+                        disabled={!!editingNC}
                         className="mt-1"
                       />
                       <div className="flex-1 space-y-2">
@@ -1424,6 +1586,7 @@ export default function CreateCreditNote() {
                               max={item.originalQuantity || item.quantity}
                               value={item.quantity}
                               onChange={e => handleItemQuantityChange(index, parseFloat(e.target.value) || 0)}
+                              disabled={!!editingNC}
                               className="w-24"
                             />
                             <span className="text-sm text-gray-500">
