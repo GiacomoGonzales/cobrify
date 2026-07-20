@@ -770,7 +770,7 @@ const appendNewCustomersSheet = (wb, { businessData, periodLabel, customers, inv
 }
 
 /** Agrega hoja "Productos sin vender" — masters que NO aparecen en topProducts. */
-const appendUnsoldProductsSheet = (wb, { businessData, periodLabel, branchLabel, products, topProducts }) => {
+const appendUnsoldProductsSheet = (wb, { businessData, periodLabel, branchLabel, products, topProducts, getCategoryName }) => {
   if (!products || products.length === 0) return
   const soldIds = new Set((topProducts || []).map(p => p.id).filter(Boolean))
   const unsold = products.filter(p => !soldIds.has(p.id) && p.trackStock !== false)
@@ -802,7 +802,7 @@ const appendUnsoldProductsSheet = (wb, { businessData, periodLabel, branchLabel,
     aoa.push([
       p.sku || '',
       p.name || 'N/A',
-      p.category || '-',
+      getCategoryName ? getCategoryName(p.category) : (p.category || '-'),
       stock,
       Number(p.minStock) || 0,
       Number(price),
@@ -830,7 +830,7 @@ const appendUnsoldProductsSheet = (wb, { businessData, periodLabel, branchLabel,
 }
 
 /** Agrega hoja "Stock Bajo" — productos con stock <= minStock (o 0). */
-const appendLowStockSheet = (wb, { businessData, products, branchLabel }) => {
+const appendLowStockSheet = (wb, { businessData, products, branchLabel, getCategoryName }) => {
   if (!products || products.length === 0) return
   const lowStock = products.filter(p => {
     if (p.trackStock === false) return false
@@ -869,7 +869,7 @@ const appendLowStockSheet = (wb, { businessData, products, branchLabel }) => {
     aoa.push([
       p.sku || '',
       p.name || 'N/A',
-      p.category || '-',
+      getCategoryName ? getCategoryName(p.category) : (p.category || '-'),
       stock,
       min,
       status,
@@ -1699,9 +1699,24 @@ export const exportSalesReport = async (data) => {
 
 export const exportProductsReport = async (data) => {
   const {
-    topProducts, salesByCategory, salesByBrand, products,
+    topProducts, salesByCategory, salesByBrand, products, productCategories,
     dateRange, customStartDate, customEndDate, branchLabel, businessData,
   } = data
+
+  // Mapa id→nombre de categoría (soporta subcategorías "Padre > Hija"). Sin
+  // esto, las hojas Sin Vender / Stock Bajo mostraban el ID crudo
+  // (cat-1783...-goflhkx7f) en vez del nombre — reporte de TODOTIRO.
+  const catList = Array.isArray(productCategories) ? productCategories : []
+  const getCategoryName = (catId) => {
+    if (!catId) return 'Sin categoría'
+    const cat = catList.find(c => c.id === catId)
+    if (!cat) return catId
+    if (cat.parentId) {
+      const parent = catList.find(c => c.id === cat.parentId)
+      return parent ? `${parent.name} > ${cat.name}` : cat.name
+    }
+    return cat.name
+  }
 
   const wb = XLSX.utils.book_new()
   const periodLabel = getRangeLabel(dateRange, customStartDate, customEndDate)
@@ -1985,12 +2000,12 @@ export const exportProductsReport = async (data) => {
   if (products && products.length > 0) {
     appendUnsoldProductsSheet(wb, {
       businessData, periodLabel, branchLabel: branchLabel || 'Todas',
-      products, topProducts,
+      products, topProducts, getCategoryName,
     })
     // Stock bajo (también requiere products)
     appendLowStockSheet(wb, {
       businessData, branchLabel: branchLabel || 'Todas',
-      products,
+      products, getCategoryName,
     })
   }
 

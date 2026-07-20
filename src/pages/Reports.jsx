@@ -432,6 +432,21 @@ export default function Reports() {
     return (product?.cost || 0) * quantity * factor
   }, [products, recipes])
 
+  // Ingreso de un item EN MONEDA BASE (PEN). Crítico para negocios que venden
+  // en dólares: el costo (`costAtSale`/`product.cost`) está en PEN, pero
+  // `item.subtotal` está en la moneda del documento (USD). Comparar directo
+  // daba márgenes absurdos (caso TODOTIRO: ingreso $312 vs costo S/693 →
+  // -122%). Prioriza `item.basePrice` (PEN exacto congelado en la venta) y si
+  // no, convierte el subtotal con el TC del documento. Ventas en soles no
+  // cambian (basePrice = price, currency = PEN).
+  const itemRevenueInBase = useCallback((item, invoice) => {
+    const quantity = item.quantity || 0
+    if (Number(item.basePrice) > 0) return Number(item.basePrice) * quantity
+    const itemPrice = item.unitPrice || item.price || 0
+    const subtotal = item.subtotal || (quantity * itemPrice)
+    return convertToBase(subtotal, invoice?.currency, invoice?.exchangeRate)
+  }, [])
+
   // Detecta si un item se agregó como "producto personalizado" en el POS
   // (no existe en el catálogo). Convención del POS: `id: custom-{ts}` para
   // productos libres y `id: appointment-...` para citas veterinarias.
@@ -723,9 +738,9 @@ export default function Reports() {
           }
         }
         productSales[key].quantity += quantity
-        // Aplicar descuento proporcional al revenue del item
-        const itemSubtotal = item.subtotal || (quantity * itemPrice)
-        const itemRevenue = itemSubtotal * discountFactor
+        // Revenue EN BASE (PEN) para que cuadre con el costo (también en PEN).
+        // El descuento se distribuye con el mismo factor (ratio adimensional).
+        const itemRevenue = itemRevenueInBase(item, invoice) * discountFactor
         // Redondear a 2 decimales para evitar errores de punto flotante
         productSales[key].revenue = Number((productSales[key].revenue + itemRevenue).toFixed(2))
 
@@ -759,7 +774,7 @@ export default function Reports() {
       }))
       .sort((a, b) => b.revenue - a.revenue)
       // Sin límite - mostrar todos los productos
-  }, [filteredInvoices, products, recipes])
+  }, [filteredInvoices, products, recipes, itemRevenueInBase])
 
   // Evolución del producto seleccionado por período (POR DÍA o POR MES según el
   // rango, con el MISMO criterio que el gráfico general salesByPeriod): rangos
@@ -876,10 +891,8 @@ export default function Reports() {
       invoice.items?.forEach(item => {
         const productId = item.productId || item.id
         const quantity = item.quantity || 0
-        const itemPrice = item.unitPrice || item.price || 0
-        // Aplicar descuento proporcional
-        const itemSubtotal = item.subtotal || (quantity * itemPrice)
-        const itemRevenue = itemSubtotal * discountFactor
+        // Revenue EN BASE (PEN), igual que en top productos (ver itemRevenueInBase)
+        const itemRevenue = itemRevenueInBase(item, invoice) * discountFactor
 
         // Buscar el producto para obtener su categoría
         const product = products.find(p => p.id === productId)
@@ -924,7 +937,7 @@ export default function Reports() {
         profitMargin: cat.revenue > 0 ? ((cat.revenue - cat.cost) / cat.revenue) * 100 : 0
       }))
       .sort((a, b) => b.revenue - a.revenue)
-  }, [filteredInvoices, products, recipes, productCategories])
+  }, [filteredInvoices, products, recipes, productCategories, itemRevenueInBase])
 
   // Resuelve el nombre de marca de un producto. Prefiere brandId (marca
   // administrada en la tabla productBrands). Fallback al texto libre
@@ -958,9 +971,8 @@ export default function Reports() {
       invoice.items?.forEach(item => {
         const productId = item.productId || item.id
         const quantity = item.quantity || 0
-        const itemPrice = item.unitPrice || item.price || 0
-        const itemSubtotal = item.subtotal || (quantity * itemPrice)
-        const itemRevenue = itemSubtotal * discountFactor
+        // Revenue EN BASE (PEN), igual que en top productos (ver itemRevenueInBase)
+        const itemRevenue = itemRevenueInBase(item, invoice) * discountFactor
 
         const product = products.find(p => p.id === productId)
         const brandName = getBrandName(product)
@@ -1002,7 +1014,7 @@ export default function Reports() {
         profitMargin: b.revenue > 0 ? ((b.revenue - b.cost) / b.revenue) * 100 : 0,
       }))
       .sort((a, b) => b.revenue - a.revenue)
-  }, [filteredInvoices, products, recipes, getBrandName])
+  }, [filteredInvoices, products, recipes, getBrandName, itemRevenueInBase])
 
   // Top clientes
   const topCustomers = useMemo(() => {
@@ -3004,7 +3016,7 @@ export default function Reports() {
           <div className="flex justify-end">
             {!hidePrivateData && (
             <button
-              onClick={async () => await exportProductsReport({ topProducts, salesByCategory, salesByBrand, products, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })}
+              onClick={async () => await exportProductsReport({ topProducts, salesByCategory, salesByBrand, products, productCategories, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
               <Download className="w-4 h-4" />
