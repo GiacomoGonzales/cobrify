@@ -784,7 +784,12 @@ Gracias por tu preferencia.`
     const deletedId = deletingInvoice.id
     setIsDeleting(true)
     try {
-      const result = await deleteInvoice(businessId, deletedId)
+      // auditInfo → log inmutable en deletedInvoices (quién/cuándo/qué número)
+      const result = await deleteInvoice(businessId, deletedId, {
+        invoice: deletingInvoice,
+        deletedBy: user.email || user.uid,
+        deletedByName: user.displayName || user.email || '',
+      })
 
       if (result.success) {
         toast.success('Factura eliminada exitosamente')
@@ -4625,6 +4630,16 @@ Gracias por tu preferencia.`
                 <strong>{deletingInvoice?.number}</strong>?
               </p>
               <p className="text-sm text-gray-600 mt-2">Esta acción no se puede deshacer.</p>
+              {/* Aviso del salto de correlativo: el número eliminado NO se
+                  reutiliza. Sin este aviso, los usuarios luego reportan
+                  "faltan comprobantes" al ver el hueco en la numeración. */}
+              {deletingInvoice?.documentType !== 'nota_venta' && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-2">
+                  El número <strong>{deletingInvoice?.number}</strong> no se reutilizará: quedará un
+                  salto en la numeración de la serie. Esto es normal para comprobantes que SUNAT
+                  nunca aceptó, pero tenlo en cuenta al revisar tus correlativos.
+                </p>
+              )}
             </div>
           </div>
 

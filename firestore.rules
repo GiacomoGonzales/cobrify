@@ -291,6 +291,16 @@ service cloud.firestore {
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
+      // Subcollection: Deleted Invoices — LOG DE AUDITORÍA de eliminaciones
+      // (quién, cuándo y qué número, para explicar saltos de correlativo).
+      // INMUTABLE para los miembros del negocio: solo crean (al eliminar un
+      // comprobante) y leen; nadie edita ni borra el rastro salvo el admin.
+      match /deletedInvoices/{logId} {
+        allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+        allow create: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow update, delete: if isAdmin();
+      }
+
       // Subcollection: Customers (Clientes)
       match /customers/{customerId} {
         // Admins pueden leer todos los clientes

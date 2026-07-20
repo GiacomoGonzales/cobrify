@@ -423,10 +423,42 @@ export const updateInvoice = async (userId, invoiceId, updates) => {
 }
 
 /**
- * Eliminar una factura
+ * Eliminar una factura.
+ *
+ * auditInfo (opcional): { invoice, deletedBy, deletedByName } — deja un LOG
+ * INMUTABLE en businesses/{id}/deletedInvoices con quién, cuándo y qué número
+ * se eliminó. Los números eliminados no se reutilizan, así que este registro
+ * es la única forma de explicar después los saltos de correlativo (caso real:
+ * "falta la FZZ1-26" → alguien del negocio la había eliminado). El log se
+ * escribe ANTES del borrado; si fallara (reglas/red), la eliminación continúa
+ * (el log es auditoría, no un candado).
  */
-export const deleteInvoice = async (userId, invoiceId) => {
+export const deleteInvoice = async (userId, invoiceId, auditInfo = null) => {
   try {
+    if (auditInfo?.invoice) {
+      try {
+        const inv = auditInfo.invoice
+        await setDoc(doc(db, 'businesses', userId, 'deletedInvoices', invoiceId), {
+          number: inv.number || '',
+          series: inv.series || '',
+          correlativeNumber: inv.correlativeNumber ?? null,
+          documentType: inv.documentType || '',
+          total: inv.total ?? null,
+          currency: inv.currency || 'PEN',
+          customerName: inv.customer?.businessName || inv.customer?.name || '',
+          customerDocument: inv.customer?.documentNumber || '',
+          sunatStatus: inv.sunatStatus || '',
+          status: inv.status || '',
+          emissionDate: inv.emissionDate || '',
+          originalCreatedAt: inv.createdAt || null,
+          deletedAt: serverTimestamp(),
+          deletedBy: auditInfo.deletedBy || '',
+          deletedByName: auditInfo.deletedByName || '',
+        })
+      } catch (logError) {
+        console.error('No se pudo registrar el log de eliminación:', logError)
+      }
+    }
     await deleteDoc(doc(db, 'businesses', userId, 'invoices', invoiceId))
     return { success: true }
   } catch (error) {
