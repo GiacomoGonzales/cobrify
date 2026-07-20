@@ -4911,15 +4911,15 @@ Gracias por tu preferencia.`
               <div className="grid grid-cols-3 gap-3 text-sm">
                 <div>
                   <p className="text-gray-600">Total</p>
-                  <p className="font-semibold text-gray-900">{formatCurrency(paymentInvoice.total)}</p>
+                  <p className="font-semibold text-gray-900">{formatCurrency(paymentInvoice.total, paymentInvoice.currency)}</p>
                 </div>
                 <div>
                   <p className="text-gray-600">Pagado</p>
-                  <p className="font-semibold text-green-600">{formatCurrency(paymentInvoice.amountPaid || 0)}</p>
+                  <p className="font-semibold text-green-600">{formatCurrency(paymentInvoice.amountPaid || 0, paymentInvoice.currency)}</p>
                 </div>
                 <div>
                   <p className="text-gray-600">Saldo</p>
-                  <p className="font-semibold text-orange-600">{formatCurrency(paymentInvoice.balance || 0)}</p>
+                  <p className="font-semibold text-orange-600">{formatCurrency(paymentInvoice.balance || 0, paymentInvoice.currency)}</p>
                 </div>
               </div>
             </div>
@@ -4940,7 +4940,7 @@ Gracias por tu preferencia.`
                 disabled={isRegisteringPayment}
               />
               <p className="text-xs text-gray-500 mt-1">
-                Máximo: {formatCurrency(paymentInvoice.balance || 0)}
+                Máximo: {formatCurrency(paymentInvoice.balance || 0, paymentInvoice.currency)}
               </p>
             </div>
 
@@ -4970,19 +4970,19 @@ Gracias por tu preferencia.`
                   <div className="flex justify-between">
                     <span className="text-gray-700">Nuevo pago:</span>
                     <span className="font-semibold text-blue-600">
-                      {formatCurrency(parseFloat(newPaymentAmount))}
+                      {formatCurrency(parseFloat(newPaymentAmount), paymentInvoice.currency)}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-700">Total pagado:</span>
                     <span className="font-semibold text-green-600">
-                      {formatCurrency((paymentInvoice.amountPaid || 0) + parseFloat(newPaymentAmount))}
+                      {formatCurrency((paymentInvoice.amountPaid || 0) + parseFloat(newPaymentAmount), paymentInvoice.currency)}
                     </span>
                   </div>
                   <div className="flex justify-between border-t border-blue-300 pt-1">
                     <span className="text-gray-700">Nuevo saldo:</span>
                     <span className="font-semibold text-orange-600">
-                      {formatCurrency(paymentInvoice.balance - parseFloat(newPaymentAmount))}
+                      {formatCurrency(paymentInvoice.balance - parseFloat(newPaymentAmount), paymentInvoice.currency)}
                     </span>
                   </div>
                 </div>
