@@ -21,7 +21,7 @@ const MODE_META = {
 }
 
 function Navbar() {
-  const { user, logout, subscription, isDemoMode, businessMode, businessSettings, branches, filterBranchesByAccess, hasMainBranchAccess, branchScope, setBranchScope, baseBusinessMode } = useAppContext()
+  const { user, logout, subscription, isDemoMode, isBusinessOwner, businessMode, businessSettings, branches, filterBranchesByAccess, hasMainBranchAccess, branchScope, setBranchScope, baseBusinessMode } = useAppContext()
   const { branding } = useBranding()
   const { toggleMobileMenu } = useStore()
   const { isInstallable, promptInstall } = usePWAInstall()
@@ -55,15 +55,18 @@ function Navbar() {
 
     loadUnreadCount();
 
-    // Verificar y crear notificaciones de suscripción
-    if (user?.uid && subscription) {
+    // Verificar y crear notificaciones de suscripción SOLO para el dueño del
+    // negocio. Los sub-usuarios usan la suscripción del owner y no pueden
+    // renovarla, así que no tiene sentido notificarles vencimientos (antes les
+    // llegaban avisos de "prueba/suscripción por vencer" que no les competen).
+    if (user?.uid && subscription && isBusinessOwner) {
       checkAndCreateSubscriptionNotifications(user.uid, subscription);
     }
 
     // Actualizar cada 5 minutos
     const interval = setInterval(loadUnreadCount, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [user?.uid, subscription, isDemoMode]);
+  }, [user?.uid, subscription, isDemoMode, isBusinessOwner]);
 
   // Cerrar el menú de locales al hacer click fuera
   useEffect(() => {

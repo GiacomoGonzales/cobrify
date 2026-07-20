@@ -365,9 +365,6 @@ export const checkAndCreateSubscriptionNotifications = async (userId, subscripti
   // Obtener notificaciones existentes del usuario
   const existingNotifications = await getUserNotifications(userId, 50);
 
-  // Determinar si es prueba gratuita
-  const isTrial = subscription.plan === 'trial';
-
   // Verificar si ya expiró
   if (daysUntilExpiry < 0 && subscription.status === 'active') {
     // Verificar si ya existe notificación de expiración
@@ -385,33 +382,22 @@ export const checkAndCreateSubscriptionNotifications = async (userId, subscripti
       );
     }
   }
-  // Notificar próximo vencimiento
-  else if (daysUntilExpiry >= 0) {
-    // Para prueba gratuita: notificar con 7 días o menos
-    // Para planes de pago: notificar solo con 1 día o menos
-    const shouldNotify = isTrial
-      ? daysUntilExpiry <= 7
-      : daysUntilExpiry <= 1;
+  // Notificar próximo vencimiento (solo suscripciones de pago; ya no existe
+  // el concepto de "prueba gratuita"). Avisar con 1 día o menos.
+  else if (daysUntilExpiry >= 0 && daysUntilExpiry <= 1) {
+    // Verificar si ya existe notificación de próximo vencimiento
+    const hasExpiringNotification = existingNotifications.some(
+      n => n.type === NOTIFICATION_TYPES.SUBSCRIPTION_EXPIRING_SOON && !n.read
+    );
 
-    if (shouldNotify) {
-      // Verificar si ya existe notificación de próximo vencimiento
-      const hasExpiringNotification = existingNotifications.some(
-        n => n.type === NOTIFICATION_TYPES.SUBSCRIPTION_EXPIRING_SOON && !n.read
+    if (!hasExpiringNotification) {
+      await createNotification(
+        userId,
+        NOTIFICATION_TYPES.SUBSCRIPTION_EXPIRING_SOON,
+        'Suscripción por Vencer',
+        `Tu suscripción vence ${daysUntilExpiry === 0 ? 'hoy' : 'mañana'}. Renueva ahora para evitar interrupciones.`,
+        { periodEnd, daysUntilExpiry }
       );
-
-      if (!hasExpiringNotification) {
-        const message = isTrial
-          ? `Tu prueba gratuita vence ${daysUntilExpiry === 0 ? 'hoy' : `en ${daysUntilExpiry} ${daysUntilExpiry === 1 ? 'día' : 'días'}`}. Actualiza a un plan de pago para continuar usando el sistema.`
-          : `Tu suscripción vence ${daysUntilExpiry === 0 ? 'hoy' : 'mañana'}. Renueva ahora para evitar interrupciones.`;
-
-        await createNotification(
-          userId,
-          NOTIFICATION_TYPES.SUBSCRIPTION_EXPIRING_SOON,
-          isTrial ? 'Prueba Gratuita por Vencer' : 'Suscripción por Vencer',
-          message,
-          { periodEnd, daysUntilExpiry, isTrial }
-        );
-      }
     }
   }
 };
@@ -463,16 +449,15 @@ export const notifyPlanChanged = async (userId, oldPlan, newPlan) => {
   }
 };
 
-// Crear notificación de bienvenida
-export const notifyWelcome = async (userId, userName, isTrial = true) => {
+// Crear notificación de bienvenida (ya no existe la "prueba gratuita": las
+// cuentas se crean con un plan de pago activo).
+export const notifyWelcome = async (userId, userName) => {
   try {
     await createNotification(
       userId,
       NOTIFICATION_TYPES.WELCOME,
       '¡Bienvenido a Cobrify!',
-      isTrial
-        ? `Hola ${userName}, gracias por unirte a Cobrify. Tu período de prueba gratuito ha comenzado.`
-        : `Hola ${userName}, gracias por unirte a Cobrify. Tu suscripción ya está activa.`,
+      `Hola ${userName}, gracias por unirte a Cobrify. Tu suscripción ya está activa.`,
       { userName }
     );
   } catch (error) {

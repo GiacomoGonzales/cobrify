@@ -531,8 +531,8 @@ export const createSubscription = async (userId, email, businessName, plan = 'tr
     const subscriptionRef = doc(db, 'subscriptions', userId);
     await setDoc(subscriptionRef, subscriptionData);
 
-    // Enviar notificación de bienvenida (texto según sea prueba o alta pagada)
-    await notifyWelcome(userId, businessName || email, plan === 'trial');
+    // Enviar notificación de bienvenida (suscripción activa)
+    await notifyWelcome(userId, businessName || email);
 
     return subscriptionData;
   } catch (error) {
