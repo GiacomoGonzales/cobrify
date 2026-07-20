@@ -622,7 +622,7 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
     doc.setTextColor(...BLACK)
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(7)
-    const qtyText = Number.isInteger(item.quantity) ? item.quantity.toString() : item.quantity.toFixed(2)
+    const qtyText = Number.isInteger(item.quantity) ? item.quantity.toString() : item.quantity.toFixed(3).replace(/\.?0+$/, '')
     doc.text(qtyText, cols.cant + colWidths.cant / 2, centerY, { align: 'center' })
 
     const unitCode = item.unit || 'UNIDAD'
