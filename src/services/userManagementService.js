@@ -116,6 +116,9 @@ export const PHARMACY_PAGES = [
   { id: 'dispatch-guides', name: 'GRE Remitente', path: '/guias-remision', category: 'documentos' },
   // Ventas
   { id: 'sellers', name: 'Vendedores', path: '/vendedores', category: 'ventas' },
+  // El sidebar de farmacia SIEMPRE tuvo Pedidos Online, pero faltaba aquí:
+  // sin este permiso los sub-usuarios (vendedores) nunca podían verlo.
+  { id: 'online-orders', name: 'Pedidos Online', path: '/pedidos-online', category: 'ventas' },
   // Compras
   { id: 'purchases', name: 'Compras', path: '/compras', category: 'compras' },
   { id: 'purchase-orders', name: 'Órdenes de Compra', path: '/ordenes-compra', category: 'compras' },
@@ -137,6 +140,9 @@ export const REAL_ESTATE_PAGES = [
 export const VETERINARY_PAGES = [
   { id: 'vet-agenda', name: 'Agenda de Citas', path: '/agenda-veterinaria', category: 'veterinaria' },
   { id: 'vet-alerts', name: 'Recordatorios Veterinarios', path: '/alertas-veterinaria', category: 'veterinaria' },
+  // Mismo gap que farmacia: el sidebar veterinario tiene Pedidos Online pero
+  // el permiso no existía y los sub-usuarios no podían verlo.
+  { id: 'online-orders', name: 'Pedidos Online', path: '/pedidos-online', category: 'ventas' },
 ]
 
 // ============ PÁGINAS MODO HOTEL ============

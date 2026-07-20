@@ -84,6 +84,7 @@ const RESTAURANT = [
 
 const PHARMACY = [
   { id: 'public-catalog', label: 'Mi Catálogo Online', description: 'Catálogo digital para compartir con tus clientes y recibir pedidos' },
+  { id: 'online-orders', label: 'Pedidos Online', description: 'Bandeja de pedidos que llegan desde tu catálogo digital' },
   { id: 'cash-register', label: 'Control de Caja', description: 'Apertura y cierre de caja' },
   { id: 'quotations', label: 'Cotizaciones', description: 'Presupuestos y proformas' },
   { id: 'sellers', label: 'Vendedores', description: 'Gestión de vendedores y comisiones' },
@@ -175,6 +176,7 @@ const LOGISTICS = [
 
 const VETERINARY = [
   { id: 'public-catalog', label: 'Mi Catálogo Online', description: 'Catálogo digital para compartir con tus clientes y recibir pedidos' },
+  { id: 'online-orders', label: 'Pedidos Online', description: 'Bandeja de pedidos que llegan desde tu catálogo digital' },
   { id: 'cash-register', label: 'Control de Caja', description: 'Apertura y cierre de caja diario' },
   { id: 'quotations', label: 'Cotizaciones', description: 'Presupuestos y proformas' },
   { id: 'sellers', label: 'Veterinarios', description: 'Gestión de veterinarios' },
