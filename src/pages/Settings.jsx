@@ -5091,8 +5091,20 @@ export default function Settings() {
                       </span>
                       <p className="text-xs text-gray-600 mt-1.5 mb-3 leading-relaxed">
                         Selecciona qué tipo de comprobante aparecerá seleccionado por defecto al abrir el Punto de Venta.
+                        Elige <strong>Ninguno</strong> para que el cajero deba escogerlo cada venta (evita emitir el tipo equivocado por descuido).
                       </p>
                       <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDefaultDocumentType('none')}
+                          className={`px-3 py-2 border-2 rounded-lg transition-colors ${
+                            defaultDocumentType === 'none'
+                              ? 'border-primary-500 bg-primary-50 text-primary-700'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <span className="text-sm font-medium">Ninguno</span>
+                        </button>
                         <button
                           type="button"
                           onClick={() => setDefaultDocumentType('boleta')}

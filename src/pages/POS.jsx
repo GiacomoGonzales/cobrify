@@ -1083,7 +1083,11 @@ export default function POS() {
   // corrija CUALQUIER camino que deje un tipo inválido (ej: el default del negocio
   // aplicado tarde), no solo cuando cambian los permisos.
   useEffect(() => {
-    if (allowedDocumentTypes && allowedDocumentTypes.length > 0 && !allowedDocumentTypes.includes(documentType)) {
+    // documentType '' es el estado intencional "sin seleccionar" (default del
+    // negocio en "Ninguno") — NO corregirlo; el cajero debe elegir y el
+    // checkout ya lo bloquea. Solo corregir tipos NO vacíos que no estén
+    // permitidos.
+    if (documentType && allowedDocumentTypes && allowedDocumentTypes.length > 0 && !allowedDocumentTypes.includes(documentType)) {
       setDocumentType(allowedDocumentTypes[0])
     }
   }, [allowedDocumentTypes, documentType])
@@ -2511,10 +2515,16 @@ export default function POS() {
           // en otro inválido (desync: se ve "Nota de Venta" pero internamente es "boleta").
           if (!hasDraft && businessData.defaultDocumentType && !userChangedDocTypeRef.current) {
             const def = businessData.defaultDocumentType
-            const safeDef = (allowedDocumentTypes && allowedDocumentTypes.length > 0 && !allowedDocumentTypes.includes(def))
-              ? allowedDocumentTypes[0]
-              : def
-            setDocumentType(safeDef)
+            // 'none' = sin default: el POS abre sin tipo seleccionado y el
+            // cajero DEBE elegirlo (el checkout ya bloquea si documentType='').
+            if (def === 'none') {
+              setDocumentType('')
+            } else {
+              const safeDef = (allowedDocumentTypes && allowedDocumentTypes.length > 0 && !allowedDocumentTypes.includes(def))
+                ? allowedDocumentTypes[0]
+                : def
+              setDocumentType(safeDef)
+            }
           }
         }
 
@@ -4529,10 +4539,15 @@ export default function POS() {
     // sub-usuarios con permisos restringidos), caer al primero permitido — así
     // el state nunca queda en un valor sin <option> en el <select>.
     const def = companySettings?.defaultDocumentType || 'boleta'
-    const safeDoc = (allowedDocumentTypes && allowedDocumentTypes.length > 0 && !allowedDocumentTypes.includes(def))
-      ? allowedDocumentTypes[0]
-      : def
-    setDocumentType(safeDoc)
+    // 'none' = sin default: para la siguiente venta el cajero vuelve a elegir.
+    if (def === 'none') {
+      setDocumentType('')
+    } else {
+      const safeDoc = (allowedDocumentTypes && allowedDocumentTypes.length > 0 && !allowedDocumentTypes.includes(def))
+        ? allowedDocumentTypes[0]
+        : def
+      setDocumentType(safeDoc)
+    }
     setOrderType('takeaway')
     setCustomerData({
       documentType: ID_TYPES.DNI,
@@ -8434,8 +8449,15 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         setPaymentInstallments([])
                       }
                     }}
-                    className="flex-1 px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
+                    className={`flex-1 px-3 py-2 text-sm font-medium border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed ${
+                      documentType ? 'border-gray-300' : 'border-amber-400 ring-1 ring-amber-300 text-amber-700'
+                    }`}
                   >
+                    {/* Placeholder cuando el default del negocio es "Ninguno":
+                        obliga a elegir; el checkout bloquea si queda vacío. */}
+                    {!documentType && (
+                      <option value="" disabled>Selecciona un tipo…</option>
+                    )}
                     {canEmitFiscal && (!allowedDocumentTypes || allowedDocumentTypes.length === 0 || allowedDocumentTypes.includes('boleta')) && (
                       <option value="boleta">Boleta de Venta</option>
                     )}
