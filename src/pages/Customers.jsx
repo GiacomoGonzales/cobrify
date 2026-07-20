@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useDeferredValue } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet, Upload, CalendarClock, Cake, Columns3, PawPrint, ClipboardList, Eye, EyeOff, X } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet, FileText, Printer, Upload, CalendarClock, Cake, Columns3, PawPrint, ClipboardList, Eye, EyeOff, X } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useHidePrivateData } from '@/hooks/useHidePrivateData'
 import { useToast } from '@/contexts/ToastContext'
@@ -27,6 +27,392 @@ import ImportCustomersModal from '@/components/ImportCustomersModal'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import MedicalHistoryModal from '@/components/veterinary/MedicalHistoryModal'
 import { normalizePets, createEmptyPet } from '@/utils/petUtils'
+
+// Etiquetas cortas por tipo de comprobante (para el modal de pedidos)
+const DOC_TYPE_LABELS = {
+  factura: 'Factura',
+  boleta: 'Boleta',
+  nota_venta: 'Nota de Venta',
+  nota_credito: 'N. Crédito',
+  nota_debito: 'N. Débito',
+}
+
+// Modal con el historial de pedidos (comprobantes) de un cliente.
+// Replica la MISMA vinculación que getCustomersWithStats (el número que se ve
+// en la columna Pedidos): primero facturas con customerId del cliente; si no
+// hay ninguna, las que tengan su mismo número de documento. Así el modal
+// muestra exactamente los documentos que componen ese contador.
+// Acciones: imprimir ticket 80mm, descargar PDF A4 y exportar Excel (mismo
+// patrón que PendingPaymentsReport: jsPDF + excelStyles, imports dinámicos
+// para no engordar el bundle de la página).
+function CustomerOrdersModal({ customer, businessId, businessSettings, isDemoMode, onClose }) {
+  const toast = useToast()
+  const [orders, setOrders] = useState(null) // null = cargando
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      if (isDemoMode || !businessId || !customer) {
+        setOrders([])
+        return
+      }
+      try {
+        const { collection, getDocs, query, where } = await import('firebase/firestore')
+        const { db } = await import('@/lib/firebase')
+        const invoicesRef = collection(db, 'businesses', businessId, 'invoices')
+
+        let docs = []
+        const byIdSnap = await getDocs(query(invoicesRef, where('customerId', '==', customer.id)))
+        docs = byIdSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+
+        const docNumber = customer.documentNumber
+        if (docs.length === 0 && docNumber && docNumber !== '00000000') {
+          const byDocSnap = await getDocs(query(invoicesRef, where('customer.documentNumber', '==', docNumber)))
+          docs = byDocSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+        }
+
+        // Más recientes primero (createdAt Timestamp → fallback issueDate/emissionDate)
+        const dateOf = (inv) => inv.createdAt?.toDate?.()?.getTime?.()
+          || (inv.issueDate?.toDate?.()?.getTime?.())
+          || (inv.emissionDate ? new Date(`${inv.emissionDate}T12:00:00`).getTime() : 0)
+        docs.sort((a, b) => dateOf(b) - dateOf(a))
+        if (!cancelled) setOrders(docs)
+      } catch (err) {
+        console.error('Error al cargar pedidos del cliente:', err)
+        if (!cancelled) setOrders([])
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [customer?.id])
+
+  const formatDate = (inv) => {
+    const d = inv.createdAt?.toDate?.() || inv.issueDate?.toDate?.()
+      || (inv.emissionDate ? new Date(`${inv.emissionDate}T12:00:00`) : null)
+    return d ? d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'
+  }
+
+  const statusChip = (inv) => {
+    if (inv.status === 'annulled' || inv.status === 'cancelled') {
+      return <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700">Anulada</span>
+    }
+    if (inv.documentType === 'nota_credito') {
+      return <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-orange-100 text-orange-700">NC</span>
+    }
+    if (inv.paymentStatus === 'pending') {
+      return <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">Por cobrar</span>
+    }
+    if (inv.paymentStatus === 'partial') {
+      return <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">Parcial</span>
+    }
+    return null
+  }
+
+  // Totales por moneda: excluye anuladas y RESTA notas de crédito (total neto
+  // real comprado, a diferencia del totalSpent naive de la columna).
+  const totals = useMemo(() => {
+    const t = { PEN: 0, USD: 0 }
+    for (const inv of orders || []) {
+      if (inv.status === 'annulled' || inv.status === 'cancelled') continue
+      const ccy = inv.currency === 'USD' ? 'USD' : 'PEN'
+      const amt = Number(inv.total) || 0
+      t[ccy] += inv.documentType === 'nota_credito' ? -amt : amt
+    }
+    return t
+  }, [orders])
+
+  const totalsLabel = () => {
+    const parts = []
+    if (Math.abs(totals.PEN) > 0.001 || Math.abs(totals.USD) <= 0.001) parts.push(formatCurrency(totals.PEN, 'PEN'))
+    if (Math.abs(totals.USD) > 0.001) parts.push(formatCurrency(totals.USD, 'USD'))
+    return parts.join(' + ')
+  }
+
+  const statusText = (inv) => {
+    if (inv.status === 'annulled' || inv.status === 'cancelled') return 'Anulada'
+    if (inv.documentType === 'nota_credito') return 'Nota de crédito'
+    if (inv.paymentStatus === 'pending') return 'Por cobrar'
+    if (inv.paymentStatus === 'partial') return 'Pago parcial'
+    return 'Pagada'
+  }
+
+  const fileDate = () => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+  const safeName = String(customer?.name || 'cliente').normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^\w-]+/g, '-').slice(0, 40)
+  const businessName = businessSettings?.tradeName || businessSettings?.businessName || ''
+
+  // ===== Ticket 80mm (abre diálogo de impresión) =====
+  const handlePrintTicket = async () => {
+    try {
+      const { default: jsPDF } = await import('jspdf')
+      const W = 80, MX = 4
+      const list = orders || []
+      const height = 34 + list.length * 8 + 18
+      const doc = new jsPDF({ unit: 'mm', format: [W, Math.max(height, 60)] })
+      let y = 8
+
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(11)
+      doc.text('PEDIDOS DEL CLIENTE', W / 2, y, { align: 'center' })
+      y += 5
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8)
+      if (businessName) { doc.text(businessName.slice(0, 40), W / 2, y, { align: 'center' }); y += 4 }
+      doc.setFont('helvetica', 'bold')
+      doc.text(String(customer?.name || '').slice(0, 40), W / 2, y, { align: 'center' })
+      y += 4
+      doc.setFont('helvetica', 'normal')
+      if (customer?.documentNumber) { doc.text(customer.documentNumber, W / 2, y, { align: 'center' }); y += 4 }
+      doc.setLineDashPattern([1, 1], 0)
+      doc.line(MX, y, W - MX, y)
+      doc.setLineDashPattern([], 0)
+      y += 5
+
+      for (const inv of list) {
+        const isNC = inv.documentType === 'nota_credito'
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(8)
+        doc.text(String(inv.number || '-').slice(0, 22), MX, y)
+        doc.text(`${isNC ? '-' : ''}${formatCurrency(inv.total || 0, inv.currency || 'PEN')}`, W - MX, y, { align: 'right' })
+        y += 3.5
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(7)
+        doc.setTextColor(90, 90, 90)
+        doc.text(`${formatDate(inv)} · ${statusText(inv)}`, MX, y)
+        doc.setTextColor(0, 0, 0)
+        y += 4.5
+      }
+
+      doc.setLineDashPattern([1, 1], 0)
+      doc.line(MX, y, W - MX, y)
+      doc.setLineDashPattern([], 0)
+      y += 5
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(9)
+      doc.text(`TOTAL (${list.length} comp.)`, MX, y)
+      doc.text(totalsLabel(), W - MX, y, { align: 'right' })
+
+      doc.autoPrint()
+      window.open(doc.output('bloburl'), '_blank')
+    } catch (e) {
+      console.error('Error generando ticket de pedidos:', e)
+      toast.error('No se pudo generar el ticket')
+    }
+  }
+
+  // ===== PDF A4 (descarga/comparte) =====
+  const handleDownloadPdf = async () => {
+    try {
+      const { default: jsPDF } = await import('jspdf')
+      const { downloadBlob } = await import('@/utils/nativeDownload')
+      const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+      const W = 210, MX = 14
+      let y = 16
+      const ensureSpace = (needed) => {
+        if (y + needed > 283) { doc.addPage(); y = 16 }
+      }
+
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(14)
+      doc.text('HISTORIAL DE PEDIDOS', W / 2, y, { align: 'center' })
+      y += 6
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(9)
+      if (businessName) { doc.text(businessName, W / 2, y, { align: 'center' }); y += 4.5 }
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(11)
+      doc.text(`${customer?.name || ''}${customer?.documentNumber ? ` · ${customer.documentNumber}` : ''}`, W / 2, y, { align: 'center' })
+      y += 7
+      doc.setDrawColor(0)
+      doc.line(MX, y, W - MX, y)
+      y += 5
+
+      doc.setFont('helvetica', 'normal')
+      for (const inv of orders || []) {
+        ensureSpace(9)
+        const isNC = inv.documentType === 'nota_credito'
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(9)
+        doc.text(String(inv.number || '-'), MX, y)
+        doc.text(`${isNC ? '-' : ''}${formatCurrency(inv.total || 0, inv.currency || 'PEN')}`, W - MX, y, { align: 'right' })
+        y += 4
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(8)
+        doc.setTextColor(90, 90, 90)
+        doc.text(
+          `${DOC_TYPE_LABELS[inv.documentType] || 'Comprobante'} · ${formatDate(inv)} · ${statusText(inv)}${inv.sellerName ? ` · Vendedor: ${inv.sellerName}` : ''}`,
+          MX, y
+        )
+        doc.setTextColor(0, 0, 0)
+        y += 5
+      }
+
+      ensureSpace(12)
+      doc.setDrawColor(0)
+      doc.line(MX, y, W - MX, y)
+      y += 5.5
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(11)
+      doc.text(`TOTAL (${(orders || []).length} comprobante${(orders || []).length === 1 ? '' : 's'})`, MX, y)
+      doc.text(totalsLabel(), W - MX, y, { align: 'right' })
+      y += 5
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7)
+      doc.setTextColor(120, 120, 120)
+      doc.text('Total neto: sin anuladas y restando notas de crédito', MX, y)
+
+      await downloadBlob(doc.output('blob'), `Pedidos-${safeName}_${fileDate()}.pdf`, {
+        title: `Pedidos de ${customer?.name || 'cliente'}`,
+        dialogTitle: 'Guardar o compartir PDF',
+      })
+    } catch (e) {
+      console.error('Error generando PDF de pedidos:', e)
+      toast.error('No se pudo generar el PDF')
+    }
+  }
+
+  // ===== Excel (una fila por comprobante, estilos de la casa) =====
+  const handleDownloadExcel = async () => {
+    try {
+      const ex = await import('@/services/excelStyles')
+      const wb = ex.XLSX.utils.book_new()
+      const headers = ['Tipo', 'Número', 'Fecha', 'Estado', 'Vendedor', 'Moneda', 'Total']
+      const totalCols = headers.length
+      const aoa = [[`PEDIDOS — ${String(customer?.name || '').toUpperCase()}`], []]
+      const metaStart = aoa.length
+      aoa.push(...ex.buildBusinessMetadataRows({
+        name: businessSettings?.businessName || businessSettings?.name || businessSettings?.tradeName,
+        ruc: businessSettings?.ruc,
+      }, {
+        periodLabel: customer?.documentNumber ? `Cliente doc. ${customer.documentNumber}` : 'Todos los pedidos',
+        totalLabel: 'Comprobantes',
+        totalItems: (orders || []).length,
+      }))
+      const metaEnd = aoa.length - 1
+      aoa.push([])
+      const headerRow = aoa.length
+      aoa.push(headers)
+      const dataStart = aoa.length
+      for (const inv of orders || []) {
+        const isNC = inv.documentType === 'nota_credito'
+        aoa.push([
+          DOC_TYPE_LABELS[inv.documentType] || inv.documentType || '',
+          inv.number || '',
+          formatDate(inv),
+          statusText(inv),
+          inv.sellerName || '',
+          inv.currency === 'USD' ? 'USD' : 'PEN',
+          Number(((isNC ? -1 : 1) * (inv.total || 0)).toFixed(2)),
+        ])
+      }
+      const totalRowIdx = aoa.length
+      aoa.push(['TOTAL NETO', '', '', '', '', '', totalsLabel()])
+
+      const ws = ex.XLSX.utils.aoa_to_sheet(aoa)
+      ex.applyColumnWidths(ws, [14, 18, 12, 14, 20, 9, 14])
+      ex.applyTitleRow(ws, 0, totalCols)
+      ex.applyMetadataRows(ws, metaStart, metaEnd)
+      ex.applyHeaderRow(ws, headerRow, totalCols)
+      for (let i = 0; i < (orders || []).length; i++) {
+        const r = dataStart + i
+        ex.setStyle(ws, r, 0, ex.centerStyle(i))
+        ex.setStyle(ws, r, 1, ex.cellStyle(i))
+        ex.setStyle(ws, r, 2, ex.centerStyle(i))
+        ex.setStyle(ws, r, 3, ex.centerStyle(i))
+        ex.setStyle(ws, r, 4, ex.cellStyle(i))
+        ex.setStyle(ws, r, 5, ex.centerStyle(i))
+        ex.setStyle(ws, r, 6, ex.numberStyle(i))
+      }
+      ex.setStyle(ws, totalRowIdx, 0, ex.totalLabelStyle)
+      ex.setStyle(ws, totalRowIdx, 6, { ...ex.totalNumberStyle, numFmt: '@' })
+      ex.applyFreezeBelow(ws, headerRow)
+      ex.XLSX.utils.book_append_sheet(wb, ws, 'Pedidos')
+
+      await ex.saveAndShareExcel(wb, ex.buildExcelFileName(`Pedidos-${safeName}`), {
+        shareTitle: `Pedidos de ${customer?.name || 'cliente'}`,
+        shareText: 'Historial de pedidos del cliente',
+      })
+    } catch (e) {
+      console.error('Error exportando Excel de pedidos:', e)
+      toast.error('No se pudo exportar el Excel')
+    }
+  }
+
+  return (
+    <Modal isOpen={!!customer} onClose={onClose} title={`Pedidos de ${customer?.name || 'cliente'}`} size="lg">
+      {orders === null ? (
+        <div className="flex items-center justify-center py-10">
+          <Loader2 className="w-6 h-6 animate-spin text-primary-600" />
+        </div>
+      ) : orders.length === 0 ? (
+        <div className="text-center py-10">
+          <ShoppingCart className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+          <p className="text-sm text-gray-500">Este cliente aún no tiene pedidos registrados</p>
+        </div>
+      ) : (
+        <div>
+          {/* Resumen + acciones */}
+          <div className="flex items-center justify-between gap-2 mb-3 px-1">
+            <span className="text-sm text-gray-600 flex-shrink-0">
+              {orders.length} comprobante{orders.length !== 1 ? 's' : ''}
+            </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={handlePrintTicket}
+                className="p-1.5 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                title="Imprimir ticket 80mm"
+              >
+                <Printer className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadPdf}
+                className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                title="Descargar PDF"
+              >
+                <FileText className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadExcel}
+                className="p-1.5 text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
+                title="Exportar Excel"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+              </button>
+              <span className="text-sm font-semibold text-gray-900 ml-1" title="Total neto: sin anuladas y restando notas de crédito">
+                {totalsLabel()}
+              </span>
+            </div>
+          </div>
+          {/* Lista */}
+          <div className="max-h-[55vh] overflow-y-auto divide-y divide-gray-100 -mx-2">
+            {orders.map(inv => (
+              <div key={inv.id} className="flex items-center justify-between gap-3 px-2 py-2.5">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-900">{inv.number || '-'}</span>
+                    {statusChip(inv)}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {DOC_TYPE_LABELS[inv.documentType] || inv.documentType || 'Comprobante'} · {formatDate(inv)}
+                    {inv.sellerName ? ` · ${inv.sellerName}` : ''}
+                  </p>
+                </div>
+                <span className={`text-sm font-semibold flex-shrink-0 ${inv.documentType === 'nota_credito' ? 'text-orange-600' : 'text-gray-900'}`}>
+                  {inv.documentType === 'nota_credito' ? '-' : ''}{formatCurrency(inv.total || 0, inv.currency || 'PEN')}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </Modal>
+  )
+}
 
 export default function Customers() {
   const { user, isDemoMode, demoData, getBusinessId, businessSettings, businessMode } = useAppContext()
@@ -61,6 +447,8 @@ export default function Customers() {
 
   // Estado para modal de historia clínica (veterinaria)
   const [medicalHistoryCustomer, setMedicalHistoryCustomer] = useState(null)
+  // Cliente cuyo historial de pedidos se está viendo (click en el contador)
+  const [ordersCustomer, setOrdersCustomer] = useState(null)
   // Estado para múltiples mascotas (veterinaria)
   const [pets, setPets] = useState([])
 
@@ -848,9 +1236,14 @@ export default function Customers() {
                       </div>
                     )}
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="inline-flex items-center justify-center px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => showAmounts && setOrdersCustomer(customer)}
+                        className="inline-flex items-center justify-center px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold hover:bg-blue-200 transition-colors"
+                        title="Ver pedidos del cliente"
+                      >
                         {showAmounts ? (customer.ordersCount || 0) : '•'}
-                      </span>
+                      </button>
                       {!hidePrivateData && (
                         <span className="text-xs font-semibold text-gray-900">{showAmounts ? formatCurrency(customer.totalSpent || 0) : hiddenAmount}</span>
                       )}
@@ -1051,9 +1444,14 @@ export default function Customers() {
                     )}
                     {visibleColumns.orders && (
                       <TableCell className="py-1.5 text-center">
-                        <span className="inline-flex items-center justify-center px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
+                        <button
+                          type="button"
+                          onClick={() => showAmounts && setOrdersCustomer(customer)}
+                          className="inline-flex items-center justify-center px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold hover:bg-blue-200 transition-colors"
+                          title="Ver pedidos del cliente"
+                        >
                           {showAmounts ? (customer.ordersCount || 0) : '•'}
-                        </span>
+                        </button>
                       </TableCell>
                     )}
                     {visibleColumns.spent && !hidePrivateData && (
@@ -1498,6 +1896,17 @@ export default function Customers() {
           onClose={() => setMedicalHistoryCustomer(null)}
           customer={medicalHistoryCustomer}
           businessId={getBusinessId()}
+        />
+      )}
+
+      {/* Modal de pedidos del cliente (click en el contador de Pedidos) */}
+      {ordersCustomer && (
+        <CustomerOrdersModal
+          customer={ordersCustomer}
+          businessId={getBusinessId()}
+          businessSettings={businessSettings}
+          isDemoMode={isDemoMode}
+          onClose={() => setOrdersCustomer(null)}
         />
       )}
     </div>
