@@ -21,6 +21,20 @@ const sanitizeSunatLine = (text, maxLen) => {
 }
 
 /**
+ * Formatea la CANTIDAD de una línea para SUNAT (formato n(12,10): hasta 10
+ * decimales). NUNCA redondear a 2 decimales: una venta de 0.225 MILLAR emitida
+ * como "0.23" descuadra contra los montos (calculados con 0.225) y SUNAT
+ * rechaza con error 3270 ("el precio unitario difiere de los cálculos") —
+ * caso real: factura de envases vendidos por fracción de millar.
+ * toFixed(10) absorbe el ruido de punto flotante y luego se recortan los
+ * ceros colgantes (0.225 → "0.225", 2 → "2", 0.2 → "0.2").
+ */
+const formatSunatQuantity = (q) => {
+  const n = Number(q) || 0
+  return n.toFixed(10).replace(/0+$/, '').replace(/\.$/, '')
+}
+
+/**
  * Mapeo de unidades de medida internas a códigos SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
  * Las unidades guardadas en la app pueden ser texto legible, pero SUNAT requiere códigos específicos
  */
@@ -1082,7 +1096,7 @@ export function generateInvoiceXML(invoiceData, businessData) {
       'unitCode': mapUnitToSunatCode(item.unit),
       'unitCodeListID': 'UN/ECE rec 20',
       'unitCodeListAgencyName': 'United Nations Economic Commission for Europe'
-    }).txt(item.quantity.toFixed(2))
+    }).txt(formatSunatQuantity(item.quantity))
 
     // Valores pre-calculados
     const lineTotal = lineExtensions[index]         // Base imponible DESPUÉS de item discount (= LineExtensionAmount)
@@ -1671,7 +1685,7 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
       'unitCode': mapUnitToSunatCode(item.unit),
       'unitCodeListID': 'UN/ECE rec 20',
       'unitCodeListAgencyName': 'United Nations Economic Commission for Europe'
-    }).txt(item.quantity.toFixed(2))
+    }).txt(formatSunatQuantity(item.quantity))
 
     // IMPORTANTE: item.unitPrice YA INCLUYE IGV (viene del POS/frontend con IGV incluido)
     const priceWithIGV = item.unitPrice
@@ -2164,7 +2178,7 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
       'unitCode': mapUnitToSunatCode(item.unit),
       'unitCodeListID': 'UN/ECE rec 20',
       'unitCodeListAgencyName': 'United Nations Economic Commission for Europe'
-    }).txt(item.quantity.toFixed(2))
+    }).txt(formatSunatQuantity(item.quantity))
 
     // IMPORTANTE: item.unitPrice YA INCLUYE IGV (viene del POS/frontend con IGV incluido)
     const priceWithIGV = item.unitPrice

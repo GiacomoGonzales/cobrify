@@ -4325,7 +4325,16 @@ export default function POS() {
             // Solo aplica con valores numéricos válidos, no con strings parciales.
             const numericQty = typeof quantity === 'number' && !isNaN(quantity) ? quantity : null
             const autoPrice = numericQty != null ? computeAutoPriceForQty(item.id, numericQty) : null
-            const finalQty = rawValue === '' || rawValue === '0' || rawValue === '0.' ? rawValue : quantity
+            // Preservar strings decimales PARCIALES mientras se escribe: "0.0",
+            // "0.20", etc. Antes, al teclear "0.0" (camino a 0.025) se
+            // convertía a número 0 y el campo colapsaba a "0" — imposible
+            // escribir cantidades con cero tras el punto ("no me deja poner
+            // 0.025 millar"). Se conserva el string crudo cuando su
+            // representación numérica canónica difiere; el blur lo normaliza.
+            const isPartialDecimal = typeof rawValue === 'string'
+              && /^\d*\.\d*$/.test(rawValue)
+              && String(parseFloat(rawValue)) !== rawValue
+            const finalQty = rawValue === '' || rawValue === '0' || rawValue === '0.' || isPartialDecimal ? rawValue : quantity
             return autoPrice != null
               ? { ...item, quantity: finalQty, price: autoPrice }
               : { ...item, quantity: finalQty }
@@ -4335,11 +4344,15 @@ export default function POS() {
     )
   }
 
-  // Al salir del input, restaurar a 1 si quedó vacío o en 0
+  // Al salir del input, restaurar a 1 si quedó vacío o en 0. Si quedó un
+  // string decimal parcial válido ("0.20"), normalizarlo a número para que
+  // el carrito nunca guarde strings (la venta/XML esperan números).
   const handleQuantityBlur = (itemId, currentQuantity) => {
     const qty = parseFloat(currentQuantity)
     if (!currentQuantity || currentQuantity === '' || currentQuantity === '0' || currentQuantity === '0.' || isNaN(qty) || qty <= 0) {
       setQuantityDirectly(itemId, 1)
+    } else if (typeof currentQuantity === 'string') {
+      setQuantityDirectly(itemId, qty)
     }
   }
 
