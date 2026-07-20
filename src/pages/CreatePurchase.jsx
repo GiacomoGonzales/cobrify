@@ -1766,6 +1766,14 @@ export default function CreatePurchase() {
               cost: roundedAverageCost,
               ...(newCostUSD != null && { costUSD: newCostUSD }),
             }),
+            // Último precio de compra REAL (unitario de ESTA compra, PEN base).
+            // Distinto de `cost` (promedio ponderado): la Lista de
+            // Reabastecimiento lo usa como precio sugerido del proveedor.
+            // Bonificaciones (costo 0) no lo pisan.
+            ...(newCost > 0 && {
+              lastPurchasePrice: newCost,
+              lastPurchaseDate: Timestamp.fromDate(new Date(invoiceDate)),
+            }),
             ...(selectedSupplier && {
               lastSupplier: {
                 id: selectedSupplier.id || '',

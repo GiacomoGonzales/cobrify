@@ -17,6 +17,7 @@ import {
   Package,
   ArrowRightCircle,
   Edit,
+  ClipboardList,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
@@ -38,6 +39,7 @@ import { getCompanySettings, getSuppliers, getProducts } from '@/services/firest
 import { generatePurchaseOrderPDF, previewPurchaseOrderPDF } from '@/utils/purchaseOrderPdfGenerator'
 import { preloadLogo } from '@/utils/pdfGenerator'
 import CreatePurchaseOrderModal from '@/components/CreatePurchaseOrderModal'
+import RestockTable from '@/components/purchase/RestockTable'
 
 export default function PurchaseOrders() {
   const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
@@ -59,6 +61,8 @@ export default function PurchaseOrders() {
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: true })
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingOrder, setEditingOrder] = useState(null)
+  // Vista enfocada "Lista de Reabastecimiento" (agotados + stock bajo)
+  const [showRestock, setShowRestock] = useState(false)
   const [downloadingPdf, setDownloadingPdf] = useState(null)
   const [visibleCount, setVisibleCount] = useState(20)
   const ITEMS_PER_PAGE = 20
@@ -75,6 +79,7 @@ export default function PurchaseOrders() {
       if (isDemoMode && demoData) {
         setOrders(demoData.purchaseOrders || [])
         setSuppliers(demoData.suppliers || [])
+        setProducts(demoData.products || [])
         setCompanySettings(demoData.business || null)
         setIsLoading(false)
         return
@@ -250,6 +255,24 @@ export default function PurchaseOrders() {
     )
   }
 
+  // Vista enfocada: Lista de Reabastecimiento (mismo patrón que
+  // "Actualizar precios" en Productos — reemplaza el contenido de la página)
+  if (showRestock) {
+    return (
+      <RestockTable
+        products={products}
+        suppliers={suppliers}
+        businessId={getBusinessId()}
+        businessName={companySettings?.tradeName || companySettings?.businessName || ''}
+        onClose={() => setShowRestock(false)}
+        onCreated={() => {
+          setShowRestock(false)
+          loadData()
+        }}
+      />
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -260,10 +283,16 @@ export default function PurchaseOrders() {
             Gestiona tus pedidos a proveedores
           </p>
         </div>
-        <Button onClick={() => setShowCreateModal(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Nueva Orden
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setShowRestock(true)}>
+            <ClipboardList className="w-4 h-4 mr-2" />
+            Lista de Reabastecimiento
+          </Button>
+          <Button onClick={() => setShowCreateModal(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Nueva Orden
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
