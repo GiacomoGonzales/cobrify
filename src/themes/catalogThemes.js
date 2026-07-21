@@ -129,6 +129,17 @@ export function getCatalogThemeClasses(themeId) {
 }
 
 /**
+ * Color de acento del catálogo (F1.5 del plan de rediseño): ÚNICA fuente del
+ * fallback. Antes '#10B981' estaba hardcodeado ~50 veces entre la página, las
+ * tarjetas, el modal de producto y el carrito — cambiar el default (o hacerlo
+ * configurable por tema en la Fase 3) era intocable.
+ */
+export const DEFAULT_CATALOG_ACCENT = '#10B981'
+export function getCatalogAccent(business) {
+  return business?.catalogColor || DEFAULT_CATALOG_ACCENT
+}
+
+/**
  * Lista de temas en orden estable.
  */
 export function getCatalogThemesList() {
