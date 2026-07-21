@@ -4,6 +4,7 @@ import ProductModal from '@/components/catalog/ProductModal'
 import CartDrawer, { TableAccountModal } from '@/components/catalog/CartDrawer'
 import { FeaturedCard, CarouselCard, GridCard, ListCard } from '@/components/catalog/ProductCards'
 import AnnouncementBar from '@/components/catalog/AnnouncementBar'
+import HeroCarousel from '@/components/catalog/HeroCarousel'
 import { ProductSkeleton } from '@/components/catalog/CatalogImages'
 import {
   DAY_SHORT,
@@ -1007,8 +1008,27 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         </div>
       </header>
 
-      {/* Hero / Búsqueda — banner cuando hay portada, clásico (gradient) si no */}
-      {business?.catalogCoverImage ? (
+      {/* Hero / Búsqueda — carrusel (F2.2) si está activado, banner cuando hay
+          portada única, clásico (gradient) si no hay nada */}
+      {business?.catalogHero?.enabled && (business?.catalogHero?.slides || []).filter(s => s.imageUrl).length > 0 ? (
+        /* === CARRUSEL HERO: slides promocionales con autoplay === */
+        <div className="relative overflow-hidden">
+          <HeroCarousel slides={business.catalogHero.slides.filter(s => s.imageUrl)} />
+          {/* Barra de búsqueda debajo del carrusel (mismo estilo que el banner) */}
+          <div className={`${themeClasses.bg} px-4 py-3`}>
+            <div className="relative max-w-7xl mx-auto">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar productos..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className={`w-full pl-12 pr-4 py-3 rounded-xl shadow-sm focus:outline-none focus:ring-2 ${thSearchBanner}`}
+              />
+            </div>
+          </div>
+        </div>
+      ) : business?.catalogCoverImage ? (
         /* === ESTILO BANNER: Imagen hero grande === */
         <div className="relative overflow-hidden">
           <div className="relative h-48 md:h-72">

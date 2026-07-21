@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Edit, MapPin, Plus, Bell, Bike, ShoppingBag, RefreshCw, Wrench, Monitor, Trash2, ChevronDown, DollarSign } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Edit, MapPin, Plus, Bell, Bike, ShoppingBag, RefreshCw, Wrench, Monitor, Trash2, ChevronDown, ChevronUp, DollarSign } from 'lucide-react'
 import QRCode from 'qrcode'
 import { QRCodeSVG } from 'qrcode.react'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -509,6 +509,9 @@ export default function Settings() {
   const [catalogAnnouncement, setCatalogAnnouncement] = useState({
     enabled: false, text: '', mode: 'static', backgroundColor: '#111827', textColor: '#FFFFFF',
   })
+  // Carrusel de portada del catálogo (F2.2): slides con imagen/texto/enlace
+  const [catalogHero, setCatalogHero] = useState({ enabled: false, slides: [] })
+  const [uploadingHeroSlide, setUploadingHeroSlide] = useState(null) // índice del slide subiendo
   const [catalogLogoUrl, setCatalogLogoUrl] = useState('')                // logo cuadrado
   const [catalogLogoLandscape, setCatalogLogoLandscape] = useState('')    // logo horizontal (opcional, reemplaza cuadrado+nombre)
   const [uploadingCatalogLogo, setUploadingCatalogLogo] = useState(false)
@@ -1339,6 +1342,10 @@ export default function Settings() {
         setCatalogAnnouncement({
           enabled: false, text: '', mode: 'static', backgroundColor: '#111827', textColor: '#FFFFFF',
           ...(businessData.catalogAnnouncement || {}),
+        })
+        setCatalogHero({
+          enabled: businessData.catalogHero?.enabled === true,
+          slides: Array.isArray(businessData.catalogHero?.slides) ? businessData.catalogHero.slides : [],
         })
         setCatalogLogoUrl(businessData.catalogLogoUrl || '')
         setCatalogLogoLandscape(businessData.catalogLogoLandscape || '')
@@ -7453,6 +7460,162 @@ export default function Settings() {
                         </div>
                       </div>
 
+                      {/* Carrusel de portada (F2.2): reemplaza la portada única
+                          con slides promocionales (imagen + texto + enlace) */}
+                      <div className="p-4 border border-gray-200 rounded-lg space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <span className="text-sm font-medium text-gray-900">Carrusel de portada</span>
+                            <p className="text-xs text-gray-600 mt-0.5">
+                              Varios banners rotando automáticamente (promociones, novedades). Si está activo, reemplaza la imagen de portada.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setCatalogHero(prev => ({ ...prev, enabled: !prev.enabled }))}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
+                              catalogHero.enabled ? 'bg-primary-600' : 'bg-gray-300'
+                            }`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                              catalogHero.enabled ? 'translate-x-6' : 'translate-x-1'
+                            }`} />
+                          </button>
+                        </div>
+
+                        {catalogHero.enabled && (
+                          <div className="space-y-3">
+                            {(catalogHero.slides || []).map((slide, idx) => (
+                              <div key={slide.id || idx} className="border border-gray-200 rounded-lg p-3 space-y-2">
+                                <div className="flex items-start gap-3">
+                                  {/* Imagen del slide */}
+                                  <label className={`relative flex-shrink-0 w-28 h-16 rounded-lg overflow-hidden border cursor-pointer group ${
+                                    slide.imageUrl ? 'border-gray-200' : 'border-2 border-dashed border-gray-300 hover:border-gray-400'
+                                  }`}>
+                                    {slide.imageUrl ? (
+                                      <>
+                                        <img src={slide.imageUrl} alt="" className="w-full h-full object-cover" />
+                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                          <span className="text-white text-[10px] font-medium">Cambiar</span>
+                                        </div>
+                                      </>
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-500 text-center px-1">
+                                        {uploadingHeroSlide === idx ? 'Subiendo…' : 'Subir imagen (1920×600)'}
+                                      </div>
+                                    )}
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      className="hidden"
+                                      disabled={uploadingHeroSlide !== null}
+                                      onChange={async (e) => {
+                                        const file = e.target.files?.[0]
+                                        if (!file) return
+                                        setUploadingHeroSlide(idx)
+                                        try {
+                                          const url = await uploadImage(await compressForCoverDesktop(file), { folder: 'cobrify/branding', businessId: getBusinessId() })
+                                          setCatalogHero(prev => ({
+                                            ...prev,
+                                            slides: prev.slides.map((s, i) => i === idx ? { ...s, imageUrl: url } : s),
+                                          }))
+                                          toast.success('Imagen del slide subida')
+                                        } catch (err) {
+                                          console.error('Error subiendo slide:', err)
+                                          toast.error('Error al subir imagen')
+                                        } finally {
+                                          setUploadingHeroSlide(null)
+                                          e.target.value = ''
+                                        }
+                                      }}
+                                    />
+                                  </label>
+                                  {/* Textos del slide */}
+                                  <div className="flex-1 space-y-1.5 min-w-0">
+                                    <input
+                                      type="text"
+                                      value={slide.title || ''}
+                                      onChange={(e) => setCatalogHero(prev => ({ ...prev, slides: prev.slides.map((s, i) => i === idx ? { ...s, title: e.target.value } : s) }))}
+                                      placeholder="Título (opcional)"
+                                      maxLength={60}
+                                      className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-emerald-500"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={slide.subtitle || ''}
+                                      onChange={(e) => setCatalogHero(prev => ({ ...prev, slides: prev.slides.map((s, i) => i === idx ? { ...s, subtitle: e.target.value } : s) }))}
+                                      placeholder="Subtítulo (opcional)"
+                                      maxLength={90}
+                                      className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-emerald-500"
+                                    />
+                                    <input
+                                      type="url"
+                                      value={slide.link || ''}
+                                      onChange={(e) => setCatalogHero(prev => ({ ...prev, slides: prev.slides.map((s, i) => i === idx ? { ...s, link: e.target.value } : s) }))}
+                                      placeholder="Enlace al tocar el slide (opcional, ej: https://...)"
+                                      className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-emerald-500"
+                                    />
+                                  </div>
+                                  {/* Acciones: subir/bajar/eliminar */}
+                                  <div className="flex flex-col gap-1 flex-shrink-0">
+                                    <button
+                                      type="button"
+                                      disabled={idx === 0}
+                                      onClick={() => setCatalogHero(prev => {
+                                        const slides = [...prev.slides]
+                                        ;[slides[idx - 1], slides[idx]] = [slides[idx], slides[idx - 1]]
+                                        return { ...prev, slides }
+                                      })}
+                                      className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-30"
+                                      title="Subir"
+                                    >
+                                      <ChevronUp className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={idx === (catalogHero.slides.length - 1)}
+                                      onClick={() => setCatalogHero(prev => {
+                                        const slides = [...prev.slides]
+                                        ;[slides[idx], slides[idx + 1]] = [slides[idx + 1], slides[idx]]
+                                        return { ...prev, slides }
+                                      })}
+                                      className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-30"
+                                      title="Bajar"
+                                    >
+                                      <ChevronDown className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setCatalogHero(prev => ({ ...prev, slides: prev.slides.filter((_, i) => i !== idx) }))}
+                                      className="p-1 text-red-400 hover:text-red-600"
+                                      title="Eliminar slide"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+
+                            {(catalogHero.slides || []).length < 5 && (
+                              <button
+                                type="button"
+                                onClick={() => setCatalogHero(prev => ({
+                                  ...prev,
+                                  slides: [...(prev.slides || []), { id: `slide-${Date.now()}`, imageUrl: '', title: '', subtitle: '', link: '' }],
+                                }))}
+                                className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:border-gray-400 hover:bg-gray-50 transition-colors"
+                              >
+                                + Agregar slide ({(catalogHero.slides || []).length}/5)
+                              </button>
+                            )}
+                            <p className="text-[11px] text-gray-500">
+                              Los slides rotan cada 5 segundos. Recomendado 1920×600 (mismo formato que la portada). Los slides sin imagen no se muestran.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
                       {/* Tema del catálogo — 3 temas en grid simple */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -7827,6 +7990,17 @@ export default function Settings() {
                         catalogWhatsapp: catalogWhatsapp.trim(),
                         catalogObservations: catalogObservations.trim(),
                         catalogAnnouncement: { ...catalogAnnouncement, text: (catalogAnnouncement.text || '').trim() },
+                        // Carrusel hero: solo slides con imagen (los vacíos no cuentan)
+                        catalogHero: {
+                          enabled: catalogHero.enabled,
+                          slides: (catalogHero.slides || []).filter(s => s.imageUrl).map(s => ({
+                            id: s.id,
+                            imageUrl: s.imageUrl,
+                            title: (s.title || '').trim(),
+                            subtitle: (s.subtitle || '').trim(),
+                            link: (s.link || '').trim(),
+                          })),
+                        },
                         catalogLogoUrl: catalogLogoUrl || null,
                         catalogLogoLandscape: catalogLogoLandscape || null,
                         catalogWholesaleMinQtys: {
