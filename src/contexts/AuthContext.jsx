@@ -144,6 +144,14 @@ export const AuthProvider = ({ children }) => {
                   } catch (error) {
                     console.error('Error al crear documento de Business Owner:', error)
                   }
+                } else if (userDataCheck.data.ownerId) {
+                  // BLINDAJE: un doc con ownerId es SIEMPRE un sub-usuario. Si
+                  // isBusinessAdmin devolvió true igual (flag heredado o lectura
+                  // rara), NO tratarlo como dueño — eso lo dejaba en su propio
+                  // negocio vacío (POS sin productos, Ventas en cero, menú
+                  // completo). Reporte real: sucursal Lamas de Gastromundo.
+                  console.warn('⚠️ isBusinessAdmin=true pero el doc tiene ownerId → se corrige a sub-usuario')
+                  businessOwnerStatus = false
                 }
               }
             } catch (error) {

@@ -37,14 +37,16 @@ export const isBusinessAdmin = async (userId) => {
     if (userSnap.exists()) {
       const userData = userSnap.data();
 
-      // Si tiene el documento y es business owner
-      if (userData.isBusinessOwner === true) return true;
-
-      // Si tiene el documento pero NO es business owner (es un sub-usuario)
+      // Un documento con `ownerId` es SIEMPRE un sub-usuario, aunque además
+      // traiga `isBusinessOwner: true` por un flag heredado (cuenta que fue
+      // dueña y se convirtió en sub-usuario, o data inconsistente). Priorizar
+      // ownerId evita escalar un sub-usuario a "dueño de su propio negocio
+      // vacío": POS sin productos, Ventas en cero y menú lateral completo
+      // (reporte real: sucursal Lamas de Gastromundo).
       if (userData.ownerId) return false;
 
-      // Si tiene documento pero no tiene ni isBusinessOwner ni ownerId
-      // Es un usuario viejo, tratarlo como business owner
+      // Sin ownerId: dueño real (flag explícito o usuario legacy sin flags).
+      if (userData.isBusinessOwner === true) return true;
       return true;
     }
 
