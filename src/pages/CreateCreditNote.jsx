@@ -496,28 +496,47 @@ export default function CreateCreditNote() {
     return { subtotal, igv, total: totalConIgv }
   }
 
+  // ¿El ítem lleva IGV? Respeta la AFECTACIÓN POR ÍTEM (Catálogo 07: 2x =
+  // exonerado, 3x = inafecto → sin IGV) además de la exoneración a nivel
+  // negocio. Antes se dividía TODO entre 1.18: una NC de un producto inafecto
+  // quedaba guardada/mostrada con IGV en el sistema, aunque el XML (que sí
+  // calcula por ítem) salía correcto — SUNAT/SIRE la registraba inafecta y el
+  // contador veía dos cifras distintas (reporte real: METFORMINA inafecta).
+  const itemHasIgv = (item, igvExempt) => {
+    if (igvExempt) return false
+    const aff = String(item?.taxAffectation || '10')
+    return !(aff.startsWith('2') || aff.startsWith('3'))
+  }
+
   const calculateTotals = () => {
     const igvRate = selectedInvoice?.taxConfig?.igvRate ?? 18
     const igvExempt = selectedInvoice?.taxConfig?.igvExempt ?? false
 
     // Modo descuento global: el usuario ingresó un MONTO directo en S/.
+    // El IGV hereda la PROPORCIÓN real de la factura (si la factura no tuvo
+    // IGV —exonerada/inafecta— el descuento tampoco lo lleva).
     if (globalDiscountMode) {
       const totalConIgv = parseFloat(globalDiscountAmount) || 0
-      const subtotal = igvExempt ? totalConIgv : totalConIgv / (1 + igvRate / 100)
-      const igv = igvExempt ? 0 : totalConIgv - subtotal
+      const invTotal = Number(selectedInvoice?.total) || 0
+      const invIgv = Number(selectedInvoice?.igv) || 0
+      const igv = igvExempt || invTotal <= 0 ? 0 : totalConIgv * (invIgv / invTotal)
+      const subtotal = totalConIgv - igv
       return { subtotal, igv, total: totalConIgv, igvRate, igvExempt }
     }
 
     const selectedItems = formData.items.filter(item => item.selected)
 
-    // item.subtotal YA INCLUYE IGV (es el precio final que pagó el cliente)
+    // item.subtotal YA INCLUYE IGV (es el precio final que pagó el cliente).
+    // Separar gravados de exonerados/inafectos: solo los gravados aportan IGV.
     const totalConIgv = selectedItems.reduce((sum, item) => sum + item.subtotal, 0)
+    const gravadoTotal = selectedItems
+      .filter(item => itemHasIgv(item, igvExempt))
+      .reduce((sum, item) => sum + item.subtotal, 0)
+    const nonGravadoTotal = totalConIgv - gravadoTotal
 
-    // Extraer el IGV del total (no sumarlo)
-    // Total = Subtotal + IGV = Subtotal * (1 + igvRate/100)
-    // Subtotal = Total / (1 + igvRate/100)
-    const subtotal = igvExempt ? totalConIgv : totalConIgv / (1 + igvRate / 100)
-    const igv = igvExempt ? 0 : totalConIgv - subtotal
+    const gravadoSubtotal = gravadoTotal / (1 + igvRate / 100)
+    const igv = gravadoTotal - gravadoSubtotal
+    const subtotal = gravadoSubtotal + nonGravadoTotal
     const total = totalConIgv // El total es lo que el cliente pagó
 
     return { subtotal, igv, total, igvRate, igvExempt }
@@ -557,13 +576,17 @@ export default function CreateCreditNote() {
     }
 
     // 2) Items con basePrice (PEN por unidad, ya neto desde la precarga).
+    // Mismo criterio por AFECTACIÓN que calculateTotals: solo los gravados
+    // aportan IGV (exonerados/inafectos van completos al subtotal).
     const allHaveBase = selectedItems.length > 0 && selectedItems.every(it => Number(it.basePrice) > 0)
     if (allHaveBase) {
-      const totalConIgvBase = selectedItems.reduce(
-        (sum, item) => sum + (Number(item.basePrice) * Number(item.quantity)), 0
-      )
-      const subtotalBase = igvExempt ? totalConIgvBase : totalConIgvBase / (1 + igvRate / 100)
-      const igvBase = igvExempt ? 0 : totalConIgvBase - subtotalBase
+      const baseOf = (item) => Number(item.basePrice) * Number(item.quantity)
+      const totalConIgvBase = selectedItems.reduce((sum, item) => sum + baseOf(item), 0)
+      const gravadoBase = selectedItems
+        .filter(item => itemHasIgv(item, igvExempt))
+        .reduce((sum, item) => sum + baseOf(item), 0)
+      const igvBase = gravadoBase - gravadoBase / (1 + igvRate / 100)
+      const subtotalBase = totalConIgvBase - igvBase
       return {
         subtotalInBase: Number(subtotalBase.toFixed(2)),
         igvInBase: Number(igvBase.toFixed(2)),
@@ -571,11 +594,14 @@ export default function CreateCreditNote() {
       }
     }
 
-    // 3) Fallback: conversión directa.
+    // 3) Fallback: conversión directa (mismo criterio por afectación).
     const totalUSD = selectedItems.reduce((sum, item) => sum + item.subtotal, 0)
+    const gravadoUSD = selectedItems
+      .filter(item => itemHasIgv(item, igvExempt))
+      .reduce((sum, item) => sum + item.subtotal, 0)
     const rate = Number(selectedInvoice.exchangeRate) || 1
-    const subtotalUSD = igvExempt ? totalUSD : totalUSD / (1 + igvRate / 100)
-    const igvUSD = igvExempt ? 0 : totalUSD - subtotalUSD
+    const igvUSD = gravadoUSD - gravadoUSD / (1 + igvRate / 100)
+    const subtotalUSD = totalUSD - igvUSD
     return {
       subtotalInBase: Number(convertToBase(subtotalUSD, 'USD', rate).toFixed(2)),
       igvInBase: Number(convertToBase(igvUSD, 'USD', rate).toFixed(2)),
@@ -1655,22 +1681,28 @@ export default function CreateCreditNote() {
                     <p className="text-xs text-gray-500 mt-1">
                       Máximo: {formatCurrency(selectedInvoice.total, selectedInvoice.currency)} (total de la factura original)
                     </p>
-                    {parseFloat(globalDiscountAmount) > 0 && (
-                      <div className="mt-3 p-2 bg-white rounded border border-gray-200 text-xs text-gray-700 space-y-1">
-                        <div className="flex justify-between">
-                          <span>Subtotal sin IGV:</span>
-                          <span className="font-medium">{formatCurrency(parseFloat(globalDiscountAmount) / (1 + (selectedInvoice?.taxConfig?.igvRate ?? 18) / 100), selectedInvoice.currency)}</span>
+                    {parseFloat(globalDiscountAmount) > 0 && (() => {
+                      // Mismo cálculo que se guardará (calculateTotals respeta
+                      // la proporción real de IGV de la factura — 0 si es
+                      // exonerada/inafecta), en vez de hardcodear el 18%.
+                      const t = calculateTotals()
+                      return (
+                        <div className="mt-3 p-2 bg-white rounded border border-gray-200 text-xs text-gray-700 space-y-1">
+                          <div className="flex justify-between">
+                            <span>Subtotal sin IGV:</span>
+                            <span className="font-medium">{formatCurrency(t.subtotal, selectedInvoice.currency)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>IGV ({t.igvRate}%):</span>
+                            <span className="font-medium">{formatCurrency(t.igv, selectedInvoice.currency)}</span>
+                          </div>
+                          <div className="flex justify-between font-semibold border-t border-gray-100 pt-1">
+                            <span>Total descuento:</span>
+                            <span className="text-primary-600">{formatCurrency(t.total, selectedInvoice.currency)}</span>
+                          </div>
                         </div>
-                        <div className="flex justify-between">
-                          <span>IGV ({selectedInvoice?.taxConfig?.igvRate ?? 18}%):</span>
-                          <span className="font-medium">{formatCurrency(parseFloat(globalDiscountAmount) - parseFloat(globalDiscountAmount) / (1 + (selectedInvoice?.taxConfig?.igvRate ?? 18) / 100), selectedInvoice.currency)}</span>
-                        </div>
-                        <div className="flex justify-between font-semibold border-t border-gray-100 pt-1">
-                          <span>Total descuento:</span>
-                          <span className="text-primary-600">{formatCurrency(parseFloat(globalDiscountAmount), selectedInvoice.currency)}</span>
-                        </div>
-                      </div>
-                    )}
+                      )
+                    })()}
                   </div>
                 )}
               </div>
@@ -1755,7 +1787,7 @@ export default function CreateCreditNote() {
                   <span className="font-medium">{formatCurrency(totals.subtotal, selectedInvoice?.currency)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">IGV (18%):</span>
+                  <span className="text-gray-600">IGV ({totals.igvRate ?? 18}%):</span>
                   <span className="font-medium">{formatCurrency(totals.igv, selectedInvoice?.currency)}</span>
                 </div>
                 <div className="flex justify-between text-xl font-bold border-t pt-2">
