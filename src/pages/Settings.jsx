@@ -505,6 +505,10 @@ export default function Settings() {
   const [catalogShowStock, setCatalogShowStock] = useState(false)
   const [catalogWhatsapp, setCatalogWhatsapp] = useState('')
   const [catalogObservations, setCatalogObservations] = useState('')
+  // Tira publicitaria del catálogo (F2.1): banner superior activable
+  const [catalogAnnouncement, setCatalogAnnouncement] = useState({
+    enabled: false, text: '', mode: 'static', backgroundColor: '#111827', textColor: '#FFFFFF',
+  })
   const [catalogLogoUrl, setCatalogLogoUrl] = useState('')                // logo cuadrado
   const [catalogLogoLandscape, setCatalogLogoLandscape] = useState('')    // logo horizontal (opcional, reemplaza cuadrado+nombre)
   const [uploadingCatalogLogo, setUploadingCatalogLogo] = useState(false)
@@ -1332,6 +1336,10 @@ export default function Settings() {
         setCatalogShowStock(businessData.catalogShowStock || false)
         setCatalogWhatsapp(businessData.catalogWhatsapp || '')
         setCatalogObservations(businessData.catalogObservations || '')
+        setCatalogAnnouncement({
+          enabled: false, text: '', mode: 'static', backgroundColor: '#111827', textColor: '#FFFFFF',
+          ...(businessData.catalogAnnouncement || {}),
+        })
         setCatalogLogoUrl(businessData.catalogLogoUrl || '')
         setCatalogLogoLandscape(businessData.catalogLogoLandscape || '')
         // Cargar cantidades mínimas por precio. Si solo existe el campo legacy
@@ -7104,6 +7112,91 @@ export default function Settings() {
                         />
                         <p className="text-xs text-gray-500 mt-1">{catalogObservations.length}/500 caracteres — Se muestra arriba de las categorías en el catálogo</p>
                       </div>
+
+                      {/* Tira publicitaria (banner superior del catálogo) */}
+                      <div className="p-4 border border-gray-200 rounded-lg space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <span className="text-sm font-medium text-gray-900">Tira publicitaria</span>
+                            <p className="text-xs text-gray-600 mt-0.5">
+                              Banner en la parte superior del catálogo para promociones o avisos (ej: "Envío gratis desde S/ 100").
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setCatalogAnnouncement(prev => ({ ...prev, enabled: !prev.enabled }))}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
+                              catalogAnnouncement.enabled ? 'bg-primary-600' : 'bg-gray-300'
+                            }`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                              catalogAnnouncement.enabled ? 'translate-x-6' : 'translate-x-1'
+                            }`} />
+                          </button>
+                        </div>
+                        {catalogAnnouncement.enabled && (
+                          <div className="space-y-3">
+                            <input
+                              type="text"
+                              value={catalogAnnouncement.text}
+                              onChange={(e) => setCatalogAnnouncement(prev => ({ ...prev, text: e.target.value }))}
+                              placeholder="Ej: Envío gratis en pedidos desde S/ 100"
+                              maxLength={120}
+                              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                            />
+                            <div className="flex flex-wrap items-center gap-3">
+                              <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+                                <button
+                                  type="button"
+                                  onClick={() => setCatalogAnnouncement(prev => ({ ...prev, mode: 'static' }))}
+                                  className={`px-3 py-1.5 text-sm font-medium ${
+                                    catalogAnnouncement.mode !== 'marquee' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  Fija
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setCatalogAnnouncement(prev => ({ ...prev, mode: 'marquee' }))}
+                                  className={`px-3 py-1.5 text-sm font-medium ${
+                                    catalogAnnouncement.mode === 'marquee' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  En movimiento
+                                </button>
+                              </div>
+                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                                Fondo
+                                <input
+                                  type="color"
+                                  value={catalogAnnouncement.backgroundColor}
+                                  onChange={(e) => setCatalogAnnouncement(prev => ({ ...prev, backgroundColor: e.target.value }))}
+                                  className="w-8 h-8 rounded border border-gray-300 cursor-pointer"
+                                />
+                              </label>
+                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                                Texto
+                                <input
+                                  type="color"
+                                  value={catalogAnnouncement.textColor}
+                                  onChange={(e) => setCatalogAnnouncement(prev => ({ ...prev, textColor: e.target.value }))}
+                                  className="w-8 h-8 rounded border border-gray-300 cursor-pointer"
+                                />
+                              </label>
+                            </div>
+                            {/* Vista previa en vivo */}
+                            {catalogAnnouncement.text.trim() && (
+                              <div className="rounded-lg overflow-hidden border border-gray-200">
+                                <div className="py-2 px-4 text-center" style={{ backgroundColor: catalogAnnouncement.backgroundColor }}>
+                                  <p className="text-sm font-medium" style={{ color: catalogAnnouncement.textColor }}>
+                                    {catalogAnnouncement.text.trim()}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                         </div>
                       )}
                     </div>
@@ -7733,6 +7826,7 @@ export default function Settings() {
                         catalogShowStock,
                         catalogWhatsapp: catalogWhatsapp.trim(),
                         catalogObservations: catalogObservations.trim(),
+                        catalogAnnouncement: { ...catalogAnnouncement, text: (catalogAnnouncement.text || '').trim() },
                         catalogLogoUrl: catalogLogoUrl || null,
                         catalogLogoLandscape: catalogLogoLandscape || null,
                         catalogWholesaleMinQtys: {

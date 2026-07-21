@@ -3,6 +3,7 @@ import { optimizeImageUrl } from '@/utils/cloudinary'
 import ProductModal from '@/components/catalog/ProductModal'
 import CartDrawer, { TableAccountModal } from '@/components/catalog/CartDrawer'
 import { FeaturedCard, CarouselCard, GridCard, ListCard } from '@/components/catalog/ProductCards'
+import AnnouncementBar from '@/components/catalog/AnnouncementBar'
 import { ProductSkeleton } from '@/components/catalog/CatalogImages'
 import {
   DAY_SHORT,
@@ -906,6 +907,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   return (
     <div className={`min-h-screen ${thBg} ${thFontWrapper}`}>
       <style>{fadeInStyle}</style>
+      {/* Tira publicitaria (F2.1) — activable desde Configuración */}
+      <AnnouncementBar config={business?.catalogAnnouncement} />
       {/* Banner de mesa (si viene de QR con número de mesa) */}
       {isRestaurantMenu && tableFromUrl && (
         <div className="text-white py-2.5 px-4 sticky top-0 z-50" style={{ backgroundColor: getCatalogAccent(business) }}>
