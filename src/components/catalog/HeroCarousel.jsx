@@ -68,7 +68,7 @@ export default function HeroCarousel({ slides = [] }) {
                 alt={s.title || ''}
                 className="absolute inset-0 w-full h-full object-cover"
                 loading={i === 0 ? 'eager' : 'lazy'}
-                fetchPriority={i === 0 ? 'high' : undefined}
+                fetchpriority={i === 0 ? 'high' : undefined}
                 decoding="async"
               />
               {hasText && (

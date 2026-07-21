@@ -512,6 +512,8 @@ export default function Settings() {
   // Carrusel de portada del catálogo (F2.2): slides con imagen/texto/enlace
   const [catalogHero, setCatalogHero] = useState({ enabled: false, slides: [] })
   const [uploadingHeroSlide, setUploadingHeroSlide] = useState(null) // índice del slide subiendo
+  // Diseño de la grilla de productos (F2.3): masonry | grid | list
+  const [catalogLayout, setCatalogLayout] = useState('masonry')
   const [catalogLogoUrl, setCatalogLogoUrl] = useState('')                // logo cuadrado
   const [catalogLogoLandscape, setCatalogLogoLandscape] = useState('')    // logo horizontal (opcional, reemplaza cuadrado+nombre)
   const [uploadingCatalogLogo, setUploadingCatalogLogo] = useState(false)
@@ -1347,6 +1349,7 @@ export default function Settings() {
           enabled: businessData.catalogHero?.enabled === true,
           slides: Array.isArray(businessData.catalogHero?.slides) ? businessData.catalogHero.slides : [],
         })
+        setCatalogLayout(businessData.catalogLayout || 'masonry')
         setCatalogLogoUrl(businessData.catalogLogoUrl || '')
         setCatalogLogoLandscape(businessData.catalogLogoLandscape || '')
         // Cargar cantidades mínimas por precio. Si solo existe el campo legacy
@@ -7616,6 +7619,62 @@ export default function Settings() {
                         )}
                       </div>
 
+                      {/* Diseño de la grilla de productos (F2.3) */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Diseño de los productos
+                        </label>
+                        <p className="text-xs text-gray-500 mb-3">
+                          Cómo se muestran los productos en el catálogo. El visitante igual puede alternar entre grilla y lista.
+                        </p>
+                        <div className="grid grid-cols-3 gap-3 max-w-md">
+                          {[
+                            { id: 'masonry', label: 'Mosaico', desc: 'Alturas naturales' },
+                            { id: 'grid', label: 'Cuadrícula', desc: 'Tarjetas uniformes' },
+                            { id: 'list', label: 'Lista', desc: 'Filas horizontales' },
+                          ].map(opt => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => setCatalogLayout(opt.id)}
+                              className={`p-3 rounded-xl border-2 transition-all text-center ${
+                                catalogLayout === opt.id
+                                  ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/40'
+                                  : 'border-gray-200 hover:border-gray-300'
+                              }`}
+                            >
+                              {/* Mini-mockup del layout */}
+                              <div className="h-14 mb-2 flex gap-1 justify-center">
+                                {opt.id === 'masonry' && (
+                                  <>
+                                    <div className="flex flex-col gap-1 w-4"><div className="bg-gray-300 rounded-sm h-6" /><div className="bg-gray-300 rounded-sm h-4" /></div>
+                                    <div className="flex flex-col gap-1 w-4"><div className="bg-gray-300 rounded-sm h-4" /><div className="bg-gray-300 rounded-sm h-7" /></div>
+                                    <div className="flex flex-col gap-1 w-4"><div className="bg-gray-300 rounded-sm h-7" /><div className="bg-gray-300 rounded-sm h-3" /></div>
+                                  </>
+                                )}
+                                {opt.id === 'grid' && (
+                                  <div className="grid grid-cols-2 gap-1 w-[3.25rem]">
+                                    <div className="bg-gray-300 rounded-sm aspect-square" />
+                                    <div className="bg-gray-300 rounded-sm aspect-square" />
+                                    <div className="bg-gray-300 rounded-sm aspect-square" />
+                                    <div className="bg-gray-300 rounded-sm aspect-square" />
+                                  </div>
+                                )}
+                                {opt.id === 'list' && (
+                                  <div className="flex flex-col gap-1 w-14 justify-center">
+                                    <div className="flex gap-1"><div className="bg-gray-300 rounded-sm w-4 h-4" /><div className="bg-gray-200 rounded-sm flex-1 h-4" /></div>
+                                    <div className="flex gap-1"><div className="bg-gray-300 rounded-sm w-4 h-4" /><div className="bg-gray-200 rounded-sm flex-1 h-4" /></div>
+                                    <div className="flex gap-1"><div className="bg-gray-300 rounded-sm w-4 h-4" /><div className="bg-gray-200 rounded-sm flex-1 h-4" /></div>
+                                  </div>
+                                )}
+                              </div>
+                              <span className="block text-xs font-semibold text-gray-800">{opt.label}</span>
+                              <span className="block text-[10px] text-gray-500">{opt.desc}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
                       {/* Tema del catálogo — 3 temas en grid simple */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -8001,6 +8060,7 @@ export default function Settings() {
                             link: (s.link || '').trim(),
                           })),
                         },
+                        catalogLayout,
                         catalogLogoUrl: catalogLogoUrl || null,
                         catalogLogoLandscape: catalogLogoLandscape || null,
                         catalogWholesaleMinQtys: {

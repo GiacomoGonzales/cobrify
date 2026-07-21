@@ -155,6 +155,17 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   }, [cart, cartStorageKey])
 
   const [viewMode, setViewMode] = useState('grid') // 'grid' | 'list'
+  // Diseño de grilla configurado por el negocio (F2.3): 'masonry' (default,
+  // alturas naturales tipo Pinterest) | 'grid' (cuadrícula uniforme) | 'list'.
+  // El visitante puede seguir alternando grilla/lista con los botones; esto
+  // define el estilo de la grilla y la vista inicial.
+  const catalogLayout = business?.catalogLayout || 'masonry'
+  const layoutAppliedRef = useRef(false)
+  useEffect(() => {
+    if (!business || layoutAppliedRef.current) return
+    layoutAppliedRef.current = true
+    if (business.catalogLayout === 'list') setViewMode('list')
+  }, [business])
   const [isLogoHorizontal, setIsLogoHorizontal] = useState(false)
 
   // Estado para mesa activa (orden existente del mozo)
@@ -1041,7 +1052,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 src={optimizeImageUrl(business.catalogCoverImage, 'cover_desktop')}
                 alt=""
                 className="absolute inset-0 w-full h-full object-cover"
-                fetchPriority="high"
+                fetchpriority="high"
                 decoding="async"
               />
             </picture>
@@ -1192,13 +1203,16 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 menú lateral (botón de filtro). Desktop: wrap, hay espacio de sobra. */}
             {activeSubcategories.length > 0 && (
               <div className="flex flex-nowrap md:flex-wrap overflow-x-auto md:overflow-x-visible gap-2 pb-3 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
+                {/* Subcategorías con el color del catálogo (antes: azul fijo
+                    bg-primary-* que rompía la estética). Seleccionada = fondo
+                    sólido del acento + texto blanco; inactiva = tinte claro del
+                    mismo acento (~8%) con el acento como texto. */}
                 <button
                   onClick={() => setSelectedSubcategory(null)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
-                    !selectedSubcategory
-                      ? 'bg-primary-600 text-white'
-                      : 'bg-primary-50 text-primary-700 hover:bg-primary-100'
-                  }`}
+                  className="px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap flex-shrink-0"
+                  style={!selectedSubcategory
+                    ? { backgroundColor: getCatalogAccent(business), color: '#fff' }
+                    : { backgroundColor: `${getCatalogAccent(business)}15`, color: getCatalogAccent(business) }}
                 >
                   Todas
                 </button>
@@ -1206,11 +1220,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                   <button
                     key={sub.id}
                     onClick={() => setSelectedSubcategory(sub.id)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
-                      selectedSubcategory === sub.id
-                        ? 'bg-primary-600 text-white'
-                        : 'bg-primary-50 text-primary-700 hover:bg-primary-100'
-                    }`}
+                    className="px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap flex-shrink-0"
+                    style={selectedSubcategory === sub.id
+                      ? { backgroundColor: getCatalogAccent(business), color: '#fff' }
+                      : { backgroundColor: `${getCatalogAccent(business)}15`, color: getCatalogAccent(business) }}
                   >
                     {sub.name}
                   </button>
@@ -1399,10 +1412,15 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             <p className={thTextFaint}>Intenta con otra búsqueda o categoría</p>
           </div>
         ) : viewMode === 'grid' ? (
-          // Vista Grid (render incremental: displayedProducts crece con el scroll)
-          <div className="columns-2 md:columns-3 lg:columns-4 gap-4 md:gap-6">
+          // Vista Grid (render incremental: displayedProducts crece con el scroll).
+          // F2.3: 'masonry' = columnas con alturas naturales (default, como
+          // siempre); 'grid' = cuadrícula uniforme con imágenes cuadradas
+          // (además elimina el salto de layout al cargar imágenes).
+          <div className={catalogLayout === 'grid'
+            ? 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6'
+            : 'columns-2 md:columns-3 lg:columns-4 gap-4 md:gap-6'}>
             {displayedProducts.map((product, index) => (
-              <GridCard key={product.id} product={product} index={index} ctx={cardCtx} />
+              <GridCard key={product.id} product={product} index={index} uniform={catalogLayout === 'grid'} ctx={cardCtx} />
             ))}
           </div>
         ) : (

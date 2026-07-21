@@ -152,7 +152,10 @@ export function CarouselCard({ product, ctx }) {
                         )
 }
 
-export function GridCard({ product, index, ctx }) {
+// uniform (F2.3): en el layout 'grid' (cuadrícula uniforme) la imagen va en
+// contenedor cuadrado fijo (sin salto de layout) y la tarjeta no usa las
+// clases de masonry (break-inside/mb — el gap lo maneja el grid contenedor).
+export function GridCard({ product, index, uniform = false, ctx }) {
   const { business, showPrices, ignoreStock, categories, selectedCategory, fmtCatalog, fmtProductMain, getCartQuantity, setSelectedProduct, addToCart, th } = ctx
               const cartQty = getCartQuantity(product.id)
               const outOfStock = isProductOutOfStock(product, ignoreStock)
@@ -160,18 +163,18 @@ export function GridCard({ product, index, ctx }) {
               return (
                 <div
                   key={product.id}
-                  className={`catalog-fade-in ${th.cardRadius} ${th.cardShadowEffect} overflow-hidden transition-shadow cursor-pointer group break-inside-avoid mb-4 md:mb-6 ${th.cardShadow} ${outOfStock ? 'opacity-75' : ''}`}
+                  className={`catalog-fade-in ${th.cardRadius} ${th.cardShadowEffect} overflow-hidden transition-shadow cursor-pointer group ${uniform ? '' : 'break-inside-avoid mb-4 md:mb-6'} ${th.cardShadow} ${outOfStock ? 'opacity-75' : ''}`}
                   onClick={() => setSelectedProduct(product)}
                   onMouseEnter={() => preloadProductDetail(product)}
                 >
-                  <div className="relative bg-gray-100 overflow-hidden">
+                  <div className={`relative bg-gray-100 overflow-hidden ${uniform ? 'aspect-square' : ''}`}>
                     {product.imageUrl ? (
                       <CatalogImage
                         src={product.imageUrl}
                         alt={product.name}
                         size="card"
                         priority={index < 4}
-                        className={`w-full h-auto object-cover md:group-hover:scale-105 md:transition-transform md:duration-300 ${outOfStock ? 'grayscale opacity-60' : ''}`}
+                        className={`${uniform ? 'w-full h-full' : 'w-full h-auto'} object-cover md:group-hover:scale-105 md:transition-transform md:duration-300 ${outOfStock ? 'grayscale opacity-60' : ''}`}
                       />
                     ) : (
                       <div className={`w-full aspect-square flex items-center justify-center ${outOfStock ? 'opacity-50' : ''}`}>
