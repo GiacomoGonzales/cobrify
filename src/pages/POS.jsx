@@ -5430,6 +5430,21 @@ export default function POS() {
       }
     }
 
+    // Venta al crédito con comprobante fiscal: SUNAT exige que la fecha del
+    // pago único o de las cuotas sea POSTERIOR a la fecha de emisión (regla
+    // 3267 — caso real: factura al crédito con vencimiento = día de emisión,
+    // rechazada). Comparación de strings YYYY-MM-DD (orden lexicográfico).
+    if ((documentType === 'factura' || documentType === 'boleta') && paymentType === 'credito') {
+      const cuotaDates = paymentInstallments.length > 0
+        ? paymentInstallments.map(c => c.dueDate).filter(Boolean)
+        : (paymentDueDate ? [paymentDueDate] : [])
+      const badDate = cuotaDates.find(d => d <= emissionDateToUse)
+      if (badDate) {
+        abortCheckout(`La fecha de vencimiento (${badDate}) debe ser POSTERIOR a la fecha de emisión (${emissionDateToUse}). SUNAT rechaza cuotas que vencen el mismo día de la emisión.`)
+        return
+      }
+    }
+
     // Si es boleta mayor a 700 soles, validar DNI obligatorio (según normativa SUNAT).
     // Se compara el total en SOLES (totalInBase) para que aplique también a boletas en USD.
     if (documentType === 'boleta' && amounts.totalInBase > 700) {

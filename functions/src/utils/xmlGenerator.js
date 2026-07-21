@@ -630,8 +630,15 @@ export function generateInvoiceXML(invoiceData, businessData) {
     }).txt(invoiceData.detractionType)
     detractionTerms.ele('cbc:Note').txt(netPayableAmount.toFixed(2))
     detractionTerms.ele('cbc:PaymentPercent').txt(String(invoiceData.detractionRate || 0))
-    detractionTerms.ele('cbc:Amount', { 'currencyID': invoiceData.currency || 'PEN' })
-      .txt(detractionAmount.toFixed(2))
+    // SUNAT exige el monto de la detracción SIEMPRE en PEN (regla 3208),
+    // aunque la factura sea en USD: se convierte con el TC congelado del
+    // documento. Caso real: factura USD con detracción rechazada por enviar
+    // currencyID="USD" en este nodo.
+    const detractionAmountPEN = (invoiceData.currency === 'USD')
+      ? Math.round(detractionAmount * (Number(invoiceData.exchangeRate) || 1) * 100) / 100
+      : detractionAmount
+    detractionTerms.ele('cbc:Amount', { 'currencyID': 'PEN' })
+      .txt(detractionAmountPEN.toFixed(2))
   }
 
   if (paymentType === 'credito') {

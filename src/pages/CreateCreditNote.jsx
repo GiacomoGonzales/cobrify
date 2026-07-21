@@ -952,6 +952,30 @@ export default function CreateCreditNote() {
       }
     }
 
+    // Verificación FRESH contra Firestore: la factura pudo haber sido dada de
+    // BAJA después de cargar esta página (caso real: el usuario anuló por
+    // comunicación de baja Y creó la NC casi en paralelo → SUNAT rechazó la NC
+    // con 2120 "el documento modificado se encuentra de baja"). Una factura de
+    // baja ya está anulada: la NC es innecesaria y siempre será rechazada.
+    try {
+      const { doc, getDoc } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+      const freshSnap = await getDoc(doc(db, 'businesses', getBusinessId(), 'invoices', selectedInvoice.id))
+      const fresh = freshSnap.exists() ? freshSnap.data() : null
+      if (!fresh) {
+        setMessage({ type: 'error', text: 'La factura referenciada ya no existe. Actualiza la página.' })
+        return
+      }
+      if (fresh.sunatStatus === 'voided' || fresh.status === 'voided') {
+        setMessage({ type: 'error', text: `La ${selectedInvoice.number} ya fue dada de BAJA en SUNAT — está anulada y no se puede (ni hace falta) emitirle una nota de crédito. SUNAT la rechazaría con "documento de baja".` })
+        return
+      }
+    } catch (freshErr) {
+      // Si la verificación falla por red, no bloquear la emisión (la validación
+      // es una red de seguridad extra, no un requisito).
+      console.warn('No se pudo verificar el estado fresco de la factura:', freshErr)
+    }
+
     // ===== REEMISIÓN de NC rechazada: actualizar el doc existente (MISMO
     // número) y reenviar. No toca serie ni stock (la emisión original ya lo
     // devolvió con estas mismas cantidades — por eso van bloqueadas). =====
