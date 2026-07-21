@@ -1078,10 +1078,14 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // ===== COLUMNA IZQUIERDA (Datos del cliente) =====
   let leftY = startY
 
-  // Razón Social (permitir hasta 2 líneas si es muy larga)
+  // Nombre / Razón Social del cliente (permitir hasta 2 líneas si es muy larga).
+  // "Razón Social" es solo para empresas (RUC); una persona natural (DNI, CE,
+  // pasaporte) lleva "Nombre". El ancho de columna ya reserva el máximo (basado
+  // en 'RAZÓN SOCIAL:'), así que el valor queda alineado con ambas etiquetas.
+  const nameLabel = docType === 'RUC' ? 'RAZÓN SOCIAL:' : 'NOMBRE:'
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(9)
-  doc.text('RAZÓN SOCIAL:', colLeftX, leftY)
+  doc.text(nameLabel, colLeftX, leftY)
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
   const customerName = invoice.customer?.name || 'CLIENTE GENERAL'

@@ -768,8 +768,9 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   // ===== COLUMNA IZQUIERDA =====
   let leftY = startY
 
+  // "Razón Social" solo para empresas (RUC); persona natural (DNI/CE) → "Nombre".
   doc.setFont('helvetica', 'bold')
-  doc.text('RAZÓN SOCIAL:', colLeftX, leftY)
+  doc.text(docType === 'RUC' ? 'RAZÓN SOCIAL:' : 'NOMBRE:', colLeftX, leftY)
   doc.setFont('helvetica', 'normal')
   const customerName = quotation.customer?.name || 'CLIENTE GENERAL'
   const customerNameMaxWidth = colWidth - maxLeftLabel - 10
