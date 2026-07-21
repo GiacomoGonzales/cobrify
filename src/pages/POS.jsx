@@ -432,6 +432,15 @@ export default function POS() {
     const day = String(date.getDate()).padStart(2, '0')
     return `${year}-${month}-${day}`
   }
+  // Día SIGUIENTE a una fecha YYYY-MM-DD. Para el `min` de los vencimientos al
+  // crédito de factura/boleta: SUNAT exige que la cuota venza DESPUÉS de la
+  // emisión (regla 3267) — con min = emisión, el picker dejaba elegir el mismo
+  // día y la factura salía rechazada (caso real).
+  const dayAfterLocalDate = (dateStr) => {
+    const d = dateStr ? new Date(`${dateStr}T00:00:00`) : new Date()
+    d.setDate(d.getDate() + 1)
+    return getLocalDateString(d)
+  }
   const [emissionDate, setEmissionDate] = useState(getLocalDateString()) // Fecha de emisión (por defecto hoy)
   // ¿El usuario eligió manualmente la fecha de emisión? Si NO, siempre se usa la
   // fecha actual del sistema al vender. Evita que una pestaña del POS abierta de un
@@ -7498,7 +7507,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   setPaymentInstallments([{ ...paymentInstallments[0], dueDate: e.target.value }])
                 }
               }}
-              min={emissionDate}
+              min={dayAfterLocalDate(emissionDate)}
               className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
             />
           </div>
@@ -7599,7 +7608,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         updated[index].dueDate = e.target.value
                         setPaymentInstallments(updated)
                       }}
-                      min={emissionDate}
+                      min={dayAfterLocalDate(emissionDate)}
                       className="w-28 px-1.5 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                     />
                     <button
