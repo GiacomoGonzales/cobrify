@@ -1,7 +1,9 @@
 ext {
     minSdkVersion = 23
-    compileSdkVersion = 35
-    targetSdkVersion = 35
+    // API 36 (Android 16): requisito de Google Play desde el 31-ago-2026
+    // para publicar actualizaciones. Subido el 22-jul-2026 junto con AGP 8.9.2.
+    compileSdkVersion = 36
+    targetSdkVersion = 36
     androidxActivityVersion = '1.9.2'
     androidxAppCompatVersion = '1.7.0'
     androidxCoordinatorLayoutVersion = '1.2.0'
