@@ -9,6 +9,7 @@
 // ignoreStock, categories, selectedCategory, fmtCatalog, fmtProductMain,
 // getCartQuantity, setSelectedProduct, addToCart, th:{...clases del tema} }.
 import { Package, Plus } from 'lucide-react'
+import { optimizeImageUrl } from '@/utils/cloudinary'
 import { CatalogImage } from '@/components/catalog/CatalogImages'
 import { getCatalogAccent } from '@/themes/catalogThemes'
 import {
@@ -156,14 +157,19 @@ export function CarouselCard({ product, ctx }) {
 // contenedor cuadrado fijo (sin salto de layout) y la tarjeta no usa las
 // clases de masonry (break-inside/mb — el gap lo maneja el grid contenedor).
 export function GridCard({ product, index, uniform = false, ctx }) {
-  const { business, showPrices, ignoreStock, categories, selectedCategory, fmtCatalog, fmtProductMain, getCartQuantity, setSelectedProduct, addToCart, th } = ctx
+  const { business, showPrices, ignoreStock, categories, selectedCategory, fmtCatalog, fmtProductMain, getCartQuantity, setSelectedProduct, addToCart, th, effects } = ctx
               const cartQty = getCartQuantity(product.id)
               const outOfStock = isProductOutOfStock(product, ignoreStock)
               const priceRange = getProductPriceRange(product, business)
+              // Efectos F2.7 (opt-in): reveal al montar + 2da imagen al hover.
+              const revealClass = effects?.scrollReveal ? 'catalog-reveal' : ''
+              const secondImage = effects?.imageSwapOnHover
+                && Array.isArray(product.imageUrls) && product.imageUrls[1]
+                ? product.imageUrls[1] : null
               return (
                 <div
                   key={product.id}
-                  className={`catalog-fade-in ${th.cardRadius} ${th.cardShadowEffect} overflow-hidden transition-shadow cursor-pointer group ${uniform ? '' : 'break-inside-avoid mb-4 md:mb-6'} ${th.cardShadow} ${outOfStock ? 'opacity-75' : ''}`}
+                  className={`catalog-fade-in ${revealClass} ${th.cardRadius} ${th.cardShadowEffect} overflow-hidden transition-shadow cursor-pointer group ${uniform ? '' : 'break-inside-avoid mb-4 md:mb-6'} ${th.cardShadow} ${outOfStock ? 'opacity-75' : ''}`}
                   onClick={() => setSelectedProduct(product)}
                   onMouseEnter={() => preloadProductDetail(product)}
                 >
@@ -180,6 +186,15 @@ export function GridCard({ product, index, uniform = false, ctx }) {
                       <div className={`w-full aspect-square flex items-center justify-center ${outOfStock ? 'opacity-50' : ''}`}>
                         <Package className="w-12 h-12 text-gray-300" />
                       </div>
+                    )}
+                    {secondImage && !outOfStock && (
+                      <img
+                        src={optimizeImageUrl(secondImage, 'card')}
+                        alt=""
+                        aria-hidden
+                        loading="lazy"
+                        className="catalog-swap-second absolute inset-0 w-full h-full object-cover"
+                      />
                     )}
                     {outOfStock && (
                       <div className="absolute inset-0 flex items-center justify-center">
@@ -269,14 +284,15 @@ export function GridCard({ product, index, uniform = false, ctx }) {
 }
 
 export function ListCard({ product, ctx }) {
-  const { business, showPrices, ignoreStock, categories, selectedCategory, fmtCatalog, fmtProductMain, getCartQuantity, setSelectedProduct, addToCart, th } = ctx
+  const { business, showPrices, ignoreStock, categories, selectedCategory, fmtCatalog, fmtProductMain, getCartQuantity, setSelectedProduct, addToCart, th, effects } = ctx
               const cartQty = getCartQuantity(product.id)
               const outOfStock = isProductOutOfStock(product, ignoreStock)
               const priceRange = getProductPriceRange(product, business)
+              const revealClass = effects?.scrollReveal ? 'catalog-reveal' : ''
               return (
                 <div
                   key={product.id}
-                  className={`catalog-fade-in ${th.cardRadius} ${th.cardShadowEffect} overflow-hidden transition-shadow cursor-pointer flex ${th.cardShadow} ${outOfStock ? 'opacity-75' : ''}`}
+                  className={`catalog-fade-in ${revealClass} ${th.cardRadius} ${th.cardShadowEffect} overflow-hidden transition-shadow cursor-pointer flex ${th.cardShadow} ${outOfStock ? 'opacity-75' : ''}`}
                   onClick={() => setSelectedProduct(product)}
                   onMouseEnter={() => preloadProductDetail(product)}
                 >

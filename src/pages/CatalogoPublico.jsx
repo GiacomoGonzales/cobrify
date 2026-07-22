@@ -5,6 +5,8 @@ import CartDrawer, { TableAccountModal } from '@/components/catalog/CartDrawer'
 import { FeaturedCard, CarouselCard, GridCard, ListCard } from '@/components/catalog/ProductCards'
 import AnnouncementBar from '@/components/catalog/AnnouncementBar'
 import HeroCarousel from '@/components/catalog/HeroCarousel'
+import FlashSaleBar from '@/components/catalog/FlashSaleBar'
+import TrustBadges from '@/components/catalog/TrustBadges'
 import { ProductSkeleton } from '@/components/catalog/CatalogImages'
 import {
   DAY_SHORT,
@@ -47,6 +49,26 @@ const fadeInStyle = `
 .catalog-fade-in {
   opacity: 1;
 }
+/* Efecto "aparecer al hacer scroll" (F2.7). El catálogo ya monta las tarjetas
+   de forma incremental a medida que bajas (40 en 40), así que una animación
+   de entrada al MONTAR se percibe como reveal al hacer scroll — sin observers
+   por tarjeta. Se respeta prefers-reduced-motion. */
+@keyframes catalog-reveal-kf {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.catalog-reveal {
+  animation: catalog-reveal-kf 0.45s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .catalog-reveal { animation: none; }
+}
+/* Swap de imagen al pasar el mouse (F2.7): la 2da foto se revela encima. */
+.catalog-swap-second {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.group:hover .catalog-swap-second { opacity: 1; }
 .catalog-scrollbar::-webkit-scrollbar {
   width: 4px;
   height: 4px;
@@ -909,6 +931,11 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const cardCtx = {
     business, showPrices, ignoreStock, categories, selectedCategory,
     fmtCatalog, fmtProductMain, getCartQuantity, setSelectedProduct, addToCart,
+    // Efectos activables (F2.7): reveal al scroll + swap de imagen en hover
+    effects: {
+      scrollReveal: business?.catalogEffects?.scrollReveal === true,
+      imageSwapOnHover: business?.catalogEffects?.imageSwapOnHover === true,
+    },
     th: {
       cardRadius: thCardRadius, cardShadowEffect: thCardShadowEffect, cardShadow: thCardShadow,
       productName: thProductName, text: thText, textMuted: thTextMuted, price: thPrice,
@@ -919,8 +946,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   return (
     <div className={`min-h-screen ${thBg} ${thFontWrapper}`}>
       <style>{fadeInStyle}</style>
-      {/* Tira publicitaria (F2.1) — activable desde Configuración */}
+      {/* Tira publicitaria (F2.1) + oferta con countdown (F2.5) — activables */}
       <AnnouncementBar config={business?.catalogAnnouncement} />
+      <FlashSaleBar config={business?.catalogFlashSale} />
       {/* Banner de mesa (si viene de QR con número de mesa) */}
       {isRestaurantMenu && tableFromUrl && (
         <div className="text-white py-2.5 px-4 sticky top-0 z-50" style={{ backgroundColor: getCatalogAccent(business) }}>
@@ -1133,6 +1161,13 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           </div>
         </div>
       )}
+
+      {/* Sellos de confianza (F2.6) — debajo del hero, activables */}
+      <TrustBadges
+        config={business?.catalogTrustBadges}
+        accent={getCatalogAccent(business)}
+        themeClasses={{ card: thCard, border: thBorderColor, text: thText }}
+      />
 
       {/* Observaciones del catálogo */}
       {business?.catalogObservations && (

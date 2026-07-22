@@ -514,6 +514,14 @@ export default function Settings() {
   const [uploadingHeroSlide, setUploadingHeroSlide] = useState(null) // índice del slide subiendo
   // Diseño de la grilla de productos (F2.3): masonry | grid | list
   const [catalogLayout, setCatalogLayout] = useState('masonry')
+  // Oferta con countdown (F2.5)
+  const [catalogFlashSale, setCatalogFlashSale] = useState({
+    enabled: false, text: '', endDate: '', backgroundColor: '#DC2626', textColor: '#FFFFFF',
+  })
+  // Sellos de confianza (F2.6)
+  const [catalogTrustBadges, setCatalogTrustBadges] = useState({ enabled: false, badges: [] })
+  // Efectos del catálogo (F2.7)
+  const [catalogEffects, setCatalogEffects] = useState({ scrollReveal: false, imageSwapOnHover: false })
   const [catalogLogoUrl, setCatalogLogoUrl] = useState('')                // logo cuadrado
   const [catalogLogoLandscape, setCatalogLogoLandscape] = useState('')    // logo horizontal (opcional, reemplaza cuadrado+nombre)
   const [uploadingCatalogLogo, setUploadingCatalogLogo] = useState(false)
@@ -1350,6 +1358,18 @@ export default function Settings() {
           slides: Array.isArray(businessData.catalogHero?.slides) ? businessData.catalogHero.slides : [],
         })
         setCatalogLayout(businessData.catalogLayout || 'masonry')
+        setCatalogFlashSale({
+          enabled: false, text: '', endDate: '', backgroundColor: '#DC2626', textColor: '#FFFFFF',
+          ...(businessData.catalogFlashSale || {}),
+        })
+        setCatalogTrustBadges({
+          enabled: businessData.catalogTrustBadges?.enabled === true,
+          badges: Array.isArray(businessData.catalogTrustBadges?.badges) ? businessData.catalogTrustBadges.badges : [],
+        })
+        setCatalogEffects({
+          scrollReveal: businessData.catalogEffects?.scrollReveal === true,
+          imageSwapOnHover: businessData.catalogEffects?.imageSwapOnHover === true,
+        })
         setCatalogLogoUrl(businessData.catalogLogoUrl || '')
         setCatalogLogoLandscape(businessData.catalogLogoLandscape || '')
         // Cargar cantidades mínimas por precio. Si solo existe el campo legacy
@@ -7619,6 +7639,148 @@ export default function Settings() {
                         )}
                       </div>
 
+                      {/* Oferta con cuenta regresiva (F2.5) */}
+                      <div className="p-4 border border-gray-200 rounded-lg space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <span className="text-sm font-medium text-gray-900">Oferta con cuenta regresiva</span>
+                            <p className="text-xs text-gray-600 mt-0.5">
+                              Barra con temporizador hacia una fecha límite (crea urgencia). Al llegar a cero desaparece sola.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setCatalogFlashSale(prev => ({ ...prev, enabled: !prev.enabled }))}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${catalogFlashSale.enabled ? 'bg-primary-600' : 'bg-gray-300'}`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${catalogFlashSale.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                          </button>
+                        </div>
+                        {catalogFlashSale.enabled && (
+                          <div className="space-y-3">
+                            <input
+                              type="text"
+                              value={catalogFlashSale.text}
+                              onChange={(e) => setCatalogFlashSale(prev => ({ ...prev, text: e.target.value }))}
+                              placeholder="Ej: ¡Cyber días! Hasta 40% de descuento"
+                              maxLength={80}
+                              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                            />
+                            <div className="flex flex-wrap items-center gap-3">
+                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                                Termina el
+                                <input
+                                  type="datetime-local"
+                                  value={catalogFlashSale.endDate}
+                                  onChange={(e) => setCatalogFlashSale(prev => ({ ...prev, endDate: e.target.value }))}
+                                  className="px-2 py-1.5 border border-gray-300 rounded-lg text-sm"
+                                />
+                              </label>
+                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                                Fondo
+                                <input type="color" value={catalogFlashSale.backgroundColor} onChange={(e) => setCatalogFlashSale(prev => ({ ...prev, backgroundColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-300 cursor-pointer" />
+                              </label>
+                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                                Texto
+                                <input type="color" value={catalogFlashSale.textColor} onChange={(e) => setCatalogFlashSale(prev => ({ ...prev, textColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-300 cursor-pointer" />
+                              </label>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Sellos de confianza (F2.6) */}
+                      <div className="p-4 border border-gray-200 rounded-lg space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <span className="text-sm font-medium text-gray-900">Sellos de confianza</span>
+                            <p className="text-xs text-gray-600 mt-0.5">
+                              Fila de mensajes con ícono (envío, pago seguro, garantía…) debajo de la portada.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setCatalogTrustBadges(prev => ({ ...prev, enabled: !prev.enabled }))}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${catalogTrustBadges.enabled ? 'bg-primary-600' : 'bg-gray-300'}`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${catalogTrustBadges.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                          </button>
+                        </div>
+                        {catalogTrustBadges.enabled && (
+                          <div className="space-y-2">
+                            {(catalogTrustBadges.badges || []).map((badge, idx) => (
+                              <div key={badge.id || idx} className="flex items-center gap-2">
+                                <select
+                                  value={badge.icon || 'shield'}
+                                  onChange={(e) => setCatalogTrustBadges(prev => ({ ...prev, badges: prev.badges.map((b, i) => i === idx ? { ...b, icon: e.target.value } : b) }))}
+                                  className="px-2 py-1.5 border border-gray-300 rounded-lg text-sm flex-shrink-0"
+                                >
+                                  <option value="truck">🚚 Envío</option>
+                                  <option value="shield">🛡️ Seguro</option>
+                                  <option value="card">💳 Pago</option>
+                                  <option value="return">↩️ Devolución</option>
+                                  <option value="support">🎧 Soporte</option>
+                                  <option value="quality">✅ Garantía</option>
+                                  <option value="clock">⏰ Rapidez</option>
+                                  <option value="tag">🏷️ Ofertas</option>
+                                </select>
+                                <input
+                                  type="text"
+                                  value={badge.text || ''}
+                                  onChange={(e) => setCatalogTrustBadges(prev => ({ ...prev, badges: prev.badges.map((b, i) => i === idx ? { ...b, text: e.target.value } : b) }))}
+                                  placeholder="Ej: Envío gratis desde S/ 100"
+                                  maxLength={40}
+                                  className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-emerald-500"
+                                />
+                                <button type="button" onClick={() => setCatalogTrustBadges(prev => ({ ...prev, badges: prev.badges.filter((_, i) => i !== idx) }))} className="p-1 text-red-400 hover:text-red-600 flex-shrink-0">
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ))}
+                            {(catalogTrustBadges.badges || []).length < 4 && (
+                              <button
+                                type="button"
+                                onClick={() => setCatalogTrustBadges(prev => ({ ...prev, badges: [...(prev.badges || []), { id: `badge-${Date.now()}`, icon: 'shield', text: '' }] }))}
+                                className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:border-gray-400 hover:bg-gray-50"
+                              >
+                                + Agregar sello ({(catalogTrustBadges.badges || []).length}/4)
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Efectos del catálogo (F2.7) */}
+                      <div className="p-4 border border-gray-200 rounded-lg space-y-2.5">
+                        <span className="text-sm font-medium text-gray-900">Efectos</span>
+                        <label className="flex items-center justify-between gap-3 cursor-pointer">
+                          <span className="text-sm text-gray-700">
+                            Aparición al hacer scroll
+                            <span className="block text-xs text-gray-500">Los productos se deslizan suavemente al aparecer.</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setCatalogEffects(prev => ({ ...prev, scrollReveal: !prev.scrollReveal }))}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${catalogEffects.scrollReveal ? 'bg-primary-600' : 'bg-gray-300'}`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${catalogEffects.scrollReveal ? 'translate-x-6' : 'translate-x-1'}`} />
+                          </button>
+                        </label>
+                        <label className="flex items-center justify-between gap-3 cursor-pointer">
+                          <span className="text-sm text-gray-700">
+                            Segunda foto al pasar el mouse
+                            <span className="block text-xs text-gray-500">En productos con 2+ imágenes, muestra la segunda al hover.</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setCatalogEffects(prev => ({ ...prev, imageSwapOnHover: !prev.imageSwapOnHover }))}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${catalogEffects.imageSwapOnHover ? 'bg-primary-600' : 'bg-gray-300'}`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${catalogEffects.imageSwapOnHover ? 'translate-x-6' : 'translate-x-1'}`} />
+                          </button>
+                        </label>
+                      </div>
+
                       {/* Diseño de la grilla de productos (F2.3) */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -8061,6 +8223,14 @@ export default function Settings() {
                           })),
                         },
                         catalogLayout,
+                        catalogFlashSale: { ...catalogFlashSale, text: (catalogFlashSale.text || '').trim() },
+                        catalogTrustBadges: {
+                          enabled: catalogTrustBadges.enabled,
+                          badges: (catalogTrustBadges.badges || []).filter(b => (b.text || '').trim()).map(b => ({
+                            id: b.id, icon: b.icon || 'shield', text: (b.text || '').trim(),
+                          })),
+                        },
+                        catalogEffects,
                         catalogLogoUrl: catalogLogoUrl || null,
                         catalogLogoLandscape: catalogLogoLandscape || null,
                         catalogWholesaleMinQtys: {
