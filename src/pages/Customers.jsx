@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useDeferredValue } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet, FileText, Printer, Upload, CalendarClock, Cake, Columns3, PawPrint, ClipboardList, Eye, EyeOff, X } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet, FileText, Printer, Upload, CalendarClock, Cake, Columns3, PawPrint, ClipboardList, Eye, EyeOff, X, ChevronDown } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useHidePrivateData } from '@/hooks/useHidePrivateData'
 import { useToast } from '@/contexts/ToastContext'
@@ -48,6 +48,30 @@ const DOC_TYPE_LABELS = {
 function CustomerOrdersModal({ customer, businessId, businessSettings, isDemoMode, onClose }) {
   const toast = useToast()
   const [orders, setOrders] = useState(null) // null = cargando
+  // Filtro por fecha (mismos rangos que la página de Ventas)
+  const [dateFilter, setDateFilter] = useState('all') // all|today|yesterday|7days|month|custom
+  const [customStart, setCustomStart] = useState('')
+  const [customEnd, setCustomEnd] = useState('')
+  // Comprobante expandido (tocar la fila muestra los productos comprados)
+  const [expandedId, setExpandedId] = useState(null)
+  // Incluir el detalle de productos en ticket/PDF/Excel (elige el usuario)
+  const [includeDetail, setIncludeDetail] = useState(false)
+
+  // Datos normalizados de una línea de producto (para exports)
+  const itemLine = (item, inv) => {
+    const qty = Number(item.quantity) || 0
+    const unit = Number(item.unitPrice ?? item.price) || 0
+    const gross = Number(item.subtotal) || qty * unit
+    const disc = Number(item.itemDiscount) || 0
+    const qtyText = Number.isInteger(qty) ? String(qty) : qty.toFixed(3).replace(/\.?0+$/, '')
+    return {
+      qtyText,
+      name: `${item.name || item.description || 'Producto'}${item.presentationName ? ` (${item.presentationName})` : ''}`,
+      unit,
+      total: Math.max(0, gross - disc),
+      ccy: inv.currency || 'PEN',
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -92,6 +116,44 @@ function CustomerOrdersModal({ customer, businessId, businessSettings, isDemoMod
     return d ? d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'
   }
 
+  // Timestamp del comprobante (mismo criterio que el ordenamiento de la carga)
+  const orderTime = (inv) => inv.createdAt?.toDate?.()?.getTime?.()
+    || (inv.issueDate?.toDate?.()?.getTime?.())
+    || (inv.emissionDate ? new Date(`${inv.emissionDate}T12:00:00`).getTime() : 0)
+
+  // Pedidos dentro del rango elegido. Todo lo derivado (lista, totales,
+  // ticket/PDF/Excel) trabaja sobre esta lista filtrada.
+  const filteredOrders = useMemo(() => {
+    if (!orders) return null
+    if (dateFilter === 'all') return orders
+    const now = new Date()
+    const DAY = 86400000
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    let from = 0
+    let to = Infinity
+    if (dateFilter === 'today') from = startOfToday
+    else if (dateFilter === 'yesterday') { from = startOfToday - DAY; to = startOfToday }
+    else if (dateFilter === '7days') from = startOfToday - 6 * DAY
+    else if (dateFilter === 'month') from = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
+    else if (dateFilter === 'custom') {
+      if (customStart) from = new Date(`${customStart}T00:00:00`).getTime()
+      if (customEnd) to = new Date(`${customEnd}T00:00:00`).getTime() + DAY
+    }
+    return orders.filter(inv => {
+      const t = orderTime(inv)
+      return t >= from && t < to
+    })
+  }, [orders, dateFilter, customStart, customEnd])
+
+  // Etiqueta del período (para ticket/PDF/Excel)
+  const rangeLabel = dateFilter === 'today' ? 'Hoy'
+    : dateFilter === 'yesterday' ? 'Ayer'
+    : dateFilter === '7days' ? 'Últimos 7 días'
+    : dateFilter === 'month' ? 'Este mes'
+    : dateFilter === 'custom' && (customStart || customEnd)
+      ? `${customStart || 'Inicio'} — ${customEnd || 'Hoy'}`
+      : 'Todos los pedidos'
+
   const statusChip = (inv) => {
     if (inv.status === 'annulled' || inv.status === 'cancelled') {
       return <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700">Anulada</span>
@@ -112,14 +174,14 @@ function CustomerOrdersModal({ customer, businessId, businessSettings, isDemoMod
   // real comprado, a diferencia del totalSpent naive de la columna).
   const totals = useMemo(() => {
     const t = { PEN: 0, USD: 0 }
-    for (const inv of orders || []) {
+    for (const inv of filteredOrders || []) {
       if (inv.status === 'annulled' || inv.status === 'cancelled') continue
       const ccy = inv.currency === 'USD' ? 'USD' : 'PEN'
       const amt = Number(inv.total) || 0
       t[ccy] += inv.documentType === 'nota_credito' ? -amt : amt
     }
     return t
-  }, [orders])
+  }, [filteredOrders])
 
   const totalsLabel = () => {
     const parts = []
@@ -148,8 +210,13 @@ function CustomerOrdersModal({ customer, businessId, businessSettings, isDemoMod
     try {
       const { default: jsPDF } = await import('jspdf')
       const W = 80, MX = 4
-      const list = orders || []
-      const height = 34 + list.length * 8 + 18
+      const list = filteredOrders || []
+      // Alto dinámico: cabecera + 8mm por comprobante + 3.2mm por producto
+      // cuando se incluye el detalle + pie
+      const detailLines = includeDetail
+        ? list.reduce((sum, inv) => sum + (Array.isArray(inv.items) ? inv.items.length : 0), 0)
+        : 0
+      const height = 34 + list.length * 8 + detailLines * 3.2 + 18
       const doc = new jsPDF({ unit: 'mm', format: [W, Math.max(height, 60)] })
       let y = 8
 
@@ -165,6 +232,8 @@ function CustomerOrdersModal({ customer, businessId, businessSettings, isDemoMod
       y += 4
       doc.setFont('helvetica', 'normal')
       if (customer?.documentNumber) { doc.text(customer.documentNumber, W / 2, y, { align: 'center' }); y += 4 }
+      doc.text(rangeLabel, W / 2, y, { align: 'center' })
+      y += 4
       doc.setLineDashPattern([1, 1], 0)
       doc.line(MX, y, W - MX, y)
       doc.setLineDashPattern([], 0)
@@ -183,6 +252,19 @@ function CustomerOrdersModal({ customer, businessId, businessSettings, isDemoMod
         doc.text(`${formatDate(inv)} · ${statusText(inv)}`, MX, y)
         doc.setTextColor(0, 0, 0)
         y += 4.5
+        // Detalle de productos (opcional, check "Incluir productos")
+        if (includeDetail && Array.isArray(inv.items)) {
+          doc.setFontSize(6.5)
+          doc.setTextColor(70, 70, 70)
+          for (const item of inv.items) {
+            const l = itemLine(item, inv)
+            doc.text(`${l.qtyText}x ${l.name}`.slice(0, 34), MX + 2, y)
+            doc.text(formatCurrency(l.total, l.ccy), W - MX, y, { align: 'right' })
+            y += 3.2
+          }
+          doc.setTextColor(0, 0, 0)
+          y += 1
+        }
       }
 
       doc.setLineDashPattern([1, 1], 0)
@@ -194,8 +276,28 @@ function CustomerOrdersModal({ customer, businessId, businessSettings, isDemoMod
       doc.text(`TOTAL (${list.length} comp.)`, MX, y)
       doc.text(totalsLabel(), W - MX, y, { align: 'right' })
 
-      doc.autoPrint()
-      window.open(doc.output('bloburl'), '_blank')
+      // Impresión DIRECTA vía iframe oculto (como los demás tickets del
+      // sistema): solo aparece el diálogo de impresión, sin abrir pestañas
+      // (antes: autoPrint + window.open abría la pestaña del blob Y la vista
+      // previa — dos ventanas).
+      const url = URL.createObjectURL(doc.output('blob'))
+      const iframe = document.createElement('iframe')
+      iframe.style.display = 'none'
+      iframe.src = url
+      iframe.onload = () => {
+        try {
+          iframe.contentWindow.focus()
+          iframe.contentWindow.print()
+        } catch (printErr) {
+          console.error('Error al abrir diálogo de impresión:', printErr)
+          window.open(url, '_blank') // fallback: abrir el PDF
+        }
+        // Limpiar después de un rato prudente (el diálogo ya tomó el documento)
+        setTimeout(() => {
+          try { document.body.removeChild(iframe); URL.revokeObjectURL(url) } catch (cleanErr) { void cleanErr }
+        }, 60000)
+      }
+      document.body.appendChild(iframe)
     } catch (e) {
       console.error('Error generando ticket de pedidos:', e)
       toast.error('No se pudo generar el ticket')
@@ -224,13 +326,17 @@ function CustomerOrdersModal({ customer, businessId, businessSettings, isDemoMod
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(11)
       doc.text(`${customer?.name || ''}${customer?.documentNumber ? ` · ${customer.documentNumber}` : ''}`, W / 2, y, { align: 'center' })
-      y += 7
+      y += 5
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(9)
+      doc.text(`Período: ${rangeLabel}`, W / 2, y, { align: 'center' })
+      y += 6
       doc.setDrawColor(0)
       doc.line(MX, y, W - MX, y)
       y += 5
 
       doc.setFont('helvetica', 'normal')
-      for (const inv of orders || []) {
+      for (const inv of filteredOrders || []) {
         ensureSpace(9)
         const isNC = inv.documentType === 'nota_credito'
         doc.setFont('helvetica', 'bold')
@@ -247,6 +353,20 @@ function CustomerOrdersModal({ customer, businessId, businessSettings, isDemoMod
         )
         doc.setTextColor(0, 0, 0)
         y += 5
+        // Detalle de productos (opcional, check "Incluir productos")
+        if (includeDetail && Array.isArray(inv.items) && inv.items.length > 0) {
+          doc.setFontSize(8)
+          doc.setTextColor(70, 70, 70)
+          for (const item of inv.items) {
+            ensureSpace(4.5)
+            const l = itemLine(item, inv)
+            doc.text(`${l.qtyText}x ${l.name}`.slice(0, 70), MX + 6, y)
+            doc.text(formatCurrency(l.total, l.ccy), W - MX, y, { align: 'right' })
+            y += 4
+          }
+          doc.setTextColor(0, 0, 0)
+          y += 1.5
+        }
       }
 
       ensureSpace(12)
@@ -255,7 +375,7 @@ function CustomerOrdersModal({ customer, businessId, businessSettings, isDemoMod
       y += 5.5
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(11)
-      doc.text(`TOTAL (${(orders || []).length} comprobante${(orders || []).length === 1 ? '' : 's'})`, MX, y)
+      doc.text(`TOTAL (${(filteredOrders || []).length} comprobante${(filteredOrders || []).length === 1 ? '' : 's'})`, MX, y)
       doc.text(totalsLabel(), W - MX, y, { align: 'right' })
       y += 5
       doc.setFont('helvetica', 'normal')
@@ -286,16 +406,16 @@ function CustomerOrdersModal({ customer, businessId, businessSettings, isDemoMod
         name: businessSettings?.businessName || businessSettings?.name || businessSettings?.tradeName,
         ruc: businessSettings?.ruc,
       }, {
-        periodLabel: customer?.documentNumber ? `Cliente doc. ${customer.documentNumber}` : 'Todos los pedidos',
+        periodLabel: rangeLabel,
         totalLabel: 'Comprobantes',
-        totalItems: (orders || []).length,
+        totalItems: (filteredOrders || []).length,
       }))
       const metaEnd = aoa.length - 1
       aoa.push([])
       const headerRow = aoa.length
       aoa.push(headers)
       const dataStart = aoa.length
-      for (const inv of orders || []) {
+      for (const inv of filteredOrders || []) {
         const isNC = inv.documentType === 'nota_credito'
         aoa.push([
           DOC_TYPE_LABELS[inv.documentType] || inv.documentType || '',
@@ -315,7 +435,7 @@ function CustomerOrdersModal({ customer, businessId, businessSettings, isDemoMod
       ex.applyTitleRow(ws, 0, totalCols)
       ex.applyMetadataRows(ws, metaStart, metaEnd)
       ex.applyHeaderRow(ws, headerRow, totalCols)
-      for (let i = 0; i < (orders || []).length; i++) {
+      for (let i = 0; i < (filteredOrders || []).length; i++) {
         const r = dataStart + i
         ex.setStyle(ws, r, 0, ex.centerStyle(i))
         ex.setStyle(ws, r, 1, ex.cellStyle(i))
@@ -329,6 +449,56 @@ function CustomerOrdersModal({ customer, businessId, businessSettings, isDemoMod
       ex.setStyle(ws, totalRowIdx, 6, { ...ex.totalNumberStyle, numFmt: '@' })
       ex.applyFreezeBelow(ws, headerRow)
       ex.XLSX.utils.book_append_sheet(wb, ws, 'Pedidos')
+
+      // Hoja 2: Productos (opcional, check "Incluir productos") — una fila por
+      // línea de producto de cada comprobante
+      if (includeDetail) {
+        const dHeaders = ['Comprobante', 'Fecha', 'Producto', 'Cantidad', 'P. Unit.', 'Moneda', 'Total']
+        const dAoa = [[`PRODUCTOS COMPRADOS — ${String(customer?.name || '').toUpperCase()}`], []]
+        const dMetaStart = dAoa.length
+        dAoa.push(...ex.buildBusinessMetadataRows({
+          name: businessSettings?.businessName || businessSettings?.name || businessSettings?.tradeName,
+          ruc: businessSettings?.ruc,
+        }, { periodLabel: rangeLabel }))
+        const dMetaEnd = dAoa.length - 1
+        dAoa.push([])
+        const dHeaderRow = dAoa.length
+        dAoa.push(dHeaders)
+        const dDataStart = dAoa.length
+        let dCount = 0
+        for (const inv of filteredOrders || []) {
+          for (const item of (Array.isArray(inv.items) ? inv.items : [])) {
+            const l = itemLine(item, inv)
+            dAoa.push([
+              inv.number || '',
+              formatDate(inv),
+              l.name,
+              l.qtyText,
+              Number(l.unit.toFixed(2)),
+              l.ccy,
+              Number(l.total.toFixed(2)),
+            ])
+            dCount++
+          }
+        }
+        const dWs = ex.XLSX.utils.aoa_to_sheet(dAoa)
+        ex.applyColumnWidths(dWs, [18, 12, 40, 10, 12, 9, 12])
+        ex.applyTitleRow(dWs, 0, dHeaders.length)
+        ex.applyMetadataRows(dWs, dMetaStart, dMetaEnd)
+        ex.applyHeaderRow(dWs, dHeaderRow, dHeaders.length)
+        for (let i = 0; i < dCount; i++) {
+          const r = dDataStart + i
+          ex.setStyle(dWs, r, 0, ex.centerStyle(i))
+          ex.setStyle(dWs, r, 1, ex.centerStyle(i))
+          ex.setStyle(dWs, r, 2, ex.cellStyle(i))
+          ex.setStyle(dWs, r, 3, ex.centerStyle(i))
+          ex.setStyle(dWs, r, 4, ex.numberStyle(i))
+          ex.setStyle(dWs, r, 5, ex.centerStyle(i))
+          ex.setStyle(dWs, r, 6, ex.numberStyle(i))
+        }
+        ex.applyFreezeBelow(dWs, dHeaderRow)
+        ex.XLSX.utils.book_append_sheet(wb, dWs, 'Productos')
+      }
 
       await ex.saveAndShareExcel(wb, ex.buildExcelFileName(`Pedidos-${safeName}`), {
         shareTitle: `Pedidos de ${customer?.name || 'cliente'}`,
@@ -353,12 +523,64 @@ function CustomerOrdersModal({ customer, businessId, businessSettings, isDemoMod
         </div>
       ) : (
         <div>
+          {/* Filtro por fecha (mismos rangos que Ventas) */}
+          <div className="mb-3 px-1 space-y-2">
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { id: 'all', label: 'Todo' },
+                { id: 'today', label: 'Hoy' },
+                { id: 'yesterday', label: 'Ayer' },
+                { id: '7days', label: '7 días' },
+                { id: 'month', label: 'Este mes' },
+                { id: 'custom', label: 'Personalizado' },
+              ].map(opt => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setDateFilter(opt.id)}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                    dateFilter === opt.id
+                      ? 'bg-primary-600 text-white border-primary-600'
+                      : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {dateFilter === 'custom' && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={customStart}
+                  onChange={(e) => setCustomStart(e.target.value)}
+                  className="px-2 py-1 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary-500"
+                />
+                <span className="text-xs text-gray-400">—</span>
+                <input
+                  type="date"
+                  value={customEnd}
+                  onChange={(e) => setCustomEnd(e.target.value)}
+                  className="px-2 py-1 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary-500"
+                />
+              </div>
+            )}
+          </div>
           {/* Resumen + acciones */}
           <div className="flex items-center justify-between gap-2 mb-3 px-1">
             <span className="text-sm text-gray-600 flex-shrink-0">
-              {orders.length} comprobante{orders.length !== 1 ? 's' : ''}
+              {(filteredOrders || []).length} comprobante{(filteredOrders || []).length !== 1 ? 's' : ''}
             </span>
             <div className="flex items-center gap-1.5">
+              <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer select-none mr-1" title="El ticket, PDF y Excel incluirán los productos de cada comprobante">
+                <input
+                  type="checkbox"
+                  checked={includeDetail}
+                  onChange={(e) => setIncludeDetail(e.target.checked)}
+                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 w-3.5 h-3.5"
+                />
+                Productos
+              </label>
               <button
                 type="button"
                 onClick={handlePrintTicket}
@@ -389,24 +611,86 @@ function CustomerOrdersModal({ customer, businessId, businessSettings, isDemoMod
             </div>
           </div>
           {/* Lista */}
+          {(filteredOrders || []).length === 0 && (
+            <p className="text-sm text-gray-500 text-center py-8">
+              Sin pedidos en el período seleccionado
+            </p>
+          )}
           <div className="max-h-[55vh] overflow-y-auto divide-y divide-gray-100 -mx-2">
-            {orders.map(inv => (
-              <div key={inv.id} className="flex items-center justify-between gap-3 px-2 py-2.5">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-900">{inv.number || '-'}</span>
-                    {statusChip(inv)}
-                  </div>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {DOC_TYPE_LABELS[inv.documentType] || inv.documentType || 'Comprobante'} · {formatDate(inv)}
-                    {inv.sellerName ? ` · ${inv.sellerName}` : ''}
-                  </p>
+            {(filteredOrders || []).map(inv => {
+              const isExpanded = expandedId === inv.id
+              const items = Array.isArray(inv.items) ? inv.items : []
+              return (
+                <div key={inv.id}>
+                  {/* Fila: tocar expande/colapsa el detalle de productos */}
+                  <button
+                    type="button"
+                    onClick={() => setExpandedId(isExpanded ? null : inv.id)}
+                    className="w-full flex items-center justify-between gap-3 px-2 py-2.5 text-left hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-900">{inv.number || '-'}</span>
+                        {statusChip(inv)}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {DOC_TYPE_LABELS[inv.documentType] || inv.documentType || 'Comprobante'} · {formatDate(inv)}
+                        {inv.sellerName ? ` · ${inv.sellerName}` : ''}
+                      </p>
+                    </div>
+                    <span className="flex items-center gap-1.5 flex-shrink-0">
+                      <span className={`text-sm font-semibold ${inv.documentType === 'nota_credito' ? 'text-orange-600' : 'text-gray-900'}`}>
+                        {inv.documentType === 'nota_credito' ? '-' : ''}{formatCurrency(inv.total || 0, inv.currency || 'PEN')}
+                      </span>
+                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                    </span>
+                  </button>
+                  {/* Detalle: productos del comprobante */}
+                  {isExpanded && (
+                    <div className="px-3 pb-3 bg-gray-50/70">
+                      {items.length === 0 ? (
+                        <p className="text-xs text-gray-400 py-2">Sin detalle de productos</p>
+                      ) : (
+                        <div className="divide-y divide-gray-200/70">
+                          {items.map((item, i) => {
+                            const qty = Number(item.quantity) || 0
+                            const unit = Number(item.unitPrice ?? item.price) || 0
+                            const lineTotal = Number(item.subtotal) || qty * unit
+                            const itemDisc = Number(item.itemDiscount) || 0
+                            const qtyText = Number.isInteger(qty) ? qty : qty.toFixed(3).replace(/\.?0+$/, '')
+                            return (
+                              <div key={i} className="flex items-start justify-between gap-3 py-1.5">
+                                <div className="min-w-0">
+                                  <p className="text-xs text-gray-800 leading-snug">
+                                    <span className="font-medium">{qtyText}×</span> {item.name || item.description || 'Producto'}
+                                    {item.presentationName ? ` (${item.presentationName})` : ''}
+                                  </p>
+                                  <p className="text-[11px] text-gray-400">
+                                    {formatCurrency(unit, inv.currency || 'PEN')} c/u
+                                    {itemDisc > 0 ? ` · desc. -${formatCurrency(itemDisc, inv.currency || 'PEN')}` : ''}
+                                  </p>
+                                </div>
+                                <span className="text-xs font-medium text-gray-700 flex-shrink-0">
+                                  {formatCurrency(Math.max(0, lineTotal - itemDisc), inv.currency || 'PEN')}
+                                </span>
+                              </div>
+                            )
+                          })}
+                          {Number(inv.globalDiscount) > 0 && (
+                            <div className="flex items-center justify-between gap-3 py-1.5">
+                              <span className="text-xs text-gray-500">Descuento global</span>
+                              <span className="text-xs font-medium text-red-600">
+                                -{formatCurrency(Number(inv.globalDiscount), inv.currency || 'PEN')}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <span className={`text-sm font-semibold flex-shrink-0 ${inv.documentType === 'nota_credito' ? 'text-orange-600' : 'text-gray-900'}`}>
-                  {inv.documentType === 'nota_credito' ? '-' : ''}{formatCurrency(inv.total || 0, inv.currency || 'PEN')}
-                </span>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
