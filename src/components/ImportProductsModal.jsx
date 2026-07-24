@@ -148,6 +148,10 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
   const validateAndMapProducts = (data) => {
     const validProducts = []
     const errors = []
+    // SKUs/nombres que ya aparecieron en una fila CON precio (producto "padre").
+    // Sirve para reconocer las filas de lote adicional (mismo producto en varias
+    // filas), que dejan el precio vacío a propósito y no deben marcar error.
+    const pricedKeys = new Set()
 
     // Index de marcas administradas para matchear el texto del Excel (case-insensitive).
     // Si una marca del Excel matchea, le inyectamos brandId al producto.
@@ -191,10 +195,25 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
         }
       }
 
-      if (!hasRowPrice && !hasRowPriceUSD && !hasVariantPrice) {
+      // Fila de LOTE ADICIONAL: el mismo producto en varias filas (múltiples lotes).
+      // Estas filas dejan el precio vacío a propósito (el precio es del producto, no
+      // del lote) y traen numero_lote + stock. Se reconocen porque su SKU/nombre ya
+      // apareció antes CON precio; heredan ese precio en la fusión de lotes de abajo.
+      // Sin esto, la validación las descartaba con "Falta el precio" y se perdían los
+      // lotes extra y su stock.
+      const contSku = String(row.sku || row.SKU || row.Sku || row.codigo_interno || row.Codigo_Interno || row.CODIGO_INTERNO || row.codigoInterno || row.CodigoInterno || '').trim().toLowerCase()
+      const contName = String(row.nombre || row.Nombre || row.NOMBRE || row.name || row.Name || row.NAME || '').trim().toLowerCase()
+      const contLote = String(row.numero_lote || row.Numero_Lote || row.NUMERO_LOTE || row.lote || row.Lote || row.LOTE || row.numeroLote || row.batchNumber || row.batch_number || row.BATCH_NUMBER || '').trim()
+      const contKey = contSku || contName
+      const isBatchContinuation = !!contLote && !!contKey && pricedKeys.has(contKey)
+
+      if (!hasRowPrice && !hasRowPriceUSD && !hasVariantPrice && !isBatchContinuation) {
         errors.push(`Fila ${rowNum}: Falta el precio (en soles, en dólares o de variante)`)
         return
       }
+      // Fila "padre" con precio: registrar su clave para que las filas de lote
+      // adicional posteriores (mismo SKU/nombre) hereden el precio y no den error.
+      if ((hasRowPrice || hasRowPriceUSD || hasVariantPrice) && contKey) pricedKeys.add(contKey)
 
       // Determinar si debe controlar stock
       const trackStockValue = row.trackStock || row.controlarStock || row.ControlarStock || row.CONTROLAR_STOCK || row.track_stock || row.TRACK_STOCK
