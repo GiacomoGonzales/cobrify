@@ -445,10 +445,14 @@ export const PLANS = {
 // ============================================
 // El addon_500_comprobantes salió del catálogo (15-jul-2026): los comprobantes
 // extra ahora se ajustan a mano en el límite del cliente, sin registrar pago.
-// `semestral` salió del catálogo (24-jul-2026): se respeta a quien ya lo tiene
-// (sigue en PLANS como legacy) pero no se ofrece más. El nivel Ilimitado ahora
-// también se puede pagar mes a mes (ilimitado_mensual).
-export const SELLABLE_PLAN_IDS = ['basico_mensual', 'mensual', 'anual', 'ilimitado_mensual', 'ilimitado_anual'];
+// Planes que se pueden ELEGIR al crear una cuenta (/register) o al registrar un
+// pago / cambiar de plan desde el panel admin.
+//
+// `semestral` (149.90 / 6 meses) sigue acá a propósito: ya NO se promociona en la
+// página pública /pricing ni en el selector del cliente, pero si alguien lo pide
+// se le puede vender o renovar desde el panel. El nivel Ilimitado ahora también
+// se puede pagar mes a mes (ilimitado_mensual).
+export const SELLABLE_PLAN_IDS = ['basico_mensual', 'mensual', 'semestral', 'anual', 'ilimitado_mensual', 'ilimitado_anual'];
 // Planes internos del sistema (no se venden pero son válidos):
 export const SYSTEM_PLAN_IDS = ['trial', 'enterprise'];
 
