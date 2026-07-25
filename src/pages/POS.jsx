@@ -3706,12 +3706,30 @@ export default function POS() {
       { key: 'price3', def: 'VIP' },
       { key: 'price4', def: 'Especial' },
     ]
+    // Cantidad mínima desde la que se aplica cada precio, SOLO si el producto usa
+    // precio automático por cantidad. Con el automático activado ya no aparece el
+    // modal para elegir precio, así que el cajero no tenía forma de saber desde
+    // cuántas unidades baja: por eso se muestra en la tarjeta. Misma resolución
+    // que computeAutoPriceForQty (mínimo del producto → global → legacy global).
+    const autoByQty = product?.useAutoPriceByQty === true
+    const productMins = product?.priceMinQtys || {}
+    const globalMins = companySettings?.catalogWholesaleMinQtys || {}
+    const legacyGlobal = parseInt(companySettings?.catalogWholesaleMinQty)
+    const getMinQty = (key) => {
+      if (!autoByQty || key === 'price1') return null
+      const p = parseInt(productMins[key])
+      if (Number.isFinite(p) && p >= 1) return p
+      const g = parseInt(globalMins[key])
+      if (Number.isFinite(g) && g >= 1) return g
+      if (Number.isFinite(legacyGlobal) && legacyGlobal >= 1) return legacyGlobal
+      return null
+    }
     const out = []
     for (const { key, def } of defs) {
       if (key !== 'price1' && !hasPriceLevel(product, key)) continue
       const value = resolvePrice(product, key)
       if (value == null || value <= 0) continue
-      out.push({ key, label: businessSettings?.priceLabels?.[key] || def, value })
+      out.push({ key, label: businessSettings?.priceLabels?.[key] || def, value, minQty: getMinQty(key) })
     }
     return out
   }
@@ -8233,7 +8251,15 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           <div className="space-y-0.5 mb-1">
                             {priceLevels.map(lvl => (
                               <div key={lvl.key} className="flex items-center justify-between gap-1.5 leading-tight">
-                                <span className="text-[10px] sm:text-xs text-gray-500 truncate">{lvl.label}</span>
+                                <span className="text-[10px] sm:text-xs text-gray-500 truncate">
+                                  {lvl.label}
+                                  {/* Desde cuántas unidades se aplica este precio (precio
+                                      automático por cantidad): el cajero ya no tiene que
+                                      memorizarlo ni descubrirlo subiendo la cantidad. */}
+                                  {lvl.minQty > 1 && (
+                                    <span className="text-emerald-600 font-semibold"> desde {lvl.minQty}</span>
+                                  )}
+                                </span>
                                 <span className={`text-xs sm:text-sm font-bold whitespace-nowrap ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
                                   {formatUnitPrice(toSessionCurrency(lvl.value), currency)}
                                 </span>
