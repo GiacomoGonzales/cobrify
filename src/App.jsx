@@ -87,6 +87,7 @@ import MobileRedirect from './components/MobileRedirect'
 import DispatchGuides from './pages/DispatchGuides'
 import CarrierDispatchGuides from './pages/CarrierDispatchGuides'
 import TermsAndConditions from './pages/TermsAndConditions'
+import Pricing from './pages/Pricing'
 import MigratePurchases from './pages/MigratePurchases'
 import Expenses from './pages/Expenses'
 import Loans from './pages/Loans'
@@ -194,6 +195,8 @@ function App() {
 
             {/* Rutas públicas */}
             <Route path="/terminos-y-condiciones" element={<TermsAndConditions />} />
+            <Route path="/pricing" element={<Pricing />} />
+            <Route path="/precios" element={<Pricing />} />
 
             {/* Catálogo público */}
             <Route path="/catalogo/:slug" element={<CatalogoPublico />} />

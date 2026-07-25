@@ -47,7 +47,11 @@ export const PLANS = {
     pricePerMonth: 19.90,
     totalPrice: 19.90,
     emissionMethod: "qpse",
-    limits: { maxInvoicesPerMonth: 500, maxCustomers: -1, maxProducts: -1, maxBranches: 1, sunatIntegration: true, multiUser: true }
+    // 100 comprobantes desde el 24-jul-2026 (antes 500). SOLO para altas y cambios
+    // de plan NUEVOS: los clientes antiguos con 500 conservan su límite porque la
+    // renovación del mismo plan preserva los limits del doc (ver registerPayment y
+    // el webhook de Flow, que en renovación no tocan limits).
+    limits: { maxInvoicesPerMonth: 100, maxCustomers: -1, maxProducts: -1, maxBranches: 1, sunatIntegration: true, multiUser: true }
   },
   mensual: {
     name: "Plan Mensual - 1 Mes",
@@ -75,6 +79,18 @@ export const PLANS = {
     totalPrice: 199.90,
     emissionMethod: "qpse",
     limits: { maxInvoicesPerMonth: 1000, maxCustomers: -1, maxProducts: -1, maxBranches: -1, sunatIntegration: true, multiUser: true }
+  },
+  // Ilimitado en ciclo MENSUAL. Mismo nivel que ilimitado_anual (todo ilimitado),
+  // solo cambia el ciclo de cobro. Existe para que el nivel "Ilimitado" se pueda
+  // pagar mes a mes o al año (ver PLAN_MATRIX más abajo).
+  ilimitado_mensual: {
+    name: "Plan Ilimitado - 1 Mes",
+    category: "qpse",
+    months: 1,
+    pricePerMonth: 39.90,
+    totalPrice: 39.90,
+    emissionMethod: "qpse",
+    limits: { maxInvoicesPerMonth: -1, maxCustomers: -1, maxProducts: -1, maxBranches: -1, sunatIntegration: true, multiUser: true }
   },
   // Todo ilimitado por 12 meses, sin CDT propio (emite por QPse). Formaliza el
   // plan "custom" que se venía asignando a mano y coincide con los términos
@@ -429,11 +445,84 @@ export const PLANS = {
 // ============================================
 // El addon_500_comprobantes salió del catálogo (15-jul-2026): los comprobantes
 // extra ahora se ajustan a mano en el límite del cliente, sin registrar pago.
-export const SELLABLE_PLAN_IDS = ['basico_mensual', 'mensual', 'semestral', 'anual', 'ilimitado_anual'];
+// `semestral` salió del catálogo (24-jul-2026): se respeta a quien ya lo tiene
+// (sigue en PLANS como legacy) pero no se ofrece más. El nivel Ilimitado ahora
+// también se puede pagar mes a mes (ilimitado_mensual).
+export const SELLABLE_PLAN_IDS = ['basico_mensual', 'mensual', 'anual', 'ilimitado_mensual', 'ilimitado_anual'];
 // Planes internos del sistema (no se venden pero son válidos):
 export const SYSTEM_PLAN_IDS = ['trial', 'enterprise'];
 
 export const isSellablePlan = (id) => SELLABLE_PLAN_IDS.includes(id);
+
+// ============================================
+// INTERRUPTOR del pago en línea (pasarela Flow).
+//
+// false = la sección de planes se muestra en modo "Próximamente": se ven los
+// planes y precios, pero los botones no cobran. Se apagó a propósito hasta que
+// Flow active Yape recurrente (medio 167); la integración ya está probada y
+// funcionando end-to-end.
+//
+// Para ACTIVAR el cobro: poner true acá Y quitar FLOW_PAYMENTS_ENABLED=false de
+// functions/.env (el server bloquea aparte, para que no se pueda pagar salteando
+// la interfaz). Después: push del front + deploy de functions.
+// ============================================
+export const ONLINE_PAYMENTS_ENABLED = false;
+
+// ============================================
+// NIVEL × CICLO — cómo se ofrecen los planes al cliente.
+//
+// Los ids de PLANS ya codifican nivel + ciclo (ej. `anual` = Completo anual), así
+// que NO hace falta migrar nada: esto es solo la capa de presentación que arma la
+// grilla "3 niveles × mensual/anual" y resuelve el id real que se guarda.
+//   PLAN_TIERS[].cycles.monthly/annual = id de PLANS (null = ese ciclo no se vende)
+// ============================================
+export const PLAN_TIERS = [
+  {
+    id: 'basico',
+    name: 'Básico',
+    tagline: 'Para empezar a facturar',
+    highlights: ['100 comprobantes al mes', '1 sub-usuario', '1 sucursal'],
+    cycles: { monthly: 'basico_mensual', annual: null },
+  },
+  {
+    id: 'completo',
+    name: 'Completo',
+    tagline: 'El más elegido',
+    popular: true,
+    highlights: ['1,000 comprobantes al mes', 'Múltiples usuarios', 'Múltiples sucursales'],
+    cycles: { monthly: 'mensual', annual: 'anual' },
+  },
+  {
+    id: 'ilimitado',
+    name: 'Ilimitado',
+    tagline: 'Sin límite de comprobantes',
+    highlights: ['Comprobantes ilimitados', 'Múltiples usuarios', 'Múltiples sucursales'],
+    cycles: { monthly: 'ilimitado_mensual', annual: 'ilimitado_anual' },
+  },
+];
+
+/** id de plan (ej. 'anual') → { tier, cycle } para saber dónde pararse en la grilla. */
+export const resolvePlanTier = (planId) => {
+  for (const tier of PLAN_TIERS) {
+    if (tier.cycles.monthly === planId) return { tier, cycle: 'monthly' };
+    if (tier.cycles.annual === planId) return { tier, cycle: 'annual' };
+  }
+  return { tier: null, cycle: null }; // legacy (semestral, qpse_*, etc.)
+};
+
+/** Precio de catálogo de un nivel en un ciclo. null si ese ciclo no se vende. */
+export const getTierPrice = (tier, cycle) => {
+  const planId = tier?.cycles?.[cycle];
+  return planId ? (PLANS[planId]?.totalPrice ?? null) : null;
+};
+
+/** Ahorro anual vs pagar 12 meses sueltos. 0 si no aplica. */
+export const getAnnualSavings = (tier) => {
+  const monthly = getTierPrice(tier, 'monthly');
+  const annual = getTierPrice(tier, 'annual');
+  if (!monthly || !annual) return 0;
+  return Math.round((monthly * 12 - annual) * 100) / 100;
+};
 
 // Clasifica un id de plan: 'vendible' | 'sistema' | 'legacy' | 'desconocido'
 export const classifyPlan = (id) => {
@@ -1029,5 +1118,32 @@ export const deleteUser = async (userId) => {
   } catch (error) {
     console.error('Error al eliminar usuario:', error);
     throw error;
+  }
+};
+
+/**
+ * Crea un pago de renovación en Flow (pasarela) y devuelve la URL de checkout.
+ * El cumplimiento (extender el vencimiento) lo hace el webhook flowConfirmation
+ * en el servidor; acá solo iniciamos el pago y redirigimos al usuario.
+ *
+ * @param {string} businessId - id de la suscripción (owner uid)
+ * @param {string} idToken - token de Firebase Auth del usuario
+ * @param {string} returnUrl - origin al que Flow devuelve tras pagar (window.location.origin)
+ * @returns {Promise<{success:boolean, url?:string, error?:string}>}
+ */
+export const createFlowRenewalPayment = async (businessId, idToken, returnUrl, targetPlan = null) => {
+  try {
+    const url = import.meta.env.VITE_CREATE_FLOW_PAYMENT_URL
+      || 'https://us-central1-cobrify-395fe.cloudfunctions.net/createFlowPayment';
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify({ businessId, returnUrl, targetPlan }),
+    });
+    const data = await res.json();
+    if (!res.ok) return { success: false, error: data.error || 'No se pudo iniciar el pago' };
+    return { success: true, url: data.url };
+  } catch (error) {
+    return { success: false, error: error.message || 'Error de red al iniciar el pago' };
   }
 };
