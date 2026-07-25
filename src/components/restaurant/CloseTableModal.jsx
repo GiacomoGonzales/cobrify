@@ -20,6 +20,8 @@ export default function CloseTableModal({
   const [isProcessing, setIsProcessing] = useState(false)
   const [showCloseWithoutReceipt, setShowCloseWithoutReceipt] = useState(false)
   const [closeReason, setCloseReason] = useState('')
+  // La orden en pantalla no coincide con la asignada a la mesa (estado stale)
+  const [staleOrderError, setStaleOrderError] = useState(false)
 
   // Detectar si estamos en demo mode basado en la ruta actual
   const isDemoMode = location.pathname.startsWith('/demo')
@@ -37,10 +39,20 @@ export default function CloseTableModal({
   const handleClose = () => {
     setShowCloseWithoutReceipt(false)
     setCloseReason('')
+    setStaleOrderError(false)
     onClose()
   }
 
   const handleCreateReceipt = () => {
+    // GUARDIA anti-desfase: la orden mostrada DEBE ser la que la mesa tiene
+    // asignada (table.currentOrder). Si no coincide (estado stale por carrera de
+    // cargas o por un traslado/unión a medio camino), NO generar el comprobante:
+    // saldría con los items de otra mesa (bug real reportado en producción).
+    if (table.currentOrder && order.id !== table.currentOrder) {
+      setStaleOrderError(true)
+      return
+    }
+
     // Construir la ruta correcta según el modo
     let posPath = '/app/pos'
     if (isDemoRestaurant) {
@@ -105,6 +117,19 @@ export default function CloseTableModal({
       size="lg"
     >
       <div className="space-y-6">
+        {/* La orden en pantalla no es la asignada a esta mesa: pedir reabrir */}
+        {staleOrderError && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-red-800">La información de la mesa se estaba actualizando</p>
+              <p className="text-sm text-red-700">
+                Para evitar cobrar datos de otra mesa, cierra esta ventana y vuelve a abrir la Mesa {table.number}.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Resumen de la cuenta */}
         <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
           <div className="flex items-center justify-between mb-2">

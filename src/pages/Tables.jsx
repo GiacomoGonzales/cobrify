@@ -615,35 +615,17 @@ export default function Tables() {
     }
   }
 
-  const handleTableClick = async (table) => {
+  const handleTableClick = (table) => {
     // Limpiar estado anterior primero
     setSelectedOrder(null)
     setSelectedTable(table)
 
-    // Si la mesa está ocupada, cargar la orden y abrir modal de acciones
-    if (table.status === 'occupied' && table.currentOrder) {
-      try {
-        // En modo demo, buscar la orden en los datos de demo
-        if (isDemoMode && demoData?.orders) {
-          const order = demoData.orders.find(o => o.id === table.currentOrder)
-          if (order) {
-            setSelectedOrder(order)
-          } else {
-            console.warn('Orden no encontrada en datos de demo:', table.currentOrder)
-          }
-        } else if (!isDemoMode) {
-          // En modo normal, cargar desde Firebase
-          const orderResult = await getOrder(getBusinessId(), table.currentOrder)
-          if (orderResult.success) {
-            setSelectedOrder(orderResult.data)
-          } else {
-            console.warn('Error al cargar orden:', orderResult.error)
-          }
-        }
-      } catch (error) {
-        console.error('Error al cargar orden:', error)
-      }
-    }
+    // La orden la carga el LISTENER en tiempo real (useEffect sobre
+    // selectedTable.currentOrder), que cubre modo normal y demo. Antes acá había
+    // además una carga asíncrona directa (getOrder) que generaba una CONDICIÓN DE
+    // CARRERA: al tocar Mesa A y rápido Mesa B, la respuesta de A podía llegar
+    // última y pisar la orden de B → el modal (y el comprobante en el POS) salían
+    // con los datos de OTRA mesa. Reportado por un restaurante en producción.
 
     // Abrir modal de acciones para todas las mesas
     setIsActionModalOpen(true)
@@ -897,6 +879,16 @@ export default function Tables() {
   }
 
   const handleConfirmIndividualPayment = (selectedItems, remainingItems) => {
+    // GUARDIA anti-desfase: la orden en memoria debe ser la asignada a la mesa.
+    // Si no coincide (estado stale), abortar para no cobrar items de otra mesa.
+    if (selectedTable?.currentOrder && selectedOrder?.id !== selectedTable.currentOrder) {
+      toast.error('La información de la mesa se estaba actualizando. Vuelve a abrir la mesa e inténtalo de nuevo.')
+      setIsIndividualPaymentModalOpen(false)
+      setSelectedTable(null)
+      setSelectedOrder(null)
+      return
+    }
+
     // Detectar ruta correcta del POS según modo demo
     const isDemoRestaurant = location.pathname.startsWith('/demorestaurant')
     const isDemo = location.pathname.startsWith('/demo')
