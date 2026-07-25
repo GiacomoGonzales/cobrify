@@ -121,6 +121,8 @@ export default function Tables() {
   const kitchenAutoPrintInProgressRef = useRef(false)
   const [kitchenStations, setKitchenStations] = useState([])
   const [enableKitchenStations, setEnableKitchenStations] = useState(false)
+  // Impresión automática de la comanda al agregar items (default ON)
+  const [autoPrintKitchenComanda, setAutoPrintKitchenComanda] = useState(true)
   // Al imprimir comanda desde PC/navegador: imprimir todo junto (no separar por estación).
   const [combineStationsOnWebPrint, setCombineStationsOnWebPrint] = useState(false)
   // Config restaurante para usuarios secundarios (solo aplican si !isOwner)
@@ -210,6 +212,9 @@ export default function Tables() {
           setCombineStationsOnWebPrint(config.combineStationsOnWebPrint || false)
           setSkipWaiterForSecondary(config.skipWaiterForSecondary || false)
           setRequireReceiptForSecondary(config.requireReceiptForSecondary || false)
+          // Default ON: los negocios que ya venían usando la impresión automática
+          // no tienen el campo guardado, así que solo se apaga si vale false.
+          setAutoPrintKitchenComanda(config.autoPrintKitchenComanda !== false)
         }
       },
       (error) => {
@@ -1346,6 +1351,9 @@ export default function Tables() {
   const autoPrintKitchenOnAdd = async (addedItems) => {
     try {
       if (isDemoMode) return
+      // Config del negocio: si el dueño apagó la impresión automática, la comanda
+      // se manda solo con el botón "Imprimir Comanda" del modal de la mesa.
+      if (!autoPrintKitchenComanda) return
       if (!Capacitor.isNativePlatform()) return
       if (!selectedOrder || !selectedTable) return
       const items = (addedItems || []).filter(Boolean)

@@ -580,6 +580,7 @@ export default function Settings() {
     deliveryPersons: [], // Lista de repartidores
     brands: [], // Lista de marcas (para dark kitchens / multi-marca)
     autoPrintByStation: false, // Impresión automática por estación al enviar a cocina
+    autoPrintKitchenComanda: true, // Imprimir la comanda sola al tomar el pedido
     // Recargo al Consumo (Decreto Ley N° 25988)
     recargoConsumoEnabled: false, // Habilitar recargo al consumo
     recargoConsumoRate: 10, // Porcentaje del recargo (1-13%)
@@ -4593,6 +4594,16 @@ export default function Settings() {
                           <span className="text-xs text-gray-500">(máximo 13% por ley)</span>
                         </div>
                       )}
+
+                      {/* Impresión automática de comandas */}
+                      <SettingToggle
+                        checked={restaurantConfig.autoPrintKitchenComanda !== false}
+                        onChange={(e) => setRestaurantConfig({...restaurantConfig, autoPrintKitchenComanda: e.target.checked})}
+                        title="Imprimir la comanda automáticamente"
+                        description={restaurantConfig.autoPrintKitchenComanda !== false
+                          ? '✓ Habilitado: Al tomar un pedido (desde Mesas u Órdenes) la comanda se envía sola a la cocina.'
+                          : '✗ Deshabilitado: La comanda no se imprime sola. El mozo la envía con el botón "Imprimir Comanda" cuando lo necesite.'}
+                      />
 
                       {/* Modo Multi-Estación de Cocina */}
                       <SettingToggle

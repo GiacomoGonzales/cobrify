@@ -61,6 +61,8 @@ export default function Orders() {
   const [combineStationsOnWebPrint, setCombineStationsOnWebPrint] = useState(false)
   const [categoryMap, setCategoryMap] = useState({}) // Mapeo ID → nombre de categoría
   const [autoPrintByStation, setAutoPrintByStation] = useState(false) // Impresión automática
+  // Impresión automática de la comanda al crear el pedido (default ON)
+  const [autoPrintKitchenComanda, setAutoPrintKitchenComanda] = useState(true)
 
   // Modales para nueva orden
   const [showCreateOrderModal, setShowCreateOrderModal] = useState(false)
@@ -157,6 +159,8 @@ export default function Orders() {
           setEnableKitchenStations(config.enableKitchenStations || false)
           setCombineStationsOnWebPrint(config.combineStationsOnWebPrint || false)
           setAutoPrintByStation(config.autoPrintByStation || false)
+          // Default ON: solo se apaga si el dueño lo guardó explícitamente en false.
+          setAutoPrintKitchenComanda(config.autoPrintKitchenComanda !== false)
         }
       },
       (error) => {
@@ -562,12 +566,16 @@ export default function Orders() {
         setNewOrderData(null)
         // Auto-imprimir la comanda del pedido recién creado (delivery / para-llevar), igual
         // que Mesas auto-imprime al agregar. Silenciosa: solo app + impresora configurada.
-        const createdOrder = { ...orderPayload, id: result.id, orderNumber: result.orderNumber }
-        handlePrintKitchenTicket(createdOrder, { silent: true }).then((printed) => {
-          // Marcar como ya impresa para que el auto-print por estación (al pasar a
-          // "Preparando") no la duplique.
-          if (printed) updateOrder(getBusinessId(), result.id, { kitchenPrinted: true }).catch(() => {})
-        })
+        // Si el dueño apagó la impresión automática, la comanda se manda solo con el
+        // botón de impresora de la tarjeta del pedido.
+        if (autoPrintKitchenComanda) {
+          const createdOrder = { ...orderPayload, id: result.id, orderNumber: result.orderNumber }
+          handlePrintKitchenTicket(createdOrder, { silent: true }).then((printed) => {
+            // Marcar como ya impresa para que el auto-print por estación (al pasar a
+            // "Preparando") no la duplique.
+            if (printed) updateOrder(getBusinessId(), result.id, { kitchenPrinted: true }).catch(() => {})
+          })
+        }
       } else {
         toast.error('Error al crear orden: ' + result.error)
       }
