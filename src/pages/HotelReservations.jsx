@@ -1220,14 +1220,14 @@ export default function HotelReservations() {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            {/* Filtro por cabaña */}
+            {/* Filtro por habitación */}
             <select
               value={roomFilter}
               onChange={(e) => setRoomFilter(e.target.value)}
-              title="Filtrar por cabaña"
+              title="Filtrar por habitación"
               className="h-10 px-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-700 flex-shrink-0 w-full sm:w-auto sm:max-w-[14rem]"
             >
-              <option value="all">Todas las cabañas</option>
+              <option value="all">Todas las habitaciones</option>
               {sortedRooms.map(room => (
                 <option key={room.id} value={room.id}>{room.name || room.number}</option>
               ))}
@@ -1449,7 +1449,9 @@ export default function HotelReservations() {
           {/* Guest info */}
           <div className="space-y-3">
             <h4 className="text-sm font-semibold text-gray-700">Datos del huésped</h4>
-            <div className="grid grid-cols-2 gap-3">
+            {/* En móvil van uno debajo del otro: el documento necesita el ancho
+                completo para que entren el campo y la lupita sin apretarse. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Select
                 label="Tipo de documento"
                 required
@@ -1465,10 +1467,13 @@ export default function HotelReservations() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Nro. documento <span className="text-red-500">*</span>
                 </label>
+                {/* min-w-0 en el input y shrink-0 en el botón: sin eso, en móvil
+                    el input (flex-1, min-width auto por defecto) empuja la lupita
+                    fuera del cuadro. Ancho fijo del botón para que no se deforme. */}
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    className="flex-1 h-10 px-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    className="flex-1 min-w-0 h-10 px-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     {...register('documentNumber')}
                   />
                   <Button
@@ -1478,7 +1483,7 @@ export default function HotelReservations() {
                     onClick={handleDocumentLookup}
                     disabled={isLookingUp || (watchDocType !== 'DNI' && watchDocType !== 'RUC')}
                     title="Buscar por DNI/RUC"
-                    className="px-3"
+                    className="shrink-0 w-11 h-10 px-0 flex items-center justify-center"
                   >
                     {isLookingUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                   </Button>
@@ -1494,7 +1499,7 @@ export default function HotelReservations() {
               {...register('guestName')}
               error={errors.guestName?.message}
             />
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Input
                 label="Teléfono"
                 type="tel"
@@ -1889,48 +1894,50 @@ export default function HotelReservations() {
                 {/* Carrito local */}
                 {pendingItems.length > 0 && (
                   <div className="border rounded-lg divide-y bg-gray-50">
+                    {/* Dos líneas (nombre+subtotal / precio+cantidad+eliminar) en vez de
+                        una sola fila: en móvil todo iba apretado en una línea y los
+                        botones de cantidad quedaban minúsculos. */}
                     {pendingItems.map(item => (
-                      <div key={item.key} className="flex items-center gap-2 px-3 py-2">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={item.price}
-                              onChange={(e) => updateItemPrice(item.key, e.target.value)}
-                              className="w-20 h-6 px-1 text-xs border border-gray-300 rounded"
-                              title="Precio unitario"
-                            />
-                            <span className="text-xs text-gray-400">c/u</span>
+                      <div key={item.key} className="px-3 py-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="flex-1 min-w-0 text-sm font-medium text-gray-900 line-clamp-2">{item.name}</p>
+                          <span className="flex-shrink-0 text-sm font-semibold text-gray-800">
+                            {formatCurrency(item.price * item.quantity)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-2">
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={item.price}
+                            onChange={(e) => updateItemPrice(item.key, e.target.value)}
+                            className="w-24 h-8 px-2 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                            title="Precio unitario"
+                          />
+                          <span className="text-xs text-gray-400">c/u</span>
+                          {/* Controles de cantidad (más grandes: se tocan con el dedo) */}
+                          <div className="ml-auto flex items-center gap-1 flex-shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => updateItemQuantity(item.key, -1)}
+                              className="w-8 h-8 flex items-center justify-center rounded-full bg-white border border-gray-300 text-gray-600 hover:bg-gray-100"
+                            >−</button>
+                            <span className="w-8 text-center text-sm font-semibold">{item.quantity}</span>
+                            <button
+                              type="button"
+                              onClick={() => updateItemQuantity(item.key, 1)}
+                              className="w-8 h-8 flex items-center justify-center rounded-full bg-white border border-gray-300 text-gray-600 hover:bg-gray-100"
+                            >+</button>
                           </div>
-                        </div>
-                        {/* Controles de cantidad */}
-                        <div className="flex items-center gap-1 flex-shrink-0">
                           <button
                             type="button"
-                            onClick={() => updateItemQuantity(item.key, -1)}
-                            className="w-7 h-7 flex items-center justify-center rounded-full bg-white border border-gray-300 text-gray-600 hover:bg-gray-100"
-                          >−</button>
-                          <span className="w-8 text-center text-sm font-semibold">{item.quantity}</span>
-                          <button
-                            type="button"
-                            onClick={() => updateItemQuantity(item.key, 1)}
-                            className="w-7 h-7 flex items-center justify-center rounded-full bg-white border border-gray-300 text-gray-600 hover:bg-gray-100"
-                          >+</button>
+                            onClick={() => removeItemFromCart(item.key)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg text-red-500 hover:text-red-700 hover:bg-red-50 flex-shrink-0"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
-                        {/* Subtotal y eliminar */}
-                        <span className="w-20 text-right text-sm font-semibold text-gray-800 flex-shrink-0">
-                          {formatCurrency(item.price * item.quantity)}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => removeItemFromCart(item.key)}
-                          className="p-1 text-red-500 hover:text-red-700 flex-shrink-0"
-                          title="Eliminar"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
                       </div>
                     ))}
                     <div className="flex items-center justify-between px-3 py-2 bg-gray-100 rounded-b-lg">
@@ -1945,40 +1952,45 @@ export default function HotelReservations() {
                 {/* Cargo manual (opcional) */}
                 <details className="text-sm">
                   <summary className="cursor-pointer text-gray-500 hover:text-gray-700 py-1">+ Agregar cargo manual</summary>
-                  <div className="flex gap-2 mt-2">
+                  {/* En móvil: descripción a lo ancho y debajo cantidad/precio/botón.
+                      Los 4 campos en una sola fila dejaban la descripción sin espacio
+                      y el botón pegado al borde. Desde sm vuelve a una línea. */}
+                  <div className="mt-2 space-y-2 sm:space-y-0 sm:flex sm:gap-2">
                     <input
                       type="text"
                       placeholder="Descripción"
-                      className="flex-1 min-w-0 h-10 px-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      className="w-full sm:flex-1 sm:min-w-0 h-10 px-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
                       value={chargeDescription}
                       onChange={(e) => setChargeDescription(e.target.value)}
                     />
-                    <input
-                      type="number"
-                      min="1"
-                      step="1"
-                      placeholder="Cant."
-                      className="w-16 flex-shrink-0 h-10 px-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                      value={chargeQuantity}
-                      onChange={(e) => setChargeQuantity(e.target.value)}
-                    />
-                    <input
-                      type="number"
-                      step="0.01"
-                      placeholder="Precio"
-                      className="w-24 flex-shrink-0 h-10 px-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                      value={chargeAmount}
-                      onChange={(e) => setChargeAmount(e.target.value)}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={addManualToCart}
-                      className="flex-shrink-0 whitespace-nowrap"
-                    >
-                      <Plus className="w-4 h-4 mr-1" /> Agregar
-                    </Button>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        placeholder="Cant."
+                        className="w-20 sm:w-16 flex-shrink-0 h-10 px-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                        value={chargeQuantity}
+                        onChange={(e) => setChargeQuantity(e.target.value)}
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="Precio"
+                        className="flex-1 min-w-0 sm:flex-none sm:w-24 h-10 px-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                        value={chargeAmount}
+                        onChange={(e) => setChargeAmount(e.target.value)}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={addManualToCart}
+                        className="flex-shrink-0 whitespace-nowrap h-10"
+                      >
+                        <Plus className="w-4 h-4 mr-1" /> Agregar
+                      </Button>
+                    </div>
                   </div>
                 </details>
 
@@ -2019,16 +2031,20 @@ export default function HotelReservations() {
               </div>
             </div>
 
-            {/* Actions */}
-            <div className="flex justify-end gap-2 pt-2">
+            {/* Actions — en móvil apilados y a lo ancho (el texto de "Generar
+                Comprobante" no entra junto a "Cerrar" en pantallas chicas) */}
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setFolioReservation(null)} className="w-full sm:w-auto">
+                Cerrar
+              </Button>
               {folioCharges.some(c => !c.invoiceId) && (
-                <Button onClick={() => goToPOSWithFolio(folioReservation, folioCharges.filter(c => !c.invoiceId))}>
+                <Button
+                  onClick={() => goToPOSWithFolio(folioReservation, folioCharges.filter(c => !c.invoiceId))}
+                  className="w-full sm:w-auto"
+                >
                   <Receipt className="w-4 h-4 mr-1" /> Generar Comprobante
                 </Button>
               )}
-              <Button variant="outline" onClick={() => setFolioReservation(null)}>
-                Cerrar
-              </Button>
             </div>
           </div>
         )}
