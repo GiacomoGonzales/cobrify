@@ -692,3 +692,89 @@ export async function recalculateInvestorReport() {
     return { success: false, error: error.message || 'Error desconocido' }
   }
 }
+
+/**
+ * Datos de ADQUISICIÓN: de dónde llegan las visitas a la landing y, sobre todo,
+ * de dónde vienen los clientes que terminan registrándose.
+ *
+ * Las visitas salen de `landingStats/{YYYY-MM-DD}` (contadores diarios que
+ * escribe la Cloud Function trackLandingVisit). El registro se atribuye con el
+ * campo `acquisition` que se guarda en el negocio al crear la cuenta.
+ *
+ * OJO: solo hay datos desde que se activó la medición; los negocios anteriores
+ * no tienen origen y se muestran aparte como "Sin medir".
+ */
+export async function getAcquisitionData(days = 30) {
+  try {
+    const since = new Date()
+    since.setDate(since.getDate() - days)
+    const sinceStr = since.toISOString().slice(0, 10)
+
+    const [statsSnap, businessesSnap] = await Promise.all([
+      getDocs(query(collection(db, 'landingStats'), orderBy('date', 'desc'), limit(days))),
+      getDocs(collection(db, 'businesses')),
+    ])
+
+    // ── Visitas por origen y por día ──
+    const visitsBySource = {}
+    const visitsByMedium = {}
+    const daily = []
+    let totalVisits = 0
+
+    statsSnap.forEach(d => {
+      const data = d.data()
+      if (data.date < sinceStr) return
+      totalVisits += data.total || 0
+      daily.push({ date: data.date, total: data.total || 0 })
+      for (const [k, v] of Object.entries(data.bySource || {})) {
+        visitsBySource[k] = (visitsBySource[k] || 0) + v
+      }
+      for (const [k, v] of Object.entries(data.byMedium || {})) {
+        visitsByMedium[k] = (visitsByMedium[k] || 0) + v
+      }
+    })
+    daily.sort((a, b) => a.date.localeCompare(b.date))
+
+    // ── Registros atribuidos ──
+    const signupsBySource = {}
+    let attributedSignups = 0
+    let unmeasuredSignups = 0
+    let signupsInRange = 0
+
+    businessesSnap.forEach(d => {
+      const data = d.data()
+      const created = data.createdAt?.toDate?.()
+      if (!created || created < since) return
+      signupsInRange++
+      const src = data.acquisition?.source
+      if (src) {
+        signupsBySource[src] = (signupsBySource[src] || 0) + 1
+        attributedSignups++
+      } else {
+        unmeasuredSignups++
+      }
+    })
+
+    const toSortedList = (obj) => Object.entries(obj)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+
+    return {
+      totalVisits,
+      daily,
+      visitsBySource: toSortedList(visitsBySource),
+      visitsByMedium: toSortedList(visitsByMedium),
+      signupsBySource: toSortedList(signupsBySource),
+      signupsInRange,
+      attributedSignups,
+      unmeasuredSignups,
+      // Conversión: solo tiene sentido si ya hay visitas medidas
+      conversionRate: totalVisits > 0 ? (attributedSignups / totalVisits) * 100 : null,
+      hasData: totalVisits > 0 || attributedSignups > 0,
+      days,
+    }
+  } catch (error) {
+    console.error('Error obteniendo datos de adquisición:', error)
+    return { hasData: false, error: error.message }
+  }
+}

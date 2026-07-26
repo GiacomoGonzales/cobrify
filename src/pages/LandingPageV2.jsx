@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { captureAttribution } from '@/utils/attribution'
 import {
   MessageCircle, ArrowRight, Check, FileText, ShoppingCart, Package,
   Users, BarChart3, ClipboardList, Handshake, ShieldCheck,
@@ -40,6 +41,28 @@ function PhoneMock({ src, alt, width = 210 }) {
 }
 
 export default function LandingPageV2() {
+  // Medir de dónde vino la visita (Google, publicidad, redes, directo...).
+  // Solo en la PRIMERA visita del navegador: así el contador cuenta personas
+  // nuevas y no recargas, y el origen queda guardado para atribuir el registro
+  // si esa persona termina creando su cuenta.
+  useEffect(() => {
+    const { attribution, isFirstVisit } = captureAttribution()
+    if (!isFirstVisit) return
+    const url = import.meta.env.VITE_TRACK_VISIT_URL
+      || 'https://us-central1-cobrify-395fe.cloudfunctions.net/trackLandingVisit'
+    // keepalive: que el registro sobreviva si el usuario navega enseguida
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source: attribution.source,
+        medium: attribution.medium,
+        campaign: attribution.campaign,
+      }),
+      keepalive: true,
+    }).catch(() => { /* medir nunca debe romper la landing */ })
+  }, [])
+
   // Reveal discreto al hacer scroll (se desactiva con prefers-reduced-motion)
   useEffect(() => {
     const els = document.querySelectorAll('.lp3r')

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { getAnalyticsData, getAdminStats } from '@/services/adminStatsService'
+import { getAnalyticsData, getAdminStats, getAcquisitionData } from '@/services/adminStatsService'
 import {
   BarChart3,
   PieChart,
@@ -10,7 +10,13 @@ import {
   Download,
   Building2,
   Zap,
-  Server
+  Server,
+  Globe,
+  Megaphone,
+  Search as SearchIcon,
+  Share2,
+  Link2,
+  AlertCircle
 } from 'lucide-react'
 import {
   BarChart,
@@ -35,6 +41,7 @@ export default function AdminAnalytics() {
   const [loading, setLoading] = useState(true)
   const [analyticsData, setAnalyticsData] = useState(null)
   const [statsData, setStatsData] = useState(null)
+  const [acquisition, setAcquisition] = useState(null)
   const [activeTab, setActiveTab] = useState('overview')
 
   useEffect(() => {
@@ -44,12 +51,14 @@ export default function AdminAnalytics() {
   async function loadData() {
     setLoading(true)
     try {
-      const [analytics, stats] = await Promise.all([
+      const [analytics, stats, acq] = await Promise.all([
         getAnalyticsData(),
-        getAdminStats()
+        getAdminStats(),
+        getAcquisitionData(30)
       ])
       setAnalyticsData(analytics)
       setStatsData(stats)
+      setAcquisition(acq)
     } catch (error) {
       console.error('Error loading analytics:', error)
     } finally {
@@ -70,6 +79,7 @@ export default function AdminAnalytics() {
 
   const tabs = [
     { id: 'overview', label: 'General', icon: BarChart3 },
+    { id: 'acquisition', label: 'Adquisición', icon: Megaphone },
     { id: 'growth', label: 'Crecimiento', icon: TrendingUp },
     { id: 'usage', label: 'Uso', icon: FileText },
     { id: 'distribution', label: 'Distribución', icon: PieChart }
@@ -110,6 +120,10 @@ export default function AdminAnalytics() {
           {activeTab === 'overview' && (
             <OverviewTab stats={statsData} analytics={analyticsData} />
           )}
+          {activeTab === 'acquisition' && (
+            <AcquisitionTab data={acquisition} />
+          )}
+
           {activeTab === 'growth' && (
             <GrowthTab stats={statsData} />
           )}
@@ -221,6 +235,194 @@ function OverviewTab({ stats, analytics }) {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+/** Ícono e idioma humano para cada canal de origen. */
+const SOURCE_META = {
+  google: { label: 'Google', icon: SearchIcon, color: '#4285F4' },
+  bing: { label: 'Bing', icon: SearchIcon, color: '#008373' },
+  duckduckgo: { label: 'DuckDuckGo', icon: SearchIcon, color: '#DE5833' },
+  facebook: { label: 'Facebook', icon: Share2, color: '#1877F2' },
+  instagram: { label: 'Instagram', icon: Share2, color: '#E4405F' },
+  tiktok: { label: 'TikTok', icon: Share2, color: '#111827' },
+  youtube: { label: 'YouTube', icon: Share2, color: '#FF0000' },
+  whatsapp: { label: 'WhatsApp', icon: Share2, color: '#25D366' },
+  twitter: { label: 'X / Twitter', icon: Share2, color: '#111827' },
+  linkedin: { label: 'LinkedIn', icon: Share2, color: '#0A66C2' },
+  directo: { label: 'Directo', icon: Globe, color: '#6B7280' },
+}
+const metaFor = (name) => SOURCE_META[name] || { label: name, icon: Link2, color: '#8B5CF6' }
+
+const MEDIUM_LABELS = {
+  organico: 'Búsqueda orgánica',
+  publicidad: 'Publicidad paga',
+  social: 'Redes sociales',
+  mensajeria: 'Mensajería',
+  referido: 'Sitios referidos',
+  directo: 'Directo',
+}
+
+function AcquisitionTab({ data }) {
+  if (!data) {
+    return <p className="text-sm text-gray-500">No se pudieron cargar los datos de adquisición.</p>
+  }
+
+  // Todavía no hay nada medido: explicar por qué en vez de mostrar ceros vacíos
+  if (!data.hasData) {
+    return (
+      <div className="max-w-2xl">
+        <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-50 border border-amber-200">
+          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold text-amber-900">Aún no hay visitas medidas</p>
+            <p className="text-sm text-amber-800 mt-1">
+              La medición de origen se acaba de activar, así que los datos empiezan desde ahora.
+              Las visitas y registros anteriores no tienen origen registrado.
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 p-4 rounded-xl bg-gray-50 border border-gray-200">
+          <p className="text-sm font-medium text-gray-900 mb-2">Cómo medir tus campañas</p>
+          <p className="text-sm text-gray-600">
+            Los anuncios de Google y Meta se detectan solos. Para el resto, agregá parámetros al
+            enlace que compartas:
+          </p>
+          <code className="block mt-2 text-xs bg-white border border-gray-200 rounded-lg p-2.5 text-gray-700 break-all">
+            cobrifyperu.com/?utm_source=instagram&amp;utm_medium=publicidad&amp;utm_campaign=agosto
+          </code>
+        </div>
+      </div>
+    )
+  }
+
+  const maxVisits = Math.max(...data.visitsBySource.map(s => s.value), 1)
+  const signupsMap = Object.fromEntries(data.signupsBySource.map(s => [s.name, s.value]))
+
+  return (
+    <div className="space-y-6">
+      {/* KPIs */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiBox label={`Visitas (${data.days} días)`} value={data.totalVisits} icon={Globe} color="blue" />
+        <KpiBox label="Registros nuevos" value={data.signupsInRange} icon={Users} color="green" />
+        <KpiBox
+          label="Conversión visita → registro"
+          value={data.conversionRate != null ? `${data.conversionRate.toFixed(1)}%` : '—'}
+          icon={TrendingUp}
+          color="purple"
+        />
+        <KpiBox label="Con origen identificado" value={data.attributedSignups} icon={Megaphone} color="amber" />
+      </div>
+
+      {/* Visitas por día */}
+      {data.daily.length > 1 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <h3 className="text-sm font-semibold text-gray-900 mb-4">Visitas por día</h3>
+          <ResponsiveContainer width="100%" height={220}>
+            <AreaChart data={data.daily}>
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+              <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={d => d.slice(5)} />
+              <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+              <Tooltip {...CHART_TOOLTIP} />
+              <Area type="monotone" dataKey="total" stroke={CHART_SERIES[0]} fill={CHART_SERIES[0]} fillOpacity={0.15} name="Visitas" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* De dónde vienen las visitas */}
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <h3 className="text-sm font-semibold text-gray-900 mb-1">De dónde vienen las visitas</h3>
+          <p className="text-xs text-gray-500 mb-4">Y cuántas de ellas terminaron registrándose</p>
+          <div className="space-y-3">
+            {data.visitsBySource.map(({ name, value }) => {
+              const meta = metaFor(name)
+              const Icon = meta.icon
+              const signups = signupsMap[name] || 0
+              return (
+                <div key={name}>
+                  <div className="flex items-center justify-between text-sm mb-1">
+                    <span className="flex items-center gap-2 text-gray-700">
+                      <Icon className="w-3.5 h-3.5" style={{ color: meta.color }} />
+                      {meta.label}
+                    </span>
+                    <span className="text-gray-900 font-medium">
+                      {value}
+                      {signups > 0 && (
+                        <span className="text-green-600 font-semibold"> · {signups} registro{signups > 1 ? 's' : ''}</span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${(value / maxVisits) * 100}%`, backgroundColor: meta.color }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Por tipo de canal */}
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <h3 className="text-sm font-semibold text-gray-900 mb-4">Por tipo de canal</h3>
+          {data.visitsByMedium.length > 0 ? (
+            <ResponsiveContainer width="100%" height={240}>
+              <RechartsPie>
+                <Pie
+                  data={data.visitsByMedium.map(m => ({ name: MEDIUM_LABELS[m.name] || m.name, value: m.value }))}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={80}
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  labelLine={false}
+                >
+                  {data.visitsByMedium.map((_, i) => (
+                    <Cell key={i} fill={CHART_SERIES[i % CHART_SERIES.length]} />
+                  ))}
+                </Pie>
+                <Tooltip {...CHART_TOOLTIP} />
+              </RechartsPie>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-sm text-gray-400">Sin datos aún</p>
+          )}
+        </div>
+      </div>
+
+      {/* Nota sobre registros sin origen */}
+      {data.unmeasuredSignups > 0 && (
+        <p className="text-xs text-gray-500">
+          {data.unmeasuredSignups} registro(s) del período no tienen origen identificado: se crearon
+          antes de activar la medición, o el alta la hizo un administrador o reseller.
+        </p>
+      )}
+    </div>
+  )
+}
+
+function KpiBox({ label, value, icon: Icon, color }) {
+  const colors = {
+    blue: 'bg-blue-50 text-blue-600',
+    green: 'bg-green-50 text-green-600',
+    purple: 'bg-purple-50 text-purple-600',
+    amber: 'bg-amber-50 text-amber-600',
+  }
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <div className={`p-1.5 rounded-lg ${colors[color]}`}>
+          <Icon className="w-4 h-4" />
+        </div>
+        <p className="text-xs text-gray-500">{label}</p>
+      </div>
+      <p className="text-2xl font-bold text-gray-900">{value}</p>
     </div>
   )
 }

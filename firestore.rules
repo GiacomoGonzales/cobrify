@@ -225,6 +225,15 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // Estadísticas de tráfico de la landing (contadores diarios por origen).
+    // Las ESCRIBE la Cloud Function trackLandingVisit con el Admin SDK (se salta
+    // estas reglas), así que desde el cliente nadie puede inflar los números.
+    // Solo el admin las lee, para el reporte de Adquisición.
+    match /landingStats/{dateId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     // CollectionGroup: FCM Tokens (para que admins puedan hacer collectionGroup query)
     match /{path=**}/fcmTokens/{tokenId} {
       allow read: if isAdmin();

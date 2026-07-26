@@ -10,6 +10,7 @@ import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { auth, secondaryAuth, db } from '@/lib/firebase'
 import { createSubscription } from './subscriptionService'
 import { setAsBusinessOwner } from './adminService'
+import { getStoredAttribution } from '@/utils/attribution'
 import { createWarehouse } from './warehouseService'
 
 /**
@@ -76,6 +77,10 @@ export const registerUser = async (email, password, displayName, businessData = 
           province: businessData.province || '',
           department: businessData.department || '',
           ubigeo: businessData.ubigeo || '',
+          // De dónde vino este cliente (Google, publicidad, referido...). Se
+          // capturó en su primera visita a la landing y se conserva acá para
+          // poder medir qué canal trae clientes que pagan, no solo visitas.
+          ...(getStoredAttribution() ? { acquisition: getStoredAttribution() } : {}),
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         }, { merge: true })
