@@ -1632,14 +1632,17 @@ export default function POS() {
       // Precargar datos del cliente capturados al crear la orden, para no
       // re-teclearlos al emitir el comprobante. Solo se sobreescribe lo que
       // vino en la orden (el resto de customerData queda como estaba).
-      if (orderInfo.customerName || orderInfo.customerDocumentNumber || orderInfo.customerPhone) {
+      if (orderInfo.customerName || orderInfo.customerDocumentNumber || orderInfo.customerPhone || orderInfo.customerAddress) {
+        // Dirección: la FISCAL (SUNAT/RUC) manda porque es la que exige la factura;
+        // si no hay, se usa la de entrega del delivery para no re-teclearla.
+        const addressForReceipt = orderInfo.customerFiscalAddress || orderInfo.customerAddress
         setCustomerData(prev => ({
           ...prev,
           ...(orderInfo.customerDocumentType && { documentType: orderInfo.customerDocumentType }),
           ...(orderInfo.customerDocumentNumber && { documentNumber: orderInfo.customerDocumentNumber }),
           ...(orderInfo.customerName && { name: orderInfo.customerName }),
           ...(orderInfo.customerBusinessName && { businessName: orderInfo.customerBusinessName }),
-          ...(orderInfo.customerFiscalAddress && { address: orderInfo.customerFiscalAddress }),
+          ...(addressForReceipt && { address: addressForReceipt }),
           ...(orderInfo.customerPhone && { phone: orderInfo.customerPhone }),
         }))
       }

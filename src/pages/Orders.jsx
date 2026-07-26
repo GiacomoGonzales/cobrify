@@ -1088,6 +1088,10 @@ export default function Orders() {
     customerDocumentNumber: order.customerDocumentNumber || null,
     customerBusinessName: order.customerBusinessName || null,
     customerFiscalAddress: order.customerFiscalAddress || null,
+    // Dirección de ENTREGA (delivery). Antes no se pasaba y el cajero tenía que
+    // re-teclearla al emitir el comprobante. El POS la usa solo si no hay
+    // dirección fiscal (en factura manda la de SUNAT).
+    customerAddress: order.customerAddress || null,
   })
 
   const handleGoToPayment = (order) => {

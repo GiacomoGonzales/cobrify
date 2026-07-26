@@ -4,6 +4,8 @@ import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import { useToast } from '@/contexts/ToastContext'
+import { useAuth } from '@/contexts/AuthContext'
+import { getCustomers } from '@/services/firestoreService'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 
 const ORDER_SOURCES = [
@@ -20,6 +22,7 @@ const ORDER_SOURCES = [
 
 export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = [] }) {
   const toast = useToast()
+  const { getBusinessId } = useAuth()
   const [orderType, setOrderType] = useState('takeaway') // 'takeaway' or 'delivery'
   const [source, setSource] = useState('counter')
   const [customerName, setCustomerName] = useState('')
@@ -31,6 +34,12 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
   const [documentNumber, setDocumentNumber] = useState('')
   const [fiscalAddress, setFiscalAddress] = useState('') // dirección fiscal (RUC/SUNAT) para factura
   const [isLookingUp, setIsLookingUp] = useState(false)
+  // Clientes ya registrados: buscador para no re-teclear los datos de un cliente
+  // frecuente (delivery que siempre pide). Se cargan al abrir el modal.
+  const [customers, setCustomers] = useState([])
+  const [customerSearch, setCustomerSearch] = useState('')
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
+  const [selectedCustomerId, setSelectedCustomerId] = useState(null)
   const [priority, setPriority] = useState('normal') // 'normal' or 'urgent'
   const [brandId, setBrandId] = useState('') // Brand selection
   // Estado de pago del pedido: false = por cobrar (el repartidor/cajero cobra), true = pagado
@@ -43,6 +52,55 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
       setBrandId(brands[0].id)
     }
   }, [brands])
+
+  // Cargar clientes al abrir (no al montar) para no pegarle a Firestore de más
+  useEffect(() => {
+    if (!isOpen) return
+    let cancelled = false
+    getCustomers(getBusinessId())
+      .then(res => { if (!cancelled && res?.success) setCustomers(res.data || []) })
+      .catch(() => { /* si falla, el modal sigue usable escribiendo a mano */ })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen])
+
+  const filteredCustomers = customers.filter(c => {
+    const q = customerSearch.trim().toLowerCase()
+    if (!q) return false
+    return (
+      c.name?.toLowerCase().includes(q) ||
+      c.businessName?.toLowerCase().includes(q) ||
+      c.documentNumber?.includes(customerSearch.trim()) ||
+      c.phone?.includes(customerSearch.trim())
+    )
+  })
+
+  // Al elegir un cliente guardado se rellenan todos sus datos. La dirección del
+  // cliente sirve para el delivery; si es RUC, además es la dirección fiscal.
+  const handleSelectCustomer = (c) => {
+    const isRuc = c.documentNumber?.length === 11
+    setSelectedCustomerId(c.id)
+    setDocumentType(isRuc ? 'RUC' : 'DNI')
+    setDocumentNumber(c.documentNumber || '')
+    setCustomerName(isRuc ? (c.businessName || c.name || '') : (c.name || c.businessName || ''))
+    setCustomerPhone(c.phone || '')
+    if (c.address) {
+      setCustomerAddress(c.address)
+      if (isRuc) setFiscalAddress(c.address)
+    }
+    setCustomerSearch('')
+    setShowCustomerDropdown(false)
+    toast.success('Datos del cliente cargados')
+  }
+
+  const clearSelectedCustomer = () => {
+    setSelectedCustomerId(null)
+    setCustomerName('')
+    setCustomerPhone('')
+    setCustomerAddress('')
+    setDocumentNumber('')
+    setFiscalAddress('')
+  }
 
   // Lupita RENIEC/SUNAT: autocompleta nombre/razón social (y dirección fiscal en RUC).
   const handleLookupDocument = async () => {
@@ -117,6 +175,8 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
     setBrandId(brands.length === 1 ? brands[0].id : '')
     setPaid(false)
     setPaymentMethod('efectivo')
+    setSelectedCustomerId(null)
+    setCustomerSearch('')
   }
 
   const handleClose = () => {
@@ -132,6 +192,8 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
     setBrandId(brands.length === 1 ? brands[0].id : '')
     setPaid(false)
     setPaymentMethod('efectivo')
+    setSelectedCustomerId(null)
+    setCustomerSearch('')
     onClose()
   }
 
@@ -279,6 +341,59 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
             <User className="w-4 h-4 text-gray-400" />
             Datos del cliente <span className="font-normal text-gray-400">(opcional)</span>
           </h3>
+
+          {/* Buscar un cliente ya registrado y traer sus datos */}
+          <div className="relative">
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1.5">
+              <User className="w-4 h-4 text-gray-400" />
+              Buscar cliente registrado
+            </label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              <input
+                value={customerSearch}
+                onChange={(e) => { setCustomerSearch(e.target.value); setShowCustomerDropdown(true) }}
+                onFocus={() => setShowCustomerDropdown(true)}
+                onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 150)}
+                placeholder="Nombre, documento o teléfono"
+                className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+              />
+            </div>
+            {showCustomerDropdown && customerSearch.trim() && (
+              <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+                {filteredCustomers.length === 0 ? (
+                  <p className="px-3 py-2.5 text-sm text-gray-500">Sin resultados. Puedes escribir los datos abajo.</p>
+                ) : (
+                  filteredCustomers.slice(0, 6).map(c => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => handleSelectCustomer(c)}
+                      className="w-full text-left px-3 py-2 hover:bg-primary-50 border-b border-gray-100 last:border-b-0"
+                    >
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {c.businessName || c.name || 'Sin nombre'}
+                      </p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {c.documentNumber || 'Sin documento'}
+                        {c.phone ? ` • ${c.phone}` : ''}
+                        {c.address ? ` • ${c.address}` : ''}
+                      </p>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+            {selectedCustomerId && (
+              <div className="mt-1.5 flex items-center justify-between gap-2 text-xs bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                <span className="text-green-800 truncate">Cliente cargado: <span className="font-medium">{customerName}</span></span>
+                <button type="button" onClick={clearSelectedCustomer} className="text-green-700 hover:underline shrink-0">
+                  Quitar
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Documento (para el comprobante) + lupita RENIEC/SUNAT */}
           <div>
