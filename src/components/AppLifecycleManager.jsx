@@ -25,13 +25,40 @@ export default function AppLifecycleManager() {
   const reconnectingRef = useRef(false)
   const navigate = useNavigate()
 
-  // Tap en push notification → navegar al path indicado en la data del push.
+  // Tap en push notification → según lo que traiga la data del push.
   // notificationService.js dispara este evento global desde el listener de
   // pushNotificationActionPerformed (que vive fuera de React Router).
   useEffect(() => {
-    const handleTap = (e) => {
-      const path = e?.detail?.redirectPath
-      if (path) navigate(path)
+    const handleTap = async (e) => {
+      const data = e?.detail || {}
+
+      // Campaña de calificación: abrir el diálogo NATIVO de reseña (el mismo que
+      // usa ReviewPrompt). Es mucho mejor que mandar a la tienda: el usuario
+      // califica sin salir de la app. Si el plugin falla, se cae a la tienda.
+      if (data.action === 'review') {
+        try {
+          const { InAppReview } = await import('@capacitor-community/in-app-review')
+          await InAppReview.requestReview()
+        } catch (error) {
+          // Fallback a la ficha real de cada tienda (las mismas URLs que usan
+          // ReviewPrompt y la landing).
+          console.error('In-app review error:', error)
+          const store = Capacitor.getPlatform() === 'ios'
+            ? 'https://apps.apple.com/pe/app/cobrify-peru/id6756195760'
+            : 'https://play.google.com/store/apps/details?id=com.factuya.cobrify'
+          window.open(store, '_blank')
+        }
+        return
+      }
+
+      // Enlace externo (promos, landing, formulario...)
+      if (data.action === 'url' && data.actionUrl) {
+        window.open(data.actionUrl, '_blank')
+        return
+      }
+
+      // Navegación interna de siempre
+      if (data.redirectPath) navigate(data.redirectPath)
     }
     window.addEventListener('cobrify:notification-tap', handleTap)
     return () => window.removeEventListener('cobrify:notification-tap', handleTap)

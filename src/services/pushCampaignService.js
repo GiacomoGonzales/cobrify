@@ -24,6 +24,10 @@ export async function createCampaign(data, adminUid, adminEmail) {
       targetMode: data.targetMode,
       filters: data.filters || {},
       manualUserIds: data.manualUserIds || [],
+      // Acción al tocar la notificación: 'review' (diálogo de calificación),
+      // 'url' (enlace externo) o nada (solo abre la app).
+      action: data.action || null,
+      actionUrl: data.actionUrl || null,
       status: 'draft',
       totalRecipients: 0,
       totalTokens: 0,
@@ -52,6 +56,21 @@ export async function sendCampaign(campaignId) {
     return { success: true, data: result.data }
   } catch (error) {
     console.error('Error sending campaign:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Calcula a cuántos usuarios/dispositivos llegaría una campaña con los filtros
+ * elegidos, SIN enviar nada. Sirve para no mandar a ciegas (o a nadie).
+ */
+export async function previewAudience({ targetMode, filters, manualUserIds }) {
+  try {
+    const fn = httpsCallable(functions, 'previewCampaignAudience')
+    const result = await fn({ targetMode, filters, manualUserIds })
+    return { success: true, data: result.data }
+  } catch (error) {
+    console.error('Error previewing audience:', error)
     return { success: false, error: error.message }
   }
 }

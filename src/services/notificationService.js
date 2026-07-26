@@ -157,7 +157,11 @@ export const initializePushNotifications = async (userId) => {
       PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
         console.log('Push notification action performed:', notification);
         const data = notification?.notification?.data || {};
-        if (data.redirectPath) {
+        // `action` permite que el toque haga algo más que navegar:
+        //   'review' → abre el diálogo nativo de calificación (Play/App Store)
+        //   'url'    → abre un enlace externo
+        // `redirectPath` sigue siendo la navegación interna de siempre.
+        if (data.redirectPath || data.action) {
           window.dispatchEvent(new CustomEvent('cobrify:notification-tap', { detail: data }));
         }
       });
