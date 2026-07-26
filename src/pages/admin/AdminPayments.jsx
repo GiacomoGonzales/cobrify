@@ -112,6 +112,28 @@ export default function AdminPayments() {
     return result
   }, [payments, searchTerm, methodFilter, dateRange, sortField, sortDirection])
 
+  // Paginación: renderizar SOLO la página actual. Un pago por cada renovación de
+  // cada cliente son miles de filas; pintarlas todas dejaba la página trabada.
+  // OJO: los totales y el CSV siguen calculándose sobre TODOS los filtrados, no
+  // sobre la página visible.
+  const PAGE_SIZE = 50
+  const [currentPage, setCurrentPage] = useState(1)
+  const pageCount = Math.max(1, Math.ceil(filteredPayments.length / PAGE_SIZE))
+  const displayedPayments = useMemo(
+    () => filteredPayments.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [filteredPayments, currentPage]
+  )
+
+  // Volver a la página 1 cuando cambian filtros/búsqueda/orden
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, methodFilter, dateRange, sortField, sortDirection])
+
+  // Si la página queda fuera de rango tras filtrar, corregir
+  useEffect(() => {
+    if (currentPage > pageCount) setCurrentPage(1)
+  }, [pageCount, currentPage])
+
   // Estadísticas filtradas
   const filteredStats = useMemo(() => {
     const total = filteredPayments.reduce((sum, p) => sum + p.amount, 0)
@@ -413,7 +435,7 @@ export default function AdminPayments() {
         {/* Mobile Card View */}
         {!loading && filteredPayments.length > 0 && (
           <div className="sm:hidden divide-y divide-gray-100">
-            {filteredPayments.map(payment => (
+            {displayedPayments.map(payment => (
               <div key={payment.id} className="p-3 hover:bg-gray-50 transition-colors">
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-2">
@@ -526,7 +548,7 @@ export default function AdminPayments() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredPayments.map(payment => (
+                {displayedPayments.map(payment => (
                   <tr key={payment.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 text-sm text-gray-900">
                       {formatDate(payment.date)}
@@ -597,6 +619,32 @@ export default function AdminPayments() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Paginación (los totales de arriba y el CSV siguen sobre todos los filtrados) */}
+        {!loading && filteredPayments.length > PAGE_SIZE && (
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 border-t border-gray-200">
+            <p className="text-xs text-gray-500">
+              Mostrando {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredPayments.length)} de {filteredPayments.length}
+            </p>
+            <div className="flex items-center justify-center gap-2">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
+              >
+                Anterior
+              </button>
+              <span className="text-sm text-gray-700">Página {currentPage} de {pageCount}</span>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(pageCount, p + 1))}
+                disabled={currentPage >= pageCount}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
+              >
+                Siguiente
+              </button>
+            </div>
           </div>
         )}
       </div>

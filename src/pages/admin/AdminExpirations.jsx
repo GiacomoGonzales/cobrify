@@ -51,6 +51,8 @@ export default function AdminExpirations() {
   const { user } = useAuth()
   const [subscriptions, setSubscriptions] = useState([])
   const [loading, setLoading] = useState(true)
+  // Los teléfonos llegan después que la tabla (ver loadPhones)
+  const [phonesLoading, setPhonesLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [activeTab, setActiveTab] = useState('today')
   const [actionLoading, setActionLoading] = useState(null)
@@ -99,15 +101,33 @@ export default function AdminExpirations() {
 
       const filtered = Array.from(allSubs.values()).filter(sub => !subUserIds.has(sub.id))
 
-      // Adjuntar el teléfono de cada negocio para mostrarlo en su columna. Se
-      // prefiere el teléfono de contacto del dueño (businesses/{uid}.contactPhone);
-      // si no tiene, cae al teléfono del negocio (el que imprime en el ticket).
-      // Antes se hacía UN getDoc por negocio (cientos de round-trips serializados por
-      // el SDK → la página tardaba mucho). Ahora se leen en lote con `documentId() in`
-      // (chunks de 30, el máximo de Firestore) y los chunks corren en paralelo:
-      // de N lecturas se pasa a ceil(N/30) queries. El id de la suscripción es el uid
-      // del dueño = id del doc de businesses.
-      const ids = filtered.map(sub => sub.id)
+      // Mostrar la tabla YA con lo esencial. Los teléfonos se traen después en
+      // segundo plano (ver loadPhones): son el dato más caro de la página y
+      // esperarlos dejaba la pantalla en blanco varios segundos.
+      setSubscriptions(filtered)
+      setLoading(false)
+      loadPhones(filtered)
+    } catch (error) {
+      console.error('Error loading subscriptions:', error)
+      setLoading(false)
+    }
+  }
+
+  // Teléfono de cada negocio para su columna. Se prefiere el de contacto del
+  // dueño (businesses/{uid}.contactPhone) y si no, el del negocio.
+  //
+  // OJO con el costo: hay que leer el doc COMPLETO de cada negocio (el SDK web no
+  // permite pedir solo un campo) y esos documentos son pesados — llevan config de
+  // restaurante, estaciones, catálogo, branding, etc. Con cientos de negocios son
+  // varios MB solo para pintar una columna. Por eso ya no bloquea el render: la
+  // tabla aparece de inmediato y los teléfonos se rellenan al llegar.
+  async function loadPhones(subs) {
+    const ids = subs.map(sub => sub.id)
+    if (ids.length === 0) return
+    setPhonesLoading(true)
+    try {
+      // `documentId() in` admite 30 ids por consulta (máximo de Firestore); los
+      // chunks van en paralelo: de N lecturas a ceil(N/30) consultas.
       const chunks = []
       for (let i = 0; i < ids.length; i += 30) chunks.push(ids.slice(i, i + 30))
 
@@ -125,13 +145,12 @@ export default function AdminExpirations() {
         })
       })
 
-      const withPhones = filtered.map(sub => ({ ...sub, phone: phoneById.get(sub.id) || '' }))
-
-      setSubscriptions(withPhones)
+      // Un solo setState al final: evita repintar la tabla por cada chunk.
+      setSubscriptions(prev => prev.map(sub => ({ ...sub, phone: phoneById.get(sub.id) || '' })))
     } catch (error) {
-      console.error('Error loading subscriptions:', error)
+      console.error('Error cargando teléfonos:', error)
     } finally {
-      setLoading(false)
+      setPhonesLoading(false)
     }
   }
 
@@ -437,6 +456,8 @@ export default function AdminExpirations() {
                               )}
                             </button>
                           </div>
+                        ) : phonesLoading ? (
+                          <span className="text-gray-300 animate-pulse">···</span>
                         ) : (
                           <span className="text-gray-400">—</span>
                         )}

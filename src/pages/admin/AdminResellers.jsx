@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import {
   collection,
   getDocs,
+  getCountFromServer,
   doc,
   setDoc,
   updateDoc,
@@ -91,44 +92,56 @@ export default function AdminResellers() {
         getDocs(collection(db, 'resellers')),
         getTiersConfig()
       ])
-      const resellersList = []
+      // Conteo de clientes por reseller.
+      //
+      // Antes esto era un for...await secuencial que, por CADA reseller, traía
+      // TODOS sus documentos de suscripción (dos veces: total y activos) solo
+      // para leer el .size. Con N resellers eran 2N consultas una detrás de otra,
+      // cada una con su ida y vuelta a la red y descargando documentos completos
+      // que nunca se usaban → la página tardaba muchísimo en abrir.
+      //
+      // Ahora: agregación en el servidor (getCountFromServer devuelve solo el
+      // número, sin documentos) y todas las consultas en PARALELO. Pasa de N
+      // viajes encadenados a uno solo, con payload mínimo.
+      const counts = await Promise.all(
+        resellersSnapshot.docs.map(async (docSnap) => {
+          const subsRef = collection(db, 'subscriptions')
+          const [totalSnap, activeSnap] = await Promise.all([
+            getCountFromServer(query(subsRef, where('resellerId', '==', docSnap.id))),
+            getCountFromServer(query(
+              subsRef,
+              where('resellerId', '==', docSnap.id),
+              where('status', '==', 'active')
+            ))
+          ])
+          return {
+            clientsCount: totalSnap.data().count,
+            activeClientsCount: activeSnap.data().count
+          }
+        })
+      )
 
-      for (const docSnap of resellersSnapshot.docs) {
+      const resellersList = resellersSnapshot.docs.map((docSnap, i) => {
         const data = docSnap.data()
-
-        // Contar clientes activos del reseller
-        const clientsQuery = query(
-          collection(db, 'subscriptions'),
-          where('resellerId', '==', docSnap.id)
-        )
-        const activeClientsQuery = query(
-          collection(db, 'subscriptions'),
-          where('resellerId', '==', docSnap.id),
-          where('status', '==', 'active')
-        )
-        const [clientsSnapshot, activeClientsSnapshot] = await Promise.all([
-          getDocs(clientsQuery),
-          getDocs(activeClientsQuery)
-        ])
+        const { clientsCount, activeClientsCount } = counts[i]
 
         // Calcular tier basado en clientes activos
-        const activeCount = activeClientsSnapshot.size
-        const currentTier = calculateTier(activeCount, tiers)
+        const currentTier = calculateTier(activeClientsCount, tiers)
         const effectiveDiscount = data.discountOverride !== undefined && data.discountOverride !== null
           ? data.discountOverride
           : currentTier.discount
 
-        resellersList.push({
+        return {
           id: docSnap.id,
           ...data,
-          clientsCount: clientsSnapshot.size,
-          activeClientsCount: activeCount,
+          clientsCount,
+          activeClientsCount,
           currentTier,
           effectiveDiscount,
           hasOverride: data.discountOverride !== undefined && data.discountOverride !== null,
           customDomain: data.customDomain || ''
-        })
-      }
+        }
+      })
 
       setResellers(resellersList)
     } catch (error) {
