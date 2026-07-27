@@ -121,6 +121,12 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   const [recipientDistrict, setRecipientDistrict] = useState('')
   const [recipientEmail, setRecipientEmail] = useState('')
 
+  // Datos del PROVEEDOR (solo motivo 02 Compra). SUNAT exige que en compras el
+  // destinatario sea la PROPIA empresa (quien compra) y el proveedor vaya aparte
+  // (cac:SellerSupplierParty en el XML + "Datos del Proveedor" en el PDF).
+  const [supplierRuc, setSupplierRuc] = useState('')
+  const [supplierName, setSupplierName] = useState('')
+
   // Establecimientos (anexos) del RUC del destinatario: lista + modal para elegir (igual que el POS)
   const [recipientEstablishments, setRecipientEstablishments] = useState([])
   const [showRecipientEstablishmentsModal, setShowRecipientEstablishmentsModal] = useState(false)
@@ -446,6 +452,9 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
         if (supplier) {
           // Dirección del proveedor va al punto de partida (origen)
           setOriginAddress(supplier.address || '')
+          // Datos del proveedor (van al XML como SellerSupplierParty y al PDF)
+          setSupplierRuc(supplier.documentNumber || '')
+          setSupplierName(supplier.name || '')
         }
 
         // El destinatario será mi propia empresa - se carga desde companySettings
@@ -568,6 +577,10 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     if (cloneData.totalWeight) setWeightManuallyEdited(true)
     setIsM1LVehicle(cloneData.isM1LVehicle || false)
     setAdditionalInfo(cloneData.additionalInfo || '')
+
+    // Proveedor (motivo 02 Compra)
+    setSupplierRuc(cloneData.supplier?.documentNumber || '')
+    setSupplierName(cloneData.supplier?.name || '')
 
     // Destinatario
     const recipient = cloneData.recipient || cloneData.customer || {}
@@ -1200,6 +1213,41 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     }
   }
 
+  // Cambio de motivo de traslado. Al elegir 02 (Compra) a mano, autocompletar
+  // el destinatario con la PROPIA empresa: en compras quien recibe es uno mismo
+  // (el proveedor va en su sección aparte). Así evitamos el error clásico de
+  // poner al proveedor como destinatario.
+  const handleTransferReasonChange = async (value) => {
+    setTransferReason(value)
+    if (value !== '02') return
+    try {
+      const businessId = getBusinessId()
+      const companyResult = await getCompanySettings(businessId)
+      if (companyResult.success && companyResult.data) {
+        const company = companyResult.data
+        setRecipientDocType('6')
+        setRecipientDocNumber(company.ruc || '')
+        setRecipientName(company.businessName || company.name || '')
+        setRecipientAddress(company.address || '')
+        // Punto de llegada = mi empresa (la mercadería viene hacia mí)
+        if (!destinationAddress) setDestinationAddress(company.address || '')
+        if (company.ubigeo && company.ubigeo.length === 6) {
+          setRecipientDepartment(company.ubigeo.substring(0, 2))
+          setRecipientProvince(company.ubigeo.substring(2, 4))
+          setRecipientDistrict(company.ubigeo.substring(4, 6))
+          if (!destinationAddress) {
+            setDestinationDepartment(company.ubigeo.substring(0, 2))
+            setDestinationProvince(company.ubigeo.substring(2, 4))
+            setDestinationDistrict(company.ubigeo.substring(4, 6))
+          }
+        }
+        toast.info('En compras, el destinatario es tu propia empresa. Completa los datos del proveedor.')
+      }
+    } catch (error) {
+      console.error('Error al autocompletar destinatario para compra:', error)
+    }
+  }
+
   const handleSubmit = async (e, { skipSunat = false } = {}) => {
     e.preventDefault()
 
@@ -1277,6 +1325,14 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       return
     }
 
+    // Motivo 02 (Compra): SUNAT espera los datos del proveedor (SellerSupplierParty)
+    if (transferReason === '02') {
+      if (!/^\d{11}$/.test((supplierRuc || '').trim()) || !(supplierName || '').trim()) {
+        toast.error('Para el motivo Compra debes completar el RUC (11 dígitos) y la razón social del proveedor')
+        return
+      }
+    }
+
     setIsSaving(true)
 
     try {
@@ -1314,6 +1370,14 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
           email: recipientEmail,
           ubigeo: getUbigeo(recipientDepartment, recipientProvince, recipientDistrict),
         },
+
+        // Proveedor (solo motivo 02 Compra): va al XML como cac:SellerSupplierParty
+        // y al PDF como "Proveedor". null en los demás motivos.
+        supplier: transferReason === '02' && supplierRuc ? {
+          documentType: '6',
+          documentNumber: supplierRuc.trim(),
+          name: supplierName.trim(),
+        } : null,
 
         issueDate,
         transferReason,
@@ -1553,17 +1617,12 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
           {/* Sección: Destinatario */}
           <div className="space-y-3">
-            <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
-              <User className="w-4 h-4 text-gray-400" />
-              <h3 className="font-semibold text-gray-800">Datos del Destinatario</h3>
-            </div>
-
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Select
                 label="Motivo de traslado"
                 required
                 value={transferReason}
-                onChange={(e) => setTransferReason(e.target.value)}
+                onChange={(e) => handleTransferReasonChange(e.target.value)}
               >
                 {TRANSFER_REASONS.map(reason => (
                   <option key={reason.value} value={reason.value}>
@@ -1581,6 +1640,38 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                 min={getYesterdayDateString()}
                 max={getLocalDateString()}
               />
+            </div>
+
+            {/* Motivo 02 (Compra): datos del PROVEEDOR (el destinatario es la propia empresa) */}
+            {transferReason === '02' && (
+              <>
+                <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
+                  <Store className="w-4 h-4 text-gray-400" />
+                  <h3 className="font-semibold text-gray-800">Datos del Proveedor</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Input
+                    label="RUC del Proveedor"
+                    placeholder="20123456789"
+                    required
+                    value={supplierRuc}
+                    onChange={(e) => setSupplierRuc(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                    maxLength={11}
+                  />
+                  <Input
+                    label="Razón Social del Proveedor"
+                    placeholder="Nombre o razón social"
+                    required
+                    value={supplierName}
+                    onChange={(e) => setSupplierName(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
+
+            <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
+              <User className="w-4 h-4 text-gray-400" />
+              <h3 className="font-semibold text-gray-800">Datos del Destinatario</h3>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

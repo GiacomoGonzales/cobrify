@@ -2543,6 +2543,26 @@ export function generateDispatchGuideXML(guideData, businessData) {
   const customerLegalEntity = customerParty.ele('cac:PartyLegalEntity')
   customerLegalEntity.ele('cbc:RegistrationName').txt(recipientData.name || 'CLIENTE GENERAL')
 
+  // === PROVEEDOR (SellerSupplierParty) ===
+  // Obligatorio cuando el motivo de traslado es 02 (Compra): el destinatario es
+  // la propia empresa (quien compra) y el proveedor que vende se declara aquí.
+  // El orden UBL importa: va DESPUÉS de DeliveryCustomerParty y ANTES de Shipment.
+  if (guideData.supplier && guideData.supplier.documentNumber) {
+    const sellerSupplierParty = root.ele('cac:SellerSupplierParty')
+    const sellerParty = sellerSupplierParty.ele('cac:Party')
+
+    const sellerPartyId = sellerParty.ele('cac:PartyIdentification')
+    sellerPartyId.ele('cbc:ID', {
+      'schemeID': guideData.supplier.documentType || '6',
+      'schemeName': 'Documento de Identidad',
+      'schemeAgencyName': 'PE:SUNAT',
+      'schemeURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06'
+    }).txt(guideData.supplier.documentNumber)
+
+    const sellerLegalEntity = sellerParty.ele('cac:PartyLegalEntity')
+    sellerLegalEntity.ele('cbc:RegistrationName').txt(guideData.supplier.name || 'PROVEEDOR')
+  }
+
   // === ENVÍO (Shipment) ===
   const shipment = root.ele('cac:Shipment')
   shipment.ele('cbc:ID').txt('SUNAT_Envio')

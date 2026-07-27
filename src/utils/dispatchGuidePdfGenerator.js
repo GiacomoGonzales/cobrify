@@ -671,6 +671,23 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   }
   currentY += spacious ? 12 : 10
 
+  // Proveedor (motivo 02 Compra): SUNAT muestra "Datos del Proveedor" además
+  // del destinatario (que en compras es la propia empresa compradora).
+  if (guide.supplier?.documentNumber || guide.supplier?.name) {
+    doc.setFont('helvetica', 'bold')
+    const provLabel = 'Datos del Proveedor:'
+    doc.text(provLabel, MARGIN_LEFT, currentY)
+    doc.setFont('helvetica', 'normal')
+    const provText = `${guide.supplier.name || ''}${guide.supplier.documentNumber ? ` - REGISTRO ÚNICO DE CONTRIBUYENTES N° ${guide.supplier.documentNumber}` : ''}`
+    const provX = MARGIN_LEFT + doc.getTextWidth(provLabel) + 6
+    const provLines = doc.splitTextToSize(provText, PAGE_WIDTH - MARGIN_RIGHT - provX)
+    provLines.forEach((line, i) => {
+      doc.text(line, i === 0 ? provX : MARGIN_LEFT, currentY)
+      currentY += spacious ? 12 : 9
+    })
+    currentY += spacious ? 4 : 3
+  }
+
   // Línea divisoria
   doc.setLineWidth(0.5)
   doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)

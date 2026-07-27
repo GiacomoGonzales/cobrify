@@ -427,6 +427,21 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
         </div>
       </div>
 
+      {/* Proveedor (motivo 02 Compra) */}
+      {guide.supplier?.documentNumber && (
+        <div className="ticket-section">
+          <div className="section-title">Proveedor</div>
+          <div className="info-row">
+            <span className="info-label">RUC:</span>
+            <span>{guide.supplier.documentNumber}</span>
+          </div>
+          <div className="info-row">
+            <span className="info-label">Nombre:</span>
+            <span>{guide.supplier.name || '-'}</span>
+          </div>
+        </div>
+      )}
+
       {/* Motivo y Peso */}
       <div className="ticket-section">
         <div className="section-title">Datos del Traslado</div>

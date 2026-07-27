@@ -101,6 +101,9 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
 
   // Datos básicos de la guía
   const [transferReason, setTransferReason] = useState('01')
+  // Proveedor (motivo 02 Compra): destinatario = la propia empresa; el proveedor va aparte
+  const [supplierRuc, setSupplierRuc] = useState('')
+  const [supplierName, setSupplierName] = useState('')
   const [transportMode, setTransportMode] = useState('02')
   const [issueDate, setIssueDate] = useState('')
   const [transferDate, setTransferDate] = useState('')
@@ -282,6 +285,9 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
     setTransferReason(guide.transferReason || '01')
     setTransportMode(guide.transportMode || '02')
     setTransferDescription(guide.transferDescription || '')
+    // Proveedor (motivo 02 Compra)
+    setSupplierRuc(guide.supplier?.documentNumber || '')
+    setSupplierName(guide.supplier?.name || '')
     setTotalWeight(guide.totalWeight?.toString() || '')
     setWeightUnit(guide.weightUnit || 'KGM')
     setIsM1LVehicle(guide.isM1LVehicle || false)
@@ -727,6 +733,13 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
           ubigeo: getUbigeo(recipientDepartment, recipientProvince, recipientDistrict),
         },
 
+        // Proveedor (solo motivo 02 Compra): XML SellerSupplierParty + PDF
+        supplier: transferReason === '02' && supplierRuc ? {
+          documentType: '6',
+          documentNumber: supplierRuc.trim(),
+          name: supplierName.trim(),
+        } : null,
+
         issueDate,
         transferReason,
         transportMode,
@@ -884,11 +897,6 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
 
           {/* Sección: Destinatario */}
           <div className="space-y-3">
-            <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
-              <User className="w-4 h-4 text-gray-400" />
-              <h3 className="font-semibold text-gray-800">Datos del Destinatario</h3>
-            </div>
-
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Select
                 label="Motivo de traslado"
@@ -910,6 +918,38 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                 value={issueDate}
                 onChange={(e) => setIssueDate(e.target.value)}
               />
+            </div>
+
+            {/* Motivo 02 (Compra): datos del PROVEEDOR (el destinatario es la propia empresa) */}
+            {transferReason === '02' && (
+              <>
+                <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
+                  <Store className="w-4 h-4 text-gray-400" />
+                  <h3 className="font-semibold text-gray-800">Datos del Proveedor</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Input
+                    label="RUC del Proveedor"
+                    placeholder="20123456789"
+                    required
+                    value={supplierRuc}
+                    onChange={(e) => setSupplierRuc(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                    maxLength={11}
+                  />
+                  <Input
+                    label="Razón Social del Proveedor"
+                    placeholder="Nombre o razón social"
+                    required
+                    value={supplierName}
+                    onChange={(e) => setSupplierName(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
+
+            <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
+              <User className="w-4 h-4 text-gray-400" />
+              <h3 className="font-semibold text-gray-800">Datos del Destinatario</h3>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
