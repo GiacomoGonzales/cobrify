@@ -20,7 +20,7 @@ import {
   Plus
 } from 'lucide-react';
 import { getUserStats } from '@/services/userStatsService';
-import { PLANS, SELLABLE_PLAN_IDS } from '@/services/subscriptionService';
+import { PLANS, SELLABLE_PLAN_IDS, extendSubscription } from '@/services/subscriptionService';
 import { doc, updateDoc, setDoc, getDoc, increment } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getEmissionSecrets, saveEmissionSecrets } from '@/services/emissionSecretsService';
@@ -43,6 +43,10 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
   const [addIgv, setAddIgv] = useState(false);
   const [useCustomDate, setUseCustomDate] = useState(false);
   const [customEndDate, setCustomEndDate] = useState('');
+  // Corrección manual del vencimiento (sin registrar pago): sirve para arreglar
+  // altas duplicadas, cortesías o errores de carga.
+  const [expiryDate, setExpiryDate] = useState('');
+  const [savingExpiry, setSavingExpiry] = useState(false);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [emissionConfig, setEmissionConfig] = useState({
     method: 'qpse',
@@ -259,6 +263,7 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                 {type === 'view' && 'Detalles del Usuario'}
                 {type === 'payment' && 'Registrar Pago'}
                 {type === 'edit' && 'Editar Suscripción'}
+                {type === 'expiry' && 'Cambiar Vencimiento'}
                 {type === 'config' && 'Configuración de Emisión'}
               </h2>
               <div className="flex items-center gap-2">
@@ -927,6 +932,114 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
           )}
 
           {/* Vista de Editar Plan */}
+          {/* Cambiar vencimiento a mano: NO registra pago ni toca el historial.
+              Es una corrección administrativa (alta duplicada, cortesía, error). */}
+          {type === 'expiry' && (
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const userId = user.userId || user.id;
+                if (!userId) { toast?.error('No se encontró el ID del usuario'); return; }
+                if (!expiryDate) { toast?.error('Elige una fecha'); return; }
+                setSavingExpiry(true);
+                try {
+                  // Se fija al final del día para que ese día siga siendo válido
+                  await extendSubscription(userId, new Date(`${expiryDate}T23:59:59`));
+                  toast?.success('Vencimiento actualizado');
+                  onUserUpdated?.();
+                  onClose();
+                } catch (err) {
+                  console.error('Error al cambiar vencimiento:', err);
+                  toast?.error('No se pudo cambiar el vencimiento');
+                } finally {
+                  setSavingExpiry(false);
+                }
+              }}
+              className="space-y-4"
+            >
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <p className="text-xs text-gray-500">Vencimiento actual</p>
+                <p className="text-lg font-semibold text-gray-900">
+                  {periodEnd ? format(new Date(periodEnd), "d 'de' MMMM 'de' yyyy", { locale: es }) : 'Sin fecha'}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nueva fecha de vencimiento
+                </label>
+                <input
+                  type="date"
+                  value={expiryDate}
+                  onChange={(e) => setExpiryDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  required
+                />
+              </div>
+
+              {/* Atajos: calculados desde HOY */}
+              <div>
+                <p className="text-xs font-medium text-gray-600 mb-1.5">Atajos desde hoy</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { label: '1 mes', months: 1 },
+                    { label: '6 meses', months: 6 },
+                    { label: '1 año', months: 12 },
+                  ].map(({ label, months }) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => {
+                        const d = new Date();
+                        d.setMonth(d.getMonth() + months);
+                        setExpiryDate(d.toISOString().slice(0, 10));
+                      }}
+                      className="px-3 py-1.5 rounded-full text-xs font-medium border border-gray-300 text-gray-600 bg-white hover:border-primary-400 hover:text-primary-700"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Avisar qué implica la fecha elegida */}
+              {expiryDate && (() => {
+                const chosen = new Date(`${expiryDate}T23:59:59`);
+                const isPast = chosen.getTime() <= Date.now();
+                return (
+                  <div className={`p-3 rounded-lg border text-sm ${
+                    isPast ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-green-50 border-green-200 text-green-800'
+                  }`}>
+                    {isPast
+                      ? 'Esa fecha ya pasó: la cuenta quedará SUSPENDIDA (sin acceso).'
+                      : 'La cuenta quedará ACTIVA hasta esa fecha.'}
+                  </div>
+                );
+              })()}
+
+              <p className="text-xs text-gray-500">
+                Esto solo corrige la fecha. No registra ningún pago ni modifica el historial.
+              </p>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingExpiry || !expiryDate}
+                  className="flex-1 px-4 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                >
+                  {savingExpiry ? 'Guardando...' : 'Guardar vencimiento'}
+                </button>
+              </div>
+            </form>
+          )}
+
           {type === 'edit' && (
             <form
               onSubmit={(e) => {

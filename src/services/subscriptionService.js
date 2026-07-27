@@ -1067,13 +1067,19 @@ export const extendSubscription = async (userId, newEndDate) => {
       throw new Error('Suscripción no encontrada');
     }
 
+    const endDate = new Date(newEndDate);
+    // Si la fecha nueva ya pasó, NO tiene sentido marcar la cuenta como activa
+    // y desbloquearla: quedaría "activa" pero vencida. En ese caso se corrige el
+    // vencimiento y se deja suspendida, que es lo coherente.
+    const isFuture = endDate.getTime() > Date.now();
+
     await updateDoc(subscriptionRef, {
-      currentPeriodEnd: Timestamp.fromDate(new Date(newEndDate)),
-      nextPaymentDate: Timestamp.fromDate(new Date(newEndDate)),
-      status: 'active',
-      accessBlocked: false,
-      blockReason: null,
-      blockedAt: null,
+      currentPeriodEnd: Timestamp.fromDate(endDate),
+      nextPaymentDate: Timestamp.fromDate(endDate),
+      status: isFuture ? 'active' : 'suspended',
+      accessBlocked: !isFuture,
+      blockReason: isFuture ? null : 'Suscripción vencida',
+      blockedAt: isFuture ? null : serverTimestamp(),
       updatedAt: serverTimestamp()
     });
 

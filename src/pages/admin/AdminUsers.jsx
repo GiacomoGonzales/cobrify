@@ -162,6 +162,7 @@ export default function AdminUsers() {
   // Estados para modal de pagos y planes
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [showPlanModal, setShowPlanModal] = useState(false)
+  const [showExpiryModal, setShowExpiryModal] = useState(false)
   const [paymentUserToEdit, setPaymentUserToEdit] = useState(null)
   const [processingPayment, setProcessingPayment] = useState(false)
 
@@ -1847,6 +1848,13 @@ export default function AdminUsers() {
     setSelectedUser(null)
   }
 
+  // Corregir a mano la fecha de vencimiento (altas duplicadas, cortesías, errores)
+  function openExpiryModal(user) {
+    setPaymentUserToEdit(user)
+    setShowExpiryModal(true)
+    setSelectedUser(null)
+  }
+
   function formatDate(date) {
     if (!date) return 'N/A'
     return date.toLocaleDateString('es-PE', {
@@ -2974,6 +2982,15 @@ export default function AdminUsers() {
                 </button>
 
                 <button
+                  onClick={() => openExpiryModal(selectedUser)}
+                  className="flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 sm:py-3 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 text-xs sm:text-sm"
+                  title="Corregir la fecha de vencimiento sin registrar un pago"
+                >
+                  <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span className="hidden sm:inline">Cambiar</span> Fecha
+                </button>
+
+                <button
                   onClick={() => {
                     openSunatConfig(selectedUser)
                   }}
@@ -3736,6 +3753,20 @@ export default function AdminUsers() {
           loading={processingPayment}
           toast={toast}
           customPlans={customPlans}
+        />
+      )}
+
+      {/* Modal de Cambiar Vencimiento */}
+      {showExpiryModal && paymentUserToEdit && (
+        <UserDetailsModal
+          user={paymentUserToEdit}
+          type="expiry"
+          onClose={() => {
+            setShowExpiryModal(false)
+            setPaymentUserToEdit(null)
+          }}
+          onUserUpdated={loadUsers}
+          toast={toast}
         />
       )}
 
