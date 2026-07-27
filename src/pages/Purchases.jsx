@@ -341,8 +341,10 @@ export default function Purchases() {
       }
 
       // Compras normales (desde purchases)
-      // 1. Revertir el stock de los productos antes de eliminar
-      if (deletingPurchase.items && deletingPurchase.items.length > 0) {
+      // 1. Revertir el stock de los productos antes de eliminar.
+      // Compras "solo registro" (affectsStock === false): NUNCA tocaron el
+      // inventario al guardarse, así que no hay nada que revertir.
+      if (deletingPurchase.affectsStock !== false && deletingPurchase.items && deletingPurchase.items.length > 0) {
         // Obtener productos actuales
         const productsResult = await getProducts(businessId)
         const products = productsResult.success ? productsResult.data : []
@@ -553,17 +555,22 @@ export default function Purchases() {
       // 1b. Compra MIXTA: revertir también el stock de los insumos (compras de insumo
       // vinculadas por relatedPurchaseId). Antes los ítems de insumo se ignoraban al
       // eliminar → su stock quedaba inflado.
-      try {
-        await deleteIngredientPurchasesByRelated(businessId, deletingPurchase.id)
-      } catch (ingErr) {
-        console.warn('No se pudo revertir compras de insumo vinculadas:', ingErr)
+      // (Las "solo registro" nunca registraron compras de insumo: nada que revertir.)
+      if (deletingPurchase.affectsStock !== false) {
+        try {
+          await deleteIngredientPurchasesByRelated(businessId, deletingPurchase.id)
+        } catch (ingErr) {
+          console.warn('No se pudo revertir compras de insumo vinculadas:', ingErr)
+        }
       }
 
       // 2. Eliminar la compra
       const result = await deletePurchase(businessId, deletingPurchase.id)
 
       if (result.success) {
-        toast.success('Compra eliminada y stock revertido exitosamente')
+        toast.success(deletingPurchase.affectsStock === false
+          ? 'Compra eliminada (no afectaba inventario)'
+          : 'Compra eliminada y stock revertido exitosamente')
         setDeletingPurchase(null)
         loadPurchases()
       } else {
@@ -777,6 +784,11 @@ export default function Purchases() {
   const handleSyncStockMovements = async (purchase) => {
     if (!purchase?.items || purchase.items.length === 0) {
       toast.warning('Esta compra no tiene productos')
+      return
+    }
+    // Compras "solo registro": nunca movieron stock, no hay nada que sincronizar.
+    if (purchase.affectsStock === false) {
+      toast.info('Esta compra se registró sin afectar inventario: no genera movimientos de stock.')
       return
     }
 
@@ -1447,6 +1459,9 @@ export default function Purchases() {
                   <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
                     <span className="font-medium">{getInvoiceDocTypeLabel(purchase.invoiceDocType)}:</span>
                     <span>{purchase.invoiceNumber || 'S/N'}</span>
+                    {purchase.affectsStock === false && (
+                      <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 flex-shrink-0">Sin stock</span>
+                    )}
                     <span className="text-gray-300">•</span>
                     <span>
                       {(purchase.invoiceDate || purchase.createdAt)
@@ -1534,6 +1549,11 @@ export default function Purchases() {
                             {getInvoiceDocTypeLabel(purchase.invoiceDocType)}
                           </span>
                           <span>{purchase.invoiceNumber || '-'}</span>
+                          {purchase.affectsStock === false && (
+                            <span className="mt-0.5 self-start px-1.5 py-0.5 text-[10px] rounded bg-amber-50 text-amber-700 border border-amber-200">
+                              Sin stock
+                            </span>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>

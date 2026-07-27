@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
-import { Plus, Trash2, Save, ArrowLeft, Loader2, Search, X, PackagePlus, Package, Beaker, Store, RefreshCw, DollarSign, Gift, Tag } from 'lucide-react'
+import { Plus, Trash2, Save, ArrowLeft, Loader2, Search, X, PackagePlus, Package, Beaker, Store, RefreshCw, DollarSign, Gift, Tag, Upload } from 'lucide-react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useAuth } from '@/contexts/AuthContext'
@@ -34,6 +34,7 @@ import {
   getProductBrands,
 } from '@/services/firestoreService'
 import { consultarRUC } from '@/services/documentLookupService'
+import ImportPurchaseXmlModal from '@/components/ImportPurchaseXmlModal'
 import { getWarehouses, updateWarehouseStock, createStockMovement } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
 import { getIngredients, registerPurchase as registerIngredientPurchase, createIngredient, updateIngredient, convertUnit } from '@/services/ingredientService'
@@ -215,6 +216,16 @@ export default function CreatePurchase() {
 
   // Laboratories for pharmacy mode
   const [laboratories, setLaboratories] = useState([])
+
+  // Importar compra desde el XML de la factura del proveedor
+  const [showImportXmlModal, setShowImportXmlModal] = useState(false)
+
+  // Solo registro: la compra NO afecta inventario (ni stock, ni costos, ni
+  // lotes/series, ni insumos). Sirve para archivar facturas de servicios o
+  // llevar ordenadas las facturas sin tocar el stock. En modo edición la
+  // casilla queda BLOQUEADA con el valor original: cambiarla a posteriori
+  // exigiría revertir/aplicar stock retroactivamente (fuente de descuadres).
+  const [affectsStock, setAffectsStock] = useState(true)
 
   useEffect(() => {
     loadData()
@@ -437,6 +448,8 @@ export default function CreatePurchase() {
         if (purchaseResult.success && purchaseResult.data) {
           const purchase = purchaseResult.data
           setOriginalPurchase(purchase) // Guardar para revertir stock
+          // Compras antiguas sin el campo = sí afectan stock (compatibilidad)
+          setAffectsStock(purchase.affectsStock !== false)
 
           // Cargar datos del proveedor
           if (purchase.supplier) {
@@ -1086,6 +1099,176 @@ export default function CreatePurchase() {
     setShowCreateProductModal(true)
   }
 
+  // ==================== Importar compra desde XML del proveedor ====================
+  // Recibe lo confirmado en el modal de revisión: proveedor (existente o por
+  // crear), líneas con su decisión (link/create/variant) y llena el formulario.
+  // No guarda la compra: el usuario revisa almacén/lotes/series y guarda normal.
+  const handleXmlImportConfirm = async ({ parsed, existingSupplier, decisions, noStock = false }) => {
+    const businessId = getBusinessId()
+    const supplierRuc = parsed.supplier.ruc
+
+    // 1. Proveedor: usar el existente o crearlo con los datos del XML
+    let supplierToUse = existingSupplier
+    if (!supplierToUse) {
+      const result = await createSupplier(businessId, {
+        ruc: supplierRuc,
+        documentType: 'RUC',
+        documentNumber: supplierRuc,
+        businessName: parsed.supplier.name,
+        address: parsed.supplier.address || '',
+        phone: '',
+        email: '',
+        contactName: '',
+      })
+      if (!result.success) {
+        toast.error('No se pudo crear el proveedor: ' + (result.error || ''))
+        throw new Error(result.error || 'createSupplier falló')
+      }
+      supplierToUse = { id: result.id, ruc: supplierRuc, documentNumber: supplierRuc, businessName: parsed.supplier.name, address: parsed.supplier.address || '' }
+      setSuppliers(prev => [...prev, supplierToUse])
+      toast.success(`Proveedor "${parsed.supplier.name}" creado`)
+    }
+
+    // 2. Crear los productos nuevos (líneas con action 'create').
+    //    Nacen con stock 0 (la compra les dará la entrada al guardar), costo del
+    //    XML y el código del proveedor guardado en supplierCodes para que la
+    //    próxima factura del mismo proveedor matchee sola.
+    const createdByLine = {}
+    for (let i = 0; i < parsed.lines.length; i++) {
+      if (decisions[i]?.action !== 'create') continue
+      const line = parsed.lines[i]
+      const productData = {
+        code: '',
+        sku: '',
+        name: line.description,
+        price: 0,
+        cost: line.cost || 0,
+        unit: line.unitCode || 'NIU',
+        category: '',
+        description: '',
+        stock: 0,
+        initialStock: 0,
+        noStock: false,
+        taxAffectation: line.taxAffectation || '10',
+        allowDecimalQuantity: !Number.isInteger(line.quantity),
+        trackExpiration: false,
+        catalogVisible: false,
+        presentations: [],
+        imageUrl: null,
+        imageUrls: [],
+        ...(line.sellerCode ? { supplierCodes: { [supplierRuc]: line.sellerCode } } : {}),
+      }
+      const result = await createProduct(businessId, productData)
+      if (!result.success) {
+        toast.error(`No se pudo crear "${line.description}": ${result.error || ''}`)
+        throw new Error(result.error || 'createProduct falló')
+      }
+      createdByLine[i] = { id: result.id, ...productData }
+    }
+
+    // 3. Aprendizaje: guardar el código del proveedor en los productos VINCULADOS
+    //    (para que la próxima importación de este proveedor matchee al 100%).
+    //    Fire-and-forget: si falla no bloquea la importación.
+    for (let i = 0; i < parsed.lines.length; i++) {
+      const d = decisions[i]
+      const line = parsed.lines[i]
+      if (!d || (d.action !== 'link' && d.action !== 'variant')) continue
+      if (!line.sellerCode || !d.productId) continue
+      const product = products.find(p => p.id === d.productId)
+      if (!product || product.supplierCodes?.[supplierRuc] === line.sellerCode) continue
+      updateProduct(businessId, d.productId, {
+        supplierCodes: { ...(product.supplierCodes || {}), [supplierRuc]: line.sellerCode },
+      }).catch(err => console.warn('No se pudo guardar el código de proveedor:', err))
+    }
+
+    // 4. Refrescar la lista de productos si se creó alguno
+    let productList = products
+    if (Object.keys(createdByLine).length > 0) {
+      const productsResult = await getProducts(businessId)
+      if (productsResult.success) {
+        productList = productsResult.data || []
+        setProducts(productList)
+      }
+    }
+
+    // 5. Llenar el formulario
+    // "Solo registro" elegido en el modal → marca el checkbox del formulario
+    // (el guardado se encarga de no tocar inventario).
+    setAffectsStock(!noStock)
+    selectSupplier(supplierToUse)
+    setInvoiceDocType(parsed.docType === 'boleta' ? 'boleta' : 'factura')
+    setInvoiceNumber(parsed.fullNumber || '')
+    if (parsed.issueDate) setInvoiceDate(parsed.issueDate)
+    setPaymentType(parsed.paymentType === 'credito' ? 'credito' : 'contado')
+    setDueDate(parsed.paymentType === 'credito' && parsed.dueDate ? parsed.dueDate : '')
+    if (multiCurrencyOn && parsed.currency === 'USD') {
+      setCurrency('USD') // el efecto existente trae el TC SBS automáticamente
+    }
+    if (parsed.detraction) {
+      setNotes(prev => {
+        const detNote = `Detracción ${parsed.detraction.percent}% = S/ ${parsed.detraction.amount.toFixed(2)}${parsed.detraction.account ? ` (Cta. BN ${parsed.detraction.account})` : ''}`
+        return prev ? `${prev}\n${detNote}` : detNote
+      })
+    }
+
+    const newItems = parsed.lines.map((line, i) => {
+      const d = decisions[i]
+      const product = d?.action === 'create'
+        ? createdByLine[i]
+        : (d?.productId ? productList.find(p => p.id === d.productId) : null)
+
+      const base = {
+        quantity: line.quantity,
+        unitPrice: line.cost,
+        cost: line.cost,
+        costWithoutIGV: line.costWithoutIGV,
+        batchNumber: '',
+        expirationDate: '',
+        sanitaryRegistry: '',
+        originalSanitaryRegistry: '',
+        itemType: 'product',
+        unit: line.unitCode || product?.unit || 'NIU',
+        taxAffectation: line.taxAffectation || product?.taxAffectation || '10',
+        salePrice: product?.price || '',
+        salePrice2: product?.price2 || '',
+        salePrice3: product?.price3 || '',
+        salePrice4: product?.price4 || '',
+        trackSerials: product?.trackSerials || false,
+        serialNumbers: [],
+        presentations: [],
+        presentationName: '',
+        presentationFactor: 1,
+      }
+
+      // Producto con variantes: dejamos productId vacío para que el usuario
+      // elija la variante con el buscador de la fila (flujo normal, que abre
+      // el modal de variantes). La validación del guardado exige resolverlo.
+      if (d?.action === 'variant') {
+        return { ...base, productId: '', productName: line.description, trackSerials: false }
+      }
+
+      return {
+        ...base,
+        productId: product?.id || '',
+        productName: product?.name || line.description,
+      }
+    })
+    setPurchaseItems(newItems)
+
+    // Prellenar los buscadores de producto de cada fila
+    const searches = {}
+    newItems.forEach((item, index) => { searches[index] = item.productName })
+    setProductSearches(searches)
+
+    setShowImportXmlModal(false)
+    const pendingVariants = decisions.filter(d => d?.action === 'variant').length
+    if (pendingVariants > 0) {
+      toast.warning(`Compra importada. ${pendingVariants} producto${pendingVariants > 1 ? 's tienen' : ' tiene'} variantes: selecciónalas en la fila antes de guardar.`)
+    } else {
+      toast.success(`Compra ${parsed.fullNumber} importada. Revisa el almacén y guarda.`)
+    }
+  }
+
   const handleCreateProduct = async (data) => {
     // Prevenir múltiples clicks
     if (isCreatingProduct) return
@@ -1431,9 +1614,10 @@ export default function CreatePurchase() {
         invoiceNumber: invoiceNumber.trim() || null,
         invoiceDocType: invoiceDocType || 'factura',
         invoiceDate: parseLocalDate(invoiceDate), // Usar parseLocalDate para evitar problema de timezone
-        // Almacén donde ingresa la mercadería
-        warehouseId: selectedWarehouse?.id || null,
-        warehouseName: selectedWarehouse?.name || null,
+        // Almacén donde ingresa la mercadería (null si es solo registro:
+        // no hay ingreso físico, y así ningún reporte la atribuye a un almacén)
+        warehouseId: affectsStock ? (selectedWarehouse?.id || null) : null,
+        warehouseName: affectsStock ? (selectedWarehouse?.name || null) : null,
         items: purchaseItems
           .filter(item => !item.isVariant || (item.quantity && Number(item.quantity) > 0))
           .map(item => ({
@@ -1467,6 +1651,9 @@ export default function CreatePurchase() {
         igvInBase: amounts.igvInBase,
         totalInBase: amounts.totalInBase,
         notes: notes.trim(),
+        // Solo registro: si es false, esta compra NO tocó el inventario al
+        // guardarse (y al eliminarla tampoco se revierte stock).
+        affectsStock: affectsStock,
         // Tipo de pago y estado
         paymentType: paymentType, // 'contado' o 'credito'
         paymentStatus: paymentType === 'contado' ? 'paid' : 'pending', // 'paid' o 'pending'
@@ -1491,7 +1678,9 @@ export default function CreatePurchase() {
       const stockDifferences = {} // { productId: diferencia } - positivo = aumentar, negativo = reducir
       let warehouseChangedInEdit = false // Indica si cambió el almacén en edición
 
-      if (isEditMode && originalPurchase && originalPurchase.items) {
+      // Compras "solo registro" (affectsStock=false): no hay diferencias de
+      // stock que calcular en edición (nunca tocaron el inventario).
+      if (isEditMode && affectsStock && originalPurchase && originalPurchase.items) {
         const originalProductItems = originalPurchase.items.filter(item => item.itemType !== 'ingredient')
         const originalWarehouseId = originalPurchase.warehouseId || ''
         const newWarehouseId = selectedWarehouse?.id || ''
@@ -1657,8 +1846,12 @@ export default function CreatePurchase() {
       // 3. Actualizar stock y costo promedio de PRODUCTOS
       // IMPORTANTE: Agrupar items por productId para manejar múltiples líneas del mismo producto
       // (ej: 2 unidades @ S/3 + 1 unidad gratis @ S/0 = 3 unidades con costo promedio correcto)
+      // Solo registro (affectsStock=false): se salta TODO el efecto de inventario
+      // (stock, costo promedio, lotes, series, movimientos). La compra queda
+      // guardada como documento contable nada más.
       const groupedProducts = {}
-      productItems.forEach(item => {
+      const itemsForInventory = affectsStock ? productItems : []
+      itemsForInventory.forEach(item => {
         // Para variantes, agrupar por productId + variantSku
         const groupKey = item.variantSku ? `${item.productId}__${item.variantSku}` : item.productId
         if (!groupedProducts[groupKey]) {
@@ -1944,7 +2137,8 @@ export default function CreatePurchase() {
       // 3.5. Registrar movimientos de stock para historial de PRODUCTOS
       // En modo edición sin cambio de almacén, los movimientos de ajuste ya se crearon arriba
       // Solo crear movimientos si es creación nueva o si cambió el almacén
-      if (!isEditMode || warehouseChangedInEdit) {
+      // (nunca para compras "solo registro": no hubo entrada real al kardex)
+      if (affectsStock && (!isEditMode || warehouseChangedInEdit)) {
         const stockMovementPromises = productItems.map(async item => {
           const product = products.find(p => p.id === item.productId)
           if (!product) return
@@ -1982,8 +2176,10 @@ export default function CreatePurchase() {
 
       // 4. Actualizar stock de INGREDIENTES
       // IMPORTANTE: Agrupar items por ingredientId para manejar múltiples líneas del mismo ingrediente
+      // Solo registro (affectsStock=false): tampoco se toca el stock de insumos.
       const groupedIngredients = {}
-      ingredientItems.forEach(item => {
+      const ingredientsForInventory = affectsStock ? ingredientItems : []
+      ingredientsForInventory.forEach(item => {
         const ingredientId = item.productId
         if (!groupedIngredients[ingredientId]) {
           groupedIngredients[ingredientId] = {
@@ -2028,8 +2224,9 @@ export default function CreatePurchase() {
         })
 
         await Promise.all(ingredientUpdates)
-      } else {
+      } else if (affectsStock) {
         // Modo edición: calcular diferencias y ajustar stock de ingredientes
+        // (solo si la compra afecta inventario; las "solo registro" nunca lo tocaron)
         const originalIngredientItems = (originalPurchase?.items || []).filter(item => item.itemType === 'ingredient')
 
         // Agrupar cantidades originales por ingrediente
@@ -2321,6 +2518,12 @@ export default function CreatePurchase() {
               : 'Registra la factura del proveedor y actualiza el inventario'}
           </p>
         </div>
+        {!isEditMode && (
+          <Button variant="outline" onClick={() => setShowImportXmlModal(true)}>
+            <Upload className="w-4 h-4 mr-2" />
+            Importar XML
+          </Button>
+        )}
       </div>
 
       {message && (
@@ -2454,8 +2657,33 @@ export default function CreatePurchase() {
               onChange={e => setInvoiceDate(e.target.value)}
             />
 
-            {/* Selector de Almacén */}
-            {warehouses.length > 0 && (
+            {/* Solo registro: la compra no toca el inventario (servicios, o
+                archivar facturas ordenadas sin afectar stock). En edición la
+                casilla queda bloqueada con el valor con que se guardó. */}
+            <div className="md:col-span-2">
+              <label className={`flex items-start gap-2 p-3 border rounded-lg transition-colors ${
+                !affectsStock ? 'border-amber-300 bg-amber-50' : 'border-gray-200 hover:bg-gray-50'
+              } ${isEditMode ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}`}>
+                <input
+                  type="checkbox"
+                  checked={!affectsStock}
+                  disabled={isEditMode}
+                  onChange={e => setAffectsStock(!e.target.checked)}
+                  className="w-4 h-4 mt-0.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500 disabled:cursor-not-allowed"
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-gray-900">No afectar inventario (solo registro)</span>
+                  <span className="block text-xs text-gray-500 mt-0.5">
+                    {isEditMode
+                      ? 'Esta opción se fija al crear la compra y no se puede cambiar después.'
+                      : 'La compra se guarda para tu control (gastos, crédito, orden de facturas) pero no suma stock ni cambia costos. Útil para servicios.'}
+                  </span>
+                </span>
+              </label>
+            </div>
+
+            {/* Selector de Almacén (irrelevante si la compra no afecta inventario) */}
+            {warehouses.length > 0 && affectsStock && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   <Store className="w-4 h-4 inline mr-1" />
@@ -3789,6 +4017,17 @@ export default function CreatePurchase() {
           )
         })()}
       </Modal>
+
+      {/* Importar compra desde el XML de la factura del proveedor */}
+      <ImportPurchaseXmlModal
+        isOpen={showImportXmlModal}
+        onClose={() => setShowImportXmlModal(false)}
+        products={products}
+        suppliers={suppliers}
+        businessRuc={user?.ruc || ''}
+        multiCurrencyOn={multiCurrencyOn}
+        onConfirm={handleXmlImportConfirm}
+      />
     </div>
   )
 }
