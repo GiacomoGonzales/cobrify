@@ -52,7 +52,12 @@ export default function Recipes() {
     instructionsLabel: isRestaurantMode ? 'Instrucciones (opcional)' : 'Instrucciones o Notas (opcional)',
     instructionsPlaceholder: isRestaurantMode
       ? 'Pasos de preparación...'
-      : 'Pasos de preparación, instrucciones de uso, etc...',
+      : 'Proceso de elaboración, instrucciones de uso, notas internas, etc...',
+    // Porciones (restaurante) = Rendimiento (general): cuántas unidades salen de
+    // una tanda de la composición. El costo unitario = costo total / este número.
+    portionsLabel: isRestaurantMode ? 'Porciones' : 'Rendimiento (unidades)',
+    portionsHeader: isRestaurantMode ? 'Porciones' : 'Rendimiento',
+    prepTimeLabel: isRestaurantMode ? 'Tiempo de preparación (min)' : 'Tiempo de producción (min)',
     saveButton: isRestaurantMode ? 'Crear Receta' : 'Guardar',
     deleteTitle: isRestaurantMode ? 'Eliminar Receta' : 'Eliminar Composición',
     deleteQuestion: isRestaurantMode ? 'la receta de' : 'la composición de',
@@ -674,7 +679,11 @@ export default function Recipes() {
                   {/* Fila 3: Porciones + Tiempo + Costo */}
                   <div className="flex items-center justify-between mt-2">
                     <div className="flex items-center gap-3 text-xs text-gray-500">
-                      <span>{recipe.portions} porción{recipe.portions > 1 ? 'es' : ''}</span>
+                      <span>
+                        {isRestaurantMode
+                          ? `${recipe.portions} porción${recipe.portions > 1 ? 'es' : ''}`
+                          : `Rinde ${recipe.portions} und`}
+                      </span>
                       {recipe.preparationTime > 0 && (
                         <>
                           <span className="text-gray-300">•</span>
@@ -705,7 +714,7 @@ export default function Recipes() {
                     </TableHead>
                     <TableHead>{texts.tableHeaderProduct}</TableHead>
                     <TableHead>{texts.tableHeaderIngredients}</TableHead>
-                    <TableHead>Porciones</TableHead>
+                    <TableHead>{texts.portionsHeader}</TableHead>
                     <TableHead>Costo Total</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
@@ -892,14 +901,14 @@ export default function Recipes() {
 
           <div className="grid grid-cols-2 gap-4">
             <Input
-              label="Porciones"
+              label={texts.portionsLabel}
               type="number"
               step="0.5"
               value={formData.portions}
               onChange={e => setFormData({ ...formData, portions: e.target.value })}
             />
             <Input
-              label="Tiempo de preparación (min)"
+              label={texts.prepTimeLabel}
               type="number"
               value={formData.preparationTime}
               onChange={e => setFormData({ ...formData, preparationTime: e.target.value })}

@@ -30,7 +30,9 @@ import ImportIngredientsModal from '@/components/ImportIngredientsModal'
 
 // Categorías por defecto cuando un negocio usa el módulo por primera vez.
 // Se auto-siembra una sola vez; luego el dueño puede editarlas/eliminarlas.
-const DEFAULT_CATEGORIES = [
+// Restaurante: rubro comida. Modo general: cualquier tipo de producción
+// (textil, cosmética, alimentos envasados, manufactura, etc.).
+const DEFAULT_CATEGORIES_RESTAURANT = [
   { id: 'granos', name: 'Granos y Cereales', order: 0 },
   { id: 'carnes', name: 'Carnes', order: 1 },
   { id: 'vegetales', name: 'Vegetales y Frutas', order: 2 },
@@ -41,6 +43,20 @@ const DEFAULT_CATEGORIES = [
   { id: 'salud', name: 'Salud y Farmacia', order: 7 },
   { id: 'limpieza', name: 'Limpieza', order: 8 },
   { id: 'otros', name: 'Otros', order: 9 },
+]
+
+const DEFAULT_CATEGORIES_GENERAL = [
+  { id: 'materia_prima', name: 'Materia Prima', order: 0 },
+  { id: 'envases', name: 'Envases y Empaques', order: 1 },
+  { id: 'etiquetas', name: 'Etiquetas y Embalaje', order: 2 },
+  { id: 'componentes', name: 'Componentes y Repuestos', order: 3 },
+  { id: 'quimicos', name: 'Químicos y Aditivos', order: 4 },
+  { id: 'textiles', name: 'Textiles y Mercería', order: 5 },
+  { id: 'alimentos', name: 'Alimentos y Bebidas', order: 6 },
+  { id: 'estetica', name: 'Estética y Belleza', order: 7 },
+  { id: 'salud', name: 'Salud y Farmacia', order: 8 },
+  { id: 'limpieza', name: 'Limpieza', order: 9 },
+  { id: 'otros', name: 'Otros', order: 10 },
 ]
 
 const UNITS = [
@@ -134,7 +150,6 @@ export default function Ingredients() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
-  const [showCategoryModal, setShowCategoryModal] = useState(false)
   const [showManageCategoriesModal, setShowManageCategoriesModal] = useState(false)
   const [editingCategoryId, setEditingCategoryId] = useState(null)
   const [editingCategoryName, setEditingCategoryName] = useState('')
@@ -176,8 +191,10 @@ export default function Ingredients() {
 
   const loadCategories = async () => {
     if (!user?.uid) return
+    // La siembra depende del modo: restaurante = rubro comida; el resto = genéricas.
+    const defaults = isRestaurantMode ? DEFAULT_CATEGORIES_RESTAURANT : DEFAULT_CATEGORIES_GENERAL
     if (isDemoMode) {
-      setCategories(DEFAULT_CATEGORIES)
+      setCategories(defaults)
       return
     }
     try {
@@ -186,7 +203,7 @@ export default function Ingredients() {
       if (result.success) {
         if (!result.data || result.data.length === 0) {
           // Primera vez: sembrar con las categorías por defecto
-          const seeded = [...DEFAULT_CATEGORIES]
+          const seeded = [...defaults]
           await saveIngredientCategories(businessId, seeded)
           setCategories(seeded)
         } else {
@@ -195,7 +212,7 @@ export default function Ingredients() {
       }
     } catch (err) {
       console.error('Error cargando categorías de ingredientes:', err)
-      setCategories(DEFAULT_CATEGORIES)
+      setCategories(defaults)
     }
   }
 
@@ -215,9 +232,9 @@ export default function Ingredients() {
     }
     const updated = [...categories, newCat]
     setCategories(updated)
+    // Si el formulario de insumo está abierto, dejar seleccionada la categoría recién creada.
     setFormData(prev => ({ ...prev, category: newCat.id }))
     setNewCategoryName('')
-    setShowCategoryModal(false)
     if (!isDemoMode) {
       const result = await saveIngredientCategories(getBusinessId(), updated)
       if (!result.success) {
@@ -743,7 +760,7 @@ export default function Ingredients() {
           if (r.success) recipes = r.data || []
         }
       } catch (e) { void e }
-      await generateIngredientsExcel(filteredIngredients, businessData, categories, recipes)
+      await generateIngredientsExcel(filteredIngredients, businessData, categories, recipes, { isRestaurantMode })
       toast.success('Excel exportado exitosamente')
     } catch (error) {
       console.error('Error al exportar:', error)
@@ -1388,11 +1405,11 @@ export default function Ingredients() {
               <label className="block text-sm font-medium text-gray-700">Categoría</label>
               <button
                 type="button"
-                onClick={() => { setNewCategoryName(''); setShowCategoryModal(true) }}
+                onClick={() => { setNewCategoryName(''); setShowManageCategoriesModal(true) }}
                 className="inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700"
               >
-                <Plus className="w-3 h-3" />
-                Nueva categoría
+                <FolderPlus className="w-3 h-3" />
+                Gestionar categorías
               </button>
             </div>
             <Select
@@ -1436,7 +1453,7 @@ export default function Ingredients() {
               }}
             />
             <p className="mt-1 text-xs text-gray-500">
-              Costo de 1 {formData.purchaseUnit}. Se usa para calcular el costo de tus recetas y valorizar el inventario. Al registrar compras se recalcula como promedio.
+              Costo de 1 {formData.purchaseUnit}. Se usa para calcular el costo de tus {isRestaurantMode ? 'recetas' : 'composiciones'} y valorizar el inventario. Al registrar compras se recalcula como promedio.
             </p>
           </div>
 
@@ -1553,7 +1570,7 @@ export default function Ingredients() {
           <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
             <div>
               <p className="text-sm font-medium text-gray-700">Solo para costos</p>
-              <p className="text-xs text-gray-500">No maneja inventario, solo sirve para calcular costos en recetas</p>
+              <p className="text-xs text-gray-500">No maneja inventario, solo sirve para calcular costos en {isRestaurantMode ? 'recetas' : 'composiciones'}</p>
             </div>
             <button
               type="button"
@@ -1598,34 +1615,9 @@ export default function Ingredients() {
         </div>
       </Modal>
 
-      {/* Modal de nueva categoría (acceso rápido desde el formulario) */}
-      <Modal
-        isOpen={showCategoryModal}
-        onClose={() => { setShowCategoryModal(false); setNewCategoryName('') }}
-        title="Nueva categoría"
-        size="sm"
-      >
-        <div className="space-y-4">
-          <Input
-            label="Nombre de la categoría"
-            value={newCategoryName}
-            onChange={(e) => setNewCategoryName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleCreateCategory()}
-            placeholder="Ej: Panadería, Bebidas frías, Limpieza"
-            autoFocus
-          />
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => { setShowCategoryModal(false); setNewCategoryName('') }}>
-              Cancelar
-            </Button>
-            <Button onClick={handleCreateCategory} disabled={!newCategoryName.trim()}>
-              Crear
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Modal de gestión de categorías (renombrar / eliminar / reordenar) */}
+      {/* Modal de gestión de categorías (crear / renombrar / eliminar / reordenar).
+          Se abre desde el botón "Categorías" del header y desde el enlace
+          "Gestionar categorías" del formulario de insumo. */}
       <Modal
         isOpen={showManageCategoriesModal}
         onClose={() => {
@@ -1722,7 +1714,7 @@ export default function Ingredients() {
                           <div>
                             <div className="font-medium text-sm text-gray-900 truncate">{cat.name}</div>
                             <div className="text-xs text-gray-500">
-                              {usageCount} ingrediente{usageCount !== 1 ? 's' : ''}
+                              {usageCount} {isRestaurantMode ? 'ingrediente' : 'insumo'}{usageCount !== 1 ? 's' : ''}
                             </div>
                           </div>
                         )}

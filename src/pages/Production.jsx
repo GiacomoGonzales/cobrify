@@ -54,8 +54,16 @@ const fmtQty = (n) => {
 }
 
 export default function Production() {
-  const { user, getBusinessId, filterBranchesByAccess, filterWarehousesByAccess, allowedBranches, isDemoMode, demoData, businessSettings } = useAppContext()
+  const { user, getBusinessId, filterBranchesByAccess, filterWarehousesByAccess, allowedBranches, isDemoMode, demoData, businessSettings, businessMode } = useAppContext()
   const toast = useToast()
+
+  // Terminología según el modo: restaurante habla de "recetas"; el resto de
+  // rubros (textil, cosmética, manufactura, etc.) de "composición".
+  const isRestaurantMode = businessMode === 'restaurant'
+  const recipeNoun = isRestaurantMode ? 'Receta' : 'Composición'
+  const withRecipeLabel = isRestaurantMode ? 'Con receta' : 'Con composición'
+  // Ícono del badge: olla para restaurante, engranajes para el resto.
+  const RecipeIcon = isRestaurantMode ? CookingPot : Cog
 
   // Estado principal
   const [productions, setProductions] = useState([])
@@ -500,7 +508,7 @@ export default function Production() {
 
   const getModeBadge = (mode) => {
     if (mode === 'recipe') {
-      return <Badge variant="info"><CookingPot className="w-3 h-3 mr-1" />Con Receta</Badge>
+      return <Badge variant="info"><RecipeIcon className="w-3 h-3 mr-1" />Con {recipeNoun}</Badge>
     }
     return <Badge variant="default"><Wrench className="w-3 h-3 mr-1" />Manual</Badge>
   }
@@ -576,10 +584,10 @@ export default function Production() {
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-blue-100 rounded-lg">
-                <CookingPot className="w-5 h-5 text-blue-600" />
+                <RecipeIcon className="w-5 h-5 text-blue-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Con receta</p>
+                <p className="text-sm text-gray-500">{withRecipeLabel}</p>
                 <p className="text-xl font-bold text-gray-900">
                   {productions.filter(p => p.mode === 'recipe').length}
                 </p>
@@ -624,7 +632,7 @@ export default function Production() {
               className="h-10 px-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white flex-shrink-0 w-full sm:w-36"
             >
               <option value="all">Todos</option>
-              <option value="recipe">Con receta</option>
+              <option value="recipe">{withRecipeLabel}</option>
               <option value="manual">Manual</option>
             </select>
             <input
@@ -1011,7 +1019,7 @@ export default function Production() {
                               {item.isCheckingRecipe ? (
                                 <Loader2 className="w-3 h-3 animate-spin text-gray-400" />
                               ) : item.hasRecipe ? (
-                                <Badge variant="info" className="text-xs"><CookingPot className="w-3 h-3 mr-1" />Con Receta</Badge>
+                                <Badge variant="info" className="text-xs"><RecipeIcon className="w-3 h-3 mr-1" />Con {recipeNoun}</Badge>
                               ) : (
                                 <Badge variant="default" className="text-xs"><Wrench className="w-3 h-3 mr-1" />Manual</Badge>
                               )}

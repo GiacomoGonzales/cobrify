@@ -23,7 +23,13 @@ import {
 
 // =================== 1. REPORTE DE INGREDIENTES ===================
 
-export const generateIngredientsExcel = async (ingredients, businessData, categories = [], recipes = []) => {
+// options.isRestaurantMode: ajusta la terminología del reporte
+// (restaurante: Ingredientes/Recetas — resto de modos: Insumos/Composiciones).
+export const generateIngredientsExcel = async (ingredients, businessData, categories = [], recipes = [], options = {}) => {
+  const isRestaurantMode = options.isRestaurantMode !== false
+  const NOUNS = isRestaurantMode
+    ? { item: 'Ingrediente', items: 'ingredientes', ITEMS: 'INGREDIENTES', recipe: 'Receta', recipes: 'recetas', Recipes: 'Recetas' }
+    : { item: 'Insumo', items: 'insumos', ITEMS: 'INSUMOS', recipe: 'Composición', recipes: 'composiciones', Recipes: 'Composiciones' }
   const catMap = new Map(categories.map(c => [c.id, c.name]))
   const resolveCategory = (c) => {
     if (!c) return ''
@@ -38,10 +44,10 @@ export const generateIngredientsExcel = async (ingredients, businessData, catego
   ]
   const totalCols = headers.length
 
-  const aoa = [['LISTADO DE INGREDIENTES'], []]
+  const aoa = [[`LISTADO DE ${NOUNS.ITEMS}`], []]
   const metaStart = aoa.length
   aoa.push(...buildBusinessMetadataRows(businessData, {
-    totalLabel: 'Total ingredientes',
+    totalLabel: `Total ${NOUNS.items}`,
     totalItems: ingredients.length,
   }))
   const metaEnd = aoa.length - 1
@@ -100,9 +106,9 @@ export const generateIngredientsExcel = async (ingredients, businessData, catego
   aoa.push([])
   const statsStart = aoa.length
   aoa.push(['ESTADÍSTICAS'])
-  aoa.push(['Total de ingredientes', ingredients.length])
-  aoa.push(['Ingredientes sin stock', outOfStockCount])
-  aoa.push(['Ingredientes con stock bajo', lowStockCount])
+  aoa.push([`Total de ${NOUNS.items}`, ingredients.length])
+  aoa.push([`${NOUNS.item}s sin stock`, outOfStockCount])
+  aoa.push([`${NOUNS.item}s con stock bajo`, lowStockCount])
   aoa.push(['Valor total del inventario', Number(totalValue.toFixed(2))])
   const statsEnd = aoa.length - 1
 
@@ -134,17 +140,17 @@ export const generateIngredientsExcel = async (ingredients, businessData, catego
   applyMetadataRows(ws, statsStart + 1, statsEnd)
   applyFreezeBelow(ws, headerRow)
 
-  XLSX.utils.book_append_sheet(wb, ws, 'Ingredientes')
+  XLSX.utils.book_append_sheet(wb, ws, isRestaurantMode ? 'Ingredientes' : 'Insumos')
 
   // ============== HOJAS EXTRA DE ANALÍTICA ==============
-  appendByCategoryIngredientsSheet(wb, ingredients, businessData, resolveCategory)
-  appendRecipesUsingIngredientsSheet(wb, ingredients, recipes, businessData)
+  appendByCategoryIngredientsSheet(wb, ingredients, businessData, resolveCategory, NOUNS)
+  appendRecipesUsingIngredientsSheet(wb, ingredients, recipes, businessData, NOUNS)
 
-  const fileName = buildExcelFileName('Ingredientes')
+  const fileName = buildExcelFileName(isRestaurantMode ? 'Ingredientes' : 'Insumos')
   await saveAndShareExcel(wb, fileName, {
     shareTitle: fileName,
-    shareText: 'Listado de ingredientes',
-    subDirectory: 'Ingredientes',
+    shareText: `Listado de ${NOUNS.items}`,
+    subDirectory: isRestaurantMode ? 'Ingredientes' : 'Insumos',
   })
 }
 
@@ -196,7 +202,7 @@ export const generateIngredientsTemplate = async () => {
 // =================== HOJAS EXTRA DE ANALÍTICA ===================
 
 /** Hoja "Por Categoría" — agrupación de ingredientes con stock + valor. */
-function appendByCategoryIngredientsSheet(wb, ingredients, businessData, resolveCategory) {
+function appendByCategoryIngredientsSheet(wb, ingredients, businessData, resolveCategory, NOUNS) {
   const agg = new Map()
   for (const ing of ingredients) {
     const cat = resolveCategory(ing.category) || 'Sin categoría'
@@ -216,10 +222,10 @@ function appendByCategoryIngredientsSheet(wb, ingredients, businessData, resolve
 
   const rows = [...agg.values()].sort((a, b) => b.totalValue - a.totalValue)
 
-  const headers = ['Categoría', '# Ingredientes', 'Stock Total', 'Valor Total', 'Stock Bajo', 'Sin Stock', '% Valor']
+  const headers = ['Categoría', `# ${NOUNS.item}s`, 'Stock Total', 'Valor Total', 'Stock Bajo', 'Sin Stock', '% Valor']
   const totalCols = headers.length
 
-  const aoa = [['INGREDIENTES POR CATEGORÍA'], []]
+  const aoa = [[`${NOUNS.ITEMS} POR CATEGORÍA`], []]
   const metaStart = aoa.length
   aoa.push(...buildBusinessMetadataRows(businessData, {
     totalLabel: 'Total categorías',
@@ -277,8 +283,8 @@ function appendByCategoryIngredientsSheet(wb, ingredients, businessData, resolve
   XLSX.utils.book_append_sheet(wb, ws, 'Por Categoría')
 }
 
-/** Hoja "Recetas que Usan" — para cada ingrediente, qué recetas lo consumen. */
-function appendRecipesUsingIngredientsSheet(wb, ingredients, recipes, businessData) {
+/** Hoja "Recetas que Usan" — para cada ingrediente, qué recetas/composiciones lo consumen. */
+function appendRecipesUsingIngredientsSheet(wb, ingredients, recipes, businessData, NOUNS) {
   if (!recipes || recipes.length === 0) return
 
   // Inverse map: ingredientId → [{ recipeName, productName, quantity, unit }]
@@ -290,7 +296,7 @@ function appendRecipesUsingIngredientsSheet(wb, ingredients, recipes, businessDa
       if (!id) continue
       if (!inverse.has(id)) inverse.set(id, [])
       inverse.get(id).push({
-        recipeName: r.productName || r.name || 'Receta',
+        recipeName: r.productName || r.name || NOUNS.recipe,
         quantity: ri.quantity || 0,
         unit: ri.unit || '',
       })
@@ -301,13 +307,13 @@ function appendRecipesUsingIngredientsSheet(wb, ingredients, recipes, businessDa
   const used = ingredients.filter(ing => inverse.has(ing.id))
   if (used.length === 0) return
 
-  const headers = ['Ingrediente', 'Unidad', '# Recetas', 'Recetas (cantidad x unidad)']
+  const headers = [NOUNS.item, 'Unidad', `# ${NOUNS.Recipes}`, `${NOUNS.Recipes} (cantidad x unidad)`]
   const totalCols = headers.length
 
-  const aoa = [['RECETAS QUE USAN CADA INGREDIENTE'], []]
+  const aoa = [[`${NOUNS.Recipes.toUpperCase()} QUE USAN CADA ${NOUNS.item.toUpperCase()}`], []]
   const metaStart = aoa.length
   aoa.push(...buildBusinessMetadataRows(businessData, {
-    totalLabel: 'Ingredientes usados en recetas',
+    totalLabel: `${NOUNS.item}s usados en ${NOUNS.recipes}`,
     totalItems: used.length,
   }))
   const metaEnd = aoa.length - 1
@@ -341,5 +347,5 @@ function appendRecipesUsingIngredientsSheet(wb, ingredients, recipes, businessDa
     setStyle(ws, r, 3, cellStyle(i))
   }
   applyFreezeBelow(ws, headerRow)
-  XLSX.utils.book_append_sheet(wb, ws, 'Recetas que Usan')
+  XLSX.utils.book_append_sheet(wb, ws, `${NOUNS.Recipes} que Usan`)
 }
