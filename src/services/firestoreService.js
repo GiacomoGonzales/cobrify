@@ -145,16 +145,23 @@ export const createInvoiceWithNumber = async (userId, invoiceData, documentType,
 
 /**
  * Obtener facturas recientes (por rango de fechas) - optimizado para Dashboard
+ *
+ * `untilDate` permite pedir una FRANJA cerrada [sinceDate, untilDate) en vez de
+ * "todo desde X". El Dashboard lo usa para cargar por tramos (hoy primero, el
+ * resto del mes después) sin volver a descargar lo que ya tiene.
+ * Ambos filtros van sobre `createdAt`, el mismo campo del orderBy → sigue usando
+ * el índice single-field, sin índices compuestos que desplegar.
+ *
  * @param {string} userId - ID del negocio
- * @param {Date} sinceDate - Fecha desde la cual obtener facturas
+ * @param {Date} sinceDate - Fecha desde la cual obtener facturas (inclusive)
+ * @param {Date|null} untilDate - Tope superior EXCLUSIVO (opcional)
  */
-export const getRecentInvoices = async (userId, sinceDate) => {
+export const getRecentInvoices = async (userId, sinceDate, untilDate = null) => {
   try {
-    const q = query(
-      collection(db, 'businesses', userId, 'invoices'),
-      where('createdAt', '>=', sinceDate),
-      orderBy('createdAt', 'desc')
-    )
+    const constraints = [where('createdAt', '>=', sinceDate)]
+    if (untilDate) constraints.push(where('createdAt', '<', untilDate))
+    constraints.push(orderBy('createdAt', 'desc'))
+    const q = query(collection(db, 'businesses', userId, 'invoices'), ...constraints)
     const querySnapshot = await getDocs(q)
     const invoices = querySnapshot.docs.map(doc => ({
       id: doc.id,

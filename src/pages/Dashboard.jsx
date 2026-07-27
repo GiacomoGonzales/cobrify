@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   FileText,
   Package,
@@ -34,6 +34,15 @@ import { getTables } from '@/services/tableService'
 import { useLocationAccess, useSellerScope } from '@/utils/locationAccess'
 import HotelDashboard from '@/components/hotel/HotelDashboard'
 
+// Placeholder mientras llega el segundo tramo de facturas del mes.
+function PendingBlock({ className = 'h-[300px]' }) {
+  return (
+    <div className={`flex items-center justify-center ${className}`}>
+      <Loader2 className="w-6 h-6 animate-spin text-gray-300" />
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const { user, isDemoMode, demoData, getBusinessId, isAdmin, isBusinessOwner, businessMode, businessSettings, allowedBranches, allowedWarehouses, branchScope, assignedSellerId } = useAppContext()
   // Filtro de seguridad por ubicación (sucursal/almacén) para usuarios secundarios.
@@ -53,6 +62,15 @@ export default function Dashboard() {
   const location = useLocation()
   const [invoices, setInvoices] = useState([])
   const [isLoading, setIsLoading] = useState(true)
+  // Carga por tramos (ver loadDashboardData): `loadedSince` marca desde qué fecha
+  // ya tenemos TODAS las facturas en memoria. Sirve para saber si un mes se puede
+  // calcular exacto con datos locales o hay que quedarse con el aggregate.
+  const [loadedSince, setLoadedSince] = useState(null)
+  // Fase 2 en vuelo → los KPIs y gráficos del MES todavía están incompletos.
+  const [monthLoading, setMonthLoading] = useState(true)
+  // Invalida las fases en vuelo si el efecto se vuelve a disparar (cambio de
+  // usuario/permisos) o el componente se desmonta.
+  const loadTokenRef = useRef(0)
   // El filtro de sucursal del Dashboard usa el selector GLOBAL del Navbar (branchScope):
   // 'all' = Todas | 'main' = Principal | <branchId>. Ya no hay selector propio aquí.
   const filterBranch = branchScope || 'all'
@@ -90,6 +108,9 @@ export default function Dashboard() {
   useEffect(() => {
     loadDashboardData()
     loadMonthlyAggregates()
+    // Al desmontar (o al re-disparar el efecto) invalidamos las fases de carga
+    // en vuelo para que no escriban estado de un usuario/permiso ya viejo.
+    return () => { loadTokenRef.current++ }
     // allowedBranches/allowedWarehouses en deps: si cambian los permisos del usuario
     // secundario, recargamos para re-saturar facturas y recomputar el gráfico de 12 meses.
     // dashMultiCurrencyOn en deps: si businessSettings carga tarde y el negocio tiene
@@ -159,6 +180,10 @@ export default function Dashboard() {
       const since = windows[0].monthStart
       setMonthlyYearLoading(true)
       setMonthlyYearError(false)
+      // Este camino descarga UN AÑO de facturas. Lo diferimos a idle para que no
+      // compita por ancho de banda con el primer tramo de loadDashboardData, que
+      // es el que destraba el primer pintado.
+      await whenIdle()
       try {
         const result = await getRecentInvoices(businessId, since)
         if (!result.success) throw new Error(result.error || 'getRecentInvoices falló')
@@ -256,10 +281,58 @@ export default function Dashboard() {
     return new Date(today.getTime() - days * 24 * 60 * 60 * 1000)
   }, [])
 
+  // Helper: rango del mes ANTERIOR en hora Perú (inicio inclusive, fin exclusivo).
+  // Devuelve también año/mes crudos para poder cruzarlo con `monthlyYearData`
+  // sin depender de la timezone del browser.
+  const getPrevMonthPeru = useCallback(() => {
+    const now = new Date()
+    const peruDate = now.toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
+    const [year, month] = peruDate.split('-').map(Number)
+    const prevMonth = month === 1 ? 12 : month - 1
+    const prevYear = month === 1 ? year - 1 : year
+    return {
+      start: new Date(`${prevYear}-${String(prevMonth).padStart(2, '0')}-01T00:00:00-05:00`),
+      end: new Date(`${year}-${String(month).padStart(2, '0')}-01T00:00:00-05:00`),
+      year: prevYear,
+      monthNum: prevMonth,
+    }
+  }, [])
+
+  // Espera a que el navegador esté ocioso antes de disparar la fase 3.
+  const whenIdle = () =>
+    new Promise(resolve => {
+      if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(() => resolve(), { timeout: 3000 })
+      } else {
+        setTimeout(resolve, 300)
+      }
+    })
+
+  // Carga de facturas EN TRES TRAMOS.
+  //
+  // Antes se descargaban ~3 meses de facturas de una sola vez antes de pintar
+  // nada: en una cuenta con miles de ventas al mes son decenas de miles de
+  // documentos (varios MB + escritura en IndexedDB), y el dashboard se quedaba
+  // en "Cargando..." muchos segundos. Ahora:
+  //
+  //   Fase 1 (bloquea el primer pintado): ayer + hoy. Son pocas facturas incluso
+  //     en cuentas grandes → la pantalla aparece de inmediato con las tarjetas
+  //     del día ya calculadas.
+  //   Fase 2 (en segundo plano): el resto de lo que necesitan los KPIs y gráficos
+  //     del mes — desde el inicio del mes actual o 13 días atrás, lo que sea más
+  //     antiguo (el gráfico de 7 días compara contra la semana previa).
+  //   Fase 3 (diferida a idle): el mes anterior completo. Solo afecta el
+  //     "% vs mes anterior" y una barra del gráfico de 12 meses, así que va al
+  //     final y mientras tanto se usa el aggregate server-side.
+  //
+  // El mes -2 ya no se descarga: no lo usaba ningún cálculo (el gráfico de 12
+  // meses se arma con aggregates server-side).
   const loadDashboardData = async () => {
     if (isDemoMode && demoData) {
       // Load demo data
       setInvoices(demoData.invoices || [])
+      setLoadedSince(new Date(0)) // demo: todo está en memoria
+      setMonthLoading(false)
       // El monto de mesas abiertas se calcula en el useEffect dedicado (respeta filterBranch).
       setIsLoading(false)
       return
@@ -268,45 +341,72 @@ export default function Dashboard() {
     if (!user?.uid) return
 
     const businessId = getBusinessId()
+    const token = ++loadTokenRef.current
+    const alive = () => loadTokenRef.current === token
+
     setIsLoading(true)
+    setMonthLoading(true)
     try {
-      // Load business settings to check privacy options
-      const businessRef = doc(db, 'businesses', businessId)
-      const businessDoc = await getDoc(businessRef)
-      const businessData = businessDoc.exists() ? businessDoc.data() : {}
+      // La opción "ocultar datos del dashboard" solo aplica a usuarios secundarios;
+      // para dueño/admin nos ahorramos este getDoc (un round-trip menos antes de
+      // empezar a traer facturas).
+      if (!isAdmin && !isBusinessOwner) {
+        const businessRef = doc(db, 'businesses', businessId)
+        const businessDoc = await getDoc(businessRef)
+        const businessData = businessDoc.exists() ? businessDoc.data() : {}
 
-      // Check if we should hide dashboard data from secondary users
-      const shouldHideData = businessData.hideDashboardDataFromSecondary && !isAdmin && !isBusinessOwner
-
-      // If we need to hide data, don't load anything
-      if (shouldHideData) {
-        setInvoices([])
-        setIsLoading(false)
-        return
+        if (businessData.hideDashboardDataFromSecondary) {
+          if (!alive()) return
+          setInvoices([])
+          setLoadedSince(null)
+          setMonthLoading(false)
+          setIsLoading(false)
+          return
+        }
       }
 
-      // Cargar facturas desde 2 meses atrás (inicio del mes anterior).
-      // Suficiente para: 7 días (gráfico semanal), mes actual (gráfico diario,
-      // top productos/clientes/pagos) y mes anterior (comparación %).
-      // El gráfico de 12 meses NO se computa aquí — usa server-side aggregations
-      // separadas (mucho más livianas que descargar miles de invoices).
-      const twoMonthsAgo = new Date()
-      twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2)
-      twoMonthsAgo.setDate(1)
-      twoMonthsAgo.setHours(0, 0, 0, 0)
-      const sinceDate = twoMonthsAgo
+      // Cada tramo se filtra por sucursales/almacenes permitidos del usuario
+      // (seguridad de usuarios secundarios) y por vendedor asignado, igual que antes.
+      const sanitize = (list) => (list || []).filter(canAccess).filter(canSeeSale)
 
-      // PERF: solo cargamos invoices recientes (con filtro por fecha). La lista
-      // de productos YA NO se descarga acá: con 4k+ productos eran 5-15s de
-      // espera para mostrar un alert opcional de "stock bajo". El detalle vive
-      // en /inventario que ya tiene paginación y búsqueda optimizadas.
-      const invoicesResult = await getRecentInvoices(businessId, sinceDate)
+      const phase1Since = getDaysAgo(1)
+      const monthStart = getStartOfMonthPeru()
+      const twoWeeksAgo = getDaysAgo(13)
+      const phase2Since = monthStart < twoWeeksAgo ? monthStart : twoWeeksAgo
+      const prevMonthStart = getPrevMonthPeru().start
 
-      if (invoicesResult.success) {
-        // Filtrar por sucursales/almacenes permitidos del usuario (seguridad de usuarios secundarios).
-        // Sanea el estado base → KPIs, gráficos, top productos/clientes/pagos lo respetan.
-        // Además, sub-usuario con vendedor asignado solo ve las ventas de su vendedor.
-        setInvoices((invoicesResult.data || []).filter(canAccess).filter(canSeeSale))
+      // --- Fase 1: ayer + hoy ---
+      const r1 = await getRecentInvoices(businessId, phase1Since)
+      if (!alive()) return
+      if (r1.success) {
+        setInvoices(sanitize(r1.data))
+        setLoadedSince(phase1Since)
+      }
+      setIsLoading(false)
+
+      // --- Fase 2: resto del mes / últimos 14 días ---
+      if (phase2Since < phase1Since) {
+        const r2 = await getRecentInvoices(businessId, phase2Since, phase1Since)
+        if (!alive()) return
+        if (r2.success) {
+          const older = sanitize(r2.data)
+          setInvoices(prev => [...prev, ...older])
+          setLoadedSince(phase2Since)
+        }
+      }
+      setMonthLoading(false)
+
+      // --- Fase 3: mes anterior completo (diferida) ---
+      if (prevMonthStart < phase2Since) {
+        await whenIdle()
+        if (!alive()) return
+        const r3 = await getRecentInvoices(businessId, prevMonthStart, phase2Since)
+        if (!alive()) return
+        if (r3.success) {
+          const oldest = sanitize(r3.data)
+          setInvoices(prev => [...prev, ...oldest])
+          setLoadedSince(prevMonthStart)
+        }
       }
 
       // El monto de mesas abiertas (modo restaurante) se calcula en un useEffect
@@ -315,7 +415,10 @@ export default function Dashboard() {
     } catch (error) {
       console.error('Error al cargar datos:', error)
     } finally {
-      setIsLoading(false)
+      if (alive()) {
+        setIsLoading(false)
+        setMonthLoading(false)
+      }
     }
   }
 
@@ -619,10 +722,16 @@ export default function Dashboard() {
     }
     return monthlyYearData.map(entry => {
       if (entry.year == null || entry.monthNum == null) return entry
+      // Con la carga por tramos solo reemplazamos meses que tenemos ENTEROS en
+      // memoria: un mes cargado a medias pintaría una barra más baja que la real.
+      const entryStart = new Date(
+        `${entry.year}-${String(entry.monthNum).padStart(2, '0')}-01T00:00:00-05:00`
+      )
+      if (!loadedSince || loadedSince > entryStart) return entry
       const key = `${entry.year}-${entry.monthNum}`
       return localTotals.has(key) ? { ...entry, ventas: localTotals.get(key) } : entry
     })
-  }, [monthlyYearData, validInvoicesForSales, getInvoiceDate])
+  }, [monthlyYearData, validInvoicesForSales, getInvoiceDate, loadedSince])
 
   const monthSales = monthStats.monthSales
   const monthSalesUSD = monthStats.monthSalesUSD
@@ -635,25 +744,32 @@ export default function Dashboard() {
   const paymentMethodsData = monthStats.paymentMethodsData
 
   // === Ventas mes ANTERIOR (memoized) ===
+  // Solo se usa para el "% vs mes anterior" de la tarjeta "Ventas del Mes".
   const prevMonthSales = useMemo(() => {
-    const now = new Date()
-    const peruDate = now.toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
-    const [year, month] = peruDate.split('-').map(Number)
-    const prevMonth = month === 1 ? 12 : month - 1
-    const prevYear = month === 1 ? year - 1 : year
-    const prevMonthStart = new Date(`${prevYear}-${String(prevMonth).padStart(2, '0')}-01T00:00:00-05:00`)
-    const monthStart = new Date(`${year}-${String(month).padStart(2, '0')}-01T00:00:00-05:00`)
+    const { start: prevMonthStart, end: monthStart, year: prevYear, monthNum: prevMonth } = getPrevMonthPeru()
 
-    let total = 0
-    for (const inv of validInvoicesForSales) {
-      const invDate = getInvoiceDate(inv)
-      if (!invDate) continue
-      if (invDate >= prevMonthStart && invDate < monthStart) {
-        total += getDocumentTotalInBase(inv)
+    // Camino exacto: la fase 3 ya trajo el mes anterior completo, así que lo
+    // sumamos localmente excluyendo NC/ND, anuladas y notas de venta convertidas.
+    if (loadedSince && loadedSince <= prevMonthStart) {
+      let total = 0
+      for (const inv of validInvoicesForSales) {
+        const invDate = getInvoiceDate(inv)
+        if (!invDate) continue
+        if (invDate >= prevMonthStart && invDate < monthStart) {
+          total += getDocumentTotalInBase(inv)
+        }
       }
+      return total
     }
-    return total
-  }, [validInvoicesForSales, getInvoiceDate])
+
+    // Mientras la fase 3 no llega, usamos el aggregate server-side que ya calcula
+    // el gráfico de 12 meses. Es aproximado (suma todo lo emitido, sin descontar
+    // NC ni anuladas), pero evita bloquear la carga esperando el mes anterior.
+    // `null` = todavía no sabemos (los aggregates siguen en vuelo) → la tarjeta
+    // muestra "Comparando..." en vez de un falso "Primer mes con ventas".
+    const entry = monthlyYearData.find(e => e.year === prevYear && e.monthNum === prevMonth)
+    return entry ? entry.ventas || 0 : null
+  }, [validInvoicesForSales, getInvoiceDate, getPrevMonthPeru, loadedSince, monthlyYearData])
 
   const monthChange = prevMonthSales > 0
     ? ((monthSales - prevMonthSales) / prevMonthSales * 100).toFixed(1)
@@ -729,13 +845,17 @@ export default function Dashboard() {
         ? `+ ${formatCurrency(monthSalesUSD, 'USD')} USD (incluido en el total)`
         : null,
       icon: TrendingUp,
-      change: prevMonthSales > 0
-        ? (monthSales >= prevMonthSales ? `+${monthChange}% vs mes anterior` : `${monthChange}% vs mes anterior`)
-        : (monthSales > 0 ? 'Primer mes con ventas' : 'Sin ventas aún'),
+      change: prevMonthSales === null
+        ? 'Comparando con el mes anterior...'
+        : prevMonthSales > 0
+          ? (monthSales >= prevMonthSales ? `+${monthChange}% vs mes anterior` : `${monthChange}% vs mes anterior`)
+          : (monthSales > 0 ? 'Primer mes con ventas' : 'Sin ventas aún'),
       changeType: prevMonthSales > 0
         ? (monthSales >= prevMonthSales ? 'positive' : 'negative')
         : 'positive',
       isSalesAmount: true,
+      // Fase 2 pendiente → el total del mes todavía está incompleto.
+      pending: monthLoading,
     },
     {
       title: 'Ticket Promedio (mes)',
@@ -744,6 +864,7 @@ export default function Dashboard() {
       change: monthSalesCount > 0 ? `Sobre ${monthSalesCount} venta${monthSalesCount !== 1 ? 's' : ''}` : 'Sin ventas',
       changeType: 'positive',
       isSalesAmount: true,
+      pending: monthLoading,
     },
     {
       title: 'N° Ventas (mes)',
@@ -752,6 +873,7 @@ export default function Dashboard() {
       icon: ShoppingBag,
       change: monthSalesCount > 0 ? 'Comprobantes emitidos' : 'Sin ventas',
       changeType: 'positive',
+      pending: monthLoading,
     },
   ]
 
@@ -855,7 +977,15 @@ export default function Dashboard() {
                   {stat.subtitle && (
                     <p className="text-xs text-primary-600 mt-0.5">{stat.subtitle}</p>
                   )}
-                  <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-2 truncate">{stat.value}</p>
+                  {stat.pending ? (
+                    // Los datos del mes llegan en un segundo tramo: mostramos un
+                    // indicador en vez de un total parcial que confundiría.
+                    <div className="h-8 mt-2 flex items-center">
+                      <Loader2 className="w-5 h-5 animate-spin text-gray-300" />
+                    </div>
+                  ) : (
+                    <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-2 truncate">{stat.value}</p>
+                  )}
                   {stat.usdSubtitle && (
                     <p className="text-xs text-emerald-700 mt-0.5 font-medium">{stat.usdSubtitle}</p>
                   )}
@@ -874,6 +1004,8 @@ export default function Dashboard() {
                         <span className="font-bold text-primary-600">{stat.restaurantBreakdown.projected}</span>
                       </div>
                     </div>
+                  ) : stat.pending ? (
+                    <p className="text-xs sm:text-sm mt-2 text-gray-400">Calculando...</p>
                   ) : (
                     <p
                       className={`text-xs sm:text-sm mt-2 ${
@@ -916,7 +1048,11 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <MonthlyDailySalesChart data={dailyMonthData} avgDaily={avgDailyMonth} />
+            {monthLoading ? (
+              <PendingBlock />
+            ) : (
+              <MonthlyDailySalesChart data={dailyMonthData} avgDaily={avgDailyMonth} />
+            )}
           </CardContent>
         </Card>
 
@@ -957,7 +1093,7 @@ export default function Dashboard() {
           </div>
         </CardHeader>
         <CardContent>
-          <SalesChart data={salesData} />
+          {monthLoading ? <PendingBlock /> : <SalesChart data={salesData} />}
         </CardContent>
       </Card>
 
@@ -973,7 +1109,9 @@ export default function Dashboard() {
             <p className="text-xs text-gray-500 mt-1">Por unidades vendidas</p>
           </CardHeader>
           <CardContent>
-            {topProducts.length === 0 ? (
+            {monthLoading ? (
+              <PendingBlock className="h-[180px]" />
+            ) : topProducts.length === 0 ? (
               <div className="text-center py-8 text-sm text-gray-500">
                 Sin ventas este mes
               </div>
@@ -1005,7 +1143,11 @@ export default function Dashboard() {
             <p className="text-xs text-gray-500 mt-1">Cómo te pagaron este mes</p>
           </CardHeader>
           <CardContent>
-            <PaymentMethodsPieChart data={paymentMethodsData} />
+            {monthLoading ? (
+              <PendingBlock className="h-[180px]" />
+            ) : (
+              <PaymentMethodsPieChart data={paymentMethodsData} />
+            )}
           </CardContent>
         </Card>
 
@@ -1019,7 +1161,9 @@ export default function Dashboard() {
             <p className="text-xs text-gray-500 mt-1">Por monto comprado</p>
           </CardHeader>
           <CardContent>
-            {topCustomers.length === 0 ? (
+            {monthLoading ? (
+              <PendingBlock className="h-[180px]" />
+            ) : topCustomers.length === 0 ? (
               <div className="text-center py-8 text-sm text-gray-500">
                 Sin clientes identificados este mes
               </div>
