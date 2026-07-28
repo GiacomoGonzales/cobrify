@@ -1892,6 +1892,11 @@ export default function CashRegister() {
     const deferredTotal = deferredPayments
       .filter(p => p.currency !== 'USD')
       .reduce((s, p) => s + (p.amount || 0), 0)
+    // Parte de esos cobros que entró en EFECTIVO: es la que afecta el arqueo
+    // (el resto va a tarjeta/transferencia/billeteras y no está en el cajón).
+    const deferredCash = deferredPayments
+      .filter(p => p.currency !== 'USD' && p.method === 'Efectivo')
+      .reduce((s, p) => s + (p.amount || 0), 0)
     const deferredTotalUSD = deferredPayments
       .filter(p => p.currency === 'USD')
       .reduce((s, p) => s + (p.amount || 0), 0)
@@ -1954,6 +1959,7 @@ export default function CashRegister() {
       pendingCount,
       deferredPayments,
       deferredTotal,
+      deferredCash,
       usd: usdBlock,
       yape: yapeBlock,
     }
@@ -2324,6 +2330,22 @@ export default function CashRegister() {
                         </div>
                       )}
                     </div>
+                    {/* Trazabilidad: cuánto de este total NO son ventas nuevas sino
+                        cobros de comprobantes emitidos en sesiones anteriores. */}
+                    {totals.deferredTotal > 0 && (
+                      <div className="mt-2 pt-2 border-t border-dashed border-amber-200 pl-3 text-xs">
+                        <div className="flex justify-between text-amber-700">
+                          <span>Incluye cobros de comprobantes anteriores:</span>
+                          <span className="font-medium">{formatCurrency(totals.deferredTotal)}</span>
+                        </div>
+                        {totals.deferredCash > 0 && (
+                          <div className="flex justify-between text-amber-600 mt-0.5">
+                            <span className="pl-2">• de los cuales en efectivo:</span>
+                            <span className="font-medium">{formatCurrency(totals.deferredCash)}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex justify-between items-center py-2 border-b">
@@ -2353,6 +2375,11 @@ export default function CashRegister() {
                       </div>
                       <div className="text-xs text-gray-500 mt-2">
                         <span className="font-medium">Fórmula:</span> Inicial ({formatCurrency(currentSession.openingAmount)}) + Ventas Efectivo ({formatCurrency(totals.salesCash)}) + Ingresos ({formatCurrency(totals.income)}) - Egresos ({formatCurrency(totals.expense)})
+                        {totals.deferredCash > 0 && (
+                          <span className="block mt-1 text-amber-700">
+                            Ventas Efectivo incluye {formatCurrency(totals.deferredCash)} de cobros de comprobantes anteriores.
+                          </span>
+                        )}
                       </div>
                     </>
                   )}
