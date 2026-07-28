@@ -126,6 +126,16 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   // (cac:SellerSupplierParty en el XML + "Datos del Proveedor" en el PDF).
   const [supplierRuc, setSupplierRuc] = useState('')
   const [supplierName, setSupplierName] = useState('')
+  // Dirección FISCAL del proveedor (la que devuelve la consulta al RUC). Se
+  // guarda en la guía y sale en el PDF; es independiente del punto de partida,
+  // que puede ser un anexo distinto al domicilio fiscal.
+  const [supplierAddress, setSupplierAddress] = useState('')
+  const [isSearchingSupplier, setIsSearchingSupplier] = useState(false)
+  // Establecimientos (anexos) del RUC del proveedor: su dirección es el PUNTO
+  // DE PARTIDA de la compra (de ahí sale la mercadería).
+  const [supplierEstablishments, setSupplierEstablishments] = useState([])
+  const [showSupplierEstablishmentsModal, setShowSupplierEstablishmentsModal] = useState(false)
+  const [loadingSupplierEstablishments, setLoadingSupplierEstablishments] = useState(false)
 
   // Establecimientos (anexos) del RUC del destinatario: lista + modal para elegir (igual que el POS)
   const [recipientEstablishments, setRecipientEstablishments] = useState([])
@@ -455,6 +465,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
           // Datos del proveedor (van al XML como SellerSupplierParty y al PDF)
           setSupplierRuc(supplier.documentNumber || '')
           setSupplierName(supplier.name || '')
+          setSupplierAddress(supplier.address || '')
         }
 
         // El destinatario será mi propia empresa - se carga desde companySettings
@@ -581,6 +592,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     // Proveedor (motivo 02 Compra)
     setSupplierRuc(cloneData.supplier?.documentNumber || '')
     setSupplierName(cloneData.supplier?.name || '')
+    setSupplierAddress(cloneData.supplier?.address || '')
 
     // Destinatario
     const recipient = cloneData.recipient || cloneData.customer || {}
@@ -742,7 +754,11 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   //
   // El ubigeo se hereda de la sucursal a la que pertenece el almacén (si tiene
   // branchId), o de la sucursal seleccionada, o del negocio.
-  const isPurchase = referenceInvoice?.isPurchase
+  // Es una COMPRA si vino desde una compra registrada O si el usuario eligió el
+  // motivo 02 (Compra) a mano. En una compra los roles se invierten: la
+  // mercadería sale del PROVEEDOR (punto de partida) y llega a MI almacén
+  // (punto de llegada), al revés que en una venta.
+  const isPurchase = referenceInvoice?.isPurchase || transferReason === '02'
   useEffect(() => {
     const loadOriginOrDestinationAddress = async () => {
       const businessId = getBusinessId()
@@ -1188,6 +1204,87 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     }
   }
 
+  // === PROVEEDOR (motivo 02 Compra) ===
+  // Buscar la razón social por RUC. En una compra la dirección del proveedor es
+  // el PUNTO DE PARTIDA (de su local sale la mercadería), así que también se
+  // rellena el origen si viene vacío.
+  const handleSearchSupplierRuc = async () => {
+    const ruc = (supplierRuc || '').replace(/\D/g, '')
+    if (ruc.length !== 11) {
+      toast.error('El RUC del proveedor debe tener 11 dígitos')
+      return
+    }
+    setIsSearchingSupplier(true)
+    try {
+      const result = await consultarRUC(ruc)
+      if (result.success) {
+        setSupplierName(result.data.razonSocial || '')
+        if (result.data.direccion) {
+          // Domicilio fiscal: se guarda en los datos del proveedor y además se
+          // propone como punto de partida (el usuario puede cambiarlo por un anexo).
+          setSupplierAddress(result.data.direccion)
+          setOriginAddress(result.data.direccion)
+        }
+        toast.success(`Datos encontrados: ${result.data.razonSocial}`)
+      } else {
+        toast.error(result.error || 'No se encontraron datos para este RUC')
+      }
+    } catch (error) {
+      console.error('Error al buscar RUC del proveedor:', error)
+      toast.error('Error al consultar el RUC')
+    } finally {
+      setIsSearchingSupplier(false)
+    }
+  }
+
+  // Establecimientos (anexos) del proveedor → eligen el PUNTO DE PARTIDA.
+  // Consulta aparte a la API (1 crédito), por eso va con botón explícito.
+  const handleViewSupplierEstablishments = async () => {
+    const ruc = (supplierRuc || '').replace(/\D/g, '')
+    if (ruc.length !== 11) {
+      toast.error('Ingresa el RUC del proveedor (11 dígitos) primero')
+      return
+    }
+    setLoadingSupplierEstablishments(true)
+    try {
+      const res = await consultarEstablecimientos(ruc)
+      if (!res.success) {
+        toast.error(res.error || 'No se pudieron obtener los establecimientos')
+        return
+      }
+      const list = res.data || []
+      if (list.length === 0) {
+        toast.info('Este RUC no tiene locales anexos en SUNAT — se mantiene el domicilio fiscal')
+        return
+      }
+      if (list.length === 1) {
+        applySupplierEstablishment(list[0])
+        toast.success('Este RUC tiene un solo establecimiento. Punto de partida actualizado.')
+        return
+      }
+      setSupplierEstablishments(list)
+      setShowSupplierEstablishmentsModal(true)
+    } catch (error) {
+      console.error('Error al consultar establecimientos del proveedor:', error)
+      toast.error('Error al consultar establecimientos. Verifique su conexión.')
+    } finally {
+      setLoadingSupplierEstablishments(false)
+    }
+  }
+
+  // Aplica el establecimiento elegido al punto de partida (dirección + ubigeo).
+  const applySupplierEstablishment = (est) => {
+    const dir = est.direccionCompleta || est.direccion || ''
+    if (dir) setOriginAddress(dir)
+    const ubigeo = (est.ubigeo || '').trim()
+    if (ubigeo.length === 6) {
+      setOriginDepartment(ubigeo.substring(0, 2))
+      setOriginProvince(ubigeo.substring(2, 4))
+      setOriginDistrict(ubigeo.substring(4, 6))
+    }
+    setShowSupplierEstablishmentsModal(false)
+  }
+
   // Elegir un establecimiento del modal → poner su dirección en el destinatario
   // (un useEffect ya sincroniza esa dirección al punto de llegada).
   const handleSelectRecipientEstablishment = (est) => {
@@ -1218,8 +1315,33 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   // (el proveedor va en su sección aparte). Así evitamos el error clásico de
   // poner al proveedor como destinatario.
   const handleTransferReasonChange = async (value) => {
+    const wasPurchase = transferReason === '02'
     setTransferReason(value)
-    if (value !== '02') return
+
+    if (value !== '02') {
+      // Se sale de Compra: el punto de llegada tenía MI almacén; para una venta
+      // el destino es el cliente (lo repone el efecto de sincronización) y el
+      // origen vuelve a ser mi almacén (lo repone el efecto de dirección).
+      if (wasPurchase) {
+        setDestinationAddress('')
+        setDestinationDepartment('')
+        setDestinationProvince('')
+        setDestinationDistrict('')
+      }
+      return
+    }
+
+    // Se entra a Compra: el punto de partida tenía MI almacén, pero ahora debe
+    // ser la dirección del PROVEEDOR (la lupa / establecimientos lo rellenan).
+    // El punto de llegada lo repone el efecto con el almacén seleccionado.
+    if (!wasPurchase) {
+      setOriginAddress('')
+      setOriginDepartment('')
+      setOriginProvince('')
+      setOriginDistrict('')
+      setSelectedOriginEstablishment('')
+    }
+
     try {
       const businessId = getBusinessId()
       const companyResult = await getCompanySettings(businessId)
@@ -1229,19 +1351,12 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
         setRecipientDocNumber(company.ruc || '')
         setRecipientName(company.businessName || company.name || '')
         setRecipientAddress(company.address || '')
-        // Punto de llegada = mi empresa (la mercadería viene hacia mí)
-        if (!destinationAddress) setDestinationAddress(company.address || '')
         if (company.ubigeo && company.ubigeo.length === 6) {
           setRecipientDepartment(company.ubigeo.substring(0, 2))
           setRecipientProvince(company.ubigeo.substring(2, 4))
           setRecipientDistrict(company.ubigeo.substring(4, 6))
-          if (!destinationAddress) {
-            setDestinationDepartment(company.ubigeo.substring(0, 2))
-            setDestinationProvince(company.ubigeo.substring(2, 4))
-            setDestinationDistrict(company.ubigeo.substring(4, 6))
-          }
         }
-        toast.info('En compras, el destinatario es tu propia empresa. Completa los datos del proveedor.')
+        toast.info('En compras, el destinatario es tu propia empresa. Completa los datos del proveedor (punto de partida).')
       }
     } catch (error) {
       console.error('Error al autocompletar destinatario para compra:', error)
@@ -1377,6 +1492,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
           documentType: '6',
           documentNumber: supplierRuc.trim(),
           name: supplierName.trim(),
+          address: (supplierAddress || '').trim(),
         } : null,
 
         issueDate,
@@ -1581,7 +1697,9 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                 <div className="flex items-center gap-2">
                   <Store className="w-4 h-4 text-gray-400 flex-shrink-0" />
                   <div className="flex-1">
-                    <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Sucursal de origen</label>
+                    <label className="block text-[11px] font-medium text-gray-600 mb-0.5">
+                      {isPurchase ? 'Sucursal de destino' : 'Sucursal de origen'}
+                    </label>
                     <select
                       value={selectedBranchId}
                       onChange={(e) => setSelectedBranchId(e.target.value)}
@@ -1599,7 +1717,9 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                 <div className="flex items-center gap-2">
                   <Package className="w-4 h-4 text-gray-400 flex-shrink-0" />
                   <div className="flex-1">
-                    <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Almacén</label>
+                    <label className="block text-[11px] font-medium text-gray-600 mb-0.5">
+                      {isPurchase ? 'Almacén de destino' : 'Almacén'}
+                    </label>
                     <select
                       value={selectedWarehouseId}
                       onChange={(e) => setSelectedWarehouseId(e.target.value)}
@@ -1650,14 +1770,34 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                   <h3 className="font-semibold text-gray-800">Datos del Proveedor</h3>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input
-                    label="RUC del Proveedor"
-                    placeholder="20123456789"
-                    required
-                    value={supplierRuc}
-                    onChange={(e) => setSupplierRuc(e.target.value.replace(/\D/g, '').slice(0, 11))}
-                    maxLength={11}
-                  />
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      RUC del Proveedor <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="20123456789"
+                        required
+                        value={supplierRuc}
+                        onChange={(e) => setSupplierRuc(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                        onKeyDown={e => e.key === 'Enter' && supplierRuc.length === 11 && handleSearchSupplierRuc()}
+                        maxLength={11}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSearchSupplierRuc}
+                        disabled={isSearchingSupplier}
+                        className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                        title="Buscar datos del RUC"
+                      >
+                        {isSearchingSupplier ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Search className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
                   <Input
                     label="Razón Social del Proveedor"
                     placeholder="Nombre o razón social"
@@ -1666,6 +1806,26 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                     onChange={(e) => setSupplierName(e.target.value)}
                   />
                 </div>
+                <Input
+                  label="Dirección Fiscal del Proveedor"
+                  placeholder="Se completa al buscar el RUC"
+                  value={supplierAddress}
+                  onChange={(e) => setSupplierAddress(e.target.value)}
+                />
+                {/* Anexos del proveedor: definen el punto de partida de la compra */}
+                <button
+                  type="button"
+                  onClick={handleViewSupplierEstablishments}
+                  disabled={loadingSupplierEstablishments}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-primary-600 hover:text-primary-700 disabled:opacity-50"
+                >
+                  {loadingSupplierEstablishments ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Store className="w-3.5 h-3.5" />
+                  )}
+                  Ver establecimientos (SUNAT)
+                </button>
               </>
             )}
 
@@ -3015,6 +3175,46 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                 key={`${est.codigo}-${idx}`}
                 type="button"
                 onClick={() => handleSelectRecipientEstablishment(est)}
+                className="w-full text-left p-3 hover:bg-primary-50 transition-colors"
+              >
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-xs font-semibold text-primary-700 bg-primary-50 border border-primary-200 rounded px-1.5 py-0.5">
+                    {est.codigo || '—'}
+                  </span>
+                  {est.tipo && <span className="text-xs text-gray-500">{est.tipo}</span>}
+                </div>
+                <p className="text-sm font-medium text-gray-900">
+                  {est.direccionCompleta || est.direccion || 'Sin dirección'}
+                </p>
+                {(est.distrito || est.provincia || est.departamento) && (
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {[est.distrito, est.provincia, est.departamento].filter(Boolean).join(' · ')}
+                  </p>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal: elegir establecimiento (anexo) del PROVEEDOR → punto de partida */}
+      <Modal
+        isOpen={showSupplierEstablishmentsModal}
+        onClose={() => setShowSupplierEstablishmentsModal(false)}
+        title="Elegir establecimiento del proveedor"
+        size="md"
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-gray-600">
+            Este RUC tiene varios establecimientos en SUNAT. Elige desde cuál sale la mercadería
+            (se usará como punto de partida):
+          </p>
+          <div className="max-h-96 overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100">
+            {supplierEstablishments.map((est, idx) => (
+              <button
+                key={`${est.codigo}-${idx}`}
+                type="button"
+                onClick={() => applySupplierEstablishment(est)}
                 className="w-full text-left p-3 hover:bg-primary-50 transition-colors"
               >
                 <div className="flex items-center gap-2 mb-0.5">

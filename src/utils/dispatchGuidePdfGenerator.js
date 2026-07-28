@@ -673,16 +673,33 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
 
   // Proveedor (motivo 02 Compra): SUNAT muestra "Datos del Proveedor" además
   // del destinatario (que en compras es la propia empresa compradora).
+  // Se listan RUC, razón social y dirección fiscal (lo que devuelve la consulta
+  // al RUC), cada uno con su etiqueta, como el resto de bloques del documento.
   if (guide.supplier?.documentNumber || guide.supplier?.name) {
     doc.setFont('helvetica', 'bold')
-    const provLabel = 'Datos del Proveedor:'
-    doc.text(provLabel, MARGIN_LEFT, currentY)
-    doc.setFont('helvetica', 'normal')
-    const provText = `${guide.supplier.name || ''}${guide.supplier.documentNumber ? ` - REGISTRO ÚNICO DE CONTRIBUYENTES N° ${guide.supplier.documentNumber}` : ''}`
-    const provX = MARGIN_LEFT + doc.getTextWidth(provLabel) + 6
-    const provLines = doc.splitTextToSize(provText, PAGE_WIDTH - MARGIN_RIGHT - provX)
-    provLines.forEach((line, i) => {
-      doc.text(line, i === 0 ? provX : MARGIN_LEFT, currentY)
+    doc.text('Datos del Proveedor', MARGIN_LEFT, currentY)
+    currentY += spacious ? 14 : 11
+
+    // Ancho fijo de etiqueta para que los valores queden alineados en columna
+    const provLabelWidth = spacious ? 62 : 55
+    const provValueX = MARGIN_LEFT + provLabelWidth
+    const provValueMaxWidth = PAGE_WIDTH - MARGIN_RIGHT - provValueX
+
+    const provRows = [
+      ['RUC', guide.supplier.documentNumber || ''],
+      ['Razón Social', guide.supplier.name || ''],
+      ['Dirección', guide.supplier.address || ''],
+    ].filter(([, value]) => value)
+
+    provRows.forEach(([label, value]) => {
+      doc.setFont('helvetica', 'bold')
+      doc.text(`${label}:`, MARGIN_LEFT, currentY)
+      doc.setFont('helvetica', 'normal')
+      const valueLines = doc.splitTextToSize(value, provValueMaxWidth)
+      valueLines.forEach((line, i) => {
+        doc.text(line, provValueX, currentY)
+        if (i < valueLines.length - 1) currentY += spacious ? 12 : 9
+      })
       currentY += spacious ? 12 : 9
     })
     currentY += spacious ? 4 : 3

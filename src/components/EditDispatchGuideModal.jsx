@@ -104,6 +104,13 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
   // Proveedor (motivo 02 Compra): destinatario = la propia empresa; el proveedor va aparte
   const [supplierRuc, setSupplierRuc] = useState('')
   const [supplierName, setSupplierName] = useState('')
+  // Dirección FISCAL del proveedor (la de la consulta al RUC); sale en el PDF
+  const [supplierAddress, setSupplierAddress] = useState('')
+  const [isSearchingSupplier, setIsSearchingSupplier] = useState(false)
+  // Establecimientos (anexos) del proveedor: definen el PUNTO DE PARTIDA
+  const [supplierEstablishments, setSupplierEstablishments] = useState([])
+  const [showSupplierEstablishmentsModal, setShowSupplierEstablishmentsModal] = useState(false)
+  const [loadingSupplierEstablishments, setLoadingSupplierEstablishments] = useState(false)
   const [transportMode, setTransportMode] = useState('02')
   const [issueDate, setIssueDate] = useState('')
   const [transferDate, setTransferDate] = useState('')
@@ -288,6 +295,7 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
     // Proveedor (motivo 02 Compra)
     setSupplierRuc(guide.supplier?.documentNumber || '')
     setSupplierName(guide.supplier?.name || '')
+    setSupplierAddress(guide.supplier?.address || '')
     setTotalWeight(guide.totalWeight?.toString() || '')
     setWeightUnit(guide.weightUnit || 'KGM')
     setIsM1LVehicle(guide.isM1LVehicle || false)
@@ -595,6 +603,82 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
     toast.success('Dirección del establecimiento aplicada')
   }
 
+  // === PROVEEDOR (motivo 02 Compra) ===
+  // Buscar razón social por RUC. En una compra la dirección del proveedor es el
+  // PUNTO DE PARTIDA (de su local sale la mercadería).
+  const handleSearchSupplierRuc = async () => {
+    const ruc = (supplierRuc || '').replace(/\D/g, '')
+    if (ruc.length !== 11) {
+      toast.error('El RUC del proveedor debe tener 11 dígitos')
+      return
+    }
+    setIsSearchingSupplier(true)
+    try {
+      const result = await consultarRUC(ruc)
+      if (result.success) {
+        setSupplierName(result.data.razonSocial || '')
+        if (result.data.direccion) {
+          setSupplierAddress(result.data.direccion)
+          setOriginAddress(result.data.direccion)
+        }
+        toast.success(`Datos encontrados: ${result.data.razonSocial}`)
+      } else {
+        toast.error(result.error || 'No se encontraron datos para este RUC')
+      }
+    } catch (error) {
+      console.error('Error al buscar RUC del proveedor:', error)
+      toast.error('Error al consultar el RUC')
+    } finally {
+      setIsSearchingSupplier(false)
+    }
+  }
+
+  const handleViewSupplierEstablishments = async () => {
+    const ruc = (supplierRuc || '').replace(/\D/g, '')
+    if (ruc.length !== 11) {
+      toast.error('Ingresa el RUC del proveedor (11 dígitos) primero')
+      return
+    }
+    setLoadingSupplierEstablishments(true)
+    try {
+      const res = await consultarEstablecimientos(ruc)
+      if (!res.success) {
+        toast.error(res.error || 'No se pudieron obtener los establecimientos')
+        return
+      }
+      const list = res.data || []
+      if (list.length === 0) {
+        toast.info('Este RUC no tiene locales anexos en SUNAT — se mantiene el domicilio fiscal')
+        return
+      }
+      if (list.length === 1) {
+        applySupplierEstablishment(list[0])
+        toast.success('Este RUC tiene un solo establecimiento. Punto de partida actualizado.')
+        return
+      }
+      setSupplierEstablishments(list)
+      setShowSupplierEstablishmentsModal(true)
+    } catch (error) {
+      console.error('Error al consultar establecimientos del proveedor:', error)
+      toast.error('Error al consultar establecimientos. Verifique su conexión.')
+    } finally {
+      setLoadingSupplierEstablishments(false)
+    }
+  }
+
+  // Aplica el establecimiento elegido al punto de partida (dirección + ubigeo)
+  const applySupplierEstablishment = (est) => {
+    const dir = est.direccionCompleta || est.direccion || ''
+    if (dir) setOriginAddress(dir)
+    const ubigeo = (est.ubigeo || '').trim()
+    if (ubigeo.length === 6) {
+      setOriginDepartment(ubigeo.substring(0, 2))
+      setOriginProvince(ubigeo.substring(2, 4))
+      setOriginDistrict(ubigeo.substring(4, 6))
+    }
+    setShowSupplierEstablishmentsModal(false)
+  }
+
   // Elegir uno de MIS establecimientos (anexos SUNAT del emisor) como punto de partida.
   // Setea la dirección y deriva departamento/provincia/distrito desde el ubigeo (6 díg).
   const applyOriginEstablishment = (codigo) => {
@@ -738,6 +822,7 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
           documentType: '6',
           documentNumber: supplierRuc.trim(),
           name: supplierName.trim(),
+          address: (supplierAddress || '').trim(),
         } : null,
 
         issueDate,
@@ -928,14 +1013,34 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                   <h3 className="font-semibold text-gray-800">Datos del Proveedor</h3>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input
-                    label="RUC del Proveedor"
-                    placeholder="20123456789"
-                    required
-                    value={supplierRuc}
-                    onChange={(e) => setSupplierRuc(e.target.value.replace(/\D/g, '').slice(0, 11))}
-                    maxLength={11}
-                  />
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      RUC del Proveedor <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="20123456789"
+                        required
+                        value={supplierRuc}
+                        onChange={(e) => setSupplierRuc(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                        onKeyDown={e => e.key === 'Enter' && supplierRuc.length === 11 && handleSearchSupplierRuc()}
+                        maxLength={11}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSearchSupplierRuc}
+                        disabled={isSearchingSupplier}
+                        className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                        title="Buscar datos del RUC"
+                      >
+                        {isSearchingSupplier ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Search className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
                   <Input
                     label="Razón Social del Proveedor"
                     placeholder="Nombre o razón social"
@@ -944,6 +1049,26 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                     onChange={(e) => setSupplierName(e.target.value)}
                   />
                 </div>
+                <Input
+                  label="Dirección Fiscal del Proveedor"
+                  placeholder="Se completa al buscar el RUC"
+                  value={supplierAddress}
+                  onChange={(e) => setSupplierAddress(e.target.value)}
+                />
+                {/* Anexos del proveedor: definen el punto de partida de la compra */}
+                <button
+                  type="button"
+                  onClick={handleViewSupplierEstablishments}
+                  disabled={loadingSupplierEstablishments}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-primary-600 hover:text-primary-700 disabled:opacity-50"
+                >
+                  {loadingSupplierEstablishments ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Store className="w-3.5 h-3.5" />
+                  )}
+                  Ver establecimientos (SUNAT)
+                </button>
               </>
             )}
 
@@ -2010,6 +2135,46 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                 key={`${est.codigo}-${idx}`}
                 type="button"
                 onClick={() => handleSelectRecipientEstablishment(est)}
+                className="w-full text-left p-3 hover:bg-primary-50 transition-colors"
+              >
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-xs font-semibold text-primary-700 bg-primary-50 border border-primary-200 rounded px-1.5 py-0.5">
+                    {est.codigo || '—'}
+                  </span>
+                  {est.tipo && <span className="text-xs text-gray-500">{est.tipo}</span>}
+                </div>
+                <p className="text-sm font-medium text-gray-900">
+                  {est.direccionCompleta || est.direccion || 'Sin dirección'}
+                </p>
+                {(est.distrito || est.provincia || est.departamento) && (
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {[est.distrito, est.provincia, est.departamento].filter(Boolean).join(' · ')}
+                  </p>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal: elegir establecimiento (anexo) del PROVEEDOR → punto de partida */}
+      <Modal
+        isOpen={showSupplierEstablishmentsModal}
+        onClose={() => setShowSupplierEstablishmentsModal(false)}
+        title="Elegir establecimiento del proveedor"
+        size="md"
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-gray-600">
+            Este RUC tiene varios establecimientos en SUNAT. Elige desde cuál sale la mercadería
+            (se usará como punto de partida):
+          </p>
+          <div className="max-h-96 overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100">
+            {supplierEstablishments.map((est, idx) => (
+              <button
+                key={`${est.codigo}-${idx}`}
+                type="button"
+                onClick={() => applySupplierEstablishment(est)}
                 className="w-full text-left p-3 hover:bg-primary-50 transition-colors"
               >
                 <div className="flex items-center gap-2 mb-0.5">

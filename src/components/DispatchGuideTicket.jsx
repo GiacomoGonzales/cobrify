@@ -439,6 +439,9 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
             <span className="info-label">Nombre:</span>
             <span>{guide.supplier.name || '-'}</span>
           </div>
+          {guide.supplier.address && (
+            <div className="address-text">{guide.supplier.address}</div>
+          )}
         </div>
       )}
 
