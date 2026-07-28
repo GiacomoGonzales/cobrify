@@ -381,9 +381,14 @@ export function generateInvoiceXML(invoiceData, businessData) {
   root.ele('cbc:IssueDate').txt(issueDate)
 
   // Tipo de documento
-  // listID según catálogo 51 SUNAT:
+  // listID según catálogo 51 SUNAT (versión vigente, Excel 24.07.2026):
   // - 0101: Venta interna
   // - 1001: Venta interna - Operación sujeta a detracción
+  // OJO: el código 0104 (Venta interna - Anticipos) aparece en guías antiguas
+  // pero YA NO existe en el catálogo 51 vigente para facturas — SUNAT rechaza
+  // con error 3206 (comprobado con F003-6 el 27-07-2026). La factura DE
+  // anticipo se emite como 0101 normal; isAdvancePayment queda como marca
+  // interna para que la factura final pueda encontrarla y deducirla.
   const operationTypeCode = (invoiceData.hasDetraction && invoiceData.detractionType && invoiceData.detractionAmount > 0)
     ? '1001'  // Operación sujeta a detracción
     : '0101'  // Venta interna normal
@@ -475,6 +480,40 @@ export function generateInvoiceXML(invoiceData, businessData) {
       discrepancyResponse.ele('cbc:Description').txt(sanitizeSunatLine(invoiceData.discrepancyReason || invoiceData.notes || '', 500))
     }
   }
+
+  // === ANTICIPOS: documentos de anticipo a deducir (AdditionalDocumentReference) ===
+  // Factura FINAL que deduce anticipos previamente facturados. Por cada anticipo:
+  //   - cbc:ID: serie-número del comprobante de anticipo (regla 2521)
+  //   - cbc:DocumentTypeCode: 02=factura de anticipo, 03=boleta (regla 2505, catálogo 12)
+  //   - cbc:DocumentStatusCode: identificador de pago que lo vincula con su
+  //     cac:PrepaidPayment (reglas 3214-3216)
+  //   - cac:IssuerParty: RUC del emisor del anticipo (reglas 3217, 2520)
+  // El comprobante referenciado debe existir ACEPTADO en SUNAT (regla 3218).
+  // Orden UBL: antes de cac:Signature.
+  const advancesList = (!isNote && Array.isArray(invoiceData.advances))
+    ? invoiceData.advances.filter(a => a && a.fullNumber && Number(a.amount) > 0)
+    : []
+
+  advancesList.forEach((advance, idx) => {
+    const advanceDocRef = root.ele('cac:AdditionalDocumentReference')
+    advanceDocRef.ele('cbc:ID').txt(advance.fullNumber)
+    advanceDocRef.ele('cbc:DocumentTypeCode', {
+      'listAgencyName': 'PE:SUNAT',
+      'listName': 'Documento Relacionado',
+      'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo12'
+    }).txt(advance.docType || '02')
+    advanceDocRef.ele('cbc:DocumentStatusCode', {
+      'listName': 'Anticipo',
+      'listAgencyName': 'PE:SUNAT'
+    }).txt(String(idx + 1))
+    const advanceIssuer = advanceDocRef.ele('cac:IssuerParty')
+    advanceIssuer.ele('cac:PartyIdentification').ele('cbc:ID', {
+      'schemeID': '6',
+      'schemeName': 'Documento de Identidad',
+      'schemeAgencyName': 'PE:SUNAT',
+      'schemeURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06'
+    }).txt(advance.issuerRuc || businessData.ruc)
+  })
 
   // === FIRMA DIGITAL (Referencia UBL) ===
   // La firma XMLDSig real se insertará en ext:UBLExtensions por QPSE o xmlSigner.js
@@ -917,8 +956,52 @@ export function generateInvoiceXML(invoiceData, businessData) {
     if (globalDiscountBase > maxBase) globalDiscountBase = maxBase
   }
 
+  // === ANTICIPOS: deducción en la factura final ===
+  // Aritmética según reglas SUNAT (Excel 24.07.2026) y guía UBL 2.1:
+  //   - Los totales del documento (LineExtensionAmount/TaxInclusiveAmount) van
+  //     BRUTOS: reglas 3278 y 3279 solo restan el descuento global 02, NO el 04.
+  //   - El IGV del documento y el TaxableAmount gravado sí van NETOS del
+  //     anticipo (reglas 3291 y 3277: restan códigos 02 Y 04).
+  //   - PayableAmount = TaxInclusive − PrepaidAmount (regla 3280 y guía: el
+  //     importe total es "31-32+33 menos los anticipos").
+  // El descuento se declara con código 04 (anticipo gravado), 05 (exonerado)
+  // o 06 (inafecto) según la afectación de la operación (regla 3287).
+  let advanceTotal = 0   // Σ anticipos CON IGV (PrepaidAmount)
+  let advanceBase = 0    // base sin IGV (monto del AllowanceCharge 04/05/06)
+  let advanceIGV = 0
+  let advanceReasonCode = '04'
+  if (advancesList.length > 0) {
+    advanceTotal = Math.round(advancesList.reduce((s, a) => s + Number(a.amount), 0) * 100) / 100
+    if (sumGravadas > 0) {
+      advanceReasonCode = '04'
+      advanceBase = Math.round((advanceTotal / (1 + igvMultiplier)) * 100) / 100
+      advanceIGV = Math.round((advanceTotal - advanceBase) * 100) / 100
+      // Acotar a lo disponible (sumGravadas ya viene neta del descuento global 02)
+      if (advanceBase > sumGravadas) {
+        advanceBase = sumGravadas
+        advanceIGV = Math.round(advanceBase * igvMultiplier * 100) / 100
+      }
+      // TaxSubtotal 1000 neto del anticipo (reglas 3277/3291)
+      sumGravadas = Math.round((sumGravadas - advanceBase) * 100) / 100
+      sumIGVGravadas = Math.round((sumIGVGravadas - advanceIGV) * 100) / 100
+    } else if (sumExoneradas > 0) {
+      // Operación exonerada: anticipo sin IGV, código 05. El TaxableAmount 9997
+      // resta los anticipos exonerados (regla 3275/fila 305).
+      advanceReasonCode = '05'
+      advanceBase = Math.min(advanceTotal, sumExoneradas)
+      sumExoneradas = Math.round((sumExoneradas - advanceBase) * 100) / 100
+    } else if (sumInafectas > 0) {
+      advanceReasonCode = '06'
+      advanceBase = Math.min(advanceTotal, sumInafectas)
+      sumInafectas = Math.round((sumInafectas - advanceBase) * 100) / 100
+    }
+    console.log(`💰 Anticipos a deducir: ${advancesList.length} doc(s), total ${advanceTotal} (base ${advanceBase}, IGV ${advanceIGV}, código ${advanceReasonCode})`)
+  }
+
   // Los valores globales ya incorporan el descuento por línea; el descuento global
   // se resta a nivel documento.
+  // OJO: taxableAmount/igvAmount alimentan LineExtensionAmount/TaxInclusiveAmount,
+  // que van BRUTOS respecto del anticipo (solo el TaxTotal va neto — ver finalIgv).
   const taxableAmount = Math.round((sumLineExtension - globalDiscountBase) * 100) / 100
   const igvAmount = Math.round((sumLineIGV - globalDiscountIGV) * 100) / 100
   const totalAmount = Math.round((taxableAmount + igvAmount) * 100) / 100
@@ -947,6 +1030,33 @@ export function generateInvoiceXML(invoiceData, businessData) {
   const recargoConsumo = invoiceData.recargoConsumo || 0
   const recargoConsumoRate = invoiceData.recargoConsumoRate || 0
   const currency = invoiceData.currency || 'PEN'
+
+  // === ANTICIPOS: cac:PrepaidPayment (uno por comprobante de anticipo) ===
+  // cbc:ID = identificador de pago (mismo número que el DocumentStatusCode del
+  // AdditionalDocumentReference correspondiente — reglas 3211/3213).
+  // Orden UBL: después de PaymentTerms y ANTES de AllowanceCharge.
+  advancesList.forEach((advance, idx) => {
+    const prepaidPayment = root.ele('cac:PrepaidPayment')
+    prepaidPayment.ele('cbc:ID', {
+      'schemeName': 'Anticipo',
+      'schemeAgencyName': 'PE:SUNAT'
+    }).txt(String(idx + 1))
+    prepaidPayment.ele('cbc:PaidAmount', { 'currencyID': currency })
+      .txt((Math.round(Number(advance.amount) * 100) / 100).toFixed(2))
+  })
+
+  // === ANTICIPOS: descuento global código 04/05/06 (Catálogo 53) ===
+  // Obligatorio cuando hay PrepaidAmount > 0 (regla 3287). El monto es la BASE
+  // sin IGV del anticipo. Factor=1 y BaseAmount=Amount (regla 3307).
+  if (advanceBase > 0) {
+    const allowanceChargeAdvance = root.ele('cac:AllowanceCharge')
+    allowanceChargeAdvance.ele('cbc:ChargeIndicator').txt('false')
+    allowanceChargeAdvance.ele('cbc:AllowanceChargeReasonCode').txt(advanceReasonCode)
+    allowanceChargeAdvance.ele('cbc:MultiplierFactorNumeric').txt('1.00000')
+    allowanceChargeAdvance.ele('cbc:Amount', { 'currencyID': currency }).txt(advanceBase.toFixed(2))
+    allowanceChargeAdvance.ele('cbc:BaseAmount', { 'currencyID': currency }).txt(advanceBase.toFixed(2))
+    console.log(`✅ AllowanceCharge anticipos (código ${advanceReasonCode}) agregado: ${advanceBase.toFixed(2)} (sin IGV)`)
+  }
 
   // === DESCUENTO GLOBAL (Catálogo 53 código 02) ===
   // Se declara como cac:AllowanceCharge a nivel documento con ChargeIndicator=false.
@@ -978,7 +1088,9 @@ export function generateInvoiceXML(invoiceData, businessData) {
   // IMPORTANTE: TaxTotal DEBE ir ANTES de LegalMonetaryTotal según UBL 2.1
   // SIEMPRE usar los valores calculados para que cuadren con las líneas
   // NUEVO: Generar múltiples TaxSubtotals según los tipos de afectación usados
-  const finalIgv = igvAmount
+  // Anticipos: el IGV del documento va NETO del IGV ya pagado en los anticipos
+  // (regla 3291: base gravada menos descuentos 02 y 04, por la tasa).
+  const finalIgv = Math.round((igvAmount - advanceIGV) * 100) / 100
 
   const taxTotal = root.ele('cac:TaxTotal')
   taxTotal.ele('cbc:TaxAmount', { 'currencyID': currency })
@@ -1079,9 +1191,18 @@ export function generateInvoiceXML(invoiceData, businessData) {
       .txt(recargoConsumo.toFixed(2))
   }
 
-  // 4. PayableAmount - Total a pagar
+  // 3.5. PrepaidAmount = total de anticipos deducidos (reglas 2509/3220).
+  // Orden UBL: después de ChargeTotalAmount y antes de PayableAmount.
+  if (advanceTotal > 0) {
+    legalMonetaryTotal.ele('cbc:PrepaidAmount', { 'currencyID': invoiceData.currency || 'PEN' })
+      .txt(advanceTotal.toFixed(2))
+  }
+
+  // 4. PayableAmount - Total a pagar. Con anticipos: TaxInclusive (bruto) menos
+  // los anticipos = saldo que efectivamente paga el cliente (regla 3280).
+  const payableAmount = Math.round((finalTotal - advanceTotal) * 100) / 100
   legalMonetaryTotal.ele('cbc:PayableAmount', { 'currencyID': invoiceData.currency || 'PEN' })
-    .txt(finalTotal.toFixed(2))
+    .txt(payableAmount.toFixed(2))
 
   // === ITEMS ===
   invoiceData.items.forEach((item, index) => {

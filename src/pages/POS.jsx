@@ -67,7 +67,7 @@ import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo }
 import { Share } from '@capacitor/share'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
-import { getDoc, doc, Timestamp } from 'firebase/firestore'
+import { getDoc, doc, Timestamp, collection, query, where, getDocs, limit as fsLimit, updateDoc } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { db, storage } from '@/lib/firebase'
 import { getRooms as getHotelRooms, getActiveReservations, addCharge as addFolioCharge, markChargesAsInvoiced } from '@/services/hotelService'
@@ -826,6 +826,17 @@ export default function POS() {
 
   // Mostrar campos de transporte de carga solo para códigos 021 y 027
   const showTransportFields = hasDetraction && ['021', '027'].includes(detractionType)
+
+  // === ANTICIPOS (solo facturas) ===
+  // isAdvanceInvoice: esta factura ES por un anticipo recibido → tipo de
+  // operación 0104 (catálogo 51) y queda marcada para poder deducirla después.
+  // deductAdvances/advancesList: la factura FINAL deduce anticipos ya
+  // facturados (XML: PrepaidPayment + AllowanceCharge 04 + PayableAmount neto).
+  const [isAdvanceInvoice, setIsAdvanceInvoice] = useState(false)
+  const [deductAdvances, setDeductAdvances] = useState(false)
+  const [advancesList, setAdvancesList] = useState([]) // [{ invoiceId?, fullNumber, amount }]
+  const [candidateAdvances, setCandidateAdvances] = useState([]) // facturas 0104 aceptadas del cliente
+  const [loadingAdvances, setLoadingAdvances] = useState(false)
 
   // Ref para controlar si ya se cargó el borrador
   const draftLoadedRef = useRef(false)
@@ -4630,6 +4641,11 @@ export default function POS() {
     setGuideNumber('')
     setPurchaseOrderNumber('')
     setOrderNumber('')
+    // Reset anticipos
+    setIsAdvanceInvoice(false)
+    setDeductAdvances(false)
+    setAdvancesList([])
+    setCandidateAdvances([])
     // Reset hora del evento de Meta Ads
     setMetaEventTime(getLocalDateTimeString())
     clearDraft() // Limpiar borrador de localStorage
@@ -4871,6 +4887,10 @@ export default function POS() {
       setDetractionType('')
       setDetractionBankAccount('')
       setHasRetencion(false)
+      // Anticipos también son factura-only
+      setIsAdvanceInvoice(false)
+      setDeductAdvances(false)
+      setAdvancesList([])
     }
   }, [documentType])
 
@@ -5099,6 +5119,14 @@ export default function POS() {
     }
   }, [cart, amounts, companySettings?.enableCustomerDisplay, saleCompleted])
 
+  // Anticipos aplicados a esta factura: suma de los anticipos seleccionados,
+  // acotada al total de la venta (no se puede deducir más de lo que se factura).
+  const advancesApplied = React.useMemo(() => {
+    if (documentType !== 'factura' || !deductAdvances) return 0
+    const sum = advancesList.reduce((s, a) => s + (parseFloat(a.amount) || 0), 0)
+    return Math.min(Math.round(sum * 100) / 100, amounts.total)
+  }, [documentType, deductAdvances, advancesList, amounts.total])
+
   // Calcular totales de pago (optimizado con useMemo)
   const paymentTotals = React.useMemo(() => {
     const totalPaid = payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0)
@@ -5110,14 +5138,61 @@ export default function POS() {
       const partialAmount = parseFloat(partialPaymentAmount) || 0
       amountToPay = partialAmount
     } else {
-      amountToPay = amounts.total
+      // Con anticipos deducidos, el cliente solo paga el SALDO
+      amountToPay = Math.round((amounts.total - advancesApplied) * 100) / 100
     }
 
     const remaining = amountToPay - totalPaid
     return { totalPaid, remaining, amountToPay }
-  }, [payments, amounts.total, enablePartialPayment, partialPaymentAmount])
+  }, [payments, amounts.total, enablePartialPayment, partialPaymentAmount, advancesApplied])
 
   const { totalPaid, remaining, amountToPay } = paymentTotals
+
+  // Cargar las facturas de anticipo del cliente (para deducirlas en la factura final).
+  // Solo califican: facturas marcadas como anticipo (0104), ACEPTADAS por SUNAT
+  // (regla 3218: el comprobante referenciado debe existir aceptado) y que no se
+  // hayan usado ya en otra factura final.
+  const loadCandidateAdvances = async () => {
+    const customerRuc = (customerData.documentNumber || '').trim()
+    if (!/^\d{11}$/.test(customerRuc)) {
+      setCandidateAdvances([])
+      return
+    }
+    setLoadingAdvances(true)
+    try {
+      const q = query(
+        collection(db, 'businesses', getBusinessId(), 'invoices'),
+        where('customer.documentNumber', '==', customerRuc),
+        fsLimit(100)
+      )
+      const snap = await getDocs(q)
+      const candidates = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(inv =>
+          inv.isAdvancePayment === true &&
+          inv.documentType === 'factura' &&
+          inv.sunatStatus === 'accepted' &&
+          !inv.advanceUsedIn &&
+          inv.status !== 'cancelled' && inv.status !== 'voided'
+        )
+        .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+      setCandidateAdvances(candidates)
+    } catch (error) {
+      console.error('Error al cargar facturas de anticipo:', error)
+      setCandidateAdvances([])
+    } finally {
+      setLoadingAdvances(false)
+    }
+  }
+
+  // Alterna un anticipo candidato en la lista a deducir
+  const toggleAdvance = (inv) => {
+    setAdvancesList(prev => {
+      const exists = prev.find(a => a.invoiceId === inv.id)
+      if (exists) return prev.filter(a => a.invoiceId !== inv.id)
+      return [...prev, { invoiceId: inv.id, fullNumber: inv.number, amount: inv.total }]
+    })
+  }
 
   // ===== Vencimiento y cuotas en notas de venta al crédito (opcional) =====
   // Reusa paymentDueDate/paymentInstallments (los mismos campos de la factura),
@@ -5225,13 +5300,15 @@ export default function POS() {
     if (!pendingAmountSyncRef.current) return
     pendingAmountSyncRef.current = false
     if (payments.length !== 1) return
-    if (!(amounts.total > 0)) return
-    const next = amounts.total.toString()
+    // Con anticipos deducidos, el monto a autollenar es el SALDO a pagar
+    const autoFillTotal = Math.round((amounts.total - advancesApplied) * 100) / 100
+    if (!(autoFillTotal > 0)) return
+    const next = autoFillTotal.toString()
     setPayments(prev => {
       if (prev.length !== 1 || prev[0].amount === next) return prev
       return [{ ...prev[0], amount: next }]
     })
-  }, [amounts.total, payments])
+  }, [amounts.total, payments, advancesApplied])
 
   // Actualizar monto de pago
   const handlePaymentAmountChange = (index, amount) => {
@@ -5249,9 +5326,11 @@ export default function POS() {
 
   // Agregar un nuevo método de pago
   const handleAddPaymentMethod = () => {
+    // Con anticipos deducidos, lo que se reparte entre métodos es el SALDO
+    const netTotal = Math.round((amounts.total - advancesApplied) * 100) / 100
     // Si solo hay un método con todo el monto, dividir el total entre los métodos
-    if (payments.length === 1 && parseFloat(payments[0].amount) === amounts.total) {
-      const halfAmount = (amounts.total / 2).toFixed(2)
+    if (payments.length === 1 && parseFloat(payments[0].amount) === netTotal) {
+      const halfAmount = (netTotal / 2).toFixed(2)
       setPayments([
         { ...payments[0], amount: halfAmount },
         { method: '', amount: halfAmount }
@@ -5263,20 +5342,22 @@ export default function POS() {
   }
 
   // Mantener el monto del pago sincronizado con el total cuando hay un solo método
-  // Esto cubre: recargo al consumo que carga después, cambios de cantidad, descuentos, etc.
+  // Esto cubre: recargo al consumo que carga después, cambios de cantidad, descuentos,
+  // y anticipos deducidos (el cliente solo paga el SALDO).
   useEffect(() => {
     if (saleCompleted) return
+    const netTotal = Math.round((amounts.total - advancesApplied) * 100) / 100
     setPayments(prev => {
       if (prev.length !== 1 || !prev[0].method) return prev
       // Saldo a favor: capear al disponible (no llenar con el total completo).
       const cap = prev[0].method === 'CREDIT_NOTE'
-        ? Math.min(amounts.total, customerStoreCredit.total)
-        : amounts.total
+        ? Math.min(netTotal, customerStoreCredit.total)
+        : netTotal
       const newAmount = cap > 0 ? cap.toString() : ''
       if (prev[0].amount === newAmount) return prev
       return [{ ...prev[0], amount: newAmount }]
     })
-  }, [amounts.total, saleCompleted, customerStoreCredit.total])
+  }, [amounts.total, saleCompleted, customerStoreCredit.total, advancesApplied])
 
   // Eliminar un método de pago
   const handleRemovePaymentMethod = (index) => {
@@ -5472,6 +5553,21 @@ export default function POS() {
       if (badDate) {
         abortCheckout(`La fecha de vencimiento (${badDate}) debe ser POSTERIOR a la fecha de emisión (${emissionDateToUse}). SUNAT rechaza cuotas que vencen el mismo día de la emisión.`)
         return
+      }
+    }
+
+    // Anticipos a deducir: validar formato de serie-número (regla SUNAT 2521) en
+    // los agregados a mano. Los seleccionados del sistema ya vienen bien formados.
+    if (documentType === 'factura' && advancesApplied > 0) {
+      for (const adv of advancesList) {
+        if (adv.invoiceId) continue
+        const amt = parseFloat(adv.amount) || 0
+        if (amt <= 0) continue // sin monto no se aplica: se ignora
+        const fn = String(adv.fullNumber || '').trim().toUpperCase()
+        if (!/^([FB][A-Z0-9]{3}|E001|EB01)-\d{1,8}$/.test(fn)) {
+          abortCheckout(`El comprobante de anticipo "${adv.fullNumber || '(vacío)'}" debe tener formato Serie-Número (ej: F001-95). Debe ser una factura ACEPTADA por SUNAT.`)
+          return
+        }
       }
     }
 
@@ -5871,8 +5967,10 @@ export default function POS() {
       // Vuelto: solo aplica a pagos al contado (no crédito, no parcial) cuando el cliente
       // pagó más que el total. totalPaid viene del state del POS y refleja exactamente lo
       // que ingresó el cajero (NO el monto recortado a allPayments por effectiveAmount).
-      const change = (!isCreditSaleForInvoice && !isPartialPayment && totalPaid > amounts.total)
-        ? Math.round((totalPaid - amounts.total) * 100) / 100
+      // Con anticipos deducidos, el cliente paga el SALDO: el vuelto se calcula contra él.
+      const netSaleTotal = Math.round((amounts.total - advancesApplied) * 100) / 100
+      const change = (!isCreditSaleForInvoice && !isPartialPayment && totalPaid > netSaleTotal)
+        ? Math.round((totalPaid - netSaleTotal) * 100) / 100
         : 0
       // Monto entregado por el cliente (incluye el excedente que se devuelve como vuelto).
       // Para tickets: se muestra como "Pago con" cuando hay vuelto, para que el cliente vea
@@ -5970,7 +6068,12 @@ export default function POS() {
         discountPercentage: parseFloat(discountPercentage) || 0,
         igv: amounts.igv,
         igvByRate: amounts.igvByRate || {},
-        total: amounts.total,
+        // Con anticipos deducidos, `total` = SALDO (el "Importe total" SUNAT /
+        // PayableAmount y lo que el cliente paga). El bruto queda en grossTotal.
+        // Así los reportes no cuentan doble (el anticipo ya se facturó antes).
+        total: advancesApplied > 0
+          ? Math.round((amounts.total - advancesApplied) * 100) / 100
+          : amounts.total,
         // Multi-divisa: moneda nativa del documento + TC CONGELADO. PEN=1
         // si no se activó multi-divisa o si se vende en soles. NUNCA se
         // recalculan a posteriori los *InBase (reportes históricos fijos).
@@ -5978,7 +6081,9 @@ export default function POS() {
         exchangeRate: currency === 'USD' ? (Number(exchangeRate) || 1) : 1,
         subtotalInBase: amounts.subtotalInBase,
         igvInBase: amounts.igvInBase,
-        totalInBase: amounts.totalInBase,
+        totalInBase: advancesApplied > 0
+          ? Math.round(((amounts.total - advancesApplied) * (currency === 'USD' ? (Number(exchangeRate) || 1) : 1)) * 100) / 100
+          : amounts.totalInBase,
         // Montos por tipo de afectación tributaria
         opGravadas: amounts.gravado?.total || 0,
         opExoneradas: amounts.exonerado?.total || 0,
@@ -6113,6 +6218,31 @@ export default function POS() {
             retencionRate: 3,
             retencionAmount: Number((amounts.total * 0.03).toFixed(2)),
             retencionNetPayable: Number((amounts.total - amounts.total * 0.03).toFixed(2)),
+          }),
+          // === ANTICIPOS ===
+          // Factura DE anticipo: tipo de operación 0104 (catálogo 51). Queda
+          // marcada para que la factura final del mismo cliente la encuentre.
+          ...(isAdvanceInvoice && { isAdvancePayment: true }),
+          // Factura FINAL que deduce anticipos: lista de comprobantes de
+          // anticipo (serie-número + monto CON IGV). El XML server-side arma
+          // PrepaidPayment/AllowanceCharge 04 y el PayableAmount neto.
+          ...(advancesApplied > 0 && {
+            advances: advancesList
+              .filter(a => a.fullNumber && parseFloat(a.amount) > 0)
+              .map(a => {
+                const fn = String(a.fullNumber).trim().toUpperCase()
+                return {
+                  ...(a.invoiceId && { invoiceId: a.invoiceId }),
+                  fullNumber: fn,
+                  // 02 = factura de anticipo, 03 = boleta de anticipo (catálogo 12)
+                  docType: (fn.startsWith('B') || fn.startsWith('EB')) ? '03' : '02',
+                  amount: Math.round(parseFloat(a.amount) * 100) / 100,
+                }
+              }),
+            advanceTotal: advancesApplied,
+            // Total BRUTO de la operación (los items completos). El campo `total`
+            // del doc queda como SALDO (lo que efectivamente paga el cliente).
+            grossTotal: amounts.total,
           }),
         }),
         // Si viene de nota(s) de venta, marcar para no descontar stock de nuevo
@@ -6274,6 +6404,19 @@ export default function POS() {
           } else {
             // Sin auto-impresión no hay nada que imprimir antes: mostrar el aviso de inmediato
             setChangeReminder(changeReminderData)
+          }
+        }
+
+        // Marcar los anticipos deducidos como USADOS en esta factura, para que
+        // el selector no permita deducirlos dos veces. Fire-and-forget: si
+        // falla, la venta ya está guardada (solo afecta el filtro del picker).
+        if (advancesApplied > 0) {
+          for (const adv of advancesList) {
+            if (!adv.invoiceId) continue
+            updateDoc(doc(db, 'businesses', businessId, 'invoices', adv.invoiceId), {
+              advanceUsedIn: invoiceId,
+              advanceUsedInNumber: numberResult.number,
+            }).catch(err => console.warn('No se pudo marcar anticipo como usado:', err))
           }
         }
 
@@ -7498,6 +7641,12 @@ ${companySettings?.businessName || 'Tu Empresa'}`
           type="button"
           onClick={() => {
             setPaymentType('credito')
+            // Una factura de anticipo NO puede ser a crédito: el anticipo es
+            // dinero YA recibido. Al pasar a crédito se desmarca con aviso.
+            if (isAdvanceInvoice) {
+              setIsAdvanceInvoice(false)
+              toast.info('Se desmarcó "Factura de anticipo": un anticipo es un pago ya recibido, no puede ser a crédito.')
+            }
             // Establecer fecha de vencimiento por defecto a 30 días
             const defaultDueDate = new Date()
             defaultDueDate.setDate(defaultDueDate.getDate() + 30)
@@ -9186,6 +9335,140 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           </div>
                         )}
                       </div>
+
+                      {/* Sección de Anticipos */}
+                      <div className="mt-3 pt-2 border-t border-gray-100 space-y-2">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={isAdvanceInvoice}
+                            onChange={e => {
+                              setIsAdvanceInvoice(e.target.checked)
+                              if (e.target.checked) {
+                                // Una factura no puede ser anticipo Y deducir anticipos a la vez
+                                setDeductAdvances(false)
+                                setAdvancesList([])
+                                // El anticipo es dinero YA recibido → siempre al contado
+                                if (paymentType === 'credito') {
+                                  setPaymentType('contado')
+                                  setPaymentDueDate('')
+                                  setPaymentInstallments([])
+                                  toast.info('La forma de pago cambió a Contado: un anticipo es un pago ya recibido.')
+                                }
+                              }
+                            }}
+                            className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                          <span className="text-xs font-medium text-gray-700">Factura de anticipo</span>
+                          <span className="text-[10px] text-gray-400">(pago recibido antes de entregar el bien/servicio)</span>
+                        </label>
+
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={deductAdvances}
+                            onChange={e => {
+                              setDeductAdvances(e.target.checked)
+                              if (e.target.checked) {
+                                setIsAdvanceInvoice(false)
+                                loadCandidateAdvances()
+                              } else {
+                                setAdvancesList([])
+                              }
+                            }}
+                            className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                          <span className="text-xs font-medium text-gray-700">Deducir anticipos facturados</span>
+                        </label>
+
+                        {deductAdvances && (
+                          <div className="space-y-2 bg-blue-50 p-2 rounded-lg border border-blue-200">
+                            {loadingAdvances ? (
+                              <div className="flex items-center gap-2 text-xs text-gray-500 py-1">
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                Buscando facturas de anticipo del cliente...
+                              </div>
+                            ) : candidateAdvances.length === 0 ? (
+                              <p className="text-[10px] text-gray-500">
+                                No se encontraron facturas de anticipo aceptadas de este cliente.
+                                {!/^\d{11}$/.test(customerData.documentNumber || '') && ' Ingresa primero el RUC del cliente.'}
+                                {' '}También puedes agregarla manualmente abajo.
+                              </p>
+                            ) : (
+                              <div className="space-y-1 max-h-28 overflow-y-auto">
+                                {candidateAdvances.map(inv => (
+                                  <label key={inv.id} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-blue-100 rounded px-1 py-0.5">
+                                    <input
+                                      type="checkbox"
+                                      checked={advancesList.some(a => a.invoiceId === inv.id)}
+                                      onChange={() => toggleAdvance(inv)}
+                                      className="w-3.5 h-3.5 text-primary-600 border-gray-300 rounded"
+                                    />
+                                    <span className="font-medium">{inv.number}</span>
+                                    <span className="text-gray-500 ml-auto">{formatCurrency(inv.total, inv.currency)}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Entrada manual (anticipo emitido fuera del sistema o antes de esta función) */}
+                            {(() => {
+                              const manual = advancesList.find(a => !a.invoiceId)
+                              return (
+                                <div className="grid grid-cols-2 gap-2 pt-1 border-t border-blue-200">
+                                  <input
+                                    type="text"
+                                    value={manual?.fullNumber || ''}
+                                    onChange={e => {
+                                      const v = e.target.value.toUpperCase()
+                                      setAdvancesList(prev => {
+                                        const rest = prev.filter(a => a.invoiceId)
+                                        if (!v && !manual?.amount) return rest
+                                        return [...rest, { fullNumber: v, amount: manual?.amount || '' }]
+                                      })
+                                    }}
+                                    placeholder="Serie-Número (F001-95)"
+                                    className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                  />
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={manual?.amount || ''}
+                                    onChange={e => {
+                                      const v = e.target.value
+                                      setAdvancesList(prev => {
+                                        const rest = prev.filter(a => a.invoiceId)
+                                        if (!v && !manual?.fullNumber) return rest
+                                        return [...rest, { fullNumber: manual?.fullNumber || '', amount: v }]
+                                      })
+                                    }}
+                                    placeholder="Monto (con IGV)"
+                                    className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                  />
+                                </div>
+                              )
+                            })()}
+
+                            {advancesApplied > 0 && (
+                              <div className="text-[10px] text-gray-600 bg-white p-2 rounded border border-gray-200">
+                                <div className="flex justify-between">
+                                  <span>Total operación:</span>
+                                  <span className="font-medium">{formatCurrency(amounts.total, currency)}</span>
+                                </div>
+                                <div className="flex justify-between text-blue-700">
+                                  <span>(-) Anticipos:</span>
+                                  <span className="font-medium">{formatCurrency(advancesApplied, currency)}</span>
+                                </div>
+                                <div className="flex justify-between font-bold text-green-700 border-t pt-1 mt-1">
+                                  <span>Saldo a pagar:</span>
+                                  <span>{formatCurrency(amounts.total - advancesApplied, currency)}</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </>
                 ) : documentType === 'boleta' ? (
@@ -10206,14 +10489,27 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     <span className="font-medium">⚠️ Empresa exonerada de IGV</span>
                   </div>
                 )}
-                <div className="flex justify-between text-xl sm:text-2xl font-bold border-t pt-2">
+                {/* Con anticipos deducidos: desglose Total operación / Anticipos / Total a pagar */}
+                {advancesApplied > 0 && (
+                  <>
+                    <div className="flex justify-between text-sm border-t pt-2">
+                      <span className="text-gray-600">Total operación:</span>
+                      <span className="font-medium">{formatCurrency(amounts.total, currency)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm text-blue-700">
+                      <span>(-) Anticipos facturados:</span>
+                      <span className="font-medium">- {formatCurrency(advancesApplied, currency)}</span>
+                    </div>
+                  </>
+                )}
+                <div className={`flex justify-between text-xl sm:text-2xl font-bold ${advancesApplied > 0 ? '' : 'border-t'} pt-2`}>
                   <span className="flex items-center gap-2">
-                    Total:
+                    {advancesApplied > 0 ? 'Total a pagar:' : 'Total:'}
                     {posMultiCurrencyOn && exchangeRate > 1 && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold">TC {exchangeRate}</span>
                     )}
                   </span>
-                  <span className="text-primary-600">{formatCurrency(amounts.total, currency)}</span>
+                  <span className="text-primary-600">{formatCurrency(amounts.total - advancesApplied, currency)}</span>
                 </div>
                 {posMultiCurrencyOn && exchangeRate > 1 && (
                   <div className="text-right text-xs text-gray-500 -mt-1">

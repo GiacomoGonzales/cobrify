@@ -975,6 +975,17 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
               </div>
             );
           })}
+          {/* Anticipos deducidos: como líneas del detalle con importe negativo,
+              igual que la representación impresa de SUNAT */}
+          {invoice.advanceTotal > 0 && Array.isArray(invoice.advances) && invoice.advances.map((advance, idx) => (
+            <div key={`adv-${idx}`} className="item-row">
+              <div className="item-desc">ANTICIPO: FACTURA NRO. {advance.fullNumber}</div>
+              <div className="item-details">
+                <span>1 x -{formatCurrency(advance.amount || 0)}</span>
+                <span style={{ whiteSpace: 'nowrap' }}>-{formatCurrency(advance.amount || 0)}</span>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -1060,6 +1071,21 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
             <span>Rec. Consumo ({invoice.recargoConsumoRate || 10}%):</span>
             <span>{formatCurrency(invoice.recargoConsumo)}</span>
           </div>
+        )}
+        {/* Anticipos deducidos (factura final): total bruto y la SUMA de
+            anticipos (el detalle por comprobante va como líneas del detalle).
+            invoice.total ya es el SALDO a pagar. */}
+        {invoice.advanceTotal > 0 && (
+          <>
+            <div className="total-row">
+              <span>TOTAL OPERACIÓN:</span>
+              <span>{formatCurrency(invoice.grossTotal || 0)}</span>
+            </div>
+            <div className="total-row">
+              <span>ANTICIPOS:</span>
+              <span>- {formatCurrency(invoice.advanceTotal || 0)}</span>
+            </div>
+          </>
         )}
         <div className="total-row final">
           <span>{isQuotation ? 'TOTAL:' : 'TOTAL A PAGAR:'}</span>

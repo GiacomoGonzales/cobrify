@@ -1367,6 +1367,12 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const HAS_DISCOUNT = (invoice.discount || 0) > 0
   const HAS_RECARGO_CONSUMO = (invoice.recargoConsumo || 0) > 0
   const HAS_DETRACTION = invoice.hasDetraction && invoice.detractionAmount > 0
+  // Anticipos deducidos (factura final): el DETALLE va como líneas de ítem
+  // ("ANTICIPO: FACTURA NRO. X" con importe negativo, como la representación
+  // de SUNAT); en los totales solo 2 filas: TOTAL OPERACIÓN y ANTICIPOS (suma).
+  // invoice.total ya es el SALDO; grossTotal es el total bruto de la operación.
+  const HAS_ADVANCES = (invoice.advanceTotal || 0) > 0
+  const ADVANCES_ROWS = HAS_ADVANCES ? 2 : 0
   const HAS_RETENCION = invoice.hasRetencion && invoice.retencionAmount > 0
   // Altura de la sección de información de detracción (leyenda SPOT + datos)
   const DETRACTION_INFO_HEIGHT = HAS_DETRACTION ? 70 : 0 // 22 (SPOT) + 4 filas * 12
@@ -1432,6 +1438,20 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       items.push(grouped)
     }
   })
+
+  // Anticipos deducidos: mostrarlos como LÍNEAS DEL DETALLE con importe negativo,
+  // igual que la representación impresa de SUNAT ("ANTICIPO: FACTURA NRO. E001-1").
+  // En los totales va una sola línea agregada "ANTICIPOS" (pueden ser varios).
+  if ((invoice.advanceTotal || 0) > 0 && Array.isArray(invoice.advances) && invoice.advances.length > 0) {
+    invoice.advances.forEach(advance => {
+      items.push({
+        quantity: 1,
+        unit: 'NIU',
+        name: `ANTICIPO: FACTURA NRO. ${advance.fullNumber || ''}`,
+        unitPrice: -(Number(advance.amount) || 0),
+      })
+    })
+  }
 
   // Verificar si algún item tiene descuento para mostrar la columna DCTO
   const hasAnyItemDiscount = items.some(item => (item.itemDiscount || 0) > 0)
@@ -2034,7 +2054,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     : (2 + extraIgvRows)
   const totalsSectionRows = shouldHideIgv
     ? 1
-    : (opRows + 1 + (HAS_DISCOUNT ? 1 : 0) + (HAS_RECARGO_CONSUMO ? 1 : 0) + (HAS_DETRACTION ? 2 : 0))
+    : (opRows + 1 + (HAS_DISCOUNT ? 1 : 0) + (HAS_RECARGO_CONSUMO ? 1 : 0) + (HAS_DETRACTION ? 2 : 0) + ADVANCES_ROWS)
 
   // Si es nota de venta con ocultar IGV, solo mostrar TOTAL
   if (shouldHideIgv) {
@@ -2130,6 +2150,30 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       footerY += totalsRowHeight
     }
 
+    // Filas de ANTICIPOS deducidos (antes del TOTAL): total bruto de la
+    // operación y la suma de anticipos (el detalle por comprobante ya está
+    // como líneas del ítem). El TOTAL de abajo ya es el saldo a pagar.
+    if (HAS_ADVANCES) {
+      doc.setFillColor(250, 250, 250)
+      doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
+      doc.setDrawColor(200, 200, 200)
+      doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
+      doc.setTextColor(...BLACK)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(9)
+      doc.text('TOTAL OPERACIÓN', totalsX + 5, footerY + 10)
+      doc.text(CCY + ' ' + (invoice.grossTotal || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+      footerY += totalsRowHeight
+
+      doc.setFillColor(250, 250, 250)
+      doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
+      doc.setDrawColor(200, 200, 200)
+      doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
+      doc.text('ANTICIPOS', totalsX + 5, footerY + 10)
+      doc.text('- ' + CCY + ' ' + (invoice.advanceTotal || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+      footerY += totalsRowHeight
+    }
+
     // Fila: TOTAL (fondo oscuro) - Si hay detracción, no es la última fila
     const hasNetRow = HAS_DETRACTION
     const totalRowHeight = hasNetRow ? totalsRowHeight : totalsRowHeight + 6
@@ -2138,7 +2182,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.setTextColor(255, 255, 255)
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(9)
-    doc.text('TOTAL', totalsX + 5, footerY + (hasNetRow ? 10 : 14))
+    doc.text(HAS_ADVANCES ? 'TOTAL A PAGAR' : 'TOTAL', totalsX + 5, footerY + (hasNetRow ? 10 : 14))
     doc.setFontSize(11)
     doc.text(CCY + ' ' + (invoice.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + (hasNetRow ? 10 : 14), { align: 'right' })
     footerY += totalRowHeight
