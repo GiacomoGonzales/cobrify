@@ -177,6 +177,65 @@ export default function InvoiceList() {
   const [sendingWhatsApp, setSendingWhatsApp] = useState(false) // Estado de envío por WhatsApp
   const [openMenuId, setOpenMenuId] = useState(null) // ID del menú de acciones abierto
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: true }) // Posición del menú
+  // Botón que abrió el menú. El menú es `position: fixed` (para poder salir del
+  // overflow de la tabla), así que al hacer scroll hay que RECALCULAR su posición
+  // contra este botón; si no, el menú se queda flotando donde estaba.
+  const menuTriggerRef = useRef(null)
+
+  // Calcula la posición del menú a partir del botón que lo abre.
+  // Devuelve null si el botón ya no está visible (para cerrar el menú).
+  const computeMenuPosition = (triggerEl) => {
+    if (!triggerEl) return null
+    const rect = triggerEl.getBoundingClientRect()
+    // Botón fuera de la ventana (scrolleado por completo) → cerrar
+    if (rect.bottom < 0 || rect.top > window.innerHeight) return null
+    const menuHeight = 400 // Altura estimada del menú
+    const spaceAbove = rect.top
+    const spaceBelow = window.innerHeight - rect.bottom
+    const openUpward = spaceAbove > menuHeight || spaceAbove > spaceBelow
+    return {
+      top: openUpward ? rect.top - 10 : rect.bottom + 10,
+      right: window.innerWidth - rect.right,
+      openUpward,
+    }
+  }
+
+  // Abre/cierra el menú de acciones de un comprobante anclándolo a su botón.
+  const toggleActionsMenu = (invoiceId, triggerEl) => {
+    if (openMenuId === invoiceId) {
+      setOpenMenuId(null)
+      menuTriggerRef.current = null
+      return
+    }
+    const pos = computeMenuPosition(triggerEl)
+    if (!pos) return
+    menuTriggerRef.current = triggerEl
+    setMenuPosition(pos)
+    setOpenMenuId(invoiceId)
+  }
+
+  // Mientras el menú está abierto, seguirlo al botón en scroll/resize.
+  // `capture: true` para captar también el scroll de contenedores internos
+  // (la tabla tiene su propio overflow), no solo el de la ventana.
+  useEffect(() => {
+    if (!openMenuId) return
+    const reposition = () => {
+      const pos = computeMenuPosition(menuTriggerRef.current)
+      if (!pos) {
+        // El botón salió de la pantalla: cerrar en vez de dejar el menú suelto
+        setOpenMenuId(null)
+        menuTriggerRef.current = null
+        return
+      }
+      setMenuPosition(pos)
+    }
+    window.addEventListener('scroll', reposition, true)
+    window.addEventListener('resize', reposition)
+    return () => {
+      window.removeEventListener('scroll', reposition, true)
+      window.removeEventListener('resize', reposition)
+    }
+  }, [openMenuId])
 
   // Pagination for invoices
   const [visibleInvoicesCount, setVisibleInvoicesCount] = useState(20)
@@ -3099,19 +3158,7 @@ Gracias por tu preferencia.`
                       <span className="text-xs text-gray-500">{getDocumentTypeName(invoice.documentType)}</span>
                     </div>
                     <button
-                      onClick={(e) => {
-                        const rect = e.currentTarget.getBoundingClientRect()
-                        const menuHeight = 400
-                        const spaceAbove = rect.top
-                        const spaceBelow = window.innerHeight - rect.bottom
-                        const openUpward = spaceAbove > menuHeight || spaceAbove > spaceBelow
-                        setMenuPosition({
-                          top: openUpward ? rect.top - 10 : rect.bottom + 10,
-                          right: window.innerWidth - rect.right,
-                          openUpward
-                        })
-                        setOpenMenuId(openMenuId === invoice.id ? null : invoice.id)
-                      }}
+                      onClick={(e) => toggleActionsMenu(invoice.id, e.currentTarget)}
                       className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors flex-shrink-0"
                       title="Acciones"
                     >
@@ -3329,20 +3376,7 @@ Gracias por tu preferencia.`
                       <div className="flex items-center justify-end">
                         <div className="relative">
                           <button
-                            onClick={(e) => {
-                              const rect = e.currentTarget.getBoundingClientRect()
-                              const menuHeight = 400 // Altura estimada del menú
-                              const spaceAbove = rect.top
-                              const spaceBelow = window.innerHeight - rect.bottom
-                              const openUpward = spaceAbove > menuHeight || spaceAbove > spaceBelow
-
-                              setMenuPosition({
-                                top: openUpward ? rect.top - 10 : rect.bottom + 10,
-                                right: window.innerWidth - rect.right,
-                                openUpward
-                              })
-                              setOpenMenuId(openMenuId === invoice.id ? null : invoice.id)
-                            }}
+                            onClick={(e) => toggleActionsMenu(invoice.id, e.currentTarget)}
                             className="p-1 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
                             title="Acciones"
                           >

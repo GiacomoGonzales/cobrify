@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { db, auth } from '@/lib/firebase'
 import { collection, getDocs, query, where, doc, getDoc, updateDoc, setDoc, deleteDoc, Timestamp, arrayUnion, increment, serverTimestamp } from 'firebase/firestore'
 import { PLANS, SELLABLE_PLAN_IDS, updateUserFeatures, updateMaxBranches } from '@/services/subscriptionService'
@@ -111,6 +111,59 @@ export default function AdminUsers() {
   const [showFilters, setShowFilters] = useState(false)
   const [actionMenuUser, setActionMenuUser] = useState(null)
   const [actionMenuPosition, setActionMenuPosition] = useState({ top: 0, left: 0 })
+  // Botón que abrió el menú. El menú es `position: fixed` (para salir del
+  // overflow de la tabla), así que al hacer scroll hay que RECALCULAR su
+  // posición contra este botón; si no, se queda flotando donde estaba.
+  const actionMenuTriggerRef = useRef(null)
+
+  // Posición del menú a partir de su botón. null si el botón ya no se ve.
+  const computeActionMenuPosition = (triggerEl) => {
+    if (!triggerEl) return null
+    const rect = triggerEl.getBoundingClientRect()
+    if (rect.bottom < 0 || rect.top > window.innerHeight) return null
+    const menuHeight = 180
+    const spaceBelow = window.innerHeight - rect.bottom
+    const openUp = spaceBelow < menuHeight
+    return {
+      top: openUp ? rect.top - menuHeight : rect.bottom + 4,
+      left: rect.right - 176,
+    }
+  }
+
+  // Abre/cierra el menú de acciones de un usuario anclándolo a su botón.
+  const toggleActionMenu = (userId, triggerEl) => {
+    if (actionMenuUser === userId) {
+      setActionMenuUser(null)
+      actionMenuTriggerRef.current = null
+      return
+    }
+    const pos = computeActionMenuPosition(triggerEl)
+    if (!pos) return
+    actionMenuTriggerRef.current = triggerEl
+    setActionMenuPosition(pos)
+    setActionMenuUser(userId)
+  }
+
+  // Mientras el menú está abierto, seguirlo al botón en scroll/resize.
+  // `capture: true` para captar también el scroll de contenedores internos.
+  useEffect(() => {
+    if (!actionMenuUser) return
+    const reposition = () => {
+      const pos = computeActionMenuPosition(actionMenuTriggerRef.current)
+      if (!pos) {
+        setActionMenuUser(null)
+        actionMenuTriggerRef.current = null
+        return
+      }
+      setActionMenuPosition(pos)
+    }
+    window.addEventListener('scroll', reposition, true)
+    window.addEventListener('resize', reposition)
+    return () => {
+      window.removeEventListener('scroll', reposition, true)
+      window.removeEventListener('resize', reposition)
+    }
+  }, [actionMenuUser])
 
   // Estados para modal de configuración SUNAT
   const [showSunatModal, setShowSunatModal] = useState(false)
@@ -2656,19 +2709,7 @@ export default function AdminUsers() {
                         <button
                           onClick={e => {
                             e.stopPropagation()
-                            if (actionMenuUser === user.id) {
-                              setActionMenuUser(null)
-                            } else {
-                              const rect = e.currentTarget.getBoundingClientRect()
-                              const menuHeight = 180
-                              const spaceBelow = window.innerHeight - rect.bottom
-                              const openUp = spaceBelow < menuHeight
-                              setActionMenuPosition({
-                                top: openUp ? rect.top - menuHeight : rect.bottom + 4,
-                                left: rect.right - 176
-                              })
-                              setActionMenuUser(user.id)
-                            }
+                            toggleActionMenu(user.id, e.currentTarget)
                           }}
                           className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
                         >
