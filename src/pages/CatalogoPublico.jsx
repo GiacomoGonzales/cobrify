@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { optimizeImageUrl } from '@/utils/cloudinary'
 import ProductModal from '@/components/catalog/ProductModal'
 import CartDrawer, { TableAccountModal } from '@/components/catalog/CartDrawer'
+import CategoryScroller from '@/components/catalog/CategoryScroller'
 import { FeaturedCard, CarouselCard, GridCard, ListCard } from '@/components/catalog/ProductCards'
 import AnnouncementBar from '@/components/catalog/AnnouncementBar'
 import HeroCarousel from '@/components/catalog/HeroCarousel'
@@ -17,7 +18,7 @@ import {
   isProductOutOfStock,
 } from '@/components/catalog/catalogHelpers'
 import { DEMO_CATALOG_DATA, DEMO_RESTAURANT_DATA } from '@/components/catalog/catalogDemoData'
-import { getCatalogThemeClasses, getCatalogAccent } from '@/themes/catalogThemes'
+import { getCatalogThemeClasses, getCatalogAccent, getCatalogTheme } from '@/themes/catalogThemes'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { collection, query, where, getDocs, doc, getDoc, orderBy, limit, startAfter, documentId } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -62,6 +63,27 @@ const fadeInStyle = `
 }
 @media (prefers-reduced-motion: reduce) {
   .catalog-reveal { animation: none; }
+}
+/* Drawer de producto (A2 del rediseño): en móvil sube desde abajo a pantalla
+   completa; en desktop entra deslizándose desde la derecha como panel lateral. */
+@keyframes catalog-drawer-up {
+  from { transform: translateY(6%); opacity: 0.6; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+@keyframes catalog-drawer-left {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+.catalog-drawer-panel {
+  animation: catalog-drawer-up 0.28s ease-out both;
+}
+@media (min-width: 768px) {
+  .catalog-drawer-panel {
+    animation: catalog-drawer-left 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .catalog-drawer-panel { animation: none; }
 }
 /* Swap de imagen al pasar el mouse (F2.7): la 2da foto se revela encima. */
 .catalog-swap-second {
@@ -115,6 +137,13 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // Modo vista previa: si la URL trae ?previewTheme=tech, sobrescribimos el tema guardado.
   // Lo usa el modal de Settings para que el dueño del negocio pruebe temas sin guardar.
   const previewThemeFromUrl = searchParams.get('previewTheme') || ''
+
+  // Vista previa de tema (?previewTheme=): se pisa catalogTheme EN el objeto
+  // business al cargarlo, así el acento por tema (getCatalogAccent lee
+  // business.catalogTheme) y los componentes hijos (modal, carrito, tarjetas)
+  // previsualizan coherente sin cambiar sus firmas. Solo visual, no persiste.
+  const applyPreviewTheme = (biz) =>
+    previewThemeFromUrl && biz ? { ...biz, catalogTheme: previewThemeFromUrl } : biz
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -177,11 +206,13 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   }, [cart, cartStorageKey])
 
   const [viewMode, setViewMode] = useState('grid') // 'grid' | 'list'
-  // Diseño de grilla configurado por el negocio (F2.3): 'masonry' (default,
-  // alturas naturales tipo Pinterest) | 'grid' (cuadrícula uniforme) | 'list'.
-  // El visitante puede seguir alternando grilla/lista con los botones; esto
-  // define el estilo de la grilla y la vista inicial.
-  const catalogLayout = business?.catalogLayout || 'masonry'
+  // Orden de los productos elegido por el visitante. Por defecto A-Z: antes se
+  // mostraban en el orden en que Firestore los devuelve (por ID), que para el
+  // cliente se ve aleatorio.
+  const [sortBy, setSortBy] = useState('name_asc') // name_asc | name_desc | price_asc | price_desc
+  // Diseño de grilla (F2.3 + motor v2): la config del negocio manda; si no
+  // eligió, el TEMA propone su grilla; fallback 'masonry'. Se resuelve más
+  // abajo (catalogLayout) porque depende del tema efectivo.
   const layoutAppliedRef = useRef(false)
   useEffect(() => {
     if (!business || layoutAppliedRef.current) return
@@ -205,7 +236,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         // Si es modo demo, usar datos estáticos
         if (isDemo) {
           const demoData = isRestaurantMenu ? DEMO_RESTAURANT_DATA : DEMO_CATALOG_DATA
-          setBusiness(demoData.business)
+          setBusiness(applyPreviewTheme(demoData.business))
           setProducts(demoData.products)
           setCategories(demoData.categories)
           setLoading(false)
@@ -231,7 +262,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         let businessData
         if (preloadedBusiness) {
           businessData = preloadedBusiness
-          setBusiness(businessData)
+          setBusiness(applyPreviewTheme(businessData))
           await fetchCatalogRate(businessData)
         } else {
           // Buscar negocio por catalogSlug o por customDomain
@@ -259,7 +290,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
 
           const businessDoc = businessesSnap.docs[0]
           businessData = { id: businessDoc.id, ...businessDoc.data() }
-          setBusiness(businessData)
+          setBusiness(applyPreviewTheme(businessData))
           await fetchCatalogRate(businessData)
         }
 
@@ -462,7 +493,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const ignoreStockSetting = business?.catalogIgnoreStock === true
 
   const filteredProducts = useMemo(() => {
-    return products.filter(product => {
+    const list = products.filter(product => {
       // Excluir productos desactivados (isActive === false) del catálogo público.
       if (product.isActive === false) return false
 
@@ -509,7 +540,42 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
 
       return matchesSearch && matchesCategory
     })
-  }, [products, searchQuery, selectedCategory, selectedSubcategory, categories, hiddenCategoryIds, hideOutOfStock, ignoreStockSetting])
+    // Orden elegido por el visitante. Por defecto A-Z: sin esto los productos
+    // salían en el orden de Firestore (por ID), que se ve aleatorio.
+    // localeCompare 'es' con sensitivity 'base' → ignora tildes y mayúsculas
+    // ("Ácido" junto a "Acido", "ñ" después de "n").
+    const byName = (a, b) =>
+      (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base', numeric: true })
+
+    // Precio comparable: el que realmente ve el visitante. Si el catálogo está
+    // en USD y el producto tiene precio fijo en dólares, se usa ese; si no, se
+    // convierte el precio PEN con el TC del catálogo (misma regla que fmtProductMain).
+    const catalogIsUSD = isMultiCurrencyEnabled(business) && normalizeCurrency(business?.defaultCurrency) === 'USD'
+    const sortPriceOf = (p) => {
+      const fixedUSD = Number(p?.priceUSD)
+      if (catalogIsUSD && Number.isFinite(fixedUSD) && fixedUSD > 0) return fixedUSD
+      const pen = Number(p?.price) || 0
+      if (!catalogIsUSD || pen === 0) return pen
+      return convertFromBase(pen, 'USD', catalogExchangeRate || 1)
+    }
+
+    const sorted = [...list]
+    switch (sortBy) {
+      case 'name_desc':
+        sorted.sort((a, b) => byName(b, a))
+        break
+      case 'price_asc':
+        // Empate de precio → alfabético, para que el orden sea estable y predecible
+        sorted.sort((a, b) => (sortPriceOf(a) - sortPriceOf(b)) || byName(a, b))
+        break
+      case 'price_desc':
+        sorted.sort((a, b) => (sortPriceOf(b) - sortPriceOf(a)) || byName(a, b))
+        break
+      default:
+        sorted.sort(byName)
+    }
+    return sorted
+  }, [products, searchQuery, selectedCategory, selectedSubcategory, categories, hiddenCategoryIds, hideOutOfStock, ignoreStockSetting, sortBy, business, catalogExchangeRate])
 
   // Productos destacados
   const featuredProducts = useMemo(() => {
@@ -586,6 +652,37 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // Si la URL trae ?previewTheme=, sobrescribe lo guardado (vista previa desde Settings).
   const effectiveTheme = previewThemeFromUrl || business?.catalogTheme
   const themeClasses = getCatalogThemeClasses(effectiveTheme)
+  // Motor v2 (A3): tema completo con fuentes y variantes de layout por sección.
+  const themeFull = getCatalogTheme(effectiveTheme)
+  const themeFonts = themeFull.fonts || {}
+  const themeLayout = themeFull.layout || {}
+  // Variante de las píldoras de categorías: 'pills' (default) | 'underline'
+  const categoriesVariant = themeLayout.categories || 'pills'
+  // Grilla efectiva: config del negocio > propuesta del tema > masonry.
+  // 'magazine' = cuadrícula uniforme donde la 1ra tarjeta ocupa 2x2 (revista).
+  const catalogLayout = business?.catalogLayout || themeLayout.grid || 'masonry'
+
+  // Clases/estilo de los botones de categoría según la variante del tema.
+  // 'pills': píldora rellena (comportamiento clásico). 'underline': tabs con
+  // subrayado del acento (estilo editorial/revista), sin fondo.
+  const catBtnClass = (active) => {
+    if (categoriesVariant === 'underline') {
+      return `px-3 py-2 text-sm font-medium whitespace-nowrap flex-shrink-0 border-b-2 transition-colors bg-transparent ${
+        active ? 'font-semibold' : `border-transparent ${themeClasses.textMuted}`
+      }`
+    }
+    return `px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
+      active ? 'text-white' : themeClasses.catInactive
+    }`
+  }
+  const catBtnStyle = (active) => {
+    if (categoriesVariant === 'underline') {
+      return active
+        ? { borderColor: getCatalogAccent(business), color: getCatalogAccent(business) }
+        : {}
+    }
+    return active ? { backgroundColor: getCatalogAccent(business) } : {}
+  }
 
   const thBg = themeClasses.bg
   const thCard = themeClasses.card
@@ -941,11 +1038,29 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       productName: thProductName, text: thText, textMuted: thTextMuted, price: thPrice,
       catBadge: thCatBadge, listBadge: thListBadge,
     },
+    // Motor v2 (A4): variante de tarjeta del tema ('classic' | 'overlay')
+    cardVariant: themeLayout.card || 'classic',
   }
 
   return (
-    <div className={`min-h-screen ${thBg} ${thFontWrapper}`}>
+    <div
+      className={`min-h-screen ${thBg} ${thFontWrapper}`}
+      style={themeFonts.body ? { fontFamily: themeFonts.body } : undefined}
+    >
       <style>{fadeInStyle}</style>
+      {/* Fuentes Google del tema (motor v2): solo si el tema las define.
+          Los 3 temas clásicos no cargan nada (usan las fuentes del bundle). */}
+      {themeFonts.googleFontsUrl && (
+        <>
+          <link rel="preconnect" href="https://fonts.googleapis.com" />
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+          <link rel="stylesheet" href={themeFonts.googleFontsUrl} />
+        </>
+      )}
+      {/* Fuente de títulos del tema como CSS var (la usan .catalog-heading) */}
+      {themeFonts.heading && (
+        <style>{`.catalog-heading { font-family: ${themeFonts.heading}; }`}</style>
+      )}
       {/* Tira publicitaria (F2.1) + oferta con countdown (F2.5) — activables */}
       <AnnouncementBar config={business?.catalogAnnouncement} />
       <FlashSaleBar config={business?.catalogFlashSale} />
@@ -1191,8 +1306,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       {rootCategories.length > 0 && (
         <div className={`${thCard} ${thBorderColor} border-b sticky top-16 md:top-20 z-30`}>
           <div className="max-w-7xl mx-auto px-4">
-            {/* Categorías raíz - móvil: 1 fila scroll edge-to-edge, desktop: wrap centrado */}
-            <div className="flex md:flex-wrap md:justify-center overflow-x-auto md:overflow-x-visible gap-2 py-3 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
+            {/* Categorías raíz — SIEMPRE una fila con scroll horizontal (A1 del
+                rediseño): en desktop el wrap multilínea comía media pantalla con
+                muchas categorías. Flechas + fade en bordes via CategoryScroller. */}
+            <CategoryScroller className="-mx-4 px-4 md:mx-0 md:px-0" innerClassName="gap-2 py-3">
               {/* Menú lateral de categorías (solo móvil): abre el árbol completo de
                   categorías y subcategorías sin ocupar pantalla. */}
               <button
@@ -1207,12 +1324,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               {(!onlyCarousels || selectedCategory || searchQuery) && (
                 <button
                   onClick={() => { setSelectedCategory(null); setSelectedSubcategory(null) }}
-                  className={`px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
-                    !selectedCategory
-                      ? 'text-white'
-                      : thCatInactive
-                  }`}
-                  style={!selectedCategory ? { backgroundColor: getCatalogAccent(business) } : {}}
+                  className={catBtnClass(!selectedCategory)}
+                  style={catBtnStyle(!selectedCategory)}
                 >
                   Todos
                 </button>
@@ -1221,23 +1334,17 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 <button
                   key={category.id}
                   onClick={() => { setSelectedCategory(category.id); setSelectedSubcategory(null) }}
-                  className={`px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
-                    selectedCategory === category.id
-                      ? 'text-white'
-                      : thCatInactive
-                  }`}
-                  style={selectedCategory === category.id ? { backgroundColor: getCatalogAccent(business) } : {}}
+                  className={catBtnClass(selectedCategory === category.id)}
+                  style={catBtnStyle(selectedCategory === category.id)}
                 >
                   {category.name}
                 </button>
               ))}
-            </div>
-            {/* Subcategorías de la categoría seleccionada.
-                Móvil: UNA fila deslizable (el wrap multilínea comía media pantalla
-                con negocios de muchas subcategorías); el árbol completo se ve en el
-                menú lateral (botón de filtro). Desktop: wrap, hay espacio de sobra. */}
+            </CategoryScroller>
+            {/* Subcategorías de la categoría seleccionada — misma fila deslizable
+                que las raíz (el árbol completo vive en el menú lateral móvil). */}
             {activeSubcategories.length > 0 && (
-              <div className="flex flex-nowrap md:flex-wrap overflow-x-auto md:overflow-x-visible gap-2 pb-3 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
+              <CategoryScroller className="-mx-4 px-4 md:mx-0 md:px-0" innerClassName="gap-2 pb-3">
                 {/* Subcategorías con el color del catálogo (antes: azul fijo
                     bg-primary-* que rompía la estética). Seleccionada = fondo
                     sólido del acento + texto blanco; inactiva = tinte claro del
@@ -1263,7 +1370,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                     {sub.name}
                   </button>
                 ))}
-              </div>
+              </CategoryScroller>
             )}
           </div>
         </div>
@@ -1352,6 +1459,19 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               )}
             </p>
             <div className="flex items-center gap-2">
+              {/* Orden de los productos. Las opciones de precio solo tienen
+                  sentido si el catálogo muestra precios. */}
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                aria-label="Ordenar productos"
+                className={`text-sm rounded-lg px-2 py-1.5 border border-gray-200 ${thSearchClassic} ${thBorderColor}`}
+              >
+                <option value="name_asc">Nombre: A - Z</option>
+                <option value="name_desc">Nombre: Z - A</option>
+                {showPrices && <option value="price_asc">Precio: menor a mayor</option>}
+                {showPrices && <option value="price_desc">Precio: mayor a menor</option>}
+              </select>
               <button
                 onClick={() => setViewMode('grid')}
                 className={`p-2 rounded-lg ${viewMode === 'grid' ? thViewActive : thViewHover}`}
@@ -1418,7 +1538,19 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               <div className="flex items-center gap-4 pt-2">
                 <div className={`flex-1 border-t ${thBorderColor}`} />
                 <span className={`text-sm font-medium ${thTextFaint}`}>Todos los productos</span>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1.5">
+                  {/* Mismo selector de orden que la vista por categoría */}
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    aria-label="Ordenar productos"
+                    className={`text-xs rounded-lg px-2 py-1 border border-gray-200 ${thSearchClassic} ${thBorderColor}`}
+                  >
+                    <option value="name_asc">Nombre: A - Z</option>
+                    <option value="name_desc">Nombre: Z - A</option>
+                    {showPrices && <option value="price_asc">Precio: menor a mayor</option>}
+                    {showPrices && <option value="price_desc">Precio: mayor a menor</option>}
+                  </select>
                   <button
                     onClick={() => setViewMode('grid')}
                     className={`p-1.5 rounded-lg ${viewMode === 'grid' ? thViewActive : thViewHover}`}
@@ -1448,14 +1580,20 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           </div>
         ) : viewMode === 'grid' ? (
           // Vista Grid (render incremental: displayedProducts crece con el scroll).
-          // F2.3: 'masonry' = columnas con alturas naturales (default, como
-          // siempre); 'grid' = cuadrícula uniforme con imágenes cuadradas
-          // (además elimina el salto de layout al cargar imágenes).
-          <div className={catalogLayout === 'grid'
-            ? 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6'
-            : 'columns-2 md:columns-3 lg:columns-4 gap-4 md:gap-6'}>
+          // F2.3 + motor v2: 'masonry' = columnas con alturas naturales (default);
+          // 'grid' = cuadrícula uniforme; 'magazine' = cuadrícula uniforme con la
+          // PRIMERA tarjeta a doble ancho/alto (portada de revista).
+          <div className={catalogLayout === 'masonry'
+            ? 'columns-2 md:columns-3 lg:columns-4 gap-4 md:gap-6'
+            : 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6'}>
             {displayedProducts.map((product, index) => (
-              <GridCard key={product.id} product={product} index={index} uniform={catalogLayout === 'grid'} ctx={cardCtx} />
+              catalogLayout === 'magazine' ? (
+                <div key={product.id} className={index === 0 ? 'col-span-2 row-span-2' : ''}>
+                  <GridCard product={product} index={index} uniform ctx={cardCtx} />
+                </div>
+              ) : (
+                <GridCard key={product.id} product={product} index={index} uniform={catalogLayout !== 'masonry'} ctx={cardCtx} />
+              )
             ))}
           </div>
         ) : (
@@ -1623,6 +1761,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         ignoreStock={ignoreStock}
         catalogCurrency={catalogCurrency}
         catalogExchangeRate={catalogExchangeRate}
+        themeClasses={themeClasses}
       />
 
       {/* Cart Drawer */}

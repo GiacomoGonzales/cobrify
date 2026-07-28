@@ -7848,13 +7848,14 @@ export default function Settings() {
                         </div>
                       </div>
 
-                      {/* Tema del catálogo — 3 temas en grid simple */}
+                      {/* Tema del catálogo — galería (Fase 3: los temas viven en
+                          src/themes/catalogThemes.js; agregar uno ahí lo muestra aquí solo) */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           Tema visual
                         </label>
                         <p className="text-xs text-gray-500 mb-3">
-                          Cada tema cambia tipografía, forma de tarjetas y acentos. Toca "Vista previa" para verlo con tus productos.
+                          Cada tema cambia colores, tipografía y forma de tarjetas. Toca "Vista previa" para verlo con tus productos. Si eliges un color personalizado arriba, ese manda sobre el acento del tema.
                         </p>
 
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -7904,6 +7905,12 @@ export default function Settings() {
                                   <Eye className="w-4 h-4" />
                                   Vista previa
                                 </button>
+                                {/* Badge de tema nuevo */}
+                                {theme.isNew && !isSelected && (
+                                  <span className="absolute top-2 left-2 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-blue-600 text-white rounded shadow">
+                                    Nuevo
+                                  </span>
+                                )}
                                 {/* Check de seleccionado */}
                                 {isSelected && (
                                   <div className="absolute top-2 right-2 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center shadow">

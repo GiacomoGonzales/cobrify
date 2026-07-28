@@ -28,7 +28,12 @@ import {
 } from 'lucide-react'
 
 // Modal de producto con soporte para modificadores
-export default function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, showPrices: globalShowPrices = true, business, ignoreStock = false, catalogCurrency = 'PEN', catalogExchangeRate = 1 }) {
+export default function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, showPrices: globalShowPrices = true, business, ignoreStock = false, catalogCurrency = 'PEN', catalogExchangeRate = 1, themeClasses = null }) {
+  // Tipografía del tema para nombre y precio: la MISMA familia que las
+  // tarjetas, para que tarjeta → detalle se sienta continuo (reporte de
+  // Giacomo: en Boutique la tarjeta era serif y el drawer salía en sans).
+  const detailNameClass = themeClasses?.detailNameClass || 'text-2xl font-bold text-gray-900'
+  const detailPriceClass = themeClasses?.detailPriceClass || 'text-3xl font-bold text-gray-900'
   // Helpers locales para mostrar precios en la moneda del catálogo
   const toCatalogDisplay = (priceInPen) => {
     const n = Number(priceInPen) || 0
@@ -318,22 +323,28 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
   const unitPrice = calculateTotalPrice()
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto catalog-scrollbar shadow-2xl">
-        {/* Botón cerrar flotante */}
+      {/* Drawer de producto (A2 del rediseño): pantalla completa en móvil,
+          panel lateral derecho en desktop. El contenido scrollea adentro y el
+          CTA queda siempre visible abajo. */}
+      <div className="catalog-drawer-panel absolute inset-0 md:inset-y-0 md:left-auto md:right-0 w-full md:max-w-md bg-white shadow-2xl flex flex-col">
+        {/* Botón cerrar flotante (fijo al panel: no se va con el scroll) */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 z-10 w-10 h-10 bg-white/90 backdrop-blur rounded-full flex items-center justify-center shadow-lg hover:bg-white transition-colors"
+          className="absolute right-4 z-10 w-10 h-10 bg-white/90 backdrop-blur rounded-full flex items-center justify-center shadow-lg hover:bg-white transition-colors"
+          style={{ top: 'calc(env(safe-area-inset-top, 0px) + 1rem)' }}
         >
           <X className="w-5 h-5" />
         </button>
         {cartQuantity > 0 && (
-          <div className="absolute top-4 left-4 z-10 text-white px-3 py-1 rounded-full text-sm font-medium" style={{ backgroundColor: getCatalogAccent(business) }}>
+          <div className="absolute left-4 z-10 text-white px-3 py-1 rounded-full text-sm font-medium" style={{ top: 'calc(env(safe-area-inset-top, 0px) + 1rem)', backgroundColor: getCatalogAccent(business) }}>
             {cartQuantity} en carrito
           </div>
         )}
 
+        {/* Zona scrolleable: galería + información */}
+        <div className="flex-1 overflow-y-auto catalog-scrollbar">
         {/* Galería (tipo Amazon): imagen grande + thumbnails */}
         <div className="bg-gray-100">
           {/* Imagen principal cuadrada 1:1 */}
@@ -392,7 +403,7 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
         {/* Contenido */}
         <div className="p-6">
           <div className="mb-4">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">{product.name}</h2>
+            <h2 className={`${detailNameClass} mb-2`}>{product.name}</h2>
             {product.description && (
               <p className="text-gray-600 whitespace-pre-line">{product.description}</p>
             )}
@@ -411,7 +422,7 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                     const selected = availablePrices.find(p => p.key === selectedPriceLevel) || availablePrices[0]
                     return (
                       <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-bold text-gray-900">{fmtCatalog(selected.value)}</span>
+                        <span className={detailPriceClass}>{fmtCatalog(selected.value)}</span>
                         <span className="text-sm text-gray-500">{selected.label}</span>
                       </div>
                     )
@@ -437,7 +448,7 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                     )
                   }
                   return (
-                    <div className="text-3xl font-bold text-gray-900">
+                    <div className={detailPriceClass}>
                       {fmtCatalog(unitPrice)}
                     </div>
                   )
@@ -752,6 +763,11 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
             </div>
           )}
 
+        </div>
+        </div>
+
+        {/* CTA fijo abajo (patrón drawer): cantidad + agregar siempre visibles */}
+        <div className="flex-shrink-0 border-t border-gray-100 bg-white px-6 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           {/* Selector de cantidad */}
           {(() => {
             // Productos con `allowDecimalQuantity` (ej. avena por kilo, pollo por kilo)

@@ -10,13 +10,25 @@
 // getCartQuantity, setSelectedProduct, addToCart, th:{...clases del tema} }.
 import { Package, Plus } from 'lucide-react'
 import { optimizeImageUrl } from '@/utils/cloudinary'
-import { CatalogImage } from '@/components/catalog/CatalogImages'
+import { CatalogImage, preloadProductDetail } from '@/components/catalog/CatalogImages'
 import { getCatalogAccent } from '@/themes/catalogThemes'
 import {
   isProductOutOfStock,
   getProductPrices,
   getProductPriceRange,
 } from '@/components/catalog/catalogHelpers'
+
+// Porcentaje de descuento cuando hay precio de comparación (tachado) mayor
+// al precio real. null si no aplica (sin comparación, variantes, o <5% que
+// visualmente no vale la pena).
+function getDiscountPercent(product) {
+  const compare = Number(product?.catalogComparePrice) || 0
+  const price = Number(product?.price) || 0
+  if (!(compare > 0) || !(price > 0) || compare <= price) return null
+  if (product?.hasVariants) return null
+  const pct = Math.round((1 - price / compare) * 100)
+  return pct >= 5 ? pct : null
+}
 
 export function FeaturedCard({ product, ctx }) {
   const { business, showPrices, ignoreStock, fmtCatalog, fmtProductMain, getCartQuantity, setSelectedProduct, th } = ctx
@@ -157,7 +169,7 @@ export function CarouselCard({ product, ctx }) {
 // contenedor cuadrado fijo (sin salto de layout) y la tarjeta no usa las
 // clases de masonry (break-inside/mb — el gap lo maneja el grid contenedor).
 export function GridCard({ product, index, uniform = false, ctx }) {
-  const { business, showPrices, ignoreStock, categories, selectedCategory, fmtCatalog, fmtProductMain, getCartQuantity, setSelectedProduct, addToCart, th, effects } = ctx
+  const { business, showPrices, ignoreStock, categories, selectedCategory, fmtCatalog, fmtProductMain, getCartQuantity, setSelectedProduct, addToCart, th, effects, cardVariant } = ctx
               const cartQty = getCartQuantity(product.id)
               const outOfStock = isProductOutOfStock(product, ignoreStock)
               const priceRange = getProductPriceRange(product, business)
@@ -166,6 +178,100 @@ export function GridCard({ product, index, uniform = false, ctx }) {
               const secondImage = effects?.imageSwapOnHover
                 && Array.isArray(product.imageUrls) && product.imageUrls[1]
                 ? product.imageUrls[1] : null
+              // A4: badge de descuento (-X%) cuando hay precio de comparación
+              const discountPct = showPrices && !product.catalogHidePrice ? getDiscountPercent(product) : null
+              const accent = getCatalogAccent(business)
+
+              // ===== Variante OVERLAY (motor v2): la imagen ES la tarjeta y la
+              // info va encima sobre un degradado inferior. La eligen los temas
+              // con layout.card = 'overlay'. Sin imagen cae a la clásica.
+              if (cardVariant === 'overlay' && product.imageUrl) {
+                return (
+                  <div
+                    key={product.id}
+                    className={`catalog-fade-in ${revealClass} ${th.cardRadius} ${th.cardShadowEffect} relative overflow-hidden cursor-pointer group ${uniform ? '' : 'break-inside-avoid mb-4 md:mb-6'} ${th.cardShadow} ${outOfStock ? 'opacity-75' : ''}`}
+                    onClick={() => setSelectedProduct(product)}
+                    onMouseEnter={() => preloadProductDetail(product)}
+                  >
+                    <div className={`relative bg-gray-100 overflow-hidden ${uniform ? 'aspect-square' : 'aspect-[3/4]'}`}>
+                      <CatalogImage
+                        src={product.imageUrl}
+                        alt={product.name}
+                        size="card"
+                        priority={index < 4}
+                        className={`w-full h-full object-cover md:group-hover:scale-105 md:transition-transform md:duration-500 ${outOfStock ? 'grayscale opacity-60' : ''}`}
+                      />
+                      {secondImage && !outOfStock && (
+                        <img
+                          src={optimizeImageUrl(secondImage, 'card')}
+                          alt=""
+                          aria-hidden
+                          loading="lazy"
+                          className="catalog-swap-second absolute inset-0 w-full h-full object-cover"
+                        />
+                      )}
+                      {/* Degradado inferior para legibilidad del texto */}
+                      <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-black/75 via-black/35 to-transparent pointer-events-none" />
+                      {/* Info sobre la imagen */}
+                      <div className="absolute inset-x-0 bottom-0 p-3.5 flex items-end justify-between gap-2">
+                        <div className="min-w-0">
+                          <h3 className={`${th.productName} text-white line-clamp-2 drop-shadow-sm`}>{product.name}</h3>
+                          {showPrices && !product.catalogHidePrice ? (
+                            <div className="flex items-baseline gap-2 mt-0.5">
+                              <span className="text-base font-bold text-white drop-shadow-sm">
+                                {product.hasVariants && product.variants?.length > 0
+                                  ? `Desde ${fmtCatalog(Math.min(...product.variants.map(v => v.price)))}`
+                                  : fmtProductMain(product)}
+                              </span>
+                              {discountPct && (
+                                <span className="text-xs line-through text-white/60">{fmtCatalog(product.catalogComparePrice)}</span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-white/80">Consultar</span>
+                          )}
+                        </div>
+                        {!outOfStock && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (product.hasVariants || product.modifiers?.length > 0 || priceRange) {
+                                setSelectedProduct(product)
+                              } else {
+                                addToCart(product)
+                              }
+                            }}
+                            className="w-9 h-9 rounded-full flex items-center justify-center text-white flex-shrink-0 shadow-lg hover:scale-110 transition-transform"
+                            style={{ backgroundColor: accent }}
+                            aria-label={`Agregar ${product.name}`}
+                          >
+                            <Plus className="w-5 h-5" />
+                          </button>
+                        )}
+                      </div>
+                      {/* Badges superiores */}
+                      {discountPct && !outOfStock && (
+                        <span className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-full text-xs font-bold text-white shadow" style={{ backgroundColor: accent }}>
+                          -{discountPct}%
+                        </span>
+                      )}
+                      {cartQty > 0 && !outOfStock && (
+                        <div className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-lg" style={{ backgroundColor: accent }}>
+                          {cartQty}
+                        </div>
+                      )}
+                      {outOfStock && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="bg-red-600 text-white px-3 py-1 rounded-md text-xs font-bold shadow-lg tracking-wide">
+                            AGOTADO
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              }
+
               return (
                 <div
                   key={product.id}
@@ -207,6 +313,12 @@ export function GridCard({ product, index, uniform = false, ctx }) {
                       <div className="absolute top-3 right-3 w-7 h-7 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-lg" style={{ backgroundColor: getCatalogAccent(business) }}>
                         {cartQty}
                       </div>
+                    )}
+                    {/* A4: badge de descuento cuando hay precio de comparación */}
+                    {discountPct && !outOfStock && (
+                      <span className="absolute top-3 left-3 px-2 py-0.5 rounded-full text-xs font-bold text-white shadow" style={{ backgroundColor: accent }}>
+                        -{discountPct}%
+                      </span>
                     )}
                     {!selectedCategory && product.category && (() => {
                       const cat = categories.find(c => c.id === product.category)
