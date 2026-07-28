@@ -474,6 +474,20 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     return descendants
   }
 
+  // Foto representativa de cada categoría raíz para la variante 'circles'
+  // (motor v2): las categorías no tienen imagen propia, así que se usa la del
+  // primer producto con foto de la categoría (o de sus subcategorías).
+  const categoryImageMap = useMemo(() => {
+    const map = {}
+    for (const cat of rootCategories) {
+      const ids = new Set([cat.id, ...getAllDescendantCategoryIds(cat.id)])
+      const withImg = products.find(p => ids.has(p.category) && p.imageUrl && p.isActive !== false)
+      map[cat.id] = withImg?.imageUrl || null
+    }
+    return map
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rootCategories, products, categories])
+
   // Filtrar productos
   // IDs de categorías ocultas en el catálogo
   const hiddenCategoryIds = useMemo(() => {
@@ -656,8 +670,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const themeFull = getCatalogTheme(effectiveTheme)
   const themeFonts = themeFull.fonts || {}
   const themeLayout = themeFull.layout || {}
-  // Variante de las píldoras de categorías: 'pills' (default) | 'underline'
+  // Variante de las píldoras de categorías: 'pills' (default) | 'underline' | 'circles'
   const categoriesVariant = themeLayout.categories || 'pills'
+  // Variante del hero: 'classic' | 'full-bleed' (portada alta con contenido centrado)
+  const heroVariant = themeLayout.hero || 'classic'
   // Grilla efectiva: config del negocio > propuesta del tema > masonry.
   // 'magazine' = cuadrícula uniforme donde la 1ra tarjeta ocupa 2x2 (revista).
   const catalogLayout = business?.catalogLayout || themeLayout.grid || 'masonry'
@@ -1183,9 +1199,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           </div>
         </div>
       ) : business?.catalogCoverImage ? (
-        /* === ESTILO BANNER: Imagen hero grande === */
+        /* === ESTILO BANNER: imagen hero. Variante 'full-bleed' (motor v2):
+            más alta, overlay más oscuro y contenido CENTRADO (restaurantes). === */
         <div className="relative overflow-hidden">
-          <div className="relative h-48 md:h-72">
+          <div className={`relative ${heroVariant === 'full-bleed' ? 'h-72 md:h-[26rem]' : 'h-48 md:h-72'}`}>
             <picture>
               <source
                 media="(max-width: 767px)"
@@ -1199,9 +1216,35 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 decoding="async"
               />
             </picture>
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-            {/* Info sobre el banner */}
-            <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 max-w-7xl mx-auto">
+            <div className={`absolute inset-0 ${heroVariant === 'full-bleed'
+              ? 'bg-gradient-to-t from-black/80 via-black/45 to-black/30'
+              : 'bg-gradient-to-t from-black/70 via-black/20 to-transparent'}`} />
+            {heroVariant === 'full-bleed' && (
+              /* Contenido centrado sobre la portada */
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6">
+                {(() => {
+                  const heroLogo = business?.catalogLogoLandscape || business?.catalogLogoUrl || business?.logoUrl
+                  if (!heroLogo) return null
+                  return (
+                    <img
+                      src={optimizeImageUrl(heroLogo, business?.catalogLogoLandscape ? 'logo_landscape' : 'logo_square')}
+                      alt={business?.name}
+                      className="h-14 md:h-20 w-auto object-contain mb-4 drop-shadow-xl"
+                    />
+                  )
+                })()}
+                <h2 className="catalog-heading text-white font-bold text-3xl md:text-5xl drop-shadow-lg">
+                  {business?.name || business?.businessName}
+                </h2>
+                {(business?.catalogWelcome || business?.catalogTagline) && (
+                  <p className="text-white/85 text-sm md:text-base mt-3 max-w-xl drop-shadow">
+                    {business?.catalogWelcome || business?.catalogTagline}
+                  </p>
+                )}
+              </div>
+            )}
+            {/* Info sobre el banner (variante clásica) */}
+            <div className={`absolute bottom-0 left-0 right-0 p-4 md:p-6 max-w-7xl mx-auto ${heroVariant === 'full-bleed' ? 'hidden' : ''}`}>
               <div className="flex items-end gap-4">
                 {(() => {
                   const overlayLogo = business?.catalogLogoLandscape || business?.catalogLogoUrl || business?.logoUrl
@@ -1321,25 +1364,87 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               </button>
               {/* Botón "Todos": oculto en modo onlyCarousels cuando estamos en la vista principal,
                   para forzar al cliente a entrar a una categoría. Dentro de una categoría sí se muestra. */}
-              {(!onlyCarousels || selectedCategory || searchQuery) && (
-                <button
-                  onClick={() => { setSelectedCategory(null); setSelectedSubcategory(null) }}
-                  className={catBtnClass(!selectedCategory)}
-                  style={catBtnStyle(!selectedCategory)}
-                >
-                  Todos
-                </button>
+              {categoriesVariant === 'circles' ? (
+                <>
+                  {/* Variante CÍRCULOS (motor v2): foto de la categoría (o inicial)
+                      en círculo + nombre debajo, estilo apps de delivery/mercado. */}
+                  {(!onlyCarousels || selectedCategory || searchQuery) && (
+                    <button
+                      onClick={() => { setSelectedCategory(null); setSelectedSubcategory(null) }}
+                      className="flex flex-col items-center gap-1.5 flex-shrink-0 w-16 group/cat"
+                    >
+                      <span
+                        className="w-14 h-14 rounded-full flex items-center justify-center border-2 transition-all"
+                        style={{
+                          borderColor: !selectedCategory ? getCatalogAccent(business) : 'transparent',
+                          backgroundColor: `${getCatalogAccent(business)}15`,
+                          color: getCatalogAccent(business),
+                        }}
+                      >
+                        <Grid3X3 className="w-6 h-6" />
+                      </span>
+                      <span className={`text-[11px] font-medium truncate w-full text-center ${!selectedCategory ? thText : thTextMuted}`}>Todos</span>
+                    </button>
+                  )}
+                  {rootCategories.map(category => {
+                    const active = selectedCategory === category.id
+                    const img = categoryImageMap[category.id]
+                    return (
+                      <button
+                        key={category.id}
+                        onClick={() => { setSelectedCategory(category.id); setSelectedSubcategory(null) }}
+                        className="flex flex-col items-center gap-1.5 flex-shrink-0 w-16"
+                      >
+                        <span
+                          className="w-14 h-14 rounded-full overflow-hidden flex items-center justify-center border-2 transition-all"
+                          style={{
+                            borderColor: active ? getCatalogAccent(business) : 'transparent',
+                            backgroundColor: img ? undefined : `${getCatalogAccent(business)}15`,
+                          }}
+                        >
+                          {img ? (
+                            <img
+                              src={optimizeImageUrl(img, 'thumbnail')}
+                              alt={category.name}
+                              loading="lazy"
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-lg font-bold" style={{ color: getCatalogAccent(business) }}>
+                              {(category.name || '?').charAt(0).toUpperCase()}
+                            </span>
+                          )}
+                        </span>
+                        <span className={`text-[11px] font-medium truncate w-full text-center ${active ? thText : thTextMuted}`}>
+                          {category.name}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </>
+              ) : (
+                <>
+                  {(!onlyCarousels || selectedCategory || searchQuery) && (
+                    <button
+                      onClick={() => { setSelectedCategory(null); setSelectedSubcategory(null) }}
+                      className={catBtnClass(!selectedCategory)}
+                      style={catBtnStyle(!selectedCategory)}
+                    >
+                      Todos
+                    </button>
+                  )}
+                  {rootCategories.map(category => (
+                    <button
+                      key={category.id}
+                      onClick={() => { setSelectedCategory(category.id); setSelectedSubcategory(null) }}
+                      className={catBtnClass(selectedCategory === category.id)}
+                      style={catBtnStyle(selectedCategory === category.id)}
+                    >
+                      {category.name}
+                    </button>
+                  ))}
+                </>
               )}
-              {rootCategories.map(category => (
-                <button
-                  key={category.id}
-                  onClick={() => { setSelectedCategory(category.id); setSelectedSubcategory(null) }}
-                  className={catBtnClass(selectedCategory === category.id)}
-                  style={catBtnStyle(selectedCategory === category.id)}
-                >
-                  {category.name}
-                </button>
-              ))}
             </CategoryScroller>
             {/* Subcategorías de la categoría seleccionada — misma fila deslizable
                 que las raíz (el árbol completo vive en el menú lateral móvil). */}
