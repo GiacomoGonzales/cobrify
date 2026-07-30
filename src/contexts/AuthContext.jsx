@@ -35,6 +35,11 @@ export const AuthProvider = ({ children }) => {
   const [hasAccess, setHasAccess] = useState(false)
   const [isInGracePeriod, setIsInGracePeriod] = useState(false)
   const [userPermissions, setUserPermissions] = useState(null) // Permisos del usuario
+  // ¿Ya se resolvieron los ROLES (admin/dueño/reseller/sub-usuario)? Distinto de
+  // isLoading: ese puede apagarse por el timeout de seguridad de 10s con los
+  // roles aún sin resolver. Solo con esto en true se puede decidir con certeza
+  // que alguien NO pertenece a ningún negocio.
+  const [rolesResolved, setRolesResolved] = useState(false)
   const [allowedPages, setAllowedPages] = useState(EMPTY_PERMS) // Páginas permitidas
   const [allowedWarehouses, setAllowedWarehouses] = useState(EMPTY_PERMS) // Almacenes permitidos (vacío = todos)
   const [allowedBranches, setAllowedBranches] = useState(EMPTY_PERMS) // Sucursales permitidas (vacío = todas)
@@ -65,6 +70,7 @@ export const AuthProvider = ({ children }) => {
 
     // Observar cambios en el estado de autenticación de Firebase
     const unsubscribe = onAuthChange(async (firebaseUser) => {
+      setRolesResolved(false)
       try {
         if (firebaseUser) {
           // Usuario autenticado
@@ -450,6 +456,7 @@ export const AuthProvider = ({ children }) => {
         console.error('Error en AuthContext:', error)
       } finally {
         clearTimeout(safetyTimeout)
+        setRolesResolved(true)
         setIsLoading(false)
       }
     })
@@ -849,6 +856,7 @@ export const AuthProvider = ({ children }) => {
     isAdmin, // Super Admin (giiacomo@gmail.com)
     isBusinessOwner, // Admin del negocio (usuarios registrados)
     isReseller, // Reseller
+    rolesResolved, // Roles ya resueltos (ver arriba)
     resellerData, // Datos del reseller
     subscription,
     hasAccess,

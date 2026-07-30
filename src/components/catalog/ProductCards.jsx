@@ -185,7 +185,11 @@ export function GridCard({ product, index, uniform = false, ctx }) {
               // ===== Variante OVERLAY (motor v2): la imagen ES la tarjeta y la
               // info va encima sobre un degradado inferior. La eligen los temas
               // con layout.card = 'overlay'. Sin imagen cae a la clásica.
-              if (cardVariant === 'overlay' && product.imageUrl) {
+              // La variante overlay aplica a TODOS los productos del tema, tengan
+              // foto o no: si dependiera de la imagen, en un mismo catálogo
+              // convivirían dos anatomías de tarjeta distintas (reporte de
+              // Giacomo). Sin foto se pinta un marcador con el fondo del tema.
+              if (cardVariant === 'overlay') {
                 return (
                   <div
                     key={product.id}
@@ -194,13 +198,25 @@ export function GridCard({ product, index, uniform = false, ctx }) {
                     onMouseEnter={() => preloadProductDetail(product)}
                   >
                     <div className={`relative bg-gray-100 overflow-hidden ${uniform ? 'aspect-square' : 'aspect-[3/4]'}`}>
-                      <CatalogImage
-                        src={product.imageUrl}
-                        alt={product.name}
-                        size="card"
-                        priority={index < 4}
-                        className={`w-full h-full object-cover md:group-hover:scale-105 md:transition-transform md:duration-500 ${outOfStock ? 'grayscale opacity-60' : ''}`}
-                      />
+                      {product.imageUrl ? (
+                        <CatalogImage
+                          src={product.imageUrl}
+                          alt={product.name}
+                          size="card"
+                          priority={index < 4}
+                          className={`w-full h-full object-cover md:group-hover:scale-105 md:transition-transform md:duration-500 ${outOfStock ? 'grayscale opacity-60' : ''}`}
+                        />
+                      ) : (
+                        // Sin foto: fondo con el acento del tema para que la
+                        // tarjeta conserve la misma anatomía (texto legible
+                        // sobre el degradado inferior).
+                        <div
+                          className={`w-full h-full flex items-center justify-center ${outOfStock ? 'opacity-50' : ''}`}
+                          style={{ background: `linear-gradient(135deg, ${accent}30, ${accent}10)` }}
+                        >
+                          <Package className="w-12 h-12" style={{ color: `${accent}80` }} />
+                        </div>
+                      )}
                       {secondImage && !outOfStock && (
                         <img
                           src={optimizeImageUrl(secondImage, 'card')}

@@ -17,17 +17,29 @@ export default function Login() {
   const [customBranding, setCustomBranding] = useState(null) // null = usar Cobrify
   const [isLoadingBranding, setIsLoadingBranding] = useState(true) // Empezar en true para esperar la detección
   const [searchParams] = useSearchParams()
-  const { login, isAuthenticated, isLoading: isAuthLoading } = useAuth()
+  const { login, logout, isAuthenticated, isLoading: isAuthLoading, isAdmin, isBusinessOwner, isReseller, userPermissions, rolesResolved } = useAuth()
   const navigate = useNavigate()
 
   const refId = searchParams.get('ref')
 
-  // Redirigir al dashboard si el usuario ya está autenticado
+  // Cuenta de COMPRADOR del catálogo: existe en el mismo pozo de Firebase Auth
+  // pero no pertenece a ningún negocio. Si intenta entrar aquí, se le explica y
+  // se cierra su sesión — sin esto quedaría rebotando entre /login y /app.
+  const isBusinessUser = isAdmin || isBusinessOwner || isReseller || !!userPermissions
+  const isShopperAccount = isAuthenticated && rolesResolved && !isBusinessUser
+
+  // Redirigir al dashboard si el usuario ya está autenticado (solo usuarios del sistema)
   useEffect(() => {
-    if (isAuthenticated && !isAuthLoading) {
+    if (isAuthenticated && !isAuthLoading && rolesResolved && isBusinessUser) {
       navigate('/app/dashboard', { replace: true })
     }
-  }, [isAuthenticated, isAuthLoading, navigate])
+  }, [isAuthenticated, isAuthLoading, rolesResolved, isBusinessUser, navigate])
+
+  useEffect(() => {
+    if (!isShopperAccount) return
+    setError('Esta cuenta es de comprador de un catálogo, no tiene acceso al sistema. Vuelve a la tienda donde compras para iniciar sesión ahí.')
+    logout()
+  }, [isShopperAccount, logout])
 
   // Cargar branding del reseller por hostname (subdominio o dominio personalizado) o por parámetro ref
   useEffect(() => {

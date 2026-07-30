@@ -227,10 +227,13 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const [isLogoHorizontal, setIsLogoHorizontal] = useState(false)
   // Cuenta OPCIONAL del comprador (Ola 1). Si no inicia sesión, el catálogo
   // funciona exactamente igual que siempre (pedido como invitado).
+  // Cuentas de comprador: el negocio puede desactivarlas en Configuración.
+  // Default ON (solo aporta comodidades y nunca obliga a registrarse).
+  const customerAccountsOn = business?.catalogCustomerAccounts !== false
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
   const [accountTab, setAccountTab] = useState('orders')
-  const { user: catalogUser, profile: catalogProfile, setProfile: setCatalogProfile, signOut: catalogLogout } = useCatalogCustomer(business?.id)
+  const { user: catalogUser, profile: catalogProfile, setProfile: setCatalogProfile, signOut: catalogLogout } = useCatalogCustomer(customerAccountsOn ? business?.id : null)
 
   // Estado para mesa activa (orden existente del mozo)
   const [activeTableOrder, setActiveTableOrder] = useState(null) // { orderId, tableId, items, total }
@@ -1217,7 +1220,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           <aside className="hidden md:block w-60 flex-shrink-0 sticky top-24 self-start max-h-[calc(100vh-7rem)] overflow-y-auto catalog-scrollbar py-6 pr-1">
             {/* Columna de CUENTA (las categorías viven arriba como pastillas,
                 igual que menus.pe: el sidebar navega, las pastillas filtran). */}
-            {catalogUser ? (
+            {!customerAccountsOn ? null : catalogUser ? (
               <>
                 <div className="flex items-center gap-2.5 px-3 mb-4">
                   {catalogUser.photoURL ? (
@@ -1657,7 +1660,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             </div>
             <div className="flex-1 overflow-y-auto py-2">
               {/* CUENTA — arriba de todo, igual que el sidebar de escritorio */}
-              {catalogUser ? (
+              {!customerAccountsOn ? null : catalogUser ? (
                 <div className={`px-4 pb-3 mb-2 border-b ${thBorderColor}`}>
                   <div className="flex items-center gap-2.5 mb-3">
                     {catalogUser.photoURL ? (
@@ -2148,12 +2151,12 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       )}
 
       {/* Login/registro OPCIONAL del comprador */}
-      <CustomerAuthModal
+      {customerAccountsOn && <CustomerAuthModal
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
         businessId={business?.id}
         accent={getCatalogAccent(business)}
-      />
+      />}
 
       {/* Cart Drawer */}
       <CartDrawer

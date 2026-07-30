@@ -503,6 +503,9 @@ export default function Settings() {
   const [catalogIgnoreStock, setCatalogIgnoreStock] = useState(false)
   const [catalogHideOutOfStock, setCatalogHideOutOfStock] = useState(false)
   const [catalogShowStock, setCatalogShowStock] = useState(false)
+  // Cuentas de comprador en el catálogo. Default ON: solo agrega comodidades
+  // (historial y direcciones) y nunca obliga a registrarse para comprar.
+  const [catalogCustomerAccounts, setCatalogCustomerAccounts] = useState(true)
   const [catalogWhatsapp, setCatalogWhatsapp] = useState('')
   const [catalogObservations, setCatalogObservations] = useState('')
   // Tira publicitaria del catálogo (F2.1): banner superior activable
@@ -1350,6 +1353,7 @@ export default function Settings() {
         setCatalogIgnoreStock(businessData.catalogIgnoreStock || false)
         setCatalogHideOutOfStock(businessData.catalogHideOutOfStock || false)
         setCatalogShowStock(businessData.catalogShowStock || false)
+        setCatalogCustomerAccounts(businessData.catalogCustomerAccounts !== false)
         setCatalogWhatsapp(businessData.catalogWhatsapp || '')
         setCatalogObservations(businessData.catalogObservations || '')
         setCatalogAnnouncement({
@@ -8067,6 +8071,18 @@ export default function Settings() {
                         </label>
                         <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
                           <div className="flex-1">
+                            <span className="text-sm font-medium text-gray-900 block">Permitir cuentas de clientes</span>
+                            <span className="text-xs text-gray-500">Tus clientes pueden crear una cuenta con Google o correo para ver su historial de pedidos y guardar sus direcciones (el checkout se autocompleta). Siempre es opcional: quien no quiera registrarse compra igual.</span>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={catalogCustomerAccounts}
+                            onChange={(e) => setCatalogCustomerAccounts(e.target.checked)}
+                            className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                        </label>
+                        <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                          <div className="flex-1">
                             <span className="text-sm font-medium text-gray-900 block">Mostrar todos los precios en catálogo</span>
                             <span className="text-xs text-gray-500">Muestra precio público, mayorista, etc. en la tarjeta del producto. Si desactivas, solo se mostrará el precio público</span>
                           </div>
@@ -8291,6 +8307,7 @@ export default function Settings() {
                         catalogIgnoreStock,
                         catalogHideOutOfStock,
                         catalogShowStock,
+                        catalogCustomerAccounts,
                         catalogWhatsapp: catalogWhatsapp.trim(),
                         catalogObservations: catalogObservations.trim(),
                         catalogAnnouncement: { ...catalogAnnouncement, text: (catalogAnnouncement.text || '').trim() },

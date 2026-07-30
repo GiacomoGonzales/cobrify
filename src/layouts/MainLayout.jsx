@@ -28,7 +28,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { routeToPageId, getFirstAllowedRoute } from '@/utils/pageRoutes'
 
 export default function MainLayout() {
-  const { user, isAuthenticated, isLoading, hasAccess, isAdmin, subscription, isBusinessOwner, hasPageAccess, allowedPages, getBusinessId, isInGracePeriod, businessMode } = useAuth()
+  const { user, isAuthenticated, isLoading, hasAccess, isAdmin, subscription, isBusinessOwner, isReseller, userPermissions, rolesResolved, hasPageAccess, allowedPages, getBusinessId, isInGracePeriod, businessMode } = useAuth()
   const toast = useToast()
   const [hasBusiness, setHasBusiness] = useState(null)
   const [checkingBusiness, setCheckingBusiness] = useState(false)
@@ -446,6 +446,18 @@ export default function MainLayout() {
   // Redirigir a login si no está autenticado
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
+  }
+
+  // Bloquear a quien NO pertenece a ningún negocio.
+  // Desde que el catálogo público tiene cuentas de comprador, existen usuarios
+  // en el mismo pozo de Firebase Auth que NO son usuarios del sistema. Sin esto
+  // podrían iniciar sesión en /login y entrar al panel (sin ver datos: las
+  // reglas de Firestore los bloquean, pero es una pantalla que no les toca).
+  // Se exige `rolesResolved` para no echar a un usuario legítimo si el timeout
+  // de seguridad de AuthContext apagó isLoading antes de resolver los roles.
+  const isBusinessUser = isAdmin || isBusinessOwner || isReseller || !!userPermissions
+  if (rolesResolved && !isBusinessUser) {
+    return <Navigate to="/login?cuenta=comprador" replace />
   }
 
   // Verificar acceso a suscripción
