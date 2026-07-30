@@ -543,24 +543,36 @@ export default function Reports() {
         .map(addCostCalculations)
     }
 
+    // TOPE SUPERIOR del período. Antes solo existía `filterDate` (inicio) y el
+    // filtro era `invoiceDate >= filterDate`, sin fin: un comprobante fechado a
+    // FUTURO se colaba en todos los rangos (uno de agosto aparecía en "Este
+    // mes" de julio, y uno de mañana en "Hoy"). Cada rango se cierra en su
+    // límite natural, así que los documentos fechados dentro del período —aunque
+    // sean posteriores a hoy— siguen contando, que es lo correcto.
+    let filterEndDate
     switch (dateRange) {
       case 'today':
         filterDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+        filterEndDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
         break
       case 'week':
         filterDate.setDate(now.getDate() - 7)
+        filterEndDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
         break
       case 'month':
-        // Del 1ero del mes actual hasta hoy
+        // Mes calendárico completo (incluye días del mes aún por venir)
         filterDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
+        filterEndDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
         break
       case 'quarter':
         // Últimos 3 meses completos desde el 1ero
         filterDate = new Date(now.getFullYear(), now.getMonth() - 2, 1, 0, 0, 0, 0)
+        filterEndDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
         break
       case 'year':
-        // Del 1 de enero del año actual hasta hoy
+        // Año calendárico completo
         filterDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0)
+        filterEndDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999)
         break
       case 'all':
         return validInvoices.map(addCostCalculations)
@@ -572,7 +584,7 @@ export default function Reports() {
       .filter(invoice => {
         const invoiceDate = getInvoiceDate(invoice)
         if (!invoiceDate) return false
-        return invoiceDate >= filterDate
+        return invoiceDate >= filterDate && invoiceDate <= filterEndDate
       })
       .map(addCostCalculations)
   }, [invoices, dateRange, customStartDate, customEndDate, calculateItemCost, isCustomItem, filterBranch, canAccess, canSeeSale])
@@ -1541,24 +1553,29 @@ export default function Reports() {
       })
     }
 
+    // Tope superior del período (ver nota en filteredInvoices): sin esto un
+    // documento fechado a futuro se colaba en todos los rangos.
+    let filterEndDate
     switch (dateRange) {
       case 'today':
         filterDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+        filterEndDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
         break
       case 'week':
         filterDate.setDate(now.getDate() - 7)
+        filterEndDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
         break
       case 'month':
-        // Del 1ero del mes actual hasta hoy
         filterDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
+        filterEndDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
         break
       case 'quarter':
-        // Últimos 3 meses completos desde el 1ero
         filterDate = new Date(now.getFullYear(), now.getMonth() - 2, 1, 0, 0, 0, 0)
+        filterEndDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
         break
       case 'year':
-        // Del 1 de enero del año actual hasta hoy
         filterDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0)
+        filterEndDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999)
         break
       case 'all':
         return expenses
@@ -1569,7 +1586,7 @@ export default function Reports() {
     return expenses.filter(expense => {
       if (!expense.date) return false
       const expenseDate = expense.date instanceof Date ? expense.date : new Date(expense.date)
-      return expenseDate >= filterDate
+      return expenseDate >= filterDate && expenseDate <= filterEndDate
     })
   }, [expenses, dateRange, customStartDate, customEndDate])
 
@@ -1599,24 +1616,28 @@ export default function Reports() {
       })
     }
 
+    // Tope superior del período (ver nota en filteredInvoices).
+    let filterEndDate
     switch (dateRange) {
       case 'today':
         filterDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+        filterEndDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
         break
       case 'week':
         filterDate.setDate(now.getDate() - 7)
+        filterEndDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
         break
       case 'month':
-        // Del 1ero del mes actual hasta hoy
         filterDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
+        filterEndDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
         break
       case 'quarter':
-        // Últimos 3 meses completos desde el 1ero
         filterDate = new Date(now.getFullYear(), now.getMonth() - 2, 1, 0, 0, 0, 0)
+        filterEndDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
         break
       case 'year':
-        // Del 1 de enero del año actual hasta hoy
         filterDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0)
+        filterEndDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999)
         break
       case 'all':
         return accessiblePurchases
@@ -1627,7 +1648,7 @@ export default function Reports() {
     return accessiblePurchases.filter(purchase => {
       if (!purchase.createdAt) return false
       const purchaseDate = purchase.createdAt.toDate ? purchase.createdAt.toDate() : new Date(purchase.createdAt)
-      return purchaseDate >= filterDate
+      return purchaseDate >= filterDate && purchaseDate <= filterEndDate
     })
   }, [purchases, dateRange, customStartDate, customEndDate, hasPurchaseAccess])
 
