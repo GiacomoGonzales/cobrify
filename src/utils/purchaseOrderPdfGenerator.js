@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf'
+import { contrastTextColor } from '@/utils/pdfColors'
 import { storage } from '@/lib/firebase'
 import { ref, getBlob, getDownloadURL } from 'firebase/storage'
 import { Capacitor, CapacitorHttp } from '@capacitor/core'
@@ -191,6 +192,8 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   const DARK_GRAY = [60, 60, 60]
   const MEDIUM_GRAY = [120, 120, 120]
   const ACCENT_COLOR = hexToRgb(companySettings?.pdfAccentColor || '#464646')
+  // Texto legible ENCIMA del acento: negro si el acento es claro.
+  const ON_ACCENT = contrastTextColor(ACCENT_COLOR)
 
   // Moneda del documento — 'S/' (PEN) o '$' (USD). Cae en PEN si no viene.
   const orderCurrency = normalizeCurrency(order?.currency)
@@ -368,7 +371,7 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
 
   doc.setFontSize(9)
   doc.setFont('helvetica', 'bold')
-  doc.setTextColor(255, 255, 255)
+  doc.setTextColor(...ON_ACCENT)
   doc.text(`R.U.C. ${companySettings?.ruc || ''}`, docBoxX + docColumnWidth / 2, docBoxY + 16, { align: 'center' })
 
   doc.setTextColor(...BLACK)
@@ -555,7 +558,7 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
 
   doc.setFontSize(7)
   doc.setFont('helvetica', 'bold')
-  doc.setTextColor(255, 255, 255)
+  doc.setTextColor(...ON_ACCENT)
 
   const headerTextY = tableY + 12
   doc.text('CANT.', cols.cant + colWidths.cant / 2, headerTextY, { align: 'center' })
@@ -743,7 +746,7 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   // Total
   doc.setFillColor(...ACCENT_COLOR)
   doc.rect(totalsX, currentY, totalsWidth, totalsRowHeight + 6, 'F')
-  doc.setTextColor(255, 255, 255)
+  doc.setTextColor(...ON_ACCENT)
   doc.setFont('helvetica', 'bold')
   doc.text('TOTAL', totalsX + 5, currentY + 14)
   doc.setFontSize(11)

@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf'
+import { contrastTextColor } from '@/utils/pdfColors'
 import { storage } from '@/lib/firebase'
 import { ref, getDownloadURL, getBlob } from 'firebase/storage'
 import { Capacitor, CapacitorHttp } from '@capacitor/core'
@@ -113,6 +114,8 @@ export const generateDeliveryPDF = async (delivery, companySettings) => {
   const MEDIUM_GRAY = [120, 120, 120]
   const LIGHT_GRAY = [200, 200, 200]
   const ACCENT_COLOR = hexToRgb(companySettings?.pdfAccentColor || '#464646')
+  // Texto legible ENCIMA del acento: negro si el acento es claro.
+  const ON_ACCENT = contrastTextColor(ACCENT_COLOR)
 
   // Márgenes y dimensiones – A4: 595pt x 842pt
   const MARGIN_LEFT = 30
@@ -464,7 +467,7 @@ export const generateDeliveryPDF = async (delivery, companySettings) => {
 
   doc.setFontSize(8)
   doc.setFont('helvetica', 'bold')
-  doc.setTextColor(255, 255, 255)
+  doc.setTextColor(...ON_ACCENT)
   doc.text('CONCEPTO', tableX + col1W / 2, currentY + 13, { align: 'center' })
   doc.line(tableX + col1W, currentY, tableX + col1W, currentY + tableHeaderHeight)
   doc.text('VALOR', tableX + col1W + col2W / 2, currentY + 13, { align: 'center' })

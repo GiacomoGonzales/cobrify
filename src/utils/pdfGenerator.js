@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf'
+import { contrastTextColor } from '@/utils/pdfColors'
 import { formatDate } from '@/lib/utils'
 import { getCurrencySymbol, normalizeCurrency } from '@/utils/currency'
 import { getComprobanteBreakdown } from '@/utils/peruUtils'
@@ -579,6 +580,7 @@ const hexToRgb = (hex) => {
   ] : [70, 70, 70] // Gris oscuro por defecto
 }
 
+
 /**
  * Genera un PDF profesional estilo apisunat.com
  * Diseño con pie de página fijo y espacio flexible para productos
@@ -608,6 +610,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   // Color de acento dinámico (configurado por el usuario)
   const ACCENT_COLOR = hexToRgb(companySettings?.pdfAccentColor || '#464646')
+  // Texto que va ENCIMA del color de acento (encabezado de la tabla, TOTAL,
+  // cajas de crédito). Se adapta al color elegido: negro sobre acentos claros.
+  const ON_ACCENT = contrastTextColor(ACCENT_COLOR)
 
   // Modo espaciado amplio (configurado por el usuario en Preferencias)
   const spacious = companySettings?.pdfSpacious === true
@@ -943,7 +948,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // RUC (texto blanco sobre fondo de color) - Ocultar en notas de venta si está configurado
   doc.setFontSize(9)
   doc.setFont('helvetica', 'bold')
-  doc.setTextColor(255, 255, 255)
+  doc.setTextColor(...ON_ACCENT)
   if (!shouldHideRuc) {
     doc.text(`R.U.C. ${companySettings?.ruc || ''}`, docBoxX + docColumnWidth / 2, docBoxY + 16, { align: 'center' })
   }
@@ -1740,7 +1745,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.rect(MARGIN_LEFT, startY, CONTENT_WIDTH, headerRowHeight, 'F')
     doc.setFontSize(7)
     doc.setFont('helvetica', 'bold')
-    doc.setTextColor(255, 255, 255)
+    doc.setTextColor(...ON_ACCENT)
     const headerTextY = startY + (spacious ? 15 : 12)
     doc.text('CANT.', cols.cant + colWidths.cant / 2, headerTextY, { align: 'center' })
     doc.text('U.M.', cols.um + 3, headerTextY)
@@ -2065,7 +2070,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.rect(totalsX, totalsStartY, totalsWidth, totalRowHeight)
     doc.setFillColor(...ACCENT_COLOR)
     doc.rect(totalsX, footerY, totalsWidth, totalRowHeight, 'F')
-    doc.setTextColor(255, 255, 255)
+    doc.setTextColor(...ON_ACCENT)
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(9)
     doc.text('TOTAL', totalsX + 5, footerY + 14)
@@ -2179,7 +2184,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     const totalRowHeight = hasNetRow ? totalsRowHeight : totalsRowHeight + 6
     doc.setFillColor(...ACCENT_COLOR)
     doc.rect(totalsX, footerY, totalsWidth, totalRowHeight, 'F')
-    doc.setTextColor(255, 255, 255)
+    doc.setTextColor(...ON_ACCENT)
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(9)
     doc.text(HAS_ADVANCES ? 'TOTAL A PAGAR' : 'TOTAL', totalsX + 5, footerY + (hasNetRow ? 10 : 14))
@@ -2205,7 +2210,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     // Fila: NETO A PAGAR (mismo estilo que TOTAL - color de acento de la empresa)
     doc.setFillColor(...ACCENT_COLOR)
     doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight + 6, 'F')
-    doc.setTextColor(255, 255, 255)
+    doc.setTextColor(...ON_ACCENT)
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(9)
     doc.text('NETO A PAGAR', totalsX + 5, footerY + 14)
@@ -2323,7 +2328,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
     doc.setFontSize(7)
     doc.setFont('helvetica', 'bold')
-    doc.setTextColor(255, 255, 255)
+    doc.setTextColor(...ON_ACCENT)
     doc.text('BANCO', colStart.banco + 2, bankY + 9)
     doc.text('MONEDA', colStart.moneda + 2, bankY + 9)
     doc.text('Nº CUENTA', colStart.cuenta + 2, bankY + 9)
@@ -2371,7 +2376,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.rect(walletX, walletY, walletWidth, walletTotalH)
     doc.setFillColor(...ACCENT_COLOR)
     doc.rect(walletX, walletY, walletWidth, walletHeaderH, 'F')
-    doc.setFontSize(7); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255)
+    doc.setFontSize(7); doc.setFont('helvetica', 'bold'); doc.setTextColor(...ON_ACCENT)
     doc.text('YAPE / PLIN', walletX + 2, walletY + 9)
     walletY += walletHeaderH
 
@@ -2862,7 +2867,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       doc.rect(MARGIN_LEFT, termsBoxY, CONTENT_WIDTH, 18, 'F')
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(9)
-      doc.setTextColor(...WHITE)
+      doc.setTextColor(...ON_ACCENT)
       doc.text('CONDICIONES DE CRÉDITO', MARGIN_LEFT + 5, termsBoxY + 12)
 
       let termsY = termsBoxY + 30
@@ -2923,7 +2928,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       doc.rect(MARGIN_LEFT, paymentBoxY, paymentBoxWidth, 18, 'F')
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(9)
-      doc.setTextColor(...WHITE)
+      doc.setTextColor(...ON_ACCENT)
       const paymentTitle = invoice.paymentStatus === 'partial' ? 'ESTADO DE PAGO' : 'DETALLE DE PAGOS'
       doc.text(paymentTitle, MARGIN_LEFT + 5, paymentBoxY + 12)
 

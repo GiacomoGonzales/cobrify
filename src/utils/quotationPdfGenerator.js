@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf'
+import { contrastTextColor } from '@/utils/pdfColors'
 import { storage } from '@/lib/firebase'
 import { ref, getBlob, getDownloadURL } from 'firebase/storage'
 import { Capacitor, CapacitorHttp } from '@capacitor/core'
@@ -422,6 +423,8 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
 
   // Color de acento dinámico (configurado por el usuario)
   const ACCENT_COLOR = hexToRgb(companySettings?.pdfAccentColor || '#464646')
+  // Texto legible ENCIMA del acento: negro si el acento es claro.
+  const ON_ACCENT = contrastTextColor(ACCENT_COLOR)
 
   // Modo espaciado amplio (configurado por el usuario en Preferencias)
   const spacious = companySettings?.pdfSpacious === true
@@ -1105,7 +1108,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     doc.rect(MARGIN_LEFT, y, CONTENT_WIDTH, headerRowHeight, 'F')
     doc.setFontSize(7)
     doc.setFont('helvetica', 'bold')
-    doc.setTextColor(255, 255, 255)
+    doc.setTextColor(...ON_ACCENT)
     const hTextY = y + (spacious ? 15 : 12)
     doc.text('CANT.', cols.cant + colWidths.cant / 2, hTextY, { align: 'center' })
     doc.text('U.M.', cols.um + 3, hTextY)
@@ -1354,7 +1357,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     // Fila: TOTAL
     doc.setFillColor(...ACCENT_COLOR)
     doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight + 6, 'F')
-    doc.setTextColor(255, 255, 255)
+    doc.setTextColor(...ON_ACCENT)
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(9)
     doc.text('TOTAL', totalsX + 5, footerY + 14)
@@ -1414,7 +1417,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     // Fila: TOTAL
     doc.setFillColor(...ACCENT_COLOR)
     doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight + 6, 'F')
-    doc.setTextColor(255, 255, 255)
+    doc.setTextColor(...ON_ACCENT)
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(9)
     doc.text('TOTAL', totalsX + 5, footerY + 14)
@@ -1474,7 +1477,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
 
     doc.setFontSize(7)
     doc.setFont('helvetica', 'bold')
-    doc.setTextColor(255, 255, 255)
+    doc.setTextColor(...ON_ACCENT)
     doc.text('BANCO', colStart.banco + 2, bankY + 9)
     doc.text('MONEDA', colStart.moneda + 2, bankY + 9)
     doc.text('Nº CUENTA', colStart.cuenta + 2, bankY + 9)
@@ -1519,7 +1522,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     doc.rect(walletX, walletY, walletWidth, walletTotalH)
     doc.setFillColor(...ACCENT_COLOR)
     doc.rect(walletX, walletY, walletWidth, walletHeaderH, 'F')
-    doc.setFontSize(7); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255)
+    doc.setFontSize(7); doc.setFont('helvetica', 'bold'); doc.setTextColor(...ON_ACCENT)
     doc.text('YAPE / PLIN', walletX + 2, walletY + 9)
     walletY += walletHeaderH
     doc.setTextColor(...BLACK)

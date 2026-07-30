@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf'
+import { contrastTextColor } from '@/utils/pdfColors'
 import QRCode from 'qrcode'
 import { storage } from '@/lib/firebase'
 import { ref, getDownloadURL, getBlob } from 'firebase/storage'
@@ -249,6 +250,8 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   const MEDIUM_GRAY = [100, 100, 100]
   const LIGHT_GRAY = [200, 200, 200]
   const ACCENT_COLOR = hexToRgb(companySettings?.pdfAccentColor || '#464646')
+  // Texto legible ENCIMA del acento: negro si el acento es claro.
+  const ON_ACCENT = contrastTextColor(ACCENT_COLOR)
 
   // Modo espaciado amplio (configurado por el usuario en Preferencias)
   // Puede ser desactivado automáticamente si los items no caben en una sola hoja con espaciado
@@ -877,7 +880,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
 
     doc.setFontSize(7)
     doc.setFont('helvetica', 'bold')
-    doc.setTextColor(255, 255, 255)
+    doc.setTextColor(...ON_ACCENT)
 
     let hColX = tableX
     doc.text('N°', hColX + colWidths.num/2, currentY + tableHeaderTextY, { align: 'center' })

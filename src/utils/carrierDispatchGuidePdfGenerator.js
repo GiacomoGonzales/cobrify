@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf'
+import { contrastTextColor } from '@/utils/pdfColors'
 import QRCode from 'qrcode'
 import { storage } from '@/lib/firebase'
 import { ref, getDownloadURL, getBlob } from 'firebase/storage'
@@ -213,6 +214,8 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   const MEDIUM_GRAY = [100, 100, 100]
   const LIGHT_GRAY = [200, 200, 200]
   const ACCENT_COLOR = hexToRgb(companySettings?.pdfAccentColor || '#464646')
+  // Texto legible ENCIMA del acento: negro si el acento es claro.
+  const ON_ACCENT = contrastTextColor(ACCENT_COLOR)
 
   // Márgenes y dimensiones
   const MARGIN_LEFT = 30
@@ -790,7 +793,7 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
 
     doc.setFontSize(6)
     doc.setFont('helvetica', 'bold')
-    doc.setTextColor(255, 255, 255)
+    doc.setTextColor(...ON_ACCENT)
 
     let hColX = tableX
     doc.text('N°', hColX + colWidths.num/2, currentY + 12, { align: 'center' })
