@@ -1435,6 +1435,22 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       return
     }
 
+    // Ítems incompletos: SUNAT rechaza la guía con error 2781 ("no existe
+    // informacion de descripcion del items") cuando llega una línea sin
+    // descripción. Antes se enviaba igual y el rechazo aparecía recién en el
+    // seguimiento, ya con la numeración consumida.
+    const emptyItemIndex = items.findIndex(item => !(item.description || '').trim())
+    if (emptyItemIndex !== -1) {
+      toast.error(`El producto ${emptyItemIndex + 1} está vacío. Complétalo o elimínalo de la lista.`)
+      return
+    }
+
+    const badQtyIndex = items.findIndex(item => !(Number(item.quantity) > 0))
+    if (badQtyIndex !== -1) {
+      toast.error(`La cantidad del producto ${badQtyIndex + 1} debe ser mayor a 0`)
+      return
+    }
+
     if (!recipientDocNumber || !recipientName) {
       toast.error('Debe completar los datos del destinatario')
       return
