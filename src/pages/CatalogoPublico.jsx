@@ -3,6 +3,9 @@ import { optimizeImageUrl } from '@/utils/cloudinary'
 import ProductModal from '@/components/catalog/ProductModal'
 import CartDrawer, { TableAccountModal } from '@/components/catalog/CartDrawer'
 import CategoryScroller from '@/components/catalog/CategoryScroller'
+import CustomerAuthModal from '@/components/catalog/CustomerAuthModal'
+import CustomerAccountDrawer from '@/components/catalog/CustomerAccountDrawer'
+import { useCatalogCustomer } from '@/components/catalog/useCatalogCustomer'
 import { FeaturedCard, CarouselCard, GridCard, ListCard } from '@/components/catalog/ProductCards'
 import AnnouncementBar from '@/components/catalog/AnnouncementBar'
 import HeroCarousel from '@/components/catalog/HeroCarousel'
@@ -37,12 +40,14 @@ import {
   Package,
   Loader2,
   Store,
-  Filter,
   Grid3X3,
   List,
   UtensilsCrossed,
   Info,
-  Mail
+  Mail,
+  User,
+  LogOut,
+  Menu
 } from 'lucide-react'
 
 // Estilos de animacion para fade-in escalonado
@@ -220,6 +225,12 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     if (business.catalogLayout === 'list') setViewMode('list')
   }, [business])
   const [isLogoHorizontal, setIsLogoHorizontal] = useState(false)
+  // Cuenta OPCIONAL del comprador (Ola 1). Si no inicia sesión, el catálogo
+  // funciona exactamente igual que siempre (pedido como invitado).
+  const [authModalOpen, setAuthModalOpen] = useState(false)
+  const [accountOpen, setAccountOpen] = useState(false)
+  const [accountTab, setAccountTab] = useState('orders')
+  const { user: catalogUser, profile: catalogProfile, setProfile: setCatalogProfile, signOut: catalogLogout } = useCatalogCustomer(business?.id)
 
   // Estado para mesa activa (orden existente del mozo)
   const [activeTableOrder, setActiveTableOrder] = useState(null) // { orderId, tableId, items, total }
@@ -674,6 +685,12 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const categoriesVariant = themeLayout.categories || 'pills'
   // Variante del hero: 'classic' | 'full-bleed' (portada alta con contenido centrado)
   const heroVariant = themeLayout.hero || 'classic'
+  // Navegación en ESCRITORIO: 'top' (barra de categorías arriba, clásico) o
+  // 'sidebar' (columna fija de categorías a la izquierda + contenido a la
+  // derecha, estilo menus.pe / apps de delivery). En móvil siempre es la barra
+  // superior: el sidebar es exclusivo de pantallas md+.
+  const desktopNav = business?.catalogDesktopNav === 'sidebar' ? 'sidebar' : 'top'
+  const sidebarNav = desktopNav === 'sidebar'
   // Grilla efectiva: config del negocio > propuesta del tema > masonry.
   // 'magazine' = cuadrícula uniforme donde la 1ra tarjeta ocupa 2x2 (revista).
   const catalogLayout = business?.catalogLayout || themeLayout.grid || 'masonry'
@@ -1110,7 +1127,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
 
       {/* Header */}
       <header className={`${thHeaderBg} shadow-sm sticky ${isRestaurantMenu && tableFromUrl ? 'top-[41px]' : 'top-0'} z-40`}>
-        <div className="max-w-7xl mx-auto px-4">
+        {/* Con menú lateral el header usa el MISMO contenedor que el layout de
+            dos columnas, para que el logo quede alineado con la columna de
+            categorías (como en menus.pe) y no flotando al centro. */}
+        <div className={sidebarNav ? 'max-w-[1360px] mx-auto px-4 md:px-8' : 'max-w-7xl mx-auto px-4'}>
           <div className="flex items-center justify-between h-16 md:h-20">
             {/* Logo y nombre — landscape tiene prioridad y oculta el nombre */}
             {(() => {
@@ -1119,6 +1139,16 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               const headerLogoSize = headerIsLandscape ? 'logo_landscape' : 'logo_square'
               return (
             <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
+              {/* Hamburguesa (solo móvil): abre el menú del catálogo — cuenta,
+                  categorías e info del negocio. Es el equivalente móvil del
+                  menú lateral de escritorio. */}
+              <button
+                onClick={() => { setDrawerExpandedCategory(selectedCategory); setCategoryDrawerOpen(true) }}
+                className={`md:hidden p-2 -ml-2 rounded-lg flex-shrink-0 ${thViewHover}`}
+                aria-label="Abrir menú"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
               {headerLogoSrc ? (
                 <img
                   src={optimizeImageUrl(headerLogoSrc, headerLogoSize)}
@@ -1178,15 +1208,155 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         </div>
       </header>
 
+      {/* Layout de dos columnas en escritorio (catalogDesktopNav='sidebar'):
+          columna fija de categorías a la izquierda + hero/productos a la derecha.
+          En móvil el wrapper es transparente (display:contents) para no alterar
+          nada del flujo actual. */}
+      <div className={sidebarNav ? 'contents md:max-w-[1360px] md:mx-auto md:px-8 md:flex md:gap-8 lg:gap-10 md:items-start' : 'contents'}>
+        {sidebarNav && (
+          <aside className="hidden md:block w-60 flex-shrink-0 sticky top-24 self-start max-h-[calc(100vh-7rem)] overflow-y-auto catalog-scrollbar py-6 pr-1">
+            {/* Columna de CUENTA (las categorías viven arriba como pastillas,
+                igual que menus.pe: el sidebar navega, las pastillas filtran). */}
+            {catalogUser ? (
+              <>
+                <div className="flex items-center gap-2.5 px-3 mb-4">
+                  {catalogUser.photoURL ? (
+                    <img src={catalogUser.photoURL} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                  ) : (
+                    <span
+                      className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+                      style={{ backgroundColor: getCatalogAccent(business) }}
+                    >
+                      {(catalogProfile?.name || catalogUser.displayName || catalogUser.email || '?').charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                  <div className="min-w-0">
+                    <p className={`text-sm font-semibold truncate ${thText}`}>
+                      {catalogProfile?.name || catalogUser.displayName || 'Mi cuenta'}
+                    </p>
+                    <p className={`text-[11px] truncate ${thTextFaint}`}>{catalogUser.email}</p>
+                  </div>
+                </div>
+
+                <p className={`text-[11px] font-semibold uppercase tracking-[0.12em] mb-2 px-3 ${thTextFaint}`}>Mi cuenta</p>
+                <nav className="space-y-1">
+                  {[
+                    { id: 'orders', label: 'Mis pedidos', icon: Package },
+                    { id: 'addresses', label: 'Mis direcciones', icon: MapPin },
+                    { id: 'data', label: 'Mis datos', icon: User },
+                  ].map(item => (
+                    <button
+                      key={item.id}
+                      onClick={() => { setAccountTab(item.id); setAccountOpen(true) }}
+                      className={`w-full flex items-center gap-2.5 text-left px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${thTextMuted} ${thViewHover}`}
+                    >
+                      <item.icon className="w-4 h-4 flex-shrink-0" />
+                      {item.label}
+                    </button>
+                  ))}
+                  <button
+                    onClick={catalogLogout}
+                    className={`w-full flex items-center gap-2.5 text-left px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${thTextMuted} ${thViewHover}`}
+                  >
+                    <LogOut className="w-4 h-4 flex-shrink-0" />
+                    Cerrar sesión
+                  </button>
+                </nav>
+              </>
+            ) : (
+              <div className="px-3">
+                <p className={`text-sm font-semibold mb-1 ${thText}`}>Tu cuenta</p>
+                <p className={`text-xs mb-3 ${thTextFaint}`}>
+                  Guarda tus pedidos y direcciones. Puedes seguir comprando sin registrarte.
+                </p>
+                <button
+                  onClick={() => setAuthModalOpen(true)}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                  style={{ backgroundColor: getCatalogAccent(business) }}
+                >
+                  <User className="w-4 h-4" />
+                  Iniciar sesión
+                </button>
+              </div>
+            )}
+
+            {/* Info del negocio al pie de la columna (en modo sidebar el footer
+                ancho se oculta: hacía "saltar" el scroll al llegar abajo). */}
+            <div className={`mt-5 pt-5 border-t ${thBorderColor} space-y-4`}>
+              {business?.address && (
+                <p className={`text-xs flex items-start gap-1.5 px-3 ${thTextMuted}`}>
+                  <MapPin className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                  <span>{business.address}</span>
+                </p>
+              )}
+
+              {/* Horario: solo el estado de hoy; el detalle completo se
+                  mantiene en el footer móvil. */}
+              {business?.businessHours?.enabled && (() => {
+                const status = isBusinessOpen(business.businessHours)
+                const today = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Lima' })).getDay()
+                const config = business.businessHours.days?.[today]
+                return (
+                  <div className="px-3">
+                    <div className="flex items-center gap-2">
+                      <Clock className={`w-3.5 h-3.5 ${thTextMuted}`} />
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${status.open ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                        {status.open ? 'Abierto' : 'Cerrado'}
+                      </span>
+                    </div>
+                    {config?.open && (
+                      <p className={`text-xs mt-1.5 ${thTextFaint}`}>Hoy {config.from} - {config.to}</p>
+                    )}
+                  </div>
+                )
+              })()}
+
+              <div className="px-3 space-y-2">
+                {(business?.catalogWhatsapp || business?.whatsapp || business?.phone) && (
+                  <a
+                    href={`https://wa.me/${(business.catalogWhatsapp || business.whatsapp || business.phone).replace(/\D/g, '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 w-full px-3 py-2 text-white rounded-xl text-sm font-medium transition-opacity hover:opacity-80"
+                    style={{ backgroundColor: getCatalogAccent(business) }}
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    WhatsApp
+                  </a>
+                )}
+                {business?.phone && (
+                  <a
+                    href={`tel:${business.phone}`}
+                    className={`flex items-center justify-center gap-2 w-full px-3 py-2 rounded-xl text-sm font-medium border transition-colors ${thBorderColor} ${thTextMuted} ${thViewHover}`}
+                  >
+                    <Phone className="w-4 h-4" />
+                    Llamar
+                  </a>
+                )}
+              </div>
+
+              <p className={`text-[11px] px-3 pt-1 ${thFooterPowered}`}>
+                Powered by <a href="https://cobrifyperu.com" className={`hover:underline ${thFooterLink}`}>Cobrify</a>
+              </p>
+            </div>
+          </aside>
+        )}
+        {/* Columna de contenido (en modo clásico no envuelve nada: display:contents) */}
+        <div className={sidebarNav ? 'contents md:block md:flex-1 md:min-w-0' : 'contents'}>
+
       {/* Hero / Búsqueda — carrusel (F2.2) si está activado, banner cuando hay
           portada única, clásico (gradient) si no hay nada */}
       {business?.catalogHero?.enabled && (business?.catalogHero?.slides || []).filter(s => s.imageUrl).length > 0 ? (
-        /* === CARRUSEL HERO: slides promocionales con autoplay === */
-        <div className="relative overflow-hidden">
-          <HeroCarousel slides={business.catalogHero.slides.filter(s => s.imageUrl)} />
+        /* === CARRUSEL HERO: slides promocionales con autoplay ===
+            Con menú lateral la portada va "en tarjeta": esquinas redondeadas y
+            separada de los bordes, como en las tiendas modernas. */
+        <div className={sidebarNav ? 'relative md:pt-6' : 'relative overflow-hidden'}>
+          <div className={sidebarNav ? 'md:rounded-2xl md:overflow-hidden md:shadow-sm' : ''}>
+            <HeroCarousel slides={business.catalogHero.slides.filter(s => s.imageUrl)} />
+          </div>
           {/* Barra de búsqueda debajo del carrusel (mismo estilo que el banner) */}
-          <div className={`${themeClasses.bg} px-4 py-3`}>
-            <div className="relative max-w-7xl mx-auto">
+          <div className={`${themeClasses.bg} px-4 py-3 ${sidebarNav ? 'md:px-0 md:pt-5' : ''}`}>
+            <div className={`relative ${sidebarNav ? '' : 'max-w-7xl mx-auto'}`}>
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
                 type="text"
@@ -1201,8 +1371,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       ) : business?.catalogCoverImage ? (
         /* === ESTILO BANNER: imagen hero. Variante 'full-bleed' (motor v2):
             más alta, overlay más oscuro y contenido CENTRADO (restaurantes). === */
-        <div className="relative overflow-hidden">
-          <div className={`relative ${heroVariant === 'full-bleed' ? 'h-72 md:h-[26rem]' : 'h-48 md:h-72'}`}>
+        <div className={sidebarNav ? 'relative md:pt-6' : 'relative overflow-hidden'}>
+          <div className={`relative ${heroVariant === 'full-bleed' ? 'h-72 md:h-[26rem]' : 'h-48 md:h-72'} ${sidebarNav ? 'overflow-hidden md:rounded-2xl md:shadow-sm' : ''}`}>
             <picture>
               <source
                 media="(max-width: 767px)"
@@ -1275,8 +1445,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             </div>
           </div>
           {/* Barra de búsqueda debajo del banner */}
-          <div className={`${themeClasses.bg} px-4 py-3`}>
-            <div className="relative max-w-7xl mx-auto">
+          <div className={`${themeClasses.bg} px-4 py-3 ${sidebarNav ? 'md:px-0 md:pt-5' : ''}`}>
+            <div className={`relative ${sidebarNav ? '' : 'max-w-7xl mx-auto'}`}>
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
                 type="text"
@@ -1291,7 +1461,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       ) : (
         /* === ESTILO CLÁSICO: solo cuando NO hay portada (gradient sólido) === */
         <div
-          className="relative text-white overflow-hidden"
+          className={`relative text-white overflow-hidden ${sidebarNav ? 'md:mt-6 md:rounded-2xl' : ''}`}
           style={{
             background: business?.catalogColor
               ? `linear-gradient(135deg, ${business.catalogColor} 0%, ${business.catalogColor}dd 100%)`
@@ -1345,23 +1515,15 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         </div>
       )}
 
-      {/* Categorías */}
+      {/* Categorías — barra superior. Con navegación lateral (sidebar) se oculta
+          en escritorio: las categorías viven en la columna izquierda. */}
       {rootCategories.length > 0 && (
-        <div className={`${thCard} ${thBorderColor} border-b sticky top-16 md:top-20 z-30`}>
-          <div className="max-w-7xl mx-auto px-4">
+        <div className={`${thCard} ${thBorderColor} border-b sticky top-16 md:top-20 z-30 ${sidebarNav ? 'md:bg-transparent md:border-0 md:static' : ''}`}>
+          <div className={sidebarNav ? 'px-4 md:px-0' : 'max-w-7xl mx-auto px-4'}>
             {/* Categorías raíz — SIEMPRE una fila con scroll horizontal (A1 del
                 rediseño): en desktop el wrap multilínea comía media pantalla con
                 muchas categorías. Flechas + fade en bordes via CategoryScroller. */}
             <CategoryScroller className="-mx-4 px-4 md:mx-0 md:px-0" innerClassName="gap-2 py-3">
-              {/* Menú lateral de categorías (solo móvil): abre el árbol completo de
-                  categorías y subcategorías sin ocupar pantalla. */}
-              <button
-                onClick={() => { setDrawerExpandedCategory(selectedCategory); setCategoryDrawerOpen(true) }}
-                className={`md:hidden px-3 py-2 rounded-full text-sm font-medium whitespace-nowrap flex-shrink-0 flex items-center gap-1.5 ${thCatInactive}`}
-                aria-label="Ver todas las categorías"
-              >
-                <Filter className="w-4 h-4" />
-              </button>
               {/* Botón "Todos": oculto en modo onlyCarousels cuando estamos en la vista principal,
                   para forzar al cliente a entrar a una categoría. Dentro de una categoría sí se muestra. */}
               {categoriesVariant === 'circles' ? (
@@ -1488,15 +1650,78 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           <div className="absolute inset-0 bg-black/50" onClick={() => setCategoryDrawerOpen(false)} />
           <div className={`absolute left-0 top-0 bottom-0 w-72 max-w-[85vw] ${thCard} shadow-2xl flex flex-col`}>
             <div className={`flex items-center justify-between px-4 py-3 border-b ${thBorderColor} flex-shrink-0`}>
-              <span className="font-semibold">Categorías</span>
+              <span className="font-semibold">Menú</span>
               <button onClick={() => setCategoryDrawerOpen(false)} className="p-2 -mr-2" aria-label="Cerrar">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto py-2">
+              {/* CUENTA — arriba de todo, igual que el sidebar de escritorio */}
+              {catalogUser ? (
+                <div className={`px-4 pb-3 mb-2 border-b ${thBorderColor}`}>
+                  <div className="flex items-center gap-2.5 mb-3">
+                    {catalogUser.photoURL ? (
+                      <img src={catalogUser.photoURL} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                    ) : (
+                      <span
+                        className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+                        style={{ backgroundColor: getCatalogAccent(business) }}
+                      >
+                        {(catalogProfile?.name || catalogUser.displayName || catalogUser.email || '?').charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                    <div className="min-w-0">
+                      <p className={`text-sm font-semibold truncate ${thText}`}>
+                        {catalogProfile?.name || catalogUser.displayName || 'Mi cuenta'}
+                      </p>
+                      <p className={`text-[11px] truncate ${thTextFaint}`}>{catalogUser.email}</p>
+                    </div>
+                  </div>
+                  {[
+                    { id: 'orders', label: 'Mis pedidos', icon: Package },
+                    { id: 'addresses', label: 'Mis direcciones', icon: MapPin },
+                    { id: 'data', label: 'Mis datos', icon: User },
+                  ].map(item => (
+                    <button
+                      key={item.id}
+                      onClick={() => { setCategoryDrawerOpen(false); setAccountTab(item.id); setAccountOpen(true) }}
+                      className={`w-full flex items-center gap-2.5 text-left py-2 text-sm font-medium ${thTextMuted}`}
+                    >
+                      <item.icon className="w-4 h-4 flex-shrink-0" />
+                      {item.label}
+                    </button>
+                  ))}
+                  <button
+                    onClick={catalogLogout}
+                    className={`w-full flex items-center gap-2.5 text-left py-2 text-sm font-medium ${thTextMuted}`}
+                  >
+                    <LogOut className="w-4 h-4 flex-shrink-0" />
+                    Cerrar sesión
+                  </button>
+                </div>
+              ) : (
+                <div className={`px-4 pb-3 mb-2 border-b ${thBorderColor}`}>
+                  <p className={`text-xs mb-2.5 ${thTextFaint}`}>
+                    Guarda tus pedidos y direcciones. Puedes seguir comprando sin registrarte.
+                  </p>
+                  <button
+                    onClick={() => { setCategoryDrawerOpen(false); setAuthModalOpen(true) }}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-semibold text-white"
+                    style={{ backgroundColor: getCatalogAccent(business) }}
+                  >
+                    <User className="w-4 h-4" />
+                    Iniciar sesión
+                  </button>
+                </div>
+              )}
+
+              {/* CATEGORÍAS */}
+              {rootCategories.length > 0 && (
+                <p className={`text-[11px] font-semibold uppercase tracking-[0.12em] px-4 pt-1 pb-1.5 ${thTextFaint}`}>Categorías</p>
+              )}
               <button
                 onClick={() => { setSelectedCategory(null); setSelectedSubcategory(null); setCategoryDrawerOpen(false) }}
-                className="w-full text-left px-4 py-2.5 text-sm font-semibold"
+                className="w-full text-left px-4 py-1.5 text-sm font-semibold"
                 style={!selectedCategory ? { color: getCatalogAccent(business) } : {}}
               >
                 Todos
@@ -1510,7 +1735,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                     <div className="flex items-center">
                       <button
                         onClick={() => { setSelectedCategory(category.id); setSelectedSubcategory(null); setCategoryDrawerOpen(false) }}
-                        className="flex-1 text-left px-4 py-2.5 text-sm font-semibold"
+                        className="flex-1 text-left px-4 py-1.5 text-sm font-semibold"
                         style={isActive ? { color: getCatalogAccent(business) } : {}}
                       >
                         {category.name}
@@ -1518,7 +1743,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                       {subs.length > 0 && (
                         <button
                           onClick={() => setDrawerExpandedCategory(isExpanded ? null : category.id)}
-                          className="p-2.5 mr-2 flex-shrink-0"
+                          className="p-1.5 mr-2 flex-shrink-0"
                           aria-label={isExpanded ? 'Contraer subcategorías' : 'Ver subcategorías'}
                         >
                           <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
@@ -1531,7 +1756,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                           <button
                             key={sub.id}
                             onClick={() => { setSelectedCategory(category.id); setSelectedSubcategory(sub.id); setCategoryDrawerOpen(false) }}
-                            className="w-full text-left pl-8 pr-4 py-2 text-sm opacity-90"
+                            className="w-full text-left pl-8 pr-4 py-1.5 text-sm opacity-90"
                             style={isActive && selectedSubcategory === sub.id ? { color: getCatalogAccent(business), fontWeight: 600, opacity: 1 } : {}}
                           >
                             {sub.name}
@@ -1543,12 +1768,46 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 )
               })}
             </div>
+            {/* Info del negocio al pie del menú (igual que el sidebar de escritorio) */}
+            <div className={`flex-shrink-0 border-t ${thBorderColor} p-4 space-y-3`}>
+              {business?.address && (
+                <p className={`text-xs flex items-start gap-1.5 ${thTextMuted}`}>
+                  <MapPin className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                  <span>{business.address}</span>
+                </p>
+              )}
+              {business?.businessHours?.enabled && (() => {
+                const status = isBusinessOpen(business.businessHours)
+                return (
+                  <div className="flex items-center gap-2">
+                    <Clock className={`w-3.5 h-3.5 ${thTextMuted}`} />
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${status.open ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                      {status.open ? 'Abierto' : 'Cerrado'}
+                    </span>
+                  </div>
+                )
+              })()}
+              {(business?.catalogWhatsapp || business?.whatsapp || business?.phone) && (
+                <a
+                  href={`https://wa.me/${(business.catalogWhatsapp || business.whatsapp || business.phone).replace(/\D/g, '')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full px-3 py-2 text-white rounded-xl text-sm font-medium"
+                  style={{ backgroundColor: getCatalogAccent(business) }}
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  WhatsApp
+                </a>
+              )}
+            </div>
           </div>
         </div>
       )}
 
       {/* Productos */}
-      <main className="max-w-7xl mx-auto px-4 py-6 md:py-8">
+      {/* En modo sidebar el ancho y el padding lateral ya los da la columna:
+          el main no debe volver a centrarse ni agregar su propio px-4. */}
+      <main className={sidebarNav ? 'px-4 md:px-0 py-6 md:py-8' : 'max-w-7xl mx-auto px-4 py-6 md:py-8'}>
         {/* Header de resultados (sin carruseles o con categoría seleccionada) */}
         {(!groupByCategory || selectedCategory || searchQuery) && (
           <div className="flex items-center justify-between mb-6">
@@ -1732,9 +1991,13 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           </p>
         )}
       </main>
+        </div>{/* fin columna de contenido (layout sidebar) */}
+      </div>{/* fin wrapper de dos columnas (layout sidebar) */}
 
-      {/* Footer con info del negocio */}
-      <footer className={`${thCard} ${thBorderColor} border-t mt-12`}>
+      {/* Footer con info del negocio. Con menú lateral se oculta en escritorio:
+          esa info vive al pie de la columna izquierda y así el scroll de la
+          derecha no "salta" al llegar abajo. En móvil se muestra siempre. */}
+      <footer className={`${thCard} ${thBorderColor} border-t mt-12 ${sidebarNav ? 'md:hidden' : ''}`}>
         <div className="max-w-7xl mx-auto px-4 py-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-3">
@@ -1869,6 +2132,29 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         themeClasses={themeClasses}
       />
 
+      {/* Panel "Mi cuenta": pedidos, direcciones y datos */}
+      {catalogUser && (
+        <CustomerAccountDrawer
+          isOpen={accountOpen}
+          onClose={() => setAccountOpen(false)}
+          businessId={business?.id}
+          user={catalogUser}
+          profile={catalogProfile}
+          onProfileChange={setCatalogProfile}
+          accent={getCatalogAccent(business)}
+          currency={catalogCurrency}
+          initialTab={accountTab}
+        />
+      )}
+
+      {/* Login/registro OPCIONAL del comprador */}
+      <CustomerAuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        businessId={business?.id}
+        accent={getCatalogAccent(business)}
+      />
+
       {/* Cart Drawer */}
       <CartDrawer
         isOpen={cartOpen}
@@ -1884,6 +2170,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         activeTableOrder={activeTableOrder}
         catalogCurrency={catalogCurrency}
         catalogExchangeRate={catalogExchangeRate}
+        catalogUser={catalogUser}
+        catalogProfile={catalogProfile}
         onOrderAdded={() => {
           // Recargar la orden activa después de agregar items
           if (business && tableFromUrl) {

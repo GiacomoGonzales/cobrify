@@ -49,7 +49,10 @@ export default function HeroCarousel({ slides = [] }) {
 
   return (
     <div
-      className="relative h-48 md:h-72 overflow-hidden"
+      // Proporción tipo banner en AMBOS tamaños: en móvil ~2:1 (como siempre) y
+      // en desktop 3:1. Antes el desktop tenía altura FIJA (h-72) sobre un ancho
+      // mucho mayor → franja de ~4.4:1 que recortaba media foto.
+      className="relative overflow-hidden aspect-[2/1] md:aspect-[3/1]"
       onMouseEnter={() => { pausedRef.current = true }}
       onMouseLeave={() => { pausedRef.current = false }}
       onTouchStart={onTouchStart}

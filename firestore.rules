@@ -293,6 +293,21 @@ service cloud.firestore {
       // Solo negocios con complaintsBookEnabled == true pueden ser consultados públicamente
       allow read: if resource.data.complaintsBookEnabled == true;
 
+      // Subcollection: catalogCustomers — cuentas OPCIONALES de los COMPRADORES
+      // del catálogo público (no son usuarios del sistema). Modelo por negocio:
+      // el mismo uid puede tener perfil en varios negocios, aislados entre sí.
+      // SEGURIDAD: cada comprador solo ve y edita SU propio documento; el dueño
+      // del negocio (y sub-usuarios con acceso) pueden leerlos como su lista de
+      // clientes, pero NO escribirlos (los datos los administra el comprador).
+      match /catalogCustomers/{customerUid} {
+        allow read: if isAdmin()
+                    || (isAuthenticated() && request.auth.uid == customerUid)
+                    || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+        // Solo el propio comprador crea/edita su perfil, y solo dentro de su uid
+        allow create, update: if isAuthenticated() && request.auth.uid == customerUid;
+        allow delete: if isAdmin() || (isAuthenticated() && request.auth.uid == customerUid);
+      }
+
       // Subcollection: Invoices (Facturas/Boletas)
       match /invoices/{invoiceId} {
         // Admins pueden leer todas las facturas
@@ -488,6 +503,15 @@ service cloud.firestore {
         allow update: if get(/databases/$(database)/documents/businesses/$(userId)).data.catalogEnabled == true
                       && request.resource.data.diff(resource.data).affectedKeys()
                          .hasOnly(['tableId', 'items', 'subtotal', 'tax', 'total', 'updatedAt']);
+
+        // El COMPRADOR con cuenta puede listar SUS propios pedidos (historial
+        // en "Mi cuenta"). Firestore evalúa esta regla contra cada documento
+        // devuelto: si la consulta trajera un pedido de otra persona, falla
+        // entera. Como la query filtra por catalogCustomerId == su uid, solo
+        // puede ver los suyos. Los pedidos de invitado (sin ese campo) quedan
+        // fuera por definición.
+        allow list: if isAuthenticated()
+                    && resource.data.catalogCustomerId == request.auth.uid;
       }
 
       // Subcollection: Counters (Contadores - para números secuenciales)

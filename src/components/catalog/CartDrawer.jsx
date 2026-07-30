@@ -147,6 +147,11 @@ export default function CartDrawer({
   onOrderAdded = null,
   catalogCurrency = 'PEN',
   catalogExchangeRate = 1,
+  // Cuenta OPCIONAL del comprador (Ola 2). Si viene, el checkout se
+  // autocompleta y el pedido queda enlazado a su cuenta. Si es null, todo
+  // funciona igual que siempre (pedido como invitado).
+  catalogUser = null,
+  catalogProfile = null,
 }) {
   // Helpers de moneda del catálogo. Los precios en `cart` están en PEN
   // del catálogo (source of truth). Convertimos y formateamos para display.
@@ -213,9 +218,22 @@ export default function CartDrawer({
 
   // Precargar info del cliente guardada en este dispositivo (por negocio)
   // — evita que tenga que escribir nombre/tel/dirección en cada pedido.
+  // Con sesión iniciada, el PERFIL de la cuenta manda sobre lo guardado en el
+  // dispositivo (sigue al comprador entre celular y computadora).
   useEffect(() => {
     if (!isOpen || !business?.id) return
     try {
+      if (catalogProfile) {
+        if (!customerName && catalogProfile.name) setCustomerName(catalogProfile.name)
+        if (!customerPhone && catalogProfile.phone) setCustomerPhone(catalogProfile.phone)
+        if (!customerEmail && catalogProfile.email) setCustomerEmail(catalogProfile.email)
+        // Dirección predeterminada de las guardadas en su cuenta
+        const def = (catalogProfile.addresses || []).find(a => a.isDefault) || (catalogProfile.addresses || [])[0]
+        if (!customerAddress && def?.address) {
+          setCustomerAddress(def.address)
+          if (def.coords) setCustomerCoords(def.coords)
+        }
+      }
       const saved = localStorage.getItem(`catalog_customer_${business.id}`)
       if (!saved) return
       const data = JSON.parse(saved)
@@ -228,7 +246,7 @@ export default function CartDrawer({
       console.warn('No se pudo cargar info guardada del cliente:', e)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, business?.id])
+  }, [isOpen, business?.id, catalogProfile])
 
   // Resetear formulario cuando se cierra
   useEffect(() => {
@@ -419,6 +437,10 @@ export default function CartDrawer({
 
         // Mesa (solo si aplica)
         ...(orderType === 'dine_in' && tableNumber && { tableNumber: tableNumber.trim() }),
+
+        // Cuenta del comprador (opcional): permite mostrarle su historial.
+        // Igual que `orders.user_id` en menus.pe — nullable a propósito.
+        ...(catalogUser?.uid && { catalogCustomerId: catalogUser.uid }),
 
         // Info del cliente
         ...(customerName && { customerName: customerName.trim() }),

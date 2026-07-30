@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app'
-import { getAuth, indexedDBLocalPersistence, initializeAuth, inMemoryPersistence } from 'firebase/auth'
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore'
+import { getAuth, indexedDBLocalPersistence, initializeAuth, inMemoryPersistence, browserLocalPersistence } from 'firebase/auth'
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions'
 import { Capacitor } from '@capacitor/core'
@@ -120,4 +120,51 @@ try {
   }
 }
 
-export { app, auth, db, storage, functions, secondaryAuth }
+// ============================================================================
+// AUTH DEL CATÁLOGO PÚBLICO (clientes compradores)
+// ============================================================================
+// Instancia SEPARADA de la sesión de la app. Motivo: el catálogo es público y
+// los compradores que se registran NO son usuarios del sistema. Si compartieran
+// la instancia principal, AuthContext los tomaría por usuarios de negocio (hoy,
+// sin doc en `users/{uid}`, igual abre sesión con permisos vacíos) y además
+// registrarse en el catálogo cerraría la sesión del dueño en la misma pestaña.
+//
+// Comparten el mismo pool de Firebase Auth (misma cuenta de Google sirve para
+// ambos), pero la SESIÓN es independiente: cada instancia guarda su token por
+// separado, así que iniciar sesión aquí no toca la sesión de la app.
+let catalogApp
+let catalogAuth
+
+try {
+  catalogApp = initializeApp(firebaseConfig, 'catalog')
+  catalogAuth = initializeAuth(catalogApp, {
+    // El comprador espera seguir logueado entre visitas (a diferencia del auth
+    // secundario, que es efímero). Web usa browserLocalPersistence.
+    persistence: Capacitor.isNativePlatform()
+      ? indexedDBLocalPersistence
+      : browserLocalPersistence,
+  })
+} catch (error) {
+  try {
+    catalogAuth = getAuth(catalogApp)
+  } catch (e) {
+    console.error('❌ No se pudo obtener catalogAuth:', e.message)
+  }
+}
+
+// Firestore ATADO a la app del catálogo. CRÍTICO: cada instancia de Firestore
+// toma el token de la app con la que se inicializó. `db` cuelga de la app
+// principal, así que las escrituras del comprador hechas con `db` viajarían
+// SIN su sesión (request.auth = null) y las reglas las rechazarían.
+// Todo lo que dependa de la identidad del comprador (su perfil, direcciones,
+// historial de pedidos) debe usar `catalogDb`.
+// Sin persistencia local: la caché multi-pestaña ya la usa la app principal y
+// dos instancias persistentes en el mismo navegador se pelean por el lock.
+let catalogDb
+try {
+  catalogDb = getFirestore(catalogApp)
+} catch (e) {
+  console.error('❌ No se pudo obtener catalogDb:', e.message)
+}
+
+export { app, auth, db, storage, functions, secondaryAuth, catalogAuth, catalogDb }

@@ -514,6 +514,8 @@ export default function Settings() {
   const [uploadingHeroSlide, setUploadingHeroSlide] = useState(null) // índice del slide subiendo
   // Diseño de la grilla de productos (F2.3): masonry | grid | list
   const [catalogLayout, setCatalogLayout] = useState('masonry')
+  // Navegación en escritorio del catálogo: 'top' (barra arriba) | 'sidebar'
+  const [catalogDesktopNav, setCatalogDesktopNav] = useState('top')
   // Oferta con countdown (F2.5)
   const [catalogFlashSale, setCatalogFlashSale] = useState({
     enabled: false, text: '', endDate: '', backgroundColor: '#DC2626', textColor: '#FFFFFF',
@@ -1359,6 +1361,7 @@ export default function Settings() {
           slides: Array.isArray(businessData.catalogHero?.slides) ? businessData.catalogHero.slides : [],
         })
         setCatalogLayout(businessData.catalogLayout || 'masonry')
+        setCatalogDesktopNav(businessData.catalogDesktopNav || 'top')
         setCatalogFlashSale({
           enabled: false, text: '', endDate: '', backgroundColor: '#DC2626', textColor: '#FFFFFF',
           ...(businessData.catalogFlashSale || {}),
@@ -7848,6 +7851,68 @@ export default function Settings() {
                         </div>
                       </div>
 
+                      {/* Navegación en escritorio: barra superior vs menú lateral */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Navegación en computadora
+                        </label>
+                        <p className="text-xs text-gray-500 mb-3">
+                          Dónde se muestran las categorías cuando el cliente entra desde una computadora. En celular siempre van arriba.
+                        </p>
+                        <div className="grid grid-cols-2 gap-3 max-w-md">
+                          {[
+                            { id: 'top', label: 'Barra superior', desc: 'Categorías arriba, a lo ancho' },
+                            { id: 'sidebar', label: 'Menú lateral', desc: 'Categorías fijas a la izquierda' },
+                          ].map(opt => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => setCatalogDesktopNav(opt.id)}
+                              className={`p-3 rounded-xl border-2 transition-all text-center ${
+                                catalogDesktopNav === opt.id
+                                  ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/40'
+                                  : 'border-gray-200 hover:border-gray-300'
+                              }`}
+                            >
+                              {/* Mini-mockup */}
+                              <div className="h-14 mb-2 flex items-center justify-center">
+                                {opt.id === 'top' ? (
+                                  <div className="w-16 flex flex-col gap-1">
+                                    <div className="flex gap-1">
+                                      <div className="bg-gray-400 rounded-sm h-2 flex-1" />
+                                      <div className="bg-gray-300 rounded-sm h-2 flex-1" />
+                                      <div className="bg-gray-300 rounded-sm h-2 flex-1" />
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-1">
+                                      <div className="bg-gray-200 rounded-sm aspect-square" />
+                                      <div className="bg-gray-200 rounded-sm aspect-square" />
+                                      <div className="bg-gray-200 rounded-sm aspect-square" />
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="w-16 flex gap-1">
+                                    <div className="flex flex-col gap-1 w-4">
+                                      <div className="bg-gray-400 rounded-sm h-1.5" />
+                                      <div className="bg-gray-300 rounded-sm h-1.5" />
+                                      <div className="bg-gray-300 rounded-sm h-1.5" />
+                                      <div className="bg-gray-300 rounded-sm h-1.5" />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-1 flex-1">
+                                      <div className="bg-gray-200 rounded-sm aspect-square" />
+                                      <div className="bg-gray-200 rounded-sm aspect-square" />
+                                      <div className="bg-gray-200 rounded-sm aspect-square" />
+                                      <div className="bg-gray-200 rounded-sm aspect-square" />
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                              <span className="block text-xs font-semibold text-gray-800">{opt.label}</span>
+                              <span className="block text-[10px] text-gray-500">{opt.desc}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
                       {/* Tema del catálogo — galería (Fase 3: los temas viven en
                           src/themes/catalogThemes.js; agregar uno ahí lo muestra aquí solo) */}
                       <div>
@@ -8241,6 +8306,7 @@ export default function Settings() {
                           })),
                         },
                         catalogLayout,
+                        catalogDesktopNav,
                         catalogFlashSale: { ...catalogFlashSale, text: (catalogFlashSale.text || '').trim() },
                         catalogTrustBadges: {
                           enabled: catalogTrustBadges.enabled,
