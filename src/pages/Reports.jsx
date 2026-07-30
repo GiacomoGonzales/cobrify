@@ -1265,9 +1265,14 @@ export default function Reports() {
       }
     } else if (dateRange === 'month') {
       groupBy = 'day'
-      // Mes calendárico: del 1ro del mes hasta hoy
-      const today = now.getDate()
-      for (let i = 1; i <= today; i++) {
+      // Mes calendárico COMPLETO (no solo hasta hoy): el filtro de documentos
+      // no tiene tope superior, así que uno fechado más adelante en el mes
+      // (adelantado, o de una salida del último día) contaba en las tarjetas de
+      // arriba pero se descartaba EN SILENCIO abajo por no tener casilla —
+      // el gráfico y su tabla sumaban menos que el total. Los días futuros
+      // quedan en 0 y no estorban.
+      const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+      for (let i = 1; i <= daysInMonth; i++) {
         const date = new Date(now.getFullYear(), now.getMonth(), i)
         const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
         periodsData[key] = {
@@ -1330,10 +1335,21 @@ export default function Reports() {
         key = `${invoiceDate.getFullYear()}-${String(invoiceDate.getMonth() + 1).padStart(2, '0')}`
       }
 
-      if (periodsData[key]) {
-        periodsData[key].revenue = Number((periodsData[key].revenue + getDocumentTotalInBase(invoice)).toFixed(2))
-        periodsData[key].count += 1
+      // Si el documento cae fuera de las casillas armadas, se crea la casilla en
+      // vez de descartarlo: así el gráfico SIEMPRE suma lo mismo que la tarjeta
+      // de "Ingresos Totales". (El orden final es por clave de fecha, así que la
+      // casilla nueva queda en su lugar cronológico.)
+      if (!periodsData[key]) {
+        periodsData[key] = {
+          period: groupBy === 'day'
+            ? invoiceDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
+            : invoiceDate.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' }),
+          revenue: 0,
+          count: 0,
+        }
       }
+      periodsData[key].revenue = Number((periodsData[key].revenue + getDocumentTotalInBase(invoice)).toFixed(2))
+      periodsData[key].count += 1
     })
 
     return Object.entries(periodsData)
@@ -1730,9 +1746,14 @@ export default function Reports() {
       }
     } else if (dateRange === 'month') {
       groupBy = 'day'
-      // Mes calendárico: del 1ro del mes hasta hoy
-      const today = now.getDate()
-      for (let i = 1; i <= today; i++) {
+      // Mes calendárico COMPLETO (no solo hasta hoy): el filtro de documentos
+      // no tiene tope superior, así que uno fechado más adelante en el mes
+      // (adelantado, o de una salida del último día) contaba en las tarjetas de
+      // arriba pero se descartaba EN SILENCIO abajo por no tener casilla —
+      // el gráfico y su tabla sumaban menos que el total. Los días futuros
+      // quedan en 0 y no estorban.
+      const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+      for (let i = 1; i <= daysInMonth; i++) {
         const date = new Date(now.getFullYear(), now.getMonth(), i)
         const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
         periodsData[key] = {
@@ -1790,10 +1811,18 @@ export default function Reports() {
         key = `${expenseDate.getFullYear()}-${String(expenseDate.getMonth() + 1).padStart(2, '0')}`
       }
 
-      if (periodsData[key]) {
-        periodsData[key].gastos = Number((periodsData[key].gastos + (expense.currency === 'USD' ? (expense.amountInBase || convertToBase(expense.amount, 'USD', expense.exchangeRate)) : (expense.amount || 0))).toFixed(2))
-        periodsData[key].count += 1
+      // Misma regla que en ventas: nunca descartar en silencio.
+      if (!periodsData[key]) {
+        periodsData[key] = {
+          period: groupBy === 'day'
+            ? expenseDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
+            : expenseDate.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' }),
+          gastos: 0,
+          count: 0,
+        }
       }
+      periodsData[key].gastos = Number((periodsData[key].gastos + (expense.currency === 'USD' ? (expense.amountInBase || convertToBase(expense.amount, 'USD', expense.exchangeRate)) : (expense.amount || 0))).toFixed(2))
+      periodsData[key].count += 1
     })
 
     return Object.entries(periodsData)
@@ -5641,8 +5670,47 @@ export default function Reports() {
         const periodResIds = new Set(periodEntries.map(e => e.reservationId))
         const totalReservationsCount = periodResIds.size
         const totalReservationsAmount = totalRoomRevenue
-        const activeRes = filteredRes.filter(r => r.status !== 'cancelled' && r.status !== 'no_show')
-        const totalReservationsPaid = activeRes.reduce((s, r) => s + (r.amountPaid || 0), 0)
+
+        // ===== Cobrado / Pendiente =====
+        // Se calcula desde los COMPROBANTES emitidos a las reservas del período
+        // (el comprobante de folio guarda `hotelReservationId`), NO desde
+        // `reservation.amountPaid`: ese campo solo se escribe al CREAR la reserva
+        // y nada en el sistema lo actualiza al cobrar, así que "Cobrado" salía
+        // siempre en 0 aunque el hotel hubiera facturado todo el mes.
+        //
+        // Se suman los comprobantes de las MISMAS reservas que aportan noches al
+        // período, para que cobrado y facturado hablen del mismo conjunto.
+        const invoicedByReservation = (() => {
+          let total = 0
+          const seen = new Set()
+          invoices.forEach(inv => {
+            const resId = inv.hotelReservationId
+            if (!resId || !periodResIds.has(resId)) return
+            // Excluir anuladas / en anulación y notas de venta ya convertidas
+            if (inv.status === 'cancelled' || inv.status === 'voided') return
+            if (inv.sunatStatus === 'voiding' || inv.sunatStatus === 'voided') return
+            if (inv.convertedTo) return
+            if (inv.archived === true) return
+            if (seen.has(inv.id)) return
+            seen.add(inv.id)
+            total += getDocumentTotalInBase(inv)
+          })
+          return total
+        })()
+
+        // Anticipos registrados en la reserva al crearla (para reservas que aún
+        // no tienen comprobante). Solo cuentan las reservas del período.
+        const prepaidOnReservations = hotelReservations.reduce((s, r) => {
+          if (!periodResIds.has(r.id)) return s
+          if (r.status === 'cancelled' || r.status === 'no_show') return s
+          // Si ya se le emitió comprobante, el cobro se cuenta arriba (no duplicar)
+          const hasInvoice = invoices.some(inv => inv.hotelReservationId === r.id
+            && inv.status !== 'cancelled' && inv.status !== 'voided' && !inv.convertedTo)
+          if (hasInvoice) return s
+          return s + (Number(r.amountPaid) || 0)
+        }, 0)
+
+        const totalReservationsPaid = invoicedByReservation + prepaidOnReservations
         const totalReservationsPending = Math.max(0, (totalRoomRevenue + consumoTotal) - totalReservationsPaid)
 
         // Ingresos por tipo de habitación (desde las noches del período)
@@ -5718,6 +5786,14 @@ export default function Reports() {
                     </div>
                   </div>
                 </div>
+                {/* Aclaración: sin esto, cualquier hotelero compara con "Ingresos
+                    Totales" del Resumen General y cree que hay un error de suma. */}
+                <p className="text-xs text-gray-500 mt-4 pt-3 border-t border-blue-200/70">
+                  Este monto es lo <strong>devengado</strong>: cada noche se cuenta en su propia fecha, así que
+                  una reserva a caballo entre dos meses reparte sus noches. Por eso no tiene que coincidir con
+                  los <strong>Ingresos Totales</strong> del Resumen General, que suman cada comprobante en su
+                  fecha de emisión (incluidos adelantos y consumos).
+                </p>
               </CardContent>
             </Card>
 
