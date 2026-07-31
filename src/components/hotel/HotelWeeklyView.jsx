@@ -65,9 +65,35 @@ export default function HotelWeeklyView({ rooms = [], reservations = [] }) {
   const matchesRoom = (r, room) =>
     (r.roomId && r.roomId === room.id) || (r.roomName && r.roomName === (room.name || room.number))
 
-  const nightPrice = (r) => r.pricingMode === 'hourly'
-    ? Number(r.totalAmount ?? r.total ?? 0)
-    : Number(r.ratePerNight ?? 0)
+  /**
+   * Precio de UNA noche de la reserva.
+   *
+   * Manda el importe REAL de la reserva repartido entre sus noches, no
+   * `ratePerNight`. Ese campo es la tarifa de lista de la habitación y no baja
+   * cuando se hace un descuento: una reserva con tarifa 195 cobrada en 180
+   * seguía mostrándose como 195, así que el calendario reportaba más ingresos
+   * de los que realmente entraron y no cuadraba con Reportes, que lee lo
+   * cobrado (reporte de 31-jul-2026: S/225 de más en un mes por 16 reservas
+   * con descuento).
+   *
+   * `ratePerNight` queda solo como respaldo para reservas sin importe cargado.
+   */
+  const nightPrice = (r) => {
+    if (r.pricingMode === 'hourly') return Number(r.totalAmount ?? r.total ?? 0)
+    const total = Number(r.totalAmount ?? r.total ?? 0)
+    // `nights` puede no estar guardado en reservas viejas: se deduce de las fechas.
+    let nights = Number(r.nights) || 0
+    if (!nights) {
+      const ci = r.checkInDate || r.checkIn
+      const co = r.checkOutDate || r.checkOut
+      if (ci && co) {
+        const ms = new Date(co + 'T12:00:00') - new Date(ci + 'T12:00:00')
+        nights = Math.max(0, Math.round(ms / 86400000))
+      }
+    }
+    if (total > 0 && nights > 0) return total / nights
+    return Number(r.ratePerNight ?? 0)
+  }
 
   const cellFor = (room, dayIso) => relevant.filter(r => matchesRoom(r, room) && occupies(r, dayIso))
 
