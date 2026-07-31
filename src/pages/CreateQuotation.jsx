@@ -1275,9 +1275,17 @@ export default function CreateQuotation() {
       // Preparar items de la cotización
       const items = quotationItems.map(item => {
         const productCatalog = products.find(p => p.id === item.productId)
+        // SKU del producto, para el PDF. La opción de Configuración se llama
+        // "mostrar el código/SKU en cotizaciones", pero hasta ahora se guardaba e
+        // imprimía `code`, que es el código de BARRAS: al cliente le salía el EAN
+        // (7501246640086) en vez de su SKU. Son dos campos distintos del producto,
+        // así que se guardan los dos: `code` lo sigue usando la conversión a venta.
+        // En una variante manda su propio SKU, que es más específico que el del padre.
+        const itemSku = (item.isVariant ? item.variantSku : productCatalog?.sku) || productCatalog?.sku || ''
         return {
           productId: item.productId || '',
           code: productCatalog?.code || '',
+          sku: itemSku,
           name: item.name,
           description: item.description || '',
           quantity: parseFloat(item.quantity),

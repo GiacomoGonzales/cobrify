@@ -1041,7 +1041,11 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     const baseHeight = productRowHeight
     const itemName = item.name || ''
     // Solo mostrar código si es un código "real" (no vacío, no CUSTOM)
-    const rawCode = item.code || item.productCode || ''
+    // El SKU manda sobre `code` (código de BARRAS): la opción de Configuración
+    // promete el SKU. Se cae a `code` por las cotizaciones guardadas ANTES de que
+    // se empezara a persistir el SKU — esas solo tienen el código de barras
+    // dentro, y seguirán mostrándolo hasta que se reediten y guarden.
+    const rawCode = item.sku || item.code || item.productCode || ''
     const isValidCode = rawCode && rawCode.trim() !== '' && rawCode.toUpperCase() !== 'CUSTOM'
     const itemDesc = (showProductCode && isValidCode) ? `${rawCode} - ${itemName}` : itemName
     // La descripción adicional del producto (no mostrar si es igual al nombre)
