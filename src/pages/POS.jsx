@@ -1448,6 +1448,11 @@ export default function POS() {
   const avisoFaltantesRef = useRef('')
   // IDs de cargos del folio pendientes de marcar como facturados (persiste aunque el cart cambie)
   const pendingFolioChargeIdsRef = useRef([])
+  // Reserva de hotel cuyo folio se está facturando. El reporte de hotel usa
+  // el hotelReservationId del comprobante para saber qué se cobró de cada reserva;
+  // sin él, "Cobrado" sale S/0.00 aunque esté todo facturado. El modal de folio
+  // sí lo guardaba, pero esta ruta —facturar el folio desde el POS— no.
+  const pendingFolioReservationIdRef = useRef(null)
   // Evita que loadBusinessData sobrescriba el documentType después de que el usuario lo cambió manualmente
   const userChangedDocTypeRef = useRef(false)
 
@@ -1592,6 +1597,7 @@ export default function POS() {
         pendingFolioChargeIdsRef.current = folioInfo.items
           .map(ch => ch.id)
           .filter(Boolean)
+        pendingFolioReservationIdRef.current = folioInfo.reservationId || null
       }
 
       // Precargar datos del cliente (huésped)
@@ -4575,6 +4581,9 @@ export default function POS() {
     // El carrito precargado quedó atrás: la siguiente venta se arma a mano y ya
     // pasa por las validaciones de agregar.
     pendingStockCheckRef.current = false
+    // Si se abandona un folio sin facturarlo, la siguiente venta no debe salir
+    // enlazada a esa reserva.
+    pendingFolioReservationIdRef.current = null
     avisoFaltantesRef.current = ''
     // Resetear al default del negocio, pero respetando los tipos permitidos del
     // usuario logueado. Si el default no está en allowedDocumentTypes (típico en
@@ -6185,6 +6194,12 @@ export default function POS() {
         sellerId: selectedSeller?.id || null,
         sellerName: selectedSeller?.name || null,
         sellerCode: selectedSeller?.code || null,
+        // Reserva de hotel, cuando la venta viene de facturar un folio. Es la llave
+        // que usa el reporte de hotel para saber qué se cobró de cada reserva: sin
+        // ella, "Cobrado" queda en S/0.00 aunque el folio esté todo facturado.
+        ...(pendingFolioReservationIdRef.current && {
+          hotelReservationId: pendingFolioReservationIdRef.current,
+        }),
         // Información del almacén/punto de venta (para inventario)
         warehouseId: selectedWarehouse?.id || null,
         warehouseName: selectedWarehouse?.name || null,
@@ -6571,6 +6586,9 @@ export default function POS() {
             if (markResult.success) {
               console.log('✅ Cargos marcados:', markResult.updated)
               pendingFolioChargeIdsRef.current = []
+              // El folio ya se facturó: la siguiente venta no debe heredar el enlace
+              // con esta reserva.
+              pendingFolioReservationIdRef.current = null
             } else {
               console.error('❌ Error al marcar cargos:', markResult.error)
               toast.error('Venta guardada, pero no se pudo marcar el folio como facturado: ' + (markResult.error || ''), 6000)
