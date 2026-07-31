@@ -44,6 +44,25 @@ export default defineConfig(({ mode }) => ({
                 statuses: [0, 200]
               }
             }
+          },
+          {
+            // Catálogo 25 de SUNAT (código de producto). Son 2.4 MB que solo se
+            // bajan al abrir el buscador de códigos. Queda fuera del precache
+            // —el globPatterns de arriba no incluye json— y se guarda al vuelo:
+            // el contenido no cambia salvo que SUNAT publique otra versión, y
+            // esa llega con otro nombre de archivo.
+            urlPattern: /\/data\/catalogo-producto-sunat-v\d+\.json$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'sunat-product-catalog',
+              expiration: {
+                maxEntries: 2,
+                maxAgeSeconds: 60 * 60 * 24 * 365 // 1 año
+              },
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
           }
         ]
       },

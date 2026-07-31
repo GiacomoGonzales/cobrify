@@ -38,6 +38,7 @@ import { getWarehouses, updateWarehouseStock, getDefaultWarehouse, createWarehou
 import { getActiveBranches } from '@/services/branchService'
 import { cleanBranchPrices } from '@/utils/branchPricing'
 import { buildProductIndex, findExistingProduct, indexProduct } from '@/utils/productImportMatch'
+import SunatProductCodeField from '@/components/SunatProductCodeField'
 import { getRateForDate } from '@/services/exchangeRateService'
 import ProductModifiersSection from '@/components/ProductModifiersSection'
 import { uploadProductImage, deleteProductImage, createImagePreview, revokeImagePreview } from '@/services/productImageService'
@@ -322,6 +323,10 @@ export default function Products() {
   const [taxAffectation, setTaxAffectation] = useState('10') // '10' = Gravado (default), '20' = Exonerado, '30' = Inafecto
   const [igvRate, setIgvRate] = useState(businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18)
   const taxType = businessSettings?.emissionConfig?.taxConfig?.taxType || (businessSettings?.emissionConfig?.taxConfig?.igvExempt ? 'exempt' : 'standard')
+  // Código de Producto SUNAT (catálogo 25). Se guarda junto con su descripción
+  // para poder mostrar la ficha sin descargar el catálogo entero.
+  const [sunatProductCode, setSunatProductCode] = useState('')
+  const [sunatProductName, setSunatProductName] = useState('')
 
   // Pharmacy mode state
   const [pharmacyData, setPharmacyData] = useState({
@@ -709,6 +714,8 @@ export default function Products() {
     setEditingPresentationIdx(null)
     setTaxAffectation(businessSettings?.defaultTaxAffectation || '10') // Default configurable (Configuración > Preferencias)
     setIgvRate(businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18)
+    setSunatProductCode('')
+    setSunatProductName('')
     // Resetear datos de farmacia
     setPharmacyData({
       genericName: '',
@@ -808,6 +815,8 @@ export default function Products() {
     // Load tax affectation (default to '10' = Gravado if not set for backwards compatibility)
     setTaxAffectation(product.taxAffectation || '10')
     setIgvRate(product.igvRate ?? (businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18))
+    setSunatProductCode(product.sunatProductCode || '')
+    setSunatProductName(product.sunatProductName || '')
 
     // Load catalog visibility
     setCatalogVisible(product.catalogVisible || false)
@@ -964,6 +973,8 @@ export default function Products() {
 
     setTaxAffectation(product.taxAffectation || '10')
     setIgvRate(product.igvRate ?? (businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18))
+    setSunatProductCode(product.sunatProductCode || '')
+    setSunatProductName(product.sunatProductName || '')
     setCatalogVisible(product.catalogVisible || false)
     setCatalogHidePrice(product.catalogHidePrice || false)
     setCatalogComparePrice(product.catalogComparePrice?.toString() || '')
@@ -1192,6 +1203,10 @@ export default function Products() {
         // (3) preservando el comportamiento anterior a esta feature.
         minStock: data.minStock && data.minStock !== '' ? Math.max(0, parseInt(data.minStock)) : null,
         taxAffectation: taxAffectation, // '10' = Gravado, '20' = Exonerado, '30' = Inafecto (SUNAT Catálogo 07)
+        // Código de Producto SUNAT (Catálogo 25). Opcional; se guarda con su
+        // descripción para no depender del catálogo al mostrarlo.
+        sunatProductCode: sunatProductCode || null,
+        sunatProductName: sunatProductCode ? (sunatProductName || null) : null,
         ...(taxType === 'standard' && taxAffectation === '10' && { igvRate }), // Per-product IGV rate (18% or 10%)
         catalogVisible: catalogVisible, // Visible en catálogo público
         catalogHidePrice: catalogHidePrice, // Ocultar precio en catálogo (mostrar "Consultar")
@@ -6527,6 +6542,16 @@ export default function Products() {
                 </select>
               )}
             </div>
+
+            {/* Código de Producto SUNAT (Catálogo 25) */}
+            <SunatProductCodeField
+              value={sunatProductCode}
+              name={sunatProductName}
+              onChange={(codigo, nombre) => {
+                setSunatProductCode(codigo)
+                setSunatProductName(nombre)
+              }}
+            />
 
             {/* Categoría */}
             <div>
