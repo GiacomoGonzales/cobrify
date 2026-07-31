@@ -60,6 +60,7 @@ import { formatCurrency, formatDate, formatDateTime, buildSearchHaystack, matche
 import { getDocumentTotalInBase, getReportsCurrency, resolveReportsRate, convertBaseToDisplay } from '@/utils/currency'
 import { getInvoiceDate } from '@/utils/invoiceDate'
 import { getInvoicesPage, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat, updateProductStockTransaction } from '@/services/firestoreService'
+import { getCashRegisterSession, addCashMovement } from '@/services/firestoreService'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, generateExitNotePDF, preloadLogo } from '@/utils/pdfGenerator'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { doc, updateDoc } from 'firebase/firestore'
@@ -314,6 +315,11 @@ export default function InvoiceList() {
   const [voidingInvoice, setVoidingInvoice] = useState(null)
   const [isVoiding, setIsVoiding] = useState(false)
   const [voidReason, setVoidReason] = useState('')
+  // Al anular un comprobante con pagos ya cobrados, el dinero suele devolverse al
+  // cliente. Ese egreso NO se registraba en ninguna parte: el ingreso dejaba de
+  // contar pero la salida física del cajón quedaba sin rastro, y el arqueo del día
+  // de la anulación aparecía corto sin explicación (reporte de 31-jul-2026).
+  const [refundOnVoid, setRefundOnVoid] = useState(true)
 
   // Estados para anulación de facturas SUNAT (Comunicación de Baja)
   const [voidingSunatInvoice, setVoidingSunatInvoice] = useState(null)
@@ -874,6 +880,11 @@ Gracias por tu preferencia.`
     }
 
     const businessId = getBusinessId()
+    // Dinero YA cobrado de este comprobante. Se lee del historial de pagos, que es
+    // el registro de lo que realmente entró; `balance` describe lo que falta, no lo
+    // recibido, y en una nota sin pagos ni siquiera existe.
+    const cobradoEnVoid = (voidingInvoice.paymentHistory || [])
+      .reduce((s, p) => s + (Number(p.amount) || 0), 0)
     // Idempotencia (Fase 2): si el stock de este comprobante ya se restauró antes
     // (p.ej. por una nota de crédito o una anulación previa), NO volver a devolverlo.
     const alreadyRestored = voidingInvoice.stockRestored === true
@@ -1096,9 +1107,43 @@ Gracias por tu preferencia.`
           }
         }
 
+        // Devolución del dinero ya cobrado. Se registra como EGRESO con la fecha
+        // de la anulación en vez de borrar el ingreso original: ese dinero SÍ entró
+        // el día que se cobró y el cierre de caja de ese día ya cuadró contra el
+        // efectivo físico. Borrarlo hacia atrás convertiría un cierre correcto en un
+        // sobrante inexplicable. Lo que cambió es un hecho NUEVO —salió plata hoy—
+        // y así es como se registra.
+        if (refundOnVoid && cobradoEnVoid > 0.01) {
+          try {
+            // La caja se busca en la sucursal del propio comprobante: es donde se
+            // cobró y donde tiene que salir la devolución.
+            const sesion = await getCashRegisterSession(businessId, voidingInvoice.branchId || null, user.uid)
+            if (sesion.success && sesion.data?.id) {
+              const mov = await addCashMovement(businessId, sesion.data.id, {
+                type: 'expense',
+                amount: cobradoEnVoid,
+                description: `Devolución por anulación de ${voidingInvoice.number}${voidReason.trim() ? ` — ${voidReason.trim()}` : ''}`,
+                category: 'Devoluciones',
+                ...(voidingInvoice.currency === 'USD' && { currency: 'USD' }),
+              })
+              if (!mov.success) {
+                toast.error('Nota anulada, pero no se pudo registrar la devolución en caja. Regístrala a mano como egreso.', 8000)
+              }
+            } else {
+              // Sin caja abierta no hay dónde registrarlo. Se avisa en vez de
+              // perderlo en silencio, que es justo el problema que se arregla.
+              toast.error(`Nota anulada. Abre la caja y registra un egreso de ${formatCurrency(cobradoEnVoid)} por la devolución, o el arqueo saldrá corto.`, 9000)
+            }
+          } catch (e) {
+            console.error('Error al registrar la devolución en caja:', e)
+            toast.error('Nota anulada, pero falló el registro de la devolución en caja. Regístrala a mano.', 8000)
+          }
+        }
+
         toast.success(`Nota de venta anulada y stock restaurado exitosamente${voidingInvoice.convertedFrom ? '. Notas origen revertidas.' : ''}`)
         setVoidingInvoice(null)
         setVoidReason('')
+        setRefundOnVoid(true)
         // Actualizar la lista EN MEMORIA en vez de recargar todo: loadInvoices()
         // vuelve a bajar la colección completa, así que anular se sentía lento solo
         // en cuentas con miles de comprobantes. La anulación solo cambia este
@@ -3965,6 +4010,7 @@ Gracias por tu preferencia.`
                           setOpenMenuId(null)
                           setVoidingInvoice(invoice)
                           setVoidReason('')
+                          setRefundOnVoid(true)
                         }}
                         className="w-full px-4 py-2 text-left text-sm hover:bg-orange-50 flex items-center gap-3 text-orange-600"
                       >
@@ -4735,6 +4781,37 @@ Gracias por tu preferencia.`
             </div>
           </div>
 
+          {/* Devolución del dinero ya cobrado. Solo aparece si hubo cobros: en una
+              nota sin pagos no hay nada que devolver y sería ruido. */}
+          {(() => {
+            const cobrado = (voidingInvoice?.paymentHistory || [])
+              .reduce((s, p) => s + (Number(p.amount) || 0), 0)
+            if (cobrado <= 0.01) return null
+            return (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={refundOnVoid}
+                    onChange={(e) => setRefundOnVoid(e.target.checked)}
+                    disabled={isVoiding}
+                    className="mt-0.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className="text-sm text-amber-900">
+                    <span className="font-medium">
+                      Devolví los {formatCurrency(cobrado)} que ya había cobrado
+                    </span>
+                    <span className="block text-xs text-amber-800 mt-1 leading-relaxed">
+                      Se registra como egreso de caja con la fecha de hoy, para que el arqueo
+                      cuadre y quede el motivo. El cobro original no se borra: ese día el dinero
+                      sí entró.
+                    </span>
+                  </span>
+                </label>
+              </div>
+            )
+          })()}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Motivo de anulación (opcional)
@@ -4756,6 +4833,7 @@ Gracias por tu preferencia.`
               onClick={() => {
                 setVoidingInvoice(null)
                 setVoidReason('')
+                setRefundOnVoid(true)
               }}
               disabled={isVoiding}
             >
