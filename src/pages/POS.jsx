@@ -2136,7 +2136,16 @@ export default function POS() {
       // enlace guardado, un atajo— y ahí el usuario editaría algo que el negocio
       // decidió no dejar editar.
       if (invoice.documentType === 'nota_venta') {
-        if (companySettings?.allowEditNotaVenta !== true) {
+        // `companySettings` puede seguir en null: esta carga la dispara un efecto
+        // que corre AL MONTAR, en paralelo con el que trae la configuración. Sin
+        // leerla fresca acá, la validación rebotaba ediciones que sí estaban
+        // habilitadas —dependía de cuál de los dos efectos ganara la carrera—.
+        let cfg = companySettings
+        if (!cfg) {
+          const cfgResult = await getCompanySettings(businessId)
+          cfg = cfgResult.success ? cfgResult.data : null
+        }
+        if (cfg?.allowEditNotaVenta !== true) {
           toast.error('La edición de notas de venta está desactivada. Actívala en Configuración > Ventas.')
           appNavigate('facturas')
           return
@@ -6418,14 +6427,41 @@ export default function POS() {
 
         toast.success(`Documento ${editingInvoiceData.series}-${editingInvoiceData.number} actualizado correctamente`)
 
+        // El ticket imprimible solo existe en el DOM cuando hay `lastInvoiceData`
+        // (bloque `hidden print:block`). La edición no lo seteaba, así que
+        // `window.print()` no encontraba ticket e imprimía LA PANTALLA del POS.
+        // Se llena igual que en la venta normal, y de paso queda disponible el
+        // panel con las opciones de reimpresión.
+        setLastInvoiceNumber(numberResult.number)
+        setLastInvoiceData(invoiceData)
+
         // Limpiar estado de edición
         setEditingInvoiceId(null)
         setEditingInvoiceData(null)
         editInvoiceLoadedRef.current = false
 
         // Auto-imprimir en modo edición (el recordatorio de vuelto no aplica al editar).
+        // El retardo le da a React el tiempo de montar el ticket recién seteado.
+        //
+        // Al terminar se vuelve a Ventas: una edición SIEMPRE empieza ahí, así que
+        // devolver al usuario cierra el círculo en vez de dejarlo en un POS con el
+        // carrito de un documento que ya guardó. Solo con auto-impresión o
+        // auto-reinicio activos, que es cuando el POS se da por terminado solo; sin
+        // ellos se queda para que pueda reimprimir desde el panel de opciones.
+        //
+        // La navegación va DESPUÉS de que el diálogo de impresión se cerró: irse
+        // antes desmonta el ticket a media impresión y saldría en blanco.
+        const _volverAVentas = () => {
+          clearCart() // que el POS no quede con el carrito del documento editado
+          appNavigate('facturas')
+        }
         if (companySettings?.autoPrintTicket) {
-          setTimeout(() => handlePrintTicket(invoiceData), 500)
+          setTimeout(async () => {
+            await handlePrintTicket(invoiceData)
+            _volverAVentas()
+          }, 500)
+        } else if (companySettings?.autoResetPOS) {
+          _volverAVentas()
         }
 
       } else {
