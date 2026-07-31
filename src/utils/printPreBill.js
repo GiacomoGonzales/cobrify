@@ -1,43 +1,10 @@
 import { formatPricedModifierHtmlLines } from './modifierHelpers'
 
-/**
- * Helper: imprime HTML usando un iframe oculto en la MISMA página (web y nativo).
- * Antes en web se usaba window.open (ventana emergente about:blank): la vista
- * previa salía en una ventanita aparte —distinta a la del ticket de venta— y
- * fallaba si el navegador bloqueaba popups. Con el iframe, la vista previa es
- * la normal del navegador sobre la misma pestaña. Los triggers de print() son
- * redundantes a propósito (el HTML se auto-imprime en su onload y hay fallback);
- * llamadas repetidas mientras la vista previa está abierta se ignoran.
- */
-const printHTML = (html) => {
-  const existing = document.getElementById('print-iframe')
-  if (existing) existing.remove()
+import { printHtmlIframe } from './printHtmlIframe'
 
-  const iframe = document.createElement('iframe')
-  iframe.id = 'print-iframe'
-  iframe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;border:none;visibility:hidden;'
-  document.body.appendChild(iframe)
-
-  const doc = iframe.contentDocument || iframe.contentWindow.document
-  doc.open()
-  doc.write(html)
-  doc.close()
-
-  // Imprimir UNA SOLA VEZ (onload + fallback comparten el guard). Sin el guard,
-  // en escritorio la vista previa bloquea el JS y el timer del fallback quedaba
-  // pendiente: al cancelar la primera vista previa se disparaba una SEGUNDA.
-  let printed = false
-  const printOnce = () => {
-    if (printed) return
-    printed = true
-    try { iframe.contentWindow.print() } catch (e) { /* iframe ya removido */ }
-    setTimeout(() => iframe.remove(), 1000)
-  }
-  // Esperar a que cargue el contenido y luego imprimir
-  iframe.contentWindow.onload = printOnce
-  // Fallback si onload no dispara
-  setTimeout(printOnce, 500)
-}
+// La precuenta usa el helper compartido: antes tenia su propia copia, con el
+// borrado por temporizador que colgaba la vista previa del navegador.
+const printHTML = (html) => printHtmlIframe(html, 'print-iframe')
 
 /**
  * Utility para imprimir precuenta de restaurante
@@ -595,16 +562,9 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
         <p style="margin-top: ${is58mm ? '1.5mm' : '2mm'};">¡GRACIAS POR SU PREFERENCIA!</p>
       </div>
 
-      <script>
-        // Auto-imprimir cuando se cargue la página
-        window.onload = function() {
-          window.print();
-          // Cerrar la ventana después de imprimir (con un pequeño delay)
-          setTimeout(function() {
-            window.close();
-          }, 100);
-        };
-      </script>
+      <!-- Sin auto-impresión: la dispara printHTML cuando las imágenes ya
+           cargaron. Un window.print() acá adentro imprimía dos veces y el
+           window.close() colgaba la vista previa. -->
     </body>
     </html>
   `
@@ -783,12 +743,7 @@ export const printAllSplitPreBills = (table, order, splitData, businessInfo = {}
         <p style="margin-top: ${is58mm ? '1.5mm' : '2mm'};">¡GRACIAS POR SU PREFERENCIA!</p>
       </div>
 
-      <script>
-        window.onload = function() {
-          window.print();
-          setTimeout(function() { window.close(); }, 100);
-        };
-      </script>
+      <!-- Sin auto-impresión: la dispara printHTML. Ver el comentario del helper. -->
     </body>
     </html>
   `

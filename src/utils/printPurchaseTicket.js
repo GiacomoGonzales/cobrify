@@ -1,51 +1,22 @@
-import { Capacitor } from '@capacitor/core'
 import { getCurrencySymbol, normalizeCurrency } from '@/utils/currency'
+import { printHtmlIframe } from '@/utils/printHtmlIframe'
 
 // ============================================================
 // IMPRESIÓN DE TICKET TÉRMICO PARA COMPRAS REGISTRADAS
 // ------------------------------------------------------------
 // Genera un ticket angosto (58mm / 80mm) con el detalle de una
-// compra y lo manda a imprimir. Funciona en web (ventana
-// emergente que se auto-imprime) y en la app (iframe oculto).
-// Es un documento INTERNO de registro, no un comprobante SUNAT.
+// compra y lo manda a imprimir, con el helper compartido, igual
+// que la precuenta. Es un documento INTERNO de registro, no un
+// comprobante SUNAT.
+//
+// Antes había dos caminos y los dos daban problemas. En la app se
+// imprimía hasta TRES veces —el onload, un temporizador a los 500 ms
+// sin ningún control, y el propio HTML— y se borraba el iframe al
+// segundo, con la vista previa todavía armándose. En web dependía de
+// una ventana emergente, que el navegador bloquea sin avisar.
 // ============================================================
 
-/**
- * Imprime HTML usando iframe oculto (app nativa) o ventana emergente (web)
- */
-const printHTML = (html) => {
-  if (Capacitor.isNativePlatform()) {
-    const existing = document.getElementById('print-iframe-purchase')
-    if (existing) existing.remove()
-
-    const iframe = document.createElement('iframe')
-    iframe.id = 'print-iframe-purchase'
-    iframe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;border:none;visibility:hidden;'
-    document.body.appendChild(iframe)
-
-    const doc = iframe.contentDocument || iframe.contentWindow.document
-    doc.open()
-    doc.write(html)
-    doc.close()
-
-    iframe.contentWindow.onload = () => {
-      iframe.contentWindow.print()
-      setTimeout(() => iframe.remove(), 1000)
-    }
-    setTimeout(() => {
-      try { iframe.contentWindow.print() } catch (e) { /* ya se imprimió */ }
-      setTimeout(() => iframe.remove(), 1000)
-    }, 500)
-  } else {
-    const printWindow = window.open('', '_blank', 'width=320,height=600')
-    if (!printWindow) {
-      alert('Por favor permite las ventanas emergentes para imprimir el ticket')
-      return
-    }
-    printWindow.document.write(html)
-    printWindow.document.close()
-  }
-}
+const printHTML = (html) => printHtmlIframe(html, 'print-iframe-purchase')
 
 /**
  * Lee el ancho de papel guardado por el dispositivo (58 o 80mm)
@@ -289,12 +260,8 @@ export const printPurchaseTicket = (purchase, businessInfo = {}, paperWidth = nu
         <p>No valido como comprobante de pago</p>
       </div>
 
-      <script>
-        window.onload = function() {
-          window.print();
-          setTimeout(function() { window.close(); }, 100);
-        };
-      </script>
+      <!-- Sin auto-impresión: la dispara printHtmlIframe cuando las imágenes ya
+           cargaron. Ver el comentario de ese helper. -->
     </body>
     </html>
   `
