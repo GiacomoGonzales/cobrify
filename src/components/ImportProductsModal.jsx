@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import * as XLSX from 'xlsx'
 import { Upload, Download, X, AlertCircle, CheckCircle, Loader2, Warehouse } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
@@ -9,6 +9,8 @@ import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 import { getWarehouses } from '@/services/warehouseService'
+import { getProducts } from '@/services/firestoreService'
+import { summarizeImport } from '@/utils/productImportMatch'
 
 export default function ImportProductsModal({ isOpen, onClose, onImport, brands = [], businessModeOverride = null, skipWarehouseSelector = false }) {
   const ctx = useAppContext()
@@ -23,14 +25,35 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
   const [success, setSuccess] = useState(0)
   const [warehouses, setWarehouses] = useState([])
   const [selectedWarehouseId, setSelectedWarehouseId] = useState('')
+  // Productos que ya tiene el negocio, para anticipar cuáles crea y cuáles
+  // actualiza el archivo. `existingLoaded` distingue "no tiene productos" de
+  // "no se pudieron cargar": si falló la consulta no bloqueamos la importación.
+  const [existingProducts, setExistingProducts] = useState([])
+  const [existingLoaded, setExistingLoaded] = useState(false)
+  const [confirming, setConfirming] = useState(false)
 
   // Cargar almacenes al abrir el modal. En el onboarding se omite (el negocio aún
   // no existe; el stock irá al "Almacén Principal" que se crea al crear la cuenta).
   useEffect(() => {
     if (isOpen && !skipWarehouseSelector) {
       loadWarehouses()
+      loadExistingProducts()
     }
   }, [isOpen, skipWarehouseSelector])
+
+  const loadExistingProducts = async () => {
+    try {
+      const businessId = getBusinessId()
+      if (!businessId) return
+      const result = await getProducts(businessId)
+      if (result.success) {
+        setExistingProducts(result.data || [])
+        setExistingLoaded(true)
+      }
+    } catch (error) {
+      console.error('Error al cargar productos existentes:', error)
+    }
+  }
 
   const loadWarehouses = async () => {
     try {
@@ -74,6 +97,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
       return
     }
 
+    // Otro archivo invalida una confirmación pendiente del anterior
+    setConfirming(false)
     setFile(selectedFile)
     setErrors([])
     processFile(selectedFile)
@@ -752,12 +777,31 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
     return { validProducts: afterSerialMerge, errors }
   }
 
+  // Qué va a hacer el archivo contra lo que ya existe. Usa el mismo criterio de
+  // coincidencia que el importador (SKU, luego código de barras, luego nombre).
+  const importSummary = useMemo(
+    () => summarizeImport(existingProducts, previewData),
+    [existingProducts, previewData]
+  )
+
+  // Solo pedimos confirmación cuando hay productos por crear en un negocio que
+  // YA tiene catálogo: es el caso en que un SKU o un nombre cambiado en el Excel
+  // duplica productos en vez de actualizarlos. En una cuenta vacía todo es nuevo
+  // y preguntar sería ruido.
+  const needsConfirmation = existingLoaded && existingProducts.length > 0 && importSummary.toCreate > 0
+
   const handleImport = async () => {
     if (previewData.length === 0) {
       setErrors(['No hay productos válidos para importar'])
       return
     }
 
+    if (needsConfirmation && !confirming) {
+      setConfirming(true)
+      return
+    }
+
+    setConfirming(false)
     setImporting(true)
     setSuccess(0)
 
@@ -792,6 +836,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
     setErrors([])
     setSuccess(0)
     setSelectedWarehouseId('')
+    setConfirming(false)
   }
 
   const handleClose = () => {
@@ -1703,6 +1748,30 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           </div>
         )}
 
+        {/* Qué hará el archivo: actualizar vs crear */}
+        {previewData.length > 0 && existingLoaded && existingProducts.length > 0 && (
+          <div className="mb-4 grid grid-cols-2 gap-3">
+            <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+              <p className="text-2xl font-semibold text-gray-900">{importSummary.toUpdate}</p>
+              <p className="text-xs text-gray-600 mt-0.5">
+                {importSummary.toUpdate === 1 ? 'producto se actualizará' : 'productos se actualizarán'}
+              </p>
+            </div>
+            <div className={`rounded-lg border px-4 py-3 ${
+              importSummary.toCreate > 0
+                ? 'border-amber-200 bg-amber-50'
+                : 'border-gray-200 bg-gray-50'
+            }`}>
+              <p className={`text-2xl font-semibold ${importSummary.toCreate > 0 ? 'text-amber-900' : 'text-gray-900'}`}>
+                {importSummary.toCreate}
+              </p>
+              <p className={`text-xs mt-0.5 ${importSummary.toCreate > 0 ? 'text-amber-800' : 'text-gray-600'}`}>
+                {importSummary.toCreate === 1 ? 'se creará como nuevo' : 'se crearán como nuevos'}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Preview */}
         {previewData.length > 0 && (
           <div className="mb-6">
@@ -1720,6 +1789,9 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Stock</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Control</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">IGV</th>
+                    {existingLoaded && existingProducts.length > 0 && (
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Acción</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -1768,6 +1840,19 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
                             <span className="text-green-600 font-medium">GRA</span>
                           )}
                         </td>
+                        {existingLoaded && existingProducts.length > 0 && (
+                          <td className="px-3 py-2 text-sm whitespace-nowrap">
+                            {importSummary.matchByRow.has(index) ? (
+                              <span className="text-gray-500 text-xs">
+                                Actualiza {importSummary.matchByRow.get(index).name !== product.name
+                                  ? `"${importSummary.matchByRow.get(index).name}"`
+                                  : 'el existente'}
+                              </span>
+                            ) : (
+                              <span className="text-amber-700 font-medium text-xs">Nuevo</span>
+                            )}
+                          </td>
+                        )}
                       </tr>
                     )
                   })}
@@ -1782,14 +1867,40 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           </div>
         )}
 
+        {/* Confirmación previa: el archivo va a crear productos en un catálogo
+            que ya existe. Casi siempre es porque el SKU o el nombre cambiaron y
+            el producto no se reconoció, y termina duplicado. */}
+        {confirming && (
+          <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4">
+            <div className="flex gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-amber-900">
+                <p className="font-semibold mb-1">
+                  Se van a crear {importSummary.toCreate} producto(s) nuevo(s)
+                  {importSummary.toUpdate > 0 && ` y actualizar ${importSummary.toUpdate}`}
+                </p>
+                <p className="text-amber-800">
+                  Si esos {importSummary.toCreate} ya existían en tu catálogo, van a quedar
+                  duplicados. Un producto se reconoce por su SKU, y si no, por su código de
+                  barras o su nombre exacto: cambiar cualquiera de los tres en el archivo hace
+                  que se cree uno nuevo en vez de actualizar el que ya tenías.
+                </p>
+                <p className="text-amber-800 mt-2">
+                  Revisa la columna Acción de la vista previa antes de continuar.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Actions */}
         <div className="flex justify-end gap-3">
           <Button
             variant="outline"
-            onClick={handleClose}
+            onClick={confirming ? () => setConfirming(false) : handleClose}
             disabled={importing}
           >
-            Cancelar
+            {confirming ? 'Volver' : 'Cancelar'}
           </Button>
           <Button
             onClick={handleImport}
@@ -1799,6 +1910,11 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 Importando...
+              </>
+            ) : confirming ? (
+              <>
+                <Upload className="w-4 h-4 mr-2" />
+                Sí, importar de todos modos
               </>
             ) : (
               <>

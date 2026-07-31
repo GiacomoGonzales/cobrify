@@ -37,6 +37,7 @@ import ImportProductsModal from '@/components/ImportProductsModal'
 import { getWarehouses, updateWarehouseStock, getDefaultWarehouse, createWarehouse, createStockMovement } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
 import { cleanBranchPrices } from '@/utils/branchPricing'
+import { buildProductIndex, findExistingProduct, indexProduct } from '@/utils/productImportMatch'
 import { getRateForDate } from '@/services/exchangeRateService'
 import ProductModifiersSection from '@/components/ProductModifiersSection'
 import { uploadProductImage, deleteProductImage, createImagePreview, revokeImagePreview } from '@/services/productImageService'
@@ -2201,15 +2202,11 @@ export default function Products() {
       const existingProductsResult = await getProducts(getBusinessId())
       const existingProducts = existingProductsResult.success ? existingProductsResult.data : []
 
-      // Crear mapas para búsqueda rápida por SKU, código de barras y nombre
-      const productBySku = new Map()
-      const productByCode = new Map()
-      const productByName = new Map()
-      existingProducts.forEach(p => {
-        if (p.sku) productBySku.set(p.sku.toLowerCase().trim(), p)
-        if (p.code) productByCode.set(p.code.toLowerCase().trim(), p)
-        if (p.name) productByName.set(p.name.toLowerCase().trim(), p)
-      })
+      // Índices por SKU, código de barras y nombre. Los comparte con la vista
+      // previa del modal, que usa los mismos para anticipar cuántos productos
+      // se van a crear y cuántos actualizar.
+      const productIndex = buildProductIndex(existingProducts)
+      const productByCode = productIndex.byCode
 
       // VALIDACIÓN PRE-IMPORT: rechazar si hay códigos de barras duplicados con SKUs
       // distintos. Esto antes pasaba silencioso: el importer trataba todas las filas con
@@ -2281,16 +2278,7 @@ export default function Products() {
           // El almacén destino ya está definido al inicio (targetWarehouse)
 
           // Buscar si el producto ya existe (por SKU, código de barras o nombre)
-          let existingProduct = null
-          if (product.sku) {
-            existingProduct = productBySku.get(product.sku.toLowerCase().trim())
-          }
-          if (!existingProduct && product.code) {
-            existingProduct = productByCode.get(product.code.toLowerCase().trim())
-          }
-          if (!existingProduct && product.name) {
-            existingProduct = productByName.get(product.name.toLowerCase().trim())
-          }
+          const existingProduct = findExistingProduct(productIndex, product)
 
           if (existingProduct) {
             // PRODUCTO EXISTE - Actualizar datos y stock
@@ -2670,11 +2658,8 @@ export default function Products() {
                   })
                 }
               }
-              // Agregar al mapa para detectar duplicados en el mismo archivo
-              const createdProduct = { ...product, id: result.id }
-              if (product.sku) productBySku.set(product.sku.toLowerCase().trim(), createdProduct)
-              if (product.code) productByCode.set(product.code.toLowerCase().trim(), createdProduct)
-              if (product.name) productByName.set(product.name.toLowerCase().trim(), createdProduct)
+              // Agregar al índice para detectar duplicados en el mismo archivo
+              indexProduct(productIndex, { ...product, id: result.id })
             } else {
               errors.push(`Producto "${product.name}": ${result.error}`)
             }
