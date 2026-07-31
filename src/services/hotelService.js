@@ -229,10 +229,20 @@ export const updateReservation = async (businessId, reservationId, updates) => {
       }
     }
 
-    // Cambio de habitación / tarifa / huéspedes: sincronizar los cargos de noche SIN
-    // facturar con la reserva actual. Si no se hace, el cargo conserva el roomId y el
-    // monto viejos → el reporte atribuye la noche a la habitación anterior con la
-    // tarifa anterior. Las noches ya facturadas no se tocan.
+    // Cambio de habitación / tarifa / huéspedes: sincronizar los cargos de noche con
+    // la reserva actual. Si no se hace, el cargo conserva el roomId y el monto viejos
+    // → el reporte atribuye la noche a la habitación anterior con la tarifa anterior.
+    //
+    // Se sincronizan TAMBIÉN las noches ya facturadas. Antes se saltaban, y el caso
+    // real es justamente ese (reporte de 31-jul-2026): el hotel emite la boleta y
+    // DESPUÉS corrige la tarifa porque el huésped agregó algo al llegar —un menor,
+    // una mascota—. El cargo se quedaba con el monto viejo y, como el reporte de
+    // Hospedaje suma cargos, mostraba menos de lo realmente cobrado.
+    //
+    // Esto NO toca el comprobante ya emitido ni lo reabre: lo pendiente por facturar
+    // se calcula por `invoiceId`, no por el monto. Si el cargo queda por encima de lo
+    // facturado, esa diferencia es real —se cobró más de lo que se facturó— y el
+    // hotel decidirá si emite una nota de débito.
     const touchesRoomOrRate = ['roomId', 'roomNumber', 'ratePerNight', 'guests', 'baseGuests', 'extraGuestRate']
       .some(k => k in updates)
     if (touchesRoomOrRate) {
@@ -247,7 +257,7 @@ export const updateReservation = async (businessId, reservationId, updates) => {
             const extraGuests = Math.max(0, (Number(res.guests) || 0) - baseGuests)
             const extraPerNight = extraGuests * extraGuestRate
             const chargesResult = await getChargesByReservation(businessId, reservationId)
-            const nights = (chargesResult.data || []).filter(c => c.chargeType === 'room_night' && !c.invoiceId)
+            const nights = (chargesResult.data || []).filter(c => c.chargeType === 'room_night')
             for (const c of nights) {
               const chargeUpdates = {
                 roomId: res.roomId || null,
