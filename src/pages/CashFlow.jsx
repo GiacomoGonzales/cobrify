@@ -8,6 +8,7 @@ import { getActiveBranches } from '@/services/branchService'
 import { getWarehouses } from '@/services/warehouseService'
 import { getDocumentTotalInBase, convertToBase } from '@/utils/currency'
 import { useLocationAccess } from '@/utils/locationAccess'
+import { isPendingInvoice, getPendingAmount } from '@/utils/receivables'
 import {
   TrendingUp,
   TrendingDown,
@@ -679,30 +680,19 @@ export default function CashFlow() {
     const balance = totalIncome - totalExpenses
 
     // PROYECCIONES
-    // Cuentas por cobrar (facturas pendientes de pago, filtradas por sucursal)
-    // Incluye: status='pending' (facturas normales) o notas de venta con paymentStatus='pending'/'partial'
-    const pendingInvoices = invoices.filter(inv => {
-      // Filtrar por sucursal primero
-      if (!filterByBranch(inv, 'invoice')) return false
-
-      // Archivadas no suman a cuentas por cobrar
-      if (inv.archived === true) return false
-
-      // Facturas/boletas con status pending
-      if (inv.status === 'pending') return true
-      // Notas de venta con pagos pendientes
-      if (inv.documentType === 'nota_venta' &&
-          (inv.paymentStatus === 'pending' || inv.paymentStatus === 'partial')) {
-        return true
-      }
-      return false
-    })
-    const accountsReceivable = pendingInvoices.reduce((sum, inv) => {
-      const paid = (inv.paymentHistory || []).reduce((s, p) => s + (p.amount || 0), 0)
-      const remainingNative = (inv.total || 0) - paid
+    // Cuentas por cobrar. Usa el MISMO criterio que el reporte de Pagos
+    // Pendientes de Ventas: antes acá se miraba solo `paymentStatus`, y como al
+    // anular un comprobante ese campo NO cambia, una nota anulada seguía
+    // apareciendo en "Por Cobrar" para siempre (reporte de 31-jul-2026: S/3,700
+    // de una nota anulada hacía dos semanas). Con dos filtros escritos por
+    // separado, las dos pantallas terminaron diciendo cosas distintas.
+    const pendingInvoices = invoices.filter(inv =>
+      filterByBranch(inv, 'invoice') && isPendingInvoice(inv)
+    )
+    const accountsReceivable = pendingInvoices.reduce((sum, inv) =>
       // Convertir el saldo pendiente a PEN base con el TC congelado.
-      return sum + convertToBase(remainingNative, inv.currency, inv.exchangeRate)
-    }, 0)
+      sum + convertToBase(getPendingAmount(inv), inv.currency, inv.exchangeRate)
+    , 0)
 
     // Cuentas por pagar (compras a crédito pendientes, filtradas por sucursal)
     const pendingPurchases = purchases.filter(p =>

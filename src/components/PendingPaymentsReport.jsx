@@ -8,6 +8,7 @@ import { getInvoices, updateInvoice } from '@/services/firestoreService'
 import { getInvoiceDate, parseLocalDateString } from '@/utils/invoiceDate'
 import { downloadBlob } from '@/utils/nativeDownload'
 import { useToast } from '@/contexts/ToastContext'
+import { isPendingInvoice, getPendingAmount } from '@/utils/receivables'
 import {
   XLSX,
   cellStyle, centerStyle, numberStyle,
@@ -43,12 +44,7 @@ import {
 
 // Pendiente de un comprobante: `balance` si existe; si es venta al crédito sin
 // balance guardado (datos legacy), el total completo.
-const getPendingAmount = (inv) => {
-  const bal = Number(inv?.balance)
-  if (Number.isFinite(bal)) return bal
-  if (inv?.paymentStatus === 'pending') return Number(inv?.total) || 0
-  return 0
-}
+// getPendingAmount e isPendingInvoice viven en @/utils/receivables: Flujo de Caja
 
 // Fecha de vencimiento pactada del comprobante (facturas al crédito y notas de
 // venta con términos activados). Con cuotas: la primera aún no vencida; si ya
@@ -78,14 +74,7 @@ const isOverdue = (dueDate) => {
   return dueDate < today
 }
 
-const isPendingInvoice = (inv) =>
-  (inv.documentType === 'nota_venta' || inv.documentType === 'factura' || inv.documentType === 'boleta') &&
-  inv.status !== 'cancelled' &&
-  inv.status !== 'voided' &&
-  inv.archived !== true &&
-  !inv.convertedTo &&
-  (inv.paymentStatus === 'pending' || inv.paymentStatus === 'partial') &&
-  getPendingAmount(inv) > 0.01
+// usa el mismo criterio y deben decir siempre lo mismo.
 
 const DOC_TYPE_LABEL = { nota_venta: 'N. Venta', factura: 'Factura', boleta: 'Boleta' }
 
