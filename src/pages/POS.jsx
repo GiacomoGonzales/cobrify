@@ -109,6 +109,7 @@ import { savePendingSale } from '@/services/offlineQueueService'
 import * as CustomerDisplay from '@/services/customerDisplayService'
 import InvoiceTicket from '@/components/InvoiceTicket'
 import { getPrimaryPet } from '@/utils/petUtils'
+import { getVisiblePaymentMethods, getPaymentLabel, getPaymentKeyByLabel } from '@/utils/paymentMethods'
 
 const PAYMENT_METHODS = {
   CASH: 'Efectivo',
@@ -319,7 +320,7 @@ export default function POS() {
     // Método de pago por defecto configurado por el negocio (Configuración > Ventas),
     // solo si está permitido para este usuario.
     const configured = companySettings?.defaultPaymentMethod
-    if (configured && PAYMENT_METHODS[configured]) {
+    if (configured && getPaymentLabel(configured, companySettings)) {
       const allowedOk = !allowedPaymentMethods || allowedPaymentMethods.length === 0
         || allowedPaymentMethods.map(id => PAYMENT_METHOD_ID_TO_KEY[id]).includes(configured)
       if (allowedOk) return configured
@@ -618,7 +619,7 @@ export default function POS() {
   // edición). Los reinicios (Nueva Venta) ya lo aplican vía getDefaultPaymentMethod.
   useEffect(() => {
     const configured = companySettings?.defaultPaymentMethod
-    if (!configured || !PAYMENT_METHODS[configured]) return
+    if (!configured || !getPaymentLabel(configured, companySettings)) return
     const allowedOk = !allowedPaymentMethods || allowedPaymentMethods.length === 0
       || allowedPaymentMethods.map(id => PAYMENT_METHOD_ID_TO_KEY[id]).includes(configured)
     if (!allowedOk) return
@@ -1967,12 +1968,12 @@ export default function POS() {
       // Cargar método de pago (convertir del formato guardado al formato del formulario)
       if (notaVentaInfo.payments && notaVentaInfo.payments.length > 0) {
         const formPayments = notaVentaInfo.payments.map(p => ({
-          method: p.methodKey || Object.keys(PAYMENT_METHODS).find(k => PAYMENT_METHODS[k] === p.method) || '',
+          method: p.methodKey || getPaymentKeyByLabel(p.method, companySettings),
           amount: p.amount ? p.amount.toString() : '',
         }))
         setPayments(formPayments)
       } else if (notaVentaInfo.paymentMethod) {
-        const methodKey = Object.keys(PAYMENT_METHODS).find(k => PAYMENT_METHODS[k] === notaVentaInfo.paymentMethod) || ''
+        const methodKey = getPaymentKeyByLabel(notaVentaInfo.paymentMethod, companySettings)
         setPayments([{ method: methodKey, amount: '' }])
       }
 
@@ -2235,12 +2236,12 @@ export default function POS() {
       // El estado del POS espera { method: 'CASH' (key), amount: string }
       if (invoice.payments && invoice.payments.length > 0) {
         const formPayments = invoice.payments.map(p => ({
-          method: p.methodKey || Object.keys(PAYMENT_METHODS).find(k => PAYMENT_METHODS[k] === p.method) || '',
+          method: p.methodKey || getPaymentKeyByLabel(p.method, companySettings),
           amount: p.amount != null ? p.amount.toString() : '',
         }))
         setPayments(formPayments)
       } else if (invoice.paymentMethod) {
-        const methodKey = Object.keys(PAYMENT_METHODS).find(k => PAYMENT_METHODS[k] === invoice.paymentMethod) || ''
+        const methodKey = getPaymentKeyByLabel(invoice.paymentMethod, companySettings)
         setPayments([{ method: methodKey, amount: '' }])
       }
 
@@ -2405,12 +2406,12 @@ export default function POS() {
       // Cargar métodos de pago del comprobante original
       if (invoice.payments && invoice.payments.length > 0) {
         const formPayments = invoice.payments.map(p => ({
-          method: p.methodKey || Object.keys(PAYMENT_METHODS).find(k => PAYMENT_METHODS[k] === p.method) || '',
+          method: p.methodKey || getPaymentKeyByLabel(p.method, companySettings),
           amount: p.amount != null ? p.amount.toString() : '',
         }))
         setPayments(formPayments)
       } else if (invoice.paymentMethod) {
-        const methodKey = Object.keys(PAYMENT_METHODS).find(k => PAYMENT_METHODS[k] === invoice.paymentMethod) || ''
+        const methodKey = getPaymentKeyByLabel(invoice.paymentMethod, companySettings)
         setPayments([{ method: methodKey, amount: '' }])
       }
 
@@ -5661,7 +5662,7 @@ export default function POS() {
           const effectiveAmount = Math.min(paid, remainingToPay)
           remainingToPay = Math.round((remainingToPay - effectiveAmount) * 100) / 100
           return {
-            method: PAYMENT_METHODS[p.method],
+            method: getPaymentLabel(p.method, companySettings),
             methodKey: p.method,
             amount: effectiveAmount
           }
@@ -10885,24 +10886,14 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       .filter(Boolean)
                     const isAvailable = (val) => !usedMethods.includes(val)
 
-                    // Métodos filtrados por permisos y modo de negocio
-                    const methodDefs = [
-                      ['CASH', 'Efectivo', 'cash'],
-                      ['CARD', 'Tarjeta', 'card'],
-                      ['TRANSFER', 'Transferencia', 'transfer'],
-                      ['YAPE', 'Yape', 'yape'],
-                      ['PLIN', 'Plin', 'plin'],
-                      ...(businessMode === 'restaurant' ? [
-                        ['RAPPI', 'Rappi', 'rappiPay'],
-                        ['PEDIDOSYA', 'PedidosYa', 'pedidosYa'],
-                        ['DIDIFOOD', 'DiDiFood', 'didifood'],
-                      ] : []),
-                      ...(businessMode === 'hotel' ? [
-                        ['ROOM', 'Habitación', 'chargeToRoom'],
-                      ] : [])
-                    ].filter(([, , permKey]) =>
-                      !allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes(permKey)
-                    )
+                    // Métodos del negocio (Configuración: ocultos + propios), filtrados
+                    // además por el permiso del sub-usuario. Dos filtros distintos:
+                    // el del negocio dice qué existe, el del usuario qué puede usar él.
+                    const methodDefs = getVisiblePaymentMethods(companySettings, businessMode)
+                      .filter(m =>
+                        !allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes(m.permKey)
+                      )
+                      .map(m => [m.key, m.label, m.permKey])
 
                     // Saldo a favor: se ofrece como método solo si el cliente tiene
                     // saldo disponible (notas de crédito sin redimir). No pasa por el

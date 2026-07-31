@@ -29,10 +29,11 @@ import { getActiveWaiters } from '@/services/waiterService'
 import { formatDate } from '@/lib/utils'
 import { db } from '@/lib/firebase'
 import { collection, getDocs } from 'firebase/firestore'
+import { getVisiblePaymentMethods } from '@/utils/paymentMethods'
 
 export default function Users() {
   const { user, isAdmin, isBusinessOwner } = useAuth()
-  const { businessMode, getBusinessId } = useAppContext()
+  const { businessMode, getBusinessId, businessSettings } = useAppContext()
   const toast = useToast()
   const [users, setUsers] = useState([])
   const [agents, setAgents] = useState([])
@@ -1427,18 +1428,9 @@ export default function Users() {
                             <h4 className="text-sm font-medium text-gray-700 mb-1">Métodos de pago</h4>
                             <p className="text-xs text-gray-500 mb-2">Sin selección = se permiten todos.</p>
                             <div className="grid grid-cols-2 gap-2">
-                              {[
-                                { id: 'cash', label: 'Efectivo' },
-                                { id: 'card', label: 'Tarjeta' },
-                                { id: 'transfer', label: 'Transferencia' },
-                                { id: 'yape', label: 'Yape' },
-                                { id: 'plin', label: 'Plin' },
-                                ...(businessMode === 'restaurant' ? [
-                                  { id: 'rappiPay', label: 'Rappi' },
-                                  { id: 'pedidosYa', label: 'PedidosYa' },
-                                  { id: 'didifood', label: 'DiDiFood' },
-                                ] : []),
-                              ].map(method => (
+                              {getVisiblePaymentMethods(businessSettings, businessMode)
+                                .map(m => ({ id: m.permKey, label: m.label }))
+                                .map(method => (
                                 <label
                                   key={method.id}
                                   className={`flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors text-sm ${

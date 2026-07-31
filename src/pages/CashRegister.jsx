@@ -31,6 +31,7 @@ import { getManagedUsers } from '@/services/userManagementService'
 import { generateCashReportExcel, generateCashReportPDF } from '@/services/cashReportService'
 import CashClosureTicket from '@/components/CashClosureTicket'
 import { Capacitor } from '@capacitor/core'
+import { getPaymentBucketLabel } from '@/utils/paymentMethods'
 
 export default function CashRegister() {
   const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess, allowedBranches, userPermissions, independentCashRegister, isAdmin, isBusinessOwner, businessSettings } = useAppContext()
@@ -1720,7 +1721,12 @@ export default function CashRegister() {
 
     // Helper: suma un pago a su método correspondiente. Distribuye a los
     // acumuladores PEN o USD según la moneda del invoice padre.
-    const addToMethod = (method, amount, currencyCode = 'PEN') => {
+    const addToMethod = (rawMethod, amount, currencyCode = 'PEN') => {
+      // Los métodos propios del negocio (Configuración > Métodos de pago) se
+      // traducen acá al método de siempre con el que se comportan. Sin esto,
+      // un pago con FISE no coincidiría con ningún `case` y el dinero
+      // desaparecería del cierre sin error ni aviso.
+      const method = getPaymentBucketLabel(rawMethod, businessSettings)
       if (currencyCode === 'USD') {
         switch (method) {
           case 'Efectivo': salesCashUSD += amount; break
@@ -1895,7 +1901,10 @@ export default function CashRegister() {
     // Parte de esos cobros que entró en EFECTIVO: es la que afecta el arqueo
     // (el resto va a tarjeta/transferencia/billeteras y no está en el cajón).
     const deferredCash = deferredPayments
-      .filter(p => p.currency !== 'USD' && p.method === 'Efectivo')
+      // Se compara el método EQUIVALENTE, no el literal: un método propio del
+      // negocio que se comporta como efectivo también entra al cajón y tiene
+      // que afectar el arqueo.
+      .filter(p => p.currency !== 'USD' && getPaymentBucketLabel(p.method, businessSettings) === 'Efectivo')
       .reduce((s, p) => s + (p.amount || 0), 0)
     const deferredTotalUSD = deferredPayments
       .filter(p => p.currency === 'USD')

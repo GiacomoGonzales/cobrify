@@ -53,6 +53,7 @@ import { getTables } from '@/services/tableService'
 import { validateShopifreeApiKey, connectShopifree, disconnectShopifree, pingShopifree, getShopifreeStoreUrl, getShopifreeIntegrationLogs, computeShopifreeStats, getLogActionLabel } from '@/services/shopifreeService'
 import RenumberInvoicesModal from '@/components/RenumberInvoicesModal'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
+import { getBuiltinPaymentMethodsForMode, getVisiblePaymentMethods, PAYMENT_BEHAVIORS } from '@/utils/paymentMethods'
 import {
   deleteAllProducts,
   deleteAllCustomers,
@@ -390,6 +391,11 @@ export default function Settings() {
   const [exitNoteEnabled, setExitNoteEnabled] = useState(false)
   const [defaultDocumentType, setDefaultDocumentType] = useState('boleta') // boleta, factura, nota_venta
   const [defaultPaymentMethod, setDefaultPaymentMethod] = useState('') // '' = ninguno; o CASH/CARD/TRANSFER/YAPE/PLIN
+  // Métodos de pago del negocio: cuáles se ocultan y cuáles agregó el usuario.
+  const [hiddenPaymentMethods, setHiddenPaymentMethods] = useState([])
+  const [customPaymentMethods, setCustomPaymentMethods] = useState([])
+  const [newPaymentName, setNewPaymentName] = useState('')
+  const [newPaymentBehavior, setNewPaymentBehavior] = useState('transfer')
   const [autoResetPOS, setAutoResetPOS] = useState(false)
   const [autoPrintTicket, setAutoPrintTicket] = useState(false)
   const [showChangeReminder, setShowChangeReminder] = useState(false)
@@ -1272,6 +1278,8 @@ export default function Settings() {
         setAdminToolsEnabled(businessData.adminTools?.enabled || false)
         setDefaultDocumentType(businessData.defaultDocumentType || 'boleta')
         setDefaultPaymentMethod(businessData.defaultPaymentMethod || '')
+        setHiddenPaymentMethods(businessData.hiddenPaymentMethods || [])
+        setCustomPaymentMethods(businessData.customPaymentMethods || [])
         setAutoResetPOS(businessData.autoResetPOS || false)
         setAutoPrintTicket(businessData.autoPrintTicket || false)
         setShowChangeReminder(businessData.showChangeReminder || false)
@@ -5210,11 +5218,10 @@ export default function Settings() {
                       <div className="flex flex-wrap gap-2">
                         {[
                           { key: '', label: 'Ninguno' },
-                          { key: 'CASH', label: 'Efectivo' },
-                          { key: 'CARD', label: 'Tarjeta' },
-                          { key: 'TRANSFER', label: 'Transferencia' },
-                          { key: 'YAPE', label: 'Yape' },
-                          { key: 'PLIN', label: 'Plin' },
+                          ...getVisiblePaymentMethods(
+                            { hiddenPaymentMethods, customPaymentMethods },
+                            businessMode
+                          ).map(m => ({ key: m.key, label: m.label })),
                         ].map(opt => (
                           <button
                             key={opt.key || 'none'}
@@ -5230,6 +5237,123 @@ export default function Settings() {
                           </button>
                         ))}
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Métodos de pago disponibles */}
+                  <div className="p-4 border border-gray-200 rounded-lg">
+                    <span className="text-sm font-medium text-gray-900">
+                      Métodos de pago disponibles
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1.5 mb-3 leading-relaxed">
+                      Desmarca los que no uses para que no aparezcan en el Punto de Venta. Efectivo no
+                      se puede quitar. Esto no afecta a las ventas ya registradas.
+                    </p>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-5">
+                      {getBuiltinPaymentMethodsForMode(businessMode).map(m => {
+                        const visible = m.fixed || !hiddenPaymentMethods.includes(m.permKey)
+                        return (
+                          <label
+                            key={m.permKey}
+                            className={`flex items-center gap-2 p-2 rounded-md border text-sm transition-colors ${
+                              m.fixed ? 'cursor-default bg-gray-50 border-gray-200 text-gray-500'
+                                : visible ? 'cursor-pointer border-primary-300 bg-primary-50 text-primary-900'
+                                : 'cursor-pointer border-gray-200 hover:bg-gray-50 text-gray-700'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={visible}
+                              disabled={m.fixed}
+                              onChange={() => setHiddenPaymentMethods(prev =>
+                                prev.includes(m.permKey)
+                                  ? prev.filter(x => x !== m.permKey)
+                                  : [...prev, m.permKey]
+                              )}
+                              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                            />
+                            <span className="truncate">{m.label}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+
+                    <span className="text-sm font-medium text-gray-900">Métodos propios</span>
+                    <p className="text-xs text-gray-600 mt-1.5 mb-3 leading-relaxed">
+                      Si cobras de una forma que no está en la lista —un vale, un convenio— agrégala acá.
+                      Indica con qué método se comporta para que el cierre de caja la contabilice donde
+                      corresponde: si eliges Efectivo, entra al cajón y suma al arqueo.
+                    </p>
+
+                    {customPaymentMethods.length > 0 && (
+                      <div className="space-y-2 mb-3">
+                        {customPaymentMethods.map(m => (
+                          <div key={m.id} className="flex items-center gap-2 p-2 border border-gray-200 rounded-md">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-gray-900 truncate">{m.name}</p>
+                              <p className="text-xs text-gray-500">
+                                Se comporta como {PAYMENT_BEHAVIORS.find(b => b.id === m.behavesLike)?.label || 'Transferencia'}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setCustomPaymentMethods(prev => prev.filter(x => x.id !== m.id))}
+                              className="text-gray-400 hover:text-red-600 p-1"
+                              aria-label={`Quitar ${m.name}`}
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="text"
+                        value={newPaymentName}
+                        onChange={e => setNewPaymentName(e.target.value)}
+                        placeholder="Nombre del método (ej. FISE)"
+                        maxLength={24}
+                        className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      />
+                      <select
+                        value={newPaymentBehavior}
+                        onChange={e => setNewPaymentBehavior(e.target.value)}
+                        className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      >
+                        {PAYMENT_BEHAVIORS.map(b => (
+                          <option key={b.id} value={b.id}>Se comporta como {b.label}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nombre = newPaymentName.trim()
+                          if (!nombre) return
+                          // Nombre repetido = dos métodos indistinguibles en los
+                          // reportes y en el cierre de caja, que guardan la etiqueta.
+                          const yaExiste = [
+                            ...getBuiltinPaymentMethodsForMode(businessMode).map(m => m.label),
+                            ...customPaymentMethods.map(m => m.name),
+                          ].some(l => l.toLowerCase() === nombre.toLowerCase())
+                          if (yaExiste) {
+                            toast.error('Ya existe un método de pago con ese nombre')
+                            return
+                          }
+                          setCustomPaymentMethods(prev => [
+                            ...prev,
+                            { id: `pm${Date.now()}`, name: nombre, behavesLike: newPaymentBehavior },
+                          ])
+                          setNewPaymentName('')
+                          setNewPaymentBehavior('transfer')
+                        }}
+                        disabled={!newPaymentName.trim()}
+                        className="px-4 py-2 text-sm font-medium bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Agregar
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -5771,6 +5895,8 @@ export default function Settings() {
                       showAllProductsInPOS: showAllProductsInPOS,
                       defaultDocumentType: defaultDocumentType,
                       defaultPaymentMethod: defaultPaymentMethod || '',
+                      hiddenPaymentMethods: hiddenPaymentMethods,
+                      customPaymentMethods: customPaymentMethods,
                       hideRucIgvInNotaVenta: hideRucIgvInNotaVenta,
                       hideOnlyIgvInNotaVenta: hideOnlyIgvInNotaVenta,
                       requireOpenCashRegister: requireOpenCashRegister,
