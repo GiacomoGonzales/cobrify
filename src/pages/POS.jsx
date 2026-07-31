@@ -1711,6 +1711,13 @@ export default function POS() {
           price: item.unitPrice || item.price || 0,
           quantity: item.quantity || 1,
           unit: item.unit || 'NIU',
+          // SKU y código de barras van SEPARADOS, como en cualquier producto del
+          // catálogo: al emitir, el comprobante resuelve `item.sku || item.code`.
+          // Copiando solo `code`, esa preferencia no encontraba SKU y la venta
+          // convertida quedaba con el código de BARRAS, mientras que la misma venta
+          // hecha a mano quedaba con el SKU: el mismo producto con dos códigos
+          // distintos según el camino, tanto en el PDF como en el XML de SUNAT.
+          sku: item.sku || '',
           code: item.code || '',
           observations: item.observations || '',
           ...(item.isVariant && {
@@ -1810,7 +1817,7 @@ export default function POS() {
     // Detectar si viene de un pedido online (tienda virtual retail) o de Rappi y cargar items + cliente
     const isFromOnlineOrder = location.state?.fromOnlineOrder
     const isFromRappiOrder = location.state?.fromRappiOrder
-    if ((isFromOnlineOrder || isFromRappiOrder) && !onlineOrderLoadedRef.current) {
+    if ((isFromOnlineOrder || isFromRappiOrder) && !onlineOrderLoadedRef.current && !productsLoading) {
       const info = location.state
       onlineOrderLoadedRef.current = true
 
@@ -1822,20 +1829,29 @@ export default function POS() {
 
       // Cargar items al carrito
       if (Array.isArray(info.items) && info.items.length > 0) {
-        const cartItems = info.items.map(item => ({
-          id: item.productId || item.id || `temp-${Date.now()}-${Math.random()}`,
-          productId: item.productId || '',
-          name: item.name || '',
-          price: item.price || 0,
-          quantity: item.quantity || 1,
-          unit: item.unit || 'NIU',
-          code: item.code || item.sku || '',
-          ...(item.isVariant && {
-            isVariant: true,
-            variantSku: item.variantSku,
-            variantAttributes: item.variantAttributes,
-          }),
-        }))
+        const cartItems = info.items.map(item => {
+          // El pedido online no guarda SKU ni código de barras —el catálogo
+          // público no los expone—, así que la venta salía SIN código mientras
+          // que la misma venta hecha a mano salía con el SKU. Se resuelven
+          // contra la ficha del producto, igual que hace la guía de remisión.
+          const product = item.productId ? products.find(p => p.id === item.productId) : null
+          return {
+            id: item.productId || item.id || `temp-${Date.now()}-${Math.random()}`,
+            productId: item.productId || '',
+            name: item.name || '',
+            price: item.price || 0,
+            quantity: item.quantity || 1,
+            unit: item.unit || 'NIU',
+            // En una variante manda su propio SKU, más específico que el del padre.
+            sku: item.sku || item.variantSku || product?.sku || '',
+            code: item.code || product?.code || '',
+            ...(item.isVariant && {
+              isVariant: true,
+              variantSku: item.variantSku,
+              variantAttributes: item.variantAttributes,
+            }),
+          }
+        })
         setCart(cartItems)
         // Vino precargado: no pasó por las validaciones de stock de agregar.
         pendingStockCheckRef.current = true
