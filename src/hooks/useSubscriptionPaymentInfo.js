@@ -66,6 +66,11 @@ export function useSubscriptionPaymentInfo(subscription) {
     paymentInfo,
     whatsappNumber,
     yapeRaw,
+    // El reseller o vendedor resuelto (null si es cliente directo). Se expone para
+    // poder nombrarlo en pantalla —"contáctate con Juan Pérez"— sin volver a
+    // consultarlo desde el componente.
+    seller,
+    isReseller,
     // true = cliente de reseller que aún no configuró sus datos de cobro.
     isResellerWithoutPayment: isReseller && !sellerHasPayment,
   }

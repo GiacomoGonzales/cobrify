@@ -14,6 +14,7 @@ import {
   ONLINE_PAYMENTS_ENABLED,
 } from '@/services/subscriptionService';
 import { getVendedorByLinkedUser, getVendedorClients } from '@/services/vendedorService';
+import { useSubscriptionPaymentInfo } from '@/hooks/useSubscriptionPaymentInfo';
 import {
   CreditCard,
   Calendar,
@@ -120,12 +121,26 @@ export default function MySubscription() {
     toast.info('Si completaste el pago, tu suscripción se actualizará en unos segundos.');
   };
 
+  // Vendedor asignado a ESTA cuenta (no confundir con `vendedorInfo` de más abajo,
+  // que responde a "el usuario logueado ES un vendedor"). Mismo hook que usa la
+  // pantalla de suscripción vencida, así el cliente ve siempre el mismo contacto.
+  const { seller: assignedSeller } = useSubscriptionPaymentInfo(subscription)
+  const assignedVendedor = subscription?.vendedorId ? assignedSeller : null
+
   // Contacto de soporte: si la cuenta pertenece a un RESELLER, mostrar SUS datos
-  // (WhatsApp/email de su branding); si es cliente directo de Cobrify, mostrar el
-  // soporte de Cobrify. No se mezclan (un cliente de reseller no debe ver a Cobrify).
+  // (WhatsApp/email de su branding); si tiene VENDEDOR asignado, el teléfono del
+  // vendedor —es con quien coordina el pago, igual que en los avisos de vencimiento—;
+  // si es cliente directo de Cobrify, el soporte de Cobrify. No se mezclan (un
+  // cliente de reseller no debe ver a Cobrify).
   const isResellerAccount = !!(branding?.companyName && branding.companyName !== DEFAULT_BRANDING.companyName)
-  const supportName = isResellerAccount ? branding.companyName : 'Cobrify'
-  const supportWhatsapp = (isResellerAccount ? (branding.whatsapp || '') : '+51 900 434 988').trim()
+  const supportName = isResellerAccount
+    ? branding.companyName
+    : (assignedVendedor?.name || 'Cobrify')
+  const supportWhatsapp = (isResellerAccount
+    ? (branding.whatsapp || '')
+    : (assignedVendedor?.phone || '+51 900 434 988')).trim()
+  // El vendedor no tiene correo en su ficha; el de Cobrify se mantiene porque
+  // estas cuentas siguen siendo clientes de Cobrify (el vendedor es su asesor).
   const supportEmail = (isResellerAccount ? (branding.supportEmail || '') : 'soporte@cobrifyperu.com').trim()
   // wa.me necesita solo dígitos; si es un celular peruano de 9 dígitos, anteponer 51.
   const supportWaDigits = (() => {
