@@ -1439,6 +1439,12 @@ export default function POS() {
   const dispatchGuideLoadedRef = useRef(false)
   const folioLoadedRef = useRef(false)
   const onlineOrderLoadedRef = useRef(false)
+  // Un carrito precargado (cotización / pedido online) no pasó por las validaciones
+  // de stock. Se marca acá para avisar en cuanto el catálogo esté disponible, y no
+  // dejar que el vendedor se entere recién al cobrar.
+  const pendingStockCheckRef = useRef(false)
+  // Último aviso de faltantes mostrado, para no repetirlo en cada cambio del carrito.
+  const avisoFaltantesRef = useRef('')
   // IDs de cargos del folio pendientes de marcar como facturados (persiste aunque el cart cambie)
   const pendingFolioChargeIdsRef = useRef([])
   // Evita que loadBusinessData sobrescriba el documentType después de que el usuario lo cambió manualmente
@@ -1718,6 +1724,8 @@ export default function POS() {
           }),
         }))
         setCart(cartItems)
+        // Vino precargado: no pasó por las validaciones de stock de agregar.
+        pendingStockCheckRef.current = true
       }
 
       // Cargar datos del cliente si existe
@@ -1829,6 +1837,8 @@ export default function POS() {
           }),
         }))
         setCart(cartItems)
+        // Vino precargado: no pasó por las validaciones de stock de agregar.
+        pendingStockCheckRef.current = true
       }
 
       // Cargar datos del cliente (siempre inline — son datos del catálogo público)
@@ -4219,51 +4229,9 @@ export default function POS() {
             // Verificar stock del almacén seleccionado (solo para productos no personalizados)
             // Si allowNegativeStock está habilitado, permitir venta sin stock
             if (item.stock !== null && !item.isCustom && !companySettings?.allowNegativeStock) {
-              const productData = products.find(p => p.id === item.id)
-              if (productData) {
-                const factor = item.presentationFactor || 1
-                // Stock disponible: variante específica > lote > "sin lote" > almacén
-                let availableStock
-                let stockMsg
-
-                if (item.isVariant && productData.hasVariants) {
-                  // Variante: buscar la variante por SKU y leer su stock
-                  // (preferir el stock del almacén seleccionado si existe).
-                  const variantData = productData.variants?.find(v => v.sku === item.variantSku)
-                  if (variantData) {
-                    if (selectedWarehouse) {
-                      const ws = (variantData.warehouseStocks || []).find(ws => ws.warehouseId === selectedWarehouse.id)
-                      availableStock = ws?.stock ?? variantData.stock ?? 0
-                    } else {
-                      availableStock = variantData.stock ?? 0
-                    }
-                  } else {
-                    availableStock = item.stock ?? 0
-                  }
-                  const variantLabel = Object.values(item.variantAttributes || {}).join(' / ') || item.variantSku
-                  stockMsg = `variante ${variantLabel}${selectedWarehouse ? ` en ${selectedWarehouse.name}` : ''}`
-                } else if (item.batchNumber) {
-                  // SUMAR todos los registros que tengan el mismo batchNumber.
-                  // Cubre el caso edge de bases con lotes duplicados (mismo lote
-                  // creado varias veces antes del fix de merge en compras).
-                  const matchingBatches = (productData.batches || []).filter(b =>
-                    (b.lotNumber || b.batchNumber) === item.batchNumber
-                  )
-                  availableStock = matchingBatches.reduce((sum, b) => sum + (parseFloat(b.quantity) || 0), 0)
-                  stockMsg = `lote ${item.batchNumber}`
-                } else if (item.isNoLot) {
-                  const totalWarehouseStock = getCurrentWarehouseStock(productData)
-                  const warehouseBatches = (productData.batches || []).filter(b =>
-                    b.quantity > 0 && (!b.warehouseId || b.warehouseId === selectedWarehouse?.id)
-                  )
-                  const batchesTotal = warehouseBatches.reduce((sum, b) => sum + (b.quantity || 0), 0)
-                  availableStock = Math.max(0, totalWarehouseStock - batchesTotal)
-                  stockMsg = 'stock sin lote'
-                } else {
-                  availableStock = getCurrentWarehouseStock(productData)
-                  stockMsg = selectedWarehouse?.name || 'este almacén'
-                }
-
+              const info = getCartItemStockInfo(item)
+              if (info) {
+                const { availableStock, stockMsg, factor } = info
                 if (factor > 1) {
                   const maxPresentations = Math.floor(availableStock / factor)
                   if (newQuantity > maxPresentations) {
@@ -4271,11 +4239,9 @@ export default function POS() {
                     toast.error(`Máximo ${maxPresentations} ${presName} en ${stockMsg}. Para más, selecciona otro lote.`)
                     return item
                   }
-                } else {
-                  if (newQuantity > availableStock) {
-                    toast.error(`Stock insuficiente en ${stockMsg}. Disponible: ${parseFloat(availableStock.toFixed(2))}`)
-                    return item
-                  }
+                } else if (newQuantity > availableStock) {
+                  toast.error(`Stock insuficiente en ${stockMsg}. Disponible: ${parseFloat(availableStock.toFixed(2))}`)
+                  return item
                 }
               }
             }
@@ -4314,49 +4280,9 @@ export default function POS() {
             // Verificar stock del almacén seleccionado (solo para productos no personalizados)
             // Si allowNegativeStock está habilitado, permitir venta sin stock
             if (item.stock !== null && !item.isCustom && quantity > 0 && !companySettings?.allowNegativeStock) {
-              const productData = products.find(p => p.id === item.id)
-              if (productData) {
-                const factor = item.presentationFactor || 1
-                // Stock disponible: variante específica > lote > "sin lote" > almacén
-                let availableStock
-                let stockMsg
-
-                if (item.isVariant && productData.hasVariants) {
-                  const variantData = productData.variants?.find(v => v.sku === item.variantSku)
-                  if (variantData) {
-                    if (selectedWarehouse) {
-                      const ws = (variantData.warehouseStocks || []).find(ws => ws.warehouseId === selectedWarehouse.id)
-                      availableStock = ws?.stock ?? variantData.stock ?? 0
-                    } else {
-                      availableStock = variantData.stock ?? 0
-                    }
-                  } else {
-                    availableStock = item.stock ?? 0
-                  }
-                  const variantLabel = Object.values(item.variantAttributes || {}).join(' / ') || item.variantSku
-                  stockMsg = `variante ${variantLabel}${selectedWarehouse ? ` en ${selectedWarehouse.name}` : ''}`
-                } else if (item.batchNumber) {
-                  // SUMAR todos los registros que tengan el mismo batchNumber.
-                  // Cubre el caso edge de bases con lotes duplicados (mismo lote
-                  // creado varias veces antes del fix de merge en compras).
-                  const matchingBatches = (productData.batches || []).filter(b =>
-                    (b.lotNumber || b.batchNumber) === item.batchNumber
-                  )
-                  availableStock = matchingBatches.reduce((sum, b) => sum + (parseFloat(b.quantity) || 0), 0)
-                  stockMsg = `lote ${item.batchNumber}`
-                } else if (item.isNoLot) {
-                  const totalWarehouseStock = getCurrentWarehouseStock(productData)
-                  const warehouseBatches = (productData.batches || []).filter(b =>
-                    b.quantity > 0 && (!b.warehouseId || b.warehouseId === selectedWarehouse?.id)
-                  )
-                  const batchesTotal = warehouseBatches.reduce((sum, b) => sum + (b.quantity || 0), 0)
-                  availableStock = Math.max(0, totalWarehouseStock - batchesTotal)
-                  stockMsg = 'stock sin lote'
-                } else {
-                  availableStock = getCurrentWarehouseStock(productData)
-                  stockMsg = selectedWarehouse?.name || 'este almacén'
-                }
-
+              const info = getCartItemStockInfo(item)
+              if (info) {
+                const { availableStock, stockMsg, factor } = info
                 if (factor > 1) {
                   const maxPresentations = Math.floor(availableStock / factor)
                   if (quantity > maxPresentations) {
@@ -4364,11 +4290,9 @@ export default function POS() {
                     toast.error(`Máximo ${maxPresentations} ${presName} en ${stockMsg}. Para más, selecciona otro lote.`)
                     return item
                   }
-                } else {
-                  if (quantity > availableStock) {
-                    toast.error(`Stock insuficiente en ${stockMsg}. Disponible: ${parseFloat(availableStock.toFixed(2))}`)
-                    return item
-                  }
+                } else if (quantity > availableStock) {
+                  toast.error(`Stock insuficiente en ${stockMsg}. Disponible: ${parseFloat(availableStock.toFixed(2))}`)
+                  return item
                 }
               }
             }
@@ -4571,10 +4495,39 @@ export default function POS() {
     }))
   }
 
+  // Avisar de los faltantes en cuanto se pueda, para que el vendedor no se entere
+  // recién al cobrar. Corre una sola vez por carga: el catálogo llega después que
+  // el carrito, así que hay que esperar a tenerlo para poder comparar.
+  useEffect(() => {
+    if (!pendingStockCheckRef.current) return
+    if (cart.length === 0 || products.length === 0) return
+    if (companySettings?.allowNegativeStock) return
+
+    const faltantes = getStockShortages()
+    if (faltantes.length === 0) {
+      avisoFaltantesRef.current = ''
+      return
+    }
+
+    const detalle = faltantes
+      .map(f => `${f.name} (pide ${f.pedido}${f.unidad ? ` ${f.unidad}` : ''}, hay ${f.disponible})`)
+      .join(', ')
+    // Solo avisar cuando la lista CAMBIA: si no, cada tecla en una cantidad
+    // dispararía el mismo mensaje otra vez.
+    if (detalle === avisoFaltantesRef.current) return
+    avisoFaltantesRef.current = detalle
+    toast.error(`Sin stock suficiente para: ${detalle}. Ajusta las cantidades antes de cobrar.`, 9000)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cart, products, companySettings?.allowNegativeStock, selectedWarehouse?.id])
+
   const clearCart = () => {
     setCart([])
     setSelectedCustomer(null)
     userChangedDocTypeRef.current = false
+    // El carrito precargado quedó atrás: la siguiente venta se arma a mano y ya
+    // pasa por las validaciones de agregar.
+    pendingStockCheckRef.current = false
+    avisoFaltantesRef.current = ''
     // Resetear al default del negocio, pero respetando los tipos permitidos del
     // usuario logueado. Si el default no está en allowedDocumentTypes (típico en
     // sub-usuarios con permisos restringidos), caer al primero permitido — así
@@ -5419,6 +5372,41 @@ export default function POS() {
     const emissionDateToUse = useCustomDate ? emissionDate : currentDate
     if (emissionDate !== emissionDateToUse) {
       setEmissionDate(emissionDateToUse)
+    }
+
+    // Barrera de stock de PRODUCTOS TERMINADOS para carritos PRECARGADOS.
+    //
+    // Las validaciones de agregar/cambiar cantidad cubren el uso manual, pero una
+    // cotización o un pedido online entran por `setCart()` y se las saltan por
+    // completo: al cobrar solo se revisaban los insumos de recetas, así que la
+    // venta pasaba y el stock quedaba en negativo (reporte 31-jul-2026).
+    //
+    // A PROPÓSITO solo aplica a esos dos orígenes (`pendingStockCheckRef`), no a
+    // todo carrito. Mesas, órdenes y folios de hotel llegan con la comida YA
+    // servida y su flujo no valida stock de producto terminado —solo insumos—;
+    // exigirlo acá dejaría a un restaurante sin poder cerrar una mesa por un
+    // descuadre de inventario, que es peor que el problema que se arregla.
+    //
+    // Nota de venta y guía de remisión ya descontaron su stock antes: volver a
+    // exigirlo bloquearía conversiones legítimas.
+    if (pendingStockCheckRef.current) {
+      const _stockYaDescontado = !!(
+        (pendingNotaVentaIds && pendingNotaVentaIds.length > 0) ||
+        (sourceDispatchGuide && sourceDispatchGuide.stockAlreadyDeducted)
+      )
+      const _faltantes = _stockYaDescontado ? [] : getStockShortages()
+      if (_faltantes.length > 0) {
+        const _detalle = _faltantes
+          .map(f => `${f.name}: pediste ${f.pedido}${f.unidad ? ` ${f.unidad}` : ''} y hay ${f.disponible} en ${f.donde}`)
+          .join('. ')
+        toast.error(
+          `No hay stock suficiente. ${_detalle}. Ajusta las cantidades, cambia de almacén, o activa "permitir vender sin stock" en Configuración.`,
+          9000
+        )
+        checkoutGuardRef.current = false
+        setIsProcessing(false)
+        return
+      }
     }
 
     // Validar stock de ingredientes de recetas.
@@ -7583,6 +7571,97 @@ ${companySettings?.businessName || 'Tu Empresa'}`
     if (!selectedWarehouse) return product.stock || 0
     // Usar getTotalAvailableStock que incluye stock del almacén + stock huérfano
     return getTotalAvailableStock(product, selectedWarehouse.id)
+  }
+
+  /**
+   * Stock disponible para un ítem del carrito, con la prioridad que usa el POS:
+   * variante específica > lote > "sin lote" > almacén. Devuelve null si el
+   * producto ya no existe en el catálogo.
+   *
+   * Estaba escrito dos veces dentro de updateQuantity (subir de a uno y fijar
+   * cantidad). Se extrajo para que la validación al cobrar mida EXACTAMENTE lo
+   * mismo que la de agregar; si fueran dos cálculos distintos, uno dejaría pasar
+   * lo que el otro bloquea.
+   */
+  const getCartItemStockInfo = (item) => {
+    const productData = products.find(p => p.id === item.id)
+    if (!productData) return null
+
+    let availableStock
+    let stockMsg
+
+    if (item.isVariant && productData.hasVariants) {
+      const variantData = productData.variants?.find(v => v.sku === item.variantSku)
+      if (variantData) {
+        if (selectedWarehouse) {
+          const ws = (variantData.warehouseStocks || []).find(ws => ws.warehouseId === selectedWarehouse.id)
+          availableStock = ws?.stock ?? variantData.stock ?? 0
+        } else {
+          availableStock = variantData.stock ?? 0
+        }
+      } else {
+        availableStock = item.stock ?? 0
+      }
+      const variantLabel = Object.values(item.variantAttributes || {}).join(' / ') || item.variantSku
+      stockMsg = `variante ${variantLabel}${selectedWarehouse ? ` en ${selectedWarehouse.name}` : ''}`
+    } else if (item.batchNumber) {
+      // SUMAR todos los registros con el mismo batchNumber: cubre bases con lotes
+      // duplicados (mismo lote creado varias veces antes del fix de merge en compras).
+      const matchingBatches = (productData.batches || []).filter(b =>
+        (b.lotNumber || b.batchNumber) === item.batchNumber
+      )
+      availableStock = matchingBatches.reduce((sum, b) => sum + (parseFloat(b.quantity) || 0), 0)
+      stockMsg = `lote ${item.batchNumber}`
+    } else if (item.isNoLot) {
+      const totalWarehouseStock = getCurrentWarehouseStock(productData)
+      const warehouseBatches = (productData.batches || []).filter(b =>
+        b.quantity > 0 && (!b.warehouseId || b.warehouseId === selectedWarehouse?.id)
+      )
+      const batchesTotal = warehouseBatches.reduce((sum, b) => sum + (b.quantity || 0), 0)
+      availableStock = Math.max(0, totalWarehouseStock - batchesTotal)
+      stockMsg = 'stock sin lote'
+    } else {
+      availableStock = getCurrentWarehouseStock(productData)
+      stockMsg = selectedWarehouse?.name || 'este almacén'
+    }
+
+    return { productData, availableStock, stockMsg, factor: item.presentationFactor || 1 }
+  }
+
+  /**
+   * Ítems del carrito que piden más de lo que hay disponible.
+   *
+   * Las cotizaciones y los pedidos online entran al carrito por `setCart()`, sin
+   * pasar por las validaciones de agregar ni de cambiar cantidad, y al cobrar lo
+   * único que se revisaba eran los insumos de recetas. Por ahí se colaban las
+   * ventas sin stock que reportó el usuario (31-jul-2026): el POS descontaba a
+   * negativo y el inventario quedaba descuadrado.
+   *
+   * Devuelve [] si el negocio activó "permitir vender sin stock" — ahí es una
+   * decisión del dueño, no un descuido.
+   */
+  const getStockShortages = (cartToCheck = cart) => {
+    if (companySettings?.allowNegativeStock) return []
+    const shortages = []
+    for (const item of cartToCheck) {
+      if (item.isCustom || item.stock === null) continue
+      const info = getCartItemStockInfo(item)
+      // Sin ficha o sin control de stock: no hay nada que validar.
+      if (!info || info.productData.trackStock === false) continue
+
+      const { availableStock, stockMsg, factor } = info
+      const disponible = factor > 1 ? Math.floor(availableStock / factor) : availableStock
+      if (item.quantity > disponible) {
+        shortages.push({
+          name: item.name,
+          pedido: item.quantity,
+          disponible: parseFloat(Number(disponible).toFixed(2)),
+          unidad: factor > 1 ? (item.presentationName || 'presentaciones') : '',
+          donde: stockMsg,
+        })
+      }
+    }
+    return shortages
   }
 
   const getStockBadge = product => {
