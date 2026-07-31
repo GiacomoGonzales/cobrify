@@ -546,7 +546,11 @@ function Sidebar() {
     {
       path: '/productos',
       icon: UtensilsCrossed,
-      label: 'Menú',
+      // Transición hacia "Productos" a secas: el resto del sistema (la página,
+      // los permisos, la importación) ya lo llama así, y "Menú" se confundía con
+      // el menú lateral. Se deja el término entre paréntesis para que el
+      // restaurantero reconozca la sección mientras se acostumbra.
+      label: 'Productos (Menú)',
       pageId: 'products',
     },
     {
