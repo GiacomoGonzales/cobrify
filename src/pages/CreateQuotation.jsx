@@ -26,6 +26,8 @@ import { getCustomers, getProducts, createCustomer } from '@/services/firestoreS
 import { createQuotation, getNextQuotationNumber, getQuotation, updateQuotation } from '@/services/quotationService'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import { getActiveBranches } from '@/services/branchService'
+import { getWarehouses } from '@/services/warehouseService'
+import StockByWarehouse from '@/components/StockByWarehouse'
 import { getSellers } from '@/services/sellerService'
 
 // Unidades de medida SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
@@ -102,7 +104,7 @@ const UNITS = [
 ]
 
 export default function CreateQuotation() {
-  const { user } = useAuth()
+  const { user, filterWarehousesByAccess } = useAuth()
   const { businessSettings, getBusinessId, filterBranchesByAccess, hasMainBranchAccess } = useAppContext()
   const navigate = useNavigate()
   const appNavigate = useAppNavigate()
@@ -116,6 +118,8 @@ export default function CreateQuotation() {
   const toast = useToast()
   const [customers, setCustomers] = useState([])
   const [products, setProducts] = useState([])
+  // Almacenes, solo para desglosar el stock informativo por almacén.
+  const [warehouses, setWarehouses] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
@@ -523,12 +527,20 @@ export default function CreateQuotation() {
 
     setIsLoading(true)
     try {
-      const [customersResult, productsResult, branchesResult, sellersResult] = await Promise.all([
+      const [customersResult, productsResult, branchesResult, sellersResult, warehousesResult] = await Promise.all([
         getCustomers(getBusinessId()),
         getProducts(getBusinessId()),
         getActiveBranches(getBusinessId()),
         getSellers(getBusinessId()),
+        getWarehouses(getBusinessId()),
       ])
+
+      if (warehousesResult.success) {
+        // Mismo criterio que el resto del sistema: un sub-usuario no ve el stock
+        // de almacenes que no maneja.
+        const activos = (warehousesResult.data || []).filter(w => w.isActive !== false)
+        setWarehouses(filterWarehousesByAccess ? filterWarehousesByAccess(activos) : activos)
+      }
 
       if (customersResult.success) {
         setCustomers(customersResult.data || [])
@@ -1896,16 +1908,13 @@ export default function CreateQuotation() {
                               )}
                             </div>
                             {/* Stock informativo (solo vista, no restringe) */}
-                            {item.productId && (() => {
-                              const stock = getStockForItem(item)
-                              if (stock === null || stock === undefined) return null
-                              const minStock = getProductForItem(item)?.minStock ?? 3
-                              return (
-                                <p className="text-[11px] text-gray-500 mt-1 ml-1">
-                                  Stock: <span className={`font-medium ${stock <= 0 ? 'text-red-600' : stock <= minStock ? 'text-amber-600' : 'text-gray-700'}`}>{stock}</span>
-                                </p>
-                              )
-                            })()}
+                            {item.productId && (
+                              <StockByWarehouse
+                                product={getProductForItem(item)}
+                                variantSku={item.variantSku}
+                                warehouses={warehouses}
+                              />
+                            )}
                             {/* Dropdown de resultados */}
                             {showProductSearch === index && !item.productId && (
                               <>
@@ -2131,17 +2140,14 @@ export default function CreateQuotation() {
                           </button>
                         )}
                       </div>
-                      {/* Stock informativo (solo vista) */}
-                      {item.productId && (() => {
-                        const stock = getStockForItem(item)
-                        if (stock === null || stock === undefined) return null
-                        const minStock = getProductForItem(item)?.minStock ?? 3
-                        return (
-                          <p className="text-[11px] text-gray-500 mt-1 ml-1">
-                            Stock: <span className={`font-medium ${stock <= 0 ? 'text-red-600' : stock <= minStock ? 'text-amber-600' : 'text-gray-700'}`}>{stock}</span>
-                          </p>
-                        )
-                      })()}
+                      {/* Stock informativo (solo vista, no restringe) */}
+                      {item.productId && (
+                        <StockByWarehouse
+                          product={getProductForItem(item)}
+                          variantSku={item.variantSku}
+                          warehouses={warehouses}
+                        />
+                      )}
                       {/* Dropdown de resultados */}
                       {showProductSearch === index && !item.productId && (
                         <>

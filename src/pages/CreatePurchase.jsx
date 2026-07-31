@@ -36,6 +36,7 @@ import {
 import { consultarRUC } from '@/services/documentLookupService'
 import ImportPurchaseXmlModal from '@/components/ImportPurchaseXmlModal'
 import { getWarehouses, updateWarehouseStock, createStockMovement } from '@/services/warehouseService'
+import StockByWarehouse from '@/components/StockByWarehouse'
 import { getActiveBranches } from '@/services/branchService'
 import { getIngredients, registerPurchase as registerIngredientPurchase, createIngredient, updateIngredient, convertUnit } from '@/services/ingredientService'
 import { recalculateRecipeCostsForIngredient } from '@/services/recipeService'
@@ -3031,7 +3032,12 @@ export default function CreatePurchase() {
                                       {searchItem.itemType === 'ingredient' ? (
                                         <>Stock: {searchItem.currentStock} {searchItem.purchaseUnit}</>
                                       ) : (
-                                        searchItem.code || `Stock: ${searchItem.stock || 0}`
+                                        (
+                                        <>
+                                          {searchItem.code && <div>{searchItem.code}</div>}
+                                          <StockByWarehouse product={searchItem} warehouses={warehouses} className="!mt-0 !ml-0" />
+                                        </>
+                                      )
                                       )}
                                     </div>
                                   </div>
@@ -3349,7 +3355,12 @@ export default function CreatePurchase() {
                                 {searchItem.itemType === 'ingredient' ? (
                                   <>Stock: {searchItem.currentStock} {searchItem.purchaseUnit}</>
                                 ) : (
-                                  searchItem.code || `Stock: ${searchItem.stock || 0}`
+                                  (
+                                        <>
+                                          {searchItem.code && <div>{searchItem.code}</div>}
+                                          <StockByWarehouse product={searchItem} warehouses={warehouses} className="!mt-0 !ml-0" />
+                                        </>
+                                      )
                                 )}
                               </div>
                             </div>
