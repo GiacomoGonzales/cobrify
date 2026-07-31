@@ -1679,6 +1679,40 @@ function Sidebar() {
       ],
     },
 
+    // === GRUPO: Producción (insumos, composición, producción) ===
+    // Las clínicas y pet shops arman combos y kits (baño + corte, pack de
+    // vacunación), que es el mismo mecanismo de composición que ya usa retail.
+    // Las páginas hablan en genérico fuera del modo restaurante: dicen
+    // "Insumos" y "Composición", no "Ingredientes" ni "Recetas".
+    {
+      groupId: 'produccion',
+      icon: Factory,
+      label: 'Producción',
+      children: [
+        {
+          path: '/ingredientes',
+          icon: Package,
+          label: 'Insumos',
+          pageId: 'ingredients',
+          menuId: 'ingredients',
+        },
+        {
+          path: '/recetas',
+          icon: ClipboardList,
+          label: 'Composición',
+          pageId: 'recipes',
+          menuId: 'recipes',
+        },
+        {
+          path: '/produccion',
+          icon: Cog,
+          label: 'Producción',
+          pageId: 'production',
+          menuId: 'production',
+        },
+      ],
+    },
+
     // === GRUPO: Compras y Proveedores ===
     {
       groupId: 'compras',

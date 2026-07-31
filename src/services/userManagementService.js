@@ -143,6 +143,16 @@ export const VETERINARY_PAGES = [
   // Mismo gap que farmacia: el sidebar veterinario tiene Pedidos Online pero
   // el permiso no existía y los sub-usuarios no podían verlo.
   { id: 'online-orders', name: 'Pedidos Online', path: '/pedidos-online', category: 'ventas' },
+  // Composición: las clínicas y pet shops arman combos y kits (baño + corte,
+  // pack de vacunación) con el mismo mecanismo que retail. Sin estos permisos
+  // el menú aparece pero el sub-usuario no puede entrar.
+  { id: 'ingredients', name: 'Insumos', path: '/ingredientes', category: 'produccion' },
+  { id: 'recipes', name: 'Composición', path: '/recetas', category: 'produccion' },
+  { id: 'production', name: 'Producción', path: '/produccion', category: 'produccion' },
+  // El sidebar veterinario ya tenía esta página, pero su permiso nunca se
+  // agregó: el sub-usuario veía el enlace y no podía entrar. Mismo caso que
+  // Pedidos Online arriba.
+  { id: 'purchase-history', name: 'Historial de Compras', path: '/ingredientes/historial', category: 'compras' },
 ]
 
 // ============ PÁGINAS MODO HOTEL ============
