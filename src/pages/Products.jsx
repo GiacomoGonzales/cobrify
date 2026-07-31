@@ -189,7 +189,6 @@ export default function Products() {
   const [isScanningExtraBarcode, setIsScanningExtraBarcode] = useState(false)
   const [noStock, setNoStock] = useState(false)
   const [allowDecimalQuantity, setAllowDecimalQuantity] = useState(false) // Venta por peso
-  const [trackExpiration, setTrackExpiration] = useState(false) // Control de vencimiento
   const [trackSerials, setTrackSerials] = useState(false) // Control de N° de serie
   const [catalogVisible, setCatalogVisible] = useState(false) // Visible en catálogo público
   // Auto-precio según cantidad (opt-in por producto). Si está ON, el POS no
@@ -669,7 +668,6 @@ export default function Products() {
     setEditingProduct(null)
     setNoStock(false)
     setAllowDecimalQuantity(false)
-    setTrackExpiration(false)
     setCatalogVisible(false)
     setCatalogHidePrice(false)
     setCatalogComparePrice('')
@@ -755,7 +753,6 @@ export default function Products() {
 
     // Set expiration tracking state
     const hasExpiration = product.trackExpiration || false
-    setTrackExpiration(hasExpiration)
 
     // Set serial tracking state
     setTrackSerials(product.trackSerials || false)
@@ -925,7 +922,6 @@ export default function Products() {
     setAllowDecimalQuantity(product.allowDecimalQuantity || false)
 
     const hasExpiration = product.trackExpiration || false
-    setTrackExpiration(hasExpiration)
     setTrackSerials(product.trackSerials || false)
 
     const productHasVariants = product.hasVariants || false
@@ -1188,14 +1184,18 @@ export default function Products() {
           : { cost: data.cost && data.cost !== '' ? parseFloat(data.cost) : null }),
         weight: data.weight && data.weight !== '' ? parseFloat(data.weight) : null,
         hasVariants: hasVariants,
-        // Con batches activos, forzar trackExpiration:true (los lotes lo implican)
-        trackExpiration: hasActiveBatches ? true : trackExpiration,
+        // Con batches activos, forzar trackExpiration:true (los lotes lo implican).
+        // Sin lotes, la bandera SIGUE al campo de fecha del formulario: si el usuario
+        // lo vacía, se apaga el control y con él el aviso de vencido del POS. Antes se
+        // arrastraba el `trackExpiration` que venía del producto, así que una fecha
+        // vieja quedaba encendida para siempre sin forma de apagarla desde la ficha.
+        trackExpiration: hasActiveBatches ? true : !!data.expirationDate,
         trackSerials: trackSerials,
         // Si hay batches activos, omitir expirationDate del payload — updateDoc
         // hace merge y preserva el valor existente (calculado por Compras).
         ...(hasActiveBatches
           ? {}
-          : { expirationDate: trackExpiration && data.expirationDate ? new Date(data.expirationDate) : null }
+          : { expirationDate: data.expirationDate ? new Date(data.expirationDate) : null }
         ),
         allowDecimalQuantity: allowDecimalQuantity, // Venta por peso (decimales)
         // Stock mínimo por producto para alerta de bajo stock. Si está vacío
@@ -6964,7 +6964,12 @@ export default function Products() {
                 {/* Stock Actual (solo al editar) */}
                 {editingProduct && (() => {
                   const stockEditOn = businessSettings?.enableManualStockEdit === true
-                  const hasBatches = !!editingProduct.trackExpiration || (Array.isArray(editingProduct.batches) && editingProduct.batches.length > 0)
+                  // Lotes DE VERDAD, no `trackExpiration`. Antes bastaba con que la
+                  // bandera estuviera activa para mandar al usuario a Control de Lotes,
+                  // pero un producto puede tener fecha a nivel de producto y CERO lotes
+                  // —el modelo viejo, de antes de batches[]—. En ese caso allá no
+                  // aparece nada y quedaba sin forma de editar su stock ni su fecha.
+                  const hasBatches = Array.isArray(editingProduct.batches) && editingProduct.batches.length > 0
                   const activeWhs = (warehouses || []).filter(w => w.isActive)
 
                   // Producto con control de lotes → bloquear edición directa con banner.
@@ -7136,6 +7141,28 @@ export default function Products() {
                   {...register('minStock')}
                   helperText="Cuando el stock baje de este valor, aparece en amarillo y se notifica. Vacío = usa el default (3)."
                 />
+
+                {/* Fecha de vencimiento — SOLO para productos sin lotes.
+                    Con lotes, la fecha vive en cada lote y se edita en Control de Lotes;
+                    mostrarla acá daría dos fuentes para el mismo dato.
+
+                    Sin lotes es imprescindible: el POS pinta el badge VENCIDO leyendo
+                    esta fecha, pero no había ningún campo para verla ni borrarla, y
+                    Control de Lotes tampoco la muestra porque solo lee batches[]. El
+                    usuario veía "VENCIDO" sin poder averiguar por qué (reporte
+                    31-jul-2026: producto con fecha del modelo viejo y cero lotes).
+
+                    Vaciar el campo apaga el aviso; al guardar, trackExpiration sigue a
+                    si hay fecha o no. */}
+                {!(Array.isArray(editingProduct?.batches) && editingProduct.batches.some(b => (Number(b.quantity) || 0) > 0)) && (
+                  <Input
+                    label="Fecha de vencimiento (opcional)"
+                    type="date"
+                    error={errors.expirationDate?.message}
+                    {...register('expirationDate')}
+                    helperText="Si la pones, el punto de venta avisa cuando el producto esté por vencer o vencido. Déjala vacía para no controlar vencimiento."
+                  />
+                )}
 
               </div>
           </div>
