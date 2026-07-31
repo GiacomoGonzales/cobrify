@@ -3543,9 +3543,21 @@ Gracias por tu preferencia.`
 
               return (
                 <>
-                  {/* Editar documento (solo si no fue aceptado por SUNAT) */}
-                  {(invoice.documentType === 'factura' || invoice.documentType === 'boleta') &&
-                   invoice.sunatStatus !== 'accepted' && (
+                  {/* Editar documento.
+                      Factura/boleta: solo mientras SUNAT no la haya aceptado.
+                      Nota de venta: no va a SUNAT, así que se puede editar siempre —
+                      pero es opcional (Configuración) y por defecto NO se puede,
+                      porque al editar no se ajusta el stock.
+                      Se excluyen las convertidas a comprobante (editarlas dejaría la
+                      nota y su factura diciendo cosas distintas) y las anuladas. */}
+                  {((invoice.documentType === 'factura' || invoice.documentType === 'boleta')
+                      ? invoice.sunatStatus !== 'accepted'
+                      : invoice.documentType === 'nota_venta' &&
+                        businessSettings?.allowEditNotaVenta === true &&
+                        !invoice.convertedTo &&
+                        invoice.status !== 'voided' &&
+                        invoice.status !== 'cancelled'
+                   ) && (
                     <button
                       onClick={() => {
                         setOpenMenuId(null)

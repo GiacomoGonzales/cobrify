@@ -2131,6 +2131,28 @@ export default function POS() {
         return
       }
 
+      // Notas de venta: mismas condiciones que muestran el botón en el listado.
+      // Se repiten acá porque ocultar el botón no impide entrar por la URL —un
+      // enlace guardado, un atajo— y ahí el usuario editaría algo que el negocio
+      // decidió no dejar editar.
+      if (invoice.documentType === 'nota_venta') {
+        if (companySettings?.allowEditNotaVenta !== true) {
+          toast.error('La edición de notas de venta está desactivada. Actívala en Configuración > Ventas.')
+          appNavigate('facturas')
+          return
+        }
+        if (invoice.convertedTo) {
+          toast.error('Esta nota de venta ya se convirtió en comprobante y no puede editarse')
+          appNavigate('facturas')
+          return
+        }
+        if (invoice.status === 'voided' || invoice.status === 'cancelled') {
+          toast.error('Esta nota de venta está anulada y no puede editarse')
+          appNavigate('facturas')
+          return
+        }
+      }
+
       // Guardar datos originales
       setEditingInvoiceId(invoiceId)
       setEditingInvoiceData(invoice)
@@ -6321,6 +6343,29 @@ export default function POS() {
         const { doc, updateDoc, serverTimestamp } = await import('firebase/firestore')
         const { db } = await import('@/lib/firebase')
 
+        // === Ajuste de inventario por DIFERENCIA ===
+        // La venta original ya descontó su stock; acá solo se mueve lo que cambió
+        // (vender 2 más = descontar 2; vender 2 menos = devolver 2). Antes la
+        // edición sobrescribía el documento sin tocar el stock y el inventario
+        // quedaba descuadrado. Se valida ANTES de escribir el doc: si el aumento
+        // no alcanza, no se guarda nada a medias.
+        const { computeEditStockDeltas, validateEditStockIncreases, applyEditStockDeltas } =
+          await import('@/services/invoiceEditStockService')
+        const _editWarehouseId = editingInvoiceData.warehouseId || selectedWarehouse?.id || null
+        const _stockDeltas = computeEditStockDeltas(editingInvoiceData.items || [], cart)
+        if (_stockDeltas.length > 0 && !companySettings?.allowNegativeStock) {
+          const _faltantes = validateEditStockIncreases(_stockDeltas, products, _editWarehouseId)
+          if (_faltantes.length > 0) {
+            const _det = _faltantes
+              .map(f => `${f.name}: pides ${f.adicional} más y hay ${parseFloat(Number(f.disponible).toFixed(2))}`)
+              .join('. ')
+            toast.error(`No hay stock para el aumento. ${_det}.`, 9000)
+            checkoutGuardRef.current = false
+            setIsProcessing(false)
+            return
+          }
+        }
+
         const invoiceRef = doc(db, 'businesses', businessId, 'invoices', editingInvoiceId)
 
         // Mantener datos originales que no deben cambiar
@@ -6345,6 +6390,31 @@ export default function POS() {
 
         await updateDoc(invoiceRef, updateData)
         invoiceId = editingInvoiceId
+
+        // Aplicar los deltas DESPUÉS de que el documento se guardó: si el update
+        // falla, el stock no se toca. Cada producto va en su propia transacción
+        // (mismo helper que la anulación: variantes, lotes y series incluidos) y
+        // queda un movimiento tipo Ajuste con referencia a esta edición.
+        if (_stockDeltas.length > 0) {
+          const _adjResult = await applyEditStockDeltas({
+            businessId,
+            deltas: _stockDeltas,
+            warehouseId: _editWarehouseId,
+            invoiceId: editingInvoiceId,
+            invoiceNumber: `${editingInvoiceData.series}-${editingInvoiceData.number}`,
+            userId: user.uid,
+            userName: user.displayName || user.email || 'Usuario',
+            allowNegative: companySettings?.allowNegativeStock === true,
+            // Para el FEFO de los aumentos en productos con lotes. Mismo snapshot
+            // que usa la venta con fallback en cliente.
+            products,
+          })
+          if (!_adjResult.success) {
+            // El documento YA quedó editado: avisar qué productos revisar en vez
+            // de fingir que todo salió bien.
+            toast.error(`Documento guardado, pero no se pudo ajustar el stock de: ${_adjResult.errores.join(', ')}. Revísalos en Inventario.`, 10000)
+          }
+        }
 
         toast.success(`Documento ${editingInvoiceData.series}-${editingInvoiceData.number} actualizado correctamente`)
 

@@ -400,6 +400,7 @@ export default function Settings() {
   const [autoPrintTicket, setAutoPrintTicket] = useState(false)
   const [showChangeReminder, setShowChangeReminder] = useState(false)
   const [lockCashRegisterHistory, setLockCashRegisterHistory] = useState(false)
+  const [allowEditNotaVenta, setAllowEditNotaVenta] = useState(false)
   const [showAllProductsInPOS, setShowAllProductsInPOS] = useState(false)
   const [enableCustomerDisplay, setEnableCustomerDisplay] = useState(false)
 
@@ -1284,6 +1285,7 @@ export default function Settings() {
         setAutoPrintTicket(businessData.autoPrintTicket || false)
         setShowChangeReminder(businessData.showChangeReminder || false)
         setLockCashRegisterHistory(businessData.lockCashRegisterHistory || false)
+        setAllowEditNotaVenta(businessData.allowEditNotaVenta || false)
         setShowAllProductsInPOS(businessData.showAllProductsInPOS || false)
 
         // Cargar configuración de notas de venta
@@ -5137,6 +5139,16 @@ export default function Settings() {
                       : '✗ Deshabilitado: Se puede editar el cuadre de una sesión cerrada desde el historial de caja.'}
                   />
 
+                  {/* Permitir editar notas de venta */}
+                  <SettingToggle
+                    checked={allowEditNotaVenta}
+                    onChange={(e) => setAllowEditNotaVenta(e.target.checked)}
+                    title="Permitir editar notas de venta"
+                    description={allowEditNotaVenta
+                      ? '✓ Habilitado: Aparece la opción "Editar documento" en las notas de venta. Al cambiar cantidades el inventario se ajusta solo por la diferencia y queda un movimiento de ajuste como rastro. No se pueden editar las ya convertidas ni las anuladas.'
+                      : '✗ Deshabilitado: Las notas de venta no se pueden editar. Para corregir una, anúlala y emite otra.'}
+                  />
+
                   {/* Mostrar todos los productos en el POS (sin botón "Ver más") */}
                   <SettingToggle
                     checked={showAllProductsInPOS}
@@ -5892,6 +5904,7 @@ export default function Settings() {
                       autoPrintTicket: autoPrintTicket,
                       showChangeReminder: showChangeReminder,
                       lockCashRegisterHistory: lockCashRegisterHistory,
+                      allowEditNotaVenta: allowEditNotaVenta,
                       showAllProductsInPOS: showAllProductsInPOS,
                       defaultDocumentType: defaultDocumentType,
                       defaultPaymentMethod: defaultPaymentMethod || '',
