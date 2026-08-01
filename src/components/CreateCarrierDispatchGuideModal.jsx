@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { X, Truck, MapPin, User, Package, Calendar, FileText, Building2, Car, Plus, Trash2, Search, Loader2, Save, Info, Store } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
+import { validatePlate, normalizePlate, PLATE_MAX_LENGTH, PLATE_EXAMPLE } from '@/utils/vehiclePlate'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
@@ -575,12 +576,15 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
       return
     }
 
-    // Validar formato de placa (6 caracteres alfanuméricos sin guion)
-    const plateRegex = /^[A-Z0-9]{3}-?[A-Z0-9]{3}$/i
-    const invalidPlate = validVehicles.find(v => !plateRegex.test(v.plate.trim()))
-    if (invalidPlate) {
-      toast.error(`Formato de placa inválido: ${invalidPlate.plate}. Use formato ABC123 o ABC-123`)
-      return
+    // Placa según la regla oficial de SUNAT (6 a 8 caracteres, mayúsculas y
+    // números, sin guion). La regex anterior aceptaba guiones y minúsculas —que
+    // SUNAT rechaza— y exigía exactamente 6, bloqueando placas válidas de 7 y 8.
+    for (const [i, v] of validVehicles.entries()) {
+      const r = validatePlate(v.plate)
+      if (!r.valid) {
+        toast.error(validVehicles.length > 1 ? `Vehículo ${i + 1}: ${r.error}` : r.error, 8000)
+        return
+      }
     }
 
     // Validar formato de TUCE (alfanumérico de 10 a 15 caracteres según SUNAT)
@@ -1327,10 +1331,12 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
               <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 <Input
                   label="Placa *"
-                  placeholder="ABC-123"
+                  placeholder={PLATE_EXAMPLE}
                   required={index === 0}
                   value={vehicle.plate}
-                  onChange={(e) => updateVehicle(index, 'plate', e.target.value.toUpperCase())}
+                  maxLength={PLATE_MAX_LENGTH}
+                  helperText="6 a 8 caracteres, sin guiones"
+                  onChange={(e) => updateVehicle(index, 'plate', normalizePlate(e.target.value))}
                 />
                 <Input
                   label="TUCE"

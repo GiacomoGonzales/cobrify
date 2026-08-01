@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { X, Truck, MapPin, User, Package, Calendar, FileText, Plus, Trash2, ChevronDown, ChevronUp, Store, AlertTriangle, Search, Loader2 } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
+import { validatePlate, normalizePlate, PLATE_MAX_LENGTH, PLATE_EXAMPLE } from '@/utils/vehiclePlate'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
@@ -160,6 +161,7 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
 
   // Datos del vehículo (principal)
   const [vehiclePlate, setVehiclePlate] = useState('')
+  const plateInputRef = useRef(null)
   const [vehicleTuce, setVehicleTuce] = useState('')
   const [vehicleAuthEntity, setVehicleAuthEntity] = useState('')
   const [vehicleAuthNumber, setVehicleAuthNumber] = useState('')
@@ -763,6 +765,29 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
       }
     }
 
+    // Placas: se validan en AMBOS modos, con la regla oficial de SUNAT (6 a 8
+    // caracteres). Antes solo en el privado y exigiendo exactamente 6.
+    const revisarPlacas = () => {
+      if (vehiclePlate) {
+        const r = validatePlate(vehiclePlate)
+        if (!r.valid) {
+          toast.error(r.error, 8000)
+          plateInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          plateInputRef.current?.focus?.()
+          return false
+        }
+      }
+      for (const [i, v] of (additionalVehicles || []).entries()) {
+        if (!v.plate?.trim()) continue
+        const r = validatePlate(v.plate)
+        if (!r.valid) {
+          toast.error(`Vehículo adicional ${i + 1}: ${r.error}`, 8000)
+          return false
+        }
+      }
+      return true
+    }
+
     if (transportMode === '02') {
       if (!isM1LVehicle) {
         if (!driverDocNumber || !driverName || !driverLastName || !driverLicense || !vehiclePlate) {
@@ -770,19 +795,13 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
           return
         }
       }
-      // Validar formato de placa (6 caracteres alfanuméricos sin guiones)
-      if (vehiclePlate) {
-        const plateRegex = /^[A-Z0-9]{6}$/
-        if (!plateRegex.test(vehiclePlate.trim())) {
-          toast.error(`Formato de placa inválido: ${vehiclePlate}. Use 6 caracteres sin guiones, ej: ABC123`)
-          return
-        }
-      }
+      if (!revisarPlacas()) return
     } else {
       if (!carrierRuc || !carrierName) {
         toast.error('Debe completar los datos del transportista para transporte público')
         return
       }
+      if (registerVehiclesAndDrivers && !revisarPlacas()) return
     }
 
     if (items.length === 0) {
@@ -1517,12 +1536,15 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
+                  ref={plateInputRef}
                   label={isM1LVehicle ? "Placa Principal (opcional)" : "Placa Principal"}
-                  placeholder={isM1LVehicle ? "Ej: ABC123 o dejar vacío" : "ABC123"}
+                  placeholder={isM1LVehicle ? `Ej: ${PLATE_EXAMPLE} o dejar vacío` : PLATE_EXAMPLE}
                   required={!isM1LVehicle}
-                  maxLength={6}
+                  // SUNAT admite de 6 a 8; el tope de 6 impedía escribir placas válidas.
+                  maxLength={PLATE_MAX_LENGTH}
+                  helperText="6 a 8 caracteres, solo letras y números (sin guiones)"
                   value={vehiclePlate}
-                  onChange={(e) => setVehiclePlate(e.target.value.replace(/[-\s]/g, '').toUpperCase())}
+                  onChange={(e) => setVehiclePlate(normalizePlate(e.target.value))}
                 />
 
                 <Input

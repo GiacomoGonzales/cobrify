@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { X, Truck, MapPin, User, Package, Calendar, FileText, Plus, Trash2, ChevronDown, ChevronUp, Store, Search, Loader2, AlertTriangle } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
@@ -12,6 +12,7 @@ import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 import SUNAT_UNITS, { normalizeSunatUnit } from '@/data/sunatUnits'
 import { matchesSearchQuery } from '@/lib/utils'
 import { consultarRUC, consultarDNI, consultarEstablecimientos } from '@/services/documentLookupService'
+import { validatePlate, normalizePlate, PLATE_MAX_LENGTH, PLATE_EXAMPLE } from '@/utils/vehiclePlate'
 
 const TRANSFER_REASONS = [
   { value: '01', label: 'Venta' },
@@ -167,6 +168,9 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
   // Datos del vehículo (principal)
   const [vehiclePlate, setVehiclePlate] = useState('')
+  // Para llevar el scroll a la placa cuando SUNAT la rechazaría: el formulario
+  // es largo y un toast solo no dice DÓNDE está el problema.
+  const plateInputRef = useRef(null)
   const [vehicleTuce, setVehicleTuce] = useState('')
   const [vehicleAuthEntity, setVehicleAuthEntity] = useState('')
   const [vehicleAuthNumber, setVehicleAuthNumber] = useState('')
@@ -1407,6 +1411,36 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       }
     }
 
+    // Placas: se validan en AMBOS modos de transporte. Antes solo se revisaban en
+    // el privado, así que una guía pública con el indicador de registrar vehículos
+    // mandaba la placa sin mirarla y SUNAT la rechazaba con el error 2567.
+    // Lleva el scroll al campo: el formulario es largo y un toast no dice DÓNDE.
+    const irAPlaca = () => {
+      plateInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      plateInputRef.current?.focus?.()
+    }
+    const revisarPlacas = () => {
+      if (vehiclePlate) {
+        const r = validatePlate(vehiclePlate)
+        if (!r.valid) {
+          toast.error(r.error, 8000)
+          irAPlaca()
+          return false
+        }
+      }
+      // Los vehículos adicionales nunca se validaban: van al XML igual que la
+      // principal y SUNAT los rechaza con el mismo error.
+      for (const [i, v] of additionalVehicles.entries()) {
+        if (!v.plate?.trim()) continue
+        const r = validatePlate(v.plate)
+        if (!r.valid) {
+          toast.error(`Vehículo adicional ${i + 1}: ${r.error}`, 8000)
+          return false
+        }
+      }
+      return true
+    }
+
     if (transportMode === '02') {
       // Si es vehículo M1 o L, los datos del conductor y placa son opcionales
       if (!isM1LVehicle) {
@@ -1415,19 +1449,15 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
           return
         }
       }
-      // Validar formato de placa si se ingresó (6 caracteres alfanuméricos sin guiones)
-      if (vehiclePlate) {
-        const plateRegex = /^[A-Z0-9]{6}$/
-        if (!plateRegex.test(vehiclePlate.trim())) {
-          toast.error(`Formato de placa inválido: ${vehiclePlate}. Use 6 caracteres sin guiones, ej: ABC123`)
-          return
-        }
-      }
+      if (!revisarPlacas()) return
     } else {
       if (!carrierRuc || !carrierName) {
         toast.error('Debe completar los datos del transportista para transporte público')
         return
       }
+      // El transportista puede registrar vehículo y conductor; esa placa también
+      // viaja al XML.
+      if (registerVehiclesAndDrivers && !revisarPlacas()) return
     }
 
     if (items.length === 0) {
@@ -2288,12 +2318,16 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
+                  ref={plateInputRef}
                   label={isM1LVehicle ? "Placa Principal (opcional)" : "Placa Principal"}
-                  placeholder={isM1LVehicle ? "Ej: ABC123 o dejar vacío" : "ABC123"}
+                  placeholder={isM1LVehicle ? `Ej: ${PLATE_EXAMPLE} o dejar vacío` : PLATE_EXAMPLE}
                   required={!isM1LVehicle}
                   value={vehiclePlate}
-                  maxLength={6}
-                  onChange={(e) => setVehiclePlate(e.target.value.replace(/[-\s]/g, '').toUpperCase())}
+                  // SUNAT admite de 6 a 8; el tope de 6 impedía escribir placas
+                  // válidas de 7 y 8 caracteres.
+                  maxLength={PLATE_MAX_LENGTH}
+                  helperText="6 a 8 caracteres, solo letras y números (sin guiones)"
+                  onChange={(e) => setVehiclePlate(normalizePlate(e.target.value))}
                 />
 
                 <Input
@@ -2374,7 +2408,8 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                         placeholder="ABC123"
                         maxLength={6}
                         value={v.plate || ''}
-                        onChange={(e) => setAdditionalVehicles(prev => prev.map((x, i) => i === idx ? { ...x, plate: e.target.value.replace(/[-\s]/g, '').toUpperCase() } : x))}
+                        maxLength={PLATE_MAX_LENGTH}
+                        onChange={(e) => setAdditionalVehicles(prev => prev.map((x, i) => i === idx ? { ...x, plate: normalizePlate(e.target.value) } : x))}
                       />
                       <Input
                         label="TUCE / Certificado (opcional)"
