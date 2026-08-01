@@ -157,6 +157,12 @@ const getExpirationStatus = (expirationDate) => {
   }
 }
 
+// Tamaños de etiqueta que usan el layout RICO (nombre, código, categoría, marca,
+// variante, rango de precio y código de barras, en PDF). El resto imprime solo el
+// código de barras. Está acá para que el ruteo y el texto que ve el usuario no se
+// contradigan: antes el aviso prometía la etiqueta completa en todos los tamaños.
+const RICH_LABEL_SIZES = ['53x26', '50x25']
+
 export default function Products() {
   const { user, isDemoMode, demoData, getBusinessId, businessMode, hasFeature, businessSettings, filterWarehousesByAccess } = useAppContext()
   const appNavigate = useAppNavigate()
@@ -3336,8 +3342,11 @@ export default function Products() {
   // rango de precio y código de barras), generada como PDF.
   const handlePrintRichLabels = (selectedProds) => {
     // Dimensiones de página (mm). El layout se calcula proporcional al alto.
+    // El layout es proporcional (factor `s = H / 26`), así que un tamaño nuevo
+    // solo necesita sus medidas: no hay posiciones fijas que reajustar.
     const SIZES = {
-      '53x26': [53, 26]
+      '53x26': [53, 26],
+      '50x25': [50, 25],
     }
     const [W, H] = SIZES[labelSize] || SIZES['53x26']
 
@@ -3518,7 +3527,7 @@ export default function Products() {
       toast.error('Selecciona al menos un producto')
       return
     }
-    if (labelSize === '53x26') return handlePrintRichLabels(selectedProds)
+    if (RICH_LABEL_SIZES.includes(labelSize)) return handlePrintRichLabels(selectedProds)
     return handlePrintSimpleLabels(selectedProds)
   }
 
@@ -9504,6 +9513,7 @@ export default function Products() {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
             >
               <option value="53x26">53 × 26 mm (5.3 × 2.6 cm)</option>
+              <option value="50x25">50 × 25 mm (5 × 2.5 cm)</option>
               <option value="30x20">30 × 20 mm (3 × 2 cm)</option>
               <option value="50x38">50 × 38 mm (5 × 3.8 cm)</option>
               <option value="58x40">58 × 40 mm (5.8 × 4 cm)</option>
@@ -9542,7 +9552,11 @@ export default function Products() {
           <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-xs text-blue-700">
               <strong>Tamaño seleccionado:</strong> {labelSize.replace('x', ' × ')} mm — Asegúrate de tener la impresora de etiquetas configurada en Windows con ese tamaño de papel.
-              Cada etiqueta incluye nombre, código, categoría, marca, variante, rango de precio y código de barras. Los productos con variantes imprimen una etiqueta por variante.
+              {' '}
+              {RICH_LABEL_SIZES.includes(labelSize)
+                ? 'Cada etiqueta incluye nombre, código, categoría, marca, variante, rango de precio y código de barras. Los productos con variantes imprimen una etiqueta por variante.'
+                : 'Este tamaño imprime solo el código de barras. Para la etiqueta completa con nombre y precio, elige 53 × 26 o 50 × 25 mm.'}
+              {' '}
               Se genera un PDF para imprimir limpio (sin fecha ni "about:blank").
             </p>
           </div>
