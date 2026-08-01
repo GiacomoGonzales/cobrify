@@ -4331,6 +4331,7 @@ export default function Products() {
     sku: products.some(p => p.sku && p.sku.trim() !== ''),
     code: products.some(p => p.code && p.code.trim() !== ''),
     description: products.some(p => p.description && p.description.trim() !== ''),
+    costValue: products.some(p => p.cost !== undefined && p.cost !== null),
     cost: products.some(p => p.cost !== undefined && p.cost !== null),
     category: products.some(p => p.category && p.category.trim() !== ''),
     brand: products.some(p => p.brandId || (p.marca && String(p.marca).trim() !== '')),
@@ -4353,7 +4354,10 @@ export default function Products() {
     sku: 'SKU',
     code: 'Código de barras',
     description: 'Descripción',
-    cost: 'Costo / Utilidad',
+    costValue: 'Costo',
+    // La columna 'cost' muestra la UTILIDAD (margen), no el costo. Se llamaba
+    // 'Costo / Utilidad' y confundía: el costo ahora tiene su propia columna.
+    cost: 'Utilidad',
     category: 'Categoría',
     brand: 'Marca',
     location: 'Ubicación',
@@ -5169,6 +5173,9 @@ export default function Products() {
                       {getSortIcon('price')}
                     </button>
                   </TableHead>
+                  {visibleColumns.costValue && (
+                    <TableHead className="hidden xl:table-cell max-w-[90px]">Costo</TableHead>
+                  )}
                   {visibleColumns.cost && (
                     <TableHead className="hidden xl:table-cell max-w-[90px]">Utilidad</TableHead>
                   )}
@@ -5306,6 +5313,15 @@ export default function Products() {
                             </div>
                           )}
                         </TableCell>
+                        {visibleColumns.costValue && (
+                          <TableCell className="hidden xl:table-cell max-w-[90px]">
+                            {product.cost === undefined || product.cost === null ? (
+                              <span className="text-xs text-gray-400">-</span>
+                            ) : (
+                              <span className="text-sm text-gray-700">{formatCurrency(product.cost)}</span>
+                            )}
+                          </TableCell>
+                        )}
                         {visibleColumns.cost && (
                           <TableCell className="hidden xl:table-cell max-w-[140px]">
                             {(() => {
