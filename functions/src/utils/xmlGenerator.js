@@ -2921,9 +2921,6 @@ export function generateDispatchGuideXML(guideData, businessData) {
   //       <cac:ApplicableTransportMeans>
   //         <cbc:RegistrationNationalityID>TUCE</cbc:RegistrationNationalityID>  (#48)
   //       </cac:ApplicableTransportMeans>
-  //       <cac:ShipmentDocumentReference>
-  //         <cbc:ID>AUTORIZACION</cbc:ID>                           (#49)
-  //       </cac:ShipmentDocumentReference>
   //       <cac:AttachedTransportEquipment>                          (vehículo secundario)
   //         <cbc:ID>PLACA_SEC</cbc:ID>                              (#50)
   //         <cac:ApplicableTransportMeans>
@@ -2933,6 +2930,9 @@ export function generateDispatchGuideXML(guideData, businessData) {
   //           <cbc:ID>AUTORIZACION</cbc:ID>                         (#52)
   //         </cac:ShipmentDocumentReference>
   //       </cac:AttachedTransportEquipment>
+  //       <cac:ShipmentDocumentReference>                           (va DESPUÉS del
+  //         <cbc:ID>AUTORIZACION</cbc:ID>                           (#49) secundario:
+  //       </cac:ShipmentDocumentReference>                          UBL es secuencia)
   //     </cac:TransportEquipment>
   //   </cac:TransportHandlingUnit>
   if (includeVehicleAndDriver && guideData.transport?.vehicle?.plate) {
@@ -2961,15 +2961,12 @@ export function generateDispatchGuideXML(guideData, businessData) {
     const authIsAllowed = !guideData.isM1LVehicle
       && !(guideData.transportMode === '01' && !registerVehiclesAndDrivers)
 
-    // Entidad emisora autorización vehículo principal (#49)
-    const mainAuthNumber = guideData.transport.vehicle.authorizationNumber?.trim()
-    if (mainAuthNumber && authIsAllowed) {
-      const shipDocRef = transportEquipment.ele('cac:ShipmentDocumentReference')
-      shipDocRef.ele('cbc:ID').txt(mainAuthNumber)
-    } else if (mainAuthNumber) {
-      console.log(`⚠️ [GRE XML] Autorización vehículo principal "${mainAuthNumber}" omitida (no aplica según reglas SUNAT 3452)`)
-    }
-
+    // ORDEN IMPORTANTE: los vehículos secundarios van ANTES de la autorización del
+    // principal. UBL 2.1 define TransportEquipment como una SECUENCIA ordenada y
+    // AttachedTransportEquipment precede a ShipmentDocumentReference; emitirlo
+    // después hace que SUNAT rechace el XML por esquema (error 0306: "Invalid
+    // content was found starting with element cac:AttachedTransportEquipment").
+    // Le pasó a una guía con vehículo secundario el 31-jul-2026.
     // Vehículos secundarios — cada uno como cac:AttachedTransportEquipment (#50-52)
     const additionalVehicles = Array.isArray(guideData.transport.additionalVehicles)
       ? guideData.transport.additionalVehicles
@@ -2994,6 +2991,16 @@ export function generateDispatchGuideXML(guideData, businessData) {
       }
       console.log(`🚛 [GRE XML] Vehículo secundario ${idx + 1}: ${normalizedAdditionalPlate}`)
     })
+
+    // Entidad emisora autorización vehículo principal (#49)
+    const mainAuthNumber = guideData.transport.vehicle.authorizationNumber?.trim()
+    if (mainAuthNumber && authIsAllowed) {
+      const shipDocRef = transportEquipment.ele('cac:ShipmentDocumentReference')
+      shipDocRef.ele('cbc:ID').txt(mainAuthNumber)
+    } else if (mainAuthNumber) {
+      console.log(`⚠️ [GRE XML] Autorización vehículo principal "${mainAuthNumber}" omitida (no aplica según reglas SUNAT 3452)`)
+    }
+
   }
 
   // === LÍNEAS DE LA GUÍA (Items a transportar) ===
