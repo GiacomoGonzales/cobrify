@@ -8579,8 +8579,15 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         />
                       </div>
                     )}
-                    {/* Name - más pequeño en móvil, truncado en tablet */}
-                    <p className={`font-semibold text-xs sm:text-sm leading-tight line-clamp-2 ${isExpired ? 'text-red-700' : 'text-gray-900'}`}>
+                    {/* Name - más pequeño en móvil, truncado en tablet.
+                        El title es un tooltip nativo al pasar el mouse: con varias
+                        presentaciones del mismo producto (perfumería) el nombre
+                        recortado no alcanza para distinguirlas y había que adivinar
+                        o escanear el código. */}
+                    <p
+                      title={product.name}
+                      className={`font-semibold text-xs sm:text-sm leading-tight line-clamp-2 ${isExpired ? 'text-red-700' : 'text-gray-900'}`}
+                    >
                       {product.name}
                     </p>
                     {/* Variants badge */}
@@ -8597,7 +8604,10 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       {product.location && <p className="font-mono text-blue-600">{product.location}</p>}
                     </div>
                     {/* Tablet/Desktop: código compacto en una línea */}
-                    <p className="hidden sm:block text-xs text-gray-500 mt-1 truncate">
+                    <p
+                      title={`${product.sku || product.code || product.barcode || ''}${product.location ? ` | ${product.location}` : ''}`}
+                      className="hidden sm:block text-xs text-gray-500 mt-1 truncate"
+                    >
                       {product.sku || product.code || product.barcode || ''}{product.location ? ` | ${product.location}` : ''}
                     </p>
                     {/* Marca */}
