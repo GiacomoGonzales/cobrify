@@ -181,6 +181,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   // Datos del conductor principal
   const [driverDocType, setDriverDocType] = useState('1')
   const [driverDocNumber, setDriverDocNumber] = useState('')
+  const [isSearchingDriver, setIsSearchingDriver] = useState(false)
   const [driverName, setDriverName] = useState('')
   const [driverLastName, setDriverLastName] = useState('')
   const [driverLicense, setDriverLicense] = useState('')
@@ -1168,6 +1169,43 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       toast.error('Error al consultar el documento')
     } finally {
       setIsSearchingRecipient(false)
+    }
+  }
+
+  // Buscar el nombre del conductor por DNI en RENIEC. Solo aplica a DNI: los
+  // otros documentos de identidad (carné de extranjería, pasaporte) no están en
+  // esa base, así que el botón ni se muestra para ellos.
+  const handleSearchDriverDoc = async () => {
+    const doc = (driverDocNumber || "").trim()
+    if (driverDocType !== '1') {
+      toast.error('La búsqueda automática solo funciona con DNI')
+      return
+    }
+    if (doc.length !== 8) {
+      toast.error('El DNI del conductor debe tener 8 dígitos')
+      return
+    }
+
+    setIsSearchingDriver(true)
+    try {
+      const result = await consultarDNI(doc)
+      if (result.success) {
+        // El formulario separa nombre y apellido, y RENIEC los devuelve por
+        // separado: se usan tal cual en vez de partir el nombre completo, que
+        // se rompe con apellidos compuestos.
+        const nombres = result.data.nombres || ""
+        const apellidos = `${result.data.apellidoPaterno || ""} ${result.data.apellidoMaterno || ""}`.trim()
+        if (nombres) setDriverName(nombres)
+        if (apellidos) setDriverLastName(apellidos)
+        toast.success(`Conductor encontrado: ${result.data.nombreCompleto}`)
+      } else {
+        toast.error(result.error || 'No se encontraron datos para ese DNI')
+      }
+    } catch (error) {
+      console.error('Error al buscar el conductor:', error)
+      toast.error('Error al consultar el DNI')
+    } finally {
+      setIsSearchingDriver(false)
     }
   }
 
@@ -2466,18 +2504,44 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                   ))}
                 </Select>
 
-                <Input
-                  label={isM1LVehicle ? "N° Doc. de identidad (opcional)" : "N° Doc. de identidad"}
-                  placeholder={
-                    driverDocType === '1' ? '12345678'
-                    : driverDocType === '4' ? '001234567'
-                    : 'ABC123456'
-                  }
-                  maxLength={driverDocType === '1' ? 8 : 12}
-                  required={!isM1LVehicle}
-                  value={driverDocNumber}
-                  onChange={(e) => setDriverDocNumber(e.target.value)}
-                />
+                {/* Con DNI se ofrece la búsqueda en RENIEC, igual que en el
+                    destinatario. Los otros documentos no están en esa base, así
+                    que ahí el campo va solo, sin un botón que no haría nada. */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {isM1LVehicle ? "N° Doc. de identidad (opcional)" : "N° Doc. de identidad"}
+                    {!isM1LVehicle && <span className="text-red-500 ml-1">*</span>}
+                  </label>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder={
+                        driverDocType === '1' ? '12345678'
+                        : driverDocType === '4' ? '001234567'
+                        : 'ABC123456'
+                      }
+                      maxLength={driverDocType === '1' ? 8 : 12}
+                      required={!isM1LVehicle}
+                      value={driverDocNumber}
+                      onChange={(e) => setDriverDocNumber(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && driverDocType === '1' && driverDocNumber.length === 8 && handleSearchDriverDoc()}
+                    />
+                    {driverDocType === '1' && (
+                      <button
+                        type="button"
+                        onClick={handleSearchDriverDoc}
+                        disabled={isSearchingDriver}
+                        className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                        title="Buscar el nombre del conductor por DNI"
+                      >
+                        {isSearchingDriver ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Search className="w-4 h-4" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                </div>
 
                 <Input
                   label={isM1LVehicle ? "N° de licencia (opcional)" : "N° de licencia o brevete"}

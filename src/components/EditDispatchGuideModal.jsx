@@ -172,6 +172,7 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
   // Datos del conductor principal
   const [driverDocType, setDriverDocType] = useState('1')
   const [driverDocNumber, setDriverDocNumber] = useState('')
+  const [isSearchingDriver, setIsSearchingDriver] = useState(false)
   const [driverName, setDriverName] = useState('')
   const [driverLastName, setDriverLastName] = useState('')
   const [driverLicense, setDriverLicense] = useState('')
@@ -560,6 +561,43 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
       }
     } else {
       toast.error('La búsqueda solo está disponible para RUC y DNI')
+    }
+  }
+
+  // Buscar el nombre del conductor por DNI en RENIEC. Solo aplica a DNI: los
+  // otros documentos de identidad (carné de extranjería, pasaporte) no están en
+  // esa base, así que el botón ni se muestra para ellos.
+  const handleSearchDriverDoc = async () => {
+    const doc = (driverDocNumber || "").trim()
+    if (driverDocType !== '1') {
+      toast.error('La búsqueda automática solo funciona con DNI')
+      return
+    }
+    if (doc.length !== 8) {
+      toast.error('El DNI del conductor debe tener 8 dígitos')
+      return
+    }
+
+    setIsSearchingDriver(true)
+    try {
+      const result = await consultarDNI(doc)
+      if (result.success) {
+        // El formulario separa nombre y apellido, y RENIEC los devuelve por
+        // separado: se usan tal cual en vez de partir el nombre completo, que
+        // se rompe con apellidos compuestos.
+        const nombres = result.data.nombres || ""
+        const apellidos = `${result.data.apellidoPaterno || ""} ${result.data.apellidoMaterno || ""}`.trim()
+        if (nombres) setDriverName(nombres)
+        if (apellidos) setDriverLastName(apellidos)
+        toast.success(`Conductor encontrado: ${result.data.nombreCompleto}`)
+      } else {
+        toast.error(result.error || 'No se encontraron datos para ese DNI')
+      }
+    } catch (error) {
+      console.error('Error al buscar el conductor:', error)
+      toast.error('Error al consultar el DNI')
+    } finally {
+      setIsSearchingDriver(false)
     }
   }
 
@@ -1680,18 +1718,43 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                   ))}
                 </Select>
 
-                <Input
-                  label={isM1LVehicle ? "N° Doc. de identidad (opcional)" : "N° Doc. de identidad"}
-                  placeholder={
-                    driverDocType === '1' ? '12345678'
-                    : driverDocType === '4' ? '001234567'
-                    : 'ABC123456'
-                  }
-                  maxLength={driverDocType === '1' ? 8 : 12}
-                  required={!isM1LVehicle}
-                  value={driverDocNumber}
-                  onChange={(e) => setDriverDocNumber(e.target.value)}
-                />
+                {/* Con DNI se ofrece la busqueda en RENIEC, igual que en el
+                    destinatario. Los otros documentos no estan en esa base. */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {isM1LVehicle ? "N° Doc. de identidad (opcional)" : "N° Doc. de identidad"}
+                    {!isM1LVehicle && <span className="text-red-500 ml-1">*</span>}
+                  </label>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder={
+                        driverDocType === '1' ? '12345678'
+                        : driverDocType === '4' ? '001234567'
+                        : 'ABC123456'
+                      }
+                      maxLength={driverDocType === '1' ? 8 : 12}
+                      required={!isM1LVehicle}
+                      value={driverDocNumber}
+                      onChange={(e) => setDriverDocNumber(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && driverDocType === '1' && driverDocNumber.length === 8 && handleSearchDriverDoc()}
+                    />
+                    {driverDocType === '1' && (
+                      <button
+                        type="button"
+                        onClick={handleSearchDriverDoc}
+                        disabled={isSearchingDriver}
+                        className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                        title="Buscar el nombre del conductor por DNI"
+                      >
+                        {isSearchingDriver ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Search className="w-4 h-4" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                </div>
 
                 <Input
                   label={isM1LVehicle ? "N° de licencia (opcional)" : "N° de licencia o brevete"}
@@ -1998,15 +2061,19 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
 
             <div className="border border-gray-200 rounded-lg overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
+                <table className="w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
+                    {/* Las columnas cortas llevan ancho fijo; Descripción va sin
+                        ancho para quedarse con todo el espacio sobrante. Antes cada
+                        input tenía un ancho fijo, así que la tabla se encogía al
+                        contenido y quedaba media pantalla vacía a la derecha. */}
                     <tr>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cantidad</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unidad</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Código</th>
+                      <th className="w-12 px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
+                      <th className="w-28 px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cantidad</th>
+                      <th className="w-28 px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unidad</th>
+                      <th className="w-36 px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Código</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Descripción</th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase"></th>
+                      <th className="w-12 px-3 py-3"><span className="sr-only">Acciones</span></th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -2019,7 +2086,7 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                             type="number"
                             value={item.quantity}
                             onChange={(e) => updateItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
-                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                             min="0.01"
                             step="0.01"
                           />
@@ -2028,7 +2095,7 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                           <select
                             value={item.unit}
                             onChange={(e) => updateItem(item.id, 'unit', e.target.value)}
-                            className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
+                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                           >
                             {UNIT_CODES.map(unit => (
                               <option key={unit.value} value={unit.value}>
@@ -2042,7 +2109,7 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                             type="text"
                             value={item.code}
                             onChange={(e) => updateItem(item.id, 'code', e.target.value)}
-                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                             placeholder="Código"
                           />
                         </td>
@@ -2051,7 +2118,7 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                             type="text"
                             value={item.description}
                             onChange={(e) => updateItem(item.id, 'description', e.target.value)}
-                            className="w-40 px-2 py-1 border border-gray-300 rounded text-sm"
+                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                             placeholder="Descripción"
                             required
                           />
