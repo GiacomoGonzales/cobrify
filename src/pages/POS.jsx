@@ -99,6 +99,7 @@ import { getWarehouses, getDefaultWarehouse, updateWarehouseStock, getStockInWar
 import { getActiveBranches, getDefaultBranch } from '@/services/branchService'
 import { shortenUrl } from '@/services/urlShortenerService'
 import { releaseTable, updateTableAmount } from '@/services/tableService'
+import { getEmissionDateLimits, validateEmissionDate } from '@/utils/emissionDate'
 import { getSellers } from '@/services/sellerService'
 import { markOrderAsPaid, updateOrder, updateOrderStatus, claimOrderForInvoicing, releaseOrderInvoicingClaim, markOrderInvoiced } from '@/services/orderService'
 import { markQuotationAsConverted } from '@/services/quotationService'
@@ -447,6 +448,9 @@ export default function POS() {
   // fecha actual del sistema al vender. Evita que una pestaña del POS abierta de un
   // día para otro "congele" la fecha y emita las ventas de hoy con la fecha de ayer.
   const emissionDateEditedRef = useRef(false)
+  // Límites del campo de fecha y ref para llevar el scroll ahí si se rechaza.
+  const emissionDateLimits = getEmissionDateLimits(documentType)
+  const emissionDateInputRef = useRef(null)
   // Obtener fecha-hora local en formato YYYY-MM-DDTHH:mm (para inputs datetime-local)
   const getLocalDateTimeString = (date = new Date()) => {
     const year = date.getFullYear()
@@ -5433,6 +5437,21 @@ export default function POS() {
       setEmissionDate(emissionDateToUse)
     }
 
+    // Barrera de FECHA DE EMISIÓN. Los `min`/`max` del campo no restringen nada
+    // —la fecha se puede teclear a mano—, así que la revisión de verdad va acá,
+    // antes de tomar correlativo. Caso real: una boleta salió con fecha futura,
+    // SUNAT la rechazó (2329) y al reintentar corregida respondió 1032 porque el
+    // número ya estaba quemado. El documento quedó irrecuperable.
+    const _fechaCheck = validateEmissionDate(emissionDateToUse, documentType)
+    if (!_fechaCheck.valid) {
+      toast.error(_fechaCheck.error, 10000)
+      emissionDateInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      emissionDateInputRef.current?.focus?.()
+      setIsProcessing(false)
+      checkoutGuardRef.current = false
+      return
+    }
+
     // Barrera de stock de PRODUCTOS TERMINADOS para carritos PRECARGADOS.
     //
     // Las validaciones de agregar/cambiar cantidad cubren el uso manual, pero una
@@ -9082,16 +9101,14 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   Fecha de Emisión
                 </label>
                 <input
+                  ref={emissionDateInputRef}
                   type="date"
                   value={emissionDate}
-                  max={documentType === 'nota_venta' ? undefined : getLocalDateString()}
-                  min={documentType === 'nota_venta' ? undefined : (() => {
-                    const today = new Date()
-                    const maxDaysBack = documentType === 'factura' ? 3 : 7
-                    const minDate = new Date(today)
-                    minDate.setDate(today.getDate() - maxDaysBack)
-                    return getLocalDateString(minDate)
-                  })()}
+                  // Los límites salen del mismo módulo que la validación al emitir.
+                  // Ojo: min/max NO restringen nada (se puede teclear la fecha a
+                  // mano); la barrera real está en handleCheckout.
+                  min={emissionDateLimits.min}
+                  max={emissionDateLimits.max}
                   onChange={e => { setEmissionDate(e.target.value); emissionDateEditedRef.current = true }}
                   className="w-full px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                 />
