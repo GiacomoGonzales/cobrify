@@ -29,6 +29,13 @@ export default function CloseTableModal({
 
   if (!table || !order) return null
 
+  // La orden ya tiene comprobante. Se mira `invoiced` además de `paid` porque el
+  // POS sella `invoiced` apenas existe el comprobante, mientras que `paid` llega
+  // después, en su bloque de background. En esa ventana —o si el background nunca
+  // corrió, que es como salieron dos boletas de la misma mesa en producción— con
+  // mirar solo `paid` la mesa volvía a ofrecer "Generar Comprobante".
+  const alreadyCharged = !!(order.paid || order.invoiced)
+
   // Recalcular subtotal e IGV a partir del total actual (puede diferir del original por pagos individuales)
   const currentTotal = order.total || 0
   const igvRate = taxConfig.igvRate || 18
@@ -92,12 +99,12 @@ export default function CloseTableModal({
   const handleCloseWithoutReceipt = async () => {
     // Cuando la orden ya fue cobrada el input de motivo no se muestra, así que no se exige.
     // Sólo exigir motivo cuando la mesa se cierra SIN emitir comprobante (flujo de cortesía/anulación).
-    if (!order.paid && !closeReason.trim()) return
+    if (!alreadyCharged && !closeReason.trim()) return
     setIsProcessing(true)
     try {
       await onConfirm({
         generateReceipt: 'none',
-        reason: order.paid ? 'Mesa liberada (orden ya cobrada)' : closeReason.trim(),
+        reason: alreadyCharged ? 'Mesa liberada (orden ya cobrada)' : closeReason.trim(),
         amount: order.total || 0,
         items: order.items || [],
       })
@@ -168,7 +175,7 @@ export default function CloseTableModal({
         </div>
 
         {/* Opciones de cierre */}
-        {order.paid ? (
+        {alreadyCharged ? (
           <>
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
               <div className="flex items-center gap-3">

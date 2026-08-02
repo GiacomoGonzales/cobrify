@@ -100,7 +100,7 @@ import { getActiveBranches, getDefaultBranch } from '@/services/branchService'
 import { shortenUrl } from '@/services/urlShortenerService'
 import { releaseTable, updateTableAmount } from '@/services/tableService'
 import { getSellers } from '@/services/sellerService'
-import { markOrderAsPaid, updateOrder, updateOrderStatus } from '@/services/orderService'
+import { markOrderAsPaid, updateOrder, updateOrderStatus, claimOrderForInvoicing, releaseOrderInvoicingClaim, markOrderInvoiced } from '@/services/orderService'
 import { markQuotationAsConverted } from '@/services/quotationService'
 import { markNotaVentaAsConverted } from '@/services/firestoreService'
 import { completeAppointment } from '@/services/appointmentService'
@@ -512,6 +512,8 @@ export default function POS() {
   const [pendingOrderId, setPendingOrderId] = useState(null)
   const [markOrderPaidOnComplete, setMarkOrderPaidOnComplete] = useState(false)
   const [markOnlineOrderCompleteOnSale, setMarkOnlineOrderCompleteOnSale] = useState(false)
+  // Reserva viva sobre la orden mientras se emite, para soltarla si la venta falla.
+  const orderClaimRef = React.useRef(null)
 
   // Estado para cotización (para marcar como convertida al completar)
   const [pendingQuotationId, setPendingQuotationId] = useState(null)
@@ -6487,6 +6489,45 @@ export default function POS() {
         // Esto garantiza que el número solo se usa si la factura se crea exitosamente
         // ========================================
 
+        // 0. Reservar la orden de mesa/pedido ANTES de gastar un correlativo.
+        //
+        // Sin esto, cobrar dos veces la misma mesa emite dos comprobantes: la
+        // orden se marca como facturada recién en `backgroundSave()`, después de
+        // la venta, así que un segundo cobro no encuentra nada que lo detenga.
+        // Pasó en producción (dos boletas consecutivas, mismos 6 items, mismo
+        // minuto). Detalle del mecanismo en `claimOrderForInvoicing`.
+        if (pendingOrderId && markOrderPaidOnComplete) {
+          const claimId = `${user.uid}-${Date.now()}`
+          const claim = await claimOrderForInvoicing(businessId, pendingOrderId, claimId, user.uid)
+
+          if (!claim.success) {
+            // Se corta la venta ANTES de tomar número: no se pierde correlativo.
+            if (claim.alreadyInvoiced) {
+              toast.error(
+                claim.invoiceNumber
+                  ? `Esta cuenta ya fue cobrada con el comprobante ${claim.invoiceNumber}. Cierra la mesa sin comprobante para liberarla.`
+                  : 'Esta cuenta ya fue cobrada. Cierra la mesa sin comprobante para liberarla.',
+                10000
+              )
+              // La mesa quedó ocupada justamente porque el cobro anterior no
+              // alcanzó a liberarla: soltarla acá evita que el cajero insista.
+              if (tableData?.tableId) {
+                releaseTable(businessId, tableData.tableId).catch(err =>
+                  console.error('Error al liberar mesa ya cobrada:', err)
+                )
+              }
+            } else {
+              toast.error('Esta cuenta se está cobrando en otro dispositivo. Espera un momento y vuelve a intentarlo.', 8000)
+            }
+            setIsProcessing(false)
+            checkoutGuardRef.current = false
+            return
+          }
+
+          // Guardado para soltarla si la emisión falla más abajo.
+          if (!claim.skipped) orderClaimRef.current = { orderId: pendingOrderId, claimId }
+        }
+
         // 1. PRIMERO: Crear factura con número atómico (garantiza que no se pierdan números)
         console.log('💾 Guardando factura con número atómico...')
         const createResult = await createInvoiceWithNumber(
@@ -6510,6 +6551,21 @@ export default function POS() {
           correlativeNumber: createResult.correlativeNumber,
         }
         console.log('✅ Factura creada atómicamente:', numberResult.number, 'ID:', invoiceId)
+
+        // Sellar la orden AQUÍ, no en el background. La reserva de arriba solo
+        // dura 2 minutos; lo que cierra el caso de forma permanente es dejar la
+        // orden marcada como facturada apenas el comprobante existe. Se espera a
+        // propósito (una escritura chica, y solo en ventas de mesa/pedido): es la
+        // escritura de la que depende que no salga un segundo comprobante.
+        if (orderClaimRef.current) {
+          const _claim = orderClaimRef.current
+          orderClaimRef.current = null
+          try {
+            await markOrderInvoiced(businessId, _claim.orderId, invoiceId, numberResult.number)
+          } catch (err) {
+            console.error('Error al sellar la orden como facturada:', err)
+          }
+        }
 
         // Actualizar invoiceData con el número generado para uso posterior (impresión, etc.)
         invoiceData.number = numberResult.number
@@ -7297,6 +7353,9 @@ export default function POS() {
                 await markOrderAsPaid(businessId, _pendingOrderId, {
                   close: !!_tableData?.tableId,
                   invoiceId: bgInvoiceId || null,
+                  // Para que un segundo intento de cobro pueda nombrar el
+                  // comprobante que ya salió, en vez de un "ya fue cobrada" seco.
+                  invoiceNumber: bgNumberResult?.number || null,
                 })
               } catch (error) {
                 console.error('Error al marcar orden como pagada:', error)
@@ -7420,6 +7479,15 @@ export default function POS() {
     } catch (error) {
       console.error('Error al procesar venta:', error)
       toast.error(error.message || 'Error al procesar la venta. Inténtalo nuevamente.')
+      // La venta no salió: soltar la reserva para que la mesa se pueda volver a
+      // cobrar ya mismo, sin esperar a que la reserva venza sola.
+      const _claim = orderClaimRef.current
+      if (_claim) {
+        orderClaimRef.current = null
+        releaseOrderInvoicingClaim(getBusinessId(), _claim.orderId, _claim.claimId).catch(err =>
+          console.error('Error al soltar la reserva de la orden:', err)
+        )
+      }
     } finally {
       setIsProcessing(false); checkoutGuardRef.current = false
     }

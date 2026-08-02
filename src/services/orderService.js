@@ -12,6 +12,7 @@ import {
   where,
   writeBatch,
   setDoc,
+  runTransaction,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { updateTableAmount, updateTableServedStatus } from './tableService'
@@ -317,7 +318,7 @@ export const deleteOrder = async (businessId, orderId) => {
  *   "Marcar Entregada").
  * - invoiceId: si se pasa, marca invoiced:true + guarda el id del comprobante.
  */
-export const markOrderAsPaid = async (businessId, orderId, { close = true, invoiceId = null } = {}) => {
+export const markOrderAsPaid = async (businessId, orderId, { close = true, invoiceId = null, invoiceNumber = null } = {}) => {
   try {
     const orderRef = doc(db, 'businesses', businessId, 'orders', orderId)
 
@@ -325,10 +326,14 @@ export const markOrderAsPaid = async (businessId, orderId, { close = true, invoi
       paid: true,
       paidAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
+      // La reserva ya cumplió: la orden queda marcada como facturada, que es la
+      // señal definitiva. Dejarla puesta solo confundiría al leer el documento.
+      invoicingClaim: null,
     }
     if (invoiceId) {
       updates.invoiced = true
       updates.invoiceId = invoiceId
+      if (invoiceNumber) updates.invoiceNumber = invoiceNumber
     }
     if (close) updates.status = 'closed'
 
@@ -337,6 +342,121 @@ export const markOrderAsPaid = async (businessId, orderId, { close = true, invoi
     return { success: true }
   } catch (error) {
     console.error('Error al marcar orden como pagada:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Sella la orden como facturada apenas existe el comprobante.
+ *
+ * Va aparte de `markOrderAsPaid` a propósito: esa corre en el background del POS,
+ * al final de todo el trabajo de stock y recetas, y es esa demora la que dejaba
+ * la puerta abierta al doble cobro. Esto es lo mínimo indispensable y se escribe
+ * de inmediato; `markOrderAsPaid` sigue después con paid/paidAt/status.
+ */
+export const markOrderInvoiced = async (businessId, orderId, invoiceId, invoiceNumber = null) => {
+  try {
+    const updates = {
+      invoiced: true,
+      invoiceId,
+      invoicingClaim: null,
+      updatedAt: serverTimestamp(),
+    }
+    if (invoiceNumber) updates.invoiceNumber = invoiceNumber
+
+    await updateDoc(doc(db, 'businesses', businessId, 'orders', orderId), updates)
+    return { success: true }
+  } catch (error) {
+    console.error('Error al marcar la orden como facturada:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// Cuánto vale una reserva de facturación antes de darla por abandonada.
+const INVOICING_CLAIM_TTL_MS = 2 * 60 * 1000
+
+/**
+ * Reserva una orden para facturarla, de forma atómica. Devuelve
+ * `{ success:false, alreadyInvoiced }` si la orden ya tiene comprobante, o
+ * `{ success:false, inProgress }` si otro dispositivo la está cobrando ahora.
+ *
+ * POR QUÉ EXISTE (bug de producción, 1-ago-2026): una mesa se cobró dos veces y
+ * salieron dos boletas consecutivas con los mismos 6 items, en el mismo minuto.
+ * El POS marca la orden como pagada y libera la mesa dentro de `backgroundSave()`,
+ * DESPUÉS de crear el comprobante y de dar la venta por terminada. Si el proceso
+ * muere en esa ventana —típico en iPad, donde iOS descarta el webview al pasar la
+ * app a segundo plano— o si dos dispositivos tienen la misma mesa abierta, la
+ * orden queda sin marcar y la mesa sigue ocupada, así que se vuelve a cobrar.
+ *
+ * Por eso la reserva NO puede ser una simple lectura de `invoiced`: en ese
+ * escenario `invoiced` nunca llegó a escribirse. Hay que tomarla ANTES de generar
+ * el número, en transacción, para que el segundo intento se corte aunque el
+ * primero jamás haya terminado.
+ *
+ * La reserva caduca sola a los 2 minutos: si quien la tomó se cayó sin emitir, la
+ * mesa se puede volver a cobrar. Preferible a dejarla bloqueada para siempre.
+ * Por lo mismo, cualquier error de red devuelve `skipped` y deja pasar la venta:
+ * el cajero tiene al cliente delante, se pierde la protección pero no la venta.
+ */
+export const claimOrderForInvoicing = async (businessId, orderId, claimId, userId = null) => {
+  try {
+    const orderRef = doc(db, 'businesses', businessId, 'orders', orderId)
+
+    return await runTransaction(db, async (tx) => {
+      const snap = await tx.get(orderRef)
+      // Orden inexistente: no es motivo para frenar la venta.
+      if (!snap.exists()) return { success: true, skipped: true }
+
+      const data = snap.data()
+
+      if (data.invoiced) {
+        return {
+          success: false,
+          alreadyInvoiced: true,
+          invoiceNumber: data.invoiceNumber || null,
+        }
+      }
+
+      const claim = data.invoicingClaim
+      if (claim && claim.id !== claimId && typeof claim.at === 'number') {
+        // El valor absoluto acota también el caso del reloj adelantado de una
+        // tablet: sin eso, una fecha futura dejaría la mesa trabada horas.
+        if (Math.abs(Date.now() - claim.at) < INVOICING_CLAIM_TTL_MS) {
+          return { success: false, inProgress: true, claimedBy: claim.byName || null }
+        }
+      }
+
+      tx.update(orderRef, {
+        invoicingClaim: { id: claimId, at: Date.now(), by: userId || null },
+      })
+      return { success: true }
+    })
+  } catch (error) {
+    console.error('Error al reservar la orden para facturar:', error)
+    return { success: true, skipped: true, error: error.message }
+  }
+}
+
+/**
+ * Suelta la reserva cuando la emisión falló, para que la mesa se pueda volver a
+ * cobrar de inmediato en vez de esperar los 2 minutos del vencimiento.
+ * Solo borra la reserva si sigue siendo nuestra.
+ */
+export const releaseOrderInvoicingClaim = async (businessId, orderId, claimId) => {
+  try {
+    const orderRef = doc(db, 'businesses', businessId, 'orders', orderId)
+
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(orderRef)
+      if (!snap.exists()) return
+      const claim = snap.data().invoicingClaim
+      if (!claim || claim.id !== claimId) return
+      tx.update(orderRef, { invoicingClaim: null })
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error al soltar la reserva de facturación:', error)
     return { success: false, error: error.message }
   }
 }
