@@ -1127,20 +1127,20 @@ Gracias por tu preferencia.`
                 ...(voidingInvoice.currency === 'USD' && { currency: 'USD' }),
               })
               if (!mov.success) {
-                toast.error('Nota anulada, pero no se pudo registrar la devolución en caja. Regístrala a mano como egreso.', 8000)
+                toast.error('Documento anulado, pero no se pudo registrar la devolución en caja. Regístrala a mano como egreso.', 8000)
               }
             } else {
               // Sin caja abierta no hay dónde registrarlo. Se avisa en vez de
               // perderlo en silencio, que es justo el problema que se arregla.
-              toast.error(`Nota anulada. Abre la caja y registra un egreso de ${formatCurrency(cobradoEnVoid)} por la devolución, o el arqueo saldrá corto.`, 9000)
+              toast.error(`Documento anulado. Abre la caja y registra un egreso de ${formatCurrency(cobradoEnVoid)} por la devolución, o el arqueo saldrá corto.`, 9000)
             }
           } catch (e) {
             console.error('Error al registrar la devolución en caja:', e)
-            toast.error('Nota anulada, pero falló el registro de la devolución en caja. Regístrala a mano.', 8000)
+            toast.error('Documento anulado, pero falló el registro de la devolución en caja. Regístrala a mano.', 8000)
           }
         }
 
-        toast.success(`Nota de venta anulada y stock restaurado exitosamente${voidingInvoice.convertedFrom ? '. Notas origen revertidas.' : ''}`)
+        toast.success(`${voidingInvoice.documentType === 'nota_venta' ? 'Nota de venta anulada' : 'Documento anulado'} y stock restaurado exitosamente${voidingInvoice.convertedFrom ? '. Notas origen revertidas.' : ''}`)
         setVoidingInvoice(null)
         setVoidReason('')
         setRefundOnVoid(true)
@@ -1162,7 +1162,7 @@ Gracias por tu preferencia.`
       }
     } catch (error) {
       console.error('Error al anular nota de venta:', error)
-      toast.error('Error al anular la nota de venta. Inténtalo nuevamente.')
+      toast.error('Error al anular el documento. Inténtalo nuevamente.')
     } finally {
       setIsVoiding(false)
     }
@@ -1983,7 +1983,10 @@ Gracias por tu preferencia.`
 
   const isReenviableASunat = (inv) =>
     SUNAT_DOC_TYPES.includes(inv.documentType) &&
-    REENVIABLE_SUNAT_STATUSES.includes(inv.sunatStatus)
+    REENVIABLE_SUNAT_STATUSES.includes(inv.sunatStatus) &&
+    // Anulado localmente (p.ej. boleta rechazada que se anuló): reenviarlo dejaría
+    // un documento vivo en SUNAT pero descontado de caja y ventas. Nunca.
+    inv.status !== 'cancelled' && inv.status !== 'voided'
 
   // === Reenvío masivo a SUNAT ===
   const handleBulkSendToSunat = async () => {
@@ -2354,6 +2357,14 @@ Gracias por tu preferencia.`
 
   const handleSendToSunat = async (invoiceId) => {
     if (!user?.uid) return
+
+    // Cinturón extra al del botón: un documento anulado localmente jamás viaja a
+    // SUNAT, o quedaría vivo allá pero descontado de caja y ventas acá.
+    const _inv = invoices.find(i => i.id === invoiceId)
+    if (_inv && (_inv.status === 'cancelled' || _inv.status === 'voided')) {
+      toast.error('Este documento está anulado y no se puede enviar a SUNAT.')
+      return
+    }
 
     const businessId = getBusinessId()
     setSendingToSunat(invoiceId)
@@ -3649,8 +3660,10 @@ Gracias por tu preferencia.`
                     </button>
                   )}
 
-                  {/* Reenviar a SUNAT (para facturas rechazadas, firmadas o atascadas en enviando) */}
+                  {/* Reenviar a SUNAT (para facturas rechazadas, firmadas o atascadas en enviando).
+                      Nunca para documentos anulados localmente: ver isReenviableASunat. */}
                   {(invoice.documentType === 'factura' || invoice.documentType === 'boleta') &&
+                   invoice.status !== 'cancelled' && invoice.status !== 'voided' &&
                    (invoice.sunatStatus === 'rejected' || invoice.sunatStatus === 'SIGNED' || invoice.sunatStatus === 'signed' || invoice.sunatStatus === 'sending') && (
                     <button
                       onClick={() => {
@@ -4001,8 +4014,13 @@ Gracias por tu preferencia.`
                     </>
                   )}
 
-                  {/* Anular - Solo para notas de venta no anuladas */}
-                  {invoice.documentType === 'nota_venta' && invoice.status !== 'cancelled' && (
+                  {/* Anular localmente: notas de venta, y boletas/facturas RECHAZADAS
+                      por SUNAT. Un documento rechazado nunca existió para SUNAT —no
+                      hay baja que comunicar— pero antes no tenía NINGUNA opción de
+                      anulación y seguía sumando en caja y ventas para siempre. */}
+                  {(invoice.documentType === 'nota_venta' ||
+                    ((invoice.documentType === 'factura' || invoice.documentType === 'boleta') && invoice.sunatStatus === 'rejected')) &&
+                   invoice.status !== 'cancelled' && (
                     <>
                       <div className="border-t border-gray-100 my-1" />
                       <button
@@ -4015,7 +4033,7 @@ Gracias por tu preferencia.`
                         className="w-full px-4 py-2 text-left text-sm hover:bg-orange-50 flex items-center gap-3 text-orange-600"
                       >
                         <Ban className="w-4 h-4" />
-                        <span>Anular Nota de Venta</span>
+                        <span>{invoice.documentType === 'nota_venta' ? 'Anular Nota de Venta' : 'Anular (rechazada por SUNAT)'}</span>
                       </button>
                     </>
                   )}
@@ -4762,7 +4780,7 @@ Gracias por tu preferencia.`
       <Modal
         isOpen={!!voidingInvoice}
         onClose={() => !isVoiding && setVoidingInvoice(null)}
-        title="Anular Nota de Venta"
+        title={voidingInvoice?.documentType === 'nota_venta' ? 'Anular Nota de Venta' : `Anular ${voidingInvoice?.documentType === 'factura' ? 'Factura' : 'Boleta'} rechazada`}
         size="sm"
       >
         <div className="space-y-4">
@@ -4772,12 +4790,19 @@ Gracias por tu preferencia.`
             </div>
             <div className="flex-1">
               <p className="text-sm text-gray-700">
-                ¿Estás seguro de que deseas anular la nota de venta{' '}
+                ¿Estás seguro de que deseas anular {voidingInvoice?.documentType === 'nota_venta' ? 'la nota de venta' : voidingInvoice?.documentType === 'factura' ? 'la factura' : 'la boleta'}{' '}
                 <strong>{voidingInvoice?.number}</strong>?
               </p>
               <p className="text-sm text-gray-600 mt-2">
-                Esta acción marcará la nota como anulada y devolverá el stock de los productos.
+                Esta acción marcará el documento como anulado y devolverá el stock de los productos.
               </p>
+              {voidingInvoice?.documentType !== 'nota_venta' && (
+                <p className="text-sm text-gray-600 mt-2">
+                  SUNAT rechazó este comprobante, así que nunca existió para SUNAT y no
+                  requiere comunicación de baja. La anulación es solo interna: deja de
+                  contar en caja, ventas y reportes. Después ya no se podrá reenviar.
+                </p>
+              )}
             </div>
           </div>
 
@@ -4853,7 +4878,7 @@ Gracias por tu preferencia.`
               ) : (
                 <>
                   <Ban className="w-4 h-4 mr-2" />
-                  Anular Nota de Venta
+                  {voidingInvoice?.documentType === 'nota_venta' ? 'Anular Nota de Venta' : 'Anular documento'}
                 </>
               )}
             </Button>
