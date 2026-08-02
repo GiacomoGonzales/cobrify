@@ -3438,15 +3438,21 @@ export default function Products() {
       // original: la primera línea baja —antes rozaba el borde y la impresora la
       // recortaba—, el código de barras se acorta para soltar aire, y la fila
       // final crece porque el número y el precio son lo que se lee de lejos.
+      //
+      // El contenido deja ~2.5 mm libres ARRIBA y ~2.2 mm ABAJO (en 25 mm). Antes
+      // el margen inferior era de 0.44 mm y bastaba el mínimo corrimiento de la
+      // impresora para que la última fila se pasara al papel siguiente. Al mover
+      // estas proporciones, revisar que sigan quedando los dos márgenes: sin aire
+      // abajo el diseño vuelve a depender de que la Zebra esté perfecta.
 
       // Fila 1: nombre (negrita, a todo lo ancho)
       doc.setFont('helvetica', 'bold')
       const namePt = fitFontSize(doc, d.name, usable, 9 * s, 5)
       doc.setFontSize(namePt)
-      doc.text(d.name, MX, H * 0.19)
+      doc.text(d.name, MX, H * 0.188)
 
       // Fila 2: código/SKU (izq, negrita) + marca (der, negrita)
-      const y2 = H * 0.33
+      const y2 = H * 0.328
       if (d.code) {
         doc.setFont('helvetica', 'bold')
         const cPt = fitFontSize(doc, String(d.code), usable * 0.55, 8.5 * s, 5)
@@ -3461,7 +3467,7 @@ export default function Products() {
       }
 
       // Fila 3: categoría (izq) + variante (der)
-      const y3 = H * 0.455
+      const y3 = H * 0.448
       if (d.category) {
         doc.setFont('helvetica', 'normal')
         const catPt = fitFontSize(doc, String(d.category), usable * 0.5, 8 * s, 4.5)
@@ -3480,7 +3486,7 @@ export default function Products() {
       // igual de bien con menos alto.
       const img = barcodeDataURL(d.barcodeVal)
       if (img) {
-        try { doc.addImage(img, 'PNG', MX, H * 0.50, usable, H * 0.29) } catch (e) { /* noop */ }
+        try { doc.addImage(img, 'PNG', MX, H * 0.488, usable, H * 0.24) } catch (e) { /* noop */ }
       } else {
         doc.setFont('helvetica', 'bold')
         doc.setFontSize(9 * s)
@@ -3489,7 +3495,7 @@ export default function Products() {
 
       // Fila final: número (izq) + rango de precio (der). Es lo que se lee de
       // lejos en percha, así que va más grande que el resto.
-      const y4 = H * 0.945
+      const y4 = H * 0.876
       doc.setFont('helvetica', 'normal')
       const nPt = fitFontSize(doc, String(d.number || ''), usable * 0.42, 10 * s, 5)
       doc.setFontSize(nPt)
