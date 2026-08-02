@@ -3433,14 +3433,20 @@ export default function Products() {
       const usable = W - 2 * MX
       doc.setTextColor(0, 0, 0)
 
+      // Ritmo vertical ajustado sobre una etiqueta comercial de referencia que el
+      // usuario trajo de otro sistema (1-ago-2026). Tres cambios respecto al
+      // original: la primera línea baja —antes rozaba el borde y la impresora la
+      // recortaba—, el código de barras se acorta para soltar aire, y la fila
+      // final crece porque el número y el precio son lo que se lee de lejos.
+
       // Fila 1: nombre (negrita, a todo lo ancho)
       doc.setFont('helvetica', 'bold')
       const namePt = fitFontSize(doc, d.name, usable, 9 * s, 5)
       doc.setFontSize(namePt)
-      doc.text(d.name, MX, H * 0.145)
+      doc.text(d.name, MX, H * 0.19)
 
       // Fila 2: código/SKU (izq, negrita) + marca (der, negrita)
-      const y2 = H * 0.29
+      const y2 = H * 0.33
       if (d.code) {
         doc.setFont('helvetica', 'bold')
         const cPt = fitFontSize(doc, String(d.code), usable * 0.55, 8.5 * s, 5)
@@ -3455,7 +3461,7 @@ export default function Products() {
       }
 
       // Fila 3: categoría (izq) + variante (der)
-      const y3 = H * 0.425
+      const y3 = H * 0.455
       if (d.category) {
         doc.setFont('helvetica', 'normal')
         const catPt = fitFontSize(doc, String(d.category), usable * 0.5, 8 * s, 4.5)
@@ -3469,25 +3475,28 @@ export default function Products() {
         doc.text(d.variant, rightX, y3, { align: 'right' })
       }
 
-      // Código de barras alto llenando el centro (como etiqueta comercial)
+      // Código de barras al centro. Más bajo que antes (0.38 → 0.29 del alto):
+      // ganaba altura a costa de pegarse a la fila de abajo, y un CODE128 se lee
+      // igual de bien con menos alto.
       const img = barcodeDataURL(d.barcodeVal)
       if (img) {
-        try { doc.addImage(img, 'PNG', MX, H * 0.455, usable, H * 0.38) } catch (e) { /* noop */ }
+        try { doc.addImage(img, 'PNG', MX, H * 0.50, usable, H * 0.29) } catch (e) { /* noop */ }
       } else {
         doc.setFont('helvetica', 'bold')
         doc.setFontSize(9 * s)
         doc.text(String(d.barcodeVal), W / 2, H * 0.65, { align: 'center' })
       }
 
-      // Fila final: número (izq) + rango de precio (der), ambos grandes
-      const y4 = H * 0.955
+      // Fila final: número (izq) + rango de precio (der). Es lo que se lee de
+      // lejos en percha, así que va más grande que el resto.
+      const y4 = H * 0.945
       doc.setFont('helvetica', 'normal')
-      const nPt = fitFontSize(doc, String(d.number || ''), usable * 0.42, 8.5 * s, 5)
+      const nPt = fitFontSize(doc, String(d.number || ''), usable * 0.42, 10 * s, 5)
       doc.setFontSize(nPt)
       doc.text(String(d.number || ''), MX, y4)
       if (d.priceText) {
         doc.setFont('helvetica', 'bold')
-        const pPt = fitFontSize(doc, d.priceText, usable * 0.54, 9.5 * s, 5.5)
+        const pPt = fitFontSize(doc, d.priceText, usable * 0.56, 11 * s, 5.5)
         doc.setFontSize(pPt)
         doc.text(d.priceText, rightX, y4, { align: 'right' })
       }
