@@ -95,10 +95,13 @@ export async function emitirComprobante(invoiceData, businessData) {
  * 4. Default: SUNAT directo
  */
 function determineEmissionMethod(businessData) {
+  // OJO: nunca volcar businessData.qpse / businessData.sunat completos al log.
+  // Traen la clave SOL, la contraseña del certificado y el .p12 entero en
+  // base64; estuvieron saliendo en texto plano en Cloud Logging (2-ago-2026).
   console.log('🔍 Determinando método de emisión...')
   console.log('   - emissionMethod:', businessData.emissionMethod)
-  console.log('   - qpse:', JSON.stringify(businessData.qpse))
-  console.log('   - sunat:', JSON.stringify(businessData.sunat))
+  console.log('   - qpse: enabled=', businessData.qpse?.enabled, ', tieneCredenciales=', !!(businessData.qpse?.usuario && businessData.qpse?.password))
+  console.log('   - sunat: enabled=', businessData.sunat?.enabled, ', environment=', businessData.sunat?.environment, ', tieneCertificado=', !!businessData.sunat?.certificateData)
 
   // Opción 1: Método explícito configurado (puede estar en emissionMethod o emissionConfig.method)
   const explicitMethod = businessData.emissionMethod || businessData.emissionConfig?.method

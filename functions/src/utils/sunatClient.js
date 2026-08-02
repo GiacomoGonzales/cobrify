@@ -143,7 +143,8 @@ function createSoapEnvelope(fileName, zipBase64, ruc, solUser, solPassword) {
   const fullUser = `${ruc}${solUser}`
 
   // Log para debugging (sin mostrar contraseña completa)
-  console.log(`🔑 Credenciales SOL: usuario=${fullUser}, password=${solPassword ? `***${solPassword.slice(-3)}` : 'NO DEFINIDA'}`)
+  // Sin pista alguna de la clave en el log (antes salían los últimos 3 caracteres).
+  console.log(`🔑 Credenciales SOL: usuario=${fullUser}, password=${solPassword ? 'definida' : 'NO DEFINIDA'}`)
 
   // Escapar caracteres especiales en credenciales
   const escapedUser = escapeXml(fullUser)
