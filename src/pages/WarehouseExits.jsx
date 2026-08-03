@@ -1,5 +1,5 @@
-import { useState, useEffect, Fragment } from 'react'
-import { ArrowUpFromLine, Plus, Search, Loader2, Trash2, Package, Calendar, User, MapPin, ScanBarcode, ChevronDown, ChevronUp, HardHat, Download, FileText, PackageMinus } from 'lucide-react'
+import { useState, useEffect, useMemo, Fragment } from 'react'
+import { ArrowUpFromLine, Plus, Search, Loader2, Trash2, Package, Calendar, User, MapPin, ScanBarcode, ChevronDown, ChevronUp, HardHat, Download, FileText, PackageMinus, BarChart3, FileSpreadsheet } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import Card, { CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -14,9 +14,11 @@ import { getWarehouses } from '@/services/warehouseService'
 import { downloadLogisticsMovementPDF } from '@/utils/logisticsPdfGenerator'
 import { getCompanySettings, saveCompanySettings } from '@/services/firestoreService'
 import { getExitReasons, getCustomExitReasons, isCustomExitReason, buildCustomExitReason } from '@/utils/warehouseExitReasons'
+import { groupExitsByProject } from '@/utils/exitCosting'
+import { generateExitReportExcel } from '@/services/exitReportExportService'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import { useLocationAccess } from '@/utils/locationAccess'
-import { matchesSearchQuery } from '@/lib/utils'
+import { matchesSearchQuery, formatCurrency } from '@/lib/utils'
 
 export default function WarehouseExits() {
   const { user, getBusinessId, isDemoMode, demoData, filterWarehousesByAccess, allowedBranches, allowedWarehouses } = useAppContext()
@@ -54,6 +56,17 @@ export default function WarehouseExits() {
   const [isAddingReason, setIsAddingReason] = useState(false)
   const [newReasonLabel, setNewReasonLabel] = useState('')
   const [isSavingReason, setIsSavingReason] = useState(false)
+
+  // Reporte de consumo por obra
+  const [isReportOpen, setIsReportOpen] = useState(false)
+  const [isExportingReport, setIsExportingReport] = useState(false)
+  const [expandedGroup, setExpandedGroup] = useState(null)
+  const [reportFilters, setReportFilters] = useState({
+    startDate: '',
+    endDate: '',
+    warehouseId: 'all',
+    includeSimple: true,
+  })
 
   useEffect(() => {
     loadData()
@@ -174,6 +187,96 @@ export default function WarehouseExits() {
     }
   }
 
+  // === Reporte de consumo por obra ===
+
+  /** Fecha de una salida como Date, o null. */
+  const exitDate = (exit) => {
+    const raw = exit?.createdAt
+    if (!raw) return null
+    const d = raw.toDate ? raw.toDate() : new Date(raw)
+    return isNaN(d.getTime()) ? null : d
+  }
+
+  const openReportModal = () => {
+    // Arranca en el MES EN CURSO: el caso que pidió el usuario es cerrar el mes
+    // y ver cuánto se consumió en cada obra.
+    const hoy = new Date()
+    const primero = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
+    const toInput = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    setReportFilters({
+      startDate: toInput(primero),
+      endDate: toInput(hoy),
+      warehouseId: 'all',
+      includeSimple: true,
+    })
+    setExpandedGroup(null)
+    setIsReportOpen(true)
+  }
+
+  /** Salidas que entran al reporte. Parte de las que el usuario puede ver. */
+  const reportExits = useMemo(() => {
+    let rows = exits.filter(canAccess)
+
+    if (!reportFilters.includeSimple) {
+      rows = rows.filter(e => e.exitType !== 'simple' && e.projectId)
+    }
+    if (reportFilters.warehouseId !== 'all') {
+      rows = rows.filter(e => e.warehouseId === reportFilters.warehouseId)
+    }
+    if (reportFilters.startDate) {
+      const [y, m, d] = reportFilters.startDate.split('-').map(Number)
+      const desde = new Date(y, m - 1, d, 0, 0, 0, 0)
+      rows = rows.filter(e => { const f = exitDate(e); return f && f >= desde })
+    }
+    if (reportFilters.endDate) {
+      const [y, m, d] = reportFilters.endDate.split('-').map(Number)
+      const hasta = new Date(y, m - 1, d, 23, 59, 59, 999)
+      rows = rows.filter(e => { const f = exitDate(e); return f && f <= hasta })
+    }
+    return rows
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exits, reportFilters])
+
+  const reportData = useMemo(
+    () => groupExitsByProject(reportExits, products),
+    [reportExits, products]
+  )
+
+  /** Etiqueta del período, para el encabezado del Excel. */
+  const reportPeriodLabel = () => {
+    const fmt = (s) => {
+      if (!s) return ''
+      const [y, m, d] = s.split('-')
+      return `${d}/${m}/${y}`
+    }
+    if (reportFilters.startDate && reportFilters.endDate) return `${fmt(reportFilters.startDate)} - ${fmt(reportFilters.endDate)}`
+    if (reportFilters.startDate) return `Desde ${fmt(reportFilters.startDate)}`
+    if (reportFilters.endDate) return `Hasta ${fmt(reportFilters.endDate)}`
+    return 'Todas las fechas'
+  }
+
+  const handleExportReport = async () => {
+    if (reportExits.length === 0) {
+      toast.error('No hay salidas en el período seleccionado')
+      return
+    }
+    setIsExportingReport(true)
+    try {
+      await generateExitReportExcel(reportExits, products, businessInfo, {
+        periodLabel: reportPeriodLabel(),
+        warehouseLabel: reportFilters.warehouseId === 'all'
+          ? 'Todos'
+          : (warehouses.find(w => w.id === reportFilters.warehouseId)?.name || 'Todos'),
+      })
+      toast.success('Reporte exportado exitosamente')
+    } catch (error) {
+      console.error('Error al exportar el reporte:', error)
+      toast.error('Error al generar el archivo Excel')
+    } finally {
+      setIsExportingReport(false)
+    }
+  }
+
   const addProduct = (product) => {
     // Producto con variantes: agregar una fila por cada variante con stock > 0
     if (product.hasVariants && product.variants?.length > 0) {
@@ -197,6 +300,10 @@ export default function WarehouseExits() {
             variantLabel,
             isVariant: true,
             allowDecimalQuantity: product.allowDecimalQuantity === true,
+            // Costo CONGELADO al momento de la salida. Sin esto, el valor de lo
+            // consumido por una obra cambiaría cada vez que se recalcula el costo
+            // del producto, y un reporte de mes cerrado dejaría de cuadrar.
+            unitCost: Number(v.cost) || Number(product.cost) || 0,
           }
         })
 
@@ -253,6 +360,8 @@ export default function WarehouseExits() {
         hasSerials: product.trackSerials && availableSerials.length > 0,
         selectedSerials: [],
         allowDecimalQuantity: product.allowDecimalQuantity === true,
+        // Costo CONGELADO al momento de la salida (ver nota en las variantes).
+        unitCost: Number(product.cost) || 0,
       }])
     }
     setProductSearch('')
@@ -399,13 +508,30 @@ export default function WarehouseExits() {
         exitType,
         warehouseId: selectedWarehouse,
         warehouseName: warehouse?.name || '',
-        items: items.map(({ productId, productName, productCode, quantity, unit, variantSku, selectedSerials }) => ({
-          productId, productName, productCode,
+        items: items.map(({ productId, productName, productCode, quantity, unit, variantSku, variantLabel, selectedSerials, unitCost }) => {
           // Normalizar a número (hasta 3 decimales) por si quedó como texto sin blur
-          quantity: Math.round((parseFloat(quantity) || 0) * 1000) / 1000,
-          unit, variantSku: variantSku || null,
-          selectedSerials: selectedSerials || [],
-        })),
+          const qty = Math.round((parseFloat(quantity) || 0) * 1000) / 1000
+          const costo = Number(unitCost) || 0
+          return {
+            productId, productName, productCode,
+            quantity: qty,
+            unit, variantSku: variantSku || null,
+            variantLabel: variantLabel || null,
+            selectedSerials: selectedSerials || [],
+            // Costo unitario CONGELADO + total de la línea, para el reporte de
+            // valor consumido por obra.
+            unitCost: costo,
+            totalCost: Math.round(qty * costo * 100) / 100,
+          }
+        }),
+        // Valor total de la salida, precalculado: los reportes suman esto en vez
+        // de recorrer los items de cada salida.
+        totalCost: Math.round(
+          items.reduce((s, i) => {
+            const qty = Math.round((parseFloat(i.quantity) || 0) * 1000) / 1000
+            return s + qty * (Number(i.unitCost) || 0)
+          }, 0) * 100
+        ) / 100,
         notes,
         userId: user.uid,
         userName: user.displayName || user.email || '',
@@ -495,6 +621,10 @@ export default function WarehouseExits() {
           <p className="text-gray-600 mt-1">Salidas hacia obras/proyectos o salidas simples para uso interno</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button onClick={openReportModal} variant="outline">
+            <BarChart3 className="w-4 h-4 mr-2" />
+            Reporte por Obra
+          </Button>
           <Button onClick={() => openCreateModal('simple')} variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50">
             <PackageMinus className="w-4 h-4 mr-2" />
             Salida Simple
@@ -1001,6 +1131,179 @@ export default function WarehouseExits() {
         onClose={() => setGuideReference(null)}
         referenceInvoice={guideReference}
       />
+
+      {/* Modal Reporte de consumo por obra */}
+      <Modal
+        isOpen={isReportOpen}
+        onClose={() => setIsReportOpen(false)}
+        title="Consumo por Obra"
+        size="4xl"
+      >
+        <div className="space-y-5">
+          {/* Filtros */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Desde</label>
+              <input
+                type="date"
+                value={reportFilters.startDate}
+                onChange={e => setReportFilters(prev => ({ ...prev, startDate: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Hasta</label>
+              <input
+                type="date"
+                value={reportFilters.endDate}
+                onChange={e => setReportFilters(prev => ({ ...prev, endDate: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Almacén</label>
+              <select
+                value={reportFilters.warehouseId}
+                onChange={e => setReportFilters(prev => ({ ...prev, warehouseId: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              >
+                <option value="all">Todos</option>
+                {warehouses.map(w => (
+                  <option key={w.id} value={w.id}>{w.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-end">
+              <label className="flex items-center gap-2 pb-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={reportFilters.includeSimple}
+                  onChange={e => setReportFilters(prev => ({ ...prev, includeSimple: e.target.checked }))}
+                  className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                />
+                <span className="text-sm text-gray-700">Incluir salidas simples</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Totales del período */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3">
+              <p className="text-xs text-indigo-700">Valor consumido</p>
+              <p className="text-xl font-bold text-indigo-900">{formatCurrency(reportData.totals.total)}</p>
+            </div>
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+              <p className="text-xs text-gray-600">Obras</p>
+              <p className="text-xl font-bold text-gray-900">{reportData.totals.projectCount}</p>
+            </div>
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+              <p className="text-xs text-gray-600">Salidas</p>
+              <p className="text-xl font-bold text-gray-900">{reportData.totals.exitCount}</p>
+            </div>
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+              <p className="text-xs text-gray-600">Unidades</p>
+              <p className="text-xl font-bold text-gray-900">{reportData.totals.unitCount.toLocaleString('es-PE', { maximumFractionDigits: 2 })}</p>
+            </div>
+          </div>
+
+          {/* Aviso de costos estimados: sin esto, el usuario leería como exacto un
+              número que se apoya en el costo actual del producto. */}
+          {reportData.totals.estimatedLines > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-800">
+              <strong>{reportData.totals.estimatedLines} línea(s)</strong> se valorizaron con el
+              costo actual del producto, porque son salidas anteriores a que el sistema
+              empezara a guardar el costo del momento. Las salidas nuevas quedan congeladas
+              con su costo y ya no cambian.
+            </div>
+          )}
+
+          {/* Listado por obra */}
+          {reportData.groups.length === 0 ? (
+            <div className="text-center py-10 text-gray-500 text-sm">
+              No hay salidas en el período seleccionado.
+            </div>
+          ) : (
+            <div className="border border-gray-200 rounded-xl divide-y divide-gray-200 max-h-[45vh] overflow-y-auto">
+              {reportData.groups.map(g => {
+                const pct = reportData.totals.total > 0 ? (g.total / reportData.totals.total) * 100 : 0
+                const abierto = expandedGroup === g.key
+                return (
+                  <div key={g.key}>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedGroup(abierto ? null : g.key)}
+                      className="w-full px-4 py-3 flex items-center justify-between gap-3 hover:bg-gray-50 text-left"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          {g.isProject
+                            ? <HardHat className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+                            : <PackageMinus className="w-4 h-4 text-blue-600 flex-shrink-0" />}
+                          <span className="font-medium text-gray-900 truncate">{g.name}</span>
+                          {g.code && <span className="text-xs text-gray-500 flex-shrink-0">({g.code})</span>}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {g.exitCount} salida(s) · {g.products.length} producto(s) · {pct.toFixed(1)}% del total
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <span className="font-semibold text-gray-900">{formatCurrency(g.total)}</span>
+                        {abierto ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                      </div>
+                    </button>
+
+                    {abierto && (
+                      <div className="px-4 pb-3 bg-gray-50">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="text-gray-500 border-b border-gray-200">
+                              <th className="text-left py-2 font-medium">Producto</th>
+                              <th className="text-right py-2 font-medium">Cantidad</th>
+                              <th className="text-right py-2 font-medium">Costo unit.</th>
+                              <th className="text-right py-2 font-medium">Valor</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {g.products.map((p, idx) => (
+                              <tr key={idx} className="border-b border-gray-100 last:border-0">
+                                <td className="py-2 pr-2">
+                                  <span className="text-gray-900">{p.name}</span>
+                                  {p.variantLabel && <span className="text-gray-500"> · {p.variantLabel}</span>}
+                                  {p.estimated && <span className="text-amber-600" title="Costo estimado con el precio actual"> *</span>}
+                                </td>
+                                <td className="py-2 text-right text-gray-700">{p.quantity.toLocaleString('es-PE', { maximumFractionDigits: 3 })} {p.unit}</td>
+                                <td className="py-2 text-right text-gray-700">{formatCurrency(p.unitCost || 0)}</td>
+                                <td className="py-2 text-right font-medium text-gray-900">{formatCurrency(p.total)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Footer */}
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t border-gray-200">
+            <Button variant="outline" onClick={() => setIsReportOpen(false)} className="w-full sm:w-auto">
+              Cerrar
+            </Button>
+            <Button
+              onClick={handleExportReport}
+              disabled={isExportingReport || reportExits.length === 0}
+              className="w-full sm:w-auto"
+            >
+              {isExportingReport
+                ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                : <FileSpreadsheet className="w-4 h-4 mr-2" />}
+              Exportar a Excel
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
