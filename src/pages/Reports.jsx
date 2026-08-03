@@ -69,7 +69,7 @@ import {
   AreaChart,
   Area,
 } from 'recharts'
-import { CHART_COLORS, colorForKey, assignColors, capSeries } from '@/utils/chartColors'
+import { CHART_COLORS, CHART_MUTED, colorForKey, assignColors, capSeries } from '@/utils/chartColors'
 
 // Paleta y asignación estable por entidad: ver src/utils/chartColors.js.
 // `COLORS` se mantiene como alias para los usos por slot FIJO (COLORS[0], etc.),
@@ -89,6 +89,9 @@ const COLORS = CHART_COLORS
  * el mismo ritmo y no queden unas apretadas y otras no.
  */
 const COMPACT_TABLE = '[&_th]:px-3 [&_th]:py-2.5 [&_td]:px-3 [&_td]:py-2.5 [&_td]:text-[13px]'
+
+/** Lunes primero, que es como se lee un horario de trabajo acá. */
+const DIAS_SEMANA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 
 /**
  * Helper para exportar Excel que funciona en iOS/Android
@@ -147,6 +150,21 @@ const exportExcelFile = async (workbook, fileName) => {
     XLSX.writeFile(workbook, fileName)
     return { success: true }
   }
+}
+
+/**
+ * Momento EXACTO en que se registró la venta.
+ *
+ * Va aparte de `getInvoiceDate` a propósito: esa prioriza `emissionDate`, que en
+ * la mayoría de los comprobantes es una cadena "YYYY-MM-DD" sin hora, así que
+ * todo caería a las 00:00. Para "¿a qué hora vendo?" la única fuente con hora
+ * real es `createdAt`.
+ */
+const getSaleTimestamp = (invoice) => {
+  const raw = invoice?.createdAt
+  if (!raw) return null
+  const d = raw.toDate ? raw.toDate() : new Date(raw)
+  return isNaN(d.getTime()) ? null : d
 }
 
 // Helper: usar emissionDate (fecha de emisión del POS) en vez de createdAt
@@ -1268,6 +1286,7 @@ export default function Reports() {
           periodsData[key] = {
             period: date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
             revenue: 0,
+            profit: 0,
             count: 0,
           }
         }
@@ -1281,6 +1300,7 @@ export default function Reports() {
           periodsData[key] = {
             period: currentDate.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' }),
             revenue: 0,
+            profit: 0,
             count: 0,
           }
           currentDate.setMonth(currentDate.getMonth() + 1)
@@ -1293,6 +1313,7 @@ export default function Reports() {
       periodsData[key] = {
         period: date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
         revenue: 0,
+        profit: 0,
         count: 0,
       }
     } else if (dateRange === 'week') {
@@ -1304,6 +1325,7 @@ export default function Reports() {
         periodsData[key] = {
           period: date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
           revenue: 0,
+          profit: 0,
           count: 0,
         }
       }
@@ -1322,6 +1344,7 @@ export default function Reports() {
         periodsData[key] = {
           period: date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
           revenue: 0,
+          profit: 0,
           count: 0,
         }
       }
@@ -1334,6 +1357,7 @@ export default function Reports() {
         periodsData[key] = {
           period: date.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' }),
           revenue: 0,
+          profit: 0,
           count: 0,
         }
       }
@@ -1346,6 +1370,7 @@ export default function Reports() {
         periodsData[key] = {
           period: date.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' }),
           revenue: 0,
+          profit: 0,
           count: 0,
         }
       }
@@ -1361,6 +1386,7 @@ export default function Reports() {
           periodsData[key] = {
             period: invoiceDate.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' }),
             revenue: 0,
+            profit: 0,
             count: 0,
           }
         }
@@ -1389,17 +1415,141 @@ export default function Reports() {
             ? invoiceDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
             : invoiceDate.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' }),
           revenue: 0,
+          profit: 0,
           count: 0,
         }
       }
       periodsData[key].revenue = Number((periodsData[key].revenue + getDocumentTotalInBase(invoice)).toFixed(2))
+      // Utilidad de la casilla, con el MISMO criterio que el resto de la pagina.
+      const costo = (invoice.items || []).reduce((sum, item) => sum + calculateItemCost(item), 0)
+      periodsData[key].profit = Number(((periodsData[key].profit || 0) + getDocumentTotalInBase(invoice) - costo).toFixed(2))
       periodsData[key].count += 1
     })
 
     return Object.entries(periodsData)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([, value]) => value)
-  }, [filteredInvoices, dateRange, customStartDate, customEndDate, invoices])
+  }, [filteredInvoices, dateRange, customStartDate, customEndDate, invoices, calculateItemCost])
+
+  /**
+   * Ingresos del PERÍODO ANTERIOR, casilla por casilla.
+   *
+   * Se alinean por POSICIÓN, no por fecha: el día 1 del mes pasado va debajo del
+   * día 1 de este mes. Es lo que significa "vs período anterior" al leerlo, y
+   * evita el enredo de que los meses tengan distinta cantidad de días.
+   *
+   * La ventana anterior se calcula igual que en `getPreviousPeriodRevenue`, para
+   * que la línea del gráfico y el porcentaje de la tarjeta hablen del mismo
+   * período. Devuelve un arreglo ordenado de importes.
+   */
+  const previousPeriodBuckets = useMemo(() => {
+    const now = new Date()
+    let startDate, endDate
+    let groupBy = 'month'
+
+    if (dateRange === 'custom') {
+      if (!customStartDate || !customEndDate) return []
+      const cs = parseLocalDate(customStartDate)
+      const ce = parseLocalDate(customEndDate)
+      const duration = ce.getTime() - cs.getTime()
+      endDate = new Date(cs.getTime() - 1)
+      startDate = new Date(endDate.getTime() - duration)
+      groupBy = Math.ceil(duration / 86400000) <= 60 ? 'day' : 'month'
+    } else if (dateRange === 'today') {
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0)
+      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999)
+      groupBy = 'day'
+    } else if (dateRange === 'week') {
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 13, 0, 0, 0, 0)
+      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7, 23, 59, 59, 999)
+      groupBy = 'day'
+    } else if (dateRange === 'month') {
+      startDate = new Date(now.getFullYear(), now.getMonth() - 2, now.getDate(), 0, 0, 0, 0)
+      endDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate(), 23, 59, 59, 999)
+      groupBy = 'day'
+    } else if (dateRange === 'quarter') {
+      startDate = new Date(now.getFullYear(), now.getMonth() - 6, now.getDate(), 0, 0, 0, 0)
+      endDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate(), 23, 59, 59, 999)
+      groupBy = 'month'
+    } else if (dateRange === 'year') {
+      startDate = new Date(now.getFullYear() - 2, now.getMonth(), now.getDate(), 0, 0, 0, 0)
+      endDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate(), 23, 59, 59, 999)
+      groupBy = 'month'
+    } else {
+      // 'all' no tiene un "anterior" con el que compararse.
+      return []
+    }
+
+    const buckets = {}
+    invoices.forEach(invoice => {
+      // Mismos descartes que el período actual, para comparar lo comparable.
+      if (!canAccess(invoice) || !canSeeSale(invoice)) return
+      if (invoice.archived === true || invoice.convertedTo) return
+      if (invoice.status === 'cancelled' || invoice.status === 'voided' ||
+          invoice.sunatStatus === 'voiding' || invoice.sunatStatus === 'voided') return
+
+      const d = getInvoiceDate(invoice)
+      if (!d || d < startDate || d > endDate) return
+
+      const key = groupBy === 'day'
+        ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      buckets[key] = (buckets[key] || 0) + getDocumentTotalInBase(invoice)
+    })
+
+    return Object.entries(buckets)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([, v]) => Number(v.toFixed(2)))
+  }, [invoices, dateRange, customStartDate, customEndDate, canAccess, canSeeSale])
+
+  /** salesByPeriod + la serie del período anterior pegada por posición. */
+  const salesTrendData = useMemo(
+    () => salesByPeriod.map((bucket, i) => ({
+      ...bucket,
+      prevRevenue: previousPeriodBuckets[i] ?? null,
+    })),
+    [salesByPeriod, previousPeriodBuckets]
+  )
+
+  const hasPreviousPeriod = previousPeriodBuckets.length > 0
+
+  /**
+   * Ventas por día de la semana × hora, para el mapa de calor.
+   *
+   * El gráfico de barras por hora dice "a las 13:00 vendo"; esto dice "los
+   * sábados a las 13:00 vendo", que es lo que sirve para decidir turnos.
+   *
+   * Solo se devuelven las horas CON actividad: con las 24 fijas, dos tercios de
+   * la cuadrícula quedaban vacíos y las celdas útiles ilegibles de tan angostas.
+   */
+  const salesByDayHour = useMemo(() => {
+    const grid = new Map() // 'dia-hora' → { revenue, count }
+    const horasActivas = new Set()
+    let max = 0
+
+    filteredInvoices.forEach(inv => {
+      // createdAt, no getInvoiceDate: es la única fuente con hora real.
+      const d = getSaleTimestamp(inv)
+      if (!d) return
+      // getDay(): 0 = domingo. Se recorre a lunes = 0, que es como se lee acá.
+      const dia = (d.getDay() + 6) % 7
+      const hora = d.getHours()
+      const key = `${dia}-${hora}`
+      const prev = grid.get(key) || { revenue: 0, count: 0 }
+      prev.revenue += getDocumentTotalInBase(inv)
+      prev.count += 1
+      grid.set(key, prev)
+      horasActivas.add(hora)
+      if (prev.revenue > max) max = prev.revenue
+    })
+
+    return {
+      grid,
+      hours: [...horasActivas].sort((a, b) => a - b),
+      max,
+      hasData: grid.size > 0,
+    }
+  }, [filteredInvoices])
 
   // Ventas por hora del día
   const salesByHour = useMemo(() => {
@@ -1408,7 +1558,7 @@ export default function Reports() {
       hours[h] = { hora: `${String(h).padStart(2, '0')}:00`, ventas: 0, total: 0 }
     }
     filteredInvoices.forEach(inv => {
-      const date = inv.createdAt?.toDate ? inv.createdAt.toDate() : (inv.createdAt ? new Date(inv.createdAt) : null)
+      const date = getSaleTimestamp(inv)
       if (!date) return
       const hour = date.getHours()
       hours[hour].ventas += 1
@@ -2262,22 +2412,39 @@ export default function Reports() {
   }
 
   // Custom tooltip para los gráficos
+  /**
+   * Tooltip comun de los graficos.
+   *
+   * El texto va en gris neutro y la identidad la carga un punto de color al lado:
+   * pintar la etiqueta del color de la serie la vuelve ilegible cuando el color
+   * es claro (amarillo, aqua) y ademas duplica el canal.
+   *
+   * Las series de importe se detectan por nombre. Antes solo se contemplaban
+   * "ventas" e "Ingresos", asi que "Utilidad" y "Periodo anterior" salian como
+   * numero pelado sin el S/.
+   */
+  const MONEY_SERIES = ['ventas', 'ingresos', 'utilidad', 'periodo anterior', 'período anterior', 'gastos', 'total']
   const CustomTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
-          <p className="font-semibold text-gray-900">{label}</p>
-          {payload.map((entry, index) => (
-            <p key={index} style={{ color: entry.color }} className="text-sm">
-              {entry.name}: {entry.name.includes('ventas') || entry.name.includes('Ingresos')
-                ? formatMoney(entry.value)
-                : entry.value}
+    if (!active || !payload?.length) return null
+    return (
+      <div className="bg-white px-3 py-2 border border-gray-200 rounded-lg shadow-sm text-xs">
+        <p className="font-medium text-gray-900 mb-1">{label}</p>
+        {payload.map((entry, index) => {
+          const nombre = String(entry.name || '')
+          const esImporte = MONEY_SERIES.some(m => nombre.toLowerCase().includes(m))
+          return (
+            <p key={index} className="text-gray-700 flex items-center gap-1.5">
+              <span
+                className="w-2 h-2 rounded-full flex-shrink-0"
+                style={{ backgroundColor: entry.color }}
+                aria-hidden="true"
+              />
+              <span>{nombre}: {esImporte ? formatMoney(entry.value) : entry.value}</span>
             </p>
-          ))}
-        </div>
-      )
-    }
-    return null
+          )
+        })}
+      </div>
+    )
   }
 
   if (isLoading) {
@@ -2584,25 +2751,44 @@ export default function Reports() {
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                  <AreaChart data={salesByPeriod}>
+                  <AreaChart data={salesTrendData}>
                     <defs>
                       <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={COLORS[0]} stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor={COLORS[0]} stopOpacity={0}/>
+                        <stop offset="5%" stopColor={CHART_COLORS[0]} stopOpacity={0.35}/>
+                        <stop offset="95%" stopColor={CHART_COLORS[0]} stopOpacity={0}/>
                       </linearGradient>
                     </defs>
                     <CartesianGrid stroke="#eef0f2" vertical={false} />
                     <XAxis dataKey="period" tick={{ fontSize: 12 }} />
                     <YAxis tick={{ fontSize: 12 }} />
                     <Tooltip content={<CustomTooltip />} />
+                    {/* El período anterior va PRIMERO para que quede detrás, en
+                        gris y sin relleno: es la referencia, no el protagonista. */}
+                    {hasPreviousPeriod && (
+                      <Area
+                        type="monotone"
+                        dataKey="prevRevenue"
+                        stroke={CHART_MUTED}
+                        strokeWidth={1.5}
+                        fill="none"
+                        dot={false}
+                        connectNulls
+                        name="Período anterior"
+                      />
+                    )}
                     <Area
                       type="monotone"
                       dataKey="revenue"
-                      stroke={COLORS[0]}
+                      stroke={CHART_COLORS[0]}
+                      strokeWidth={2}
                       fillOpacity={1}
                       fill="url(#colorRevenue)"
+                      dot={false}
                       name="Ingresos"
                     />
+                    {/* Con dos series la leyenda es obligatoria: la identidad no
+                        puede quedar solo en el color. */}
+                    {hasPreviousPeriod && <Legend iconType="plainline" wrapperStyle={{ fontSize: 12 }} />}
                   </AreaChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -2827,15 +3013,35 @@ export default function Reports() {
             {/* Gráfico de línea de ingresos */}
             <Card>
               <CardHeader>
-                <CardTitle>Evolución de Ingresos</CardTitle>
+                <CardTitle>Ingresos y Utilidad</CardTitle>
+                <p className="text-sm text-gray-500 mt-1">
+                  Si los ingresos suben y la utilidad no lo acompana, el margen se esta achicando.
+                </p>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={400}>
-                  <LineChart data={salesByPeriod}>
+                  {/* Las dos series son soles, asi que comparten eje sin trampa.
+                      Un segundo eje aqui inventaria una correlacion que no existe. */}
+                  <LineChart data={salesTrendData}>
                     <CartesianGrid stroke="#eef0f2" vertical={false} />
                     <XAxis dataKey="period" tick={{ fontSize: 12 }} />
                     <YAxis tick={{ fontSize: 12 }} />
-                    <Tooltip content={<CustomTooltip />} />
+                    <Tooltip
+                      content={({ active, payload, label }) => {
+                        if (!active || !payload?.length) return null
+                        const d = payload[0].payload
+                        const margen = d.revenue > 0 ? (d.profit / d.revenue) * 100 : 0
+                        return (
+                          <div className="bg-white border border-gray-200 rounded-lg shadow-sm px-3 py-2 text-xs">
+                            <p className="font-medium text-gray-900 mb-1">{label}</p>
+                            <p className="text-gray-700">Ingresos: {formatMoney(d.revenue)}</p>
+                            <p className="text-gray-700">Utilidad: {formatMoney(d.profit || 0)}</p>
+                            <p className="text-gray-500 mt-0.5">Margen: {margen.toFixed(1)}%</p>
+                          </div>
+                        )
+                      }}
+                    />
+                    <Legend iconType="plainline" wrapperStyle={{ fontSize: 12 }} />
                     <Line
                       type="monotone"
                       dataKey="revenue"
@@ -2844,6 +3050,15 @@ export default function Reports() {
                       dot={false}
                       activeDot={{ r: 5, strokeWidth: 2, stroke: '#fff' }}
                       name="Ingresos"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="profit"
+                      stroke={CHART_COLORS[2]}
+                      strokeWidth={2}
+                      dot={false}
+                      activeDot={{ r: 5, strokeWidth: 2, stroke: '#fff' }}
+                      name="Utilidad"
                     />
                   </LineChart>
                 </ResponsiveContainer>
@@ -2886,6 +3101,76 @@ export default function Reports() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Mapa de calor: día de la semana × hora */}
+          {salesByDayHour.hasData && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Cuándo se vende</CardTitle>
+                <p className="text-sm text-gray-500 mt-1">
+                  Ingresos por día de la semana y hora. Sirve para decidir turnos y horarios.
+                </p>
+              </CardHeader>
+              <CardContent>
+                {/* Rampa secuencial de UN solo tono, claro a oscuro: el color
+                    codifica magnitud, no identidad. Un arcoíris acá seria ilegible. */}
+                <div className="overflow-x-auto">
+                  <div className="inline-block min-w-full">
+                    {/* Encabezado de horas */}
+                    <div className="flex items-center gap-1 mb-1">
+                      <div className="w-10 flex-shrink-0" />
+                      {salesByDayHour.hours.map(h => (
+                        <div key={h} className="flex-1 min-w-[26px] text-center text-[10px] text-gray-500 tabular-nums">
+                          {String(h).padStart(2, '0')}
+                        </div>
+                      ))}
+                    </div>
+
+                    {DIAS_SEMANA.map((dia, diaIdx) => (
+                      <div key={dia} className="flex items-center gap-1 mb-1">
+                        <div className="w-10 flex-shrink-0 text-[11px] text-gray-600 font-medium">{dia}</div>
+                        {salesByDayHour.hours.map(h => {
+                          const celda = salesByDayHour.grid.get(`${diaIdx}-${h}`)
+                          const valor = celda?.revenue || 0
+                          // Raíz cuadrada: sin esto, un pico aislado aplasta al
+                          // resto de la cuadrícula a un gris indistinguible.
+                          const intensidad = salesByDayHour.max > 0
+                            ? Math.sqrt(valor / salesByDayHour.max)
+                            : 0
+                          return (
+                            <div
+                              key={h}
+                              className="flex-1 min-w-[26px] h-7 rounded"
+                              style={{
+                                backgroundColor: valor > 0
+                                  ? `rgba(42, 120, 214, ${0.12 + intensidad * 0.88})`
+                                  : '#f3f4f6',
+                              }}
+                              title={valor > 0
+                                ? `${dia} ${String(h).padStart(2, '0')}:00 — ${formatMoney(valor)} en ${celda.count} venta${celda.count === 1 ? '' : 's'}`
+                                : `${dia} ${String(h).padStart(2, '0')}:00 — sin ventas`}
+                            />
+                          )
+                        })}
+                      </div>
+                    ))}
+
+                    {/* Escala: sin ella el color no se puede traducir a un monto */}
+                    <div className="flex items-center gap-2 mt-3 text-[11px] text-gray-500">
+                      <span>Menos</span>
+                      <div className="flex gap-0.5">
+                        {[0.12, 0.34, 0.56, 0.78, 1].map(o => (
+                          <div key={o} className="w-6 h-3 rounded-sm" style={{ backgroundColor: `rgba(42, 120, 214, ${o})` }} />
+                        ))}
+                      </div>
+                      <span>Más</span>
+                      <span className="ml-2">Máximo: {formatMoney(salesByDayHour.max)}</span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Ventas por Hora del Día */}
           {salesByHour.length > 0 && (
