@@ -360,7 +360,13 @@ export default function Reports() {
           getAllCashMovements(getBusinessId(), sinceDate)
         ]),
       ]
+      // El indice se CAPTURA al empujar, no se escribe a mano: la lista de
+      // arriba crece con el tiempo y un numero fijo se desincroniza en silencio
+      // (paso: apuntaba a 7 cuando los gastos estaban en 8, asi que el reporte
+      // de gastos recibia el resultado de los movimientos y salia en cero).
+      let expensesIndex = -1
       if (hasFeature && hasFeature('expenseManagement')) {
+        expensesIndex = promises.length
         promises.push(getExpenses(getBusinessId()))
       }
 
@@ -389,9 +395,11 @@ export default function Reports() {
       if (financialResult?.success) setFinancialMovements((financialResult.data || []).filter(canAccess))
       if (cashResult?.success) setCashMovements((cashResult.data || []).filter(canAccess))
 
-      // Gastos (si se cargaron)
-      if (hasFeature && hasFeature('expenseManagement') && results[7]) {
-        setExpenses(results[7] || [])
+      // Gastos (si se cargaron). getExpenses devuelve un ARREGLO crudo, no
+      // { success, data } como los demas servicios.
+      if (expensesIndex >= 0) {
+        const expensesResult = results[expensesIndex]
+        setExpenses(Array.isArray(expensesResult) ? expensesResult : [])
       }
 
       // Cargar datos de hotel si es modo hotel
