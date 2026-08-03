@@ -12,7 +12,8 @@ import { getProjects } from '@/services/projectService'
 import { getProducts } from '@/services/firestoreService'
 import { getWarehouses } from '@/services/warehouseService'
 import { downloadLogisticsMovementPDF } from '@/utils/logisticsPdfGenerator'
-import { getCompanySettings } from '@/services/firestoreService'
+import { getCompanySettings, saveCompanySettings } from '@/services/firestoreService'
+import { getExitReasons, getCustomExitReasons, isCustomExitReason, buildCustomExitReason } from '@/utils/warehouseExitReasons'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import { useLocationAccess } from '@/utils/locationAccess'
 import { matchesSearchQuery } from '@/lib/utils'
@@ -46,13 +47,13 @@ export default function WarehouseExits() {
   const [items, setItems] = useState([])
   const [productSearch, setProductSearch] = useState('')
 
-  // Motivos para salida simple (sin proyecto)
-  const SIMPLE_REASONS = [
-    { value: 'office_use', label: 'Uso en oficina' },
-    { value: 'employee_delivery', label: 'Entrega a trabajador' },
-    { value: 'internal_consumption', label: 'Consumo interno' },
-    { value: 'other', label: 'Otro' },
-  ]
+  // Motivos para salida simple (sin proyecto): los de siempre + los del negocio.
+  const SIMPLE_REASONS = getExitReasons(businessInfo)
+
+  // Alta de un motivo propio, desde el mismo modal.
+  const [isAddingReason, setIsAddingReason] = useState(false)
+  const [newReasonLabel, setNewReasonLabel] = useState('')
+  const [isSavingReason, setIsSavingReason] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -97,11 +98,80 @@ export default function WarehouseExits() {
     setExitType(initialType)
     setSelectedProject('')
     setSimpleReason('office_use')
+    setIsAddingReason(false)
+    setNewReasonLabel('')
     setSelectedWarehouse(warehouses.find(w => w.isDefault)?.id || warehouses[0]?.id || '')
     setNotes('')
     setItems([])
     setProductSearch('')
     setIsModalOpen(true)
+  }
+
+  /**
+   * Guarda un motivo propio y lo deja seleccionado.
+   *
+   * Se persiste en la configuración del negocio (`customExitReasons`), no en la
+   * salida: el punto es que la próxima vez ya esté en la lista.
+   */
+  const handleAddReason = async () => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+    const built = buildCustomExitReason(newReasonLabel, businessInfo)
+    if (!built.ok) {
+      toast.error(built.error)
+      return
+    }
+    setIsSavingReason(true)
+    try {
+      const nuevos = [...(businessInfo?.customExitReasons || []), built.reason]
+      const result = await saveCompanySettings(getBusinessId(), { customExitReasons: nuevos })
+      if (!result?.success) throw new Error(result?.error || 'No se pudo guardar')
+
+      // Estado local al día sin recargar toda la página: el modal está abierto y
+      // recargar lo cerraría con el carrito de items a medio armar.
+      setBusinessInfo(prev => ({ ...prev, customExitReasons: nuevos }))
+      setSimpleReason(built.reason.value)
+      setNewReasonLabel('')
+      setIsAddingReason(false)
+      toast.success(`Motivo "${built.reason.label}" agregado`)
+    } catch (error) {
+      console.error('Error al agregar motivo:', error)
+      toast.error('No se pudo agregar el motivo. Inténtalo nuevamente.')
+    } finally {
+      setIsSavingReason(false)
+    }
+  }
+
+  /**
+   * Quita un motivo propio de la lista. Las salidas ya registradas con él no se
+   * tocan: guardan su `reasonLabel`, así que siguen mostrando lo que decían.
+   */
+  const handleDeleteReason = async (value) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+    const actual = getCustomExitReasons(businessInfo).find(r => r.value === value)
+    if (!actual) return
+    if (!window.confirm(`¿Quitar el motivo "${actual.label}"?\n\nLas salidas ya registradas con este motivo no cambian.`)) return
+
+    try {
+      const nuevos = (businessInfo?.customExitReasons || []).filter(r => {
+        const v = String(r.value || '').trim() || `custom_${r.id || ''}`
+        return v !== value
+      })
+      const result = await saveCompanySettings(getBusinessId(), { customExitReasons: nuevos })
+      if (!result?.success) throw new Error(result?.error || 'No se pudo guardar')
+
+      setBusinessInfo(prev => ({ ...prev, customExitReasons: nuevos }))
+      if (simpleReason === value) setSimpleReason('office_use')
+      toast.success('Motivo eliminado')
+    } catch (error) {
+      console.error('Error al eliminar motivo:', error)
+      toast.error('No se pudo eliminar el motivo.')
+    }
   }
 
   const addProduct = (product) => {
@@ -665,17 +735,85 @@ export default function WarehouseExits() {
               </div>
             ) : (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Motivo *</label>
-                <select
-                  value={simpleReason}
-                  onChange={e => setSimpleReason(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                >
-                  {SIMPLE_REASONS.map(r => (
-                    <option key={r.value} value={r.value}>{r.label}</option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-500 mt-1">Salida sin proyecto: para uso interno, oficina, consumo, etc.</p>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-medium text-gray-700">Motivo *</label>
+                  {!isAddingReason && !isDemoMode && (
+                    <button
+                      type="button"
+                      onClick={() => { setIsAddingReason(true); setNewReasonLabel('') }}
+                      className="text-xs font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Agregar motivo
+                    </button>
+                  )}
+                </div>
+
+                {isAddingReason ? (
+                  <div className="border border-indigo-200 bg-indigo-50 rounded-lg p-3 space-y-2">
+                    <input
+                      type="text"
+                      value={newReasonLabel}
+                      onChange={e => setNewReasonLabel(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') { e.preventDefault(); handleAddReason() }
+                        if (e.key === 'Escape') { setIsAddingReason(false); setNewReasonLabel('') }
+                      }}
+                      maxLength={40}
+                      autoFocus
+                      placeholder="Ej: Devolución a proveedor, Merma, Préstamo..."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                    <p className="text-xs text-gray-600">
+                      Queda guardado para las próximas salidas de este negocio.
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={handleAddReason}
+                        disabled={isSavingReason || !newReasonLabel.trim()}
+                      >
+                        {isSavingReason ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Guardar motivo'}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => { setIsAddingReason(false); setNewReasonLabel('') }}
+                        disabled={isSavingReason}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={simpleReason}
+                        onChange={e => setSimpleReason(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      >
+                        {SIMPLE_REASONS.map(r => (
+                          <option key={r.value} value={r.value}>{r.label}</option>
+                        ))}
+                      </select>
+                      {/* Solo los propios se pueden quitar; los de siempre no. */}
+                      {isCustomExitReason(simpleReason) && !isDemoMode && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteReason(simpleReason)}
+                          title="Quitar este motivo"
+                          className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Salida sin proyecto: para uso interno, oficina, consumo, etc.</p>
+                  </>
+                )}
               </div>
             )}
             <div>

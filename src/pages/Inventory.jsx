@@ -72,6 +72,7 @@ import { executeRecipeProduction, executeManualProduction, checkProductionReadin
 import { getRecipeByProductId, calculateRecipeCost } from '@/services/recipeService'
 import { getCompanySettings } from '@/services/firestoreService'
 import { computeBatchDeduction, computeProductBatchMetadata } from '@/utils/batchStock'
+import { getExitReasons, getExitReasonLabel } from '@/utils/warehouseExitReasons'
 import { getItemUnitLabel } from '@/utils/units'
 
 // Helper functions for category hierarchy
@@ -879,7 +880,11 @@ export default function Inventory() {
         project_use: 'Uso en proyecto/obra',
         other: 'Otro'
       }
-      const reasonLabel = reasonLabels[damageData.reason] || damageData.reason
+      // Los motivos propios del negocio no están en el mapa fijo: sin esto, el
+      // movimiento se guardaría con el valor crudo ("custom_merma_2") como texto.
+      const reasonLabel = reasonLabels[damageData.reason]
+        || getExitReasonLabel(damageData.reason, companySettings)
+        || damageData.reason
 
       // Crear movimiento de merma
       const variantSku = isVariantDamage ? damageData.selectedVariantSku : null
@@ -4445,9 +4450,15 @@ export default function Inventory() {
           >
             {businessMode === 'logistics' ? (
               <>
-                <option value="office_use">Uso en oficina</option>
-                <option value="employee_delivery">Entrega a trabajador</option>
-                <option value="internal_consumption">Consumo interno</option>
+                {/* Misma lista que "Nueva Salida Simple", motivos propios incluidos:
+                    si el negocio agregó uno allá y acá no apareciera, el usuario
+                    creería que no se guardó. `project_use` es solo de esta pantalla
+                    (en Salidas eso es un tipo de salida aparte, no un motivo). */}
+                {getExitReasons(companySettings).map(r => (
+                  r.value === 'other'
+                    ? null
+                    : <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
                 <option value="project_use">Uso en proyecto/obra</option>
                 <option value="other">Otro</option>
               </>
