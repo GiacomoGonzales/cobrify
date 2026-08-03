@@ -6444,10 +6444,59 @@ export default function Products() {
                 </>
               )}
               {businessSettings?.multiplePricesEnabled && hasVariants && (
-                <div className="col-span-2">
+                <div className="col-span-2 space-y-3">
                   <p className="text-xs text-blue-700 bg-blue-50 px-3 py-2 rounded-lg">
                     Los precios adicionales se configuran directamente en cada variante.
                   </p>
+
+                  {/* Precio automático por cantidad CON variantes.
+                      El umbral es del PRODUCTO (una regla comercial única: "desde
+                      50 unidades es mayorista"); el precio sigue siendo de cada
+                      variante, porque el rojo puede costar distinto que el dorado. */}
+                  <div className="border-t border-gray-100 pt-3">
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={useAutoPriceByQty}
+                        onChange={(e) => setUseAutoPriceByQty(e.target.checked)}
+                        className="mt-0.5 rounded text-primary-600"
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-gray-900">
+                          Aplicar precio automático según cantidad
+                        </span>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          La cantidad se suma entre TODAS las variantes: si el cliente lleva 20 rojos,
+                          20 azules y 20 verdes, cuentan como 60 y el precio baja en las tres líneas.
+                          Cada variante aplica su propio precio de ese nivel.
+                        </p>
+                      </div>
+                    </label>
+
+                    {useAutoPriceByQty && (
+                      <div className="grid grid-cols-3 gap-2 mt-3">
+                        {[
+                          { key: 'price2', def: 'Precio 2' },
+                          { key: 'price3', def: 'Precio 3' },
+                          { key: 'price4', def: 'Precio 4' },
+                        ].map(({ key, def }) => (
+                          <div key={key}>
+                            <label className="block text-xs text-gray-600 mb-1">
+                              {businessSettings?.priceLabels?.[key] || def}
+                            </label>
+                            <Input
+                              type="number"
+                              min="1"
+                              placeholder="Mínimo unidades"
+                              value={priceMinQtys[key]}
+                              onChange={(e) => setPriceMinQtys((prev) => ({ ...prev, [key]: e.target.value }))}
+                              className="text-xs"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 

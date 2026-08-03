@@ -3531,18 +3531,15 @@ export default function POS() {
       }
 
       setCart(
-        cart.map(item => {
-          if ((item.cartId || item.id) === cartItemId) {
-            const newQuantity = item.quantity + 1
-            // Auto-precio por cantidad: al sumar con clics también debe cambiar de nivel
-            // (Público → Mayorista, etc.), igual que al editar la cantidad en el carrito.
-            const autoPrice = computeAutoPriceForQty(item.id, newQuantity)
-            return autoPrice != null
-              ? { ...item, quantity: newQuantity, price: autoPrice }
-              : { ...item, quantity: newQuantity }
-          }
-          return item
-        })
+        // El repricing va sobre el carrito COMPLETO: con suma por producto, subir
+        // una variante puede bajar el precio de las otras.
+        applyAutoPricingToCart(
+          cart.map(item =>
+            (item.cartId || item.id) === cartItemId
+              ? { ...item, quantity: item.quantity + 1 }
+              : item
+          )
+        )
       )
     } else {
       // Detectar bonificación automática: productos del catálogo con precio 0.
@@ -4043,6 +4040,12 @@ export default function POS() {
         const autoPrice = resolvePrice(variant, priceKey, product) || variant.price
         return addVariantToCart(product, variant, autoPrice)
       }
+      // Auto-precio por cantidad: mismo atajo que ya tenía el producto sin
+      // variantes. Entra con el precio unitario de la variante y el carrito lo
+      // reprecia solo cuando la suma del producto alcanza el mínimo.
+      if (product.useAutoPriceByQty === true) {
+        return addVariantToCart(product, variant, variant.price)
+      }
       // Mostrar modal de selección de precio
       setVariantForPriceSelection({ product, variant })
       setShowPriceModal(true)
@@ -4075,11 +4078,13 @@ export default function POS() {
         return
       }
 
-      setCart(
+      // Reprecia el carrito completo: con suma por producto, subir esta variante
+      // puede bajar el precio de las otras del mismo producto.
+      setCart(applyAutoPricingToCart(
         cart.map(item =>
           item.cartId === variantCartId ? { ...item, quantity: item.quantity + 1 } : item
         )
-      )
+      ))
     } else {
       // Add new variant to cart with unique cartId and variant info
       const cartItem = {
@@ -4098,7 +4103,9 @@ export default function POS() {
         imageUrl: product.imageUrl, // Include product image
         description: product.description || '', // Descripción del producto para el PDF (opción showProductDescriptionInInvoice)
       }
-      setCart([...cart, cartItem])
+      // Igual acá: agregar un color nuevo puede completar el mínimo del producto
+      // y bajar el precio de los colores que ya estaban en el carrito.
+      setCart(applyAutoPricingToCart([...cart, cartItem]))
     }
 
     // Close modal
@@ -4234,7 +4241,7 @@ export default function POS() {
    * Si el cliente del POS tiene `priceLevel` asignado, no se modifica nada
    * (esa selección tiene prioridad).
    */
-  const computeAutoPriceForQty = (productId, qty) => {
+  const computeAutoPriceForQty = (productId, qty, variantSku = null) => {
     if (selectedCustomer?.priceLevel) return null
     const product = products.find(p => p.id === productId)
     if (!product || product.useAutoPriceByQty !== true) return null
@@ -4252,11 +4259,25 @@ export default function POS() {
       return null
     }
 
-    const basePrice = parseFloat(product.price) || 0
+    // De dónde salen los PRECIOS: de la variante si la hay, con el producto de
+    // respaldo. El umbral ("desde 50 unidades") es del producto —es una regla
+    // comercial única— pero cuánto cuesta el mayorista sí depende de la variante:
+    // el papel lustre rojo puede valer distinto que el dorado.
+    const variant = variantSku && Array.isArray(product.variants)
+      ? product.variants.find(v => v.sku === variantSku)
+      : null
+    const priceOf = (key) => {
+      const v = variant ? parseFloat(variant[key]) : NaN
+      if (Number.isFinite(v) && v > 0) return v
+      const p = parseFloat(product[key])
+      return Number.isFinite(p) && p > 0 ? p : null
+    }
+
+    const basePrice = priceOf('price') ?? (parseFloat(product.price) || 0)
     const candidates = ['price2', 'price3', 'price4']
       .map(key => {
-        const v = parseFloat(product[key])
-        if (!Number.isFinite(v) || v <= 0) return null
+        const v = priceOf(key)
+        if (v == null) return null
         const min = getMin(key)
         if (min == null || min < 1) return null
         if (qty < min) return null
@@ -4268,12 +4289,66 @@ export default function POS() {
     return candidates[0].value
   }
 
+  /**
+   * Reprecia TODO el carrito según el precio automático por cantidad.
+   *
+   * La cantidad se suma POR PRODUCTO, juntando todas sus variantes: quien lleva
+   * 20 rojos + 20 azules + 20 verdes se llevó 60 hojas de papel lustre y le
+   * corresponde el mayorista, aunque ningún color por separado llegue al mínimo.
+   *
+   * Por eso el precio de una línea NO se puede calcular sola: depende del resto
+   * del carrito. Antes cada sitio que cambiaba una cantidad repreciaba solo esa
+   * línea; ahora los tres llaman acá y el criterio vive en un lugar.
+   *
+   * `autoPriceByTotal` marca las líneas cuyo precio bajó por la suma con OTRAS
+   * variantes, para que el cajero vea por qué cambió un renglón que no tocó.
+   */
+  const applyAutoPricingToCart = (cartToPrice) => {
+    if (selectedCustomer?.priceLevel) return cartToPrice
+
+    // Total por producto (todas las variantes juntas)
+    const totalPorProducto = {}
+    for (const item of cartToPrice) {
+      // Las bonificaciones van regaladas: no son unidades compradas y no deben
+      // empujar al cliente al siguiente nivel de precio.
+      if (!item.id || item.isCustom || item.isBonificacion) continue
+      totalPorProducto[item.id] = (totalPorProducto[item.id] || 0) + (parseFloat(item.quantity) || 0)
+    }
+
+    return cartToPrice.map(item => {
+      if (!item.id || item.isCustom) return item
+      // Bonificación: precio 0 puesto a propósito. Comparte productId con la
+      // línea pagada, así que sin este guard el motor la habría "corregido" al
+      // precio del catálogo y el regalo pasaba a cobrarse.
+      if (item.isBonificacion || Number(item.price) === 0) return item
+      // Precio anclado en dólares: se fijó a propósito y los niveles del catálogo
+      // están en soles. Repreciarlo lo convertiría en un número de otra moneda.
+      if (item.fixedPriceUSD) return item
+      const product = products.find(p => p.id === item.id)
+      if (!product || product.useAutoPriceByQty !== true) return item
+
+      const totalProducto = totalPorProducto[item.id] || 0
+      const propia = parseFloat(item.quantity) || 0
+      const nuevoPrecio = computeAutoPriceForQty(item.id, totalProducto, item.variantSku || null)
+      if (nuevoPrecio == null) return item
+
+      // El precio bajó gracias a otras variantes, no a la cantidad de esta línea.
+      const porSuma = totalProducto > propia &&
+        nuevoPrecio !== computeAutoPriceForQty(item.id, propia, item.variantSku || null)
+
+      if (Number(item.price) === Number(nuevoPrecio) && !!item.autoPriceByTotal === porSuma) return item
+      return { ...item, price: nuevoPrecio, autoPriceByTotal: porSuma }
+    })
+  }
+
   const updateQuantity = (itemId, change) => {
     if (saleCompleted) {
       toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
       return
     }
-    setCart(
+    // El repricing va sobre el carrito COMPLETO: con suma por producto,
+    // cambiar una variante puede mover el precio de las otras.
+    setCart(applyAutoPricingToCart(
       cart
         .map(item => {
           const matchId = item.cartId || item.id
@@ -4306,19 +4381,14 @@ export default function POS() {
               }
             }
 
-            // Auto-precio según cantidad (solo si el producto lo tiene habilitado).
-            // Cubre tanto upgrade (Público → Mayorista al subir qty) como
-            // downgrade (Mayorista → Público al bajar qty). No toca productos
-            // que no tienen useAutoPriceByQty ni si el cliente tiene priceLevel.
-            const autoPrice = computeAutoPriceForQty(item.id, newQuantity)
-            return autoPrice != null
-              ? { ...item, quantity: newQuantity, price: autoPrice }
-              : { ...item, quantity: newQuantity }
+            // El precio lo pone applyAutoPricingToCart sobre el carrito ya
+            // actualizado; acá solo se resuelve la cantidad.
+            return { ...item, quantity: newQuantity }
           }
           return item
         })
         .filter(item => item.quantity > 0)
-    )
+    ))
   }
 
   // Función para establecer cantidad directamente (para productos por peso o input manual)
@@ -4332,7 +4402,7 @@ export default function POS() {
     const quantity = parseFloat(rawValue)
     if (rawValue !== '' && rawValue !== '0' && rawValue !== '0.' && (isNaN(quantity) || quantity < 0)) return
 
-    setCart(
+    setCart(applyAutoPricingToCart(
       cart
         .map(item => {
           const matchId = item.cartId || item.id
@@ -4356,10 +4426,7 @@ export default function POS() {
                 }
               }
             }
-            // Auto-precio según cantidad (igual que en updateQuantity).
-            // Solo aplica con valores numéricos válidos, no con strings parciales.
-            const numericQty = typeof quantity === 'number' && !isNaN(quantity) ? quantity : null
-            const autoPrice = numericQty != null ? computeAutoPriceForQty(item.id, numericQty) : null
+            // El precio lo pone applyAutoPricingToCart sobre el carrito completo.
             // Preservar strings decimales PARCIALES mientras se escribe: "0.0",
             // "0.20", etc. Antes, al teclear "0.0" (camino a 0.025) se
             // convertía a número 0 y el campo colapsaba a "0" — imposible
@@ -4370,13 +4437,11 @@ export default function POS() {
               && /^\d*\.\d*$/.test(rawValue)
               && String(parseFloat(rawValue)) !== rawValue
             const finalQty = rawValue === '' || rawValue === '0' || rawValue === '0.' || isPartialDecimal ? rawValue : quantity
-            return autoPrice != null
-              ? { ...item, quantity: finalQty, price: autoPrice }
-              : { ...item, quantity: finalQty }
+            return { ...item, quantity: finalQty }
           }
           return item
         })
-    )
+    ))
   }
 
   // Al salir del input, restaurar a 1 si quedó vacío o en 0. Si quedó un
@@ -10370,6 +10435,18 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                               {item.isVariant && item.variantAttributes && (
                                 <span className="text-gray-600 truncate">
                                   {Object.entries(item.variantAttributes).map(([, v]) => v).join(' / ')}
+                                </span>
+                              )}
+                              {/* El precio de esta línea bajó por la cantidad TOTAL del
+                                  producto (sumando otras variantes), no por su propia
+                                  cantidad. Sin avisarlo, el cajero ve cambiar un renglón
+                                  que no tocó y no entiende por qué. */}
+                              {item.autoPriceByTotal && (
+                                <span
+                                  className="inline-flex items-center px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full border border-green-200 font-medium"
+                                  title="El precio bajó porque, sumando todas las variantes de este producto, se alcanzó la cantidad mínima."
+                                >
+                                  Precio por cantidad total
                                 </span>
                               )}
                               {item.presentationName && (
