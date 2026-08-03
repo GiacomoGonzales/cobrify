@@ -206,7 +206,11 @@ export const currencyTagStyle = (rowIdx, ccy) => ({
 export const statusStyle = (rowIdx, statusText) => {
   const lower = String(statusText || '').toLowerCase()
   let color = COLORS.statusOk
-  if (lower.includes('rechaz') || lower.includes('anul') || lower.includes('sin stock') || lower.includes('agotado')) {
+  // 'venc' cubre "Vencida" (cuentas por pagar) y "Vencido" (lotes): un estado
+  // vencido siempre es malo. Solo llega acá texto de columnas de ESTADO, así que
+  // no pinta de rojo las columnas de fecha de vencimiento.
+  if (lower.includes('rechaz') || lower.includes('anul') || lower.includes('venc') ||
+      lower.includes('sin stock') || lower.includes('agotado')) {
     color = COLORS.statusError
   } else if (lower.includes('pend') || lower.includes('envi') || lower.includes('borrad') || lower.includes('bajo')) {
     color = COLORS.statusWarn

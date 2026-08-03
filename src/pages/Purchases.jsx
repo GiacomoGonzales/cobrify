@@ -26,6 +26,7 @@ import {
   FileText,
   Printer,
   Receipt,
+  FileSpreadsheet,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -45,11 +46,23 @@ import { getDocumentTotalInBase, normalizeCurrency } from '@/utils/currency'
 import { getPurchases, deletePurchase, updatePurchase, getProducts, updateProduct, updateProductStockTransaction, getCompanySettings } from '@/services/firestoreService'
 import { getPurchases as getIngredientPurchases, deleteIngredientPurchase, deleteIngredientPurchasesByRelated } from '@/services/ingredientService'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
+import { generatePurchasesExcel, getPurchaseDate } from '@/services/purchaseExportService'
 
 /**
  * Parsea fecha YYYY-MM-DD a Date en hora LOCAL (evita problema de timezone)
  * "2024-01-12" con new Date() se interpreta como UTC, causando día incorrecto en Perú
  */
+/**
+ * Date → "YYYY-MM-DD" para un <input type="date">, en hora LOCAL.
+ * Con toISOString() una fecha de la noche en Perú se corre al día siguiente.
+ */
+const formatDateInput = (date) => {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 const parseLocalDate = (dateValue) => {
   if (dateValue instanceof Date) return dateValue
   if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
@@ -129,6 +142,21 @@ export default function Purchases() {
   const [branches, setBranches] = useState([])
   const [warehouses, setWarehouses] = useState([])
   const [filterBranch, setFilterBranch] = useState('all') // 'all', 'main', or branch.id
+
+  // Exportación a Excel. Mismos criterios que el modal de Comprobantes: un filtro
+  // vacío significa "todos", no "ninguno".
+  const [showExportModal, setShowExportModal] = useState(false)
+  const [exportDatePreset, setExportDatePreset] = useState('all')
+  const [exportFilters, setExportFilters] = useState({
+    docTypes: [],
+    paymentTypes: [],
+    paymentStatuses: [],
+    suppliers: [],
+    branch: 'all',
+    startDate: '',
+    endDate: '',
+    onlyAffectsStock: false,
+  })
 
   useEffect(() => {
     loadPurchases()
@@ -1077,6 +1105,165 @@ export default function Purchases() {
     return branch?.name || companySettings?.mainBranchName || 'Sucursal Principal'
   }
 
+  // === Exportación a Excel ===
+
+  // Proveedores presentes en las compras VISIBLES, para el desplegable del modal.
+  // Se listan desde las compras y no desde la colección de proveedores: exportar
+  // por un proveedor sin compras en el período no aporta nada.
+  const exportSuppliers = useMemo(() => {
+    const map = new Map()
+    for (const p of purchases) {
+      if (!hasLocationAccess(p)) continue
+      const key = p.supplier?.documentNumber || p.supplier?.businessName
+      if (!key) continue
+      if (!map.has(key)) map.set(key, p.supplier?.businessName || key)
+    }
+    return [...map.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [purchases, allowedWarehouseIds, locationRestricted, hasMainBranchAccess])
+
+  const openExportModal = () => {
+    // Arrancar con el rango de fechas que el usuario ya tiene puesto en la página:
+    // si vino filtrando por un período, exportar otra cosa lo sorprendería.
+    const range = getDateRange()
+    const toInput = (d) => (d ? formatDateInput(d) : '')
+    setExportFilters(prev => ({
+      ...prev,
+      branch: filterBranch,
+      startDate: range ? toInput(range.start) : '',
+      endDate: range ? toInput(range.end) : '',
+      paymentTypes: paymentFilter === 'contado' || paymentFilter === 'credito' ? [paymentFilter] : [],
+    }))
+    setExportDatePreset(range ? 'custom' : 'all')
+    setShowExportModal(true)
+  }
+
+  /** Aplica un rango rápido (últimos N días, este mes, mes anterior) al modal. */
+  const applyExportPreset = (preset) => {
+    setExportDatePreset(preset)
+    const hoy = new Date()
+    let start = null
+    let end = hoy
+    if (preset === 'all') {
+      setExportFilters(prev => ({ ...prev, startDate: '', endDate: '' }))
+      return
+    }
+    if (preset === 'today') start = hoy
+    else if (preset === '7days') { start = new Date(hoy); start.setDate(hoy.getDate() - 6) }
+    else if (preset === '30days') { start = new Date(hoy); start.setDate(hoy.getDate() - 29) }
+    else if (preset === 'thisMonth') start = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
+    else if (preset === 'lastMonth') {
+      start = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1)
+      end = new Date(hoy.getFullYear(), hoy.getMonth(), 0)
+    }
+    setExportFilters(prev => ({
+      ...prev,
+      startDate: start ? formatDateInput(start) : '',
+      endDate: formatDateInput(end),
+    }))
+  }
+
+  const handleExportToExcel = async () => {
+    try {
+      // Punto de partida: TODAS las compras que el usuario tiene permitido ver,
+      // no `filteredPurchases`. Los filtros del modal son independientes de los de
+      // la página; lo que nunca se relaja es `hasLocationAccess`.
+      let rows = purchases.filter(hasLocationAccess)
+
+      if (exportFilters.docTypes.length > 0) {
+        rows = rows.filter(p => exportFilters.docTypes.includes(p.invoiceDocType || 'factura'))
+      }
+      if (exportFilters.paymentTypes.length > 0) {
+        rows = rows.filter(p => exportFilters.paymentTypes.includes(p.paymentType || 'contado'))
+      }
+      if (exportFilters.paymentStatuses.length > 0) {
+        rows = rows.filter(p => {
+          const total = Number(p.total) || 0
+          const paid = Number(p.paidAmount) || 0
+          const estado = p.paymentStatus === 'paid'
+            ? 'paid'
+            : (paid > 0.01 && paid < total - 0.01 ? 'partial' : 'pending')
+          return exportFilters.paymentStatuses.includes(estado)
+        })
+      }
+      if (exportFilters.suppliers.length > 0) {
+        rows = rows.filter(p => {
+          const key = p.supplier?.documentNumber || p.supplier?.businessName
+          return key && exportFilters.suppliers.includes(key)
+        })
+      }
+      if (exportFilters.onlyAffectsStock) {
+        rows = rows.filter(p => p.affectsStock !== false)
+      }
+
+      // Fechas: se usa getPurchaseDate (prioriza invoiceDate), la MISMA que la
+      // página. Con createdAt, una compra de junio registrada en julio caía fuera
+      // del rango de junio y el Excel salía vacío aunque la lista sí la mostraba.
+      if (exportFilters.startDate) {
+        const [y, m, d] = exportFilters.startDate.split('-').map(Number)
+        const desde = new Date(y, m - 1, d, 0, 0, 0, 0)
+        rows = rows.filter(p => { const f = getPurchaseDate(p); return f && f >= desde })
+      }
+      if (exportFilters.endDate) {
+        const [y, m, d] = exportFilters.endDate.split('-').map(Number)
+        const hasta = new Date(y, m - 1, d, 23, 59, 59, 999)
+        rows = rows.filter(p => { const f = getPurchaseDate(p); return f && f <= hasta })
+      }
+
+      // Sucursal: se deriva del almacén, porque las compras no tienen branchId.
+      const exportBranch = exportFilters.branch || 'all'
+      if (exportBranch !== 'all') {
+        const ids = exportBranch === 'main'
+          ? warehouses.filter(w => !w.branchId).map(w => w.id)
+          : warehouses.filter(w => w.branchId === exportBranch).map(w => w.id)
+        rows = rows.filter(p => {
+          const whId = p.warehouseId || p.items?.[0]?.warehouseId
+          if (!whId) return exportBranch === 'main' // sin almacén = Sucursal Principal
+          return ids.includes(whId)
+        })
+      }
+
+      if (rows.length === 0) {
+        toast.error('No hay compras que coincidan con los filtros seleccionados')
+        return
+      }
+
+      let branchLabel = null
+      if (exportBranch === 'main') {
+        branchLabel = companySettings?.mainBranchName || 'Sucursal Principal'
+      } else if (exportBranch !== 'all') {
+        branchLabel = branches.find(b => b.id === exportBranch)?.name || null
+      }
+
+      const docTypeNames = { factura: 'Facturas', boleta: 'Boletas', ticket: 'Tickets', recibo: 'Recibos', otro: 'Otros' }
+      const paymentTypeNames = { contado: 'Contado', credito: 'Crédito' }
+      const paymentStatusNames = { paid: 'Pagadas', partial: 'Parciales', pending: 'Pendientes' }
+
+      await generatePurchasesExcel(
+        rows,
+        {
+          ...exportFilters,
+          docTypeLabel: exportFilters.docTypes.map(t => docTypeNames[t] || t).join(', ') || null,
+          paymentTypeLabel: exportFilters.paymentTypes.map(t => paymentTypeNames[t] || t).join(', ') || null,
+          paymentStatusLabel: exportFilters.paymentStatuses.map(s => paymentStatusNames[s] || s).join(', ') || null,
+          supplierLabel: exportFilters.suppliers.length > 0
+            ? exportFilters.suppliers.map(id => exportSuppliers.find(s => s.id === id)?.name || id).join(', ')
+            : null,
+        },
+        companySettings,
+        { branchLabel, getBranchName },
+      )
+
+      toast.success(`${rows.length} compra(s) exportada(s) exitosamente`)
+      setShowExportModal(false)
+    } catch (error) {
+      console.error('Error al exportar compras a Excel:', error)
+      toast.error('Error al generar el archivo Excel')
+    }
+  }
+
   // Búsqueda con haystack pre-construido (perf): re-normaliza solo cuando cambia
   // la lista de compras, no en cada keystroke.
   const deferredSearchTerm = useDeferredValue(searchTerm)
@@ -1195,10 +1382,20 @@ export default function Purchases() {
             Gestiona tus órdenes de compra y entrada de mercadería
           </p>
         </div>
-        <Button className="w-full sm:w-auto" onClick={() => appNavigate('compras/nueva')}>
-          <Plus className="w-4 h-4 mr-2" />
-          Nueva Compra
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+          <Button
+            variant="outline"
+            className="w-full sm:w-auto"
+            onClick={openExportModal}
+          >
+            <FileSpreadsheet className="w-4 h-4 mr-2" />
+            Exportar Excel
+          </Button>
+          <Button className="w-full sm:w-auto" onClick={() => appNavigate('compras/nueva')}>
+            <Plus className="w-4 h-4 mr-2" />
+            Nueva Compra
+          </Button>
+        </div>
       </div>
 
       {/* Search and Filters */}
@@ -2473,6 +2670,237 @@ export default function Purchases() {
         onClose={() => setGuideReference(null)}
         referenceInvoice={guideReference}
       />
+
+      {/* Modal Exportar a Excel */}
+      <Modal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        title="Exportar Compras a Excel"
+        size="3xl"
+      >
+        <div className="space-y-5">
+          <p className="text-sm text-gray-600">
+            Puedes marcar varias opciones en cada filtro. Si dejas un filtro sin marcar, se incluyen todos.
+          </p>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* Tipo de documento */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Documento</label>
+              <div className="space-y-2.5 border border-gray-200 rounded-xl p-4">
+                {[
+                  { id: 'factura', label: 'Facturas' },
+                  { id: 'boleta', label: 'Boletas' },
+                  { id: 'ticket', label: 'Tickets' },
+                  { id: 'recibo', label: 'Recibos' },
+                  { id: 'otro', label: 'Otros' },
+                ].map(opt => (
+                  <label key={opt.id} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={exportFilters.docTypes.includes(opt.id)}
+                      onChange={(e) => setExportFilters(prev => ({
+                        ...prev,
+                        docTypes: e.target.checked
+                          ? [...prev.docTypes, opt.id]
+                          : prev.docTypes.filter(t => t !== opt.id),
+                      }))}
+                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <span className="text-sm text-gray-700">{opt.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Pago y sucursal */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Pago</label>
+                <div className="flex flex-wrap gap-4 border border-gray-200 rounded-xl p-4">
+                  {[
+                    { id: 'contado', label: 'Contado' },
+                    { id: 'credito', label: 'Crédito' },
+                  ].map(opt => (
+                    <label key={opt.id} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={exportFilters.paymentTypes.includes(opt.id)}
+                        onChange={(e) => setExportFilters(prev => ({
+                          ...prev,
+                          paymentTypes: e.target.checked
+                            ? [...prev.paymentTypes, opt.id]
+                            : prev.paymentTypes.filter(t => t !== opt.id),
+                        }))}
+                        className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                      />
+                      <span className="text-sm text-gray-700">{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Estado de Pago</label>
+                <div className="flex flex-wrap gap-4 border border-gray-200 rounded-xl p-4">
+                  {[
+                    { id: 'paid', label: 'Pagadas' },
+                    { id: 'partial', label: 'Parciales' },
+                    { id: 'pending', label: 'Pendientes' },
+                  ].map(opt => (
+                    <label key={opt.id} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={exportFilters.paymentStatuses.includes(opt.id)}
+                        onChange={(e) => setExportFilters(prev => ({
+                          ...prev,
+                          paymentStatuses: e.target.checked
+                            ? [...prev.paymentStatuses, opt.id]
+                            : prev.paymentStatuses.filter(s => s !== opt.id),
+                        }))}
+                        className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                      />
+                      <span className="text-sm text-gray-700">{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {branches.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Sucursal</label>
+                  <select
+                    value={exportFilters.branch}
+                    onChange={(e) => setExportFilters(prev => ({ ...prev, branch: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                  >
+                    <option value="all">Todas</option>
+                    <option value="main">{companySettings?.mainBranchName || 'Sucursal Principal'}</option>
+                    {branches.map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Proveedores */}
+          {exportSuppliers.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Proveedores
+                <span className="font-normal text-gray-500"> — sin marcar, se incluyen todos</span>
+              </label>
+              <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-xl p-4 space-y-2.5">
+                {exportSuppliers.map(s => (
+                  <label key={s.id} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={exportFilters.suppliers.includes(s.id)}
+                      onChange={(e) => setExportFilters(prev => ({
+                        ...prev,
+                        suppliers: e.target.checked
+                          ? [...prev.suppliers, s.id]
+                          : prev.suppliers.filter(x => x !== s.id),
+                      }))}
+                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <span className="text-sm text-gray-700">{s.name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Rango de fechas */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Rango de Fechas</label>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {[
+                { id: 'all', label: 'Todas' },
+                { id: 'today', label: 'Hoy' },
+                { id: '7days', label: 'Últimos 7 días' },
+                { id: '30days', label: 'Últimos 30 días' },
+                { id: 'thisMonth', label: 'Este mes' },
+                { id: 'lastMonth', label: 'Mes anterior' },
+              ].map(opt => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => applyExportPreset(opt.id)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                    exportDatePreset === opt.id
+                      ? 'bg-primary-600 border-primary-700 text-white'
+                      : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Desde</label>
+                <input
+                  type="date"
+                  value={exportFilters.startDate}
+                  onChange={(e) => { setExportFilters(prev => ({ ...prev, startDate: e.target.value })); setExportDatePreset('custom') }}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Hasta</label>
+                <input
+                  type="date"
+                  value={exportFilters.endDate}
+                  onChange={(e) => { setExportFilters(prev => ({ ...prev, endDate: e.target.value })); setExportDatePreset('custom') }}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 mt-1.5">
+              Se usa la fecha de la factura del proveedor, no la de registro en el sistema.
+            </p>
+          </div>
+
+          {/* Solo compras que movieron inventario */}
+          <label className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-3.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={exportFilters.onlyAffectsStock}
+              onChange={(e) => setExportFilters(prev => ({ ...prev, onlyAffectsStock: e.target.checked }))}
+              className="w-4 h-4 mt-0.5 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+            />
+            <div>
+              <span className="text-sm font-medium text-amber-800">Solo compras que ingresaron mercadería</span>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Excluye las compras de solo registro, que se cargaron para el control contable pero no tocaron el inventario.
+              </p>
+            </div>
+          </label>
+
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-3.5">
+            <p className="text-xs text-gray-600">
+              El archivo incluye 5 hojas: <strong>Compras</strong> (listado completo),{' '}
+              <strong>Registro de Compras</strong> (formato SUNAT para el contador),{' '}
+              <strong>Detalle de Items</strong> (una fila por producto, con lote y vencimiento),{' '}
+              <strong>Por Proveedor</strong> y <strong>Cuentas por Pagar</strong>.
+            </p>
+          </div>
+
+          {/* Footer */}
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t border-gray-200">
+            <Button variant="outline" onClick={() => setShowExportModal(false)} className="w-full sm:w-auto">
+              Cancelar
+            </Button>
+            <Button onClick={handleExportToExcel} className="w-full sm:w-auto">
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+              Exportar a Excel
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
