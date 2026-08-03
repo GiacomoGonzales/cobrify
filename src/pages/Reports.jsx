@@ -70,6 +70,7 @@ import {
   Area,
 } from 'recharts'
 import { CHART_COLORS, CHART_MUTED, colorForKey, assignColors, capSeries } from '@/utils/chartColors'
+import { getSaleSeller } from '@/utils/saleSeller'
 
 // Paleta y asignación estable por entidad: ver src/utils/chartColors.js.
 // `COLORS` se mantiene como alias para los usos por slot FIJO (COLORS[0], etc.),
@@ -1130,14 +1131,16 @@ export default function Reports() {
     const sellers = {}
 
     filteredInvoices.forEach(invoice => {
-      const sellerId = invoice.createdBy || 'unknown'
-      const sellerName = invoice.createdByName || invoice.createdByEmail || 'Sin asignar'
+      // VENDEDOR, no cuenta. El criterio vive en getSaleSeller para que esta
+      // pantalla y el filtro de Ventas no puedan volver a divergir.
+      const { id: sellerId, name: sellerName, email: sellerEmail, isSeller } = getSaleSeller(invoice)
 
       if (!sellers[sellerId]) {
         sellers[sellerId] = {
           id: sellerId,
           name: sellerName,
-          email: invoice.createdByEmail || '',
+          email: sellerEmail,
+          isSeller,
           salesCount: 0,
           totalRevenue: 0,
           totalCost: 0,
@@ -2482,7 +2485,8 @@ export default function Reports() {
       'Comprobante': `${inv.series || ''}-${String(inv.correlativeNumber || inv.number || '').padStart(8, '0')}`,
       'Tipo': DOC_LABELS[inv.documentType] || inv.documentType || '',
       'Cliente': inv.customerName || inv.customer?.name || 'Cliente General',
-      'Vendedor': inv.createdByName || inv.createdByEmail || 'Sin asignar',
+      // Vendedor elegido en el POS; la cuenta emisora solo como respaldo.
+      'Vendedor': inv.sellerName || inv.createdByName || inv.createdByEmail || 'Sin asignar',
       'Total': Math.round((getDocumentTotalInBase(inv) || 0) * 100) / 100,
     }))
 
@@ -5084,6 +5088,12 @@ export default function Reports() {
                           <div>
                             <p className="font-medium text-gray-900">{seller.name}</p>
                             {seller.email && <p className="text-xs text-gray-500">{seller.email}</p>}
+                            {/* La fila representa a la CUENTA porque esas ventas no
+                                llevaron vendedor elegido en el POS. Decirlo evita
+                                que se lea como si el dueño fuera un vendedor más. */}
+                            {!seller.isSeller && (
+                              <p className="text-xs text-gray-400">Sin vendedor asignado</p>
+                            )}
                           </div>
                         </div>
                         <span className="font-bold text-green-600">{formatMoney(seller.totalRevenue)}</span>
@@ -5168,6 +5178,9 @@ export default function Reports() {
                               <p className="font-medium truncate" title={seller.name}>{seller.name}</p>
                               {seller.email && (
                                 <p className="text-xs text-gray-500 truncate" title={seller.email}>{seller.email}</p>
+                              )}
+                              {!seller.isSeller && (
+                                <p className="text-xs text-gray-400 truncate">Sin vendedor asignado</p>
                               )}
                             </div>
                           </TableCell>

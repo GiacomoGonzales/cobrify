@@ -155,7 +155,10 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
       ? 'N/A'
       : (sunatStatusNames[invoice.sunatStatus] || invoice.sunatStatus || 'Pendiente')
 
-    const sellerName = invoice.createdByName || invoice.sellerName || invoice.createdByEmail || 'Sin vendedor'
+    // El VENDEDOR elegido en el POS manda sobre la cuenta emisora: son cosas
+    // distintas y el orden estaba invertido, asi que un dueno que registra las
+    // ventas de su equipo aparecia como el vendedor de todas.
+    const sellerName = invoice.sellerName || invoice.createdByName || invoice.createdByEmail || 'Sin vendedor'
     // Moneda del comprobante: los montos de la fila van en su moneda NATIVA;
     // la fila de TOTALES convierte todo a soles con el TC congelado de cada doc.
     const rowCurrency = normalizeCurrency(invoice.currency)
@@ -668,7 +671,7 @@ function appendSellersSheet(wb, invoices, businessData, branchLabel) {
 
   const agg = new Map()
   for (const inv of invoices) {
-    const seller = inv.createdByName || inv.sellerName || inv.createdByEmail || 'Sin vendedor'
+    const seller = inv.sellerName || inv.createdByName || inv.createdByEmail || 'Sin vendedor'
     if (!agg.has(seller)) agg.set(seller, { seller, amount: 0, count: 0 })
     const e = agg.get(seller)
     // En SOLES con el TC congelado del doc (no mezclar monedas)

@@ -77,6 +77,7 @@ import { shortenUrl } from '@/services/urlShortenerService'
 import { getActiveBranches } from '@/services/branchService'
 import { useLocationAccess, useSellerScope } from '@/utils/locationAccess'
 import { getVisiblePaymentMethods } from '@/utils/paymentMethods'
+import { getSaleSeller, matchesSaleSeller, listSaleSellers } from '@/utils/saleSeller'
 
 /**
  * Tipo de pedido guardado en el comprobante. Solo aplica a restaurante/delivery;
@@ -2224,7 +2225,7 @@ Gracias por tu preferencia.`
 
       // Filtrar por vendedor (multi: mismo criterio que la página, inv.createdBy)
       if (exportFilters.sellers && exportFilters.sellers.length > 0) {
-        filteredInvoices = filteredInvoices.filter(inv => exportFilters.sellers.includes(inv.createdBy));
+        filteredInvoices = filteredInvoices.filter(inv => exportFilters.sellers.includes(getSaleSeller(inv).id));
       }
 
       // Filtrar por estado de pago (multi: inv.status)
@@ -2509,13 +2510,10 @@ Gracias por tu preferencia.`
   }
 
   // Obtener lista única de vendedores
-  const sellers = Array.from(
-    new Set(
-      invoices
-        .filter(inv => inv.createdBy)
-        .map(inv => JSON.stringify({ id: inv.createdBy, name: inv.createdByName || inv.createdByEmail || 'Sin nombre' }))
-    )
-  ).map(str => JSON.parse(str))
+  // El desplegable dice "Todos los vendedores" pero listaba CUENTAS (createdBy).
+  // Mismo criterio que Reportes: el vendedor elegido en el POS manda y la cuenta
+  // solo aparece cuando la venta no llevo vendedor asignado.
+  const sellers = listSaleSellers(invoices)
 
   // Obtener rango de fechas basado en el filtro de período
   const getDateRange = () => {
@@ -2608,7 +2606,7 @@ Gracias por tu preferencia.`
 
       const matchesStatus = filterStatus === 'all' || invoice.status === filterStatus
       const matchesType = filterType === 'all' || invoice.documentType === filterType
-      const matchesSeller = filterSeller === 'all' || invoice.createdBy === filterSeller
+      const matchesSeller = filterSeller === 'all' || matchesSaleSeller(invoice, filterSeller)
 
       // Filtrar por sucursal
       let matchesBranch = true
