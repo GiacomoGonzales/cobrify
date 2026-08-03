@@ -73,6 +73,20 @@ import {
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
 
 /**
+ * Densidad compacta para las tablas de esta página.
+ *
+ * El componente `Table` usa `px-6 py-4`, que está pensado para tablas de 4 o 5
+ * columnas. Acá hay de 10 y de 12: solo el padding se comía ~480 px y el detalle
+ * de ventas se cortaba en "Utilidad", obligando a scroll horizontal.
+ *
+ * Se aplica desde afuera con variantes arbitrarias en vez de tocar el componente
+ * base, que lo usan decenas de pantallas con tablas angostas donde el aire actual
+ * está bien. Va como constante para que todas las tablas de la página compartan
+ * el mismo ritmo y no queden unas apretadas y otras no.
+ */
+const COMPACT_TABLE = '[&_th]:px-3 [&_th]:py-2.5 [&_td]:px-3 [&_td]:py-2.5 [&_td]:text-[13px]'
+
+/**
  * Helper para exportar Excel que funciona en iOS/Android
  * En móvil guarda el archivo y abre el menú compartir
  * En web usa la descarga normal
@@ -2963,16 +2977,19 @@ export default function Reports() {
 
               {/* Desktop Table */}
               <div className="hidden lg:block overflow-x-auto">
-                <Table>
+                <Table className={COMPACT_TABLE}>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Número</TableHead>
-                      <TableHead>Cliente</TableHead>
-                      <TableHead>Fecha</TableHead>
+                      {/* Anchos acotados y truncado: el Cliente es el único campo
+                          de largo impredecible y era el que empujaba la tabla
+                          fuera de la pantalla. */}
+                      <TableHead className="whitespace-nowrap">Número</TableHead>
+                      <TableHead className="max-w-[180px]">Cliente</TableHead>
+                      <TableHead className="whitespace-nowrap">Fecha</TableHead>
                       <TableHead>Tipo</TableHead>
                       <TableHead>Estado</TableHead>
-                      <TableHead>Método Pago</TableHead>
-                      <TableHead className="text-right">Precio Venta</TableHead>
+                      <TableHead className="max-w-[110px]">Pago</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">Venta</TableHead>
                       <TableHead className="text-right">Costo</TableHead>
                       <TableHead className="text-right">Utilidad</TableHead>
                       <TableHead className="text-right">Margen</TableHead>
@@ -3005,17 +3022,22 @@ export default function Reports() {
                       return (
                         <TableRow key={invoice.id}>
                           <TableCell className="font-medium">{invoice.number}</TableCell>
-                          <TableCell>{invoice.customer?.name || 'Cliente General'}</TableCell>
+                          <TableCell className="max-w-[180px]">
+                            <span className="block truncate" title={invoice.customer?.name || 'Cliente General'}>
+                              {invoice.customer?.name || 'Cliente General'}
+                            </span>
+                          </TableCell>
                           <TableCell>
                             {getInvoiceDate(invoice) ? formatDate(getInvoiceDate(invoice)) : '-'}
                           </TableCell>
                           <TableCell>
-                            <Badge variant={invoice.documentType === 'factura' ? 'primary' : invoice.documentType === 'nota_venta' ? 'warning' : 'default'}>
+                            <Badge className="px-2" variant={invoice.documentType === 'factura' ? 'primary' : invoice.documentType === 'nota_venta' ? 'warning' : 'default'}>
                               {invoice.documentType === 'factura' ? 'Factura' : invoice.documentType === 'nota_venta' ? 'N. Venta' : 'Boleta'}
                             </Badge>
                           </TableCell>
                           <TableCell>
                             <Badge
+                              className="px-2"
                               variant={
                                 invoice.status === 'paid'
                                   ? 'success'
@@ -3027,8 +3049,10 @@ export default function Reports() {
                               {invoice.status === 'paid' ? 'Pagada' : 'Pendiente'}
                             </Badge>
                           </TableCell>
-                          <TableCell>
-                            <Badge variant="default">{paymentMethods}</Badge>
+                          <TableCell className="max-w-[110px]">
+                            <Badge className="px-2 max-w-full" variant="default">
+                              <span className="truncate" title={paymentMethods}>{paymentMethods}</span>
+                            </Badge>
                           </TableCell>
                           <TableCell className="text-right font-semibold">
                             {formatMoney(invoice.total)}
@@ -3321,7 +3345,7 @@ export default function Reports() {
 
                     {/* Desktop Table */}
                     <div className="hidden lg:block overflow-x-auto">
-                      <Table>
+                      <Table className={COMPACT_TABLE}>
                         <TableHeader>
                           <TableRow>
                             <TableHead>Posición</TableHead>
@@ -3458,7 +3482,7 @@ export default function Reports() {
 
               {/* Desktop Table */}
               <div className="hidden lg:block overflow-x-auto">
-                <Table>
+                <Table className={COMPACT_TABLE}>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Categoría</TableHead>
@@ -3547,7 +3571,7 @@ export default function Reports() {
 
               {/* Desktop Table */}
               <div className="hidden lg:block overflow-x-auto">
-                <Table>
+                <Table className={COMPACT_TABLE}>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Marca</TableHead>
@@ -3821,7 +3845,7 @@ export default function Reports() {
 
                     {/* Desktop table */}
                     <div className="hidden lg:block overflow-x-auto">
-                      <Table>
+                      <Table className={COMPACT_TABLE}>
                         <TableHeader>
                           <TableRow>
                             <TableHead>Posición</TableHead>
@@ -4128,7 +4152,7 @@ export default function Reports() {
 
                     {/* Desktop table */}
                     <div className="hidden lg:block overflow-x-auto">
-                      <Table>
+                      <Table className={COMPACT_TABLE}>
                         <TableHeader>
                           <TableRow>
                             <TableHead>Posición</TableHead>
@@ -4310,7 +4334,7 @@ export default function Reports() {
 
               {/* Desktop Table */}
               <div className="hidden lg:block overflow-x-auto">
-                <Table>
+                <Table className={COMPACT_TABLE}>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Posición</TableHead>
@@ -4434,7 +4458,7 @@ export default function Reports() {
 
                 {/* Desktop Table */}
                 <div className="hidden lg:block overflow-x-auto">
-                  <Table>
+                  <Table className={COMPACT_TABLE}>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Posición</TableHead>
@@ -4648,18 +4672,20 @@ export default function Reports() {
 
               {/* Desktop Table */}
               <div className="hidden lg:block overflow-x-auto">
-                <Table>
+                <Table className={COMPACT_TABLE}>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Posición</TableHead>
-                      <TableHead>Vendedor</TableHead>
-                      <TableHead className="text-right">Total Ventas</TableHead>
-                      <TableHead className="text-right">Facturas</TableHead>
-                      <TableHead className="text-right">Boletas</TableHead>
-                      <TableHead className="text-right">N. Venta</TableHead>
-                      <TableHead className="text-right">N. Crédito</TableHead>
-                      <TableHead className="text-right">N. Débito</TableHead>
-                      <TableHead className="text-right">Ingresos Totales</TableHead>
+                      {/* Encabezados cortos: con 12 columnas, "Ingresos Totales"
+                          y "Total Ventas" fijaban un ancho mínimo que no entraba. */}
+                      <TableHead className="w-12">#</TableHead>
+                      <TableHead className="max-w-[200px]">Vendedor</TableHead>
+                      <TableHead className="text-right">Ventas</TableHead>
+                      <TableHead className="text-right">Fact.</TableHead>
+                      <TableHead className="text-right">Bol.</TableHead>
+                      <TableHead className="text-right">N.V.</TableHead>
+                      <TableHead className="text-right">N.C.</TableHead>
+                      <TableHead className="text-right">N.D.</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">Ingresos</TableHead>
                       <TableHead className="text-right">Costo</TableHead>
                       <TableHead className="text-right">Utilidad</TableHead>
                       <TableHead className="text-right">Margen</TableHead>
@@ -4677,7 +4703,7 @@ export default function Reports() {
                         <TableRow key={seller.id}>
                           <TableCell>
                             <div
-                              className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
+                              className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
                                 index === 0
                                   ? 'bg-yellow-100 text-yellow-700'
                                   : index === 1
@@ -4690,33 +4716,33 @@ export default function Reports() {
                               {index + 1}
                             </div>
                           </TableCell>
-                          <TableCell>
-                            <div>
-                              <p className="font-medium">{seller.name}</p>
+                          <TableCell className="max-w-[200px]">
+                            <div className="min-w-0">
+                              <p className="font-medium truncate" title={seller.name}>{seller.name}</p>
                               {seller.email && (
-                                <p className="text-xs text-gray-500">{seller.email}</p>
+                                <p className="text-xs text-gray-500 truncate" title={seller.email}>{seller.email}</p>
                               )}
                             </div>
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="inline-flex items-center justify-center px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full">
-                              <span className="text-sm font-semibold">{seller.salesCount}</span>
+                            <div className="inline-flex items-center justify-center px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
+                              <span className="text-xs font-semibold">{seller.salesCount}</span>
                             </div>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Badge variant="primary">{seller.facturas}</Badge>
+                            <Badge className="px-2" variant="primary">{seller.facturas}</Badge>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Badge variant="default">{seller.boletas}</Badge>
+                            <Badge className="px-2" variant="default">{seller.boletas}</Badge>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Badge variant="warning">{seller.notasVenta}</Badge>
+                            <Badge className="px-2" variant="warning">{seller.notasVenta}</Badge>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Badge variant="warning">{seller.notasCredito}</Badge>
+                            <Badge className="px-2" variant="warning">{seller.notasCredito}</Badge>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Badge variant="danger">{seller.notasDebito}</Badge>
+                            <Badge className="px-2" variant="danger">{seller.notasDebito}</Badge>
                           </TableCell>
                           <TableCell className="text-right font-semibold text-green-600">
                             {formatMoney(seller.totalRevenue)}
@@ -4992,7 +5018,7 @@ export default function Reports() {
 
               {/* Desktop Table */}
               <div className="hidden lg:block overflow-x-auto">
-                <Table>
+                <Table className={COMPACT_TABLE}>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Fecha</TableHead>
@@ -5469,7 +5495,7 @@ export default function Reports() {
 
               {/* Desktop Table */}
               <div className="hidden lg:block overflow-x-auto">
-                <Table>
+                <Table className={COMPACT_TABLE}>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Período</TableHead>
@@ -5961,7 +5987,7 @@ export default function Reports() {
                     </ResponsiveContainer>
                     {/* Tabla */}
                     <div className="overflow-x-auto">
-                      <Table>
+                      <Table className={COMPACT_TABLE}>
                         <TableHeader>
                           <TableRow>
                             <TableHead>Tipo</TableHead>
@@ -6019,7 +6045,7 @@ export default function Reports() {
                     </ResponsiveContainer>
                     {/* Tabla */}
                     <div className="overflow-x-auto">
-                      <Table>
+                      <Table className={COMPACT_TABLE}>
                         <TableHeader>
                           <TableRow>
                             <TableHead>Habitación</TableHead>
@@ -6102,7 +6128,7 @@ export default function Reports() {
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
-                  <Table>
+                  <Table className={COMPACT_TABLE}>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Huésped</TableHead>
