@@ -6206,8 +6206,12 @@ export default function POS() {
         createdBy: user.uid,
         createdByName: user.displayName || user.email || 'Usuario',
         createdByEmail: user.email || '',
-        // Tipo de pedido (para reportes)
-        orderType: orderType,
+        // Tipo de pedido: SOLO en restaurante, que es el único modo donde el
+        // cajero lo elige. El estado arranca en 'takeaway' y el selector se
+        // renderiza únicamente si businessMode === 'restaurant', así que en
+        // retail, farmacia o veterinaria se venía guardando "Para llevar" en
+        // TODAS las ventas sin que nadie lo hubiera elegido ni lo leyera.
+        ...(businessMode === 'restaurant' && { orderType }),
         // Información del mozo (si viene de una mesa)
         waiterId: tableData?.waiterId || null,
         waiterName: tableData?.waiterName || null,

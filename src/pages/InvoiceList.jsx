@@ -4261,7 +4261,10 @@ Gracias por tu preferencia.`
                 viewingInvoice.createdByName && ['Registrado por', viewingInvoice.createdByName],
                 viewingInvoice.branchName && ['Sucursal', viewingInvoice.branchName],
                 viewingInvoice.warehouseName && ['Almacén', viewingInvoice.warehouseName],
-                ORDER_TYPE_LABELS[viewingInvoice.orderType] && ['Tipo de pedido', ORDER_TYPE_LABELS[viewingInvoice.orderType]],
+                // Solo en restaurante: es el único modo donde el cajero elige el
+                // tipo. Las ventas anteriores a ago-2026 de otros rubros tienen
+                // 'takeaway' guardado por un default que nadie eligió.
+                businessMode === 'restaurant' && ORDER_TYPE_LABELS[viewingInvoice.orderType] && ['Tipo de pedido', ORDER_TYPE_LABELS[viewingInvoice.orderType]],
                 viewingInvoice.waiterName && ['Mozo', viewingInvoice.waiterName],
               ].filter(Boolean)
 
