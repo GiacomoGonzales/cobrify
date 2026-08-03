@@ -31,7 +31,7 @@ import { getManagedUsers } from '@/services/userManagementService'
 import { generateCashReportExcel, generateCashReportPDF } from '@/services/cashReportService'
 import CashClosureTicket from '@/components/CashClosureTicket'
 import { Capacitor } from '@capacitor/core'
-import { getPaymentBucketLabel } from '@/utils/paymentMethods'
+import { getPaymentBucketLabel, getCustomMethodByLabel, isCashLikePayment } from '@/utils/paymentMethods'
 
 export default function CashRegister() {
   const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess, allowedBranches, userPermissions, independentCashRegister, isAdmin, isBusinessOwner, businessSettings } = useAppContext()
@@ -961,6 +961,7 @@ export default function CashRegister() {
         salesRappi: totalsClose.usd.salesRappi,
         salesPedidosYa: totalsClose.usd.salesPedidosYa,
         salesDiDiFood: totalsClose.usd.salesDiDiFood,
+        salesByCustomMethod: totalsClose.usd.salesByCustomMethod || {},
         totalIncome: totalsClose.usd.income,
         totalExpense: totalsClose.usd.expense,
         expectedAmount: totalsClose.usd.expected,
@@ -997,6 +998,7 @@ export default function CashRegister() {
         salesRappi: totalsClose.salesRappi,
         salesPedidosYa: totalsClose.salesPedidosYa,
         salesDiDiFood: totalsClose.salesDiDiFood,
+        salesByCustomMethod: totalsClose.salesByCustomMethod || {},
         totalIncome: totalsClose.income,
         totalExpense: totalsClose.expense,
         totalIncomeYape: totalsClose.incomeYape || 0,
@@ -1039,6 +1041,9 @@ export default function CashRegister() {
         salesRappi: totalsClose.salesRappi,
         salesPedidosYa: totalsClose.salesPedidosYa,
         salesDiDiFood: totalsClose.salesDiDiFood,
+        // Desglose de métodos propios (etiqueta → monto). Persistirlo permite
+        // que el historial y las impresiones lo muestren sin recalcular.
+        salesByCustomMethod: totalsClose.salesByCustomMethod || {},
         totalIncome: totalsClose.income,
         totalExpense: totalsClose.expense,
         expectedAmount: totalsClose.expected,
@@ -1657,6 +1662,7 @@ export default function CashRegister() {
       pendingCount: 0,
       deferredPayments: [],
       deferredTotal: 0,
+      salesByCustomMethod: {},
       usd: null,
       yape: null,
     }
@@ -1684,6 +1690,14 @@ export default function CashRegister() {
     let salesDiDiFoodUSD = 0
     let pendingTotalUSD = 0
     let pendingCountUSD = 0
+
+    // Métodos PROPIOS del negocio: mapa dinámico etiqueta → monto, cada uno con
+    // su propia línea. Antes se disolvían en el balde de su "se comporta como"
+    // (FISE aparecía dentro de Transferencia) y el cliente no podía ver cuánto
+    // cobró con cada uno. `behavesLike` sigue vivo pero solo decide si esa plata
+    // está en el CAJÓN (ver `isCashLikePayment`).
+    const customSales = {}
+    const customSalesUSD = {}
 
     // Devuelve la moneda de un invoice (default PEN para legacy).
     const invoiceCurrency = (inv) => normalizeCurrency(inv?.currency)
@@ -1722,10 +1736,18 @@ export default function CashRegister() {
     // Helper: suma un pago a su método correspondiente. Distribuye a los
     // acumuladores PEN o USD según la moneda del invoice padre.
     const addToMethod = (rawMethod, amount, currencyCode = 'PEN') => {
-      // Los métodos propios del negocio (Configuración > Métodos de pago) se
-      // traducen acá al método de siempre con el que se comportan. Sin esto,
-      // un pago con FISE no coincidiría con ningún `case` y el dinero
-      // desaparecería del cierre sin error ni aviso.
+      // Método PROPIO: acumula bajo su propia etiqueta, sin traducirse a un
+      // balde. Su aporte al cajón se resuelve aparte, en el cálculo del
+      // efectivo esperado.
+      const propio = getCustomMethodByLabel(rawMethod, businessSettings)
+      if (propio) {
+        const mapa = currencyCode === 'USD' ? customSalesUSD : customSales
+        mapa[propio.label] = (mapa[propio.label] || 0) + amount
+        return
+      }
+      // Métodos de siempre (y etiquetas huérfanas de métodos borrados): igual
+      // que antes. El bucket traduce lo desconocido a Transferencia para que
+      // nada desaparezca del cierre sin error ni aviso.
       const method = getPaymentBucketLabel(rawMethod, businessSettings)
       if (currencyCode === 'USD') {
         switch (method) {
@@ -1869,13 +1891,26 @@ export default function CashRegister() {
       }
     })
 
-    // Total de ventas (todos los métodos) — PEN y USD por separado
-    const sales = salesCash + salesCard + salesTransfer + salesYape + salesPlin + salesRappi + salesPedidosYa + salesDiDiFood
-    const salesUSD = salesCashUSD + salesCardUSD + salesTransferUSD + salesYapeUSD + salesPlinUSD + salesRappiUSD + salesPedidosYaUSD + salesDiDiFoodUSD
+    // Métodos propios: suma total y la parte que es efectivo físico (entra al
+    // cajón y por lo tanto al arqueo, aunque en el desglose tenga línea propia).
+    const sumCustom = (mapa) => Object.values(mapa).reduce((s, v) => s + v, 0)
+    const sumCustomCash = (mapa) => Object.entries(mapa)
+      .filter(([label]) => isCashLikePayment(label, businessSettings))
+      .reduce((s, [, v]) => s + v, 0)
+    const customTotal = sumCustom(customSales)
+    const customTotalUSD = sumCustom(customSalesUSD)
+    const customCash = sumCustomCash(customSales)
+    const customCashUSD = sumCustomCash(customSalesUSD)
 
-    // Dinero esperado en caja (SOLO efectivo + ingresos - egresos)
-    const expected = (currentSession.openingAmount || 0) + salesCash + income - expense
-    const expectedUSD = (currentSession.openingAmountUSD || 0) + salesCashUSD + incomeUSD - expenseUSD
+    // Total de ventas (todos los métodos) — PEN y USD por separado
+    const sales = salesCash + salesCard + salesTransfer + salesYape + salesPlin + salesRappi + salesPedidosYa + salesDiDiFood + customTotal
+    const salesUSD = salesCashUSD + salesCardUSD + salesTransferUSD + salesYapeUSD + salesPlinUSD + salesRappiUSD + salesPedidosYaUSD + salesDiDiFoodUSD + customTotalUSD
+
+    // Dinero esperado en caja (SOLO efectivo + ingresos - egresos).
+    // `customCash` es la plata de métodos propios que ES efectivo físico: se
+    // muestra aparte en el desglose, pero está en el cajón y cuenta acá.
+    const expected = (currentSession.openingAmount || 0) + salesCash + customCash + income - expense
+    const expectedUSD = (currentSession.openingAmountUSD || 0) + salesCashUSD + customCashUSD + incomeUSD - expenseUSD
     // Esperado Yape = apertura Yape + ventas Yape + ingresos Yape − gastos Yape
     const openingYape = currentSession.openingAmountYape || 0
     const expectedYape = openingYape + salesYape + incomeYape - expenseYape
@@ -1932,6 +1967,7 @@ export default function CashRegister() {
       pendingCount: pendingCountUSD,
       deferredTotal: deferredTotalUSD,
       openingAmount: currentSession.openingAmountUSD || 0,
+      salesByCustomMethod: customSalesUSD,
     } : null
 
     // Bloque Yape: saldo paralelo de billetera digital. Sólo se incluye si
@@ -1969,6 +2005,9 @@ export default function CashRegister() {
       deferredPayments,
       deferredTotal,
       deferredCash,
+      // Métodos propios: etiqueta → monto. La UI, el cierre y las impresiones
+      // leen este mapa; los campos fijos de arriba quedan para los de siempre.
+      salesByCustomMethod: customSales,
       usd: usdBlock,
       yape: yapeBlock,
     }
@@ -2338,6 +2377,17 @@ export default function CashRegister() {
                           <span className="font-medium">{formatCurrency(totals.salesDiDiFood)}</span>
                         </div>
                       )}
+                      {/* Métodos propios del negocio, cada uno con su línea. Los
+                          que son efectivo físico se pintan como Efectivo: esa
+                          plata está en el cajón y suma al esperado. */}
+                      {Object.entries(totals.salesByCustomMethod || {}).map(([label, monto]) => monto > 0 && (
+                        <div key={label} className="flex justify-between text-gray-600">
+                          <span>• {label}:</span>
+                          <span className={`font-medium ${isCashLikePayment(label, businessSettings) ? 'text-green-600' : ''}`}>
+                            {formatCurrency(monto)}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                     {/* Trazabilidad: cuánto de este total NO son ventas nuevas sino
                         cobros de comprobantes emitidos en sesiones anteriores. */}
@@ -2383,7 +2433,7 @@ export default function CashRegister() {
                         </span>
                       </div>
                       <div className="text-xs text-gray-500 mt-2">
-                        <span className="font-medium">Fórmula:</span> Inicial ({formatCurrency(currentSession.openingAmount)}) + Ventas Efectivo ({formatCurrency(totals.salesCash)}) + Ingresos ({formatCurrency(totals.income)}) - Egresos ({formatCurrency(totals.expense)})
+                        <span className="font-medium">Fórmula:</span> Inicial ({formatCurrency(currentSession.openingAmount)}) + Ventas Efectivo ({formatCurrency(totals.expected - (currentSession.openingAmount || 0) - totals.income + totals.expense)}) + Ingresos ({formatCurrency(totals.income)}) - Egresos ({formatCurrency(totals.expense)})
                         {totals.deferredCash > 0 && (
                           <span className="block mt-1 text-amber-700">
                             Ventas Efectivo incluye {formatCurrency(totals.deferredCash)} de cobros de comprobantes anteriores.
@@ -2450,6 +2500,12 @@ export default function CashRegister() {
                             <span className="font-medium">{formatCurrency(totals.usd.salesPlin, 'USD')}</span>
                           </div>
                         )}
+                        {Object.entries(totals.usd.salesByCustomMethod || {}).map(([label, monto]) => monto > 0 && (
+                          <div key={label} className="flex justify-between text-gray-600">
+                            <span>• {label}:</span>
+                            <span className={`font-medium ${isCashLikePayment(label, businessSettings) ? 'text-green-600' : ''}`}>{formatCurrency(monto, 'USD')}</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
 
@@ -3256,6 +3312,16 @@ export default function CashRegister() {
                     )}
                   </div>
                 )}
+                {/* Métodos propios de la sesión (solo lectura: no tienen conteo
+                    de cierre propio, su plata en efectivo va dentro del conteo
+                    de Efectivo). Sesiones anteriores al desglose no traen el
+                    mapa y no muestran nada, como siempre. */}
+                {Object.entries(selectedHistorySession.salesByCustomMethod || {}).map(([label, monto]) => monto > 0 && (
+                  <div key={label} className="flex justify-between items-center">
+                    <span className="text-gray-600">{label} (ventas):</span>
+                    <span className="font-semibold">{formatCurrency(monto)}</span>
+                  </div>
+                ))}
                 <div className="flex justify-between border-t border-gray-200 pt-2 mt-2">
                   <span className="text-gray-600">Efectivo Esperado:</span>
                   <span className="font-semibold">{formatCurrency(selectedHistorySession.expectedAmount || 0)}</span>
@@ -3870,6 +3936,19 @@ export default function CashRegister() {
                 <span className="font-semibold text-gray-700">{formatCurrency(totals.salesDiDiFood)}</span>
               </div>
             )}
+            {/* Métodos propios. Los que son efectivo físico llevan la nota "(en
+                el cajón)": el cajero tiene que saber que ese monto va DENTRO del
+                conteo de efectivo, no aparte. */}
+            {Object.entries(totals.salesByCustomMethod || {}).map(([label, monto]) => monto > 0 && (
+              <div key={label} className="flex justify-between text-sm">
+                <span className="text-gray-600">
+                  • Ventas en {label}:{isCashLikePayment(label, businessSettings) && (
+                    <span className="text-green-700 text-xs"> (en el cajón)</span>
+                  )}
+                </span>
+                <span className="font-semibold text-gray-700">{formatCurrency(monto)}</span>
+              </div>
+            ))}
 
             {!hideExpectedForCashier && (
               <div className="border-t border-gray-300 pt-2 mt-3">
@@ -4044,6 +4123,9 @@ export default function CashRegister() {
                 {totals.usd.salesPlin > 0 && (
                   <div className="flex justify-between"><span className="text-gray-600">• Plin:</span><span className="font-semibold">{formatCurrency(totals.usd.salesPlin, 'USD')}</span></div>
                 )}
+                {Object.entries(totals.usd.salesByCustomMethod || {}).map(([label, monto]) => monto > 0 && (
+                  <div key={label} className="flex justify-between"><span className="text-gray-600">• {label}:</span><span className={`font-semibold ${isCashLikePayment(label, businessSettings) ? 'text-green-700' : ''}`}>{formatCurrency(monto, 'USD')}</span></div>
+                ))}
                 {!hideExpectedForCashier && (
                   <div className="border-t border-emerald-200 pt-2 mt-2 flex justify-between">
                     <span className="text-sm font-semibold text-gray-700">Efectivo USD Esperado:</span>

@@ -123,6 +123,29 @@ export const getPaymentKeyByLabel = (label, companySettings) => {
  * llega una etiqueta desconocida, es preferible que no infle el efectivo
  * esperado y provoque un arqueo que no cuadra.
  */
+/** El método propio cuya etiqueta quedó guardada en el pago, o null. */
+export const getCustomMethodByLabel = (methodLabel, companySettings) => {
+  const label = String(methodLabel || '').trim()
+  if (!label) return null
+  return getCustomPaymentMethods(companySettings).find(m => m.label === label) || null
+}
+
+/**
+ * ¿Este pago entró al cajón como efectivo físico?
+ *
+ * Desde que los métodos propios se desglosan con su propia línea en la caja,
+ * `behavesLike` quedó SOLO para esta pregunta: el efectivo esperado del arqueo
+ * (`inicial + ventas en efectivo + ingresos − egresos`) tiene que incluir la
+ * plata de un método propio que es efectivo físico, aunque en el desglose se
+ * muestre aparte. Sin esto, el arqueo saldría corto todos los días.
+ */
+export const isCashLikePayment = (methodLabel, companySettings) => {
+  const label = String(methodLabel || '').trim()
+  if (label === 'Efectivo') return true
+  const propio = getCustomMethodByLabel(label, companySettings)
+  return propio ? propio.behavesLike === 'cash' : false
+}
+
 export const getPaymentBucketLabel = (methodLabel, companySettings) => {
   const label = String(methodLabel || '').trim()
   if (!label) return ''

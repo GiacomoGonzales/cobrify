@@ -76,6 +76,7 @@ import { printInvoiceTicket, connectPrinter, getPrinterConfig } from '@/services
 import { shortenUrl } from '@/services/urlShortenerService'
 import { getActiveBranches } from '@/services/branchService'
 import { useLocationAccess, useSellerScope } from '@/utils/locationAccess'
+import { getVisiblePaymentMethods } from '@/utils/paymentMethods'
 
 export default function InvoiceList() {
   const { user, isDemoMode, demoData, getBusinessId, businessSettings, businessMode, filterBranchesByAccess, hasMainBranchAccess, isBusinessOwner, isAdmin, allowedBranches, allowedWarehouses, assignedSellerId } = useAppContext()
@@ -86,6 +87,20 @@ export default function InvoiceList() {
   const toast = useToast()
   const [invoices, setInvoices] = useState([])
   const [companySettings, setCompanySettings] = useState(null)
+
+  // Etiquetas de métodos de pago para selects y filtros: los de siempre
+  // visibles + los PROPIOS del negocio. Antes estas listas estaban escritas a
+  // mano en 5 sitios y un método propio (FISE) ni aparecía como opción.
+  const paymentMethodLabels = useMemo(
+    () => getVisiblePaymentMethods(companySettings, businessMode).map(m => m.label),
+    [companySettings, businessMode]
+  )
+  // Incluye el valor actual aunque el método ya no exista u esté oculto: una
+  // venta vieja con esa etiqueta debe seguir mostrándola, no quedar en blanco.
+  const methodOptionsFor = (current) =>
+    current && !paymentMethodLabels.includes(current)
+      ? [current, ...paymentMethodLabels]
+      : paymentMethodLabels
   const ticketRef = useRef()
 
   // Campo "Alumno" activo (colegios): agrega la columna Alumno a la tabla y
@@ -3055,14 +3070,9 @@ Gracias por tu preferencia.`
               className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900 text-sm"
             >
               <option value="all">Todos los pagos</option>
-              <option value="Efectivo">Efectivo</option>
-              <option value="Tarjeta">Tarjeta</option>
-              <option value="Transferencia">Transferencia</option>
-              <option value="Yape">Yape</option>
-              <option value="Plin">Plin</option>
-              <option value="Rappi">Rappi</option>
-              <option value="PedidosYa">PedidosYa</option>
-              <option value="DiDiFood">DiDiFood</option>
+              {paymentMethodLabels.map(m => (
+                <option key={m} value={m}>{m}</option>
+              ))}
             </select>
             {/* Filtro de conversión */}
             <select
@@ -4252,14 +4262,9 @@ Gracias por tu preferencia.`
                   onChange={e => handleUpdatePaymentMethod(viewingInvoice.id, e.target.value)}
                   className="mt-1 text-sm"
                 >
-                  <option value="Efectivo">Efectivo</option>
-                  <option value="Tarjeta">Tarjeta</option>
-                  <option value="Transferencia">Transferencia</option>
-                  <option value="Yape">Yape</option>
-                  <option value="Plin">Plin</option>
-                  <option value="Rappi">Rappi</option>
-                  <option value="PedidosYa">PedidosYa</option>
-                  <option value="DiDiFood">DiDiFood</option>
+                  {methodOptionsFor(viewingInvoice.paymentMethod || 'Efectivo').map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
                 </Select>
               </div>
               <div className="bg-gray-50 rounded-lg p-3">
@@ -4525,14 +4530,9 @@ Gracias por tu preferencia.`
                         }}
                         className="text-sm flex-1"
                       >
-                        <option value="Efectivo">Efectivo</option>
-                        <option value="Tarjeta">Tarjeta</option>
-                        <option value="Transferencia">Transferencia</option>
-                        <option value="Yape">Yape</option>
-                        <option value="Plin">Plin</option>
-                        <option value="Rappi">Rappi</option>
-                        <option value="PedidosYa">PedidosYa</option>
-                        <option value="DiDiFood">DiDiFood</option>
+                        {methodOptionsFor(pago.method).map(m => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
                       </Select>
                       <span className="font-medium whitespace-nowrap">{formatCurrency(pago.amount, viewingInvoice.currency)}</span>
                     </div>
@@ -5118,11 +5118,9 @@ Gracias por tu preferencia.`
                 onChange={(e) => setNewPaymentMethod(e.target.value)}
                 disabled={isRegisteringPayment}
               >
-                <option value="Efectivo">Efectivo</option>
-                <option value="Tarjeta">Tarjeta</option>
-                <option value="Transferencia">Transferencia</option>
-                <option value="Yape">Yape</option>
-                <option value="Plin">Plin</option>
+                {paymentMethodLabels.map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
               </Select>
             </div>
 
@@ -5383,7 +5381,7 @@ Gracias por tu preferencia.`
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Método de pago</label>
             <div className="flex flex-wrap gap-2">
-              {['Efectivo', 'Tarjeta', 'Transferencia', 'Yape', 'Plin', 'Rappi', 'PedidosYa', 'DiDiFood'].map(m => {
+              {paymentMethodLabels.map(m => {
                 const active = exportFilters.paymentMethods.includes(m)
                 return (
                   <button key={m} type="button" onClick={() => toggleExportFilter('paymentMethods', m)}

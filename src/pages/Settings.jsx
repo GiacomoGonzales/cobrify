@@ -53,7 +53,7 @@ import { getTables } from '@/services/tableService'
 import { validateShopifreeApiKey, connectShopifree, disconnectShopifree, pingShopifree, getShopifreeStoreUrl, getShopifreeIntegrationLogs, computeShopifreeStats, getLogActionLabel } from '@/services/shopifreeService'
 import RenumberInvoicesModal from '@/components/RenumberInvoicesModal'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
-import { getBuiltinPaymentMethodsForMode, getVisiblePaymentMethods, PAYMENT_BEHAVIORS } from '@/utils/paymentMethods'
+import { getBuiltinPaymentMethodsForMode, getVisiblePaymentMethods } from '@/utils/paymentMethods'
 import {
   deleteAllProducts,
   deleteAllCustomers,
@@ -5294,8 +5294,9 @@ export default function Settings() {
                     <span className="text-sm font-medium text-gray-900">Métodos propios</span>
                     <p className="text-xs text-gray-600 mt-1.5 mb-3 leading-relaxed">
                       Si cobras de una forma que no está en la lista —un vale, un convenio— agrégala acá.
-                      Indica con qué método se comporta para que el cierre de caja la contabilice donde
-                      corresponde: si eliges Efectivo, entra al cajón y suma al arqueo.
+                      Aparece con su propio nombre en el punto de venta, el control de caja, los reportes
+                      y el detalle de cada venta. Lo único que debes indicar es si es efectivo físico:
+                      si lo es, esa plata entra al cajón y suma al arqueo del cierre.
                     </p>
 
                     {customPaymentMethods.length > 0 && (
@@ -5305,7 +5306,9 @@ export default function Settings() {
                             <div className="flex-1 min-w-0">
                               <p className="text-sm text-gray-900 truncate">{m.name}</p>
                               <p className="text-xs text-gray-500">
-                                Se comporta como {PAYMENT_BEHAVIORS.find(b => b.id === m.behavesLike)?.label || 'Transferencia'}
+                                {m.behavesLike === 'cash'
+                                  ? 'Efectivo físico: entra al cajón y suma al arqueo'
+                                  : 'No entra al cajón (se cuadra aparte)'}
                               </p>
                             </div>
                             <button
@@ -5335,9 +5338,10 @@ export default function Settings() {
                         onChange={e => setNewPaymentBehavior(e.target.value)}
                         className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                       >
-                        {PAYMENT_BEHAVIORS.map(b => (
-                          <option key={b.id} value={b.id}>Se comporta como {b.label}</option>
-                        ))}
+                        {/* behavesLike quedó SOLO para el arqueo: el desglose ya
+                            es independiente en caja, reportes y ventas. */}
+                        <option value="cash">Es efectivo físico (entra al cajón)</option>
+                        <option value="transfer">No entra al cajón</option>
                       </select>
                       <button
                         type="button"

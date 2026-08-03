@@ -6,6 +6,7 @@ import Button from '@/components/ui/Button'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getInvoices, updateInvoice } from '@/services/firestoreService'
 import { getInvoiceDate, parseLocalDateString } from '@/utils/invoiceDate'
+import { getVisiblePaymentMethods } from '@/utils/paymentMethods'
 import { downloadBlob } from '@/utils/nativeDownload'
 import { useToast } from '@/contexts/ToastContext'
 import { isPendingInvoice, getPendingAmount } from '@/utils/receivables'
@@ -1005,11 +1006,12 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
                   disabled={isPayingGroup}
                   className="w-full h-10 px-3 border border-gray-300 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 >
-                  <option value="Efectivo">Efectivo</option>
-                  <option value="Tarjeta">Tarjeta</option>
-                  <option value="Transferencia">Transferencia</option>
-                  <option value="Yape">Yape</option>
-                  <option value="Plin">Plin</option>
+                  {/* Sin businessMode como prop: los métodos por modo (Rappi,
+                      etc.) no aplican a cobrar deudas, así que la lista base +
+                      los propios del negocio es exactamente lo que va acá. */}
+                  {getVisiblePaymentMethods(companySettings, null).map(m => (
+                    <option key={m.key} value={m.label}>{m.label}</option>
+                  ))}
                 </select>
               </div>
 

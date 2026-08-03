@@ -3392,6 +3392,10 @@ export const printCashClosureTicket = async (sessionData, movements = [], busine
     if (salesTransfer > 0) printer = printer.text(createLine('Transferencia:', formatCurrency(salesTransfer)) + '\n');
     if (salesYape > 0) printer = printer.text(createLine('Yape:', formatCurrency(salesYape)) + '\n');
     if (salesPlin > 0) printer = printer.text(createLine('Plin:', formatCurrency(salesPlin)) + '\n');
+    // Metodos propios del negocio (sesiones cerradas desde ago-2026)
+    Object.entries(sessionData?.salesByCustomMethod || {}).forEach(([label, monto]) => {
+      if (monto > 0) printer = printer.text(createLine(label + ':', formatCurrency(monto)) + '\n');
+    });
 
     printer = printer
       .text(format.halfSeparator + '\n')
@@ -3634,6 +3638,10 @@ const printWifiCashClosure = async (sessionData, movements, business, paperWidth
     if (salesTransfer > 0) builder.text(createLine('Transferencia:', formatCurrency(salesTransfer))).newLine();
     if (salesYape > 0) builder.text(createLine('Yape:', formatCurrency(salesYape))).newLine();
     if (salesPlin > 0) builder.text(createLine('Plin:', formatCurrency(salesPlin))).newLine();
+    // Metodos propios del negocio (sesiones cerradas desde ago-2026)
+    Object.entries(sessionData?.salesByCustomMethod || {}).forEach(([label, monto]) => {
+      if (monto > 0) builder.text(createLine(label + ':', formatCurrency(monto))).newLine();
+    });
     builder.text(format.halfSeparator).newLine()
       .bold(true).text(createLine('Total Ventas:', formatCurrency(totalSales))).newLine().bold(false)
       .text(format.separator).newLine();
@@ -3816,6 +3824,10 @@ const printBLECashClosure = async (sessionData, movements, business, paperWidth,
     if (salesTransfer > 0) ticketText += createLine('Transferencia:', formatCurrency(salesTransfer)) + '\n';
     if (salesYape > 0) ticketText += createLine('Yape:', formatCurrency(salesYape)) + '\n';
     if (salesPlin > 0) ticketText += createLine('Plin:', formatCurrency(salesPlin)) + '\n';
+    // Metodos propios del negocio (sesiones cerradas desde ago-2026)
+    Object.entries(sessionData?.salesByCustomMethod || {}).forEach(([label, monto]) => {
+      if (monto > 0) ticketText += createLine(label + ':', formatCurrency(monto)) + '\n';
+    });
     ticketText += format.halfSeparator + '\n';
     ticketText += createLine('Total Ventas:', formatCurrency(totalSales)) + '\n';
     ticketText += format.separator + '\n';

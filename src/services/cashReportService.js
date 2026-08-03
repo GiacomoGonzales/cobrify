@@ -308,6 +308,8 @@ export const generateCashReportExcel = async (sessionData, movements, invoices, 
     ...(sessionData.salesRappi ? [['Rappi', sessionData.salesRappi]] : []),
     ...(sessionData.salesPedidosYa ? [['PedidosYa', sessionData.salesPedidosYa]] : []),
     ...(sessionData.salesDiDiFood ? [['DiDiFood', sessionData.salesDiDiFood]] : []),
+    // Métodos propios del negocio (sesiones cerradas desde ago-2026)
+    ...Object.entries(sessionData.salesByCustomMethod || {}).filter(([, v]) => v > 0),
   ]
   const closingMethods = [
     ['Efectivo Contado', sessionData.closingCash || 0],
@@ -1007,6 +1009,8 @@ export const generateCashReportPDF = async (sessionData, movements, invoices, bu
     ...(sessionData.salesRappi ? [['Rappi', sessionData.salesRappi]] : []),
     ...(sessionData.salesPedidosYa ? [['PedidosYa', sessionData.salesPedidosYa]] : []),
     ...(sessionData.salesDiDiFood ? [['DiDiFood', sessionData.salesDiDiFood]] : []),
+    // Métodos propios del negocio (sesiones cerradas desde ago-2026)
+    ...Object.entries(sessionData.salesByCustomMethod || {}).filter(([, v]) => v > 0),
   ];
 
   salesItems.forEach(([lbl, val], i) => {

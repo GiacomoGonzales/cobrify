@@ -2378,7 +2378,7 @@ export const closeCashRegister = async (userId, sessionId, closingData, userUid 
       return { success: true, alreadyClosed: true }
     }
 
-    const { cash, card, transfer, yape, plin, rappi, pedidosYa, diDiFood, totalSales, salesCash, salesCard, salesTransfer, salesYape, salesPlin, salesRappi, salesPedidosYa, salesDiDiFood, totalIncome, totalExpense, totalIncomeYape, totalExpenseYape, expectedAmount, difference, expectedAmountYape, differenceYape, invoiceCount, deferredPayments, deferredTotal, usd } = closingData
+    const { cash, card, transfer, yape, plin, rappi, pedidosYa, diDiFood, totalSales, salesCash, salesCard, salesTransfer, salesYape, salesPlin, salesRappi, salesPedidosYa, salesDiDiFood, salesByCustomMethod, totalIncome, totalExpense, totalIncomeYape, totalExpenseYape, expectedAmount, difference, expectedAmountYape, differenceYape, invoiceCount, deferredPayments, deferredTotal, usd } = closingData
     const closingAmount = cash + card + transfer + (yape || 0) + (plin || 0) + (rappi || 0) + (pedidosYa || 0) + (diDiFood || 0)
 
     const updateData = {
@@ -2404,6 +2404,9 @@ export const closeCashRegister = async (userId, sessionId, closingData, userUid 
       salesRappi: salesRappi || 0,
       salesPedidosYa: salesPedidosYa || 0,
       salesDiDiFood: salesDiDiFood || 0,
+      // Métodos propios del negocio: etiqueta → monto. Solo se escribe si hubo
+      // (sesiones sin métodos propios no cargan un mapa vacío en el doc).
+      ...(salesByCustomMethod && Object.keys(salesByCustomMethod).length > 0 && { salesByCustomMethod }),
       totalIncome: totalIncome || 0,
       totalExpense: totalExpense || 0,
       expectedAmount: expectedAmount || 0,
