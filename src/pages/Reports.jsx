@@ -71,6 +71,7 @@ import {
 } from 'recharts'
 import { CHART_COLORS, CHART_MUTED, colorForKey, assignColors, capSeries } from '@/utils/chartColors'
 import { getSaleSeller } from '@/utils/saleSeller'
+import MonthSelect from '@/components/MonthSelect'
 import { getInvoiceCommission, buildSellerIndex } from '@/utils/commissions'
 import { getSellers } from '@/services/sellerService'
 
@@ -230,6 +231,9 @@ export default function Reports() {
   const [isLoading, setIsLoading] = useState(true)
   const [dateRange, setDateRange] = useState('month') // week, month, quarter, year, all, custom
   const [selectedReport, setSelectedReport] = useState('overview') // overview, sales, products, customers, expenses
+  // Mes elegido en el selector. Rellena el rango PERSONALIZADO: no es un modo
+  // de filtro nuevo, para no tocar la logica de fechas de la pagina.
+  const [selectedMonth, setSelectedMonth] = useState('')
   const [customStartDate, setCustomStartDate] = useState('')
   const [customEndDate, setCustomEndDate] = useState('')
   const [branches, setBranches] = useState([])
@@ -2636,7 +2640,7 @@ export default function Reports() {
             ].map(option => (
               <button
                 key={option.value}
-                onClick={() => setDateRange(option.value)}
+                onClick={() => { setDateRange(option.value); setSelectedMonth('') }}
                 className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
                   dateRange === option.value
                     ? 'bg-primary-600 text-white'
@@ -2646,19 +2650,31 @@ export default function Reports() {
                 {option.label}
               </button>
             ))}
+            {/* Elegir un mes concreto sin tener que tipear el rango a mano ni
+                acordarse de en que dia termina cada mes. */}
+            <MonthSelect
+              value={selectedMonth}
+              onSelect={(m) => {
+                if (!m) { setSelectedMonth(''); return }
+                setSelectedMonth(m.value)
+                setDateRange('custom')
+                setCustomStartDate(m.start)
+                setCustomEndDate(m.end)
+              }}
+            />
             {dateRange === 'custom' && (
               <>
                 <input
                   type="date"
                   value={customStartDate}
-                  onChange={e => setCustomStartDate(e.target.value)}
+                  onChange={e => { setCustomStartDate(e.target.value); setSelectedMonth('') }}
                   className="px-2 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm w-[130px]"
                 />
                 <span className="text-gray-400 text-sm">—</span>
                 <input
                   type="date"
                   value={customEndDate}
-                  onChange={e => setCustomEndDate(e.target.value)}
+                  onChange={e => { setCustomEndDate(e.target.value); setSelectedMonth('') }}
                   className="px-2 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm w-[130px]"
                 />
               </>

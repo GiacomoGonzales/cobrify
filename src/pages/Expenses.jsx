@@ -6,6 +6,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { matchesSearchQuery } from '@/lib/utils'
 import Button from '@/components/ui/Button'
+import MonthSelect from '@/components/MonthSelect'
 import {
   getExpenses,
   createExpense,
@@ -372,6 +373,9 @@ export default function Expenses() {
   const [showCategoriesModal, setShowCategoriesModal] = useState(false)
 
   // Atajos para setear rango de fechas rápido
+  // Mes elegido: rellena el mismo rango que usan los atajos.
+  const [selectedMonth, setSelectedMonth] = useState('')
+
   function applyDateShortcut(shortcut) {
     const today = new Date()
     let start, end
@@ -896,12 +900,21 @@ export default function Expenses() {
               <button
                 key={s.key}
                 type="button"
-                onClick={() => applyDateShortcut(s.key)}
+                onClick={() => { applyDateShortcut(s.key); setSelectedMonth('') }}
                 className="px-2.5 py-1 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors"
               >
                 {s.label}
               </button>
             ))}
+            <MonthSelect
+              value={selectedMonth}
+              onSelect={(mes) => {
+                if (!mes) { setSelectedMonth(''); return }
+                setSelectedMonth(mes.value)
+                setDateRange({ startDate: mes.start, endDate: mes.end })
+              }}
+              className="px-2 py-1 text-xs border border-gray-300 rounded-md bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
           </div>
         </div>
 

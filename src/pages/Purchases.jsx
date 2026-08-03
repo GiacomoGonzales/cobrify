@@ -37,6 +37,7 @@ import { generatePurchasePDF } from '@/utils/purchasePdfGenerator'
 import { printPurchaseTicket } from '@/utils/printPurchaseTicket'
 import { preloadLogo } from '@/utils/pdfGenerator'
 import Card, { CardContent } from '@/components/ui/Card'
+import MonthSelect from '@/components/MonthSelect'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
@@ -132,6 +133,8 @@ export default function Purchases() {
 
   // Filtro de fechas
   const [dateFilter, setDateFilter] = useState('all') // 'all', 'today', '3days', '7days', '30days', 'custom'
+  // Mes elegido: rellena el rango personalizado que la pagina ya procesa.
+  const [selectedMonth, setSelectedMonth] = useState('')
   const [customStartDate, setCustomStartDate] = useState('')
   const [customEndDate, setCustomEndDate] = useState('')
 
@@ -1430,7 +1433,7 @@ export default function Purchases() {
               ].map((option) => (
                 <button
                   key={option.value}
-                  onClick={() => setDateFilter(option.value)}
+                  onClick={() => { setDateFilter(option.value); setSelectedMonth('') }}
                   className={`px-3 py-1.5 text-sm rounded-lg transition-colors shadow-sm ${
                     dateFilter === option.value
                       ? 'bg-primary-600 text-white border border-primary-700'
@@ -1440,6 +1443,16 @@ export default function Purchases() {
                   {option.label}
                 </button>
               ))}
+              <MonthSelect
+                value={selectedMonth}
+                onSelect={(mes) => {
+                  if (!mes) { setSelectedMonth(''); return }
+                  setSelectedMonth(mes.value)
+                  setDateFilter('custom')
+                  setCustomStartDate(mes.start)
+                  setCustomEndDate(mes.end)
+                }}
+              />
             </div>
           </div>
 

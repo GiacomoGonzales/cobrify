@@ -78,6 +78,7 @@ import { getActiveBranches } from '@/services/branchService'
 import { useLocationAccess, useSellerScope } from '@/utils/locationAccess'
 import { getVisiblePaymentMethods } from '@/utils/paymentMethods'
 import { getSaleSeller, matchesSaleSeller, listSaleSellers } from '@/utils/saleSeller'
+import MonthSelect from '@/components/MonthSelect'
 
 /**
  * Tipo de pedido guardado en el comprobante. Solo aplica a restaurante/delivery;
@@ -193,6 +194,8 @@ export default function InvoiceList() {
   const [filterConversion, setFilterConversion] = useState('all') // 'all', 'converted', 'not_converted'
   const [branches, setBranches] = useState([])
   const [dateFilter, setDateFilter] = useState('30days') // 'all', 'today', '3days', '7days', '30days', 'custom'
+  // Mes elegido: rellena el rango personalizado que la pagina ya procesa.
+  const [selectedMonth, setSelectedMonth] = useState('')
   const [filterStartDate, setFilterStartDate] = useState('')
   const [filterEndDate, setFilterEndDate] = useState('')
   const [viewingInvoice, setViewingInvoice] = useState(null)
@@ -2982,7 +2985,7 @@ Gracias por tu preferencia.`
               ].map((option) => (
                 <button
                   key={option.value}
-                  onClick={() => setDateFilter(option.value)}
+                  onClick={() => { setDateFilter(option.value); setSelectedMonth('') }}
                   className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
                     dateFilter === option.value
                       ? 'bg-primary-600 text-white'
@@ -2992,6 +2995,16 @@ Gracias por tu preferencia.`
                   {option.label}
                 </button>
               ))}
+              <MonthSelect
+                value={selectedMonth}
+                onSelect={(mes) => {
+                  if (!mes) { setSelectedMonth(''); return }
+                  setSelectedMonth(mes.value)
+                  setDateFilter('custom')
+                  setFilterStartDate(mes.start)
+                  setFilterEndDate(mes.end)
+                }}
+              />
             </div>
           </div>
 
