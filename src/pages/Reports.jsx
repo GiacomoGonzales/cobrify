@@ -1522,6 +1522,93 @@ export default function Reports() {
    * Solo se devuelven las horas CON actividad: con las 24 fijas, dos tercios de
    * la cuadrícula quedaban vacíos y las celdas útiles ilegibles de tan angostas.
    */
+  /**
+   * Ventas por DÍA DEL MES (1 a 31), para ver si se vende más a inicio de mes,
+   * en quincena o a fin de mes — que acá marca el calendario de pagos.
+   *
+   * Usa `getInvoiceDate` (fecha de emisión), no `createdAt`: acá interesa el día
+   * de calendario de la venta, que es el mismo criterio con el que la página
+   * agrupa todo lo demás. El mapa de calor sí necesita `createdAt` porque de esa
+   * fecha saca la HORA, que `emissionDate` no tiene.
+   *
+   * OJO con el sesgo: si el rango abarca varios meses, el día 31 ocurre en menos
+   * meses que el 15, así que comparar totales lo castigaría sin razón. Por eso se
+   * cuenta en cuántos meses ocurrió cada día y se expone también el PROMEDIO por
+   * ocurrencia, que es la cifra comparable.
+   */
+  const salesByMonthDay = useMemo(() => {
+    const dias = Array.from({ length: 31 }, (_, i) => ({
+      dia: i + 1,
+      total: 0,
+      count: 0,
+      ocurrencias: 0,
+    }))
+
+    let minDate = null
+    let maxDate = null
+
+    filteredInvoices.forEach(inv => {
+      const d = getInvoiceDate(inv)
+      if (!d) return
+      const idx = d.getDate() - 1
+      if (idx < 0 || idx > 30) return
+      dias[idx].total += getDocumentTotalInBase(inv)
+      dias[idx].count += 1
+      if (!minDate || d < minDate) minDate = d
+      if (!maxDate || d > maxDate) maxDate = d
+    })
+
+    // Cuántas veces ocurrió cada día del mes dentro del span real de los datos.
+    // Se usa el span de los datos y no el rango elegido: es el denominador de lo
+    // que efectivamente se pudo observar.
+    if (minDate && maxDate) {
+      const cursor = new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate())
+      const fin = new Date(maxDate.getFullYear(), maxDate.getMonth(), maxDate.getDate())
+      while (cursor <= fin) {
+        dias[cursor.getDate() - 1].ocurrencias += 1
+        cursor.setDate(cursor.getDate() + 1)
+      }
+    }
+
+    const data = dias.map(d => ({
+      ...d,
+      total: Number(d.total.toFixed(2)),
+      promedio: d.ocurrencias > 0 ? Number((d.total / d.ocurrencias).toFixed(2)) : 0,
+    }))
+
+    // Tercios del mes. Son los tramos con los que se razona el flujo de caja acá:
+    // quincena y fin de mes son fechas de pago.
+    const tramo = (desde, hasta) => {
+      const items = data.filter(d => d.dia >= desde && d.dia <= hasta)
+      return {
+        total: Number(items.reduce((s, d) => s + d.total, 0).toFixed(2)),
+        count: items.reduce((s, d) => s + d.count, 0),
+      }
+    }
+
+    const inicio = tramo(1, 10)
+    const quincena = tramo(11, 20)
+    const fin = tramo(21, 31)
+    const totalGeneral = inicio.total + quincena.total + fin.total
+
+    // ¿Los datos cruzan más de un mes? Solo entonces el sesgo de los días 29-31
+    // es real y vale la pena avisarlo.
+    const variosMeses = !!(minDate && maxDate) &&
+      (minDate.getFullYear() !== maxDate.getFullYear() || minDate.getMonth() !== maxDate.getMonth())
+
+    return {
+      data,
+      tramos: [
+        { key: 'inicio', label: 'Inicio de mes', rango: '1 al 10', ...inicio },
+        { key: 'quincena', label: 'Quincena', rango: '11 al 20', ...quincena },
+        { key: 'fin', label: 'Fin de mes', rango: '21 al 31', ...fin },
+      ].map(t => ({ ...t, pct: totalGeneral > 0 ? (t.total / totalGeneral) * 100 : 0 })),
+      totalGeneral,
+      variosMeses,
+      hasData: totalGeneral > 0,
+    }
+  }, [filteredInvoices])
+
   const salesByDayHour = useMemo(() => {
     const grid = new Map() // 'dia-hora' → { revenue, count }
     const horasActivas = new Set()
@@ -3101,6 +3188,80 @@ export default function Reports() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Ventas por día del mes: inicio / quincena / fin de mes */}
+          {salesByMonthDay.hasData && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Qué días del mes se vende más</CardTitle>
+                <p className="text-sm text-gray-500 mt-1">
+                  Para ver si el movimiento se concentra a inicio de mes, en quincena o a fin de mes.
+                </p>
+              </CardHeader>
+              <CardContent>
+                {/* Los tres tramos primero: son la respuesta a la pregunta. El
+                    detalle día a día va abajo, para quien quiera afinar. */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+                  {salesByMonthDay.tramos.map(t => {
+                    const esMayor = t.total > 0 && t.total === Math.max(...salesByMonthDay.tramos.map(x => x.total))
+                    return (
+                      <div
+                        key={t.key}
+                        className={`rounded-xl border p-3.5 ${esMayor ? 'border-primary-300 bg-primary-50' : 'border-gray-200 bg-white'}`}
+                      >
+                        <div className="flex items-baseline justify-between">
+                          <p className={`text-sm font-medium ${esMayor ? 'text-primary-900' : 'text-gray-700'}`}>{t.label}</p>
+                          <span className="text-xs text-gray-500">{t.rango}</span>
+                        </div>
+                        <p className={`text-xl font-bold mt-1 ${esMayor ? 'text-primary-900' : 'text-gray-900'}`}>
+                          {formatMoney(t.total)}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {t.pct.toFixed(1)}% del período · {t.count} venta{t.count === 1 ? '' : 's'}
+                        </p>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={salesByMonthDay.data}>
+                    <CartesianGrid stroke="#eef0f2" vertical={false} />
+                    <XAxis dataKey="dia" tick={{ fontSize: 10 }} interval={0} />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip
+                      cursor={{ fill: '#f3f4f6' }}
+                      content={({ active, payload }) => {
+                        if (!active || !payload?.length) return null
+                        const d = payload[0].payload
+                        return (
+                          <div className="bg-white border border-gray-200 rounded-lg shadow-sm px-3 py-2 text-xs">
+                            <p className="font-medium text-gray-900 mb-1">Día {d.dia}</p>
+                            <p className="text-gray-700">Total: {formatMoney(d.total)}</p>
+                            <p className="text-gray-700">Promedio: {formatMoney(d.promedio)}</p>
+                            <p className="text-gray-500 mt-0.5">
+                              {d.count} venta{d.count === 1 ? '' : 's'} · ocurrió {d.ocurrencias} vez{d.ocurrencias === 1 ? '' : 'es'}
+                            </p>
+                          </div>
+                        )
+                      }}
+                    />
+                    <Bar dataKey="total" fill={CHART_COLORS[0]} name="total" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+
+                {/* El sesgo solo existe si el rango cruza meses: en uno solo, cada
+                    día ocurrió exactamente una vez. */}
+                {salesByMonthDay.variosMeses && (
+                  <p className="text-xs text-gray-500 mt-2">
+                    El rango abarca varios meses, así que los días 29, 30 y 31 ocurren menos veces
+                    y su total sale más bajo por esa razón. Para compararlos parejo, mira el
+                    promedio en el tooltip.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Mapa de calor: día de la semana × hora */}
           {salesByDayHour.hasData && (
