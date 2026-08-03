@@ -4259,7 +4259,11 @@ Gracias por tu preferencia.`
                 !mismaFecha && registro && ['Registrada el', formatDateTime(registro)],
                 viewingInvoice.sellerName && ['Vendedor', viewingInvoice.sellerName],
                 viewingInvoice.createdByName && ['Registrado por', viewingInvoice.createdByName],
-                viewingInvoice.branchName && ['Sucursal', viewingInvoice.branchName],
+                // Una venta de la sucursal principal NO guarda branchId ni
+                // branchName (la principal no es un documento de sucursal), así
+                // que la fila desaparecía justo en el caso más común. Mismo
+                // criterio que los filtros de esta página y el de Caja.
+                ['Sucursal', viewingInvoice.branchName || companySettings?.mainBranchName || 'Sucursal Principal'],
                 viewingInvoice.warehouseName && ['Almacén', viewingInvoice.warehouseName],
                 // Solo en restaurante: es el único modo donde el cajero elige el
                 // tipo. Las ventas anteriores a ago-2026 de otros rubros tienen
