@@ -663,30 +663,15 @@ export default function Reports() {
 
     const avgTicket = totalInvoices > 0 ? totalRevenue / totalInvoices : 0
 
-    // Calcular utilidad total
-    let totalCost = 0
-    filteredInvoices.forEach(invoice => {
-      invoice.items?.forEach(item => {
-        const productId = item.productId || item.id
-        const quantity = item.quantity || 0
-        const factor = item.presentationFactor || 1
-
-        // Costo congelado al momento de la venta (Fase 2): prioridad sobre todo
-        if (typeof item.costAtSale === 'number') {
-          totalCost += item.costAtSale * quantity
-        } else {
-          const recipe = recipes.find(r => r.productId === productId)
-          if (recipe) {
-            // Fallback receta: costo calculado de ingredientes
-            totalCost += (recipe.totalCost || 0) * quantity * factor
-          } else {
-            // Fallback final: costo actual del producto en catálogo
-            const product = products.find(p => p.id === productId)
-            totalCost += (product?.cost || 0) * quantity * factor
-          }
-        }
-      })
-    })
+    // Calcular utilidad total.
+    // Usa `calculateItemCost`, el MISMO criterio que la utilidad por producto,
+    // por marca y por vendedor. Antes acá había una copia literal de esa función:
+    // dos cálculos separados para el mismo número terminan divergiendo en cuanto
+    // uno de los dos se toca.
+    const totalCost = filteredInvoices.reduce(
+      (sum, invoice) => sum + (invoice.items || []).reduce((s, item) => s + calculateItemCost(item), 0),
+      0
+    )
     const totalProfit = totalRevenue - totalCost
     const profitMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0
 
@@ -710,7 +695,9 @@ export default function Reports() {
       totalProfit,
       profitMargin,
     }
-  }, [filteredInvoices, getPreviousPeriodRevenue, products, recipes])
+    // `calculateItemCost` ya depende de products y recipes; se mantienen en las
+    // dependencias porque el useMemo las sigue usando para el resto del cálculo.
+  }, [filteredInvoices, getPreviousPeriodRevenue, products, recipes, calculateItemCost])
 
   // Top productos vendidos
   const topProducts = useMemo(() => {
@@ -1117,6 +1104,10 @@ export default function Reports() {
           email: invoice.createdByEmail || '',
           salesCount: 0,
           totalRevenue: 0,
+          totalCost: 0,
+          // Ventas sin costo registrado: se listan aparte porque inflan la
+          // utilidad (cuentan como costo 0) y el vendedor no tiene la culpa.
+          salesWithoutCost: 0,
           facturas: 0,
           boletas: 0,
           notasVenta: 0,
@@ -1128,6 +1119,18 @@ export default function Reports() {
       sellers[sellerId].salesCount += 1
       sellers[sellerId].totalRevenue += getDocumentTotalInBase(invoice)
 
+      // Costo con el MISMO criterio que la utilidad total y la utilidad por
+      // producto: `calculateItemCost` (costo congelado en la venta → receta →
+      // costo actual del catálogo). No se recalcula acá para que los tres
+      // números de la página no puedan discrepar.
+      const items = invoice.items || []
+      sellers[sellerId].totalCost += items.reduce((s, item) => s + calculateItemCost(item), 0)
+      // Una venta hecha 100% de productos personalizados no tiene costo que
+      // consultar: su "utilidad" sería el importe completo, y eso es falso.
+      if (items.length > 0 && items.every(isCustomItem)) {
+        sellers[sellerId].salesWithoutCost += 1
+      }
+
       if (invoice.documentType === 'factura') sellers[sellerId].facturas += 1
       else if (invoice.documentType === 'boleta') sellers[sellerId].boletas += 1
       else if (invoice.documentType === 'nota_venta') sellers[sellerId].notasVenta += 1
@@ -1136,8 +1139,17 @@ export default function Reports() {
     })
 
     return Object.values(sellers)
+      .map(s => {
+        const profit = Math.round((s.totalRevenue - s.totalCost) * 100) / 100
+        return {
+          ...s,
+          totalCost: Math.round(s.totalCost * 100) / 100,
+          profit,
+          profitMargin: s.totalRevenue > 0 ? (profit / s.totalRevenue) * 100 : 0,
+        }
+      })
       .sort((a, b) => b.totalRevenue - a.totalRevenue)
-  }, [filteredInvoices])
+  }, [filteredInvoices, calculateItemCost, isCustomItem])
 
   // Estadísticas por método de pago
   const paymentMethodStats = useMemo(() => {
@@ -2177,13 +2189,16 @@ export default function Reports() {
 
     // Hoja 1: Resumen por vendedor
     const resumen = [
-      { 'Vendedor': 'Sucursal:', 'Email': branchLabel || 'Todas', 'N° Ventas': '', 'Ingresos': '', 'Facturas': '', 'Boletas': '', 'Notas de Venta': '', 'Notas de Crédito': '', 'Notas de Débito': '' },
-      { 'Vendedor': '', 'Email': '', 'N° Ventas': '', 'Ingresos': '', 'Facturas': '', 'Boletas': '', 'Notas de Venta': '', 'Notas de Crédito': '', 'Notas de Débito': '' },
+      { 'Vendedor': 'Sucursal:', 'Email': branchLabel || 'Todas', 'N° Ventas': '', 'Ingresos': '', 'Costo': '', 'Utilidad': '', 'Margen %': '', 'Facturas': '', 'Boletas': '', 'Notas de Venta': '', 'Notas de Crédito': '', 'Notas de Débito': '' },
+      { 'Vendedor': '', 'Email': '', 'N° Ventas': '', 'Ingresos': '', 'Costo': '', 'Utilidad': '', 'Margen %': '', 'Facturas': '', 'Boletas': '', 'Notas de Venta': '', 'Notas de Crédito': '', 'Notas de Débito': '' },
       ...sellerStats.map(s => ({
         'Vendedor': s.name,
         'Email': s.email || '',
         'N° Ventas': s.salesCount,
         'Ingresos': Math.round((s.totalRevenue || 0) * 100) / 100,
+        'Costo': Math.round((s.totalCost || 0) * 100) / 100,
+        'Utilidad': Math.round((s.profit || 0) * 100) / 100,
+        'Margen %': Math.round((s.profitMargin || 0) * 10) / 10,
         'Facturas': s.facturas,
         'Boletas': s.boletas,
         'Notas de Venta': s.notasVenta,
@@ -2195,6 +2210,9 @@ export default function Reports() {
       'Vendedor': 'TOTAL', 'Email': '',
       'N° Ventas': sellerStats.reduce((a, s) => a + (s.salesCount || 0), 0),
       'Ingresos': Math.round(sellerStats.reduce((a, s) => a + (s.totalRevenue || 0), 0) * 100) / 100,
+      'Costo': Math.round(sellerStats.reduce((a, s) => a + (s.totalCost || 0), 0) * 100) / 100,
+      'Utilidad': Math.round(sellerStats.reduce((a, s) => a + (s.profit || 0), 0) * 100) / 100,
+      'Margen %': '',
       'Facturas': '', 'Boletas': '', 'Notas de Venta': '', 'Notas de Crédito': '', 'Notas de Débito': '',
     })
 
@@ -4609,6 +4627,20 @@ export default function Reports() {
                         {seller.notasCredito > 0 && <Badge variant="warning">{seller.notasCredito} NC</Badge>}
                         {seller.notasDebito > 0 && <Badge variant="danger">{seller.notasDebito} ND</Badge>}
                       </div>
+                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100 text-sm">
+                        <span className="text-gray-500">Utilidad</span>
+                        <span className="flex items-center gap-1.5">
+                          <span className={`font-semibold ${seller.profit >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
+                            {formatMoney(seller.profit)}
+                          </span>
+                          <span className={`text-xs ${seller.profitMargin >= 0 ? 'text-gray-500' : 'text-red-500'}`}>
+                            ({seller.profitMargin.toFixed(1)}%)
+                          </span>
+                          {seller.salesWithoutCost > 0 && (
+                            <span className="text-amber-600" title={`${seller.salesWithoutCost} venta(s) sin costo registrado`}>*</span>
+                          )}
+                        </span>
+                      </div>
                     </div>
                   ))
                 )}
@@ -4628,12 +4660,15 @@ export default function Reports() {
                       <TableHead className="text-right">N. Crédito</TableHead>
                       <TableHead className="text-right">N. Débito</TableHead>
                       <TableHead className="text-right">Ingresos Totales</TableHead>
+                      <TableHead className="text-right">Costo</TableHead>
+                      <TableHead className="text-right">Utilidad</TableHead>
+                      <TableHead className="text-right">Margen</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {sellerStats.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                        <TableCell colSpan={12} className="text-center py-8 text-gray-500">
                           No hay datos de vendedores
                         </TableCell>
                       </TableRow>
@@ -4685,6 +4720,26 @@ export default function Reports() {
                           </TableCell>
                           <TableCell className="text-right font-semibold text-green-600">
                             {formatMoney(seller.totalRevenue)}
+                          </TableCell>
+                          <TableCell className="text-right text-gray-600">
+                            {formatMoney(seller.totalCost)}
+                          </TableCell>
+                          <TableCell className={`text-right font-semibold ${seller.profit >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
+                            {formatMoney(seller.profit)}
+                            {/* Ventas 100% de productos personalizados: no tienen
+                                costo que consultar, así que su importe entra
+                                entero como utilidad. Se avisa en vez de callarlo. */}
+                            {seller.salesWithoutCost > 0 && (
+                              <span
+                                className="text-amber-600 ml-0.5"
+                                title={`${seller.salesWithoutCost} venta(s) sin costo registrado: su importe cuenta como utilidad completa`}
+                              >
+                                *
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell className={`text-right ${seller.profitMargin >= 0 ? 'text-gray-700' : 'text-red-600'}`}>
+                            {seller.profitMargin.toFixed(1)}%
                           </TableCell>
                         </TableRow>
                       ))
