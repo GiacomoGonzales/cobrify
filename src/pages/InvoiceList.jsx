@@ -78,6 +78,17 @@ import { getActiveBranches } from '@/services/branchService'
 import { useLocationAccess, useSellerScope } from '@/utils/locationAccess'
 import { getVisiblePaymentMethods } from '@/utils/paymentMethods'
 
+/**
+ * Tipo de pedido guardado en el comprobante. Solo aplica a restaurante/delivery;
+ * en retail el campo no existe y la tarjeta no se muestra.
+ */
+const ORDER_TYPE_LABELS = {
+  'dine-in': 'En mesa',
+  takeaway: 'Para llevar',
+  delivery: 'Delivery',
+  counter: 'Mostrador',
+}
+
 export default function InvoiceList() {
   const { user, isDemoMode, demoData, getBusinessId, businessSettings, businessMode, filterBranchesByAccess, hasMainBranchAccess, isBusinessOwner, isAdmin, allowedBranches, allowedWarehouses, assignedSellerId } = useAppContext()
   const hidePrivateData = useHidePrivateData()
@@ -4251,35 +4262,36 @@ Gracias por tu preferencia.`
                   <p className="font-medium text-gray-900 mt-1">{viewingInvoice.warehouseName}</p>
                 </div>
               )}
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-xs text-gray-500 uppercase">Forma de Pago</p>
-                <p className="font-medium text-gray-900 mt-1">{viewingInvoice.paymentType === 'credito' ? 'Crédito' : 'Contado'}</p>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-xs text-gray-500 uppercase">Método</p>
-                <Select
-                  value={viewingInvoice.paymentMethod || 'Efectivo'}
-                  onChange={e => handleUpdatePaymentMethod(viewingInvoice.id, e.target.value)}
-                  className="mt-1 text-sm"
-                >
-                  {methodOptionsFor(viewingInvoice.paymentMethod || 'Efectivo').map(m => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </Select>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-xs text-gray-500 uppercase">Estado Pago</p>
-                <Select
-                  value={viewingInvoice.status}
-                  onChange={e => handleUpdateStatus(viewingInvoice.id, e.target.value)}
-                  className="mt-1 text-sm"
-                >
-                  <option value="pending">Pendiente</option>
-                  <option value="paid">Pagada</option>
-                  <option value="overdue">Vencida</option>
-                  <option value="cancelled">Anulada</option>
-                </Select>
-              </div>
+              {/* El pago vive en su propia tarjeta más abajo. Antes había acá un
+                  select de "Método" que editaba paymentMethod (el campo legacy de
+                  un solo método) mientras la lista de pagos de abajo editaba
+                  payments[]: dos lugares para lo mismo que podían contradecirse. */}
+              {viewingInvoice.createdByName && (
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 uppercase">Registrado por</p>
+                  <p className="font-medium text-gray-900 mt-1 truncate" title={viewingInvoice.createdByName}>{viewingInvoice.createdByName}</p>
+                </div>
+              )}
+              {viewingInvoice.createdAt && (
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 uppercase">Hora de Registro</p>
+                  <p className="font-medium text-gray-900 mt-1">
+                    {formatDateTime(viewingInvoice.createdAt?.toDate ? viewingInvoice.createdAt.toDate() : new Date(viewingInvoice.createdAt))}
+                  </p>
+                </div>
+              )}
+              {ORDER_TYPE_LABELS[viewingInvoice.orderType] && (
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 uppercase">Tipo de Pedido</p>
+                  <p className="font-medium text-gray-900 mt-1">{ORDER_TYPE_LABELS[viewingInvoice.orderType]}</p>
+                </div>
+              )}
+              {viewingInvoice.waiterName && (
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 uppercase">Mozo</p>
+                  <p className="font-medium text-gray-900 mt-1 truncate" title={viewingInvoice.waiterName}>{viewingInvoice.waiterName}</p>
+                </div>
+              )}
             </div>
 
             {/* ========== CLIENTE ========== */}
@@ -4337,6 +4349,12 @@ Gracias por tu preferencia.`
                           <span>{item.quantity} x {formatCurrency(item.unitPrice, viewingInvoice.currency)}</span>
                           {item.code && <span className="text-gray-400">• Cód: {item.code}</span>}
                           {item.unit && <span className="text-gray-400">• {item.unit}</span>}
+                          {item.serialNumber && <span className="bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded">Serie: {item.serialNumber}</span>}
+                          {Number(item.itemDiscount) > 0 && (
+                            <span className="bg-red-50 text-red-600 px-1.5 py-0.5 rounded">
+                              Desc. {item.itemDiscountType === 'percentage' ? `${item.itemDiscount}%` : formatCurrency(item.itemDiscount, viewingInvoice.currency)}
+                            </span>
+                          )}
                           {item.taxAffectation === '20' && <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">Exonerado</span>}
                           {item.taxAffectation === '30' && <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Inafecto</span>}
                           {/* En comprobantes MIXTOS, etiquetar también los gravados: un item
@@ -4429,6 +4447,175 @@ Gracias por tu preferencia.`
               </div>
             </div>
 
+            {/* ========== PAGO (unificado) ==========
+                Una sola tarjeta para todo el dinero. Antes esto vivía en 5 bloques
+                (Forma de Pago, Método, Pagos Registrados, Métodos Usados, Vuelto)
+                y dos de ellos editaban campos distintos para lo mismo. */}
+            <div className="border border-gray-200 rounded-xl overflow-hidden">
+              <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Wallet className="w-4 h-4 text-gray-400" />
+                  <h4 className="font-semibold text-gray-700">Pago</h4>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${viewingInvoice.paymentType === 'credito' ? 'bg-amber-100 text-amber-800' : 'bg-gray-200 text-gray-700'}`}>
+                    {viewingInvoice.paymentType === 'credito' ? 'Crédito' : 'Contado'}
+                  </span>
+                </div>
+                <Select
+                  value={viewingInvoice.status}
+                  onChange={e => handleUpdateStatus(viewingInvoice.id, e.target.value)}
+                  className="text-sm w-36"
+                >
+                  <option value="pending">Pendiente</option>
+                  <option value="paid">Pagada</option>
+                  <option value="overdue">Vencida</option>
+                  <option value="cancelled">Anulada</option>
+                </Select>
+              </div>
+              <div className="p-4 space-y-4">
+                {/* --- Pagos del comprobante (solo CONTADO: en una venta al crédito
+                    payments[] guarda el método elegido al emitir, no plata real;
+                    mostrarlo como pago engañaría) --- */}
+                {viewingInvoice.paymentType !== 'credito' && (() => {
+                  // Ventas viejas sin payments[]: se sintetiza una fila desde el
+                  // campo legacy para que el modal siempre edite UNA lista.
+                  const pagos = Array.isArray(viewingInvoice.payments) && viewingInvoice.payments.length > 0
+                    ? viewingInvoice.payments
+                    : [{ method: viewingInvoice.paymentMethod || 'Efectivo', amount: viewingInvoice.total, sintetico: true }]
+                  return (
+                    <div className="space-y-2">
+                      {pagos.map((pago, i) => (
+                        <div key={i} className="bg-gray-50 rounded-lg p-2 flex items-center gap-2 text-sm">
+                          <Select
+                            value={pago.method}
+                            onChange={e => {
+                              const nuevo = e.target.value
+                              if (pago.sintetico || pagos.length === 1) {
+                                // handleUpdatePaymentMethod ya sincroniza payments[0]
+                                // cuando el array tiene un solo pago.
+                                handleUpdatePaymentMethod(viewingInvoice.id, nuevo)
+                                return
+                              }
+                              const updatedPayments = [...viewingInvoice.payments]
+                              updatedPayments[i] = { ...updatedPayments[i], method: nuevo }
+                              // paymentMethod (legacy) sigue al primer pago: es lo
+                              // que leen listas y filtros viejos.
+                              if (i === 0) handleUpdatePaymentMethod(viewingInvoice.id, nuevo)
+                              updateInvoice(getBusinessId(), viewingInvoice.id, { payments: updatedPayments })
+                              setViewingInvoice(prev => prev ? { ...prev, payments: updatedPayments } : prev)
+                            }}
+                            className="text-sm flex-1"
+                          >
+                            {methodOptionsFor(pago.method).map(m => (
+                              <option key={m} value={m}>{m}</option>
+                            ))}
+                          </Select>
+                          <span className="font-medium whitespace-nowrap">{formatCurrency(pago.amount, viewingInvoice.currency)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+
+                {/* --- Venta al crédito sin cobros aún --- */}
+                {viewingInvoice.paymentType === 'credito' && (!Array.isArray(viewingInvoice.paymentHistory) || viewingInvoice.paymentHistory.length === 0) && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center justify-between text-sm">
+                    <span className="text-amber-800">Aún no se registran pagos de esta venta.</span>
+                    <span className="font-bold text-amber-900">Saldo: {formatCurrency(viewingInvoice.balance ?? viewingInvoice.total, viewingInvoice.currency)}</span>
+                  </div>
+                )}
+
+                {/* --- Pagos registrados (cobros reales de crédito/parciales) --- */}
+                {Array.isArray(viewingInvoice.paymentHistory) && viewingInvoice.paymentHistory.length > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold text-emerald-800 uppercase flex items-center gap-1.5">
+                        <Receipt className="w-3.5 h-3.5" />
+                        Pagos Registrados
+                      </p>
+                      <span className="text-xs text-emerald-700">
+                        {viewingInvoice.paymentHistory.length} pago{viewingInvoice.paymentHistory.length !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {viewingInvoice.paymentHistory.map((pago, i) => {
+                        const fecha = pago.date?.toDate
+                          ? pago.date.toDate()
+                          : (pago.date ? new Date(pago.date) : null)
+                        const fechaTxt = fecha
+                          ? fecha.toLocaleString('es-PE', {
+                              day: '2-digit', month: '2-digit', year: 'numeric',
+                              hour: '2-digit', minute: '2-digit', hour12: true
+                            })
+                          : '—'
+                        return (
+                          <div key={i} className="bg-emerald-50 rounded-lg p-3 border border-emerald-100">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                                    {pago.method || 'Efectivo'}
+                                  </span>
+                                  <span className="text-xs text-gray-500 flex items-center gap-1">
+                                    <Clock className="w-3 h-3" />
+                                    {fechaTxt}
+                                  </span>
+                                </div>
+                                {(pago.recordedByName || pago.recordedBy) && (
+                                  <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                                    <User className="w-3 h-3" />
+                                    {pago.recordedByName || pago.recordedBy}
+                                  </p>
+                                )}
+                              </div>
+                              <span className="font-bold text-emerald-700 whitespace-nowrap">
+                                {formatCurrency(pago.amount, viewingInvoice.currency)}
+                              </span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <div className="mt-3 pt-3 border-t border-emerald-200 grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <p className="text-xs text-emerald-700">Total pagado</p>
+                        <p className="font-bold text-emerald-900">{formatCurrency(viewingInvoice.amountPaid || 0, viewingInvoice.currency)}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-emerald-700">Saldo pendiente</p>
+                        <p className={`font-bold ${(viewingInvoice.balance || 0) > 0 ? 'text-amber-700' : 'text-emerald-900'}`}>
+                          {formatCurrency(viewingInvoice.balance || 0, viewingInvoice.currency)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* --- Recibido / vuelto / recargo, al pie --- */}
+                {(Number(viewingInvoice.amountReceived) > 0 || Number(viewingInvoice.change) > 0 || (viewingInvoice.cardCommissionApplied && Number(viewingInvoice.cardCommissionAmount) > 0)) && (
+                  <div className="pt-3 border-t border-gray-100 space-y-1.5 text-sm">
+                    {viewingInvoice.cardCommissionApplied && Number(viewingInvoice.cardCommissionAmount) > 0 && (
+                      <div className="flex justify-between text-gray-600">
+                        <span>Incluye recargo por tarjeta</span>
+                        <span className="font-medium">{formatCurrency(viewingInvoice.cardCommissionAmount, viewingInvoice.currency)}</span>
+                      </div>
+                    )}
+                    {Number(viewingInvoice.amountReceived) > 0 && (
+                      <div className="flex justify-between text-gray-600">
+                        <span>Recibido del cliente</span>
+                        <span className="font-medium">{formatCurrency(viewingInvoice.amountReceived, viewingInvoice.currency)}</span>
+                      </div>
+                    )}
+                    {Number(viewingInvoice.change) > 0 && (
+                      <div className="flex justify-between text-blue-700">
+                        <span className="font-medium">Vuelto entregado</span>
+                        <span className="font-bold">{formatCurrency(Number(viewingInvoice.change), viewingInvoice.currency)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* ========== CUOTAS CRÉDITO ========== */}
             {viewingInvoice.paymentType === 'credito' && viewingInvoice.creditTerms?.installments?.length > 0 && (
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
@@ -4441,113 +4628,6 @@ Gracias por tu preferencia.`
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
-
-            {/* ========== HISTORIAL DE PAGOS REGISTRADOS ========== */}
-            {Array.isArray(viewingInvoice.paymentHistory) && viewingInvoice.paymentHistory.length > 0 && (
-              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-semibold text-emerald-800 flex items-center gap-2">
-                    <Receipt className="w-4 h-4" />
-                    Pagos Registrados
-                  </h4>
-                  <span className="text-xs text-emerald-700">
-                    {viewingInvoice.paymentHistory.length} pago{viewingInvoice.paymentHistory.length !== 1 ? 's' : ''}
-                  </span>
-                </div>
-                <div className="space-y-2">
-                  {viewingInvoice.paymentHistory.map((pago, i) => {
-                    const fecha = pago.date?.toDate
-                      ? pago.date.toDate()
-                      : (pago.date ? new Date(pago.date) : null)
-                    const fechaTxt = fecha
-                      ? fecha.toLocaleString('es-PE', {
-                          day: '2-digit', month: '2-digit', year: 'numeric',
-                          hour: '2-digit', minute: '2-digit', hour12: true
-                        })
-                      : '—'
-                    return (
-                      <div key={i} className="bg-white rounded-lg p-3 border border-emerald-100">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                                {pago.method || 'Efectivo'}
-                              </span>
-                              <span className="text-xs text-gray-500 flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                {fechaTxt}
-                              </span>
-                            </div>
-                            {(pago.recordedByName || pago.recordedBy) && (
-                              <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                                <User className="w-3 h-3" />
-                                {pago.recordedByName || pago.recordedBy}
-                              </p>
-                            )}
-                          </div>
-                          <span className="font-bold text-emerald-700 whitespace-nowrap">
-                            {formatCurrency(pago.amount, viewingInvoice.currency)}
-                          </span>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-                {/* Totales del crédito */}
-                <div className="mt-3 pt-3 border-t border-emerald-200 grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <p className="text-xs text-emerald-700">Total pagado</p>
-                    <p className="font-bold text-emerald-900">{formatCurrency(viewingInvoice.amountPaid || 0, viewingInvoice.currency)}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-emerald-700">Saldo pendiente</p>
-                    <p className={`font-bold ${(viewingInvoice.balance || 0) > 0 ? 'text-amber-700' : 'text-emerald-900'}`}>
-                      {formatCurrency(viewingInvoice.balance || 0, viewingInvoice.currency)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ========== PAGOS MÚLTIPLES ========== */}
-            {viewingInvoice.payments?.length > 1 && (
-              <div className="border border-gray-200 rounded-xl p-4">
-                <h4 className="font-semibold text-gray-700 mb-3">Métodos de Pago Usados</h4>
-                <div className="space-y-2">
-                  {viewingInvoice.payments.map((pago, i) => (
-                    <div key={i} className="bg-gray-50 rounded-lg p-2 flex items-center gap-2 text-sm">
-                      <Select
-                        value={pago.method}
-                        onChange={e => {
-                          const updatedPayments = [...viewingInvoice.payments]
-                          updatedPayments[i] = { ...updatedPayments[i], method: e.target.value }
-                          const newPrimaryMethod = updatedPayments[0].method
-                          handleUpdatePaymentMethod(viewingInvoice.id, newPrimaryMethod)
-                          updateInvoice(getBusinessId(), viewingInvoice.id, { payments: updatedPayments })
-                          setViewingInvoice(prev => prev ? { ...prev, payments: updatedPayments } : prev)
-                        }}
-                        className="text-sm flex-1"
-                      >
-                        {methodOptionsFor(pago.method).map(m => (
-                          <option key={m} value={m}>{m}</option>
-                        ))}
-                      </Select>
-                      <span className="font-medium whitespace-nowrap">{formatCurrency(pago.amount, viewingInvoice.currency)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* ========== VUELTO ========== */}
-            {Number(viewingInvoice.change) > 0 && (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center justify-between">
-                <p className="text-sm font-semibold text-blue-800">Vuelto entregado al cliente</p>
-                <p className="text-base font-bold text-blue-900">
-                  {formatCurrency(Number(viewingInvoice.change), viewingInvoice.currency)}
-                </p>
               </div>
             )}
 
