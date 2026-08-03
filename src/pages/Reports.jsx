@@ -71,6 +71,8 @@ import {
 } from 'recharts'
 import { CHART_COLORS, CHART_MUTED, colorForKey, assignColors, capSeries } from '@/utils/chartColors'
 import { getSaleSeller } from '@/utils/saleSeller'
+import { getInvoiceCommission, buildSellerIndex } from '@/utils/commissions'
+import { getSellers } from '@/services/sellerService'
 
 // Paleta y asignación estable por entidad: ver src/utils/chartColors.js.
 // `COLORS` se mantiene como alias para los usos por slot FIJO (COLORS[0], etc.),
@@ -206,6 +208,9 @@ export default function Reports() {
   const [invoices, setInvoices] = useState([])
   const [customers, setCustomers] = useState([])
   const [products, setProducts] = useState([])
+  // Vendedores: solo para el FALLBACK de comisiones de ventas anteriores al
+  // congelado. Las ventas nuevas ya traen su comision guardada.
+  const [sellersList, setSellersList] = useState([])
   // Moneda de visualización de reportes (PEN por defecto; USD si el negocio lo eligió
   // con multi-divisa). Todo se calcula en soles base; formatMoney es la capa de
   // presentación: convierte el monto (en soles) a la moneda elegida y le pone su símbolo.
@@ -346,6 +351,7 @@ export default function Reports() {
         getCustomersWithStats(getBusinessId()),
         getProducts(getBusinessId()),
         getRecipes(getBusinessId()),
+        getSellers(getBusinessId()),
         getProductCategories(getBusinessId()),
         getProductBrands(getBusinessId()),
         getPurchases(getBusinessId(), { sinceDate }),
@@ -363,7 +369,7 @@ export default function Reports() {
         return { success: false, data: [] }
       })))
 
-      const [invoicesResult, customersResult, productsResult, recipesResult, categoriesResult, brandsResult, purchasesResult, movementsResults] = results
+      const [invoicesResult, customersResult, productsResult, recipesResult, sellersResult, categoriesResult, brandsResult, purchasesResult, movementsResults] = results
 
       // Seguridad usuarios secundarios: sanear los conjuntos que van por sucursal (branchId)
       // con el helper compartido. Facturas también traen warehouseId.
@@ -373,6 +379,7 @@ export default function Reports() {
       if (customersResult.success) setCustomers(customersResult.data || [])
       if (productsResult.success) setProducts(productsResult.data || [])
       if (recipesResult.success) setRecipes(recipesResult.data || [])
+      if (sellersResult?.success) setSellersList(sellersResult.data || [])
       if (categoriesResult.success) setProductCategories(categoriesResult.data || [])
       if (brandsResult?.success) setProductBrands(brandsResult.data || [])
       if (purchasesResult?.success) setPurchases(purchasesResult.data || [])
@@ -1129,6 +1136,7 @@ export default function Reports() {
   // Estadísticas por vendedor
   const sellerStats = useMemo(() => {
     const sellers = {}
+    const sellerIndex = buildSellerIndex(sellersList)
 
     filteredInvoices.forEach(invoice => {
       // VENDEDOR, no cuenta. El criterio vive en getSaleSeller para que esta
@@ -1144,6 +1152,13 @@ export default function Reports() {
           salesCount: 0,
           totalRevenue: 0,
           totalCost: 0,
+          commission: 0,
+          // Comisiones de ventas ANTERIORES al congelado: se recalculan con la
+          // configuracion actual, asi que pueden moverse si se cambia el %.
+          commissionEstimated: 0,
+          // Comision de ventas ya COBRADAS. Una venta al credito sin pagar
+          // todavia no deberia generar un pago al vendedor.
+          commissionCollected: 0,
           // Ventas sin costo registrado: se listan aparte porque inflan la
           // utilidad (cuentan como costo 0) y el vendedor no tiene la culpa.
           salesWithoutCost: 0,
@@ -1163,7 +1178,24 @@ export default function Reports() {
       // costo actual del catálogo). No se recalcula acá para que los tres
       // números de la página no puedan discrepar.
       const items = invoice.items || []
-      sellers[sellerId].totalCost += items.reduce((s, item) => s + calculateItemCost(item), 0)
+      const costoVenta = items.reduce((s, item) => s + calculateItemCost(item), 0)
+      sellers[sellerId].totalCost += costoVenta
+
+      // Comision: la congelada en la venta manda; si no hay (venta anterior a la
+      // funcion), se recalcula con la config actual y se cuenta aparte.
+      const com = getInvoiceCommission(invoice, {
+        sellersById: sellerIndex,
+        totalInBase: getDocumentTotalInBase(invoice),
+        costInBase: costoVenta,
+      })
+      if (com) {
+        sellers[sellerId].commission += com.amount
+        if (com.estimated) sellers[sellerId].commissionEstimated += com.amount
+        // Contado o credito ya saldado. `paymentStatus` ausente = venta vieja al
+        // contado, que si esta cobrada.
+        const cobrada = !invoice.paymentStatus || invoice.paymentStatus === 'completed' || invoice.paymentStatus === 'paid'
+        if (cobrada) sellers[sellerId].commissionCollected += com.amount
+      }
       // Una venta hecha 100% de productos personalizados no tiene costo que
       // consultar: su "utilidad" sería el importe completo, y eso es falso.
       if (items.length > 0 && items.every(isCustomItem)) {
@@ -1183,12 +1215,15 @@ export default function Reports() {
         return {
           ...s,
           totalCost: Math.round(s.totalCost * 100) / 100,
+          commission: Math.round(s.commission * 100) / 100,
+          commissionEstimated: Math.round(s.commissionEstimated * 100) / 100,
+          commissionCollected: Math.round(s.commissionCollected * 100) / 100,
           profit,
           profitMargin: s.totalRevenue > 0 ? (profit / s.totalRevenue) * 100 : 0,
         }
       })
       .sort((a, b) => b.totalRevenue - a.totalRevenue)
-  }, [filteredInvoices, calculateItemCost, isCustomItem])
+  }, [filteredInvoices, calculateItemCost, isCustomItem, sellersList])
 
   // Estadísticas por método de pago
   const paymentMethodStats = useMemo(() => {
@@ -2450,8 +2485,8 @@ export default function Reports() {
 
     // Hoja 1: Resumen por vendedor
     const resumen = [
-      { 'Vendedor': 'Sucursal:', 'Email': branchLabel || 'Todas', 'N° Ventas': '', 'Ingresos': '', 'Costo': '', 'Utilidad': '', 'Margen %': '', 'Facturas': '', 'Boletas': '', 'Notas de Venta': '', 'Notas de Crédito': '', 'Notas de Débito': '' },
-      { 'Vendedor': '', 'Email': '', 'N° Ventas': '', 'Ingresos': '', 'Costo': '', 'Utilidad': '', 'Margen %': '', 'Facturas': '', 'Boletas': '', 'Notas de Venta': '', 'Notas de Crédito': '', 'Notas de Débito': '' },
+      { 'Vendedor': 'Sucursal:', 'Email': branchLabel || 'Todas', 'N° Ventas': '', 'Ingresos': '', 'Costo': '', 'Utilidad': '', 'Margen %': '', 'Comision': '', 'Comision cobrada': '', 'Facturas': '', 'Boletas': '', 'Notas de Venta': '', 'Notas de Crédito': '', 'Notas de Débito': '' },
+      { 'Vendedor': '', 'Email': '', 'N° Ventas': '', 'Ingresos': '', 'Costo': '', 'Utilidad': '', 'Margen %': '', 'Comision': '', 'Comision cobrada': '', 'Facturas': '', 'Boletas': '', 'Notas de Venta': '', 'Notas de Crédito': '', 'Notas de Débito': '' },
       ...sellerStats.map(s => ({
         'Vendedor': s.name,
         'Email': s.email || '',
@@ -2460,6 +2495,8 @@ export default function Reports() {
         'Costo': Math.round((s.totalCost || 0) * 100) / 100,
         'Utilidad': Math.round((s.profit || 0) * 100) / 100,
         'Margen %': Math.round((s.profitMargin || 0) * 10) / 10,
+        'Comision': Math.round((s.commission || 0) * 100) / 100,
+        'Comision cobrada': Math.round((s.commissionCollected || 0) * 100) / 100,
         'Facturas': s.facturas,
         'Boletas': s.boletas,
         'Notas de Venta': s.notasVenta,
@@ -2474,6 +2511,8 @@ export default function Reports() {
       'Costo': Math.round(sellerStats.reduce((a, s) => a + (s.totalCost || 0), 0) * 100) / 100,
       'Utilidad': Math.round(sellerStats.reduce((a, s) => a + (s.profit || 0), 0) * 100) / 100,
       'Margen %': '',
+      'Comision': Math.round(sellerStats.reduce((a, s) => a + (s.commission || 0), 0) * 100) / 100,
+      'Comision cobrada': Math.round(sellerStats.reduce((a, s) => a + (s.commissionCollected || 0), 0) * 100) / 100,
       'Facturas': '', 'Boletas': '', 'Notas de Venta': '', 'Notas de Crédito': '', 'Notas de Débito': '',
     })
 
@@ -5122,6 +5161,19 @@ export default function Reports() {
                           )}
                         </span>
                       </div>
+                      {seller.commission > 0 && (
+                        <div className="flex items-center justify-between mt-1 text-sm">
+                          <span className="text-gray-500">Comisión</span>
+                          <span className="font-semibold text-gray-900">
+                            {formatMoney(seller.commission)}
+                            {seller.commissionCollected < seller.commission && (
+                              <span className="text-xs text-gray-500 font-normal ml-1">
+                                ({formatMoney(seller.commissionCollected)} cobrada)
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   ))
                 )}
@@ -5146,12 +5198,13 @@ export default function Reports() {
                       <TableHead className="text-right">Costo</TableHead>
                       <TableHead className="text-right">Utilidad</TableHead>
                       <TableHead className="text-right">Margen</TableHead>
+                      <TableHead className="text-right">Comisión</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {sellerStats.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={12} className="text-center py-8 text-gray-500">
+                        <TableCell colSpan={13} className="text-center py-8 text-gray-500">
                           No hay datos de vendedores
                         </TableCell>
                       </TableRow>
@@ -5226,6 +5279,30 @@ export default function Reports() {
                           </TableCell>
                           <TableCell className={`text-right ${seller.profitMargin >= 0 ? 'text-gray-700' : 'text-red-600'}`}>
                             {seller.profitMargin.toFixed(1)}%
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {seller.commission > 0 ? (
+                              <div>
+                                <span className="font-semibold text-gray-900">{formatMoney(seller.commission)}</span>
+                                {/* Lo ya cobrado importa: una venta al crédito sin
+                                    pagar no debería gatillar un pago al vendedor. */}
+                                {seller.commissionCollected < seller.commission && (
+                                  <p className="text-xs text-gray-500">
+                                    {formatMoney(seller.commissionCollected)} cobrada
+                                  </p>
+                                )}
+                                {seller.commissionEstimated > 0 && (
+                                  <p
+                                    className="text-xs text-amber-600"
+                                    title="Ventas anteriores al registro de comisiones: se calcularon con el porcentaje ACTUAL del vendedor, así que cambian si lo modificas."
+                                  >
+                                    {formatMoney(seller.commissionEstimated)} estimada
+                                  </p>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">—</span>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))

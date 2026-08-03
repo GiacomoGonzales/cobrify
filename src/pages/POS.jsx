@@ -100,6 +100,7 @@ import { getActiveBranches, getDefaultBranch } from '@/services/branchService'
 import { shortenUrl } from '@/services/urlShortenerService'
 import { releaseTable, updateTableAmount } from '@/services/tableService'
 import { getEmissionDateLimits, validateEmissionDate } from '@/utils/emissionDate'
+import { computeSaleCommission } from '@/utils/commissions'
 import { getSellers } from '@/services/sellerService'
 import { markOrderAsPaid, updateOrder, updateOrderStatus, claimOrderForInvoicing, releaseOrderInvoicingClaim, markOrderInvoiced } from '@/services/orderService'
 import { markQuotationAsConverted } from '@/services/quotationService'
@@ -6284,6 +6285,22 @@ export default function POS() {
         sellerId: selectedSeller?.id || null,
         sellerName: selectedSeller?.name || null,
         sellerCode: selectedSeller?.code || null,
+        // COMISIÓN CONGELADA. Se guarda con la venta, no se deduce después de la
+        // configuración del vendedor: si mañana le suben el porcentaje, las
+        // comisiones ya informadas (y muchas veces ya pagadas) no pueden moverse
+        // solas. Mismo criterio que `costAtSale` en los items.
+        //
+        // Va en SOLES: el porcentaje del vendedor está en soles y `amounts.total`
+        // puede venir en dólares. La utilidad usa el costo ya congelado de cada
+        // item, así que la comisión sobre utilidad tampoco se mueve después.
+        ...(() => {
+          const com = computeSaleCommission(
+            selectedSeller,
+            amounts.totalInBase,
+            items.reduce((sum, it) => sum + (Number(it.costAtSale) || 0) * (Number(it.quantity) || 0), 0)
+          )
+          return com ? { commission: com } : {}
+        })(),
         // Reserva de hotel, cuando la venta viene de facturar un folio. Es la llave
         // que usa el reporte de hotel para saber qué se cobró de cada reserva: sin
         // ella, "Cobrado" queda en S/0.00 aunque el folio esté todo facturado.

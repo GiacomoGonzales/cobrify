@@ -5,6 +5,8 @@ import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { getSellers, deleteSeller, toggleSellerStatus } from '@/services/sellerService'
+import { getInvoiceCommission, buildSellerIndex } from '@/utils/commissions'
+import { getDocumentTotalInBase } from '@/utils/currency'
 import { getInvoices, getRecentInvoices } from '@/services/firestoreService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -167,6 +169,7 @@ export default function Sellers() {
 
   // Calcular estadísticas de vendedores desde facturas filtradas
   const sellerInvoiceStats = useMemo(() => {
+    const sellerIndex = buildSellerIndex(sellers)
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
@@ -179,17 +182,31 @@ export default function Sellers() {
 
     dateFilteredInvoices.forEach(invoice => {
       const sellerId = invoice.sellerId
-      const total = invoice.total || 0
+      // En moneda BASE (PEN). Antes se sumaba invoice.total crudo, asi que un
+      // negocio con ventas en dolares veia cifras mezcladas.
+      const total = getDocumentTotalInBase(invoice)
       const invoiceDate = invoice.createdAt?.toDate
         ? invoice.createdAt.toDate()
         : new Date(invoice.createdAt || 0)
 
       if (!statsMap[sellerId]) {
-        statsMap[sellerId] = { filteredSales: 0, filteredOrders: 0, todaySales: 0, todayOrders: 0, weekSales: 0, monthSales: 0 }
+        statsMap[sellerId] = { filteredSales: 0, filteredOrders: 0, todaySales: 0, todayOrders: 0, weekSales: 0, monthSales: 0, commission: 0 }
       }
 
       statsMap[sellerId].filteredSales += total
       statsMap[sellerId].filteredOrders += 1
+
+      // Comision: la congelada en la venta manda. Las ventas anteriores al
+      // congelado se recalculan con la config actual (getInvoiceCommission lo
+      // marca como estimado).
+      const com = getInvoiceCommission(invoice, {
+        sellersById: sellerIndex,
+        totalInBase: total,
+        costInBase: (invoice.items || []).reduce(
+          (c, it) => c + (Number(it.costAtSale) || 0) * (Number(it.quantity) || 0), 0
+        ),
+      })
+      if (com) statsMap[sellerId].commission += com.amount
 
       if (invoiceDate >= today) {
         statsMap[sellerId].todaySales += total
@@ -204,7 +221,7 @@ export default function Sellers() {
     })
 
     return statsMap
-  }, [dateFilteredInvoices])
+  }, [dateFilteredInvoices, sellers])
 
   // Enriquecer vendedores con stats calculadas desde facturas (en demo usar datos de ejemplo)
   const sellersWithStats = useMemo(() => {
@@ -217,6 +234,7 @@ export default function Sellers() {
       monthSales: sellerInvoiceStats[seller.id]?.monthSales ?? 0,
       filteredSales: sellerInvoiceStats[seller.id]?.filteredSales ?? 0,
       filteredOrders: sellerInvoiceStats[seller.id]?.filteredOrders ?? 0,
+      commission: sellerInvoiceStats[seller.id]?.commission ?? 0,
     }))
   }, [sellers, sellerInvoiceStats, isDemoMode])
 
@@ -647,6 +665,11 @@ export default function Sellers() {
                     <div className="flex items-center gap-3 text-xs text-gray-600">
                       <span>{hasDateFilter ? 'Ventas' : 'Hoy'}: <span className="font-semibold text-sm text-gray-900">{formatCurrency(hasDateFilter ? seller.filteredSales : seller.todaySales)}</span></span>
                       <span>{hasDateFilter ? seller.filteredOrders : seller.todayOrders} órd.</span>
+                      {seller.commission > 0 && (
+                        <span className="text-emerald-700">
+                          Comisión: <span className="font-semibold text-sm">{formatCurrency(seller.commission)}</span>
+                        </span>
+                      )}
                     </div>
                     <Badge variant={seller.status === 'active' ? 'success' : 'secondary'}>
                       {seller.status === 'active' ? 'Activo' : 'Inactivo'}

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Loader2, User, Store, Target } from 'lucide-react'
+import { Loader2, User, Store, Target, Percent } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import { createSeller, updateSeller } from '@/services/sellerService'
+import { COMMISSION_TYPES, DEFAULT_COMMISSION_TYPE } from '@/utils/commissions'
 import { getActiveBranches } from '@/services/branchService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -23,6 +24,9 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
     branchId: '',
     salesGoal: '',
     goalPeriod: 'monthly',
+    commissionEnabled: false,
+    commissionType: DEFAULT_COMMISSION_TYPE,
+    commissionRate: '',
   })
 
   const [errors, setErrors] = useState({})
@@ -54,10 +58,16 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
         branchId: seller.branchId || '',
         salesGoal: seller.salesGoal || seller.dailyGoal || '',
         goalPeriod: seller.goalPeriod || (seller.dailyGoal ? 'daily' : 'monthly'),
+        commissionEnabled: seller.commissionEnabled === true,
+        commissionType: seller.commissionType || DEFAULT_COMMISSION_TYPE,
+        commissionRate: seller.commissionRate != null ? String(seller.commissionRate) : '',
       })
     } else {
       // Reset form for new seller
       setFormData({
+        commissionEnabled: false,
+        commissionType: DEFAULT_COMMISSION_TYPE,
+        commissionRate: '',
         name: '',
         code: '',
         phone: '',
@@ -106,6 +116,10 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
       const dataToSave = {
         ...formData,
         salesGoal: formData.salesGoal ? parseFloat(formData.salesGoal) : 0,
+        // El porcentaje se guarda como NUMERO: el calculo de la comision lo
+        // multiplica y un string daria NaN silencioso.
+        commissionEnabled: formData.commissionEnabled === true,
+        commissionRate: formData.commissionEnabled ? (parseFloat(formData.commissionRate) || 0) : 0,
       }
       const result = seller
         ? await updateSeller(businessId, seller.id, dataToSave)
@@ -247,6 +261,64 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
           <p className="text-xs text-gray-500 mt-1">
             Meta de ventas para este vendedor (dejar vacío si no aplica)
           </p>
+        </div>
+
+        {/* ===== COMISIÓN ===== */}
+        <div className="border border-gray-200 rounded-lg p-3">
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              name="commissionEnabled"
+              checked={formData.commissionEnabled}
+              onChange={(e) => setFormData(prev => ({ ...prev, commissionEnabled: e.target.checked }))}
+              className="mt-0.5 rounded text-primary-600"
+            />
+            <div className="flex-1">
+              <span className="text-sm font-medium text-gray-900 flex items-center gap-1.5">
+                <Percent className="w-4 h-4" />
+                Este vendedor gana comisión
+              </span>
+              <p className="text-xs text-gray-500 mt-0.5">
+                La comisión se calcula y se guarda en cada venta. Si más adelante cambias
+                el porcentaje, las ventas ya emitidas conservan el que tenían.
+              </p>
+            </div>
+          </label>
+
+          {formData.commissionEnabled && (
+            <div className="mt-3 space-y-3">
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Se calcula sobre</label>
+                <select
+                  name="commissionType"
+                  value={formData.commissionType}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                >
+                  {COMMISSION_TYPES.map(t => (
+                    <option key={t.id} value={t.id}>{t.label}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  {COMMISSION_TYPES.find(t => t.id === formData.commissionType)?.help}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Porcentaje (%)</label>
+                <Input
+                  type="number"
+                  name="commissionRate"
+                  value={formData.commissionRate}
+                  onChange={handleChange}
+                  placeholder="Ej: 5"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Teléfono */}
