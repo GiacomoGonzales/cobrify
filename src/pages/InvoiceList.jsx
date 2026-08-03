@@ -4137,7 +4137,7 @@ Gracias por tu preferencia.`
         isOpen={!!viewingInvoice}
         onClose={() => setViewingInvoice(null)}
         title="Detalles del Comprobante"
-        size="lg"
+        size="xl"
       >
         {viewingInvoice && (
           <div className="space-y-5">
@@ -4238,67 +4238,55 @@ Gracias por tu preferencia.`
               </div>
             )}
 
-            {/* ========== INFO VENTA ========== */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-xs text-gray-500 uppercase">Fecha de Emisión</p>
-                <p className="font-medium text-gray-900 mt-1">{formatDate(getInvoiceDate(viewingInvoice))}</p>
-              </div>
-              {viewingInvoice.sellerName && (
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-500 uppercase">Vendedor</p>
-                  <p className="font-medium text-gray-900 mt-1">{viewingInvoice.sellerName}</p>
+            {/* ========== CONTEXTO DE LA VENTA ==========
+                Antes eran seis cajas grises del mismo peso en una grilla de tres
+                columnas: siempre quedaba un hueco impar y los nombres largos se
+                cortaban por medir un tercio del ancho. Ahora es un panel plano de
+                filas etiqueta/valor que fluyen: sin huecos y con ancho para el texto. */}
+            {(() => {
+              const emision = getInvoiceDate(viewingInvoice)
+              const registro = viewingInvoice.createdAt?.toDate
+                ? viewingInvoice.createdAt.toDate()
+                : (viewingInvoice.createdAt ? new Date(viewingInvoice.createdAt) : null)
+              // La fecha ya está en el encabezado. Solo se repite cuando la emisión
+              // NO es el día en que se registró (venta con fecha atrasada), que es
+              // justo cuando el dato importa.
+              const mismaFecha = emision && registro &&
+                emision.toDateString() === registro.toDateString()
+
+              const filas = [
+                !mismaFecha && emision && ['Fecha de emisión', formatDate(emision)],
+                !mismaFecha && registro && ['Registrada el', formatDateTime(registro)],
+                viewingInvoice.sellerName && ['Vendedor', viewingInvoice.sellerName],
+                viewingInvoice.createdByName && ['Registrado por', viewingInvoice.createdByName],
+                viewingInvoice.branchName && ['Sucursal', viewingInvoice.branchName],
+                viewingInvoice.warehouseName && ['Almacén', viewingInvoice.warehouseName],
+                ORDER_TYPE_LABELS[viewingInvoice.orderType] && ['Tipo de pedido', ORDER_TYPE_LABELS[viewingInvoice.orderType]],
+                viewingInvoice.waiterName && ['Mozo', viewingInvoice.waiterName],
+              ].filter(Boolean)
+
+              if (filas.length === 0) return null
+              return (
+                <div className="bg-gray-50 rounded-xl px-4 py-3">
+                  <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 text-sm">
+                    {filas.map(([label, valor]) => (
+                      <div key={label} className="flex items-baseline justify-between gap-3 min-w-0">
+                        <dt className="text-gray-500 whitespace-nowrap">{label}</dt>
+                        <dd className="font-medium text-gray-900 text-right min-w-0 truncate" title={valor}>{valor}</dd>
+                      </div>
+                    ))}
+                  </dl>
                 </div>
-              )}
-              {viewingInvoice.branchName && (
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-500 uppercase">Sucursal</p>
-                  <p className="font-medium text-gray-900 mt-1">{viewingInvoice.branchName}</p>
-                </div>
-              )}
-              {viewingInvoice.warehouseName && (
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-500 uppercase">Almacén</p>
-                  <p className="font-medium text-gray-900 mt-1">{viewingInvoice.warehouseName}</p>
-                </div>
-              )}
-              {/* El pago vive en su propia tarjeta más abajo. Antes había acá un
-                  select de "Método" que editaba paymentMethod (el campo legacy de
-                  un solo método) mientras la lista de pagos de abajo editaba
-                  payments[]: dos lugares para lo mismo que podían contradecirse. */}
-              {viewingInvoice.createdByName && (
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-500 uppercase">Registrado por</p>
-                  <p className="font-medium text-gray-900 mt-1 truncate" title={viewingInvoice.createdByName}>{viewingInvoice.createdByName}</p>
-                </div>
-              )}
-              {viewingInvoice.createdAt && (
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-500 uppercase">Hora de Registro</p>
-                  <p className="font-medium text-gray-900 mt-1">
-                    {formatDateTime(viewingInvoice.createdAt?.toDate ? viewingInvoice.createdAt.toDate() : new Date(viewingInvoice.createdAt))}
-                  </p>
-                </div>
-              )}
-              {ORDER_TYPE_LABELS[viewingInvoice.orderType] && (
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-500 uppercase">Tipo de Pedido</p>
-                  <p className="font-medium text-gray-900 mt-1">{ORDER_TYPE_LABELS[viewingInvoice.orderType]}</p>
-                </div>
-              )}
-              {viewingInvoice.waiterName && (
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-500 uppercase">Mozo</p>
-                  <p className="font-medium text-gray-900 mt-1 truncate" title={viewingInvoice.waiterName}>{viewingInvoice.waiterName}</p>
-                </div>
-              )}
-            </div>
+              )
+            })()}
 
             {/* ========== CLIENTE ========== */}
-            <div className="border border-gray-200 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-3">
+            {/* Sección PLANA (sin caja): el contenido fuerte del modal es Items y
+                Pago; encerrar todo en cajas hace que nada destaque. */}
+            <div>
+              <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-200">
                 <User className="w-4 h-4 text-gray-400" />
-                <h4 className="font-semibold text-gray-700">Cliente</h4>
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Cliente</h4>
               </div>
               <div className="space-y-2">
                 <p className="font-semibold text-gray-900 text-lg">
@@ -4336,7 +4324,7 @@ Gracias por tu preferencia.`
               <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
                 <div className="flex items-center gap-2">
                   <ShoppingCart className="w-4 h-4 text-gray-400" />
-                  <h4 className="font-semibold text-gray-700">Items ({viewingInvoice.items?.length || 0})</h4>
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Items ({viewingInvoice.items?.length || 0})</h4>
                 </div>
               </div>
               <div className="divide-y divide-gray-100 max-h-64 overflow-y-auto">
@@ -4455,7 +4443,7 @@ Gracias por tu preferencia.`
               <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-2">
                   <Wallet className="w-4 h-4 text-gray-400" />
-                  <h4 className="font-semibold text-gray-700">Pago</h4>
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Pago</h4>
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${viewingInvoice.paymentType === 'credito' ? 'bg-amber-100 text-amber-800' : 'bg-gray-200 text-gray-700'}`}>
                     {viewingInvoice.paymentType === 'credito' ? 'Crédito' : 'Contado'}
                   </span>
@@ -4633,9 +4621,12 @@ Gracias por tu preferencia.`
 
             {/* ========== NOTAS ========== */}
             {viewingInvoice.notes && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-                <p className="text-xs font-semibold text-yellow-800 uppercase mb-1">Observaciones</p>
-                <p className="text-sm text-yellow-900">{viewingInvoice.notes}</p>
+              <div>
+                <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-200">
+                  <FileText className="w-4 h-4 text-gray-400" />
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Observaciones</h4>
+                </div>
+                <p className="text-sm text-gray-700">{viewingInvoice.notes}</p>
               </div>
             )}
 
@@ -4680,13 +4671,13 @@ Gracias por tu preferencia.`
 
             {/* ========== ARCHIVOS SUNAT ========== */}
             {viewingInvoice.sunatStatus === 'accepted' && (viewingInvoice.sunatResponse?.xmlStorageUrl || viewingInvoice.sunatResponse?.cdrStorageUrl || viewingInvoice.sunatResponse?.cdrData) && (
-              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <FileCheck className="w-4 h-4 text-emerald-600" />
-                  <h4 className="font-semibold text-emerald-800">Archivos SUNAT</h4>
+              <div>
+                <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-200">
+                  <FileCheck className="w-4 h-4 text-gray-400" />
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Archivos SUNAT</h4>
                 </div>
                 {viewingInvoice.sunatResponse?.hash && (
-                  <p className="text-xs text-emerald-700 font-mono mb-3 break-all bg-emerald-100 p-2 rounded">
+                  <p className="text-xs text-gray-500 font-mono mb-3 break-all bg-gray-50 p-2 rounded">
                     Hash: {viewingInvoice.sunatResponse.hash}
                   </p>
                 )}
