@@ -69,8 +69,12 @@ import {
   AreaChart,
   Area,
 } from 'recharts'
+import { CHART_COLORS, colorForKey, assignColors, capSeries } from '@/utils/chartColors'
 
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
+// Paleta y asignación estable por entidad: ver src/utils/chartColors.js.
+// `COLORS` se mantiene como alias para los usos por slot FIJO (COLORS[0], etc.),
+// que son series con significado propio y no dependen de ranking.
+const COLORS = CHART_COLORS
 
 /**
  * Densidad compacta para las tablas de esta página.
@@ -1231,11 +1235,13 @@ export default function Reports() {
 
   // Datos para gráfico de métodos de pago
   const paymentMethodsData = useMemo(() => {
-    return paymentMethodStats.map((method, index) => ({
-      name: method.method,
-      value: method.total,
-      color: COLORS[index % COLORS.length]
-    }))
+    // Color por NOMBRE del metodo, no por su puesto: si Yape sube o baja en el
+    // ranking entre un periodo y otro, conserva su color.
+    const capped = capSeries(
+      paymentMethodStats.map(m => ({ name: m.method, value: m.total }))
+    )
+    const colors = assignColors(capped.filter(d => !d.isOthers).map(d => d.name))
+    return capped.map(d => ({ ...d, color: d.color || colors.get(d.name) }))
   }, [paymentMethodStats])
 
   // Ventas por período según el rango seleccionado
@@ -1453,7 +1459,7 @@ export default function Reports() {
       fullName: product.name || 'Producto',
       ventas: product.revenue,
       cantidad: product.quantity,
-      color: COLORS[index % COLORS.length]
+      color: colorForKey(product.name || 'Producto'),
     }))
   }, [topProducts])
 
@@ -1464,7 +1470,7 @@ export default function Reports() {
       fullName: category.name || 'Sin categoría',
       ventas: category.revenue,
       cantidad: category.quantity,
-      color: COLORS[index % COLORS.length]
+      color: colorForKey(category.name || 'Sin categoria'),
     }))
   }, [salesByCategory])
 
@@ -1477,7 +1483,7 @@ export default function Reports() {
       fullName: brand.name || 'Sin marca',
       ventas: brand.revenue,
       cantidad: brand.quantity,
-      color: COLORS[index % COLORS.length],
+      color: colorForKey(brand.name || 'Sin marca'),
     }))
   }, [salesByBrand])
 
@@ -1486,10 +1492,11 @@ export default function Reports() {
     const top = salesByBrand.slice(0, 6)
     const rest = salesByBrand.slice(6)
     const otherRevenue = rest.reduce((s, b) => s + (b.revenue || 0), 0)
-    const data = top.map((b, i) => ({
+    const brandColors = assignColors(top.map(b => b.name || 'Sin marca'))
+    const data = top.map(b => ({
       name: b.name || 'Sin marca',
       value: Number((b.revenue || 0).toFixed(2)),
-      color: COLORS[i % COLORS.length],
+      color: brandColors.get(b.name || 'Sin marca'),
     }))
     if (otherRevenue > 0) {
       data.push({
@@ -1538,7 +1545,7 @@ export default function Reports() {
       fullName: p.name || 'Producto',
       ventas: p.revenue,
       cantidad: p.quantity,
-      color: COLORS[i % COLORS.length],
+      color: colorForKey(p.name || 'Producto'),
     }))
     return {
       brandName: selectedBrandName,
@@ -1736,7 +1743,7 @@ export default function Reports() {
         name: category?.name || catId,
         value: data.total,
         count: data.count,
-        color: COLORS[index % COLORS.length]
+        color: colorForKey(category?.name || catId),
       }
     }).sort((a, b) => b.value - a.value)
   }, [expenseStats.byCategory])
@@ -2584,7 +2591,7 @@ export default function Reports() {
                         <stop offset="95%" stopColor={COLORS[0]} stopOpacity={0}/>
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <CartesianGrid stroke="#eef0f2" vertical={false} />
                     <XAxis dataKey="period" tick={{ fontSize: 12 }} />
                     <YAxis tick={{ fontSize: 12 }} />
                     <Tooltip content={<CustomTooltip />} />
@@ -2614,9 +2621,9 @@ export default function Reports() {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                      label={({ name, percent }) => (percent >= 0.05 ? `${name}: ${(percent * 100).toFixed(0)}%` : '')}
                       outerRadius={100}
-                      fill="#8884d8"
+                      fill={CHART_COLORS[0]}
                       dataKey="value"
                     >
                       {documentTypesData.map((entry, index) => (
@@ -2646,10 +2653,10 @@ export default function Reports() {
                       cy="50%"
                       innerRadius={60}
                       outerRadius={100}
-                      fill="#8884d8"
+                      fill={CHART_COLORS[0]}
                       paddingAngle={5}
                       dataKey="value"
-                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                      label={({ name, percent }) => (percent >= 0.05 ? `${name}: ${(percent * 100).toFixed(0)}%` : '')}
                     >
                       {paymentStatusData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
@@ -2676,10 +2683,10 @@ export default function Reports() {
                         cy="50%"
                         innerRadius={60}
                         outerRadius={100}
-                        fill="#8884d8"
+                        fill={CHART_COLORS[0]}
                         paddingAngle={5}
                         dataKey="value"
-                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                        label={({ name, percent }) => (percent >= 0.05 ? `${name}: ${(percent * 100).toFixed(0)}%` : '')}
                       >
                         {orderTypeData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />
@@ -2799,7 +2806,7 @@ export default function Reports() {
                         <p className="text-sm font-medium text-gray-600">{method.method}</p>
                         <div
                           className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                          style={{ backgroundColor: colorForKey(method.method) }}
                         />
                       </div>
                       <p className="text-2xl font-bold text-gray-900">
@@ -2825,17 +2832,17 @@ export default function Reports() {
               <CardContent>
                 <ResponsiveContainer width="100%" height={400}>
                   <LineChart data={salesByPeriod}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <CartesianGrid stroke="#eef0f2" vertical={false} />
                     <XAxis dataKey="period" tick={{ fontSize: 12 }} />
                     <YAxis tick={{ fontSize: 12 }} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Legend />
                     <Line
                       type="monotone"
                       dataKey="revenue"
-                      stroke={COLORS[0]}
-                      strokeWidth={3}
-                      dot={{ fill: COLORS[0], r: 6 }}
+                      stroke={CHART_COLORS[0]}
+                      strokeWidth={2}
+                      dot={false}
+                      activeDot={{ r: 5, strokeWidth: 2, stroke: '#fff' }}
                       name="Ingresos"
                     />
                   </LineChart>
@@ -2857,9 +2864,9 @@ export default function Reports() {
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        label={({ name, percent, value }) => `${name}: ${formatMoney(value)} (${(percent * 100).toFixed(0)}%)`}
+                        label={({ name, percent }) => (percent >= 0.05 ? `${name}: ${(percent * 100).toFixed(0)}%` : '')}
                         outerRadius={120}
-                        fill="#8884d8"
+                        fill={CHART_COLORS[0]}
                         dataKey="value"
                       >
                         {paymentMethodsData.map((entry, index) => (
@@ -2889,18 +2896,28 @@ export default function Reports() {
               <CardContent>
                 <ResponsiveContainer width="100%" height={280}>
                   <BarChart data={salesByHour}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <CartesianGrid stroke="#eef0f2" vertical={false} />
                     <XAxis dataKey="hora" tick={{ fontSize: 11 }} />
                     <YAxis tick={{ fontSize: 12 }} />
+                    {/* Antes había dos barras en el MISMO eje: cantidad (0–20) e
+                        importe (0–8000). La de cantidad salía como una astilla
+                        invisible. Se grafica el importe, que es lo comparable, y
+                        la cantidad se lee en el tooltip. */}
                     <Tooltip
-                      formatter={(value, name) => [
-                        name === 'total' ? `S/ ${value.toFixed(2)}` : value,
-                        name === 'total' ? 'Ingresos' : 'Cantidad'
-                      ]}
-                      labelFormatter={(label) => `Hora: ${label}`}
+                      cursor={{ fill: '#f3f4f6' }}
+                      content={({ active, payload, label }) => {
+                        if (!active || !payload?.length) return null
+                        const d = payload[0].payload
+                        return (
+                          <div className="bg-white border border-gray-200 rounded-lg shadow-sm px-3 py-2 text-xs">
+                            <p className="font-medium text-gray-900 mb-1">Hora: {label}</p>
+                            <p className="text-gray-700">Ingresos: {formatMoney(d.total)}</p>
+                            <p className="text-gray-500">{d.ventas} venta{d.ventas === 1 ? '' : 's'}</p>
+                          </div>
+                        )
+                      }}
                     />
-                    <Bar dataKey="ventas" fill="#6366f1" name="ventas" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="total" fill="#10b981" name="total" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="total" fill={CHART_COLORS[0]} name="total" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -3127,15 +3144,11 @@ export default function Reports() {
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={top5ProductsData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <CartesianGrid stroke="#eef0f2" vertical={false} />
                     <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={80} />
                     <YAxis tick={{ fontSize: 12 }} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="ventas" fill={COLORS[0]} name="Ventas" radius={[8, 8, 0, 0]}>
-                      {top5ProductsData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Bar>
+                    <Bar dataKey="ventas" fill={CHART_COLORS[0]} name="Ventas" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -3149,15 +3162,11 @@ export default function Reports() {
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={top5CategoriesData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <CartesianGrid stroke="#eef0f2" vertical={false} />
                     <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={80} />
                     <YAxis tick={{ fontSize: 12 }} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="ventas" fill={COLORS[1]} name="Ventas" radius={[8, 8, 0, 0]}>
-                      {top5CategoriesData.map((entry, index) => (
-                        <Cell key={`cell-cat-${index}`} fill={entry.color} />
-                      ))}
-                    </Bar>
+                    <Bar dataKey="ventas" fill={CHART_COLORS[0]} name="Ventas" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -3244,11 +3253,11 @@ export default function Reports() {
                   <AreaChart data={productPeriodData} margin={{ top: 16, right: 16, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="colorProductoMes" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.3} />
-                        <stop offset="100%" stopColor="#3b82f6" stopOpacity={0} />
+                        <stop offset="0%" stopColor={CHART_COLORS[0]} stopOpacity={0.3} />
+                        <stop offset="100%" stopColor={CHART_COLORS[0]} stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <CartesianGrid stroke="#eef0f2" vertical={false} />
                     <XAxis dataKey="period" stroke="#6b7280" fontSize={12} interval="preserveStartEnd" minTickGap={20} />
                     <YAxis stroke="#6b7280" fontSize={12} />
                     <Tooltip
@@ -3261,7 +3270,7 @@ export default function Reports() {
                     <Area
                       type="monotone"
                       dataKey={productChartMetric === 'revenue' ? 'ventas' : 'cantidad'}
-                      stroke="#3b82f6"
+                      stroke={CHART_COLORS[0]}
                       strokeWidth={2.5}
                       fill="url(#colorProductoMes)"
                       dot={{ fill: '#3b82f6', r: 3 }}
@@ -3756,15 +3765,11 @@ export default function Reports() {
               ) : (
                 <ResponsiveContainer width="100%" height={320}>
                   <BarChart data={selectedBrandData.top5ChartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <CartesianGrid stroke="#eef0f2" vertical={false} />
                     <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-30} textAnchor="end" height={80} />
                     <YAxis tick={{ fontSize: 12 }} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="ventas" name="Ingresos" radius={[8, 8, 0, 0]}>
-                      {selectedBrandData.top5ChartData.map((entry, index) => (
-                        <Cell key={`bd-${index}`} fill={entry.color} />
-                      ))}
-                    </Bar>
+                    <Bar dataKey="ventas" name="Ingresos" fill={CHART_COLORS[0]} radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -4031,15 +4036,11 @@ export default function Reports() {
                 ) : (
                   <ResponsiveContainer width="100%" height={320}>
                     <BarChart data={top10BrandsChartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <CartesianGrid stroke="#eef0f2" vertical={false} />
                       <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={90} />
                       <YAxis tick={{ fontSize: 12 }} />
                       <Tooltip content={<CustomTooltip />} />
-                      <Bar dataKey="ventas" name="Ingresos" radius={[8, 8, 0, 0]}>
-                        {top10BrandsChartData.map((entry, index) => (
-                          <Cell key={`b-${index}`} fill={entry.color} />
-                        ))}
-                      </Bar>
+                      <Bar dataKey="ventas" name="Ingresos" fill={CHART_COLORS[0]} radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 )}
@@ -4284,11 +4285,11 @@ export default function Reports() {
             <CardContent>
               <ResponsiveContainer width="100%" height={400}>
                 <BarChart data={topCustomers}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <CartesianGrid stroke="#eef0f2" vertical={false} />
                   <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-45} textAnchor="end" height={100} />
                   <YAxis tick={{ fontSize: 12 }} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="totalSpent" fill={COLORS[4]} name="Total Gastado" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="totalSpent" fill={COLORS[4]} name="Total Gastado" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -4417,11 +4418,11 @@ export default function Reports() {
               ) : (
                 <ResponsiveContainer width="100%" height={400}>
                   <BarChart data={salesByZone.slice(0, 10)} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <CartesianGrid stroke="#eef0f2" vertical={false} />
                     <XAxis type="number" tick={{ fontSize: 12 }} />
                     <YAxis dataKey="zone" type="category" tick={{ fontSize: 11 }} width={150} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="totalRevenue" fill={COLORS[2]} name="Total Vendido" radius={[0, 8, 8, 0]} />
+                    <Bar dataKey="totalRevenue" fill={COLORS[2]} name="Total Vendido" radius={[0, 4, 4, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -4606,11 +4607,11 @@ export default function Reports() {
             <CardContent>
               <ResponsiveContainer width="100%" height={400}>
                 <BarChart data={sellerStats}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <CartesianGrid stroke="#eef0f2" vertical={false} />
                   <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-45} textAnchor="end" height={100} />
                   <YAxis tick={{ fontSize: 12 }} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="totalRevenue" fill={COLORS[0]} name="Total Vendido" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="totalRevenue" fill={COLORS[0]} name="Total Vendido" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -4890,11 +4891,11 @@ export default function Reports() {
                   <AreaChart data={expensesByPeriod}>
                     <defs>
                       <linearGradient id="colorGastos" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                        <stop offset="5%" stopColor={CHART_COLORS[7]} stopOpacity={0.8}/>
+                        <stop offset="95%" stopColor={CHART_COLORS[7]} stopOpacity={0}/>
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <CartesianGrid stroke="#eef0f2" vertical={false} />
                     <XAxis dataKey="period" tick={{ fontSize: 12 }} />
                     <YAxis tick={{ fontSize: 12 }} />
                     <Tooltip
@@ -4904,7 +4905,7 @@ export default function Reports() {
                     <Area
                       type="monotone"
                       dataKey="gastos"
-                      stroke="#ef4444"
+                      stroke={CHART_COLORS[7]}
                       fillOpacity={1}
                       fill="url(#colorGastos)"
                       name="Gastos"
@@ -4928,9 +4929,9 @@ export default function Reports() {
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                        label={({ name, percent }) => (percent >= 0.05 ? `${name}: ${(percent * 100).toFixed(0)}%` : '')}
                         outerRadius={100}
-                        fill="#8884d8"
+                        fill={CHART_COLORS[0]}
                         dataKey="value"
                       >
                         {expensesByCategoryData.map((entry, index) => (
@@ -5344,7 +5345,7 @@ export default function Reports() {
             <CardContent>
               <ResponsiveContainer width="100%" height={400}>
                 <BarChart data={profitabilityByPeriod}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <CartesianGrid stroke="#eef0f2" vertical={false} />
                   <XAxis dataKey="period" tick={{ fontSize: 11 }} angle={-45} textAnchor="end" height={80} />
                   <YAxis tick={{ fontSize: 12 }} />
                   <Tooltip
@@ -5352,8 +5353,8 @@ export default function Reports() {
                     labelFormatter={(label) => `Período: ${label}`}
                   />
                   <Legend />
-                  <Bar dataKey="ingresos" fill="#3b82f6" name="Ingresos" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="gastos" fill="#ef4444" name="Gastos" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="ingresos" fill={CHART_COLORS[0]} name="Ingresos" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="gastos" fill={CHART_COLORS[7]} name="Gastos" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -5371,11 +5372,11 @@ export default function Reports() {
                   <AreaChart data={profitabilityByPeriod}>
                     <defs>
                       <linearGradient id="colorUtilidad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                        <stop offset="5%" stopColor={CHART_COLORS[2]} stopOpacity={0.8}/>
+                        <stop offset="95%" stopColor={CHART_COLORS[2]} stopOpacity={0}/>
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <CartesianGrid stroke="#eef0f2" vertical={false} />
                     <XAxis dataKey="period" tick={{ fontSize: 11 }} />
                     <YAxis tick={{ fontSize: 12 }} />
                     <Tooltip
@@ -5385,7 +5386,7 @@ export default function Reports() {
                     <Area
                       type="monotone"
                       dataKey="utilidad"
-                      stroke="#10b981"
+                      stroke={CHART_COLORS[2]}
                       fillOpacity={1}
                       fill="url(#colorUtilidad)"
                       name="Utilidad Neta"
@@ -5413,10 +5414,10 @@ export default function Reports() {
                         cy="50%"
                         innerRadius={60}
                         outerRadius={100}
-                        fill="#8884d8"
+                        fill={CHART_COLORS[0]}
                         paddingAngle={5}
                         dataKey="value"
-                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                        label={({ name, percent }) => (percent >= 0.05 ? `${name}: ${(percent * 100).toFixed(0)}%` : '')}
                       >
                         {[
                           { name: 'Utilidad Neta', value: Math.max(0, profitabilityStats.utilidadNeta), color: '#10b981' },
@@ -5974,15 +5975,11 @@ export default function Reports() {
                     {/* Gráfico de barras horizontal */}
                     <ResponsiveContainer width="100%" height={Math.max(180, revenueByRoomType.length * 56)}>
                       <BarChart data={revenueByRoomType} layout="vertical" margin={{ left: 10, right: 20 }}>
-                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                        <CartesianGrid stroke="#eef0f2" horizontal={false} />
                         <XAxis type="number" tickFormatter={(v) => formatMoney(v)} />
                         <YAxis type="category" dataKey="type" width={90} />
                         <Tooltip formatter={(value) => formatMoney(value)} />
-                        <Bar dataKey="revenue" name="Ingresos" radius={[0, 4, 4, 0]}>
-                          {revenueByRoomType.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Bar>
+                        <Bar dataKey="revenue" name="Ingresos" fill={CHART_COLORS[0]} radius={[0, 4, 4, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                     {/* Tabla */}
@@ -6032,15 +6029,11 @@ export default function Reports() {
                     {/* Gráfico de barras horizontal */}
                     <ResponsiveContainer width="100%" height={Math.max(180, revenueByRoom.length * 48)}>
                       <BarChart data={revenueByRoom} layout="vertical" margin={{ left: 10, right: 20 }}>
-                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                        <CartesianGrid stroke="#eef0f2" horizontal={false} />
                         <XAxis type="number" tickFormatter={(v) => formatMoney(v)} />
                         <YAxis type="category" dataKey="label" width={110} />
                         <Tooltip formatter={(value) => formatMoney(value)} />
-                        <Bar dataKey="revenue" name="Ingresos" radius={[0, 4, 4, 0]}>
-                          {revenueByRoom.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Bar>
+                        <Bar dataKey="revenue" name="Ingresos" fill={CHART_COLORS[0]} radius={[0, 4, 4, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                     {/* Tabla */}
