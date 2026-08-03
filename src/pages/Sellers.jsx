@@ -6,6 +6,7 @@ import Badge from '@/components/ui/Badge'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { getSellers, deleteSeller, toggleSellerStatus } from '@/services/sellerService'
 import { getInvoiceCommission, buildSellerIndex } from '@/utils/commissions'
+import MonthSelect from '@/components/MonthSelect'
 import { getDocumentTotalInBase } from '@/utils/currency'
 import { getInvoices, getRecentInvoices } from '@/services/firestoreService'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -86,6 +87,8 @@ export default function Sellers() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [datePreset, setDatePreset] = useState('all')
+  // Mes elegido: rellena el rango de fechas que la pagina ya sabe procesar.
+  const [selectedMonth, setSelectedMonth] = useState('')
   const [visibleCount, setVisibleCount] = useState(20)
   const ITEMS_PER_PAGE = 20
 
@@ -117,6 +120,7 @@ export default function Sellers() {
   // Helper para aplicar preset de fecha
   const applyDatePreset = (preset) => {
     setDatePreset(preset)
+    setSelectedMonth('')
     const today = new Date()
     const fmt = (d) => d.toISOString().split('T')[0]
 
@@ -261,6 +265,9 @@ export default function Sellers() {
       filteredOrders: sellersWithStats.reduce((sum, s) => sum + s.filteredOrders, 0),
       todaySales: sellersWithStats.reduce((sum, s) => sum + s.todaySales, 0),
       todayOrders: sellersWithStats.reduce((sum, s) => sum + s.todayOrders, 0),
+      // Comision del periodo mostrado: respeta el filtro de fechas, igual que
+      // filteredSales, porque es lo que el dueno va a pagar por ese rango.
+      commission: sellersWithStats.reduce((sum, s) => sum + (s.commission || 0), 0),
     }
   }, [sellersWithStats])
 
@@ -491,10 +498,10 @@ export default function Sellers() {
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-600">
-                    {hasDateFilter ? 'Total (Período)' : 'Ventas Totales'}
+                    {hasDateFilter ? 'Comisión (Período)' : 'Comisión'}
                   </p>
                   <p className="text-xl font-bold text-gray-900 mt-2">
-                    {formatCurrency(stats.filteredSales)}
+                    {formatCurrency(stats.commission || 0)}
                   </p>
                 </div>
                 <div className="p-3 bg-purple-100 rounded-lg flex-shrink-0">
@@ -564,19 +571,30 @@ export default function Sellers() {
                   {p.label}
                 </button>
               ))}
+              <MonthSelect
+                value={selectedMonth}
+                onSelect={(mes) => {
+                  if (!mes) { setSelectedMonth(''); return }
+                  setSelectedMonth(mes.value)
+                  setDatePreset('custom')
+                  setDateFrom(mes.start)
+                  setDateTo(mes.end)
+                }}
+                className="px-2 py-1 text-xs border border-gray-300 rounded-full bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
             </div>
             <div className="flex items-center gap-2 flex-1">
               <input
                 type="date"
                 value={dateFrom}
-                onChange={e => { setDateFrom(e.target.value); setDatePreset('custom') }}
+                onChange={e => { setDateFrom(e.target.value); setDatePreset('custom'); setSelectedMonth('') }}
                 className="text-sm border border-gray-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary-500 w-full sm:w-auto"
               />
               <span className="text-gray-400 text-xs">a</span>
               <input
                 type="date"
                 value={dateTo}
-                onChange={e => { setDateTo(e.target.value); setDatePreset('custom') }}
+                onChange={e => { setDateTo(e.target.value); setDatePreset('custom'); setSelectedMonth('') }}
                 className="text-sm border border-gray-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary-500 w-full sm:w-auto"
               />
               {hasDateFilter && (
@@ -714,6 +732,7 @@ export default function Sellers() {
                     <TableHead>{hasDateFilter ? 'Ventas (Período)' : 'Ventas Hoy'}</TableHead>
                     <TableHead>Meta</TableHead>
                     <TableHead>{hasDateFilter ? 'Total (Período)' : 'Total Ventas'}</TableHead>
+                    <TableHead className="text-right">Comisión</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -782,6 +801,15 @@ export default function Sellers() {
                       </TableCell>
                       <TableCell>
                         {formatCurrency(seller.filteredSales || 0)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {seller.commission > 0 ? (
+                          <span className="font-semibold text-emerald-700">{formatCurrency(seller.commission)}</span>
+                        ) : (
+                          // Sin comisión configurada no hay nada que mostrar; un
+                          // S/ 0.00 se leería como "vendió y no ganó nada".
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end">
