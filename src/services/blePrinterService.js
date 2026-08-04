@@ -4,6 +4,7 @@
  */
 
 import { Capacitor } from '@capacitor/core';
+import { getRealPayments } from '@/utils/receivables'
 import { BleClient, numbersToDataView, numberToUUID } from '@capacitor-community/bluetooth-le';
 import { prepareLogoForPrinting } from './imageProcessingService';
 import { buildKitchenLines } from '@/utils/kitchenComandaFormat';
@@ -1044,10 +1045,11 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
     commands.push(ESCPOSCommands.bold(false));
 
     // ========== Forma de Pago ==========
-    const totalPaid = payments && payments.length > 0
-      ? payments.reduce((sum, p) => sum + (p.amount || 0), 0)
-      : 0;
-    const isCreditSale = totalPaid === 0 && !paymentMethod && paymentStatus === 'pending';
+    // Pagos REALES: manda paymentHistory sobre payments[]. Sin esto, una nota
+    // emitida con adelanto seguia imprimiendo el saldo del dia de la emision
+    // aunque el cliente ya hubiera terminado de pagar.
+    const realPay = getRealPayments({ total, payments, paymentHistory, paymentMethod });
+    const isCreditSale = realPay.isCredit && !paymentMethod && paymentStatus === 'pending';
 
     if (isCreditSale) {
       // Venta totalmente a crédito (sin pagos)
@@ -1060,20 +1062,20 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
       commands.push(ESCPOSCommands.text(convertSpanishText('AL CREDITO') + '\n'));
       commands.push(ESCPOSCommands.bold(false));
       commands.push(ESCPOSCommands.text('Saldo Pendiente: ' + currencySymbol + ' ' + (total || 0).toFixed(2) + '\n'));
-    } else if (paymentMethod || (payments && payments.length > 0)) {
+    } else if (paymentMethod || realPay.payments.length > 0) {
       commands.push(ESCPOSCommands.text(separator + '\n'));
       commands.push(ESCPOSCommands.align(0));
       commands.push(ESCPOSCommands.bold(true));
       commands.push(ESCPOSCommands.text('FORMA DE PAGO\n'));
       commands.push(ESCPOSCommands.bold(false));
 
-      if (payments && payments.length > 0) {
-        for (const payment of payments) {
+      if (realPay.payments.length > 0) {
+        for (const payment of realPay.payments) {
           commands.push(ESCPOSCommands.text(convertSpanishText(payment.method) + ': ' + currencySymbol + ' ' + payment.amount.toFixed(2) + '\n'));
         }
-        // Mostrar saldo pendiente si el pago es menor al total
-        if (totalPaid < (total || 0)) {
-          const saldoPendiente = (total || 0) - totalPaid;
+        // Solo si de verdad queda algo por cobrar
+        if (realPay.pending > 0.01) {
+          const saldoPendiente = realPay.pending;
           commands.push(ESCPOSCommands.bold(true));
           commands.push(ESCPOSCommands.text('Saldo Pendiente: ' + currencySymbol + ' ' + saldoPendiente.toFixed(2) + '\n'));
           commands.push(ESCPOSCommands.bold(false));

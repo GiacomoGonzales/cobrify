@@ -1,4 +1,5 @@
 import { CapacitorThermalPrinter } from 'capacitor-thermal-printer';
+import { getRealPayments } from '@/utils/receivables'
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { prepareLogoForPrinting } from './imageProcessingService';
 import * as BLEPrinter from './blePrinterService';
@@ -1277,10 +1278,11 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
         .text('FORMA DE PAGO\n')
         .clearFormatting();
 
-      const totalPaid = invoice.payments && invoice.payments.length > 0
-        ? invoice.payments.reduce((sum, p) => sum + (p.amount || 0), 0)
-        : 0;
-      const isCreditSale = totalPaid === 0;
+      // Pagos REALES: manda paymentHistory sobre payments[]. Sin esto, una nota
+      // emitida con adelanto seguia imprimiendo el saldo del dia de la emision
+      // aunque el cliente ya hubiera terminado de pagar.
+      const realPay = getRealPayments(invoice);
+      const isCreditSale = realPay.isCredit;
 
       if (isCreditSale && !invoice.paymentMethod) {
         // Venta al crédito (sin pagos)
@@ -1289,13 +1291,13 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
           .text(convertSpanishText('AL CREDITO\n'))
           .clearFormatting();
         printer = printer.text(convertSpanishText(`Saldo Pendiente: ${currencySymbol} ${(invoice.total || 0).toFixed(2)}\n`));
-      } else if (invoice.payments && invoice.payments.length > 0) {
-        invoice.payments.forEach(payment => {
+      } else if (realPay.payments.length > 0) {
+        realPay.payments.forEach(payment => {
           printer = printer.text(convertSpanishText(`${payment.method}: ${currencySymbol} ${payment.amount.toFixed(2)}\n`));
         });
-        // Mostrar saldo pendiente si el pago es menor al total
-        if (totalPaid < (invoice.total || 0)) {
-          const saldoPendiente = (invoice.total || 0) - totalPaid;
+        // Solo si de verdad queda algo por cobrar
+        if (realPay.pending > 0.01) {
+          const saldoPendiente = realPay.pending;
           printer = printer
             .bold()
             .text(convertSpanishText(`Saldo Pendiente: ${currencySymbol} ${saldoPendiente.toFixed(2)}\n`))

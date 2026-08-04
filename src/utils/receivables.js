@@ -45,3 +45,75 @@ export const isPendingInvoice = (inv) => {
   if (inv.paymentStatus !== 'pending' && inv.paymentStatus !== 'partial') return false
   return getPendingAmount(inv) > 0.01
 }
+
+/**
+ * Los pagos REALES de un comprobante, para imprimirlos y mostrarlos.
+ *
+ * ── El bug que arregla ───────────────────────────────────────────────────────
+ * Hay DOS lugares donde vive un pago y significan cosas distintas:
+ *   - `payments[]`      → lo que el cajero eligió AL EMITIR. No se actualiza nunca.
+ *   - `paymentHistory[]`→ los cobros REALES, incluidos los registrados después.
+ *
+ * Los tickets calculaban "Forma de pago" y "Saldo pendiente" desde `payments[]`,
+ * así que una nota de venta emitida con S/20 de adelanto seguía imprimiendo
+ * "Yape: 20.00 / Saldo Pendiente: 60.00" AUNQUE el cliente ya hubiera pagado
+ * todo — el historial de abajo mostraba los dos pagos y el bloque de arriba
+ * seguía anclado al día de la emisión (reporte 3-ago-2026).
+ *
+ * Mismo criterio que ya usaban el cuadre de caja y los reportes: manda el
+ * historial. Vive acá para que las cuatro impresiones no puedan discrepar.
+ *
+ * @returns {{ payments: Array<{method: string, amount: number}>, totalPaid: number,
+ *             pending: number, isCredit: boolean, fromHistory: boolean }}
+ */
+export const getRealPayments = (invoice) => {
+  const total = Number(invoice?.total) || 0
+  const historial = Array.isArray(invoice?.paymentHistory) ? invoice.paymentHistory : []
+
+  if (historial.length > 0) {
+    const payments = historial.map(p => ({
+      method: p.method || 'Efectivo',
+      amount: Number(p.amount) || 0,
+    }))
+    const totalPaid = payments.reduce((s, p) => s + p.amount, 0)
+    return {
+      payments,
+      totalPaid: Math.round(totalPaid * 100) / 100,
+      // Se usa `balance` si el sistema lo mantiene: es la cifra que ya se muestra
+      // en el resto de la app. Si no, se deriva del total.
+      pending: Math.max(0, Math.round((total - totalPaid) * 100) / 100),
+      isCredit: false,
+      fromHistory: true,
+    }
+  }
+
+  const emitidos = Array.isArray(invoice?.payments) ? invoice.payments : []
+  if (emitidos.length > 0) {
+    const payments = emitidos.map(p => ({
+      method: p.method || 'Efectivo',
+      amount: Number(p.amount) || 0,
+    }))
+    const totalPaid = payments.reduce((s, p) => s + p.amount, 0)
+    return {
+      payments,
+      totalPaid: Math.round(totalPaid * 100) / 100,
+      pending: Math.max(0, Math.round((total - totalPaid) * 100) / 100),
+      // Sin plata registrada en ningún lado: es una venta al crédito.
+      isCredit: totalPaid <= 0,
+      fromHistory: false,
+    }
+  }
+
+  // Estructura antigua: un solo método, sin desglose.
+  if (invoice?.paymentMethod) {
+    return {
+      payments: [{ method: invoice.paymentMethod, amount: total }],
+      totalPaid: total,
+      pending: 0,
+      isCredit: false,
+      fromHistory: false,
+    }
+  }
+
+  return { payments: [], totalPaid: 0, pending: total, isCredit: true, fromHistory: false }
+}

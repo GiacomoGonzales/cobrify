@@ -1,4 +1,5 @@
 import { forwardRef } from 'react'
+import { getRealPayments } from '@/utils/receivables'
 import React from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { formatPricedModifierLines } from '@/utils/modifierHelpers'
@@ -1134,13 +1135,12 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
       <div className="ticket-section">
         <div className="section-title">FORMA DE PAGO</div>
         {(() => {
-          // Calcular total pagado
-          const totalPaid = invoice.payments && invoice.payments.length > 0
-            ? invoice.payments.reduce((sum, p) => sum + (p.amount || 0), 0)
-            : 0
-
-          // Detectar si es venta al crédito (sin pagos o pago = 0)
-          const isCreditSale = totalPaid === 0
+          // Los pagos REALES: manda paymentHistory sobre payments[]. Sin esto, una
+          // nota emitida con adelanto seguia imprimiendo el saldo pendiente del dia
+          // de la emision aunque el cliente ya hubiera pagado todo.
+          const real = getRealPayments(invoice)
+          const totalPaid = real.totalPaid
+          const isCreditSale = real.isCredit
 
           if (isCreditSale) {
             // Venta al crédito
@@ -1156,22 +1156,21 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
                 </div>
               </>
             )
-          } else if (invoice.payments && invoice.payments.length > 0) {
-            // Pagos múltiples registrados
+          } else if (real.payments.length > 0) {
             return (
               <>
                 <div className="space-y-1">
-                  {invoice.payments.map((payment, index) => (
+                  {real.payments.map((payment, index) => (
                     <div key={index} className="info-row">
                       <span className="info-label">{payment.method}:</span>
                       <span>{formatCurrency(payment.amount)}</span>
                     </div>
                   ))}
                 </div>
-                {totalPaid < invoice.total && (
+                {real.pending > 0.01 && (
                   <div className="info-row" style={{ marginTop: '4px' }}>
                     <span className="info-label">Saldo Pendiente:</span>
-                    <span style={{ fontWeight: 'bold', color: '#ff6600' }}>{formatCurrency(invoice.total - totalPaid)}</span>
+                    <span style={{ fontWeight: 'bold', color: '#ff6600' }}>{formatCurrency(real.pending)}</span>
                   </div>
                 )}
               </>
