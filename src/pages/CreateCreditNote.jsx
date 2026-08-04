@@ -9,7 +9,7 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Alert from '@/components/ui/Alert'
-import { getInvoicesPage, createInvoice, updateInvoice, getDocumentSeries, updateDocumentSeries, updateProductStockTransaction, sendCreditNoteToSunat, getCompanySettings } from '@/services/firestoreService'
+import { getInvoicesPage, createInvoice, updateInvoice, getDocumentSeries, updateDocumentSeries, updateProductStockTransaction, sendCreditNoteToSunat, getCompanySettings, createNoteWithNumber } from '@/services/firestoreService'
 import { formatCurrency } from '@/lib/utils'
 import { normalizeCurrency, convertToBase } from '@/utils/currency'
 import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
@@ -706,9 +706,9 @@ export default function CreateCreditNote() {
 
     try {
       const { subtotal, igv, total } = calculateExternalTotals()
-      const nextNumber = series[seriesKey].lastNumber + 1
-      const creditNoteSeries = series[seriesKey].serie
-      const creditNoteNumber = `${creditNoteSeries}-${String(nextNumber).padStart(8, '0')}`
+      // El numero lo asigna createNoteWithNumber DENTRO de una transaccion.
+      // Calcularlo antes desde el estado de React producia correlativos
+      // repetidos cuando se creaban dos notas seguidas.
 
       // Lectura FRESH de autoSendToSunat para decidir el sunatStatus inicial:
       //   - true  → 'pending' (cron retryPendingInvoices puede reenviarlo)
@@ -724,9 +724,6 @@ export default function CreateCreditNote() {
 
       const creditNoteData = {
         documentType: 'nota_credito',
-        series: creditNoteSeries,
-        correlativeNumber: nextNumber,
-        number: creditNoteNumber,
 
         // Referencia al documento externo
         referencedDocumentId: externalData.documentNumber.toUpperCase(),
@@ -802,18 +799,12 @@ export default function CreateCreditNote() {
         createdByEmail: user.email || '',
       }
 
-      const result = await createInvoice(getBusinessId(), creditNoteData)
+      const result = await createNoteWithNumber(getBusinessId(), creditNoteData, seriesKey)
+      // El numero real sale de la transaccion, no de un calculo previo.
+      const creditNoteNumber = result.number
 
       if (result.success) {
-        // Incrementar el número de serie
-        const updatedSeries = {
-          ...series,
-          [seriesKey]: {
-            ...series[seriesKey],
-            lastNumber: nextNumber
-          }
-        }
-        await updateDocumentSeries(getBusinessId(), updatedSeries)
+        // El contador ya subió dentro de la transacción de createNoteWithNumber.
 
         // Envío automático a SUNAT - reutiliza shouldAutoSendToSunat ya leído FRESH.
         if (shouldAutoSendToSunat) {
@@ -1072,9 +1063,7 @@ export default function CreateCreditNote() {
 
     try {
       const { subtotal, igv, total, igvRate, igvExempt } = calculateTotals()
-      const nextNumber = series[seriesKey].lastNumber + 1
-      const creditNoteSeries = series[seriesKey].serie
-      const creditNoteNumber = `${creditNoteSeries}-${String(nextNumber).padStart(8, '0')}`
+      // El numero lo asigna createNoteWithNumber DENTRO de una transaccion.
 
       // Lectura FRESH de autoSendToSunat para decidir el sunatStatus inicial.
       let shouldAutoSendToSunat = false
@@ -1088,9 +1077,6 @@ export default function CreateCreditNote() {
 
       const creditNoteData = {
         documentType: 'nota_credito',
-        series: creditNoteSeries,
-        correlativeNumber: nextNumber,
-        number: creditNoteNumber,
 
         // Referencia al documento modificado
         referencedDocumentId: selectedInvoice.number,
@@ -1179,18 +1165,12 @@ export default function CreateCreditNote() {
         createdByEmail: user.email || '',
       }
 
-      const result = await createInvoice(getBusinessId(), creditNoteData)
+      const result = await createNoteWithNumber(getBusinessId(), creditNoteData, seriesKey)
+      // El numero real sale de la transaccion, no de un calculo previo.
+      const creditNoteNumber = result.number
 
       if (result.success) {
-        // Incrementar el número de serie después de crear exitosamente
-        const updatedSeries = {
-          ...series,
-          [seriesKey]: {
-            ...series[seriesKey],
-            lastNumber: nextNumber
-          }
-        }
-        await updateDocumentSeries(getBusinessId(), updatedSeries)
+        // El contador ya subió dentro de la transacción de createNoteWithNumber.
 
         // Actualizar la boleta/factura original para marcarla como pendiente de anulación
         // Esto asegura que no se cuente en el Dashboard/Caja hasta que SUNAT procese la NC

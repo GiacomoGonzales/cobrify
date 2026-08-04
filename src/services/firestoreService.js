@@ -144,6 +144,78 @@ export const createInvoiceWithNumber = async (userId, invoiceData, documentType,
 }
 
 /**
+ * Crear NOTA DE CRÉDITO o DÉBITO con numeración ATÓMICA.
+ *
+ * ── El bug que arregla (reporte 3-ago-2026) ──────────────────────────────────
+ * Las notas usaban esta secuencia, con el contador en el estado de React:
+ *
+ *     const nextNumber = series[seriesKey].lastNumber + 1   // leer
+ *     await createInvoice(...)                              // crear
+ *     await updateDocumentSeries(...)                       // recién acá incrementar
+ *
+ * Entre leer y guardar el contador pasa medio segundo. Cualquier segunda
+ * creación en esa ventana lee el MISMO `lastNumber` y saca el MISMO número. Un
+ * negocio terminó con dos FC01-00000003 (doble clic, 79 ms de diferencia) y dos
+ * FC01-00000005 con montos DISTINTOS (S/450.80 y S/54.00, creadas con 14
+ * segundos de diferencia — ni siquiera hizo falta un doble clic).
+ *
+ * SUNAT rechazó la segunda FC01-5 con el código 1033 ("registrado previamente
+ * con otros datos"): el correlativo ya estaba tomado allá.
+ *
+ * Acá el número se lee, se calcula, se escribe el documento y se incrementa el
+ * contador DENTRO de una sola transacción, igual que `createInvoiceWithNumber`
+ * para facturas y boletas. Si dos pestañas compiten, Firestore reintenta una y
+ * le entrega el número siguiente.
+ *
+ * @param {string} userId    - ID del negocio
+ * @param {Object} noteData  - Datos de la nota (SIN number, series, correlativeNumber)
+ * @param {string} seriesKey - 'nota_credito_factura' | 'nota_credito_boleta' | 'nota_debito_*'
+ */
+export const createNoteWithNumber = async (userId, noteData, seriesKey) => {
+  try {
+    const businessRef = doc(db, 'businesses', userId)
+    const notesCollection = collection(db, 'businesses', userId, 'invoices')
+    const newNoteRef = doc(notesCollection)
+
+    const result = await runTransaction(db, async (transaction) => {
+      const businessSnap = await transaction.get(businessRef)
+      if (!businessSnap.exists()) throw new Error('Negocio no encontrado')
+
+      const data = businessSnap.data()
+      const typeData = data.series?.[seriesKey]
+      if (!typeData || !typeData.serie) {
+        throw new Error(`No se ha configurado la serie para ${seriesKey}. Ve a Configuración.`)
+      }
+
+      const nextNumber = (typeData.lastNumber || 0) + 1
+      const formattedNumber = `${typeData.serie}-${String(nextNumber).padStart(8, '0')}`
+
+      transaction.set(newNoteRef, {
+        ...noteData,
+        number: formattedNumber,
+        series: typeData.serie,
+        correlativeNumber: nextNumber,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+
+      // El contador sube en la MISMA transacción: si el documento no se crea, el
+      // número tampoco se consume (no quedan saltos en la numeración).
+      transaction.update(businessRef, {
+        [`series.${seriesKey}.lastNumber`]: nextNumber,
+      })
+
+      return { number: formattedNumber, series: typeData.serie, correlativeNumber: nextNumber }
+    })
+
+    return { success: true, id: newNoteRef.id, ...result }
+  } catch (error) {
+    console.error('Error al crear nota con número:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * Obtener facturas recientes (por rango de fechas) - optimizado para Dashboard
  *
  * `untilDate` permite pedir una FRANJA cerrada [sinceDate, untilDate) en vez de

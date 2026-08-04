@@ -9,7 +9,7 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Alert from '@/components/ui/Alert'
-import { getInvoicesPage, createInvoice, getDocumentSeries, sendInvoiceToSunat, getCompanySettings } from '@/services/firestoreService'
+import { getInvoicesPage, createInvoice, getDocumentSeries, sendInvoiceToSunat, getCompanySettings, createNoteWithNumber } from '@/services/firestoreService'
 import { formatCurrency } from '@/lib/utils'
 import { normalizeCurrency, convertToBase } from '@/utils/currency'
 import { getAuth } from 'firebase/auth'
@@ -166,9 +166,9 @@ export default function CreateDebitNote() {
 
     try {
       const { subtotal, igv, total } = calculateTotals()
-      const nextNumber = series[seriesKey].lastNumber + 1
-      const debitNoteSeries = series[seriesKey].serie
-      const debitNoteNumber = `${debitNoteSeries}-${String(nextNumber).padStart(8, '0')}`
+      // El numero lo asigna createNoteWithNumber DENTRO de una transaccion, que
+      // ademas INCREMENTA el contador: esta pantalla nunca lo incrementaba, asi
+      // que toda nota de debito reutilizaba el mismo correlativo.
 
       // Lectura FRESH de autoSendToSunat para decidir sunatStatus inicial.
       let shouldAutoSendToSunat = false
@@ -192,9 +192,6 @@ export default function CreateDebitNote() {
 
       const debitNoteData = {
         documentType: 'nota_debito',
-        series: debitNoteSeries,
-        correlativeNumber: nextNumber,
-        number: debitNoteNumber,
 
         // Referencia al documento modificado
         referencedDocumentId: selectedInvoice.number,
@@ -242,11 +239,14 @@ export default function CreateDebitNote() {
 
       // 1. Crear el documento en Firestore
       setMessage({ type: 'info', text: 'Creando nota de débito...' })
-      const result = await createInvoice(getBusinessId(), debitNoteData)
+      const result = await createNoteWithNumber(getBusinessId(), debitNoteData, seriesKey)
 
       if (!result.success) {
         throw new Error(result.error || 'Error al crear la nota de débito')
       }
+
+      // El numero real sale de la transaccion, no de un calculo previo.
+      const debitNoteNumber = result.number
 
       const debitNoteId = result.id
 
