@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { CREDIT_NOTE_REASONS } from '@/data/noteReasons'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { ArrowLeft, Loader2, FileText, AlertCircle, Plus, Trash2, Search, Wallet, Banknote } from 'lucide-react'
@@ -20,27 +21,8 @@ const CREDIT_NOTE_MODES = {
   EXTERNAL: 'external'
 }
 
-// Catálogo 09 - Tipos de nota de crédito SUNAT, con las descripciones
-// OFICIALES (hoja "Catálogos" del Excel de reglas de validación de SUNAT).
-// OJO: hasta jul-2026 las etiquetas de 12 y 13 estaban cruzadas — el 12 real
-// es "Ajustes afectos al IVAP" (arroz pilado: exige TODOS los ítems con
-// afectación 17, si no SUNAT rechaza con error 2644) y el ajuste de
-// montos/fechas de pago es el 13, no el 12.
-const CREDIT_NOTE_REASONS = [
-  { code: '01', description: 'Anulación de la operación' },
-  { code: '02', description: 'Anulación por error en el RUC' },
-  { code: '03', description: 'Corrección por error en la descripción' },
-  { code: '04', description: 'Descuento global' },
-  { code: '05', description: 'Descuento por ítem' },
-  { code: '06', description: 'Devolución total' },
-  { code: '07', description: 'Devolución por ítem' },
-  { code: '08', description: 'Bonificación' },
-  { code: '09', description: 'Disminución en el valor' },
-  { code: '10', description: 'Otros conceptos' },
-  { code: '11', description: 'Ajustes de operaciones de exportación' },
-  { code: '12', description: 'Ajustes afectos al IVAP' },
-  { code: '13', description: 'Corrección del monto pendiente de pago / fechas de cuotas' },
-]
+// El catálogo vive en src/data/noteReasons.js: la lista de Ventas también lo
+// necesita para traducir el código guardado en el comprobante.
 
 // Motivos que el sistema puede emitir correctamente hoy. Los demás exigen
 // estructuras XML que no generamos y SUNAT los rechaza SIEMPRE:

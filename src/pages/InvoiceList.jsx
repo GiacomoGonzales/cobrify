@@ -78,6 +78,7 @@ import { getActiveBranches } from '@/services/branchService'
 import { useLocationAccess, useSellerScope } from '@/utils/locationAccess'
 import { getVisiblePaymentMethods } from '@/utils/paymentMethods'
 import { getSaleSeller, matchesSaleSeller, listSaleSellers } from '@/utils/saleSeller'
+import { getNoteReasonLabel, getReferencedDocTypeLabel } from '@/data/noteReasons'
 import MonthSelect from '@/components/MonthSelect'
 
 /**
@@ -3328,6 +3329,12 @@ Gracias por tu preferencia.`
                           Desde nota
                         </span>
                       )}
+                      {(invoice.documentType === 'nota_credito' || invoice.documentType === 'nota_debito') &&
+                       invoice.referencedDocumentId && (
+                        <span className="text-xs text-gray-500">
+                          → {invoice.referencedDocumentId}
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -3385,6 +3392,15 @@ Gracias por tu preferencia.`
                       <span className="font-medium text-primary-600 text-sm whitespace-nowrap">
                         {invoice.number}
                       </span>
+                      {/* A que documento afecta la nota. Sin esto hay que abrir el
+                          detalle una por una para saber cual es cual — y con dos
+                          notas del mismo monto es imposible distinguirlas. */}
+                      {(invoice.documentType === 'nota_credito' || invoice.documentType === 'nota_debito') &&
+                       invoice.referencedDocumentId && (
+                        <span className="block text-xs text-gray-500 whitespace-nowrap" title={`Se aplica a ${invoice.referencedDocumentId}`}>
+                          → {invoice.referencedDocumentId}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="py-2.5 px-3">
                       <div className="flex flex-col gap-0.5">
@@ -4200,6 +4216,60 @@ Gracias por tu preferencia.`
                 </div>
               </div>
             </div>
+
+            {/* ========== DOCUMENTO DE REFERENCIA (notas de crédito/débito) ==========
+                Una nota no se entiende sola: lo primero que uno quiere saber al
+                abrirla es a QUÉ documento se aplica. Va arriba de todo por eso. */}
+            {(viewingInvoice.documentType === 'nota_credito' || viewingInvoice.documentType === 'nota_debito') &&
+             viewingInvoice.referencedDocumentId && (() => {
+              const tipoRef = getReferencedDocTypeLabel(viewingInvoice.referencedDocumentType)
+              const motivo = getNoteReasonLabel(viewingInvoice.documentType, viewingInvoice.discrepancyCode)
+              // Se busca el documento original entre los ya cargados para poder
+              // abrirlo de un clic. Si no está en la página actual, igual se
+              // muestra el número: el dato importa aunque no se pueda navegar.
+              const original = invoices.find(inv =>
+                inv.id === viewingInvoice.referencedInvoiceFirestoreId ||
+                inv.number === viewingInvoice.referencedDocumentId
+              )
+              return (
+                <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide flex items-center gap-1.5">
+                        <ArrowRightCircle className="w-3.5 h-3.5" />
+                        Se aplica a
+                      </p>
+                      <p className="text-lg font-bold text-indigo-900 mt-1">
+                        {tipoRef ? `${tipoRef} ` : ''}{viewingInvoice.referencedDocumentId}
+                      </p>
+                      {motivo && (
+                        <p className="text-sm text-indigo-800 mt-1">
+                          Motivo: {motivo}
+                          {viewingInvoice.discrepancyCode && (
+                            <span className="text-indigo-500"> (código {viewingInvoice.discrepancyCode})</span>
+                          )}
+                        </p>
+                      )}
+                      {original && (
+                        <p className="text-xs text-indigo-600 mt-1">
+                          Total del documento original: {formatCurrency(original.total, original.currency)}
+                        </p>
+                      )}
+                    </div>
+                    {original && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-indigo-300 text-indigo-700 hover:bg-indigo-100 shrink-0"
+                        onClick={() => setViewingInvoice(original)}
+                      >
+                        Ver documento
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* ========== SALDO A FAVOR (store credit) ========== */}
             {viewingInvoice.documentType === 'nota_credito' && viewingInvoice.storeCredit && (() => {

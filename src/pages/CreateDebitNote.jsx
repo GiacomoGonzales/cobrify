@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { DEBIT_NOTE_REASONS } from '@/data/noteReasons'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { ArrowLeft, Loader2, FileText, AlertCircle, Send } from 'lucide-react'
@@ -20,11 +21,7 @@ const SEND_DEBIT_NOTE_URL = import.meta.env.VITE_FIREBASE_FUNCTIONS_URL
   : 'https://us-central1-cobrify-395fe.cloudfunctions.net/sendDebitNoteToSunat'
 
 // Catálogo 10 - Tipos de nota de débito SUNAT
-const DEBIT_NOTE_REASONS = [
-  { code: '01', description: 'Intereses por mora' },
-  { code: '02', description: 'Aumento en el valor' },
-  { code: '03', description: 'Penalidades/ otros conceptos' },
-]
+// El catálogo vive en src/data/noteReasons.js (lo comparte la lista de Ventas).
 
 export default function CreateDebitNote() {
   const { user, getBusinessId } = useAuth()
