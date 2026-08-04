@@ -2699,6 +2699,13 @@ Gracias por tu preferencia.`
         return <Badge variant="danger">Anulada</Badge>
       case 'partial_refund':
         return <Badge className="bg-orange-100 text-orange-800">Dev. Parcial</Badge>
+      // Estados intermedios mientras una nota de credito procesa en SUNAT.
+      // Sin estos casos caian al `default` y la tabla mostraba el codigo CRUDO
+      // ("pending_cancellation"), que al usuario no le dice nada.
+      case 'pending_cancellation':
+        return <Badge className="bg-amber-100 text-amber-800">Anulación en proceso</Badge>
+      case 'partial_refund_pending':
+        return <Badge className="bg-amber-100 text-amber-800">Dev. parcial en proceso</Badge>
       default:
         return <Badge>{status}</Badge>
     }
@@ -3717,7 +3724,10 @@ Gracias por tu preferencia.`
                   )}
 
                   {/* Enviar Nota de Crédito a SUNAT (pendientes y no enviados) */}
+                  {/* Una NC anulada localmente NO se envia: si SUNAT la aceptara,
+                      quedaria viva alla y descontada aca. */}
                   {invoice.documentType === 'nota_credito' &&
+                   invoice.status !== 'cancelled' && invoice.status !== 'voided' &&
                    (invoice.sunatStatus === 'pending' || invoice.sunatStatus === 'not_sent') && (
                     <button
                       onClick={() => {
@@ -3739,6 +3749,7 @@ Gracias por tu preferencia.`
                   {/* Editar fecha de emisión (NC pendiente o rechazada).
                       Útil cuando SUNAT rechaza por fecha vieja. */}
                   {invoice.documentType === 'nota_credito' &&
+                   invoice.status !== 'cancelled' && invoice.status !== 'voided' &&
                    (invoice.sunatStatus === 'pending' || invoice.sunatStatus === 'rejected' ||
                     invoice.sunatStatus === 'signed' || invoice.sunatStatus === 'SIGNED' ||
                     invoice.sunatStatus === 'sending') && (
@@ -3771,6 +3782,7 @@ Gracias por tu preferencia.`
 
                   {/* Reenviar Nota de Crédito a SUNAT (rechazada, firmada o atascada) */}
                   {invoice.documentType === 'nota_credito' &&
+                   invoice.status !== 'cancelled' && invoice.status !== 'voided' &&
                    (invoice.sunatStatus === 'rejected' || invoice.sunatStatus === 'SIGNED' || invoice.sunatStatus === 'signed' || invoice.sunatStatus === 'sending') && (
                     <button
                       onClick={() => {
