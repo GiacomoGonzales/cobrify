@@ -1,5 +1,6 @@
 import { forwardRef } from 'react'
 import { getRealPayments } from '@/utils/receivables'
+import { getNotaVentaLegend } from '@/utils/documentLegends'
 import React from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { formatPricedModifierLines } from '@/utils/modifierHelpers'
@@ -1244,7 +1245,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
       <div className="ticket-footer">
         <div className="representation-text">
           {invoice.documentType === 'nota_venta'
-            ? 'DOCUMENTO NO VÁLIDO PARA FINES TRIBUTARIOS'
+            ? getNotaVentaLegend(companySettings)
             : isQuotation
             ? 'COTIZACIÓN - NO VÁLIDO COMO COMPROBANTE DE PAGO'
             : 'REPRESENTACIÓN IMPRESA DE LA ' + getDocumentTypeName()

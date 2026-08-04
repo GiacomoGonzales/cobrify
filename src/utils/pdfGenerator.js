@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf'
 import { contrastTextColor } from '@/utils/pdfColors'
+import { getNotaVentaLegend } from '@/utils/documentLegends'
 import { formatDate } from '@/lib/utils'
 import { getCurrencySymbol, normalizeCurrency } from '@/utils/currency'
 import { getComprobanteBreakdown } from '@/utils/peruUtils'
@@ -2982,7 +2983,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
     doc.setFontSize(8)
     doc.setTextColor(...MEDIUM_GRAY)
-    doc.text('DOCUMENTO NO VÁLIDO PARA EFECTOS TRIBUTARIOS', MARGIN_LEFT, footerY + 10)
+    // Misma leyenda que los tickets. Antes decia "EFECTOS" y los tickets
+    // "FINES": el mismo documento se contradecia segun donde se imprimiera.
+    doc.text(getNotaVentaLegend(companySettings), MARGIN_LEFT, footerY + 10)
     footerY += 20
   }
 

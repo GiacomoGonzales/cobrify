@@ -224,6 +224,7 @@ export const registerBusinessAsAdmin = async (email, password, displayName, busi
         ...(businessData?.hideBatchAndExpiryInDocuments !== undefined && { hideBatchAndExpiryInDocuments: businessData.hideBatchAndExpiryInDocuments }),
         ...(businessData?.invoiceFooterTerms !== undefined && { invoiceFooterTerms: businessData.invoiceFooterTerms }),
         ...(businessData?.ticketFooterMessage !== undefined && { ticketFooterMessage: businessData.ticketFooterMessage }),
+        ...(businessData?.notaVentaLegend !== undefined && { notaVentaLegend: businessData.notaVentaLegend }),
         ...(businessData?.ticketQrEnabled !== undefined && { ticketQrEnabled: businessData.ticketQrEnabled }),
         ...(businessData?.ticketQrContent !== undefined && { ticketQrContent: businessData.ticketQrContent }),
         ...(businessData?.ticketQrCaption !== undefined && { ticketQrCaption: businessData.ticketQrCaption }),

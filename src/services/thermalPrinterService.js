@@ -1,5 +1,6 @@
 import { CapacitorThermalPrinter } from 'capacitor-thermal-printer';
 import { getRealPayments } from '@/utils/receivables'
+import { getNotaVentaLegend, wrapLegend } from '@/utils/documentLegends'
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { prepareLogoForPrinting } from './imageProcessingService';
 import * as BLEPrinter from './blePrinterService';
@@ -1395,11 +1396,13 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
 
     // Leyenda legal según tipo de documento
     if (isNotaVenta) {
-      printer = printer
-        .bold()
-        .text('DOCUMENTO NO VALIDO PARA\n')
-        .text('FINES TRIBUTARIOS\n')
-        .clearFormatting();
+      // Leyenda configurable (Configuracion > Documentos). Se parte segun el
+      // ancho del papel: la impresora no corta sola, trunca sin aviso.
+      printer = printer.bold();
+      for (const linea of wrapLegend(getNotaVentaLegend(business), paperWidth === 58 ? 32 : 48)) {
+        printer = printer.text(convertSpanishText(linea) + '\n');
+      }
+      printer = printer.clearFormatting();
     } else {
       // Para facturas y boletas electrónicas
       printer = printer
@@ -1883,6 +1886,9 @@ const printBLETicket = async (invoice, business, paperWidth = 58) => {
       // Configuración
       hideRucIgvInNotaVenta: business?.hideRucIgvInNotaVenta || false,
       hideOnlyIgvInNotaVenta: business?.hideOnlyIgvInNotaVenta || false,
+      // Leyenda de nota de venta YA RESUELTA: el path BLE recibe campos sueltos,
+      // no el objeto del negocio, asi que no puede resolverla por su cuenta.
+      notaVentaLegend: getNotaVentaLegend(business),
 
       // Documento
       documentType: docType,
@@ -2658,12 +2664,11 @@ const buildTicketEscPos = async (invoice, business, paperWidth = 58) => {
       .newLine();
 
     if (isNotaVenta) {
-      builder.bold(true)
-        .text('DOCUMENTO NO VALIDO PARA')
-        .newLine()
-        .text('FINES TRIBUTARIOS')
-        .newLine()
-        .bold(false);
+      builder.bold(true);
+      for (const linea of wrapLegend(getNotaVentaLegend(business), paperWidth === 58 ? 32 : 48)) {
+        builder.text(convertSpanishText(linea)).newLine();
+      }
+      builder.bold(false);
     } else {
       builder.text('REPRESENTACION IMPRESA DE LA')
         .newLine()

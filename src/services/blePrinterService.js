@@ -5,6 +5,7 @@
 
 import { Capacitor } from '@capacitor/core';
 import { getRealPayments } from '@/utils/receivables'
+import { getNotaVentaLegend, wrapLegend } from '@/utils/documentLegends'
 import { BleClient, numbersToDataView, numberToUUID } from '@capacitor-community/bluetooth-le';
 import { prepareLogoForPrinting } from './imageProcessingService';
 import { buildKitchenLines } from '@/utils/kitchenComandaFormat';
@@ -678,6 +679,7 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
       logoPrintScale,
       // Configuración
       hideRucIgvInNotaVenta,
+      notaVentaLegend,
       hideOnlyIgvInNotaVenta,
       // Documento
       documentType,
@@ -1129,10 +1131,11 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
     commands.push(ESCPOSCommands.align(1));
 
     if (isNotaVenta) {
-      // Nota de venta: no válido tributariamente
+      // Leyenda configurable (Configuracion > Documentos), partida al ancho.
       commands.push(ESCPOSCommands.bold(true));
-      commands.push(ESCPOSCommands.text('DOCUMENTO NO VALIDO PARA\n'));
-      commands.push(ESCPOSCommands.text('FINES TRIBUTARIOS\n'));
+      for (const linea of wrapLegend(notaVentaLegend || getNotaVentaLegend(null), paperWidth === 58 ? 32 : 48)) {
+        commands.push(ESCPOSCommands.text(convertSpanishText(linea) + '\n'));
+      }
       commands.push(ESCPOSCommands.bold(false));
     } else {
       // Factura/Boleta electrónica

@@ -20,6 +20,7 @@ import { httpsCallable } from 'firebase/functions'
 import { db, storage, auth, functions } from '@/lib/firebase'
 import { applyMarginToCost } from '@/lib/utils'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import { DEFAULT_NOTA_VENTA_LEGEND, NOTA_VENTA_LEGEND_MAX } from '@/utils/documentLegends'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
@@ -291,6 +292,8 @@ export default function Settings() {
   // Estado para color de PDF
   const [pdfAccentColor, setPdfAccentColor] = useState('#464646') // Gris oscuro por defecto
   const [ticketFooterMessage, setTicketFooterMessage] = useState('') // Mensaje personalizado al pie del ticket térmico
+  // Leyenda al pie de las NOTAS DE VENTA. Vacío = se usa la de por defecto.
+  const [notaVentaLegend, setNotaVentaLegend] = useState('')
   const [invoiceFooterTerms, setInvoiceFooterTerms] = useState('') // Términos y condiciones libres al pie del comprobante PDF (solo PDF, no SUNAT)
   // QR personalizado al pie del ticket térmico (URL, texto libre, datos de pago, etc.)
   const [ticketQrEnabled, setTicketQrEnabled] = useState(false)
@@ -1150,6 +1153,7 @@ export default function Settings() {
 
         // Cargar color de PDF
         setTicketFooterMessage(businessData.ticketFooterMessage || '')
+        setNotaVentaLegend(businessData.notaVentaLegend || '')
         setInvoiceFooterTerms(businessData.invoiceFooterTerms || '')
         setTicketQrEnabled(businessData.ticketQrEnabled === true)
         setTicketQrContent(businessData.ticketQrContent || '')
@@ -1946,6 +1950,7 @@ export default function Settings() {
         logoPrintScale: Number(logoPrintScale) || 100,
         pdfAccentColor: pdfAccentColor,
         ticketFooterMessage: ticketFooterMessage || '',
+        notaVentaLegend: notaVentaLegend.trim() || '',
         invoiceFooterTerms: invoiceFooterTerms || '',
         ticketQrEnabled: ticketQrEnabled === true,
         ticketQrContent: ticketQrContent || '',
@@ -6194,6 +6199,31 @@ export default function Settings() {
                   Personaliza el pie de tus tickets impresos en impresoras térmicas
                 </p>
 
+                {/* Leyenda de las notas de venta */}
+                <div className="mb-6">
+                  <label className="block text-sm font-semibold text-gray-900 mb-2">
+                    Leyenda al pie de las Notas de Venta
+                  </label>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Advertencia que se imprime al final de cada nota de venta, en el ticket y en el PDF.
+                    Solo aplica a notas de venta: las boletas y facturas llevan la leyenda que exige SUNAT.
+                  </p>
+                  <input
+                    type="text"
+                    value={notaVentaLegend}
+                    onChange={(e) => setNotaVentaLegend(e.target.value.slice(0, NOTA_VENTA_LEGEND_MAX))}
+                    maxLength={NOTA_VENTA_LEGEND_MAX}
+                    placeholder={DEFAULT_NOTA_VENTA_LEGEND}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                  <div className="flex justify-between items-center mt-1">
+                    <span className="text-xs text-gray-400">
+                      Si lo dejas vacío se imprime «{DEFAULT_NOTA_VENTA_LEGEND}»
+                    </span>
+                    <span className="text-xs text-gray-400">{notaVentaLegend.length}/{NOTA_VENTA_LEGEND_MAX}</span>
+                  </div>
+                </div>
+
                 {/* Mensaje personalizado al pie del ticket térmico */}
                 <div className="mb-6">
                   <label className="block text-sm font-semibold text-gray-900 mb-2">
@@ -6703,6 +6733,7 @@ export default function Settings() {
                     await setDoc(businessRef, {
                       pdfAccentColor: pdfAccentColor,
                       ticketFooterMessage: ticketFooterMessage || '',
+                      notaVentaLegend: notaVentaLegend.trim() || '',
                       invoiceFooterTerms: invoiceFooterTerms || '',
                       ticketQrEnabled: ticketQrEnabled === true,
                       ticketQrContent: ticketQrContent || '',
