@@ -152,6 +152,25 @@ export const exportInventoryWithOptions = async ({
   return { success: true, itemCount: items.length }
 }
 
+/**
+ * Costo unitario de un item para el Excel de inventario.
+ *
+ * Los insumos no tienen `cost`: su costo es `averageCost` (promedio ponderado de
+ * las compras), que ya se normaliza como `price` al armar la lista. Las
+ * variantes usan el suyo y caen al del producto padre si no lo tienen — mismo
+ * criterio que Productos e Inventario en pantalla.
+ */
+function getUnitCost(item, variant = null) {
+  if (variant) {
+    const v = parseFloat(variant.cost)
+    if (Number.isFinite(v) && v > 0) return v
+  }
+  if (item.itemType === 'ingredient') {
+    return Number(item.averageCost) || Number(item.cost) || 0
+  }
+  return Number(item.cost) || 0
+}
+
 // =================== FORMATO A: UNA COLUMNA POR ALMACÉN ===================
 
 function buildSheetColumns(items, selectedWarehouses, categories, businessData, brands = []) {
@@ -162,7 +181,7 @@ function buildSheetColumns(items, selectedWarehouses, categories, businessData, 
     return legacy || ''
   }
   const headers = [
-    'Tipo', 'SKU', 'Código', 'Nombre', 'Categoría', 'Marca', 'Unidad', 'Precio',
+    'Tipo', 'SKU', 'Código', 'Nombre', 'Categoría', 'Marca', 'Unidad', 'Precio', 'Costo',
     ...selectedWarehouses.map(w => `Stock\n${w.name}`),
     'Stock Total', 'Stock Mín.', 'Estado',
   ]
@@ -189,6 +208,7 @@ function buildSheetColumns(items, selectedWarehouses, categories, businessData, 
           marca: resolveBrand(item),
           unidad: item.unit || 'UNIDAD',
           precio: Number(v.price) || 0,
+          costo: getUnitCost(item, v),
           stockPerWh,
           stockTotal: totalStock,
           stockMin: Number(item.minStock) || 0,
@@ -209,6 +229,7 @@ function buildSheetColumns(items, selectedWarehouses, categories, businessData, 
         marca: isProduct ? resolveBrand(item) : '',
         unidad: item.unit || 'UNIDAD',
         precio: Number(item.price) || 0,
+        costo: getUnitCost(item),
         stockPerWh,
         stockTotal: totalStock,
         stockMin: Number(item.minStock) || 0,
@@ -234,7 +255,7 @@ function buildSheetColumns(items, selectedWarehouses, categories, businessData, 
   const dataStart = aoa.length
   rows.forEach(r => {
     aoa.push([
-      r.tipo, r.sku, r.codigo, r.nombre, r.categoria, r.marca, r.unidad, r.precio,
+      r.tipo, r.sku, r.codigo, r.nombre, r.categoria, r.marca, r.unidad, r.precio, r.costo,
       ...r.stockPerWh,
       r.stockTotal, r.stockMin, r.status,
     ])
@@ -249,12 +270,16 @@ function buildSheetColumns(items, selectedWarehouses, categories, businessData, 
   aoa.push(['Items sin stock', rows.filter(r => r.stockTotal === 0).length])
   aoa.push(['Items con stock bajo', rows.filter(r => r.status === 'Stock bajo').length])
   const totalValue = rows.reduce((s, r) => s + r.precio * r.stockTotal, 0)
-  aoa.push(['Valor total del inventario', Number(totalValue.toFixed(2))])
+  aoa.push(['Valor total del inventario (a precio de venta)', Number(totalValue.toFixed(2))])
+  // Valorizado AL COSTO: es la cifra que sirve para contabilidad y para saber
+  // cuanta plata hay inmovilizada en mercaderia.
+  const totalCost = rows.reduce((s, r) => s + (r.costo || 0) * r.stockTotal, 0)
+  aoa.push(['Valor total del inventario (al costo)', Number(totalCost.toFixed(2))])
   const summaryEnd = aoa.length - 1
 
   const ws = XLSX.utils.aoa_to_sheet(aoa)
   applyColumnWidths(ws, [
-    11, 12, 14, 35, 22, 18, 10, 10,
+    11, 12, 14, 35, 22, 18, 10, 10, 10,
     ...selectedWarehouses.map(() => 14),
     12, 11, 12,
   ])
@@ -274,10 +299,11 @@ function buildSheetColumns(items, selectedWarehouses, categories, businessData, 
     setStyle(ws, r, 5, cellStyle(i))                         // Marca
     setStyle(ws, r, 6, centerStyle(i))                       // Unidad
     setStyle(ws, r, 7, numberStyle(i))                       // Precio
+    setStyle(ws, r, 8, numberStyle(i))                       // Costo
     selectedWarehouses.forEach((_, wIdx) => {
-      setStyle(ws, r, 8 + wIdx, intStyle(i))
+      setStyle(ws, r, 9 + wIdx, intStyle(i))
     })
-    const totalCol = 8 + selectedWarehouses.length
+    const totalCol = 9 + selectedWarehouses.length
     setStyle(ws, r, totalCol, { ...intStyle(i), font: { ...intStyle(i).font, bold: true } })
     setStyle(ws, r, totalCol + 1, intStyle(i))
     setStyle(ws, r, totalCol + 2, statusStyle(i, row.status))
@@ -301,7 +327,7 @@ function buildSheetRows(items, selectedWarehouses, categories, businessData, bra
     return legacy || ''
   }
   const headers = [
-    'Tipo', 'SKU', 'Código', 'Nombre', 'Categoría', 'Marca', 'Unidad', 'Precio',
+    'Tipo', 'SKU', 'Código', 'Nombre', 'Categoría', 'Marca', 'Unidad', 'Precio', 'Costo',
     'Almacén', 'Stock', 'Stock Mín.', 'Estado',
   ]
   const totalCols = headers.length
@@ -324,6 +350,7 @@ function buildSheetRows(items, selectedWarehouses, categories, businessData, bra
             marca: resolveBrand(item),
             unidad: item.unit || 'UNIDAD',
             precio: Number(v.price) || 0,
+            costo: getUnitCost(item, v),
             almacen: w.name,
             stock,
             stockMin: Number(item.minStock) || 0,
@@ -345,6 +372,7 @@ function buildSheetRows(items, selectedWarehouses, categories, businessData, bra
           marca: isProduct ? resolveBrand(item) : '',
           unidad: item.unit || 'UNIDAD',
           precio: Number(item.price) || 0,
+          costo: getUnitCost(item),
           almacen: w.name,
           stock,
           stockMin: Number(item.minStock) || 0,
@@ -370,12 +398,12 @@ function buildSheetRows(items, selectedWarehouses, categories, businessData, bra
   rows.forEach(r => {
     aoa.push([
       r.tipo, r.sku, r.codigo, r.nombre, r.categoria, r.marca, r.unidad,
-      r.precio, r.almacen, r.stock, r.stockMin, r.status,
+      r.precio, r.costo, r.almacen, r.stock, r.stockMin, r.status,
     ])
   })
 
   const ws = XLSX.utils.aoa_to_sheet(aoa)
-  applyColumnWidths(ws, [11, 12, 14, 32, 22, 18, 10, 10, 22, 11, 11, 12])
+  applyColumnWidths(ws, [11, 12, 14, 32, 22, 18, 10, 10, 10, 22, 11, 11, 12])
   applyTitleRow(ws, 0, totalCols)
   applyMetadataRows(ws, metaStart, metaEnd)
   applyHeaderRow(ws, headerRow, totalCols)
@@ -390,11 +418,12 @@ function buildSheetRows(items, selectedWarehouses, categories, businessData, bra
     setStyle(ws, r, 4, cellStyle(i))
     setStyle(ws, r, 5, cellStyle(i))
     setStyle(ws, r, 6, centerStyle(i))
-    setStyle(ws, r, 7, numberStyle(i))
-    setStyle(ws, r, 8, cellStyle(i))
-    setStyle(ws, r, 9, intStyle(i))
-    setStyle(ws, r, 10, intStyle(i))
-    setStyle(ws, r, 11, statusStyle(i, row.status))
+    setStyle(ws, r, 7, numberStyle(i))   // Precio
+    setStyle(ws, r, 8, numberStyle(i))   // Costo
+    setStyle(ws, r, 9, cellStyle(i))     // Almacén
+    setStyle(ws, r, 10, intStyle(i))     // Stock
+    setStyle(ws, r, 11, intStyle(i))     // Stock Mín.
+    setStyle(ws, r, 12, statusStyle(i, row.status))
   }
   applyFreezeBelow(ws, headerRow)
   return ws
