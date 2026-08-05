@@ -702,29 +702,33 @@ export default function PriceUpdateTable({
       {/* Encabezado del modo */}
       <div className="rounded-xl border border-primary-200 bg-primary-50 p-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-start gap-3">
+          <div className="flex items-start gap-3 min-w-0">
             <div className="rounded-lg bg-primary-600 p-2 text-white shrink-0">
               <Tag className="w-5 h-5" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h2 className="text-base font-semibold text-gray-900">Actualizar precios</h2>
               <p className="text-sm text-gray-600">
                 Edita precios de venta (incluye variantes, presentaciones y múltiples precios).
-                Expande cada producto con el ▸ para ver sus precios extra.
+                {/* En movil el ▸ esta a la vista y la frase ocupaba tres lineas. */}
+                <span className="hidden sm:inline"> Expande cada producto con el ▸ para ver sus precios extra.</span>
               </p>
             </div>
           </div>
-          <div className="flex gap-2 shrink-0">
-            <Button variant="outline" size="sm" onClick={() => setLevelsOpen(true)} title="Nombres de los niveles y calculo automatico por porcentaje">
-              <Layers className="w-4 h-4 mr-2" />
+          {/* En movil: dos columnas parejas y "Salir" abajo a lo ancho. En una
+              sola fila los tres no entraban y el texto se partia a la mitad
+              ("Niveles de / precio"). whitespace-nowrap evita que se rompa. */}
+          <div className="grid grid-cols-2 sm:flex gap-2 sm:shrink-0">
+            <Button variant="outline" size="sm" onClick={() => setLevelsOpen(true)} className="whitespace-nowrap" title="Nombres de los niveles y cálculo automático por porcentaje">
+              <Layers className="w-4 h-4 mr-2 shrink-0" />
               Niveles de precio
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setBulkOpen(true)} title="Ajustar varios precios a la vez">
-              <Calculator className="w-4 h-4 mr-2" />
+            <Button variant="outline" size="sm" onClick={() => setBulkOpen(true)} className="whitespace-nowrap" title="Ajustar varios precios a la vez">
+              <Calculator className="w-4 h-4 mr-2 shrink-0" />
               Ajuste masivo
             </Button>
-            <Button variant="outline" size="sm" onClick={onClose}>
-              <X className="w-4 h-4 mr-2" />
+            <Button variant="outline" size="sm" onClick={onClose} className="col-span-2 sm:col-span-1 whitespace-nowrap">
+              <X className="w-4 h-4 mr-2 shrink-0" />
               Salir
             </Button>
           </div>
@@ -733,7 +737,7 @@ export default function PriceUpdateTable({
         {/* Filtros de tipo */}
         {(multiPricesOn || presentationsOn || products.some(hasVariants)) && (
           <div className="mt-3 flex items-center gap-2 flex-wrap">
-            <Filter className="w-4 h-4 text-gray-500" />
+            <Filter className="w-4 h-4 text-gray-500 shrink-0" />
             {[
               { v: 'all', label: 'Todos' },
               { v: 'multi', label: 'Con múltiples precios', show: multiPricesOn },
@@ -743,7 +747,7 @@ export default function PriceUpdateTable({
               <button
                 key={opt.v}
                 onClick={() => setTypeFilter(opt.v)}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors whitespace-nowrap ${
                   typeFilter === opt.v
                     ? 'bg-primary-600 text-white border-primary-700'
                     : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'

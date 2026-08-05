@@ -221,7 +221,7 @@ export default function PriceLevelsConfigModal({
 
               <div className="space-y-2">
                 {nivelesConPct.map(key => (
-                  <div key={key} className="flex items-center gap-3 p-2.5 border border-gray-200 rounded-lg">
+                  <div key={key} className="flex items-center gap-2 sm:gap-3 p-2.5 border border-gray-200 rounded-lg flex-wrap">
                     <input
                       type="checkbox"
                       checked={pcts[key]?.enabled || false}
@@ -231,7 +231,7 @@ export default function PriceLevelsConfigModal({
                       }))}
                       className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                     />
-                    <span className="text-sm text-gray-700 min-w-[90px] truncate" title={labels[key]}>
+                    <span className="text-sm text-gray-700 flex-1 min-w-0 sm:flex-initial sm:min-w-[90px] truncate" title={labels[key]}>
                       {labels[key] || `Precio ${NIVELES.indexOf(key) + 1}`}
                     </span>
                     <span className="text-xs text-gray-500">{base === 'cost' ? '+' : '−'}</span>
@@ -249,7 +249,7 @@ export default function PriceLevelsConfigModal({
                       placeholder="0"
                       className="w-20 px-2 py-1.5 text-sm text-center border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100 disabled:text-gray-400"
                     />
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-gray-500 w-full sm:w-auto">
                       {base === 'cost' ? '% sobre el costo' : `% menos que ${labels.price1 || 'el principal'}`}
                     </span>
                   </div>
