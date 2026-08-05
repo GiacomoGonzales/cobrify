@@ -393,6 +393,9 @@ export default function Settings() {
   const [notaVentaCreditTerms, setNotaVentaCreditTerms] = useState(false)
   const [dispatchGuidesEnabled, setDispatchGuidesEnabled] = useState(false)
   const [exitNoteEnabled, setExitNoteEnabled] = useState(false)
+  // Modal para crear un metodo de pago propio (antes era un formulario
+  // siempre desplegado que ocupaba media seccion).
+  const [showNewPaymentModal, setShowNewPaymentModal] = useState(false)
   const [defaultDocumentType, setDefaultDocumentType] = useState('boleta') // boleta, factura, nota_venta
   // Comprobantes que el negocio emite. Vacio = todos (los negocios que nunca
   // tocaron la opcion siguen igual). Un negocio en el RUS desactiva Factura.
@@ -5359,7 +5362,8 @@ export default function Settings() {
                     </span>
                     <p className="text-xs text-gray-600 mt-1.5 mb-3 leading-relaxed">
                       Desmarca los que no uses para que no aparezcan en el Punto de Venta. Efectivo no
-                      se puede quitar. Esto no afecta a las ventas ya registradas.
+                      se puede quitar. Con <strong>Agregar método</strong> creas uno propio —un vale, un
+                      convenio— con su propio nombre. Esto no afecta a las ventas ya registradas.
                     </p>
 
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-5">
@@ -5389,88 +5393,48 @@ export default function Settings() {
                           </label>
                         )
                       })}
-                    </div>
 
-                    <span className="text-sm font-medium text-gray-900">Métodos propios</span>
-                    <p className="text-xs text-gray-600 mt-1.5 mb-3 leading-relaxed">
-                      Si cobras de una forma que no está en la lista —un vale, un convenio— agrégala acá.
-                      Aparece con su propio nombre en el punto de venta, el control de caja, los reportes
-                      y el detalle de cada venta. Lo único que debes indicar es si es efectivo físico:
-                      si lo es, esa plata entra al cajón y suma al arqueo del cierre.
-                    </p>
+                      {/* Los metodos propios van en la MISMA grilla que los de
+                          fabrica: son metodos de pago igual, y tenerlos en una
+                          lista aparte con su propio titulo y explicacion hacia
+                          que la seccion ocupara el doble. Se quitan con la ×;
+                          no llevan casilla porque quitarlos ES desactivarlos. */}
+                      {customPaymentMethods.map(m => (
+                        <div
+                          key={m.id}
+                          className="flex items-center gap-2 p-2 rounded-md border border-gray-200 text-sm text-gray-700"
+                          title={m.behavesLike === 'cash'
+                            ? 'Efectivo físico: entra al cajón y suma al arqueo'
+                            : 'No entra al cajón (se cuadra aparte)'}
+                        >
+                          <span className="w-4 h-4 rounded bg-primary-600 flex items-center justify-center flex-shrink-0">
+                            <Check className="w-3 h-3 text-white" />
+                          </span>
+                          <span className="truncate flex-1">{m.name}</span>
+                          {m.behavesLike === 'cash' && (
+                            <span className="text-xs text-gray-400 flex-shrink-0">cajón</span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setCustomPaymentMethods(prev => prev.filter(x => x.id !== m.id))}
+                            className="text-gray-400 hover:text-red-600 flex-shrink-0"
+                            aria-label={`Quitar ${m.name}`}
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
 
-                    {customPaymentMethods.length > 0 && (
-                      <div className="space-y-2 mb-3">
-                        {customPaymentMethods.map(m => (
-                          <div key={m.id} className="flex items-center gap-2 p-2 border border-gray-200 rounded-md">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm text-gray-900 truncate">{m.name}</p>
-                              <p className="text-xs text-gray-500">
-                                {m.behavesLike === 'cash'
-                                  ? 'Efectivo físico: entra al cajón y suma al arqueo'
-                                  : 'No entra al cajón (se cuadra aparte)'}
-                              </p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setCustomPaymentMethods(prev => prev.filter(x => x.id !== m.id))}
-                              className="text-gray-400 hover:text-red-600 p-1"
-                              aria-label={`Quitar ${m.name}`}
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <input
-                        type="text"
-                        value={newPaymentName}
-                        onChange={e => setNewPaymentName(e.target.value)}
-                        placeholder="Nombre del método (ej. FISE)"
-                        maxLength={24}
-                        className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      />
-                      <select
-                        value={newPaymentBehavior}
-                        onChange={e => setNewPaymentBehavior(e.target.value)}
-                        className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      >
-                        {/* behavesLike quedó SOLO para el arqueo: el desglose ya
-                            es independiente en caja, reportes y ventas. */}
-                        <option value="cash">Es efectivo físico (entra al cajón)</option>
-                        <option value="transfer">No entra al cajón</option>
-                      </select>
                       <button
                         type="button"
-                        onClick={() => {
-                          const nombre = newPaymentName.trim()
-                          if (!nombre) return
-                          // Nombre repetido = dos métodos indistinguibles en los
-                          // reportes y en el cierre de caja, que guardan la etiqueta.
-                          const yaExiste = [
-                            ...getBuiltinPaymentMethodsForMode(businessMode).map(m => m.label),
-                            ...customPaymentMethods.map(m => m.name),
-                          ].some(l => l.toLowerCase() === nombre.toLowerCase())
-                          if (yaExiste) {
-                            toast.error('Ya existe un método de pago con ese nombre')
-                            return
-                          }
-                          setCustomPaymentMethods(prev => [
-                            ...prev,
-                            { id: `pm${Date.now()}`, name: nombre, behavesLike: newPaymentBehavior },
-                          ])
-                          setNewPaymentName('')
-                          setNewPaymentBehavior('transfer')
-                        }}
-                        disabled={!newPaymentName.trim()}
-                        className="px-4 py-2 text-sm font-medium bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                        onClick={() => setShowNewPaymentModal(true)}
+                        className="flex items-center justify-center gap-1.5 p-2 rounded-md border border-dashed border-gray-300 text-sm text-gray-600 hover:border-primary-400 hover:text-primary-700 transition-colors"
                       >
-                        Agregar
+                        <Plus className="w-4 h-4" />
+                        Agregar método
                       </button>
                     </div>
+
 
                     {/* Por defecto: al final, cuando ya se sabe cuales estan
                         disponibles (incluidos los propios). Mismo orden que en
@@ -12873,6 +12837,89 @@ export default function Settings() {
           }}
         />
       )}
+
+      {/* Nuevo método de pago propio. Antes era un formulario siempre abierto
+          dentro de la seccion; se crea un metodo cada varios meses, asi que no
+          justificaba ocupar ese espacio de forma permanente. */}
+      <Modal
+        isOpen={showNewPaymentModal}
+        onClose={() => { setShowNewPaymentModal(false); setNewPaymentName(''); setNewPaymentBehavior('transfer') }}
+        title="Nuevo método de pago"
+        size="md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Si cobras de una forma que no está en la lista —un vale, un convenio— agrégala acá.
+            Aparece con su propio nombre en el punto de venta, el control de caja, los reportes
+            y el detalle de cada venta.
+          </p>
+
+          <Input
+            label="Nombre del método"
+            value={newPaymentName}
+            onChange={e => setNewPaymentName(e.target.value)}
+            placeholder="Ej: FISE"
+            maxLength={24}
+            autoFocus
+          />
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              ¿Entra al cajón?
+            </label>
+            <select
+              value={newPaymentBehavior}
+              onChange={e => setNewPaymentBehavior(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              {/* behavesLike quedó SOLO para el arqueo: el desglose ya
+                  es independiente en caja, reportes y ventas. */}
+              <option value="cash">Sí, es efectivo físico (entra al cajón)</option>
+              <option value="transfer">No entra al cajón</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Si es efectivo físico, esa plata entra al cajón y suma al arqueo del cierre.
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => { setShowNewPaymentModal(false); setNewPaymentName(''); setNewPaymentBehavior('transfer') }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              disabled={!newPaymentName.trim()}
+              onClick={() => {
+                const nombre = newPaymentName.trim()
+                if (!nombre) return
+                // Nombre repetido = dos métodos indistinguibles en los
+                // reportes y en el cierre de caja, que guardan la etiqueta.
+                const yaExiste = [
+                  ...getBuiltinPaymentMethodsForMode(businessMode).map(m => m.label),
+                  ...customPaymentMethods.map(m => m.name),
+                ].some(l => l.toLowerCase() === nombre.toLowerCase())
+                if (yaExiste) {
+                  toast.error('Ya existe un método de pago con ese nombre')
+                  return
+                }
+                setCustomPaymentMethods(prev => [
+                  ...prev,
+                  { id: `pm${Date.now()}`, name: nombre, behavesLike: newPaymentBehavior },
+                ])
+                setNewPaymentName('')
+                setNewPaymentBehavior('transfer')
+                setShowNewPaymentModal(false)
+                toast.success(`"${nombre}" agregado. No olvides guardar los cambios.`)
+              }}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Agregar
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
