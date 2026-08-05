@@ -143,6 +143,11 @@ export default function CartDrawer({
   showPrices = true,
   isRestaurantMenu = false,
   tableNumber: initialTableNumber = '',
+  // ID del documento de la mesa (del QR). Identifica la mesa sin ambiguedad:
+  // dos sucursales pueden tener ambas "Mesa 5" y buscar por numero elegia la
+  // primera, con lo que la orden heredaba el branchId equivocado y aparecia en
+  // la cocina de la otra sede. Vacio en QR viejos y en mesa escrita a mano.
+  tableId: tableIdFromQr = '',
   activeTableOrder = null,
   onOrderAdded = null,
   catalogCurrency = 'PEN',
@@ -552,11 +557,12 @@ export default function CartDrawer({
           const allTablesSnap = await getDocs(tablesRef)
           const trimmedNumber = tableNumber.trim()
 
-          // Buscar mesa por número (comparar como string para evitar mismatch de tipos)
-          const matchedTableDoc = allTablesSnap.docs.find(d => {
-            const num = d.data().number
-            return String(num) === trimmedNumber
-          })
+          // Primero por ID (viene del QR y es unico); si no, por numero
+          // (QR antiguos y mesa escrita a mano). Comparar como string para
+          // evitar mismatch de tipos.
+          const matchedTableDoc =
+            (tableIdFromQr && allTablesSnap.docs.find(d => d.id === tableIdFromQr)) ||
+            allTablesSnap.docs.find(d => String(d.data().number) === trimmedNumber)
 
           if (matchedTableDoc) {
             const tableData = matchedTableDoc.data()

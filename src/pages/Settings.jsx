@@ -580,6 +580,13 @@ export default function Settings() {
 
   // Estados para QR de mesas (carta digital restaurante)
   const [tableQrCodes, setTableQrCodes] = useState([])
+  // Nombre de sucursal -> parte de nombre de archivo (sin tildes ni espacios).
+  const slugSede = (nombre) => String(nombre || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
   const [generatingTableQrs, setGeneratingTableQrs] = useState(false)
 
   // Estados para modo de negocio
@@ -890,13 +897,28 @@ export default function Settings() {
         const baseUrl = resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL
         const qrs = []
         for (const mesa of result.data) {
-          const url = `${baseUrl}/menu/${catalogSlug}?mesa=${mesa.number}`
+          // `t` = ID del documento de la mesa, unico en todo el negocio. Sin el,
+          // dos sucursales con "Mesa 5" generaban el MISMO QR y el pedido caia
+          // en la que apareciera primero. `mesa` se mantiene para mostrar el
+          // numero y para que los QR ya impresos sigan funcionando.
+          const url = `${baseUrl}/menu/${catalogSlug}?mesa=${mesa.number}&t=${mesa.id}`
           const dataUrl = await QRCode.toDataURL(url, {
             width: 300,
             margin: 2,
             color: { dark: '#000000', light: '#ffffff' }
           })
-          qrs.push({ table: mesa.number, zone: mesa.zone || '', url, dataUrl })
+          const sede = mesa.branchId
+            ? (branches.find(b => b.id === mesa.branchId)?.name || 'Sucursal')
+            : (businessSettings?.mainBranchName || 'Sucursal Principal')
+          qrs.push({
+            id: mesa.id,
+            table: mesa.number,
+            zone: mesa.zone || '',
+            branchId: mesa.branchId || null,
+            branchName: sede,
+            url,
+            dataUrl,
+          })
         }
         setTableQrCodes(qrs)
       } catch (error) {
@@ -906,7 +928,7 @@ export default function Settings() {
       }
     }
     generateTableQrs()
-  }, [catalogSlug, catalogEnabled, businessMode, resellerCustomDomain])
+  }, [catalogSlug, catalogEnabled, businessMode, resellerCustomDomain, branches])
 
   // Obtener dominio personalizado del reseller cuando hay suscripción
   useEffect(() => {
@@ -7019,9 +7041,13 @@ export default function Settings() {
                                     type="button"
                                     onClick={async () => {
                                       try {
+                                        // Con varias sedes el nombre lleva la sucursal:
+                                        // "mesa-5-qr.png" repetido no distingue cual imprimir.
                                         const files = tableQrCodes.map(qr => ({
                                           dataUrl: qr.dataUrl,
-                                          filename: `mesa-${qr.table}-qr.png`
+                                          filename: branches.length > 0
+                                            ? `${slugSede(qr.branchName)}-mesa-${qr.table}-qr.png`
+                                            : `mesa-${qr.table}-qr.png`
                                         }))
                                         const result = await saveFilesToDevice(files)
                                         if (result.nativeFolder) {
@@ -7041,33 +7067,73 @@ export default function Settings() {
                                   </button>
                                 </div>
 
-                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-96 overflow-y-auto p-2 bg-white rounded-lg">
-                                  {tableQrCodes.map((qr) => (
-                                    <div key={qr.table} className="flex flex-col items-center p-2 border rounded-lg hover:border-orange-300 transition-colors">
-                                      <img src={qr.dataUrl} alt={`${qr.zone ? `${qr.zone} - ` : ''}Mesa ${qr.table}`} className="w-24 h-24" />
-                                      <span className="text-sm font-semibold text-gray-900 mt-1">
-                                        {qr.zone ? `${qr.zone} - ` : ''}Mesa {qr.table}
-                                      </span>
-                                      <button
-                                        type="button"
-                                        onClick={async () => {
-                                          try {
-                                            const filename = `mesa-${qr.table}-qr.png`
-                                            await downloadDataUrl(qr.dataUrl, filename, {
-                                              title: filename,
-                                              dialogTitle: `Guardar QR de la mesa ${qr.table}`
-                                            })
-                                          } catch (err) {
-                                            console.error('Error descargando QR de mesa:', err)
-                                            toast.error('No se pudo descargar el QR')
-                                          }
-                                        }}
-                                        className="mt-1 text-xs text-orange-600 hover:text-orange-700"
-                                      >
-                                        Descargar
-                                      </button>
-                                    </div>
-                                  ))}
+                                <div className="max-h-96 overflow-y-auto p-2 bg-white rounded-lg space-y-4">
+                                  {(() => {
+                                    // Agrupado por sucursal: con dos locales, una grilla plana
+                                    // con "Mesa 5" repetida no dice cual QR va en cual local.
+                                    const grupos = []
+                                    const principal = tableQrCodes.filter(q => !q.branchId)
+                                    if (principal.length > 0) {
+                                      grupos.push({ key: 'main', nombre: principal[0].branchName, qrs: principal })
+                                    }
+                                    branches.forEach(b => {
+                                      const suyos = tableQrCodes.filter(q => q.branchId === b.id)
+                                      if (suyos.length > 0) grupos.push({ key: b.id, nombre: b.name, qrs: suyos })
+                                    })
+
+                                    const tarjeta = (qr) => (
+                                      <div key={qr.id} className="flex flex-col items-center p-2 border rounded-lg hover:border-orange-300 transition-colors">
+                                        <img src={qr.dataUrl} alt={`${qr.zone ? `${qr.zone} - ` : ''}Mesa ${qr.table}`} className="w-24 h-24" />
+                                        <span className="text-sm font-semibold text-gray-900 mt-1">
+                                          {qr.zone ? `${qr.zone} - ` : ''}Mesa {qr.table}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={async () => {
+                                            try {
+                                              const filename = branches.length > 0
+                                                ? `${slugSede(qr.branchName)}-mesa-${qr.table}-qr.png`
+                                                : `mesa-${qr.table}-qr.png`
+                                              await downloadDataUrl(qr.dataUrl, filename, {
+                                                title: filename,
+                                                dialogTitle: `Guardar QR de la mesa ${qr.table}`
+                                              })
+                                            } catch (err) {
+                                              console.error('Error descargando QR de mesa:', err)
+                                              toast.error('No se pudo descargar el QR')
+                                            }
+                                          }}
+                                          className="mt-1 text-xs text-orange-600 hover:text-orange-700"
+                                        >
+                                          Descargar
+                                        </button>
+                                      </div>
+                                    )
+
+                                    // Sin sucursales configuradas no hay nada que agrupar.
+                                    if (branches.length === 0) {
+                                      return (
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                          {tableQrCodes.map(tarjeta)}
+                                        </div>
+                                      )
+                                    }
+
+                                    return grupos.map(g => (
+                                      <div key={g.key}>
+                                        <div className="flex items-center gap-1.5 mb-2">
+                                          <Store className="w-3.5 h-3.5 text-gray-400" />
+                                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide truncate" title={g.nombre}>
+                                            {g.nombre}
+                                          </span>
+                                          <span className="text-xs text-gray-400">({g.qrs.length})</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                          {g.qrs.map(tarjeta)}
+                                        </div>
+                                      </div>
+                                    ))
+                                  })()}
                                 </div>
                               </div>
                             )}

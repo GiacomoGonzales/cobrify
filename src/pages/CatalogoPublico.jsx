@@ -139,6 +139,21 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const { slug } = useParams()
   const [searchParams] = useSearchParams()
   const tableFromUrl = searchParams.get('mesa') || searchParams.get('table') || ''
+  // `t` = ID del documento de la mesa. Es lo unico que identifica una mesa sin
+  // ambiguedad: dos sucursales pueden tener ambas "Mesa 5" y el numero solo no
+  // alcanza. Los QR impresos antes no lo traen -> se cae al match por numero.
+  const tableIdFromUrl = searchParams.get('t') || ''
+
+  // Resolver la mesa del QR entre los docs de mesas del negocio.
+  const findTableDoc = (docs) => {
+    if (tableIdFromUrl) {
+      const porId = docs.find(d => d.id === tableIdFromUrl)
+      if (porId) return porId
+    }
+    const num = tableFromUrl.trim()
+    if (!num) return null
+    return docs.find(d => String(d.data().number) === num) || null
+  }
   // Modo vista previa: si la URL trae ?previewTheme=tech, sobrescribimos el tema guardado.
   // Lo usa el modal de Settings para que el dueño del negocio pruebe temas sin guardar.
   const previewThemeFromUrl = searchParams.get('previewTheme') || ''
@@ -384,12 +399,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         setLoadingTableOrder(true)
         const tablesRef = collection(db, 'businesses', business.id, 'tables')
         const allTablesSnap = await getDocs(tablesRef)
-        const trimmedNumber = tableFromUrl.trim()
 
-        const matchedTableDoc = allTablesSnap.docs.find(d => {
-          const num = d.data().number
-          return String(num) === trimmedNumber
-        })
+        const matchedTableDoc = findTableDoc(allTablesSnap.docs)
 
         if (!matchedTableDoc) {
           setActiveTableOrder(null)
@@ -428,7 +439,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     }
 
     checkActiveTable()
-  }, [business, tableFromUrl, isRestaurantMenu, isDemo])
+  }, [business, tableFromUrl, tableIdFromUrl, isRestaurantMenu, isDemo])
 
   // Actualizar título y favicon de la pestaña con datos del negocio
   useEffect(() => {
@@ -2170,6 +2181,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         showPrices={showPrices}
         isRestaurantMenu={isRestaurantMenu}
         tableNumber={tableFromUrl}
+        tableId={tableIdFromUrl}
         activeTableOrder={activeTableOrder}
         catalogCurrency={catalogCurrency}
         catalogExchangeRate={catalogExchangeRate}
@@ -2182,7 +2194,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               try {
                 const tablesRef = collection(db, 'businesses', business.id, 'tables')
                 const allTablesSnap = await getDocs(tablesRef)
-                const matched = allTablesSnap.docs.find(d => String(d.data().number) === tableFromUrl.trim())
+                const matched = findTableDoc(allTablesSnap.docs)
                 if (matched) {
                   const td = matched.data()
                   if (td.currentOrder) {
