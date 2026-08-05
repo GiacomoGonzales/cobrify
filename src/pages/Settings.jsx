@@ -5224,8 +5224,10 @@ export default function Settings() {
                       : '✗ Deshabilitado: El POS muestra los productos por partes y carga el resto con el botón "Ver más".'}
                   />
 
-                  {/* Comprobantes habilitados + tipo por defecto en POS */}
-                  <div className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                  {/* Comprobantes: cuales estan disponibles y cual viene por
+                      defecto. Sin el tinte azul del hover — el color queda solo
+                      en el check y en el boton elegido. */}
+                  <div className="p-4 border border-gray-200 rounded-lg">
                     <div className="flex-1">
                       <span className="text-sm font-medium text-gray-900">
                         Comprobantes disponibles en el POS
@@ -5234,46 +5236,47 @@ export default function Settings() {
                         Desmarca los que tu negocio no emite y dejarán de aparecer en el Punto de Venta.
                         Por ejemplo, en el <strong>RUS</strong> no se emiten facturas.
                       </p>
-                      <div className="flex flex-wrap gap-2 mb-2">
+                      {/* Casillas neutras: el color va solo en el check, no de
+                          fondo. Mismo patron que "Metodos de pago disponibles". */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
                         {DOCUMENT_TYPES.map(tipo => {
                           // Vacio = todos habilitados, asi que "marcado" es
                           // estar en la lista O que la lista este vacia.
                           const marcado = enabledDocumentTypes.length === 0 || enabledDocumentTypes.includes(tipo)
                           const esElUltimo = marcado && enabledDocumentTypes.length === 1
                           return (
-                            <button
+                            <label
                               key={tipo}
-                              type="button"
-                              disabled={esElUltimo}
                               title={esElUltimo ? 'Debe quedar al menos un comprobante disponible' : ''}
-                              onClick={() => {
-                                // Al desmarcar el primero hay que materializar la
-                                // lista completa: hasta ahora estaba vacia ("todos").
-                                const actuales = enabledDocumentTypes.length === 0 ? [...DOCUMENT_TYPES] : enabledDocumentTypes
-                                const nuevos = actuales.includes(tipo)
-                                  ? actuales.filter(t => t !== tipo)
-                                  : [...actuales, tipo]
-                                if (nuevos.length === 0) return
-                                // Si quedaron todos, volver a "vacio = todos".
-                                setEnabledDocumentTypes(nuevos.length === DOCUMENT_TYPES.length ? [] : nuevos)
-                                // El default no puede apuntar a uno desactivado.
-                                if (!nuevos.includes(defaultDocumentType) && defaultDocumentType !== 'none') {
-                                  setDefaultDocumentType(nuevos[0])
-                                }
-                              }}
-                              className={`px-3 py-2 border-2 rounded-lg transition-colors flex items-center gap-2 ${
-                                marcado
-                                  ? 'border-primary-500 bg-primary-50 text-primary-700'
-                                  : 'border-gray-200 text-gray-400 hover:border-gray-300'
-                              } ${esElUltimo ? 'opacity-70 cursor-not-allowed' : ''}`}
+                              className={`flex items-center gap-2 p-2 rounded-md border border-gray-200 text-sm transition-colors ${
+                                esElUltimo
+                                  ? 'cursor-default bg-gray-50 text-gray-500'
+                                  : 'cursor-pointer hover:bg-gray-50 text-gray-700'
+                              }`}
                             >
-                              <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${
-                                marcado ? 'bg-primary-600 border-primary-600' : 'border-gray-300'
-                              }`}>
-                                {marcado && <Check className="w-3 h-3 text-white" />}
-                              </span>
-                              <span className="text-sm font-medium">{DOCUMENT_TYPE_LABELS[tipo]}</span>
-                            </button>
+                              <input
+                                type="checkbox"
+                                checked={marcado}
+                                disabled={esElUltimo}
+                                onChange={() => {
+                                  // Al desmarcar el primero hay que materializar la
+                                  // lista completa: hasta ahora estaba vacia ("todos").
+                                  const actuales = enabledDocumentTypes.length === 0 ? [...DOCUMENT_TYPES] : enabledDocumentTypes
+                                  const nuevos = actuales.includes(tipo)
+                                    ? actuales.filter(t => t !== tipo)
+                                    : [...actuales, tipo]
+                                  if (nuevos.length === 0) return
+                                  // Si quedaron todos, volver a "vacio = todos".
+                                  setEnabledDocumentTypes(nuevos.length === DOCUMENT_TYPES.length ? [] : nuevos)
+                                  // El default no puede apuntar a uno desactivado.
+                                  if (!nuevos.includes(defaultDocumentType) && defaultDocumentType !== 'none') {
+                                    setDefaultDocumentType(nuevos[0])
+                                  }
+                                }}
+                                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                              />
+                              <span className="truncate">{DOCUMENT_TYPE_LABELS[tipo]}</span>
+                            </label>
                           )
                         })}
                       </div>
@@ -5346,41 +5349,10 @@ export default function Settings() {
                     </div>
                   </div>
 
-                  {/* Método de pago por defecto en POS */}
-                  <div className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900">
-                        Método de pago por defecto en POS
-                      </span>
-                      <p className="text-xs text-gray-600 mt-1.5 mb-3 leading-relaxed">
-                        Aparecerá seleccionado al abrir el Punto de Venta. El cajero puede cambiarlo en cualquier momento.
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {[
-                          { key: '', label: 'Ninguno' },
-                          ...getVisiblePaymentMethods(
-                            { hiddenPaymentMethods, customPaymentMethods },
-                            businessMode
-                          ).map(m => ({ key: m.key, label: m.label })),
-                        ].map(opt => (
-                          <button
-                            key={opt.key || 'none'}
-                            type="button"
-                            onClick={() => setDefaultPaymentMethod(opt.key)}
-                            className={`px-3 py-2 border-2 rounded-lg transition-colors ${
-                              defaultPaymentMethod === opt.key
-                                ? 'border-primary-500 bg-primary-50 text-primary-700'
-                                : 'border-gray-200 hover:border-gray-300'
-                            }`}
-                          >
-                            <span className="text-sm font-medium">{opt.label}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Métodos de pago disponibles */}
+                  {/* Métodos de pago: cuales estan disponibles, los propios y
+                      cual viene por defecto — todo en una tarjeta, igual que
+                      los comprobantes. Antes "por defecto" era una tarjeta
+                      aparte, arriba, y habia que ir y volver para cuadrarlos. */}
                   <div className="p-4 border border-gray-200 rounded-lg">
                     <span className="text-sm font-medium text-gray-900">
                       Métodos de pago disponibles
@@ -5396,10 +5368,10 @@ export default function Settings() {
                         return (
                           <label
                             key={m.permKey}
-                            className={`flex items-center gap-2 p-2 rounded-md border text-sm transition-colors ${
-                              m.fixed ? 'cursor-default bg-gray-50 border-gray-200 text-gray-500'
-                                : visible ? 'cursor-pointer border-primary-300 bg-primary-50 text-primary-900'
-                                : 'cursor-pointer border-gray-200 hover:bg-gray-50 text-gray-700'
+                            className={`flex items-center gap-2 p-2 rounded-md border border-gray-200 text-sm transition-colors ${
+                              m.fixed
+                                ? 'cursor-default bg-gray-50 text-gray-500'
+                                : 'cursor-pointer hover:bg-gray-50 text-gray-700'
                             }`}
                           >
                             <input
@@ -5498,6 +5470,39 @@ export default function Settings() {
                       >
                         Agregar
                       </button>
+                    </div>
+
+                    {/* Por defecto: al final, cuando ya se sabe cuales estan
+                        disponibles (incluidos los propios). Mismo orden que en
+                        comprobantes: primero cuales hay, despues cual arranca. */}
+                    <div className="border-t border-gray-100 pt-3 mt-4" />
+                    <span className="text-sm font-medium text-gray-900">
+                      Método de pago por defecto en POS
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1.5 mb-3 leading-relaxed">
+                      Aparecerá seleccionado al abrir el Punto de Venta. El cajero puede cambiarlo en cualquier momento.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { key: '', label: 'Ninguno' },
+                        ...getVisiblePaymentMethods(
+                          { hiddenPaymentMethods, customPaymentMethods },
+                          businessMode
+                        ).map(m => ({ key: m.key, label: m.label })),
+                      ].map(opt => (
+                        <button
+                          key={opt.key || 'none'}
+                          type="button"
+                          onClick={() => setDefaultPaymentMethod(opt.key)}
+                          className={`px-3 py-2 border-2 rounded-lg transition-colors ${
+                            defaultPaymentMethod === opt.key
+                              ? 'border-primary-500 bg-primary-50 text-primary-700'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <span className="text-sm font-medium">{opt.label}</span>
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </div>
