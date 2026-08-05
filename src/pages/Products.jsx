@@ -168,7 +168,7 @@ const getExpirationStatus = (expirationDate) => {
 const RICH_LABEL_SIZES = ['53x26', '50x25']
 
 export default function Products() {
-  const { user, isDemoMode, demoData, getBusinessId, businessMode, hasFeature, businessSettings, filterWarehousesByAccess } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessMode, hasFeature, businessSettings, filterWarehousesByAccess, branchScope } = useAppContext()
   const appNavigate = useAppNavigate()
   const hidePrivateData = useHidePrivateData()
   const toast = useToast()
@@ -211,8 +211,13 @@ export default function Products() {
   // Sedes donde el producto esta DISPONIBLE (el form razona en positivo;
   // se guarda como excepciones — ver src/utils/branchCatalog.js).
   const [availableBranches, setAvailableBranches] = useState([])
-  // Filtro de la LISTA por sucursal (distinto de availableBranches, que es del form).
-  const [filterBranch, setFilterBranch] = useState('all')
+  // La lista respeta el selector de sucursal del HEADER (branchScope), que es
+  // global a toda la app. Tener un filtro propio acá era duplicarlo: si el
+  // usuario ya entró a "Tienda Centro", el catálogo debe verse como esa sede sin
+  // que tenga que elegirla dos veces.
+  //   'all'  -> todo el catálogo
+  //   'main' -> lo disponible en Sucursal Principal
+  //   <id>   -> lo disponible en esa sucursal
   // Seleccion de sedes del modal de accion masiva (independiente del form).
   const [bulkBranches, setBulkBranches] = useState([])
   const branchCatalogOn = businessSettings?.branchCatalogEnabled === true && branches.length > 0
@@ -4298,10 +4303,10 @@ export default function Products() {
         }
       }
 
-      // Filtro por sucursal: solo con la feature activa. 'all' no filtra nada.
+      // Sucursal: sale del selector del header. 'all' no filtra nada.
       let matchesBranch = true
-      if (branchCatalogOn && filterBranch !== 'all') {
-        matchesBranch = isProductInBranch(product, filterBranch === MAIN_BRANCH_TOKEN ? null : filterBranch)
+      if (branchCatalogOn && branchScope && branchScope !== 'all') {
+        matchesBranch = isProductInBranch(product, branchScope === MAIN_BRANCH_TOKEN ? null : branchScope)
       }
 
       return matchesSearch && matchesCategory && matchesBrand && matchesExpiration && matchesBranch
@@ -4361,7 +4366,7 @@ export default function Products() {
     })
 
     return sorted
-  }, [products, deferredSearchTerm, productSearchIndex, selectedCategoryFilter, selectedBrandFilter, showExpiringOnly, categories, brands, sortField, sortDirection, filterBranch, branchCatalogOn])
+  }, [products, deferredSearchTerm, productSearchIndex, selectedCategoryFilter, selectedBrandFilter, showExpiringOnly, categories, brands, sortField, sortDirection, branchScope, branchCatalogOn])
 
   // Paginación de productos filtrados (optimizado con useMemo)
   const paginationData = React.useMemo(() => {
@@ -4673,21 +4678,6 @@ export default function Products() {
 
           {/* Fila 2: Filtros */}
           <div className="flex flex-wrap items-center gap-2">
-            {/* Ver el catalogo de una sucursal (solo con la feature activa) */}
-            {branchCatalogOn && (
-              <select
-                value={filterBranch}
-                onChange={e => setFilterBranch(e.target.value)}
-                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                title="Ver solo los productos disponibles en una sucursal"
-              >
-                <option value="all">Todas las sucursales</option>
-                <option value={MAIN_BRANCH_TOKEN}>{businessSettings?.mainBranchName || 'Sucursal Principal'}</option>
-                {branches.map(b => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </select>
-            )}
             {/* Filtro de vencimiento */}
             {expiringProductsCount > 0 && (
               <Button
