@@ -10,7 +10,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 
 export default function WaiterFormModal({ isOpen, onClose, waiter, onSuccess }) {
-  const { getBusinessId, filterBranchesByAccess, allowedBranches, hasMainBranchAccess, businessSettings } = useAppContext()
+  const { getBusinessId, filterBranchesByAccess, allowedBranches, hasMainBranchAccess, businessSettings, branchScope } = useAppContext()
   const toast = useToast()
 
   const [isLoading, setIsLoading] = useState(false)
@@ -60,8 +60,18 @@ export default function WaiterFormModal({ isOpen, onClose, waiter, onSuccess }) 
       })
     } else {
       // Reset form for new waiter.
-      // Por defecto: Sucursal Principal si tiene acceso; si está restringido a
-      // sucursales, fijar la primera permitida.
+      // La sede por defecto sale del selector del header: si estás viendo
+      // "Sede Norte" y creas un mozo, lo normal es que sea de ahí — y con la
+      // lista acotada a esa sede, nacer en la Principal lo haría desaparecer
+      // apenas se guarda. Con "Todas" se cae al criterio de siempre: Principal
+      // si tiene acceso, o la primera permitida si está restringido.
+      const sedePorDefecto = (() => {
+        if (branchScope && branchScope !== 'all') {
+          if (branchScope === 'main') return hasMainBranchAccess ? null : (branches[0]?.id || null)
+          if (branches.some(b => b.id === branchScope)) return branchScope
+        }
+        return !hasMainBranchAccess && branches.length > 0 ? branches[0].id : null
+      })()
       setFormData({
         name: '',
         code: '',
@@ -69,11 +79,11 @@ export default function WaiterFormModal({ isOpen, onClose, waiter, onSuccess }) 
         email: '',
         shift: 'Mañana',
         startTime: '08:00',
-        branchId: !hasMainBranchAccess && branches.length > 0 ? branches[0].id : null,
+        branchId: sedePorDefecto,
       })
     }
     setErrors({})
-  }, [waiter, isOpen, branches, hasMainBranchAccess])
+  }, [waiter, isOpen, branches, hasMainBranchAccess, branchScope])
 
   const handleChange = (e) => {
     const { name, value } = e.target

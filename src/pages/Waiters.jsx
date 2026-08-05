@@ -44,7 +44,7 @@ const fmtDateTime = (d) => {
 }
 
 export default function Waiters() {
-  const { getBusinessId, isDemoMode, demoData, filterBranchesByAccess, allowedBranches, businessSettings } = useAppContext()
+  const { getBusinessId, isDemoMode, demoData, filterBranchesByAccess, allowedBranches, businessSettings, branchScope } = useAppContext()
   const toast = useToast()
   const canAccess = useLocationAccess()
 
@@ -68,7 +68,19 @@ export default function Waiters() {
   const mainBranchName = businessSettings?.mainBranchName || 'Sucursal Principal'
   const branchNameOf = (w) => (w.branchId ? (branchNameById[w.branchId] || w.branchId) : mainBranchName)
 
-  const visibleWaiters = useMemo(() => waiters.filter(canAccess), [waiters, canAccess])
+  // Dos filtros distintos que se suman:
+  //  - canAccess: PERMISO del sub-usuario (a que sedes tiene acceso).
+  //  - branchScope: VISTA elegida en el selector del header, como en Productos,
+  //    Inventario y Vencimientos. Sin esto, estando en "Sede Norte" se seguian
+  //    listando los mozos de todas las sedes y las tarjetas de arriba sumaban
+  //    ventas de gente de otro local.
+  const visibleWaiters = useMemo(() => {
+    const conAcceso = waiters.filter(canAccess)
+    if (!branchScope || branchScope === 'all') return conAcceso
+    return conAcceso.filter(w =>
+      branchScope === 'main' ? !w.branchId : w.branchId === branchScope
+    )
+  }, [waiters, canAccess, branchScope])
 
   // ---- Carga de mozos + sedes ----
   useEffect(() => {
