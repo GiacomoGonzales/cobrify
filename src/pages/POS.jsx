@@ -62,7 +62,7 @@ import {
 } from '@/utils/currency'
 import { getRateForDate } from '@/services/exchangeRateService'
 import { applyBranchPricing } from '@/utils/branchPricing'
-import { filterProductsForBranch } from '@/utils/branchCatalog'
+import { filterProductsForBranch, isProductInBranch } from '@/utils/branchCatalog'
 import { calculateInvoiceAmounts, calculateMixedInvoiceAmounts, calculateRecargoConsumo, ID_TYPES, DETRACTION_TYPES, DETRACTION_MIN_AMOUNT } from '@/utils/peruUtils'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
 import { Share } from '@capacitor/share'
@@ -515,6 +515,26 @@ export default function POS() {
     return visibles.map(p => applyBranchPricing(p, branchId))
   }, [productsRaw, selectedBranch, businessSettings?.branchPricingEnabled, businessSettings?.branchCatalogEnabled])
 
+  // Aviso (no bloqueo) cuando un carrito precargado —cotizacion, nota de venta,
+  // pedido online, guia— trae productos ocultos en la sucursal activa. La venta
+  // procede y el stock se descuenta igual (eso lo garantiza productsRaw en el
+  // checkout); esto solo evita que el cajero venda sin saberlo.
+  const warnHiddenItemsInCart = (cartItems) => {
+    if (businessSettings?.branchCatalogEnabled !== true) return
+    if (!Array.isArray(cartItems) || cartItems.length === 0 || productsRaw.length === 0) return
+    const branchId = selectedBranch?.id || null
+    const ocultos = cartItems.filter(it => {
+      const pid = it.productId || it.id
+      if (!pid) return false
+      const prod = productsRaw.find(pr => pr.id === pid)
+      return prod && !isProductInBranch(prod, branchId)
+    })
+    if (ocultos.length === 0) return
+    const nombres = ocultos.slice(0, 3).map(i => i.name).filter(Boolean).join(', ')
+    const extra = ocultos.length > 3 ? ` y ${ocultos.length - 3} más` : ''
+    toast.info(`Ojo: ${nombres}${extra} no ${ocultos.length === 1 ? 'está disponible' : 'están disponibles'} en esta sucursal. Se puede vender igual y el stock se descontará.`, 8000)
+  }
+
   // Estado para edición de documento existente
   const [editingInvoiceId, setEditingInvoiceId] = useState(null)
   const [editingInvoiceData, setEditingInvoiceData] = useState(null)
@@ -725,6 +745,10 @@ export default function POS() {
 
   // Aviso (modal) cuando se escanea/pega un código que no existe en el sistema.
   const [unknownScanCode, setUnknownScanCode] = useState(null)
+  // Si el codigo escaneado SI existe pero el producto esta oculto en esta
+  // sucursal, guardamos su nombre para avisarlo tal cual. Decir "no registrado"
+  // seria falso y empuja al cajero a crear un duplicado con el mismo EAN.
+  const [unknownScanProduct, setUnknownScanProduct] = useState(null)
 
   // Custom product modal
   const [showCustomProductModal, setShowCustomProductModal] = useState(false)
@@ -1752,6 +1776,7 @@ export default function POS() {
           }),
         }))
         setCart(cartItems)
+        warnHiddenItemsInCart(cartItems)
         // Vino precargado: no pasó por las validaciones de stock de agregar.
         pendingStockCheckRef.current = true
       }
@@ -1855,7 +1880,9 @@ export default function POS() {
           // público no los expone—, así que la venta salía SIN código mientras
           // que la misma venta hecha a mano salía con el SKU. Se resuelven
           // contra la ficha del producto, igual que hace la guía de remisión.
-          const product = item.productId ? products.find(p => p.id === item.productId) : null
+          // productsRaw: si el producto esta oculto en la sede activa, con la
+          // lista filtrada la venta salia sin SKU ni codigo.
+          const product = item.productId ? productsRaw.find(p => p.id === item.productId) : null
           return {
             id: item.productId || item.id || `temp-${Date.now()}-${Math.random()}`,
             productId: item.productId || '',
@@ -1874,6 +1901,7 @@ export default function POS() {
           }
         })
         setCart(cartItems)
+        warnHiddenItemsInCart(cartItems)
         // Vino precargado: no pasó por las validaciones de stock de agregar.
         pendingStockCheckRef.current = true
       }
@@ -1949,6 +1977,7 @@ export default function POS() {
           batchExpiryDate: item.batchExpiryDate || '',
         }))
         setCart(cartItems)
+        warnHiddenItemsInCart(cartItems)
       }
 
       // Cargar datos del cliente en el formulario (customerData)
@@ -2039,7 +2068,9 @@ export default function POS() {
       // Cargar items de la guía al carrito con precios del producto
       if (guideInfo.items && guideInfo.items.length > 0) {
         const cartItems = guideInfo.items.map((item, idx) => {
-          const product = item.productId ? products.find(p => p.id === item.productId) : null
+          // productsRaw: con la lista filtrada, un producto oculto en esta sede
+          // perdia SKU, marca y afectacion IGV (caia al default gravado '10').
+          const product = item.productId ? productsRaw.find(p => p.id === item.productId) : null
           return {
             id: product?.id || `guide-${Date.now()}-${idx}`,
             productId: item.productId || '',
@@ -2058,6 +2089,7 @@ export default function POS() {
           }
         })
         setCart(cartItems)
+        warnHiddenItemsInCart(cartItems)
       }
 
       // Cargar datos del destinatario como cliente
@@ -3219,6 +3251,8 @@ export default function POS() {
       // No se encontró ningún producto con ese código. Si vino de la pistola
       // (detector global), avisar con un modal para que el cajero se detenga.
       if (exactMatches.length === 0 && !variantMatch && wasGunScan && products.length > 0) {
+        const enOtraSede = findInFullCatalogByCode(searchTerm)
+        setUnknownScanProduct(enOtraSede ? enOtraSede.name : null)
         setUnknownScanCode(searchTerm)
         setSearchTerm('')
       }
@@ -3226,6 +3260,40 @@ export default function POS() {
 
     return () => clearTimeout(timer)
   }, [searchTerm, products, companySettings, selectedWarehouse])
+
+  // Buscar el código EXACTO en el catálogo COMPLETO (sin filtro de sucursal).
+  // Distingue "el código no existe" de "existe pero es de otra sede".
+  const findInFullCatalogByCode = (term) => {
+    const searchLower = String(term || '').toLowerCase().trim()
+    if (!searchLower) return null
+    const searchNoHyphens = searchLower.replace(/-/g, '')
+    for (const p of productsRaw) {
+      if (p.isActive === false) continue
+      const code = p.code?.toLowerCase() || ''
+      const sku = p.sku?.toLowerCase() || ''
+      if (code === searchLower || sku === searchLower ||
+        code.replace(/-/g, '') === searchNoHyphens || sku.replace(/-/g, '') === searchNoHyphens) {
+        return p
+      }
+      if (Array.isArray(p.barcodes) && p.barcodes.some(bc => {
+        const b = String(bc || '').toLowerCase()
+        return b === searchLower || b.replace(/-/g, '') === searchNoHyphens
+      })) {
+        return p
+      }
+      if (p.hasVariants && Array.isArray(p.variants)) {
+        const v = p.variants.find(v => {
+          if (!v) return false
+          const vSku = (v.sku || '').toLowerCase()
+          const vBarcode = (v.barcode || '').toLowerCase()
+          return vSku === searchLower || vBarcode === searchLower ||
+            vSku.replace(/-/g, '') === searchNoHyphens
+        })
+        if (v) return p
+      }
+    }
+    return null
+  }
 
   // ¿Existe algún producto/variante con este código EXACTO (code/SKU/barcode)?
   // Se usa para avisar cuando la pistola pega/escanea un código no registrado.
@@ -3348,7 +3416,12 @@ export default function POS() {
             }
           }
         } else {
-          toast.error(`No se encontró producto con código: ${scannedCode}`)
+          const enOtraSede = findInFullCatalogByCode(scannedCode)
+          if (enOtraSede) {
+            toast.error(`"${enOtraSede.name}" existe pero no está disponible en esta sucursal`)
+          } else {
+            toast.error(`No se encontró producto con código: ${scannedCode}`)
+          }
         }
       }
     } catch (error) {
@@ -12199,27 +12272,41 @@ ${companySettings?.businessName || 'Tu Empresa'}`
       {/* Aviso: código escaneado/pegado que no está registrado en el sistema */}
       <Modal
         isOpen={!!unknownScanCode}
-        onClose={() => setUnknownScanCode(null)}
-        title="Código no registrado"
+        onClose={() => { setUnknownScanCode(null); setUnknownScanProduct(null) }}
+        title={unknownScanProduct ? 'Producto de otra sucursal' : 'Código no registrado'}
         size="md"
       >
         <div className="space-y-4">
           <div className="flex items-start gap-3">
             <AlertTriangle className="w-6 h-6 text-red-500 flex-shrink-0 mt-0.5" />
             <div className="min-w-0">
-              <p className="text-sm text-gray-700">
-                Este código no está registrado en el sistema:
-              </p>
+              {unknownScanProduct ? (
+                <p className="text-sm text-gray-700">
+                  Este código pertenece a <span className="font-semibold">{unknownScanProduct}</span>,
+                  que no está disponible en esta sucursal:
+                </p>
+              ) : (
+                <p className="text-sm text-gray-700">
+                  Este código no está registrado en el sistema:
+                </p>
+              )}
               <p className="mt-1 font-mono text-base font-semibold text-gray-900 break-all">
                 {unknownScanCode}
               </p>
-              <p className="mt-2 text-sm text-gray-600">
-                No se agregó ningún producto. Verifícalo antes de seguir escaneando.
-              </p>
+              {unknownScanProduct ? (
+                <p className="mt-2 text-sm text-gray-600">
+                  No se agregó al carrito. Si debería venderse aquí, actívalo en esta
+                  sucursal desde la página Productos — no lo crees de nuevo.
+                </p>
+              ) : (
+                <p className="mt-2 text-sm text-gray-600">
+                  No se agregó ningún producto. Verifícalo antes de seguir escaneando.
+                </p>
+              )}
             </div>
           </div>
           <div className="flex justify-end">
-            <Button onClick={() => { setUnknownScanCode(null); searchInputRef.current?.focus() }}>
+            <Button onClick={() => { setUnknownScanCode(null); setUnknownScanProduct(null); searchInputRef.current?.focus() }}>
               Entendido
             </Button>
           </div>

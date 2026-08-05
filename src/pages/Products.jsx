@@ -1168,6 +1168,16 @@ export default function Products() {
     // sigue siendo el suyo, no es un cambio. Esto evita que duplicados pre-existentes
     // (creados antes de la validación, o vía importador masivo) bloqueen al usuario
     // que solo quiere actualizar precio/stock.
+    //
+    // La validacion corre sobre el catalogo COMPLETO, pero la lista visible
+    // esta acotada a la sede del header: si el duplicado vive en otra sede, el
+    // usuario lo buscaria en la suya y no lo encontraria. Decirle DONDE esta
+    // convierte un error confuso en uno accionable.
+    const dondeVive = (dup) => {
+      if (!branchCatalogOn) return ''
+      const etiqueta = getBranchScopeLabel(dup, branches, businessSettings?.mainBranchName || 'Sucursal Principal')
+      return etiqueta ? ` (disponible en: ${etiqueta.replace(/^Solo /, '')})` : ''
+    }
     if (data.code && data.code.trim()) {
       const codeToCheck = data.code.trim().toUpperCase()
       const originalCode = editingProduct?.code?.trim().toUpperCase() || ''
@@ -1178,7 +1188,7 @@ export default function Products() {
           return p.code?.trim().toUpperCase() === codeToCheck
         })
         if (duplicateByCode) {
-          toast.error(`El código de barras "${data.code}" ya está en uso por el producto "${duplicateByCode.name}"`)
+          toast.error(`El código de barras "${data.code}" ya está en uso por el producto "${duplicateByCode.name}"${dondeVive(duplicateByCode)}`)
           setIsSaving(false)
           return
         }
@@ -1197,7 +1207,7 @@ export default function Products() {
           return p.sku?.trim().toUpperCase() === skuToCheck
         })
         if (duplicateBySku) {
-          toast.error(`El SKU "${data.sku}" ya está en uso por el producto "${duplicateBySku.name}"`)
+          toast.error(`El SKU "${data.sku}" ya está en uso por el producto "${duplicateBySku.name}"${dondeVive(duplicateBySku)}`)
           setIsSaving(false)
           return
         }
