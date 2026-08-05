@@ -2,13 +2,14 @@ import { Fragment, useState, useMemo } from 'react'
 import {
   X, Save, Loader2, Calculator, Package, Edit, CheckSquare, Square,
   AlertTriangle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  RotateCcw, Tag, ChevronDown, Filter,
+  RotateCcw, Tag, ChevronDown, Filter, Layers,
 } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import { formatCurrency, applyMarginToCost } from '@/lib/utils'
 import { updateProduct } from '@/services/firestoreService'
 import { useToast } from '@/contexts/ToastContext'
+import PriceLevelsConfigModal from '@/components/product/PriceLevelsConfigModal'
 
 /**
  * Input de precio editable. DEFINIDO A NIVEL MÓDULO (no dentro del componente)
@@ -100,6 +101,9 @@ export default function PriceUpdateTable({
   onClose,
   onEditProduct,
   onSaved,
+  // Refresca businessSettings tras cambiar los niveles: los nombres de las
+  // columnas y el calculo automatico salen de ahi.
+  onSettingsSaved,
 }) {
   // useToast() devuelve el objeto toast directamente (Provider value={toast}),
   // NO envuelto en { toast }. Destructurar daría undefined → toast.success crashea.
@@ -124,6 +128,9 @@ export default function PriceUpdateTable({
   const [perPage, setPerPage] = useState(50)
 
   const [typeFilter, setTypeFilter] = useState('all')
+
+  // Configuracion de niveles de precio (antes vivia en Configuracion > Ventas)
+  const [levelsOpen, setLevelsOpen] = useState(false)
 
   // Ajuste masivo
   const [bulkOpen, setBulkOpen] = useState(false)
@@ -708,6 +715,10 @@ export default function PriceUpdateTable({
             </div>
           </div>
           <div className="flex gap-2 shrink-0">
+            <Button variant="outline" size="sm" onClick={() => setLevelsOpen(true)} title="Nombres de los niveles y calculo automatico por porcentaje">
+              <Layers className="w-4 h-4 mr-2" />
+              Niveles de precio
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setBulkOpen(true)} title="Ajustar varios precios a la vez">
               <Calculator className="w-4 h-4 mr-2" />
               Ajuste masivo
@@ -1167,6 +1178,16 @@ export default function PriceUpdateTable({
           </div>
         </div>
       </Modal>
+
+      {/* Niveles de precio: nombres de las columnas y calculo automatico.
+          Vivia en Configuracion > Ventas, lejos de donde se usan. */}
+      <PriceLevelsConfigModal
+        isOpen={levelsOpen}
+        onClose={() => setLevelsOpen(false)}
+        businessId={businessId}
+        businessSettings={businessSettings}
+        onSaved={onSettingsSaved}
+      />
     </div>
   )
 }

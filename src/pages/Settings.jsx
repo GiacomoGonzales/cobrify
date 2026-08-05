@@ -18,7 +18,6 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage
 import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth'
 import { httpsCallable } from 'firebase/functions'
 import { db, storage, auth, functions } from '@/lib/firebase'
-import { applyMarginToCost } from '@/lib/utils'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { DEFAULT_NOTA_VENTA_LEGEND, NOTA_VENTA_LEGEND_MAX } from '@/utils/documentLegends'
 import Button from '@/components/ui/Button'
@@ -432,32 +431,15 @@ export default function Settings() {
   const [allowCustomEmissionDate, setAllowCustomEmissionDate] = useState(false)
 
   // Estados para múltiples precios
-  const [multiplePricesEnabled, setMultiplePricesEnabled] = useState(false)
   // Precios de venta por sucursal (overrides por producto; ver src/utils/branchPricing.js)
   const [branchPricingEnabled, setBranchPricingEnabled] = useState(false)
   const [branchCatalogEnabled, setBranchCatalogEnabled] = useState(false)
-  const [priceLabels, setPriceLabels] = useState({
-    price1: 'Público',
-    price2: 'Mayorista',
-    price3: 'VIP',
-    price4: 'Especial'
-  })
-  const [pricePercentages, setPricePercentages] = useState({
-    // price1 solo aplica cuando priceCalculationBase === 'cost' (margen sobre costo).
-    // En modo 'public' no tiene sentido aplicar % al propio precio público.
-    price1: { enabled: false, discount: 0 },
-    price2: { enabled: false, discount: 0 },
-    price3: { enabled: false, discount: 0 },
-    price4: { enabled: false, discount: 0 }
-  })
-  // Base sobre la que se aplica el porcentaje:
-  //   'public' → Precio N = Precio público × (1 - %)  (descuento sobre público, default histórico)
-  //   'cost'   → Precio N = Costo × (1 + %)           (margen sobre costo)
-  const [priceCalculationBase, setPriceCalculationBase] = useState('public')
+  // Los niveles de precio (nombres, base de calculo, porcentajes y formula del
+  // margen) se configuran en Productos > Actualizar precios > "Niveles de
+  // precio". Esta pantalla ya no los lee ni los escribe.
   // Fórmula del margen cuando priceCalculationBase === 'cost':
   //   'markup' → Precio = Costo × (1 + %)   (% sobre costo, default histórico)
   //   'margin' → Precio = Costo ÷ (1 − %)   (% como utilidad sobre el precio final)
-  const [marginFormula, setMarginFormula] = useState('markup')
 
   // Multi-divisa (USD) — opt-in por negocio. Off por default: 99% solo
   // trabaja con PEN. Cuando se activa, las fases siguientes habilitan
@@ -466,10 +448,6 @@ export default function Settings() {
   const [defaultCurrency, setDefaultCurrency] = useState('PEN')
   const [reportsCurrency, setReportsCurrency] = useState('PEN') // moneda de visualización de reportes
 
-  const [showBulkRecalcModal, setShowBulkRecalcModal] = useState(false)
-  const [isBulkRecalculating, setIsBulkRecalculating] = useState(false)
-  const [bulkRecalcProgress, setBulkRecalcProgress] = useState({ current: 0, total: 0 })
-  const [bulkRecalcStats, setBulkRecalcStats] = useState(null)
 
   // Estado para presentaciones de venta
   const [presentationsEnabled, setPresentationsEnabled] = useState(false)
@@ -762,69 +740,6 @@ export default function Settings() {
     }
   }
 
-  // Recalcula el precio de venta de todos los productos como Costo × (1 + % Precio 1).
-  // Salta productos sin costo. Para productos con variantes, usa cost de la variante con
-  // fallback al cost del producto padre, y actualiza variant.price y product.price.
-  const handleBulkRecalcPrices = async () => {
-    const pct = pricePercentages.price1?.discount
-    if (!pct || pct <= 0) {
-      toast.error('Configura primero un porcentaje para Precio 1')
-      return
-    }
-
-    setIsBulkRecalculating(true)
-    setBulkRecalcStats(null)
-    try {
-      const businessId = getBusinessId()
-      const result = await getProducts(businessId)
-      if (!result.success) throw new Error(result.error || 'Error al cargar productos')
-      const allProducts = result.data || []
-
-      const candidates = allProducts.filter(p => {
-        // Producto con costo propio O con variantes que tengan algún costo
-        if (parseFloat(p.cost) > 0) return true
-        if (Array.isArray(p.variants) && p.variants.some(v => parseFloat(v.cost) > 0 || parseFloat(p.cost) > 0)) return true
-        return false
-      })
-
-      setBulkRecalcProgress({ current: 0, total: candidates.length })
-      let updated = 0
-      // Usa el helper compartido para respetar la fórmula configurada (markup vs margin)
-      const computePrice = (cost) => applyMarginToCost(cost, pct, marginFormula)
-
-      for (const p of candidates) {
-        const updates = {}
-        const parentCost = parseFloat(p.cost) || 0
-        if (parentCost > 0) {
-          updates.price = computePrice(parentCost)
-        }
-        if (Array.isArray(p.variants) && p.variants.length > 0) {
-          updates.variants = p.variants.map(v => {
-            const vCost = parseFloat(v.cost) || parentCost || 0
-            return vCost > 0 ? { ...v, price: computePrice(vCost) } : v
-          })
-        }
-        if (Object.keys(updates).length === 0) continue
-
-        const r = await updateProduct(businessId, p.id, updates)
-        if (r.success) updated++
-        setBulkRecalcProgress(prev => ({ ...prev, current: prev.current + 1 }))
-      }
-
-      setBulkRecalcStats({
-        total: allProducts.length,
-        candidates: candidates.length,
-        updated,
-        skipped: allProducts.length - updated,
-      })
-      toast.success(`${updated} producto(s) actualizado(s) con margen del ${pct}%`)
-    } catch (err) {
-      console.error('Error en bulk recalc:', err)
-      toast.error(err.message || 'Error al recalcular precios')
-    } finally {
-      setIsBulkRecalculating(false)
-    }
-  }
 
   // Actualizar form values cuando cambian los códigos de ubicación
   const handleLocationChange = (type, value) => {
@@ -1340,7 +1255,6 @@ export default function Settings() {
         setAllowCustomEmissionDate(businessData.allowCustomEmissionDate || false)
 
         // Cargar configuración de múltiples precios
-        setMultiplePricesEnabled(businessData.multiplePricesEnabled || false)
         setBranchPricingEnabled(businessData.branchPricingEnabled || false)
         setBranchCatalogEnabled(businessData.branchCatalogEnabled || false)
         // Cargar configuración de presentaciones de venta
@@ -1348,24 +1262,6 @@ export default function Settings() {
         setShowDescriptionInPOS(businessData.showDescriptionInPOS || false)
         // Afectación IGV por defecto al crear productos
         setDefaultTaxAffectation(businessData.defaultTaxAffectation || '10')
-        if (businessData.priceLabels) {
-          setPriceLabels({
-            price1: businessData.priceLabels.price1 || 'Público',
-            price2: businessData.priceLabels.price2 || 'Mayorista',
-            price3: businessData.priceLabels.price3 || 'VIP',
-            price4: businessData.priceLabels.price4 || 'Especial'
-          })
-        }
-        if (businessData.pricePercentages) {
-          setPricePercentages({
-            price1: businessData.pricePercentages.price1 || { enabled: false, discount: 0 },
-            price2: businessData.pricePercentages.price2 || { enabled: false, discount: 0 },
-            price3: businessData.pricePercentages.price3 || { enabled: false, discount: 0 },
-            price4: businessData.pricePercentages.price4 || { enabled: false, discount: 0 }
-          })
-        }
-        setPriceCalculationBase(businessData.priceCalculationBase || 'public')
-        setMarginFormula(businessData.marginFormula === 'margin' ? 'margin' : 'markup')
 
         // Multi-divisa (USD) — opt-in
         setMultiCurrencyEnabled(businessData.multiCurrencyEnabled === true)
@@ -5546,207 +5442,13 @@ export default function Settings() {
                 />
               </div>
 
-              {/* Múltiples precios por producto */}
-              <div>
-                <h3 className="text-base font-semibold text-gray-900 mb-1">Múltiples Precios por Producto</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Configura hasta 3 precios diferentes por producto (ej: Público, Mayorista, VIP)
-                </p>
-                <div className="space-y-4">
-                  <div>
-                    <div className="pt-1">
-                        <p className="text-xs text-gray-500 mb-3">Personaliza los nombres de cada nivel de precio:</p>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Precio 1</label>
-                            <input
-                              type="text"
-                              value={priceLabels.price1}
-                              onChange={(e) => setPriceLabels(prev => ({ ...prev, price1: e.target.value }))}
-                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                              placeholder="Público"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Precio 2</label>
-                            <input
-                              type="text"
-                              value={priceLabels.price2}
-                              onChange={(e) => setPriceLabels(prev => ({ ...prev, price2: e.target.value }))}
-                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                              placeholder="Mayorista"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Precio 3</label>
-                            <input
-                              type="text"
-                              value={priceLabels.price3}
-                              onChange={(e) => setPriceLabels(prev => ({ ...prev, price3: e.target.value }))}
-                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                              placeholder="VIP"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Precio 4</label>
-                            <input
-                              type="text"
-                              value={priceLabels.price4}
-                              onChange={(e) => setPriceLabels(prev => ({ ...prev, price4: e.target.value }))}
-                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                              placeholder="Especial"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="mt-4 pt-4 border-t border-gray-200">
-                          <p className="text-xs text-gray-500 mb-3">
-                            Cálculo automático por porcentaje (opcional). Si lo activas, los productos que no tengan un precio manual asignado calcularán el precio automáticamente.
-                          </p>
-
-                          {/* Base de cálculo */}
-                          <div className="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-lg">
-                            <p className="text-xs font-medium text-gray-700 mb-2">Base de cálculo</p>
-                            <div className="flex flex-col sm:flex-row gap-2">
-                              <label className="flex items-start gap-2 cursor-pointer flex-1 p-2 bg-white rounded border border-gray-200 hover:border-primary-300">
-                                <input
-                                  type="radio"
-                                  name="priceCalculationBase"
-                                  value="public"
-                                  checked={priceCalculationBase === 'public'}
-                                  onChange={(e) => setPriceCalculationBase(e.target.value)}
-                                  className="mt-0.5 w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
-                                />
-                                <span className="text-xs text-gray-700">
-                                  <strong>Precio público</strong> — el % se descuenta del precio público (Precio N = Público × (1 − %))
-                                </span>
-                              </label>
-                              <label className="flex items-start gap-2 cursor-pointer flex-1 p-2 bg-white rounded border border-gray-200 hover:border-primary-300">
-                                <input
-                                  type="radio"
-                                  name="priceCalculationBase"
-                                  value="cost"
-                                  checked={priceCalculationBase === 'cost'}
-                                  onChange={(e) => setPriceCalculationBase(e.target.value)}
-                                  className="mt-0.5 w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
-                                />
-                                <span className="text-xs text-gray-700">
-                                  <strong>Costo</strong> — el % se aplica sobre el costo del producto
-                                </span>
-                              </label>
-                            </div>
-                          </div>
-
-                          {/* Selector de fórmula del margen — solo cuando la base es Costo */}
-                          {priceCalculationBase === 'cost' && (
-                            <div className="mb-4 p-3 bg-amber-50 border border-amber-100 rounded-lg">
-                              <p className="text-xs font-medium text-gray-700 mb-2">Fórmula del margen</p>
-                              <div className="flex flex-col sm:flex-row gap-2">
-                                <label className="flex items-start gap-2 cursor-pointer flex-1 p-2 bg-white rounded border border-gray-200 hover:border-amber-300">
-                                  <input
-                                    type="radio"
-                                    name="marginFormula"
-                                    value="markup"
-                                    checked={marginFormula === 'markup'}
-                                    onChange={(e) => setMarginFormula(e.target.value)}
-                                    className="mt-0.5 w-4 h-4 text-amber-600 border-gray-300 focus:ring-amber-500"
-                                  />
-                                  <span className="text-xs text-gray-700">
-                                    <strong>Markup</strong> — % sobre el costo<br/>
-                                    <span className="font-mono text-[11px]">Precio = Costo × (1 + %)</span><br/>
-                                    <span className="text-gray-500 text-[11px]">Ej: costo 10, margen 30% → Precio 13.00</span>
-                                  </span>
-                                </label>
-                                <label className="flex items-start gap-2 cursor-pointer flex-1 p-2 bg-white rounded border border-gray-200 hover:border-amber-300">
-                                  <input
-                                    type="radio"
-                                    name="marginFormula"
-                                    value="margin"
-                                    checked={marginFormula === 'margin'}
-                                    onChange={(e) => setMarginFormula(e.target.value)}
-                                    className="mt-0.5 w-4 h-4 text-amber-600 border-gray-300 focus:ring-amber-500"
-                                  />
-                                  <span className="text-xs text-gray-700">
-                                    <strong>Margen sobre venta</strong> — % como utilidad del precio final<br/>
-                                    <span className="font-mono text-[11px]">Precio = Costo ÷ (1 − %)</span><br/>
-                                    <span className="text-gray-500 text-[11px]">Ej: costo 10, margen 30% → Precio 14.29</span>
-                                  </span>
-                                </label>
-                              </div>
-                            </div>
-                          )}
-
-                          <div className="space-y-3">
-                            {/* Precio 1 solo aparece cuando la base es Costo: aplicar % al precio público
-                                solo tiene sentido si se calcula como margen sobre costo. */}
-                            {(priceCalculationBase === 'cost' ? ['price1', 'price2', 'price3', 'price4'] : ['price2', 'price3', 'price4']).map((key) => (
-                              <div key={key} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                                <input
-                                  type="checkbox"
-                                  checked={pricePercentages[key]?.enabled || false}
-                                  onChange={(e) => setPricePercentages(prev => ({
-                                    ...prev,
-                                    [key]: { ...prev[key], enabled: e.target.checked }
-                                  }))}
-                                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                                />
-                                <span className="text-sm text-gray-700 min-w-[80px]">
-                                  {priceLabels[key] || key}
-                                </span>
-                                <div className="flex items-center gap-1">
-                                  <span className="text-xs text-gray-500">{priceCalculationBase === 'cost' ? '+' : '-'}</span>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    max={priceCalculationBase === 'cost' ? '1000' : '100'}
-                                    step="1"
-                                    value={pricePercentages[key]?.discount || ''}
-                                    onChange={(e) => setPricePercentages(prev => ({
-                                      ...prev,
-                                      [key]: { ...prev[key], discount: parseFloat(e.target.value) || 0 }
-                                    }))}
-                                    disabled={!pricePercentages[key]?.enabled}
-                                    className="w-20 px-2 py-1.5 text-sm text-center border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 disabled:text-gray-400"
-                                    placeholder="0"
-                                  />
-                                  <span className="text-xs text-gray-500">
-                                    {priceCalculationBase === 'cost'
-                                      ? '% sobre el costo del producto'
-                                      : `% menos que ${priceLabels.price1 || 'Precio 1'}`}
-                                  </span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                          <p className="text-xs text-gray-400 mt-2 italic">
-                            Si un producto ya tiene un precio manual ingresado, se usará ese precio en lugar del porcentaje.
-                            {priceCalculationBase === 'cost' && ' Los productos sin costo registrado no mostrarán este nivel de precio.'}
-                          </p>
-
-                          {/* Bulk recalc: solo cuando base es Costo y el % de Precio 1 está activo */}
-                          {priceCalculationBase === 'cost' && pricePercentages.price1?.enabled && pricePercentages.price1?.discount > 0 && (
-                            <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                              <p className="text-xs text-amber-900 font-medium mb-1">Aplicar margen a productos existentes</p>
-                              <p className="text-xs text-amber-800 mb-3">
-                                Recalcula el precio de venta de todos los productos con costo registrado, usando: <strong>{marginFormula === 'margin' ? `Costo ÷ (1 − ${pricePercentages.price1.discount}%)` : `Costo × (1 + ${pricePercentages.price1.discount}%)`}</strong>. Esta acción es destructiva: los precios manuales serán sobrescritos.
-                              </p>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setShowBulkRecalcModal(true)}
-                                disabled={isBulkRecalculating}
-                                className="text-amber-900 border-amber-300 hover:bg-amber-100"
-                              >
-                                {isBulkRecalculating ? `Recalculando ${bulkRecalcProgress.current}/${bulkRecalcProgress.total}...` : 'Aplicar a productos existentes'}
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                  </div>
-                </div>
-              </div>
+              {/* La configuracion de "Multiples Precios por Producto" se movio a
+                  Productos > Actualizar precios > "Niveles de precio": ahi el
+                  usuario ya esta viendo las columnas que estos nombres titulan
+                  y los importes que estos porcentajes calculan. Los campos del
+                  negocio no cambiaron (multiplePricesEnabled, priceLabels,
+                  priceCalculationBase, marginFormula, pricePercentages), asi
+                  que el POS y el formulario de producto los siguen leyendo. */}
 
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
@@ -6029,13 +5731,14 @@ export default function Settings() {
                       requireOpenCashRegister: requireOpenCashRegister,
                       cardCommissionEnabled: cardCommissionEnabled,
                       cardCommissionRate: Number(cardCommissionRate) || 0,
-                      multiplePricesEnabled: multiplePricesEnabled,
                       branchPricingEnabled: branchPricingEnabled,
                       branchCatalogEnabled: branchCatalogEnabled,
-                      priceLabels: priceLabels,
-                      pricePercentages: pricePercentages,
-                      priceCalculationBase: priceCalculationBase,
-                      marginFormula: marginFormula,
+                      // OJO: multiplePricesEnabled, priceLabels, pricePercentages,
+                      // priceCalculationBase y marginFormula ya NO se guardan aca.
+                      // Los edita Productos > Actualizar precios > "Niveles de
+                      // precio"; si esta pantalla los siguiera escribiendo desde
+                      // su estado en memoria, guardar cualquier otra opcion
+                      // pisaria lo que el usuario acaba de configurar alla.
                       // Multi-divisa (USD) — Fase 0: solo flag + moneda por default.
                       multiCurrencyEnabled: multiCurrencyEnabled,
                       defaultCurrency: defaultCurrency,
@@ -8493,7 +8196,7 @@ export default function Settings() {
                           {['price2', 'price3', 'price4'].map((key) => (
                             <div key={key}>
                               <label className="block text-xs font-medium text-gray-600 mb-1">
-                                {priceLabels[key] || key.charAt(0).toUpperCase() + key.slice(1)}
+                                {businessSettings?.priceLabels?.[key] || key.charAt(0).toUpperCase() + key.slice(1)}
                               </label>
                               <input
                                 type="number"
@@ -12682,66 +12385,6 @@ export default function Settings() {
       </Modal>
 
       {/* Modal: Crear/Editar Plantilla de Términos */}
-      {/* Modal de confirmación: Aplicar margen a productos existentes */}
-      <Modal
-        isOpen={showBulkRecalcModal}
-        onClose={() => {
-          if (!isBulkRecalculating) {
-            setShowBulkRecalcModal(false)
-            setBulkRecalcStats(null)
-          }
-        }}
-        title="Aplicar margen a productos existentes"
-        maxWidth="md"
-      >
-        <div className="space-y-4">
-          {!bulkRecalcStats && (
-            <>
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
-                Se recalculará el <strong>precio de venta</strong> de cada producto con costo registrado usando la fórmula:
-                <p className="mt-2 font-mono text-center bg-white rounded py-1">{marginFormula === 'margin' ? `precio = costo ÷ (1 − ${pricePercentages.price1?.discount || 0}%)` : `precio = costo × (1 + ${pricePercentages.price1?.discount || 0}%)`}</p>
-              </div>
-              <ul className="text-xs text-gray-600 space-y-1 list-disc pl-5">
-                <li>Los productos sin costo registrado <strong>se saltan</strong>.</li>
-                <li>En productos con variantes se actualiza cada variante usando su costo (o el del padre si no tiene).</li>
-                <li>Los precios manuales serán <strong>sobrescritos</strong>.</li>
-                <li>Los precios 2/3/4 manuales no se tocan; se recalculan en POS según la configuración.</li>
-              </ul>
-              {isBulkRecalculating && (
-                <div className="text-sm text-gray-700">
-                  Procesando {bulkRecalcProgress.current} / {bulkRecalcProgress.total}…
-                </div>
-              )}
-              <div className="flex justify-end gap-2 pt-2">
-                <Button variant="outline" onClick={() => setShowBulkRecalcModal(false)} disabled={isBulkRecalculating}>
-                  Cancelar
-                </Button>
-                <Button onClick={handleBulkRecalcPrices} disabled={isBulkRecalculating}>
-                  {isBulkRecalculating ? 'Procesando…' : 'Confirmar y aplicar'}
-                </Button>
-              </div>
-            </>
-          )}
-          {bulkRecalcStats && (
-            <>
-              <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-900">
-                <p className="font-medium mb-1">Recálculo completado</p>
-                <ul className="text-xs space-y-0.5">
-                  <li>Productos totales: {bulkRecalcStats.total}</li>
-                  <li>Candidatos (con costo): {bulkRecalcStats.candidates}</li>
-                  <li>Actualizados: <strong>{bulkRecalcStats.updated}</strong></li>
-                  <li>Saltados (sin costo): {bulkRecalcStats.skipped}</li>
-                </ul>
-              </div>
-              <div className="flex justify-end pt-2">
-                <Button onClick={() => { setShowBulkRecalcModal(false); setBulkRecalcStats(null); }}>
-                  Cerrar
-                </Button>
-              </div>
-            </>
-          )}
-        </div>
-      </Modal>
 
       <Modal
         isOpen={showTermsTemplateModal}

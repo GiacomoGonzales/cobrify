@@ -168,7 +168,7 @@ const getExpirationStatus = (expirationDate) => {
 const RICH_LABEL_SIZES = ['53x26', '50x25']
 
 export default function Products() {
-  const { user, isDemoMode, demoData, getBusinessId, businessMode, hasFeature, businessSettings, filterWarehousesByAccess, branchScope } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessMode, hasFeature, businessSettings, filterWarehousesByAccess, branchScope, refreshBusinessSettings } = useAppContext()
   const appNavigate = useAppNavigate()
   const hidePrivateData = useHidePrivateData()
   const toast = useToast()
@@ -5062,6 +5062,7 @@ export default function Products() {
           onClose={() => setPriceUpdateMode(false)}
           onEditProduct={(p) => openEditModal(p)}
           onSaved={loadProducts}
+          onSettingsSaved={refreshBusinessSettings}
         />
       ) : (
       /* Products Table */
