@@ -184,3 +184,25 @@ export const buildKitchenLines = (order = {}, table = null, paperWidth = 58, sta
   lines.push(SEP);
   return lines;
 };
+
+/**
+ * Estaciones de cocina que deben recibir la comanda de ESTA orden.
+ *
+ * Criterio ÚNICO de ruteo por sucursal. Vive acá porque el mismo bucle de
+ * estaciones está repetido en Mesas, Pedidos y el servicio de impresión: si
+ * cada copia decidiera por su cuenta, se desincronizarían (ya pasó con el
+ * layout de la comanda, que es justo por lo que existe este archivo).
+ *
+ * `station.branchId`:
+ *   null/'' -> todas las sedes. Es el valor de las estaciones creadas antes de
+ *              que existiera el campo; excluirlas dejaría sin comandas a quien
+ *              todavía no las haya clasificado.
+ *   'main'  -> solo Sucursal Principal (órdenes sin branchId).
+ *   <id>    -> solo esa sucursal.
+ */
+export const stationsForOrder = (order, kitchenStations = []) => {
+  const claveSede = order?.branchId || 'main';
+  return (kitchenStations || []).filter(
+    (st) => !st.branchId || st.branchId === claveSede
+  );
+};

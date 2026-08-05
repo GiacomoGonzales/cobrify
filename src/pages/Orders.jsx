@@ -28,6 +28,7 @@ import { Capacitor } from '@capacitor/core'
 import { printKitchenOrder, connectPrinter, getPrinterConfig, printToAllStations, printPreBill as printPreBillThermal } from '@/services/thermalPrinterService'
 import { printPreBill, printAllSplitPreBills } from '@/utils/printPreBill'
 import { getActiveMotoristas, createDeliveryRecord, updateOperationalStatus } from '@/services/motoristaService'
+import { stationsForOrder } from '@/utils/kitchenComandaFormat'
 
 export default function Orders() {
   const { user, getBusinessId, isDemoMode, demoData, filterBranchesByAccess, allowedBranches, hasMainBranchAccess, userPermissions } = useAppContext()
@@ -297,7 +298,8 @@ export default function Orders() {
               }
 
               let anyPrinted = false
-              for (const station of kitchenStations) {
+              // stationsForOrder: la comanda solo va a las estaciones de la sede de esa orden
+              for (const station of stationsForOrder(order, kitchenStations)) {
                 let stationItems
                 if (station.isPase) {
                   stationItems = order.items || []
@@ -1947,7 +1949,8 @@ export default function Orders() {
               const assignedCategories = new Set()
               const stationTickets = []
 
-              kitchenStations.forEach(station => {
+              // stationsForOrder: la comanda solo va a las estaciones de la sede de esa orden
+              stationsForOrder(orderToPrint, kitchenStations).forEach(station => {
                 let stationItems
                 if (station.isPase) {
                   stationItems = allItems

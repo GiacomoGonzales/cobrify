@@ -7,7 +7,7 @@ import * as BLEPrinter from './blePrinterService';
 import { getPricedModifiers } from '@/utils/modifierHelpers';
 import { unitDisplayName } from '@/data/sunatUnits';
 import { getComprobanteBreakdown } from '@/utils/peruUtils';
-import { buildKitchenLines } from '@/utils/kitchenComandaFormat';
+import { buildKitchenLines, stationsForOrder } from '@/utils/kitchenComandaFormat';
 
 /**
  * Servicio para manejar impresoras térmicas WiFi/Bluetooth
@@ -2880,7 +2880,12 @@ export const printStationTicket = async (printerIp, order, station, items, paper
 export const printToAllStations = async (order, kitchenStations, paperWidth = 58) => {
   const results = [];
 
-  for (const station of kitchenStations) {
+  // Ruteo por sede: una comanda solo sale por las impresoras de SU local. Sin
+  // esto, un negocio con dos sedes imprimia el pedido de una en la cocina de la
+  // otra — el plato se preparaba en el local equivocado. El criterio vive en
+  // stationsForOrder (kitchenComandaFormat) porque este bucle esta repetido en
+  // Mesas y Pedidos.
+  for (const station of stationsForOrder(order, kitchenStations)) {
     // Saltear estaciones sin impresora configurada (salvo que usen la integrada)
     if (!station.printerIp && !station.useBuiltInPrinter) {
       continue;

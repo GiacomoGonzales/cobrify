@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { ChefHat, Clock, CheckCircle, AlertTriangle, Flame, Loader2, LayoutGrid } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -35,7 +35,27 @@ export default function Kitchen() {
 
   // Estados para modo multi-estación
   const [enableKitchenStations, setEnableKitchenStations] = useState(false)
-  const [kitchenStations, setKitchenStations] = useState([])
+  const [kitchenStationsAll, setKitchenStationsAll] = useState([])
+
+  // Estaciones de la sede que se esta viendo. La pantalla ya filtra las ORDENES
+  // por selectedBranchId; sin esto seguian apareciendo las pestanas de las
+  // estaciones del otro local, siempre vacias.
+  // branchId null/'' = estacion compartida (valor previo al campo) -> se ve en
+  // todas las sedes; 'main' = solo Sucursal Principal.
+  const kitchenStations = useMemo(() => {
+    const claveSede = selectedBranchId || 'main'
+    return kitchenStationsAll.filter(st => !st.branchId || st.branchId === claveSede)
+  }, [kitchenStationsAll, selectedBranchId])
+
+  // Si al cambiar de sede la estacion elegida ya no existe aca, volver a
+  // "Todas": si no, quedaba seleccionada una pestana invisible y la pantalla
+  // se veia vacia sin explicacion.
+  useEffect(() => {
+    if (selectedStation === 'all') return
+    if (!kitchenStations.some(st => st.id === selectedStation)) {
+      setSelectedStation('all')
+    }
+  }, [kitchenStations, selectedStation])
   const [selectedStation, setSelectedStation] = useState('all') // 'all' o el ID de una estación
   const [categoryMap, setCategoryMap] = useState({}) // Mapeo de ID a nombre de categoría
 
@@ -53,7 +73,7 @@ export default function Kitchen() {
           setItemStatusTracking(config.itemStatusTracking || false)
           // Cargar configuración de estaciones
           setEnableKitchenStations(config.enableKitchenStations || false)
-          setKitchenStations(config.kitchenStations || [])
+          setKitchenStationsAll(config.kitchenStations || [])
         }
       },
       (error) => {

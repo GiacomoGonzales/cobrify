@@ -47,6 +47,7 @@ import { getActiveBranches } from '@/services/branchService'
 import { useLocationAccess } from '@/utils/locationAccess'
 import { collection, onSnapshot, query, orderBy, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { stationsForOrder } from '@/utils/kitchenComandaFormat'
 
 export default function Tables() {
   const { user, getBusinessId, isDemoMode, demoData, userPermissions, filterBranchesByAccess, allowedBranches, hasMainBranchAccess } = useAppContext()
@@ -1281,7 +1282,8 @@ export default function Tables() {
               }
 
               let anyPrinted = false
-              for (const station of kitchenStations) {
+              // stationsForOrder: la comanda solo va a las estaciones de la sede de esa orden
+              for (const station of stationsForOrder(orderToPrintData, kitchenStations)) {
                 let stationItems
                 if (station.isPase) {
                   stationItems = orderToPrintData.items || []
@@ -1392,7 +1394,8 @@ export default function Tables() {
             return false
           }
           let anyPrinted = false
-          for (const station of kitchenStations) {
+          // stationsForOrder: la comanda solo va a las estaciones de la sede de esa orden
+          for (const station of stationsForOrder(orderToPrintData, kitchenStations)) {
             let stationItems
             if (station.isPase) stationItems = items
             else if (station.categories?.length > 0) stationItems = items.filter(it => itemMatchesStation(it.category || it.categoryId || '', station.categories))
@@ -2389,7 +2392,8 @@ export default function Tables() {
               const assignedCategories = new Set()
               const stationTickets = []
 
-              kitchenStations.forEach(station => {
+              // stationsForOrder: la comanda solo va a las estaciones de la sede de esa orden
+              stationsForOrder(orderToPrint, kitchenStations).forEach(station => {
                 let stationItems
                 if (station.isPase) {
                   stationItems = allItems

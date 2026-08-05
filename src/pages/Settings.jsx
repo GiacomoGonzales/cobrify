@@ -127,7 +127,7 @@ function PdfImageSizeSlider({ value, onChange }) {
 }
 
 export default function Settings() {
-  const { user, isDemoMode, getBusinessId, refreshBusinessSettings, hasFeature, businessSettings, updateDisplayName, isBusinessOwner, isAdmin } = useAppContext()
+  const { user, isDemoMode, getBusinessId, refreshBusinessSettings, hasFeature, businessSettings, updateDisplayName, isBusinessOwner, isAdmin, branchScope } = useAppContext()
   // Preview de tema del catálogo
   const [previewThemeId, setPreviewThemeId] = useState(null)
   const toast = useToast()
@@ -4679,7 +4679,10 @@ export default function Settings() {
                                   color: '#EF4444',
                                   order: (restaurantConfig.kitchenStations?.length || 0) + 1,
                                   isPase: false,
-                                  printerIp: ''
+                                  printerIp: '',
+                                  // Sede: hereda la del header. null = imprime en TODAS
+                                  // (valor de las estaciones anteriores al campo).
+                                  branchId: (branchScope && branchScope !== 'all') ? branchScope : null,
                                 }
                                 setRestaurantConfig({
                                   ...restaurantConfig,
@@ -4891,6 +4894,34 @@ export default function Settings() {
                                           Imprime automáticamente comandas al enviar a cocina
                                         </p>
                                       </div>
+
+                                      {/* Sede de la estación (solo con sucursales configuradas) */}
+                                      {branches.length > 0 && (
+                                        <div>
+                                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                                            Sucursal:
+                                          </label>
+                                          <select
+                                            value={station.branchId || ''}
+                                            onChange={(e) => {
+                                              const updated = [...restaurantConfig.kitchenStations]
+                                              updated[index] = { ...station, branchId: e.target.value || null }
+                                              setRestaurantConfig({ ...restaurantConfig, kitchenStations: updated })
+                                            }}
+                                            className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+                                          >
+                                            <option value="">Todas las sucursales</option>
+                                            <option value="main">{businessSettings?.mainBranchName || 'Sucursal Principal'}</option>
+                                            {branches.map(b => (
+                                              <option key={b.id} value={b.id}>{b.name}</option>
+                                            ))}
+                                          </select>
+                                          <p className="text-xs text-gray-500 mt-0.5">
+                                            Solo recibirá las comandas de esta sede. Con "Todas" imprime
+                                            los pedidos de cualquier local.
+                                          </p>
+                                        </div>
+                                      )}
                                     </div>
 
                                     {/* Botón eliminar */}
