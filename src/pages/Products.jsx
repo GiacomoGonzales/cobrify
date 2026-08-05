@@ -216,6 +216,27 @@ export default function Products() {
   // Seleccion de sedes del modal de accion masiva (independiente del form).
   const [bulkBranches, setBulkBranches] = useState([])
   const branchCatalogOn = businessSettings?.branchCatalogEnabled === true && branches.length > 0
+
+  /**
+   * Almacenes donde tiene sentido cargarle stock a ESTE producto.
+   *
+   * Sin esto se ofrecian TODOS los almacenes del negocio: se podia crear un
+   * producto "solo para Sucursal 2" y cargarle el stock inicial en un almacen de
+   * la Sucursal 1, donde el producto ni siquiera se ve. Quedaba mercaderia
+   * invisible, que es de los errores mas caros de encontrar.
+   *
+   * La disponibilidad NO mueve stock (eso sigue siendo decision del usuario),
+   * pero si acota que almacenes se pueden elegir.
+   */
+  const warehousesForProduct = React.useMemo(() => {
+    const activos = warehouses.filter(w => w.isActive !== false)
+    if (!branchCatalogOn) return activos
+    // "En todas" no restringe nada.
+    const todasLasClaves = [MAIN_BRANCH_TOKEN, ...branches.map(b => b.id)]
+    if (availableBranches.length >= todasLasClaves.length) return activos
+    const permitidas = new Set(availableBranches)
+    return activos.filter(w => permitidas.has(w.branchId || MAIN_BRANCH_TOKEN))
+  }, [warehouses, branches, availableBranches, branchCatalogOn])
   const [branchPricesOpen, setBranchPricesOpen] = useState(false) // sección colapsable del modal
   // Moneda del precio principal (solo con multidivisa): 'PEN' clásico | 'USD' = el
   // precio tecleado es el ancla priceUSD y el soles se calcula con el TC del día.
@@ -1295,9 +1316,13 @@ export default function Products() {
 
         // Determinar almacén destino para variantes (usar el seleccionado o el por defecto)
         let targetWarehouseForVariants = variantWarehouseId
-        if (!targetWarehouseForVariants && warehouses.length > 0) {
-          const defaultWh = warehouses.find(w => w.isDefault && (w.isActive || w.status === 'active'))
-          targetWarehouseForVariants = defaultWh?.id || warehouses.find(w => w.isActive || w.status === 'active')?.id || ''
+        if (!targetWarehouseForVariants && warehousesForProduct.length > 0) {
+          // El respaldo se busca DENTRO de las sucursales donde el producto estara
+          // disponible. Antes tomaba el almacen por defecto del negocio, que podia
+          // ser de otra sede: asi terminaba stock en una sucursal donde el producto
+          // ni siquiera se ve.
+          const defaultWh = warehousesForProduct.find(w => w.isDefault)
+          targetWarehouseForVariants = defaultWh?.id || warehousesForProduct[0]?.id || ''
         }
 
         productData.variants = variants.map(v => {
@@ -1687,8 +1712,11 @@ export default function Products() {
                 }
               }
             } else {
-              // Stock sin almacén específico - usar almacén por defecto
-              const defaultWarehouse = await getDefaultWarehouse(businessId)
+              // Stock sin almacén específico. Con catálogo por sucursal, el respaldo
+              // sale de los almacenes de las sedes elegidas; si no, el por defecto
+              // del negocio (comportamiento de siempre).
+              const preferido = warehousesForProduct.find(w => w.isDefault) || warehousesForProduct[0]
+              const defaultWarehouse = preferido || await getDefaultWarehouse(businessId)
               await createStockMovement(businessId, {
                 productId: result.id,
                 warehouseId: defaultWarehouse?.id || '',
@@ -7343,8 +7371,21 @@ export default function Products() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Stock Inicial por Almacén
                     </label>
+                    {/* Solo los almacenes de las sucursales donde el producto estara
+                        disponible: cargar stock donde no se ve es mercaderia perdida. */}
+                    {branchCatalogOn && warehousesForProduct.length < warehouses.filter(w => w.isActive !== false).length && (
+                      <p className="text-xs text-blue-700 bg-blue-50 px-2 py-1.5 rounded mb-2">
+                        Solo se muestran los almacenes de las sucursales que elegiste arriba.
+                      </p>
+                    )}
+                    {warehousesForProduct.length === 0 ? (
+                      <p className="text-xs text-amber-700 bg-amber-50 px-2 py-1.5 rounded">
+                        Las sucursales elegidas no tienen almacenes activos. Podrás cargarle stock
+                        después, desde Inventario.
+                      </p>
+                    ) : (
                     <div className="space-y-2">
-                      {warehouses.filter(wh => wh.isActive).map((wh) => (
+                      {warehousesForProduct.map((wh) => (
                         <div key={wh.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
                           <div className="flex-1">
                             <span className="text-sm font-medium text-gray-700">
@@ -7372,6 +7413,7 @@ export default function Products() {
                         </div>
                       ))}
                     </div>
+                    )}
                     {/* Total */}
                     {Object.values(warehouseInitialStocks).some(v => v && parseFloat(v) > 0) && (
                       <div className="mt-2 pt-2 border-t border-gray-200 flex justify-between items-center">
@@ -7788,8 +7830,11 @@ export default function Products() {
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                   >
                     {(() => {
-                      const mainWarehouses = warehouses.filter(w => (w.isActive || w.status === 'active') && !w.branchId)
-                      const branchWarehouses = warehouses.filter(w => (w.isActive || w.status === 'active') && w.branchId)
+                      // Acotado a las sucursales elegidas para el producto (ver
+                      // warehousesForProduct): ofrecer un almacen de una sede donde
+                      // el producto no se ve deja mercaderia invisible.
+                      const mainWarehouses = warehousesForProduct.filter(w => !w.branchId)
+                      const branchWarehouses = warehousesForProduct.filter(w => w.branchId)
                       const branchGroups = branchWarehouses.reduce((acc, w) => {
                         if (!acc[w.branchId]) acc[w.branchId] = []
                         acc[w.branchId].push(w)
