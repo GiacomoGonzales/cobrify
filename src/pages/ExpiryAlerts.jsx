@@ -9,7 +9,7 @@ import { db } from '@/lib/firebase'
 import { formatCurrency, matchesSearchQuery } from '@/lib/utils'
 
 function ExpiryAlerts() {
-  const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData, branchScope } = useAppContext()
   const toast = useToast()
   const [products, setProducts] = useState([])
   const [warehouses, setWarehouses] = useState([])
@@ -152,8 +152,22 @@ function ExpiryAlerts() {
     return d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
   }
 
+  // La sucursal sale del selector del HEADER (branchScope), como en Productos
+  // e Inventario. El criterio es la ubicacion FISICA del lote (almacen -> sede),
+  // no el catalogo: al encargado de una sede le importan los vencimientos de lo
+  // que tiene en SUS almacenes. Lotes/productos legacy sin almacen se muestran
+  // siempre — no se sabe donde estan y ocultar un vencimiento es peor.
+  const enSede = (p) => {
+    if (!branchScope || branchScope === 'all') return true
+    if (!p.isBatch || !p.batchWarehouseId) return true
+    const wh = warehouses.find(w => w.id === p.batchWarehouseId)
+    const whBranch = wh?.branchId || null
+    return branchScope === 'main' ? whBranch === null : whBranch === branchScope
+  }
+  const productsInScope = products.filter(enSede)
+
   // Filtrar y ordenar productos
-  const filteredProducts = products
+  const filteredProducts = productsInScope
     .map(p => ({
       ...p,
       expirationInfo: getExpirationStatus(p.expirationDate)
@@ -189,15 +203,15 @@ function ExpiryAlerts() {
 
   // Estadísticas
   const stats = {
-    expired: products.filter(p => getExpirationStatus(p.expirationDate)?.status === 'expired').length,
-    in30days: products.filter(p => getExpirationStatus(p.expirationDate)?.status === '30days').length,
-    in60days: products.filter(p => getExpirationStatus(p.expirationDate)?.status === '60days').length,
-    in90days: products.filter(p => getExpirationStatus(p.expirationDate)?.status === '90days').length,
-    ok: products.filter(p => getExpirationStatus(p.expirationDate)?.status === 'ok').length,
+    expired: productsInScope.filter(p => getExpirationStatus(p.expirationDate)?.status === 'expired').length,
+    in30days: productsInScope.filter(p => getExpirationStatus(p.expirationDate)?.status === '30days').length,
+    in60days: productsInScope.filter(p => getExpirationStatus(p.expirationDate)?.status === '60days').length,
+    in90days: productsInScope.filter(p => getExpirationStatus(p.expirationDate)?.status === '90days').length,
+    ok: productsInScope.filter(p => getExpirationStatus(p.expirationDate)?.status === 'ok').length,
   }
 
   // Calcular valor en riesgo (productos por vencer en 90 días)
-  const valueAtRisk = products
+  const valueAtRisk = productsInScope
     .filter(p => {
       const status = getExpirationStatus(p.expirationDate)?.status
       return ['expired', '30days', '60days', '90days'].includes(status)
