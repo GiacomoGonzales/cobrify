@@ -227,14 +227,19 @@ export default function Products() {
   // validaciones de codigo/SKU duplicado y los conteos al borrar categorias o
   // marcas tienen que ver todo el negocio: acotarlas por sucursal dejaria crear
   // codigos repetidos en otra sede sin aviso.
+  // Seleccion de sedes del modal de accion masiva (independiente del form).
+  const [bulkBranches, setBulkBranches] = useState([])
+  // OJO: esta declaracion va ANTES del useMemo que la usa. El array de
+  // dependencias se evalua al invocar useMemo, asi que declararla despues
+  // reventaba con "Cannot access 'branchCatalogOn' before initialization" en el
+  // primer render — y no lo agarra el build, solo el navegador.
+  const branchCatalogOn = businessSettings?.branchCatalogEnabled === true && branches.length > 0
+
   const scopedProducts = React.useMemo(() => {
     if (!branchCatalogOn || !branchScope || branchScope === 'all') return products
     const branchId = branchScope === MAIN_BRANCH_TOKEN ? null : branchScope
     return products.filter(p => isProductInBranch(p, branchId))
   }, [products, branchScope, branchCatalogOn])
-  // Seleccion de sedes del modal de accion masiva (independiente del form).
-  const [bulkBranches, setBulkBranches] = useState([])
-  const branchCatalogOn = businessSettings?.branchCatalogEnabled === true && branches.length > 0
 
   /**
    * Almacenes donde tiene sentido cargarle stock a ESTE producto.

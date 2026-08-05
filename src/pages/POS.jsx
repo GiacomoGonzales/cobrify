@@ -4332,7 +4332,9 @@ export default function POS() {
       // Precio anclado en dólares: se fijó a propósito y los niveles del catálogo
       // están en soles. Repreciarlo lo convertiría en un número de otra moneda.
       if (item.fixedPriceUSD) return item
-      const product = products.find(p => p.id === item.id)
+      // productsRaw: si el producto esta oculto en esta sede pero entro al
+      // carrito (cotizacion/edicion), su precio por cantidad sigue aplicando.
+      const product = productsRaw.find(p => p.id === item.id)
       if (!product || product.useAutoPriceByQty !== true) return item
 
       const totalProducto = totalPorProducto[item.id] || 0
@@ -6492,7 +6494,9 @@ export default function POS() {
         const _editWarehouseId = editingInvoiceData.warehouseId || selectedWarehouse?.id || null
         const _stockDeltas = computeEditStockDeltas(editingInvoiceData.items || [], cart)
         if (_stockDeltas.length > 0 && !companySettings?.allowNegativeStock) {
-          const _faltantes = validateEditStockIncreases(_stockDeltas, products, _editWarehouseId)
+          // productsRaw: la factura editada puede traer productos ocultos en la
+          // sucursal activa; con la lista filtrada no se validaban ni ajustaban.
+          const _faltantes = validateEditStockIncreases(_stockDeltas, productsRaw, _editWarehouseId)
           if (_faltantes.length > 0) {
             const _det = _faltantes
               .map(f => `${f.name}: pides ${f.adicional} más y hay ${parseFloat(Number(f.disponible).toFixed(2))}`)
@@ -6543,9 +6547,11 @@ export default function POS() {
             userId: user.uid,
             userName: user.displayName || user.email || 'Usuario',
             allowNegative: companySettings?.allowNegativeStock === true,
-            // Para el FEFO de los aumentos en productos con lotes. Mismo snapshot
-            // que usa la venta con fallback en cliente.
-            products,
+            // Para el FEFO de los aumentos en productos con lotes. productsRaw
+            // (catalogo completo): con la lista filtrada por sucursal, un
+            // producto oculto en la sede activa no se encontraba, se ajustaba el
+            // total pero NO los lotes, y el detalle por lote quedaba descuadrado.
+            products: productsRaw,
           })
           if (!_adjResult.success) {
             // El documento YA quedó editado: avisar qué productos revisar en vez
@@ -6844,7 +6850,13 @@ export default function POS() {
 
         // Capturar datos necesarios para el background
         const bgCart = [...cart]
-        const bgProducts = [...products]
+        // productsRaw, NO products: la lista filtrada por sucursal gobierna QUE SE
+        // MUESTRA para agregar al carrito, nunca QUE SE DESCUENTA al cobrar. Con
+        // `products` (filtrado), un item de otra sede —que llega por edicion,
+        // cotizacion, nota de venta o pedido online— no se encontraba y el stock
+        // NO se descontaba: se cobraba la venta y el inventario quedaba intacto,
+        // sin error, sin aviso y sin movimiento en el historial.
+        const bgProducts = [...productsRaw]
         const bgSelectedWarehouse = selectedWarehouse
         const bgDocumentType = documentType
         const bgTaxConfig = taxConfig
@@ -7905,7 +7917,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
    * lo que el otro bloquea.
    */
   const getCartItemStockInfo = (item) => {
-    const productData = products.find(p => p.id === item.id)
+    // productsRaw, no products: un item puede llegar al carrito desde una
+    // cotizacion, nota de venta o edicion aunque este oculto en esta sucursal.
+    // Con la lista filtrada devolvia null y ese item se saltaba TODA la
+    // validacion de stock (getStockShortages lo ignoraba en silencio).
+    const productData = productsRaw.find(p => p.id === item.id)
     if (!productData) return null
 
     let availableStock
