@@ -311,6 +311,8 @@ export default function Inventory() {
 
   // Estado para modal de recuento de inventario
   const [showInventoryCountModal, setShowInventoryCountModal] = useState(false)
+  // Menu unico "Opciones" del header, igual que en Productos.
+  const [optionsMenuOpen, setOptionsMenuOpen] = useState(false)
   const [showMassTransferModal, setShowMassTransferModal] = useState(false)
   const [showBulkCorrectionModal, setShowBulkCorrectionModal] = useState(false)
   // Backup activo de la última verificación masiva (para revertir si algo se desconfiguró).
@@ -2103,36 +2105,73 @@ export default function Inventory() {
             Gestiona el stock de tus productos e ingredientes
           </p>
         </div>
+        {/* Acciones del header: igual que en Productos, las secundarias viven en
+            un unico menu "Opciones" para que la cabecera no sea una fila de seis
+            botones. Exportar Excel se queda afuera por ser la mas usada.
+            "Revertir verificacion" TAMBIEN queda afuera a proposito: solo
+            aparece durante los 7 dias posteriores a una verificacion y es el
+            deshacer de una operacion que puede descuadrar el stock — enterrarla
+            en un menu es lo ultimo que se quiere cuando hace falta. */}
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowMassTransferModal(true)}
-          >
-            <ArrowRightLeft className="w-4 h-4 mr-2" />
-            Traslado Masivo
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowInventoryCountModal(true)}
-          >
-            <ClipboardCheck className="w-4 h-4 mr-2" />
-            Recuento
-          </Button>
-          {isBusinessOwner && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowBulkCorrectionModal(true)}
-            disabled={isDemoMode}
-            title={isDemoMode ? 'No disponible en modo demo' : 'Verificar y corregir stock de todos los productos'}
-          >
-            <Wrench className="w-4 h-4 mr-2" />
-            Verificar stock
-          </Button>
-          )}
-          {/* Botón "Revertir" — solo visible si hay un backup activo (≤ 7 días). */}
+          <div className="relative w-full sm:w-auto">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setOptionsMenuOpen(!optionsMenuOpen)}
+              className="w-full sm:w-auto"
+              title="Más opciones: traslado masivo, recuento, historial"
+            >
+              <MoreVertical className="w-4 h-4 mr-2" />
+              <span>Opciones</span>
+              <ChevronDown className={`w-4 h-4 ml-2 transition-transform ${optionsMenuOpen ? 'rotate-180' : ''}`} />
+            </Button>
+            {optionsMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setOptionsMenuOpen(false)} />
+                <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-1 w-60 max-w-[calc(100vw-2rem)] bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                  <button
+                    onClick={() => { setOptionsMenuOpen(false); setShowMassTransferModal(true) }}
+                    className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                  >
+                    <ArrowRightLeft className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                    Traslado masivo
+                  </button>
+                  <button
+                    onClick={() => { setOptionsMenuOpen(false); setShowInventoryCountModal(true) }}
+                    className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                  >
+                    <ClipboardCheck className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                    Recuento físico
+                  </button>
+                  {!hidePrivateData && (
+                    <button
+                      onClick={() => { setOptionsMenuOpen(false); setShowCountHistory(true) }}
+                      className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <History className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                      Historial de recuentos
+                    </button>
+                  )}
+                  {isBusinessOwner && (
+                    <>
+                      <div className="border-t border-gray-100 my-1" />
+                      <button
+                        onClick={() => { setOptionsMenuOpen(false); setShowBulkCorrectionModal(true) }}
+                        disabled={isDemoMode}
+                        className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title={isDemoMode ? 'No disponible en modo demo' : 'Verificar y corregir stock de todos los productos'}
+                      >
+                        <Wrench className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                        Verificar stock
+                      </button>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Solo aparece si hay un backup activo (<= 7 dias) tras una verificacion. */}
           {latestStockBackup && !isDemoMode && (
             <Button
               variant="outline"
@@ -2145,16 +2184,7 @@ export default function Inventory() {
               Revertir verificación
             </Button>
           )}
-          {!hidePrivateData && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowCountHistory(true)}
-          >
-            <History className="w-4 h-4 mr-2" />
-            Historial
-          </Button>
-          )}
+
           {!hidePrivateData && (
             <Button
               variant="outline"
