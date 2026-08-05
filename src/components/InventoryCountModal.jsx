@@ -31,6 +31,8 @@ import { useToast } from '@/contexts/ToastContext'
 import { updateProduct } from '@/services/firestoreService'
 import { updateIngredient } from '@/services/ingredientService'
 import { createStockMovement, createInventoryCount } from '@/services/warehouseService'
+import { isProductInBranch } from '@/utils/branchCatalog'
+import { useAppContext } from '@/hooks/useAppContext'
 import { generateInventoryCountPdf } from '@/utils/inventoryCountPdfGenerator'
 
 export default function InventoryCountModal({
@@ -46,6 +48,7 @@ export default function InventoryCountModal({
   onCountCompleted,
 }) {
   const toast = useToast()
+  const { businessSettings } = useAppContext()
 
   // Estado principal del conteo
   const [countData, setCountData] = useState({})
@@ -109,6 +112,9 @@ export default function InventoryCountModal({
   // Inicializar datos de conteo cuando se selecciona un almacén
   const initializeCountData = (warehouseId) => {
     const initialCountData = {}
+    // Catalogo por sucursal: sede a la que pertenece el almacen del recuento.
+    const countBranchId = warehouses.find(w => w.id === warehouseId)?.branchId || null
+    const branchCatalogOn = businessSettings?.branchCatalogEnabled === true
     products.forEach(product => {
       // Incluir productos con stock, ingredientes con currentStock, o productos con variantes
       const hasStock = product.stock !== null && product.stock !== undefined
@@ -118,6 +124,16 @@ export default function InventoryCountModal({
 
       if (hasStock || hasCurrentStock || hasVariants || isIngredient) {
         const warehouseStock = getWarehouseStock(product, warehouseId)
+
+        // No listar productos ajenos a la sede de este almacen SALVO que tengan
+        // stock aqui (huerfano, hay que poder contarlo). Sin esto el operario
+        // los contaria como 0 y el recuento generaria ajustes falsos.
+        if (branchCatalogOn && !isIngredient && !isProductInBranch(product, countBranchId)) {
+          const hayStockAqui = warehouseStock > 0 ||
+            (product.variants || []).some(v => (v.warehouseStocks || [])
+              .some(ws => ws.warehouseId === warehouseId && (ws.stock || 0) > 0))
+          if (!hayStockAqui) return
+        }
         // Filtrar lotes del almacén seleccionado (o legacy sin warehouseId)
         const activeBatches = (product.batches || []).filter(b => b.quantity > 0 && (!b.warehouseId || b.warehouseId === warehouseId))
         const price = product.hasVariants ? (product.basePrice || 0) : (product.price || 0)

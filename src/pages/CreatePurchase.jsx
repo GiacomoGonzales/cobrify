@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
+import { filterProductsForBranch } from '@/utils/branchCatalog'
 import { Plus, Trash2, Save, ArrowLeft, Loader2, Search, X, PackagePlus, Package, Beaker, Store, RefreshCw, DollarSign, Gift, Tag, Upload } from 'lucide-react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
@@ -849,7 +850,14 @@ export default function CreatePurchase() {
 
     // Agregar productos si el modo lo permite
     if (itemMode === 'products' || itemMode === 'all') {
-      const filteredProducts = products.filter(product =>
+      // Catalogo por sucursal: comprar es cargar stock al almacen elegido, asi
+      // que se ofrecen solo los productos disponibles en la sede de ESE almacen
+      // (comprar un producto de otra sede seria crear mercaderia invisible).
+      // Sin almacen elegido (compra solo-registro) no se filtra nada.
+      const comprables = selectedWarehouse
+        ? filterProductsForBranch(products, selectedWarehouse.branchId || null, businessSettings?.branchCatalogEnabled === true)
+        : products
+      const filteredProducts = comprables.filter(product =>
         matchesPrebuilt(search, productSearchIndex.get(product.id))
       ).map(p => ({ ...p, itemType: 'product' }))
       items = [...items, ...filteredProducts]

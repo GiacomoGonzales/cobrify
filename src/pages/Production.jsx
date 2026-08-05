@@ -29,6 +29,7 @@ import Modal from '@/components/ui/Modal'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency, cn, matchesSearchQuery } from '@/lib/utils'
 import { getProducts, getProductCategories } from '@/services/firestoreService'
+import { filterProductsForBranch } from '@/utils/branchCatalog'
 import { getWarehouses } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
 import { getRecipeByProductId } from '@/services/recipeService'
@@ -450,8 +451,16 @@ export default function Production() {
     }
   }
 
-  // Productos filtrados para el grid de búsqueda en el modal
-  const availableProducts = products.filter(p => p.type !== 'service')
+  // Productos filtrados para el grid de búsqueda en el modal.
+  // Catalogo por sucursal: el almacen destino ya se acota a la sede elegida
+  // (arriba), pero el producto a fabricar no se acotaba — se podia producir en
+  // una sede un articulo que solo existe en otra y depositarlo en un almacen
+  // donde nadie lo ve. selectedBranch null = Sucursal Principal.
+  const availableProducts = filterProductsForBranch(
+    products.filter(p => p.type !== 'service'),
+    selectedBranch?.id || null,
+    businessSettings?.branchCatalogEnabled === true
+  )
 
   const modalFilteredProducts = availableProducts.filter(p => {
     // Filtro por categoría (incluye subcategorías cuando se elige una categoría padre).

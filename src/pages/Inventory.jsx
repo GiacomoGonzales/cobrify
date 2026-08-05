@@ -71,6 +71,7 @@ import BulkStockCorrectionModal from '@/components/BulkStockCorrectionModal'
 import { executeRecipeProduction, executeManualProduction, checkProductionReadiness } from '@/services/productionService'
 import { getRecipeByProductId, calculateRecipeCost } from '@/services/recipeService'
 import { getCompanySettings } from '@/services/firestoreService'
+import { isProductInBranch } from '@/utils/branchCatalog'
 import { computeBatchDeduction, computeProductBatchMetadata } from '@/utils/batchStock'
 import { getExitReasons, getExitReasonLabel } from '@/utils/warehouseExitReasons'
 import { getItemUnitLabel } from '@/utils/units'
@@ -664,8 +665,19 @@ export default function Inventory() {
 
       // Importar y ejecutar el export
       const { exportInventoryWithOptions } = await import('@/services/inventoryExportService')
+      // Misma regla que la lista: mirando UNA sede, el Excel no debe traer
+      // productos ajenos a ella — salvo los que tengan stock ahi (huerfanos).
+      // Un export "de la sede X" con todo el negocio es peor que no filtrar,
+      // porque el usuario cree que esta filtrado.
+      const productsForExport = (businessSettings?.branchCatalogEnabled === true && filterBranch !== 'all')
+        ? products.filter(p => {
+            const bId = filterBranch === 'main' ? null : filterBranch
+            const st = getStockForBranch(p)
+            return isProductInBranch(p, bId) || (typeof st === 'number' && st > 0)
+          })
+        : products
       const result = await exportInventoryWithOptions({
-        products,
+        products: productsForExport,
         ingredients,
         categories: productCategories,
         brands,
@@ -1759,6 +1771,16 @@ export default function Inventory() {
       // Usar stock filtrado por sucursal
       const branchStock = getStockForBranch(item)
 
+      // Catalogo por sucursal: mirando UNA sede, ocultar los productos que no
+      // estan disponibles ahi — SALVO que tengan stock en esa sede (stock
+      // huerfano): esconder mercaderia existente seria peor que la fila
+      // fantasma. Los insumos no tienen sedes y pasan siempre.
+      let matchesBranchCatalog = true
+      if (businessSettings?.branchCatalogEnabled === true && filterBranch !== 'all' && item.itemType !== 'ingredient') {
+        const bId = filterBranch === 'main' ? null : filterBranch
+        matchesBranchCatalog = isProductInBranch(item, bId) || (typeof branchStock === 'number' && branchStock > 0)
+      }
+
       // Multi-select: array vacío = todos los estados
       // Stock mínimo por producto (default 3 si no está configurado).
       const itemMinStock = Number.isFinite(Number(item?.minStock)) && Number(item?.minStock) >= 0
@@ -1790,7 +1812,7 @@ export default function Inventory() {
         matchesStockTracking = item.trackStock === false || (item.stock === null && item.stock === undefined && !hasVariantStock)
       }
 
-      return matchesSearch && matchesCategory && matchesBrand && matchesStatus && matchesStockTracking
+      return matchesSearch && matchesCategory && matchesBrand && matchesStatus && matchesStockTracking && matchesBranchCatalog
     })
 
     // Ordenar productos
@@ -1835,7 +1857,7 @@ export default function Inventory() {
 
     console.log(`🔍 [Inventory] filteredProducts resultado: ${sorted.length} items`)
     return sorted
-  }, [allItems, deferredSearchTerm, itemSearchIndex, filterCategories, filterBrands, filterStatuses, filterStockTracking, productCategories, sortField, sortDirection, getStockForBranch])
+  }, [allItems, deferredSearchTerm, itemSearchIndex, filterCategories, filterBrands, filterStatuses, filterStockTracking, productCategories, sortField, sortDirection, getStockForBranch, filterBranch, businessSettings?.branchCatalogEnabled])
 
   // Paginación de productos filtrados (optimizado con useMemo)
   const paginationData = React.useMemo(() => {

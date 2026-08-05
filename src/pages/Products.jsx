@@ -1821,14 +1821,17 @@ export default function Products() {
 
   const handleExportToExcel = async () => {
     try {
-      if (products.length === 0) {
+      // scopedProducts: el Excel respeta la sede elegida en el header, igual
+      // que la lista y las tarjetas. Exportar todo el negocio cuando la
+      // pantalla muestra una sede haria mentir al conteo del toast.
+      if (scopedProducts.length === 0) {
         toast.error('No hay productos para exportar');
         return;
       }
 
       // Exportar en formato compatible con importación
-      await exportProductsForImport(products, categories, businessMode);
-      toast.success(`${products.length} producto(s) exportado(s) exitosamente. El archivo es compatible con la función de importar.`);
+      await exportProductsForImport(scopedProducts, categories, businessMode);
+      toast.success(`${scopedProducts.length} producto(s) exportado(s) exitosamente. El archivo es compatible con la función de importar.`);
     } catch (error) {
       console.error('Error al exportar productos:', error);
       toast.error('Error al generar el archivo Excel');
@@ -1837,12 +1840,12 @@ export default function Products() {
 
   const handleExportForRappi = async () => {
     try {
-      if (products.length === 0) {
+      if (scopedProducts.length === 0) {
         toast.error('No hay productos para exportar')
         return
       }
-      await exportProductsForRappi(products, categories)
-      toast.success(`${products.length} producto(s) exportados para Self Mapping de Rappi`)
+      await exportProductsForRappi(scopedProducts, categories)
+      toast.success(`${scopedProducts.length} producto(s) exportados para Self Mapping de Rappi`)
     } catch (error) {
       console.error('Error exportando para Rappi:', error)
       toast.error('Error al generar el Excel para Rappi')

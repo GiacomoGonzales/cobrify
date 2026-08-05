@@ -5,6 +5,8 @@ import {
 import { createPortal } from 'react-dom'
 import Button from '@/components/ui/Button'
 import { createMassTransfer } from '@/services/massTransferService'
+import { isProductInBranch } from '@/utils/branchCatalog'
+import { useAppContext } from '@/hooks/useAppContext'
 import { downloadLogisticsMovementPDF } from '@/utils/logisticsPdfGenerator'
 import { useBranding } from '@/contexts/BrandingContext'
 
@@ -29,6 +31,7 @@ export default function MassTransferModal({
   const [isDischarge, setIsDischarge] = useState(false)
   const [fromWarehouse, setFromWarehouse] = useState('')
   const [toWarehouse, setToWarehouse] = useState('')
+  const { businessSettings } = useAppContext()
   const [items, setItems] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
   const [showDropdown, setShowDropdown] = useState(false)
@@ -310,6 +313,21 @@ export default function MassTransferModal({
   }
 
   // En una descarga no se exige destino (el stock no va a ningún almacén).
+  // Items seleccionados cuyo producto esta oculto en la sede del almacen
+  // DESTINO. Se advierte, no se bloquea: mover stock legitimo siempre debe
+  // poderse, pero trasladar a una sede donde el producto no se ve crea justo
+  // el "stock invisible" que el catalogo por sucursal intenta evitar.
+  const ocultosEnDestino = useMemo(() => {
+    if (isDischarge || !toWarehouse) return []
+    if (businessSettings?.branchCatalogEnabled !== true) return []
+    const destBranchId = warehouseList.find(w => w.id === toWarehouse)?.branchId || null
+    return items.filter(it => {
+      if (it.isIngredient) return false
+      const prod = products.find(pr => pr.id === it.productId)
+      return prod && !isProductInBranch(prod, destBranchId)
+    })
+  }, [items, toWarehouse, isDischarge, products, businessSettings?.branchCatalogEnabled])
+
   const destinationOk = isDischarge || (toWarehouse && fromWarehouse !== toWarehouse)
   const canTransfer = fromWarehouse && destinationOk && items.length > 0 &&
     items.every(i => i.quantity > 0 && (!i.hasBatches || i.batchNumber) && (!i.hasSerials || i.selectedSerials?.length > 0))
@@ -606,6 +624,17 @@ export default function MassTransferModal({
                   {' | '}
                   {availableProducts.length} items con stock (productos e ingredientes)
                 </span>
+              </div>
+            )}
+
+            {ocultosEnDestino.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+                <strong>Ojo:</strong>{' '}
+                {ocultosEnDestino.slice(0, 3).map(i => i.productName).join(', ')}
+                {ocultosEnDestino.length > 3 ? ` y ${ocultosEnDestino.length - 3} más` : ''}
+                {ocultosEnDestino.length === 1 ? ' no está disponible' : ' no están disponibles'} en la
+                sucursal del almacén destino. El traslado se hará igual, pero ese stock no se verá en el
+                Punto de Venta de esa sede hasta que actives el producto ahí (página Productos).
               </div>
             )}
 

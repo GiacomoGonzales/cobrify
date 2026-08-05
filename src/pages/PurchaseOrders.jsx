@@ -22,6 +22,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useAppContext } from '@/hooks/useAppContext'
+import { isProductInBranch, MAIN_BRANCH_TOKEN } from '@/utils/branchCatalog'
 import { useToast } from '@/contexts/ToastContext'
 import { useBranding } from '@/contexts/BrandingContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -42,7 +43,7 @@ import CreatePurchaseOrderModal from '@/components/CreatePurchaseOrderModal'
 import RestockTable from '@/components/purchase/RestockTable'
 
 export default function PurchaseOrders() {
-  const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessSettings, branchScope } = useAppContext()
   const toast = useToast()
   const navigate = useNavigate()
   const { branding } = useBranding()
@@ -258,9 +259,15 @@ export default function PurchaseOrders() {
   // Vista enfocada: Lista de Reabastecimiento (mismo patrón que
   // "Actualizar precios" en Productos — reemplaza el contenido de la página)
   if (showRestock) {
+    // Catalogo por sucursal: sugerir reponer un producto que la sede del
+    // header no vende es ruido. Con "Todas" no se filtra nada; el resto de la
+    // pagina (PDF, mapa de SKU) sigue usando el catalogo completo.
+    const restockProducts = (businessSettings?.branchCatalogEnabled === true && branchScope && branchScope !== 'all')
+      ? products.filter(p => isProductInBranch(p, branchScope === MAIN_BRANCH_TOKEN ? null : branchScope))
+      : products
     return (
       <RestockTable
-        products={products}
+        products={restockProducts}
         suppliers={suppliers}
         businessId={getBusinessId()}
         businessName={companySettings?.tradeName || companySettings?.businessName || ''}
