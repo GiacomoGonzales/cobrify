@@ -44,11 +44,12 @@ export default function InventoryCountModal({
   userId,
   companySettings,
   warehouses = [],
+  branches = [],
   defaultWarehouse = null,
   onCountCompleted,
 }) {
   const toast = useToast()
-  const { businessSettings } = useAppContext()
+  const { businessSettings, branchScope } = useAppContext()
 
   // Estado principal del conteo
   const [countData, setCountData] = useState({})
@@ -924,71 +925,125 @@ export default function InventoryCountModal({
 
   return (
     <>
+      {/* La pantalla de conteo si necesita todo el ancho (tabla larga); elegir
+          almacen es una lista corta y a pantalla completa se veia perdida. */}
       <Modal
         isOpen={isOpen}
         onClose={onClose}
         title={showWarehouseSelector ? "Seleccionar Almacén" : `Recuento: ${selectedWarehouse?.name || ''}`}
-        size="full"
+        size={showWarehouseSelector ? 'lg' : 'full'}
       >
         {/* Pantalla de selección de almacén */}
         {showWarehouseSelector ? (
-          <div className="flex flex-col items-center justify-center py-8 px-4">
-            <Warehouse className="w-16 h-16 text-primary-500 mb-4" />
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">¿Qué almacén vas a contar?</h3>
-            <p className="text-gray-600 text-center mb-6 max-w-md">
-              Selecciona el almacén donde realizarás el recuento físico.
-              Solo se mostrará y actualizará el stock de ese almacén.
-            </p>
+          (() => {
+            // Almacenes de la sucursal elegida en el header. Si esa sede no
+            // tiene ninguno, se muestran todos en vez de dejar la pantalla
+            // vacia: el recuento es una tarea puntual y bloquearla seria peor.
+            const acotados = (!branchScope || branchScope === 'all')
+              ? warehouses
+              : warehouses.filter(w => (w.branchId || 'main') === branchScope)
+            const visibles = acotados.length > 0 ? acotados : warehouses
+            const filtrando = visibles !== warehouses
 
-            {warehouses.length === 0 ? (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center max-w-md">
-                <AlertTriangle className="w-8 h-8 text-yellow-600 mx-auto mb-2" />
-                <p className="text-yellow-800 font-medium">No hay almacenes configurados</p>
-                <p className="text-yellow-700 text-sm mt-1">
-                  Configura al menos un almacén en la sección de Inventario para poder hacer recuentos.
-                </p>
-              </div>
-            ) : (
-              <div className="grid gap-3 w-full max-w-md">
-                {warehouses.map(warehouse => {
-                  // Calcular stock total de este almacén
-                  const warehouseStock = products.reduce((sum, p) => {
-                    const ws = p.warehouseStocks?.find(w => w.warehouseId === warehouse.id)
-                    return sum + (ws?.stock || 0)
-                  }, 0)
+            const nombreSede = (w) => (w.branchId
+              ? (branches.find(b => b.id === w.branchId)?.name || 'Otra sucursal')
+              : (businessSettings?.mainBranchName || 'Sucursal Principal'))
 
-                  return (
-                    <button
-                      key={warehouse.id}
-                      onClick={() => handleSelectWarehouse(warehouse)}
-                      className="flex items-center justify-between p-4 bg-white border-2 border-gray-200 rounded-xl hover:border-primary-500 hover:bg-primary-50 transition-all group"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center group-hover:bg-primary-200">
-                          <Warehouse className="w-5 h-5 text-primary-600" />
+            const stockDe = (w) => products.reduce((sum, p) => {
+              const ws = p.warehouseStocks?.find(x => x.warehouseId === w.id)
+              return sum + (ws?.stock || 0)
+            }, 0)
+
+            // Agrupado por sede: sin esto, con varias sucursales la lista eran
+            // nombres sueltos ("Almacen 1", "Almacen 2") sin decir de donde son.
+            const grupos = []
+            if (branches.length > 0) {
+              const principal = visibles.filter(w => !w.branchId)
+              if (principal.length > 0) {
+                grupos.push({ key: 'main', nombre: nombreSede(principal[0]), almacenes: principal })
+              }
+              branches.forEach(b => {
+                const suyos = visibles.filter(w => w.branchId === b.id)
+                if (suyos.length > 0) grupos.push({ key: b.id, nombre: b.name, almacenes: suyos })
+              })
+              // Almacenes de sedes que ya no existen o sin acceso.
+              const ubicados = new Set(grupos.flatMap(g => g.almacenes.map(w => w.id)))
+              const sueltos = visibles.filter(w => !ubicados.has(w.id))
+              if (sueltos.length > 0) {
+                grupos.push({ key: 'otros', nombre: 'Otras sucursales', almacenes: sueltos })
+              }
+            }
+
+            const tarjeta = (warehouse) => (
+              <button
+                key={warehouse.id}
+                onClick={() => handleSelectWarehouse(warehouse)}
+                className="w-full flex items-center justify-between px-3 py-2.5 bg-white border border-gray-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-all group text-left"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 bg-primary-100 rounded-lg flex items-center justify-center flex-shrink-0 group-hover:bg-primary-200">
+                    <Warehouse className="w-4 h-4 text-primary-600" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-900 text-sm truncate">{warehouse.name}</p>
+                    <p className="text-xs text-gray-500">
+                      {Math.round(stockDe(warehouse) * 100) / 100} unidades
+                      {branches.length === 0 ? '' : ` · ${nombreSede(warehouse)}`}
+                    </p>
+                  </div>
+                </div>
+                <ArrowLeft className="w-4 h-4 rotate-180 text-primary-600 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+              </button>
+            )
+
+            return (
+              <div className="py-2">
+                <div className="text-center mb-4">
+                  <Warehouse className="w-10 h-10 text-primary-500 mx-auto mb-2" />
+                  <h3 className="text-lg font-semibold text-gray-900">¿Qué almacén vas a contar?</h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Solo se mostrará y actualizará el stock de ese almacén.
+                  </p>
+                </div>
+
+                {warehouses.length === 0 ? (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
+                    <AlertTriangle className="w-8 h-8 text-yellow-600 mx-auto mb-2" />
+                    <p className="text-yellow-800 font-medium">No hay almacenes configurados</p>
+                    <p className="text-yellow-700 text-sm mt-1">
+                      Configura al menos un almacén en la sección de Inventario para poder hacer recuentos.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {filtrando && (
+                      <p className="text-xs text-gray-500 mb-2">
+                        Almacenes de la sucursal seleccionada arriba.
+                      </p>
+                    )}
+                    <div className="max-h-[55vh] overflow-y-auto pr-1 space-y-3">
+                      {grupos.length > 0 ? grupos.map(g => (
+                        <div key={g.key}>
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 truncate" title={g.nombre}>
+                            {g.nombre}
+                          </p>
+                          <div className="space-y-1.5">
+                            {g.almacenes.map(tarjeta)}
+                          </div>
                         </div>
-                        <div className="text-left">
-                          <p className="font-semibold text-gray-900">{warehouse.name}</p>
-                          <p className="text-sm text-gray-500">{Math.round(warehouseStock * 100) / 100} unidades en stock</p>
-                        </div>
-                      </div>
-                      <div className="text-primary-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <ArrowLeft className="w-5 h-5 rotate-180" />
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
-            )}
+                      )) : (
+                        <div className="space-y-1.5">{visibles.map(tarjeta)}</div>
+                      )}
+                    </div>
+                  </>
+                )}
 
-            <Button
-              variant="outline"
-              onClick={onClose}
-              className="mt-6"
-            >
-              Cancelar
-            </Button>
-          </div>
+                <div className="flex justify-end mt-4">
+                  <Button variant="outline" onClick={onClose}>Cancelar</Button>
+                </div>
+              </div>
+            )
+          })()
         ) : (
         <div className="flex flex-col h-[calc(100vh-120px)] md:h-[calc(100vh-160px)]">
           {/* Header con estadísticas - Compacto en móvil */}

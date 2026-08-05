@@ -5205,6 +5205,7 @@ export default function Inventory() {
         userId={user?.uid}
         companySettings={companySettings}
         warehouses={warehouses}
+        branches={branches}
         defaultWarehouse={defaultWarehouse}
         onCountCompleted={() => {
           loadProducts()
