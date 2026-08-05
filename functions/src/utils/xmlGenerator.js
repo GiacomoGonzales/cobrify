@@ -297,8 +297,20 @@ export function generateInvoiceXML(invoiceData, businessData) {
   const igvRate = rawIgvRate === 10 ? 10.5 : rawIgvRate
   const igvExempt = invoiceData.taxConfig?.igvExempt ?? businessData?.emissionConfig?.taxConfig?.igvExempt ?? false
   const exemptionReason = invoiceData.taxConfig?.exemptionReason ?? businessData?.emissionConfig?.taxConfig?.exemptionReason ?? ''
-  // taxType del régimen del negocio: 'exempt' = Exonerado (0%) Ley 27037 (Amazonía).
+  // taxType del régimen del negocio:
+  //   'exempt' = Exonerado (0%) Ley 27037 (Amazonía).
+  //   'nrus'   = Nuevo RUS. OJO: NO es una exoneración — la operación sigue
+  //              siendo GRAVADA (afectación 10, tributo 1000) pero con IGV 0,
+  //              y la boleta viaja con tipo de operación 0113 (Catálogo 51),
+  //              que es lo que le dice a SUNAT que no exija IGV distinto de 0
+  //              (reglas 2993/3111/3462/4310 se desactivan solo bajo 0113).
   const taxType = invoiceData.taxConfig?.taxType ?? businessData?.emissionConfig?.taxConfig?.taxType ?? ''
+  // El 0113 existe SOLO para boletas (un NRUS no emite facturas; el panel
+  // admin les apaga la factura al marcar el régimen). Las notas de crédito
+  // NO tienen la excepción 0113 en las reglas de SUNAT —exigen factor de IGV
+  // distinto de 0 en líneas gravadas sin importar el tipo de operación—, así
+  // que las NC de un NRUS siguen saliendo como exoneradas (camino igvExempt).
+  const isNrusBoleta = taxType === 'nrus' && invoiceData.documentType === 'boleta'
   const igvMultiplier = igvRate / 100
 
   console.log(`💰 Configuración IGV FINAL: rate=${igvRate}%, exempt=${igvExempt}, multiplier=${igvMultiplier}`)
@@ -389,9 +401,13 @@ export function generateInvoiceXML(invoiceData, businessData) {
   // con error 3206 (comprobado con F003-6 el 27-07-2026). La factura DE
   // anticipo se emite como 0101 normal; isAdvancePayment queda como marca
   // interna para que la factura final pueda encontrarla y deducirla.
-  const operationTypeCode = (invoiceData.hasDetraction && invoiceData.detractionType && invoiceData.detractionAmount > 0)
-    ? '1001'  // Operación sujeta a detracción
-    : '0101'  // Venta interna normal
+  // - 0113: Venta Interna-NRUS (solo boletas). Va PRIMERO: es el régimen del
+  //   emisor y sin él SUNAT rechazaría la boleta con IGV 0 (error 2993).
+  const operationTypeCode = isNrusBoleta
+    ? '0113'  // Venta Interna-NRUS
+    : (invoiceData.hasDetraction && invoiceData.detractionType && invoiceData.detractionAmount > 0)
+      ? '1001'  // Operación sujeta a detracción
+      : '0101'  // Venta interna normal
 
   root.ele('cbc:InvoiceTypeCode', {
     'listID': operationTypeCode,
@@ -794,7 +810,11 @@ export function generateInvoiceXML(invoiceData, businessData) {
     if (isBonifLine) {
       taxAffectation = '15'  // Gravado - Bonificaciones (Catálogo 07)
     } else if (igvExempt) {
-      taxAffectation = '20'
+      // NRUS: la línea es GRAVADA (10/1000) con tasa 0 — no exonerada. Marcar
+      // 20 diría que los productos están exonerados por ley, que es falso; lo
+      // que pasa es que el RÉGIMEN del emisor no desglosa IGV. Con igvRate 0
+      // la aritmética de abajo ya produce base completa e IGV 0.
+      taxAffectation = isNrusBoleta ? '10' : '20'
     } else {
       taxAffectation = item.taxAffectation || '10'
     }

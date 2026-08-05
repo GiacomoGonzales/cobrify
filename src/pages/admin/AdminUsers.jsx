@@ -187,7 +187,7 @@ export default function AdminUsers() {
     // Configuración tributaria
     igvExempt: false,
     igvRate: 18,
-    taxType: 'standard', // 'standard' (18%), 'reduced' (8% Ley 31556), 'exempt' (0% Ley 27037)
+    taxType: 'standard', // 'standard' (18%), 'reduced' (10.5% Ley 31556), 'exempt' (0% Ley 27037), 'nrus' (Nuevo RUS: boleta 0113 con IGV 0)
     // Override admin: permitir boleta/factura en el POS aunque NO haya conexión SUNAT.
     allowInvoicingWithoutSunat: false
   })
@@ -665,7 +665,9 @@ export default function AdminUsers() {
       if (igvFilter === 'reduced') {
         result = result.filter(u => u.taxType === 'reduced' || u.igvRate === 10.5)
       } else if (igvFilter === 'exempt') {
-        result = result.filter(u => u.taxType === 'exempt' || u.igvRate === 0)
+        result = result.filter(u => u.taxType === 'exempt' || (u.igvRate === 0 && u.taxType !== 'nrus'))
+      } else if (igvFilter === 'nrus') {
+        result = result.filter(u => u.taxType === 'nrus')
       } else if (igvFilter === 'standard') {
         result = result.filter(u => u.taxType === 'standard' && u.igvRate === 18)
       }
@@ -1212,9 +1214,11 @@ export default function AdminUsers() {
           // Configuración tributaria
           igvExempt: taxConfig.igvExempt || false,
           igvRate: taxConfig.igvRate || 18,
-          // Determinar taxType basado en configuración existente
-          // Ley 31556: aceptar 10, 10.5 y 8 como 'reduced' por compatibilidad con configs antiguas
-          taxType: taxConfig.igvExempt ? 'exempt' : (taxConfig.igvRate === 10 || taxConfig.igvRate === 10.5 || taxConfig.igvRate === 8 ? 'reduced' : 'standard'),
+          // taxType guardado manda (un 'nrus' también tiene igvExempt=true y
+          // derivarlo de igvExempt lo confundiría con 'exempt'/Amazonía);
+          // derivar de igvExempt/igvRate solo para configs antiguas sin taxType.
+          // Ley 31556: aceptar 10, 10.5 y 8 como 'reduced' por compatibilidad.
+          taxType: taxConfig.taxType || (taxConfig.igvExempt ? 'exempt' : (taxConfig.igvRate === 10 || taxConfig.igvRate === 10.5 || taxConfig.igvRate === 8 ? 'reduced' : 'standard')),
           allowInvoicingWithoutSunat: businessData.allowInvoicingWithoutSunat === true
         })
       } else {
@@ -1307,9 +1311,26 @@ export default function AdminUsers() {
       const taxTypeConfig = {
         standard: { igvExempt: false, igvRate: 18 },
         reduced: { igvExempt: false, igvRate: 10.5 }, // Ley 31556: 8% IGV + 2.5% IPM
-        exempt: { igvExempt: true, igvRate: 0 }
+        exempt: { igvExempt: true, igvRate: 0 },
+        // NRUS lleva igvExempt=true A PROPÓSITO: para el POS, los PDFs y las
+        // notas de crédito se comporta EXACTAMENTE como un exonerado (precios
+        // finales, sin desglose de IGV) — es el camino que ya funciona en
+        // producción. La diferencia vive solo en el XML de la boleta, donde el
+        // generador ve taxType='nrus' y emite tipo de operación 0113 con
+        // líneas GRAVADAS (afectación 10) a tasa 0, que es lo que exige SUNAT
+        // para este régimen (no confundir con exonerado: eso es afectación 20).
+        nrus: { igvExempt: true, igvRate: 0 }
       }
       const selectedTaxConfig = taxTypeConfig[sunatForm.taxType] || taxTypeConfig.standard
+
+      // Un NRUS no puede emitir facturas: se le deja solo Boleta y Nota de
+      // Venta en el POS (mismo mecanismo enabledDocumentTypes de Configuración
+      // > POS; el dueño puede reactivarla ahí si el negocio cambia de régimen).
+      // Solo se escribe al MARCAR nrus — al desmarcar no se toca, para no
+      // pisar una configuración que el dueño haya afinado por su cuenta.
+      if (sunatForm.taxType === 'nrus') {
+        updateData.enabledDocumentTypes = ['boleta', 'nota_venta']
+      }
 
       // Construir emissionConfig
       const emissionConfig = {
@@ -2207,7 +2228,8 @@ export default function AdminUsers() {
             >
               <option value="all">IGV</option>
               <option value="reduced">10.5% ({users.filter(u => u.taxType === 'reduced' || u.igvRate === 10.5).length})</option>
-              <option value="exempt">Exonerado ({users.filter(u => u.taxType === 'exempt' || u.igvRate === 0).length})</option>
+              <option value="exempt">Exonerado ({users.filter(u => u.taxType === 'exempt' || (u.igvRate === 0 && u.taxType !== 'nrus')).length})</option>
+              <option value="nrus">NRUS ({users.filter(u => u.taxType === 'nrus').length})</option>
               <option value="standard">18% ({users.filter(u => u.taxType === 'standard' && u.igvRate === 18).length})</option>
             </select>
 
@@ -3218,6 +3240,31 @@ export default function AdminUsers() {
                       <div>
                         <span className="font-medium text-gray-900">Exonerado (0%) - Ley N° 27037</span>
                         <p className="text-xs text-gray-500">Ley de Promoción de la Inversión en la Amazonía. Para empresas ubicadas en Loreto, Ucayali, Madre de Dios, Amazonas y San Martín.</p>
+                      </div>
+                    </label>
+
+                    {/* NRUS - Nuevo Régimen Único Simplificado */}
+                    <label className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-all ${
+                      sunatForm.taxType === 'nrus'
+                        ? 'border-emerald-500 bg-emerald-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="taxType"
+                        value="nrus"
+                        checked={sunatForm.taxType === 'nrus'}
+                        onChange={e => setSunatForm({ ...sunatForm, taxType: e.target.value })}
+                        className="mt-1 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <div>
+                        <span className="font-medium text-gray-900">NRUS - Nuevo RUS (boletas con IGV 0%)</span>
+                        <p className="text-xs text-gray-500">
+                          Nuevo Régimen Único Simplificado: paga cuota fija mensual, no declara IGV.
+                          Las boletas salen como <strong>Venta Interna-NRUS (0113)</strong>, gravadas con
+                          IGV en cero — NO como exoneradas. Al guardar se desactiva la Factura en el POS
+                          (un NRUS no emite facturas).
+                        </p>
                       </div>
                     </label>
                   </div>
