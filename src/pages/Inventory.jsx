@@ -153,7 +153,7 @@ const getRealStockValue = (item) => {
 }
 
 export default function Inventory() {
-  const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings, hasMainBranchAccess, allowedWarehouses, isBusinessOwner } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings, hasMainBranchAccess, allowedWarehouses, isBusinessOwner, branchScope } = useAppContext()
   const hidePrivateData = useHidePrivateData()
   const { filterWarehousesByAccess } = useAuth()
   const toast = useToast()
@@ -251,7 +251,12 @@ export default function Inventory() {
   const [warehouses, setWarehouses] = useState([])
   const [allWarehouses, setAllWarehouses] = useState([]) // Todos los almacenes (para transferencias entre sucursales)
   const [branches, setBranches] = useState([])
-  const [filterBranch, setFilterBranch] = useState('all')
+  // La sucursal sale del selector del HEADER (branchScope), igual que en
+  // Productos: tener un filtro propio aca era duplicarlo y podian
+  // contradecirse (header en "Centro" y la pagina en "Norte"). Mismos tokens:
+  // 'all' | 'main' | <branchId>. El filtro de ALMACENES si es propio de la
+  // pagina, porque una sede puede tener varios.
+  const filterBranch = branchScope || 'all'
   const [filterWarehouses, setFilterWarehouses] = useState([]) // Array vacío = todos los almacenes
   const [showTransferModal, setShowTransferModal] = useState(false)
   const [transferProduct, setTransferProduct] = useState(null)
@@ -2560,24 +2565,6 @@ export default function Inventory() {
                   </div>
                 )}
               </div>
-
-              {/* Branch Filter (single select - stays the same) */}
-              {branches.length > 0 && (
-                <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm w-full sm:w-auto">
-                  <Store className="w-4 h-4 text-gray-500" />
-                  <select
-                    value={filterBranch}
-                    onChange={e => setFilterBranch(e.target.value)}
-                    className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
-                  >
-                    <option value="all">Todas las sucursales</option>
-                    {hasMainBranchAccess && <option value="main">{companySettings?.mainBranchName || 'Sucursal Principal'}</option>}
-                    {branches.map(branch => (
-                      <option key={branch.id} value={branch.id}>{branch.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
 
               {/* Warehouse Multi-Select Filter */}
               {filteredWarehouses.length > 0 && (
