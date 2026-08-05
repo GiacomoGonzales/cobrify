@@ -42,7 +42,6 @@ import {
 } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
-import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useHidePrivateData } from '@/hooks/useHidePrivateData'
@@ -178,7 +177,6 @@ export default function Inventory() {
       setRecalcCosts(false)
     }
   }
-  const appNavigate = useAppNavigate()
 
   // Multi-divisa (Fase 3): doble lectura del valor de inventario "S/ X ≈ US$ Y".
   // Solo visualización — la valuación contable sigue SIEMPRE en soles. TC de
@@ -219,6 +217,13 @@ export default function Inventory() {
   const [isScanning, setIsScanning] = useState(false)
   const [filterCategories, setFilterCategories] = useState([]) // Array vacío = todas las categorías
   const [filterStatuses, setFilterStatuses] = useState([]) // Array vacío = todos los estados
+
+  // Las tarjetas de Stock Bajo / Agotados actuan como atajo del filtro de
+  // estado: tocarlas deja ver solo esos items, y volver a tocarlas lo quita.
+  const verSoloEstado = (estado) => filterStatuses.length === 1 && filterStatuses[0] === estado
+  const toggleStatusFilter = (estado) => {
+    setFilterStatuses(prev => (prev.length === 1 && prev[0] === estado) ? [] : [estado])
+  }
   const [filterType, setFilterType] = useState('all') // 'all', 'products', 'ingredients'
   const [filterStockTracking, setFilterStockTracking] = useState('tracked') // 'all', 'tracked', 'untracked'
   const [expandedProduct, setExpandedProduct] = useState(null)
@@ -2247,30 +2252,52 @@ export default function Inventory() {
           </Card>
         )}
 
-        <Card>
+        {/* Stock bajo y Agotados llevan el aviso adentro: antes esto vivia en un
+            bloque rojo aparte que ocupaba media pantalla para decir un numero
+            que ya estaba aca arriba. Ademas filtran la lista al tocarlas —
+            estando en Inventario es mas util que mandar a otra pagina. */}
+        <Card
+          onClick={() => toggleStatusFilter('low')}
+          className={`cursor-pointer transition-colors hover:border-yellow-400 ${verSoloEstado('low') ? 'border-yellow-500 bg-yellow-50' : ''}`}
+          title="Ver solo los productos con stock bajo"
+        >
           <CardContent className="p-4 sm:p-6">
             <div className="flex items-center justify-between">
-              <div>
+              <div className="min-w-0">
                 <p className="text-xs sm:text-sm text-gray-600">Stock Bajo</p>
                 <p className="text-xl sm:text-2xl font-bold text-yellow-600 mt-1">
                   {lowStockItems.length}
                 </p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {lowStockItems.length === 0
+                    ? 'Todo con stock suficiente'
+                    : verSoloEstado('low') ? 'Mostrando solo estos' : 'Conviene reabastecer pronto'}
+                </p>
               </div>
-              <AlertTriangle className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-600" />
+              <AlertTriangle className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-600 flex-shrink-0" />
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card
+          onClick={() => toggleStatusFilter('out')}
+          className={`cursor-pointer transition-colors hover:border-red-400 ${verSoloEstado('out') ? 'border-red-500 bg-red-50' : ''}`}
+          title="Ver solo los productos agotados"
+        >
           <CardContent className="p-4 sm:p-6">
             <div className="flex items-center justify-between">
-              <div>
+              <div className="min-w-0">
                 <p className="text-xs sm:text-sm text-gray-600">Agotados</p>
                 <p className="text-xl sm:text-2xl font-bold text-red-600 mt-1">
                   {outOfStockItems.length}
                 </p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {outOfStockItems.length === 0
+                    ? 'Ninguno sin stock'
+                    : verSoloEstado('out') ? 'Mostrando solo estos' : 'Sin stock: se pierden ventas'}
+                </p>
               </div>
-              <TrendingDown className="w-6 h-6 sm:w-8 sm:h-8 text-red-600" />
+              <TrendingDown className="w-6 h-6 sm:w-8 sm:h-8 text-red-600 flex-shrink-0" />
             </div>
           </CardContent>
         </Card>
@@ -2312,29 +2339,6 @@ export default function Inventory() {
             )}
           </Button>
           )}
-        </Alert>
-      )}
-
-      {/* Alert for low/out of stock */}
-      {(lowStockItems.length > 0 || outOfStockItems.length > 0) && (
-        <Alert
-          variant={outOfStockItems.length > 0 ? 'danger' : 'warning'}
-          title={
-            outOfStockItems.length > 0
-              ? `${outOfStockItems.length} productos agotados`
-              : `${lowStockItems.length} productos con stock bajo`
-          }
-        >
-          <p className="text-sm">
-            {outOfStockItems.length > 0
-              ? 'Hay productos sin stock. Es urgente reabastecer para evitar ventas perdidas.'
-              : 'Algunos productos tienen stock bajo. Considera reabastecer pronto.'}
-          </p>
-          <div className="inline-block mt-2">
-            <Button variant="outline" size="sm" onClick={() => appNavigate('productos')}>
-              Gestionar Productos
-            </Button>
-          </div>
         </Alert>
       )}
 
