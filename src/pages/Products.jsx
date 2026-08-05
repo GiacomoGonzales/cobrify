@@ -4680,6 +4680,56 @@ export default function Products() {
         </div>
       </div>
 
+      {/* Stats — mismo formato que Inventario: van JUSTO debajo de la cabecera
+          (no despues de los filtros) porque el bloque de categorias y marcas es
+          alto y empujaba los totales fuera de la vista. Mismas medidas, mismos
+          colores semanticos y misma linea de contexto que alli. */}
+      <div className={`grid grid-cols-2 ${hidePrivateData ? 'lg:grid-cols-2' : 'lg:grid-cols-3'} gap-4 sm:gap-6`}>
+        <Card>
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex items-center justify-between">
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm text-gray-600">Total Productos</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">{scopedProducts.length}</p>
+              </div>
+              <Package className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600 flex-shrink-0" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {!hidePrivateData && (
+          <Card>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div className="min-w-0">
+                  <p className="text-xs sm:text-sm text-gray-600">Valor Inventario</p>
+                  <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">{formatCurrency(totalValue)}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Costo: {formatCurrency(totalCostValue)}</p>
+                </div>
+                <DollarSign className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 flex-shrink-0" />
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        <Card>
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex items-center justify-between">
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm text-gray-600">Stock Bajo</p>
+                {/* Amarillo, igual que en Inventario: el rojo esta reservado
+                    para "agotados", que es el estado que si cuesta ventas. */}
+                <p className="text-xl sm:text-2xl font-bold text-yellow-600 mt-1">{lowStockCount}</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {lowStockCount === 0 ? 'Todo con stock suficiente' : 'Conviene reabastecer pronto'}
+                </p>
+              </div>
+              <AlertTriangle className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-600 flex-shrink-0" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Search and Category Filter */}
       <Card>
         <CardContent className="p-4 space-y-3">
@@ -4999,48 +5049,6 @@ export default function Products() {
           </CardContent>
         </Card>
       )}
-
-      {/* Stats */}
-      <div className={`grid grid-cols-1 ${hidePrivateData ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-6`}>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total Productos</p>
-                <p className="text-2xl font-bold text-gray-900 mt-2">{scopedProducts.length}</p>
-              </div>
-              <Package className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600 flex-shrink-0" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {!hidePrivateData && (
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Valor Inventario</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-2">{formatCurrency(totalValue)}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">Costo: {formatCurrency(totalCostValue)}</p>
-                </div>
-                <DollarSign className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 flex-shrink-0" />
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Stock Bajo</p>
-                <p className="text-2xl font-bold text-gray-900 mt-2">{lowStockCount}</p>
-              </div>
-              <AlertTriangle className="w-6 h-6 sm:w-8 sm:h-8 text-red-600 flex-shrink-0" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
 
       {/* Vista de actualización de precios (modo enfocado) */}
       {priceUpdateMode ? (
