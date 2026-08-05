@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Truck, Plus, Edit, Trash2, UserCheck, DollarSign, TrendingUp,
   Loader2, Search, Package, Clock, CheckCircle, XCircle, Filter,
@@ -65,11 +65,20 @@ const PAYMENT_METHOD_LABELS = {
 }
 
 export default function Envios() {
-  const { getBusinessId, isDemoMode } = useAppContext()
+  const { getBusinessId, isDemoMode, branchScope } = useAppContext()
   const toast = useToast()
 
   const [activeTab, setActiveTab] = useState('envios')
-  const [motoristas, setMotoristas] = useState([])
+  // Los motoristas se acotan a la sucursal del selector del header, igual que
+  // Productos, Inventario, Vencimientos y Mozos. Sin esto, estando en una sede
+  // se listaban los repartidores de todo el negocio.
+  const [motoristasAll, setMotoristasAll] = useState([])
+  const motoristas = useMemo(() => {
+    if (!branchScope || branchScope === 'all') return motoristasAll
+    return motoristasAll.filter(m =>
+      branchScope === 'main' ? !m.branchId : m.branchId === branchScope
+    )
+  }, [motoristasAll, branchScope])
   const [stats, setStats] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isFormModalOpen, setIsFormModalOpen] = useState(false)
@@ -108,7 +117,10 @@ export default function Envios() {
   useEffect(() => {
     loadMotoristas()
     loadCompanySettings()
-  }, [isDemoMode])
+    // branchScope en deps: las tarjetas se calculan en el servicio, asi que hay
+    // que recalcularlas al cambiar de sede (la lista ya es derivada).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDemoMode, branchScope])
 
   const loadCompanySettings = async () => {
     try {
@@ -128,11 +140,11 @@ export default function Envios() {
       const businessId = getBusinessId()
       const [motoristasResult, statsResult] = await Promise.all([
         getMotoristas(businessId),
-        getMotoristasStats(businessId),
+        getMotoristasStats(businessId, branchScope),
       ])
 
       if (motoristasResult.success) {
-        setMotoristas(motoristasResult.data || [])
+        setMotoristasAll(motoristasResult.data || [])
       } else {
         toast.error('Error al cargar motoristas: ' + motoristasResult.error)
       }

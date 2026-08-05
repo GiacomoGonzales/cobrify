@@ -54,6 +54,17 @@ export default function Orders() {
   const [requirePaymentBeforeKitchen, setRequirePaymentBeforeKitchen] = useState(false) // Config para pago obligatorio
   const [requireReceiptForSecondary, setRequireReceiptForSecondary] = useState(false) // Sub-usuario siempre con comprobante
   const [deliveryPersons, setDeliveryPersons] = useState([]) // Lista de repartidores
+
+  // Repartidores de la sede a la que pertenece la orden. Un motorista de otra
+  // sede no deberia poder asignarse: quedaba en la orden y luego en la factura,
+  // y el arqueo de su efectivo caia en el local equivocado.
+  // Motoristas sin branchId (creados antes de que existiera el campo) se
+  // ofrecen en todas las sedes: excluirlos dejaria sin repartidores a negocios
+  // que aun no los han clasificado.
+  const deliveryPersonsForOrder = (order) => {
+    const orderBranch = order?.branchId || null
+    return deliveryPersons.filter(p => !p.branchId || (p.branchId || null) === orderBranch)
+  }
   const [brands, setBrands] = useState([]) // Lista de marcas
   const [kitchenStations, setKitchenStations] = useState([]) // Estaciones de cocina
   const [enableKitchenStations, setEnableKitchenStations] = useState(false) // Multi-estación habilitada
@@ -1533,7 +1544,7 @@ export default function Orders() {
                   )}
 
                   {/* Selector de repartidor para delivery */}
-                  {order.orderType === 'delivery' && deliveryPersons.length > 0 && (
+                  {order.orderType === 'delivery' && deliveryPersonsForOrder(order).length > 0 && (
                     <div className="flex items-center gap-2 text-sm pb-2 border-b border-gray-200 mb-2">
                       <Bike className="w-4 h-4 text-blue-600" />
                       <span className="text-gray-600">Repartidor:</span>
@@ -1543,7 +1554,7 @@ export default function Orders() {
                         className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                       >
                         <option value="">Sin asignar</option>
-                        {deliveryPersons.map((person) => (
+                        {deliveryPersonsForOrder(order).map((person) => (
                           <option key={person.id} value={person.id}>
                             {person.name}{person.operationalStatus ? ` (${person.operationalStatus === 'available' ? '✓' : person.operationalStatus === 'on_delivery' ? '🚗' : person.operationalStatus === 'break' ? '☕' : '⭘'})` : ''}
                           </option>
@@ -1553,7 +1564,7 @@ export default function Orders() {
                   )}
 
                   {/* Mostrar repartidor asignado cuando hay pocos repartidores */}
-                  {order.orderType === 'delivery' && order.deliveryPersonName && deliveryPersons.length === 0 && (
+                  {order.orderType === 'delivery' && order.deliveryPersonName && deliveryPersonsForOrder(order).length === 0 && (
                     <div className="flex items-center gap-2 text-sm text-blue-600 pb-2">
                       <Bike className="w-4 h-4" />
                       <span>Repartidor: {order.deliveryPersonName}</span>

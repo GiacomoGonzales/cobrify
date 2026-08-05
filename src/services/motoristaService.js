@@ -60,6 +60,7 @@ export const createMotorista = async (businessId, data) => {
       paymentType: data.paymentType || 'per_delivery', // per_delivery, fixed, mixed
       ratePerDelivery: parseFloat(data.ratePerDelivery) || 0,
       fixedSalary: parseFloat(data.fixedSalary) || 0,
+      branchId: data.branchId || null, // sede a la que pertenece el motorista (null = Sucursal Principal)
       status: 'active', // active, inactive
       operationalStatus: 'available', // available, on_delivery, break, offline
       // Métricas
@@ -174,12 +175,21 @@ export const getActiveMotoristas = async (businessId) => {
 /**
  * Obtener estadísticas de motoristas
  */
-export const getMotoristasStats = async (businessId) => {
+export const getMotoristasStats = async (businessId, branchFilter = null) => {
   try {
     const result = await getMotoristas(businessId)
     if (!result.success) return result
 
-    const motoristas = result.data
+    // Sede solicitada (mismo contrato que getTablesStats):
+    //   null/'all' -> todo el negocio
+    //   'main'     -> motoristas SIN branchId (Sucursal Principal)
+    //   <branchId> -> solo los de esa sede
+    let motoristas = result.data
+    if (branchFilter && branchFilter !== 'all') {
+      motoristas = motoristas.filter(m =>
+        branchFilter === 'main' ? !m.branchId : m.branchId === branchFilter
+      )
+    }
     const active = motoristas.filter(m => m.status === 'active')
 
     // Obtener entregas de hoy
@@ -195,8 +205,15 @@ export const getMotoristasStats = async (businessId) => {
     let todayCashCollected = 0
     let todayEarnings = 0
 
+    // Con una sede elegida, solo cuentan las entregas de SUS motoristas: si no,
+    // la tarjeta diria "3 motoristas activos" y al lado las entregas de todo el
+    // negocio, que es el descuadre clasico de mezclar dos ambitos.
+    const idsDeLaSede = new Set(motoristas.map(m => m.id))
+    const acotado = !!branchFilter && branchFilter !== 'all'
+
     deliveriesSnap.forEach((doc) => {
       const d = doc.data()
+      if (acotado && !idsDeLaSede.has(d.motoristaId)) return
       todayDeliveries++
       if (d.paymentMethod === 'cash' || d.paymentMethod === 'efectivo') {
         todayCashCollected += d.cashCollected || d.amount || 0

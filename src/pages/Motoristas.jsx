@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   Bike, Plus, Edit, Trash2, UserCheck, DollarSign, TrendingUp,
   Loader2, Search, Package, Clock, CheckCircle, XCircle, Filter,
@@ -18,6 +18,7 @@ import {
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import MotoristaFormModal from '@/components/restaurant/MotoristaFormModal'
+import { getActiveBranches } from '@/services/branchService'
 
 const OPERATIONAL_STATUS_CONFIG = {
   available: { label: 'Disponible', color: 'success', icon: CheckCircle },
@@ -52,11 +53,30 @@ const PAYMENT_METHOD_LABELS = {
 }
 
 export default function Motoristas() {
-  const { getBusinessId, isDemoMode } = useAppContext()
+  const { getBusinessId, isDemoMode, branchScope, businessSettings } = useAppContext()
   const toast = useToast()
 
   const [activeTab, setActiveTab] = useState('motoristas')
-  const [motoristas, setMotoristas] = useState([])
+  // Los motoristas se acotan a la sucursal del selector del header, igual que
+  // Productos, Inventario, Vencimientos y Mozos. Sin esto, estando en una sede
+  // se listaban los repartidores de todo el negocio.
+  const [motoristasAll, setMotoristasAll] = useState([])
+  const [branches, setBranches] = useState([])
+  // Nombre de sede del motorista. Solo se muestra viendo "Todas las sucursales":
+  // dentro de una sede seria repetir el mismo texto en cada fila.
+  const branchLabelOf = (m) => {
+    if (branchScope && branchScope !== 'all') return ''
+    if (branches.length === 0) return ''
+    if (!m.branchId) return businessSettings?.mainBranchName || 'Sucursal Principal'
+    return branches.find(b => b.id === m.branchId)?.name || ''
+  }
+
+  const motoristas = useMemo(() => {
+    if (!branchScope || branchScope === 'all') return motoristasAll
+    return motoristasAll.filter(m =>
+      branchScope === 'main' ? !m.branchId : m.branchId === branchScope
+    )
+  }, [motoristasAll, branchScope])
   const [stats, setStats] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isFormModalOpen, setIsFormModalOpen] = useState(false)
@@ -83,19 +103,25 @@ export default function Motoristas() {
 
   useEffect(() => {
     loadMotoristas()
-  }, [isDemoMode])
+    // branchScope en deps: las tarjetas se calculan en el servicio, asi que hay
+    // que recalcularlas al cambiar de sede (la lista ya es derivada).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDemoMode, branchScope])
 
   const loadMotoristas = async () => {
     setIsLoading(true)
     try {
       const businessId = getBusinessId()
-      const [motoristasResult, statsResult] = await Promise.all([
+      const [motoristasResult, statsResult, branchesResult] = await Promise.all([
         getMotoristas(businessId),
-        getMotoristasStats(businessId),
+        getMotoristasStats(businessId, branchScope),
+        getActiveBranches(businessId),
       ])
 
+      if (branchesResult.success) setBranches(branchesResult.data || [])
+
       if (motoristasResult.success) {
-        setMotoristas(motoristasResult.data || [])
+        setMotoristasAll(motoristasResult.data || [])
       } else {
         toast.error('Error al cargar motoristas: ' + motoristasResult.error)
       }
@@ -322,6 +348,7 @@ export default function Motoristas() {
       {activeTab === 'motoristas' && (
         <TabMotoristas
           motoristas={motoristas}
+          branchLabelOf={branchLabelOf}
           stats={stats}
           onEdit={handleEdit}
           onDelete={handleDelete}
@@ -373,7 +400,7 @@ export default function Motoristas() {
 // ============================================================
 // Tab 1: Motoristas (CRUD)
 // ============================================================
-function TabMotoristas({ motoristas, stats, onEdit, onDelete, onToggleStatus, onChangeOperationalStatus }) {
+function TabMotoristas({ motoristas, stats, onEdit, onDelete, onToggleStatus, onChangeOperationalStatus, branchLabelOf = () => '' }) {
   return (
     <>
       {/* Stats */}
@@ -476,7 +503,12 @@ function TabMotoristas({ motoristas, stats, onEdit, onDelete, onToggleStatus, on
                                 {m.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
                               </span>
                             </div>
-                            <span className="font-medium">{m.name}</span>
+                            <div className="min-w-0">
+                              <span className="font-medium block truncate">{m.name}</span>
+                              {branchLabelOf(m) && (
+                                <span className="text-xs text-gray-500 block truncate">{branchLabelOf(m)}</span>
+                              )}
+                            </div>
                           </div>
                         </TableCell>
                         <TableCell className="hidden md:table-cell text-gray-600">{m.phone || '-'}</TableCell>

@@ -5,14 +5,17 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { createMotorista, updateMotorista } from '@/services/motoristaService'
+import { getActiveBranches } from '@/services/branchService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 
 export default function MotoristaFormModal({ isOpen, onClose, motorista, onSuccess }) {
-  const { getBusinessId } = useAppContext()
+  const { getBusinessId, filterBranchesByAccess, allowedBranches, hasMainBranchAccess, businessSettings, branchScope } = useAppContext()
   const toast = useToast()
 
   const [isLoading, setIsLoading] = useState(false)
+  // Sucursales habilitadas para el usuario: para asignar la sede del motorista.
+  const [branches, setBranches] = useState([])
   const [formData, setFormData] = useState({
     name: '',
     code: '',
@@ -23,9 +26,27 @@ export default function MotoristaFormModal({ isOpen, onClose, motorista, onSucce
     paymentType: 'per_delivery',
     ratePerDelivery: '',
     fixedSalary: '',
+    branchId: null,
   })
 
   const [errors, setErrors] = useState({})
+
+  useEffect(() => {
+    if (!isOpen) return
+    const loadBranches = async () => {
+      try {
+        const result = await getActiveBranches(getBusinessId())
+        if (result.success) {
+          const list = filterBranchesByAccess ? filterBranchesByAccess(result.data || []) : (result.data || [])
+          setBranches(list)
+        }
+      } catch (error) {
+        console.error('Error al cargar sucursales:', error)
+      }
+    }
+    loadBranches()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, allowedBranches])
 
   useEffect(() => {
     if (motorista) {
@@ -39,8 +60,20 @@ export default function MotoristaFormModal({ isOpen, onClose, motorista, onSucce
         paymentType: motorista.paymentType || 'per_delivery',
         ratePerDelivery: motorista.ratePerDelivery || '',
         fixedSalary: motorista.fixedSalary || '',
+        branchId: motorista.branchId || null,
       })
     } else {
+      // La sede por defecto sale del selector del header: si estás viendo
+      // "Sede Norte" y creas un motorista, lo normal es que sea de ahí — y con
+      // la lista acotada a esa sede, nacer en la Principal lo haría desaparecer
+      // apenas se guarda. Con "Todas" se cae al criterio de siempre.
+      const sedePorDefecto = (() => {
+        if (branchScope && branchScope !== 'all') {
+          if (branchScope === 'main') return hasMainBranchAccess ? null : (branches[0]?.id || null)
+          if (branches.some(b => b.id === branchScope)) return branchScope
+        }
+        return !hasMainBranchAccess && branches.length > 0 ? branches[0].id : null
+      })()
       setFormData({
         name: '',
         code: '',
@@ -51,10 +84,11 @@ export default function MotoristaFormModal({ isOpen, onClose, motorista, onSucce
         paymentType: 'per_delivery',
         ratePerDelivery: '',
         fixedSalary: '',
+        branchId: sedePorDefecto,
       })
     }
     setErrors({})
-  }, [motorista, isOpen])
+  }, [motorista, isOpen, branches, hasMainBranchAccess, branchScope])
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -237,6 +271,29 @@ export default function MotoristaFormModal({ isOpen, onClose, motorista, onSucce
               step="0.01"
               min="0"
             />
+          </div>
+        )}
+
+        {/* Sede (solo si el negocio tiene sucursales) */}
+        {branches.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Sede
+            </label>
+            <Select
+              value={formData.branchId || ''}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, branchId: e.target.value || null }))
+              }
+            >
+              {hasMainBranchAccess && <option value="">{businessSettings?.mainBranchName || 'Sucursal Principal'}</option>}
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </Select>
+            <p className="text-xs text-gray-500 mt-1">
+              El motorista solo aparecerá en esta sede.
+            </p>
           </div>
         )}
 
