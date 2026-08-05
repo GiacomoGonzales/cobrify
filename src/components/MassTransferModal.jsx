@@ -112,6 +112,25 @@ export default function MassTransferModal({
     }).slice(0, 10)
   }, [availableProducts, searchTerm])
 
+  // Items seleccionados cuyo producto esta oculto en la sede del almacen
+  // DESTINO. Se advierte, no se bloquea: mover stock legitimo siempre debe
+  // poderse, pero trasladar a una sede donde el producto no se ve crea justo
+  // el "stock invisible" que el catalogo por sucursal intenta evitar.
+  const ocultosEnDestino = useMemo(() => {
+    if (isDischarge || !toWarehouse) return []
+    if (businessSettings?.branchCatalogEnabled !== true) return []
+    const destBranchId = warehouseList.find(w => w.id === toWarehouse)?.branchId || null
+    return items.filter(it => {
+      if (it.isIngredient) return false
+      const prod = products.find(pr => pr.id === it.productId)
+      return prod && !isProductInBranch(prod, destBranchId)
+    })
+  }, [items, toWarehouse, isDischarge, products, businessSettings?.branchCatalogEnabled])
+
+  // OJO: todos los hooks van ARRIBA de este return. Este useMemo estaba mas
+  // abajo y al abrir el modal se ejecutaba un hook mas que al estar cerrado
+  // -> "Rendered more hooks than during the previous render" (React #310),
+  // pantalla en blanco al abrir Traslado Masivo.
   if (!isOpen) return null
 
   const getWarehouseStock = (product) => {
@@ -313,21 +332,6 @@ export default function MassTransferModal({
   }
 
   // En una descarga no se exige destino (el stock no va a ningún almacén).
-  // Items seleccionados cuyo producto esta oculto en la sede del almacen
-  // DESTINO. Se advierte, no se bloquea: mover stock legitimo siempre debe
-  // poderse, pero trasladar a una sede donde el producto no se ve crea justo
-  // el "stock invisible" que el catalogo por sucursal intenta evitar.
-  const ocultosEnDestino = useMemo(() => {
-    if (isDischarge || !toWarehouse) return []
-    if (businessSettings?.branchCatalogEnabled !== true) return []
-    const destBranchId = warehouseList.find(w => w.id === toWarehouse)?.branchId || null
-    return items.filter(it => {
-      if (it.isIngredient) return false
-      const prod = products.find(pr => pr.id === it.productId)
-      return prod && !isProductInBranch(prod, destBranchId)
-    })
-  }, [items, toWarehouse, isDischarge, products, businessSettings?.branchCatalogEnabled])
-
   const destinationOk = isDischarge || (toWarehouse && fromWarehouse !== toWarehouse)
   const canTransfer = fromWarehouse && destinationOk && items.length > 0 &&
     items.every(i => i.quantity > 0 && (!i.hasBatches || i.batchNumber) && (!i.hasSerials || i.selectedSerials?.length > 0))
