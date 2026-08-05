@@ -2,14 +2,14 @@ import { Fragment, useState, useMemo } from 'react'
 import {
   X, Save, Loader2, Calculator, Package, Edit, CheckSquare, Square,
   AlertTriangle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  RotateCcw, Tag, ChevronDown, Filter, Layers,
+  RotateCcw, Tag, ChevronDown, Filter,
 } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import { formatCurrency, applyMarginToCost } from '@/lib/utils'
 import { updateProduct } from '@/services/firestoreService'
 import { useToast } from '@/contexts/ToastContext'
-import PriceLevelsConfigModal from '@/components/product/PriceLevelsConfigModal'
+import AutoPriceRulesPanel from '@/components/product/AutoPriceRulesPanel'
 
 /**
  * Input de precio editable. DEFINIDO A NIVEL MÓDULO (no dentro del componente)
@@ -129,11 +129,10 @@ export default function PriceUpdateTable({
 
   const [typeFilter, setTypeFilter] = useState('all')
 
-  // Configuracion de niveles de precio (antes vivia en Configuracion > Ventas)
-  const [levelsOpen, setLevelsOpen] = useState(false)
-
-  // Ajuste masivo
+  // Un solo modal para las dos formas de fijar precios: cambiar los que ya
+  // existen (masivo) y la regla para los que no tienen precio escrito (auto).
   const [bulkOpen, setBulkOpen] = useState(false)
+  const [bulkTab, setBulkTab] = useState('bulk') // 'bulk' | 'auto'
   const [bulkMode, setBulkMode] = useState('up') // 'up' | 'down' | 'margin' | 'round'
   const [bulkPct, setBulkPct] = useState('')
   const [bulkEnding, setBulkEnding] = useState('0.90')
@@ -719,15 +718,11 @@ export default function PriceUpdateTable({
               sola fila los tres no entraban y el texto se partia a la mitad
               ("Niveles de / precio"). whitespace-nowrap evita que se rompa. */}
           <div className="grid grid-cols-2 sm:flex gap-2 sm:shrink-0">
-            <Button variant="outline" size="sm" onClick={() => setLevelsOpen(true)} className="whitespace-nowrap" title="Nombres de los niveles y cálculo automático por porcentaje">
-              <Layers className="w-4 h-4 mr-2 shrink-0" />
-              Niveles de precio
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setBulkOpen(true)} className="whitespace-nowrap" title="Ajustar varios precios a la vez">
+            <Button variant="outline" size="sm" onClick={() => { setBulkTab('bulk'); setBulkOpen(true) }} className="whitespace-nowrap" title="Ajustar varios precios y definir el cálculo automático">
               <Calculator className="w-4 h-4 mr-2 shrink-0" />
-              Ajuste masivo
+              Ajuste de precios
             </Button>
-            <Button variant="outline" size="sm" onClick={onClose} className="col-span-2 sm:col-span-1 whitespace-nowrap">
+            <Button variant="outline" size="sm" onClick={onClose} className="whitespace-nowrap">
               <X className="w-4 h-4 mr-2 shrink-0" />
               Salir
             </Button>
@@ -1072,8 +1067,38 @@ export default function PriceUpdateTable({
         </div>
       )}
 
-      {/* Modal de ajuste masivo */}
-      <Modal isOpen={bulkOpen} onClose={() => setBulkOpen(false)} title="Ajuste masivo de precios" size="lg">
+      {/* Ajuste de precios: masivo (cambia lo que ya existe) + calculo
+          automatico (regla para lo que no tiene precio escrito). Estaban en
+          pantallas distintas aunque responden a la misma pregunta. */}
+      <Modal isOpen={bulkOpen} onClose={() => setBulkOpen(false)} title="Ajuste de precios" size="lg">
+        <div className="flex gap-1 mb-4 border-b border-gray-200">
+          {[
+            { k: 'bulk', label: 'Ajuste masivo' },
+            { k: 'auto', label: 'Cálculo automático' },
+          ].map(t => (
+            <button
+              key={t.k}
+              onClick={() => setBulkTab(t.k)}
+              className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                bulkTab === t.k
+                  ? 'border-primary-600 text-primary-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {bulkTab === 'auto' ? (
+          <AutoPriceRulesPanel
+            businessId={businessId}
+            businessSettings={businessSettings}
+            labelOf={labelOf}
+            onSaved={onSettingsSaved}
+            onClose={() => setBulkOpen(false)}
+          />
+        ) : (
         <div className="space-y-4">
           <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 text-sm text-gray-700">
             Se aplicará a <span className="font-semibold">{bulkScope.length} producto{bulkScope.length !== 1 ? 's' : ''}</span>{' '}
@@ -1181,17 +1206,8 @@ export default function PriceUpdateTable({
             </Button>
           </div>
         </div>
+        )}
       </Modal>
-
-      {/* Niveles de precio: nombres de las columnas y calculo automatico.
-          Vivia en Configuracion > Ventas, lejos de donde se usan. */}
-      <PriceLevelsConfigModal
-        isOpen={levelsOpen}
-        onClose={() => setLevelsOpen(false)}
-        businessId={businessId}
-        businessSettings={businessSettings}
-        onSaved={onSettingsSaved}
-      />
     </div>
   )
 }

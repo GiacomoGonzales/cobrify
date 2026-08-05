@@ -434,9 +434,16 @@ export default function Settings() {
   // Precios de venta por sucursal (overrides por producto; ver src/utils/branchPricing.js)
   const [branchPricingEnabled, setBranchPricingEnabled] = useState(false)
   const [branchCatalogEnabled, setBranchCatalogEnabled] = useState(false)
-  // Los niveles de precio (nombres, base de calculo, porcentajes y formula del
-  // margen) se configuran en Productos > Actualizar precios > "Niveles de
-  // precio". Esta pantalla ya no los lee ni los escribe.
+  // Aca vive lo que NOMBRA los niveles de precio. El CALCULO (base, formula y
+  // porcentajes) se configura en Productos > Ajuste de precios, junto al ajuste
+  // masivo: las dos cosas responden a de donde sale el numero de un precio.
+  const [multiplePricesEnabled, setMultiplePricesEnabled] = useState(false)
+  const [priceLabels, setPriceLabels] = useState({
+    price1: 'Público',
+    price2: 'Mayorista',
+    price3: 'VIP',
+    price4: 'Especial'
+  })
   // Fórmula del margen cuando priceCalculationBase === 'cost':
   //   'markup' → Precio = Costo × (1 + %)   (% sobre costo, default histórico)
   //   'margin' → Precio = Costo ÷ (1 − %)   (% como utilidad sobre el precio final)
@@ -1260,6 +1267,15 @@ export default function Settings() {
         // Cargar configuración de presentaciones de venta
         setPresentationsEnabled(businessData.presentationsEnabled || false)
         setShowDescriptionInPOS(businessData.showDescriptionInPOS || false)
+        setMultiplePricesEnabled(businessData.multiplePricesEnabled || false)
+        if (businessData.priceLabels) {
+          setPriceLabels({
+            price1: businessData.priceLabels.price1 || 'Público',
+            price2: businessData.priceLabels.price2 || 'Mayorista',
+            price3: businessData.priceLabels.price3 || 'VIP',
+            price4: businessData.priceLabels.price4 || 'Especial'
+          })
+        }
         // Afectación IGV por defecto al crear productos
         setDefaultTaxAffectation(businessData.defaultTaxAffectation || '10')
 
@@ -5442,13 +5458,61 @@ export default function Settings() {
                 />
               </div>
 
-              {/* La configuracion de "Multiples Precios por Producto" se movio a
-                  Productos > Actualizar precios > "Niveles de precio": ahi el
-                  usuario ya esta viendo las columnas que estos nombres titulan
-                  y los importes que estos porcentajes calculan. Los campos del
-                  negocio no cambiaron (multiplePricesEnabled, priceLabels,
-                  priceCalculationBase, marginFormula, pricePercentages), asi
-                  que el POS y el formulario de producto los siguen leyendo. */}
+              {/* Niveles de precio: activarlos y como se llaman. El CALCULO
+                  automatico (base, formula y porcentajes) se movio a Productos >
+                  Ajuste de precios, junto al ajuste masivo. */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Niveles de precio</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Vende el mismo producto a distintos precios según el cliente.
+                </p>
+                <div className="space-y-4">
+                  <SettingToggle
+                    checked={multiplePricesEnabled}
+                    onChange={(e) => setMultiplePricesEnabled(e.target.checked)}
+                    title="Usar varios precios por producto"
+                    description={multiplePricesEnabled
+                      ? '✓ Habilitado: además del precio principal, cada producto puede tener hasta 3 precios más (mayorista, cliente frecuente…). El cajero elige cuál usar al vender.'
+                      : '✗ Deshabilitado: cada producto tiene un solo precio de venta.'}
+                  />
+
+                  {multiplePricesEnabled && (
+                    <div className="p-4 border border-gray-200 rounded-lg">
+                      <span className="text-sm font-medium text-gray-900">Nombre de cada nivel</span>
+                      <p className="text-xs text-gray-600 mt-1.5 mb-3 leading-relaxed">
+                        Así los verás en el punto de venta, en el formulario del producto y en
+                        Productos → Actualizar precios.
+                      </p>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {[
+                          { key: 'price1', n: 1, ph: 'Público' },
+                          { key: 'price2', n: 2, ph: 'Mayorista' },
+                          { key: 'price3', n: 3, ph: 'VIP' },
+                          { key: 'price4', n: 4, ph: 'Especial' },
+                        ].map(({ key, n, ph }) => (
+                          <div key={key}>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Precio {n}</label>
+                            <input
+                              type="text"
+                              value={priceLabels[key] || ''}
+                              onChange={(e) => setPriceLabels(prev => ({ ...prev, [key]: e.target.value }))}
+                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                              placeholder={ph}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-3">
+                        El <strong>cálculo automático</strong> por porcentaje se configura en
+                        Productos → Actualizar precios → <strong>Ajuste de precios</strong>.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
 
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
@@ -5733,12 +5797,12 @@ export default function Settings() {
                       cardCommissionRate: Number(cardCommissionRate) || 0,
                       branchPricingEnabled: branchPricingEnabled,
                       branchCatalogEnabled: branchCatalogEnabled,
-                      // OJO: multiplePricesEnabled, priceLabels, pricePercentages,
-                      // priceCalculationBase y marginFormula ya NO se guardan aca.
-                      // Los edita Productos > Actualizar precios > "Niveles de
-                      // precio"; si esta pantalla los siguiera escribiendo desde
-                      // su estado en memoria, guardar cualquier otra opcion
-                      // pisaria lo que el usuario acaba de configurar alla.
+                      multiplePricesEnabled: multiplePricesEnabled,
+                      priceLabels: priceLabels,
+                      // OJO: pricePercentages, priceCalculationBase y marginFormula
+                      // NO se guardan aca — los edita Productos > Ajuste de precios.
+                      // Si esta pantalla los escribiera desde su estado en memoria,
+                      // guardar cualquier otra opcion pisaria lo configurado alla.
                       // Multi-divisa (USD) — Fase 0: solo flag + moneda por default.
                       multiCurrencyEnabled: multiCurrencyEnabled,
                       defaultCurrency: defaultCurrency,
