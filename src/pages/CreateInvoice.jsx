@@ -31,6 +31,8 @@ import {
   updateProduct,
 } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
+import { filterProductsForBranch } from '@/utils/branchCatalog'
+import { applyBranchPricing } from '@/utils/branchPricing'
 
 // Unidades de medida SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
 const UNITS = [
@@ -114,6 +116,21 @@ export default function CreateInvoice() {
   const [branches, setBranches] = useState([])
   const [selectedBranch, setSelectedBranch] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
+
+  // Mismo criterio que el POS: el catalogo por sucursal y los precios por sede
+  // se aplican SOLO al selector de productos. Los lookups por id (autocompletar,
+  // congelar costo, descontar stock) siguen contra `products` completo, porque
+  // un documento puede traer items de otra sede y esos flujos no deben perderlos.
+  const pickerProducts = useMemo(() => {
+    const branchId = selectedBranch?.id || null
+    const visibles = filterProductsForBranch(
+      products, branchId, businessSettings?.branchCatalogEnabled === true
+    )
+    if (!businessSettings?.branchPricingEnabled) return visibles
+    if (!branchId) return visibles
+    return visibles.map(p => applyBranchPricing(p, branchId))
+  }, [products, selectedBranch, businessSettings?.branchPricingEnabled, businessSettings?.branchCatalogEnabled])
+
   const [isSaving, setIsSaving] = useState(false)
   const [message, setMessage] = useState(null)
   const [selectedCustomer, setSelectedCustomer] = useState(null)
@@ -240,7 +257,9 @@ export default function CreateInvoice() {
 
     // Si selecciona un producto, auto-completar datos
     if (field === 'productId' && value) {
-      const product = products.find(p => p.id === value)
+      // Primero la lista del selector (trae el precio de la sede si aplica);
+      // el catalogo completo queda de respaldo por si el item viene de antes.
+      const product = pickerProducts.find(p => p.id === value) || products.find(p => p.id === value)
       if (product) {
         newItems[index].name = product.name
         // Multi-divisa: el precio del producto está en PEN (moneda base).
@@ -673,7 +692,7 @@ export default function CreateInvoice() {
                         onChange={e => updateItem(index, 'productId', e.target.value)}
                       >
                         <option value="">-- Manual --</option>
-                        {products.map(product => {
+                        {pickerProducts.map(product => {
                           // El precio del producto vive en PEN; lo mostramos en
                           // el dropdown en la moneda actual de la factura para
                           // que el usuario vea cómo quedará al cargar el item.

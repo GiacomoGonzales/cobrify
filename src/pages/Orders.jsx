@@ -1868,6 +1868,7 @@ export default function Orders() {
           onClose={() => setBarTab(null)}
           table={barTab.table}
           order={barTab.order}
+          branchId={selectedBranchId || null}
           onSuccess={() => {
             setBarTab(null)
             toast.success('Cuenta de barra abierta. Continúa en Mesas > Barra.')
@@ -1885,6 +1886,7 @@ export default function Orders() {
           }}
           table={{ number: newOrderData.orderType === 'delivery' ? 'Delivery' : 'Para Llevar' }}
           order={{ id: 'temp', items: [] }}
+          branchId={selectedBranchId || null}
           onSuccess={() => {
             // Este callback se ejecutará después de que OrderItemsModal llame a addOrderItems
             // Pero nosotros lo interceptaremos

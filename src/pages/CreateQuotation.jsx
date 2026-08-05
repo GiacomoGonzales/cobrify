@@ -23,6 +23,8 @@ import {
 } from '@/utils/currency'
 import { getRateForDate } from '@/services/exchangeRateService'
 import { getCustomers, getProducts, createCustomer } from '@/services/firestoreService'
+import { filterProductsForBranch } from '@/utils/branchCatalog'
+import { applyBranchPricing } from '@/utils/branchPricing'
 import { createQuotation, getNextQuotationNumber, getQuotation, updateQuotation } from '@/services/quotationService'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import { getActiveBranches } from '@/services/branchService'
@@ -196,6 +198,20 @@ export default function CreateQuotation() {
   // Sucursales
   const [branches, setBranches] = useState([])
   const [selectedBranch, setSelectedBranch] = useState(null)
+
+  // Mismo criterio que el POS: el catalogo por sucursal y los precios por sede
+  // se aplican SOLO al selector de productos. Los lookups por id (autocompletar,
+  // congelar costo, descontar stock) siguen contra `products` completo, porque
+  // un documento puede traer items de otra sede y esos flujos no deben perderlos.
+  const pickerProducts = useMemo(() => {
+    const branchId = selectedBranch?.id || null
+    const visibles = filterProductsForBranch(
+      products, branchId, businessSettings?.branchCatalogEnabled === true
+    )
+    if (!businessSettings?.branchPricingEnabled) return visibles
+    if (!branchId) return visibles
+    return visibles.map(p => applyBranchPricing(p, branchId))
+  }, [products, selectedBranch, businessSettings?.branchPricingEnabled, businessSettings?.branchCatalogEnabled])
 
   // Vendedores
   const [sellers, setSellers] = useState([])
@@ -964,7 +980,10 @@ export default function CreateQuotation() {
   // Filtrar productos según búsqueda
   const getFilteredProducts = (searchTerm) => {
     // Excluir productos desactivados (isActive === false) de las búsquedas.
-    const activeProducts = products.filter(p => p.isActive !== false)
+    // pickerProducts: acotado a la sucursal elegida y con su precio por sede.
+    // Cotizar en la sede Norte un producto que solo existe en Sur es un
+    // compromiso comercial imposible de cumplir.
+    const activeProducts = pickerProducts.filter(p => p.isActive !== false)
     if (!searchTerm) return activeProducts.slice(0, 5) // Mostrar primeros 5 si no hay búsqueda
 
     // Búsqueda flexible: cada palabra parcial debe aparecer en alguno de los

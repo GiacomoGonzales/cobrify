@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { X, Truck, MapPin, User, Package, Calendar, FileText, Plus, Trash2, ChevronDown, ChevronUp, Store, Search, Loader2, AlertTriangle } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
@@ -6,6 +6,7 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { useToast } from '@/contexts/ToastContext'
 import { useAppContext } from '@/hooks/useAppContext'
+import { filterProductsForBranch } from '@/utils/branchCatalog'
 import { createDispatchGuide, getCompanySettings, sendDispatchGuideToSunat, getProducts, getCustomers } from '@/services/firestoreService'
 import { getBranch, getActiveBranches } from '@/services/branchService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
@@ -213,6 +214,14 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   // Mapa de productos y lista (para búsqueda y lotes en farmacia)
   const [productsMap, setProductsMap] = useState({})
   const [productsList, setProductsList] = useState([])
+
+  // Catalogo por sucursal SOLO en el buscador de items nuevos. productsMap se
+  // queda completo: enriquece items que vienen de una factura de referencia
+  // (peso, SKU) y esos pueden ser de cualquier sede. En este modal '' en
+  // selectedBranchId significa Sucursal Principal.
+  const pickerProducts = useMemo(() => filterProductsForBranch(
+    productsList, selectedBranchId || null, businessSettings?.branchCatalogEnabled === true
+  ), [productsList, selectedBranchId, businessSettings?.branchCatalogEnabled])
   const [showProductSearch, setShowProductSearch] = useState(null) // índice del item con búsqueda abierta
 
   // Clientes registrados (para autocompletado del destinatario)
@@ -928,8 +937,8 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
   // Filtrar productos según búsqueda (flexible + sin acentos, alineado con POS/Inventario)
   const getFilteredProducts = (searchTerm) => {
-    if (!searchTerm) return productsList.slice(0, 8)
-    return productsList
+    if (!searchTerm) return pickerProducts.slice(0, 8)
+    return pickerProducts
       .filter(p => {
         const code = p.code || ''
         const sku = p.sku || ''

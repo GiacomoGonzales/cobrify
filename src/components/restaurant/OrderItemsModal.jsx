@@ -12,6 +12,7 @@ import ModifierSelectorModal from '@/components/restaurant/ModifierSelectorModal
 import VariantSelectorModal from '@/components/product/VariantSelectorModal'
 import PresentationSelectorModal from '@/components/product/PresentationSelectorModal'
 import { computeProductsWithoutIngredients, hasAnyRecipe } from '@/utils/recipeAvailability'
+import { filterProductsForBranch } from '@/utils/branchCatalog'
 import { cn } from '@/lib/utils'
 
 export default function OrderItemsModal({
@@ -20,12 +21,21 @@ export default function OrderItemsModal({
   table,
   order,
   onSuccess,
+  // Sede de la orden cuando table/order son ficticios (orden manual de la
+  // pagina Pedidos). Con mesa u orden reales se deriva de ellas.
+  branchId = undefined,
   isNewOrder = false,
   newOrderData = null,
   onSaveNewOrder = null,
   onAfterAddItems = null
 }) {
   const { getBusinessId, businessSettings } = useAppContext()
+
+  // Carta por sucursal: la mesa ya viene filtrada por sede (Tables.jsx), pero
+  // este modal mostraba el catalogo COMPLETO del negocio — un mozo podia pedir
+  // un plato que la cocina de esta sede no prepara. branchId explicito gana;
+  // si no, se toma de la mesa o de la orden. null = Sucursal Principal.
+  const orderBranchId = branchId !== undefined ? branchId : (table?.branchId ?? order?.branchId ?? null)
   const demoContext = useDemoRestaurant()
   const toast = useToast()
 
@@ -87,7 +97,9 @@ export default function OrderItemsModal({
       setShowMobileCart(false)
       loadProducts()
     }
-  }, [isOpen])
+    // orderBranchId en deps: si el modal queda montado y cambia de mesa/sede,
+    // la carta se recarga para la sede correcta.
+  }, [isOpen, orderBranchId])
 
   // Lazy: calcular productos sin insumos en background después de pintar el
   // modal. Solo si `allowNegativeStock` está DESACTIVADO y hay recetas. En
@@ -268,7 +280,10 @@ export default function OrderItemsModal({
         if (result.success) {
           // Excluir productos desactivados (isActive === false), igual que el POS, para que
           // los mozos no puedan agregar a la mesa productos que estan ocultos del catalogo.
-          const allProducts = (result.data || []).filter((p) => p.isActive !== false)
+          const activos = (result.data || []).filter((p) => p.isActive !== false)
+          const allProducts = filterProductsForBranch(
+            activos, orderBranchId, businessSettings?.branchCatalogEnabled === true
+          )
           setProducts(allProducts)
           setFilteredProducts(allProducts)
 
