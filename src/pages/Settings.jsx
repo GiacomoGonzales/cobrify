@@ -428,6 +428,7 @@ export default function Settings() {
   const [multiplePricesEnabled, setMultiplePricesEnabled] = useState(false)
   // Precios de venta por sucursal (overrides por producto; ver src/utils/branchPricing.js)
   const [branchPricingEnabled, setBranchPricingEnabled] = useState(false)
+  const [branchCatalogEnabled, setBranchCatalogEnabled] = useState(false)
   const [priceLabels, setPriceLabels] = useState({
     price1: 'Público',
     price2: 'Mayorista',
@@ -1311,6 +1312,7 @@ export default function Settings() {
         // Cargar configuración de múltiples precios
         setMultiplePricesEnabled(businessData.multiplePricesEnabled || false)
         setBranchPricingEnabled(businessData.branchPricingEnabled || false)
+        setBranchCatalogEnabled(businessData.branchCatalogEnabled || false)
         // Cargar configuración de presentaciones de venta
         setPresentationsEnabled(businessData.presentationsEnabled || false)
         setShowDescriptionInPOS(businessData.showDescriptionInPOS || false)
@@ -5442,6 +5444,18 @@ export default function Settings() {
                 />
               </div>
 
+              {/* Catálogo por sucursal */}
+              <div>
+                <SettingToggle
+                  checked={branchCatalogEnabled}
+                  onChange={(e) => setBranchCatalogEnabled(e.target.checked)}
+                  title="Catálogo de productos por sucursal"
+                  description={branchCatalogEnabled
+                    ? '✓ Habilitado: al crear o editar un producto podrás elegir en qué sucursales está disponible. El Punto de Venta mostrará solo los productos de la sucursal activa. Los productos que ya tienes siguen disponibles en todas hasta que los cambies, y una sucursal nueva hereda todo el catálogo.'
+                    : '✗ Deshabilitado: todas las sucursales venden el mismo catálogo completo.'}
+                />
+              </div>
+
               {/* Múltiples precios por producto */}
               <div>
                 <h3 className="text-base font-semibold text-gray-900 mb-1">Múltiples Precios por Producto</h3>
@@ -5926,6 +5940,7 @@ export default function Settings() {
                       cardCommissionRate: Number(cardCommissionRate) || 0,
                       multiplePricesEnabled: multiplePricesEnabled,
                       branchPricingEnabled: branchPricingEnabled,
+                      branchCatalogEnabled: branchCatalogEnabled,
                       priceLabels: priceLabels,
                       pricePercentages: pricePercentages,
                       priceCalculationBase: priceCalculationBase,

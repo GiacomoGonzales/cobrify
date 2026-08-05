@@ -37,6 +37,10 @@ import ImportProductsModal from '@/components/ImportProductsModal'
 import { getWarehouses, updateWarehouseStock, getDefaultWarehouse, createWarehouse, createStockMovement } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
 import { cleanBranchPrices } from '@/utils/branchPricing'
+import {
+  MAIN_BRANCH_TOKEN, buildHiddenFromSelection, buildSelectionFromHidden,
+  isProductInBranch, getBranchScopeLabel,
+} from '@/utils/branchCatalog'
 import { buildProductIndex, findExistingProduct, indexProduct } from '@/utils/productImportMatch'
 import SunatProductCodeField from '@/components/SunatProductCodeField'
 import { getRateForDate } from '@/services/exchangeRateService'
@@ -204,6 +208,14 @@ export default function Products() {
   const [priceMinQtys, setPriceMinQtys] = useState({ price2: '', price3: '', price4: '' })
   // Precios por sucursal (overrides): { [branchId]: { price:'', price2:'', price3:'', price4:'' } } — strings del form
   const [branchPrices, setBranchPrices] = useState({})
+  // Sedes donde el producto esta DISPONIBLE (el form razona en positivo;
+  // se guarda como excepciones — ver src/utils/branchCatalog.js).
+  const [availableBranches, setAvailableBranches] = useState([])
+  // Filtro de la LISTA por sucursal (distinto de availableBranches, que es del form).
+  const [filterBranch, setFilterBranch] = useState('all')
+  // Seleccion de sedes del modal de accion masiva (independiente del form).
+  const [bulkBranches, setBulkBranches] = useState([])
+  const branchCatalogOn = businessSettings?.branchCatalogEnabled === true && branches.length > 0
   const [branchPricesOpen, setBranchPricesOpen] = useState(false) // sección colapsable del modal
   // Moneda del precio principal (solo con multidivisa): 'PEN' clásico | 'USD' = el
   // precio tecleado es el ancla priceUSD y el soles se calcula con el TC del día.
@@ -675,6 +687,9 @@ export default function Products() {
     setNoStock(false)
     setAllowDecimalQuantity(false)
     setCatalogVisible(false)
+    // Producto nuevo: disponible en TODAS por defecto. Sin este reset heredaria
+    // la seleccion del producto que se edito antes.
+    setAvailableBranches([MAIN_BRANCH_TOKEN, ...branches.map(b => b.id)])
     setCatalogHidePrice(false)
     setCatalogComparePrice('')
     setUseAutoPriceByQty(false)
@@ -823,6 +838,7 @@ export default function Products() {
 
     // Load catalog visibility
     setCatalogVisible(product.catalogVisible || false)
+    setAvailableBranches(buildSelectionFromHidden(product, branches))
     setCatalogHidePrice(product.catalogHidePrice || false)
     setCatalogComparePrice(product.catalogComparePrice?.toString() || '')
     setIsFeatured(product.isFeatured || false)
@@ -978,6 +994,7 @@ export default function Products() {
     setSunatProductCode(product.sunatProductCode || '')
     setSunatProductName(product.sunatProductName || '')
     setCatalogVisible(product.catalogVisible || false)
+    setAvailableBranches(buildSelectionFromHidden(product, branches))
     setCatalogHidePrice(product.catalogHidePrice || false)
     setCatalogComparePrice(product.catalogComparePrice?.toString() || '')
     setIsFeatured(product.isFeatured || false)
@@ -1412,6 +1429,11 @@ export default function Products() {
       // Precios por sucursal (overrides; null = sin overrides, se limpia el campo).
       // Solo si el negocio tiene la feature activa — si está apagada no tocamos
       // lo guardado (para no borrar overrides al editar con la feature OFF).
+      // Catalogo por sucursal: igual que branchPrices, si la feature esta OFF no
+      // se toca el campo, para no borrar la configuracion al editar.
+      if (businessSettings?.branchCatalogEnabled) {
+        productData.hiddenInBranches = buildHiddenFromSelection(availableBranches, branches)
+      }
       if (businessSettings?.branchPricingEnabled) {
         productData.branchPrices = cleanBranchPrices(branchPrices)
       }
@@ -3582,6 +3604,11 @@ export default function Products() {
   }
 
   const openBulkActionModal = (action) => {
+    // Arranca con todas marcadas: lo mas comun es acotar desde "todas", no
+    // construir la lista desde cero.
+    if (action === 'branches') {
+      setBulkBranches([MAIN_BRANCH_TOKEN, ...branches.map(b => b.id)])
+    }
     if (selectedProducts.size === 0) {
       toast.error('Debes seleccionar al menos un producto')
       return
@@ -3735,6 +3762,52 @@ export default function Products() {
     } catch (error) {
       console.error('Error en cambio masivo de estado:', error)
       toast.error('Error al cambiar el estado')
+    } finally {
+      setIsProcessingBulk(false)
+    }
+  }
+
+  /**
+   * Asigna las sucursales donde estaran disponibles los productos seleccionados.
+   * Sin esto, un negocio con miles de productos tendria que abrirlos uno por uno,
+   * que es lo mismo que no tener la funcion.
+   */
+  const handleBulkSetBranches = async () => {
+    if (selectedProducts.size === 0) return
+
+    setIsProcessingBulk(true)
+    try {
+      const businessId = getBusinessId()
+      const hidden = buildHiddenFromSelection(bulkBranches, branches)
+      let successCount = 0
+      let errorCount = 0
+
+      for (const productId of selectedProducts) {
+        try {
+          const result = await updateProduct(businessId, productId, { hiddenInBranches: hidden })
+          if (result.success) successCount++
+          else errorCount++
+        } catch (error) {
+          console.error(`Error al actualizar producto ${productId}:`, error)
+          errorCount++
+        }
+      }
+
+      await loadProducts()
+      setSelectedProducts(new Set())
+
+      if (successCount > 0) {
+        const donde = hidden === null
+          ? 'todas las sucursales'
+          : `${bulkBranches.length} sucursal${bulkBranches.length === 1 ? '' : 'es'}`
+        toast.success(`${successCount} producto(s) disponibles en ${donde}`)
+      }
+      if (errorCount > 0) toast.error(`${errorCount} producto(s) no pudieron actualizarse`)
+
+      closeBulkActionModal()
+    } catch (error) {
+      console.error('Error en asignacion masiva de sucursales:', error)
+      toast.error('Error al asignar sucursales')
     } finally {
       setIsProcessingBulk(false)
     }
@@ -4197,7 +4270,13 @@ export default function Products() {
         }
       }
 
-      return matchesSearch && matchesCategory && matchesBrand && matchesExpiration
+      // Filtro por sucursal: solo con la feature activa. 'all' no filtra nada.
+      let matchesBranch = true
+      if (branchCatalogOn && filterBranch !== 'all') {
+        matchesBranch = isProductInBranch(product, filterBranch === MAIN_BRANCH_TOKEN ? null : filterBranch)
+      }
+
+      return matchesSearch && matchesCategory && matchesBrand && matchesExpiration && matchesBranch
     })
 
     // Ordenar productos
@@ -4254,7 +4333,7 @@ export default function Products() {
     })
 
     return sorted
-  }, [products, deferredSearchTerm, productSearchIndex, selectedCategoryFilter, selectedBrandFilter, showExpiringOnly, categories, brands, sortField, sortDirection])
+  }, [products, deferredSearchTerm, productSearchIndex, selectedCategoryFilter, selectedBrandFilter, showExpiringOnly, categories, brands, sortField, sortDirection, filterBranch, branchCatalogOn])
 
   // Paginación de productos filtrados (optimizado con useMemo)
   const paginationData = React.useMemo(() => {
@@ -4566,6 +4645,21 @@ export default function Products() {
 
           {/* Fila 2: Filtros */}
           <div className="flex flex-wrap items-center gap-2">
+            {/* Ver el catalogo de una sucursal (solo con la feature activa) */}
+            {branchCatalogOn && (
+              <select
+                value={filterBranch}
+                onChange={e => setFilterBranch(e.target.value)}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                title="Ver solo los productos disponibles en una sucursal"
+              >
+                <option value="all">Todas las sucursales</option>
+                <option value={MAIN_BRANCH_TOKEN}>{businessSettings?.mainBranchName || 'Sucursal Principal'}</option>
+                {branches.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            )}
             {/* Filtro de vencimiento */}
             {expiringProductsCount > 0 && (
               <Button
@@ -4792,6 +4886,17 @@ export default function Products() {
                   <Eye className="w-4 h-4 mr-2" />
                   Mostrar en catálogo
                 </Button>
+                {branchCatalogOn && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openBulkActionModal('branches')}
+                    className="flex-1 sm:flex-initial"
+                  >
+                    <Store className="w-4 h-4 mr-2" />
+                    Asignar sucursales
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
@@ -6499,6 +6604,78 @@ export default function Products() {
                   </div>
                 </div>
               )}
+
+              {/* Disponibilidad por sucursal (feature branchCatalogEnabled).
+                  Se oculta con una sola sucursal: preguntar "en cual" cuando solo
+                  hay una es ruido puro. */}
+              {businessSettings?.branchCatalogEnabled && branches.length > 0 && (() => {
+                const todas = [
+                  { key: MAIN_BRANCH_TOKEN, name: businessSettings?.mainBranchName || 'Sucursal Principal' },
+                  ...branches.map(b => ({ key: b.id, name: b.name })),
+                ]
+                const enTodas = availableBranches.length === todas.length
+                const toggle = (key) => setAvailableBranches(prev =>
+                  prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+                )
+                return (
+                  <div className="col-span-2 border border-gray-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Store className="w-4 h-4 text-gray-400" />
+                      <span className="text-sm font-medium text-gray-900">Disponible en</span>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          checked={enTodas}
+                          onChange={() => setAvailableBranches(todas.map(t => t.key))}
+                          className="text-primary-600"
+                        />
+                        <span className="text-sm text-gray-900">Todas las sucursales</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          checked={!enTodas}
+                          onChange={() => {
+                            // Al pasar a "solo algunas" se deja marcada la sucursal
+                            // activa, para que nunca quede un producto sin ninguna.
+                            if (enTodas) setAvailableBranches([MAIN_BRANCH_TOKEN])
+                          }}
+                          className="text-primary-600"
+                        />
+                        <span className="text-sm text-gray-900">Solo en algunas</span>
+                      </label>
+                    </div>
+
+                    {!enTodas && (
+                      <div className="mt-3 pl-6 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {todas.map(t => (
+                          <label key={t.key} className="flex items-center gap-2 cursor-pointer text-sm">
+                            <input
+                              type="checkbox"
+                              checked={availableBranches.includes(t.key)}
+                              onChange={() => toggle(t.key)}
+                              className="rounded text-primary-600"
+                            />
+                            <span className="text-gray-700 truncate" title={t.name}>{t.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+
+                    {!enTodas && availableBranches.length === 0 && (
+                      <p className="text-xs text-amber-700 bg-amber-50 px-2 py-1.5 rounded mt-2">
+                        Sin sucursales marcadas el producto no aparecera en ningun Punto de Venta.
+                      </p>
+                    )}
+                    <p className="text-xs text-gray-500 mt-2">
+                      Controla en que locales se ve el producto. No mueve stock: el inventario
+                      se sigue manejando por almacen.
+                    </p>
+                  </div>
+                )
+              })()}
 
               {/* Precios por sucursal (overrides opcionales; feature branchPricingEnabled) */}
               {businessSettings?.branchPricingEnabled && branches.length > 0 && !hasVariants && (
@@ -9314,6 +9491,64 @@ export default function Products() {
                     <>
                       <Package className="w-4 h-4 mr-2" />
                       Cambiar Estado
+                    </>
+                  )}
+                </Button>
+              </div>
+            </>
+          )}
+
+          {bulkAction === 'branches' && (
+            <>
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+                <p className="text-sm text-blue-800 font-medium">
+                  Vas a definir en qué sucursales están disponibles {selectedProducts.size} producto{selectedProducts.size !== 1 ? 's' : ''}.
+                </p>
+                <p className="text-xs text-blue-700">
+                  Esto <strong>reemplaza</strong> la configuración actual de cada uno. Solo cambia dónde
+                  se ven: <strong>no mueve stock</strong> ni lo elimina.
+                </p>
+              </div>
+
+              <div className="mt-3 space-y-2 max-h-64 overflow-y-auto">
+                {[
+                  { key: MAIN_BRANCH_TOKEN, name: businessSettings?.mainBranchName || 'Sucursal Principal' },
+                  ...branches.map(b => ({ key: b.id, name: b.name })),
+                ].map(t => (
+                  <label key={t.key} className="flex items-center gap-2 cursor-pointer text-sm">
+                    <input
+                      type="checkbox"
+                      checked={bulkBranches.includes(t.key)}
+                      onChange={() => setBulkBranches(prev =>
+                        prev.includes(t.key) ? prev.filter(k => k !== t.key) : [...prev, t.key]
+                      )}
+                      className="rounded text-primary-600"
+                    />
+                    <span className="text-gray-700 truncate" title={t.name}>{t.name}</span>
+                  </label>
+                ))}
+              </div>
+
+              {bulkBranches.length === 0 && (
+                <p className="text-xs text-amber-700 bg-amber-50 px-2 py-1.5 rounded mt-2">
+                  Sin sucursales marcadas, estos productos no aparecerán en ningún Punto de Venta.
+                </p>
+              )}
+
+              <div className="flex justify-end gap-2 mt-4">
+                <Button variant="outline" onClick={closeBulkActionModal} disabled={isProcessingBulk}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleBulkSetBranches} disabled={isProcessingBulk}>
+                  {isProcessingBulk ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Asignando...
+                    </>
+                  ) : (
+                    <>
+                      <Store className="w-4 h-4 mr-2" />
+                      Asignar sucursales
                     </>
                   )}
                 </Button>

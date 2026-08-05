@@ -62,6 +62,7 @@ import {
 } from '@/utils/currency'
 import { getRateForDate } from '@/services/exchangeRateService'
 import { applyBranchPricing } from '@/utils/branchPricing'
+import { filterProductsForBranch } from '@/utils/branchCatalog'
 import { calculateInvoiceAmounts, calculateMixedInvoiceAmounts, calculateRecargoConsumo, ID_TYPES, DETRACTION_TYPES, DETRACTION_MIN_AMOUNT } from '@/utils/peruUtils'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
 import { Share } from '@capacitor/share'
@@ -502,11 +503,17 @@ export default function POS() {
   // activa. Sin feature o en Sucursal Principal (sin branchId) → lista original tal
   // cual (misma referencia, no invalida memos aguas abajo).
   const products = useMemo(() => {
-    if (!businessSettings?.branchPricingEnabled) return productsRaw
     const branchId = selectedBranch?.id || null
-    if (!branchId) return productsRaw
-    return productsRaw.map(p => applyBranchPricing(p, branchId))
-  }, [productsRaw, selectedBranch, businessSettings?.branchPricingEnabled])
+    // 1) Catalogo por sucursal: saca del catalogo los productos que no aplican a
+    //    esta sede. Va PRIMERO para no repreciar lo que igual no se va a mostrar.
+    const visibles = filterProductsForBranch(
+      productsRaw, branchId, businessSettings?.branchCatalogEnabled === true
+    )
+    // 2) Precios por sucursal sobre lo que quedo visible.
+    if (!businessSettings?.branchPricingEnabled) return visibles
+    if (!branchId) return visibles
+    return visibles.map(p => applyBranchPricing(p, branchId))
+  }, [productsRaw, selectedBranch, businessSettings?.branchPricingEnabled, businessSettings?.branchCatalogEnabled])
 
   // Estado para edición de documento existente
   const [editingInvoiceId, setEditingInvoiceId] = useState(null)

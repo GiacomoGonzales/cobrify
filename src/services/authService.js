@@ -207,6 +207,8 @@ export const registerBusinessAsAdmin = async (email, password, displayName, busi
         ...(businessData?.allowPartialPayments !== undefined && { allowPartialPayments: businessData.allowPartialPayments }),
         ...(businessData?.requireOpenCashRegister !== undefined && { requireOpenCashRegister: businessData.requireOpenCashRegister }),
         ...(businessData?.cardCommissionEnabled !== undefined && { cardCommissionEnabled: businessData.cardCommissionEnabled }),
+        // Sin esto, un sub-usuario no ve el catalogo filtrado por su sucursal.
+        ...(businessData?.branchCatalogEnabled !== undefined && { branchCatalogEnabled: businessData.branchCatalogEnabled }),
         ...(businessData?.cardCommissionRate !== undefined && { cardCommissionRate: businessData.cardCommissionRate }),
         ...(businessData?.multiCurrencyEnabled !== undefined && { multiCurrencyEnabled: businessData.multiCurrencyEnabled }),
         ...(businessData?.defaultCurrency && { defaultCurrency: businessData.defaultCurrency }),
