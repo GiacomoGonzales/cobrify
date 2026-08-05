@@ -63,6 +63,7 @@ import {
 import { getRateForDate } from '@/services/exchangeRateService'
 import { applyBranchPricing } from '@/utils/branchPricing'
 import { filterProductsForBranch, isProductInBranch } from '@/utils/branchCatalog'
+import { getAvailableDocumentTypes, resolveDocumentType } from '@/utils/documentTypes'
 import { calculateInvoiceAmounts, calculateMixedInvoiceAmounts, calculateRecargoConsumo, ID_TYPES, DETRACTION_TYPES, DETRACTION_MIN_AMOUNT } from '@/utils/peruUtils'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
 import { Share } from '@capacitor/share'
@@ -414,6 +415,8 @@ export default function POS() {
   const cashAmountInputRef = useRef(null)
   const [selectedCustomer, setSelectedCustomer] = useState(null)
   const [documentType, setDocumentType] = useState(() => {
+    // companySettings aun no cargo aca, asi que solo se aplica el permiso del
+    // usuario; el efecto de mas abajo corrige en cuanto llegan los ajustes.
     if (allowedDocumentTypes && allowedDocumentTypes.length > 0) {
       return allowedDocumentTypes[0]
     }
@@ -426,6 +429,19 @@ export default function POS() {
   // selector ni forzar Nota de Venta antes de tiempo; al cargar queda el valor real.
   const hasSunatConnection = ['qpse', 'sunat_direct'].includes(companySettings?.emissionMethod)
   const canEmitFiscal = isDemoMode || !companySettings || hasSunatConnection || companySettings.allowInvoicingWithoutSunat === true
+
+  // Comprobantes realmente disponibles: cruza lo que emite el negocio
+  // (enabledDocumentTypes — un RUS desactiva Factura), el permiso del
+  // sub-usuario y la conexion SUNAT. Se calcula UNA vez y lo usan el <select>,
+  // el estado inicial, el reset tras la venta y la correccion de tipo invalido.
+  const docTypeOpts = useMemo(() => ({
+    enabledForBusiness: companySettings?.enabledDocumentTypes || null,
+    allowedForUser: allowedDocumentTypes || null,
+    canEmitFiscal,
+  }), [companySettings?.enabledDocumentTypes, allowedDocumentTypes, canEmitFiscal])
+
+  const availableDocTypes = useMemo(() => getAvailableDocumentTypes(docTypeOpts), [docTypeOpts])
+
   // Campo "Alumno" activo (colegios): habilita buscar al apoderado por el nombre
   // del alumno y mostrarlo en el desplegable de clientes.
   const showStudentField = companySettings?.posCustomFields?.showStudentField === true
@@ -1146,10 +1162,10 @@ export default function POS() {
     // negocio en "Ninguno") — NO corregirlo; el cajero debe elegir y el
     // checkout ya lo bloquea. Solo corregir tipos NO vacíos que no estén
     // permitidos.
-    if (documentType && allowedDocumentTypes && allowedDocumentTypes.length > 0 && !allowedDocumentTypes.includes(documentType)) {
-      setDocumentType(allowedDocumentTypes[0])
+    if (documentType && availableDocTypes.length > 0 && !availableDocTypes.includes(documentType)) {
+      setDocumentType(availableDocTypes[0])
     }
-  }, [allowedDocumentTypes, documentType])
+  }, [availableDocTypes, documentType])
 
   // Autofocus en barra de búsqueda solo en desktop/laptop.
   // Tablets quedan excluidos aunque tengan ancho >= 1024px (ej. iPad Pro,
@@ -2653,10 +2669,13 @@ export default function POS() {
             if (def === 'none') {
               setDocumentType('')
             } else {
-              const safeDef = (allowedDocumentTypes && allowedDocumentTypes.length > 0 && !allowedDocumentTypes.includes(def))
-                ? allowedDocumentTypes[0]
-                : def
-              setDocumentType(safeDef)
+              // businessData (no companySettings): estos son los ajustes que
+              // se acaban de leer; el state todavia no se actualizo.
+              setDocumentType(resolveDocumentType(def, {
+                enabledForBusiness: businessData.enabledDocumentTypes || null,
+                allowedForUser: allowedDocumentTypes || null,
+                canEmitFiscal,
+              }))
             }
           }
         }
@@ -4748,10 +4767,7 @@ export default function POS() {
     if (def === 'none') {
       setDocumentType('')
     } else {
-      const safeDoc = (allowedDocumentTypes && allowedDocumentTypes.length > 0 && !allowedDocumentTypes.includes(def))
-        ? allowedDocumentTypes[0]
-        : def
-      setDocumentType(safeDoc)
+      setDocumentType(resolveDocumentType(def, docTypeOpts))
     }
     setOrderType('takeaway')
     setCustomerData({
@@ -9159,13 +9175,16 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     {!documentType && (
                       <option value="" disabled>Selecciona un tipo…</option>
                     )}
-                    {canEmitFiscal && (!allowedDocumentTypes || allowedDocumentTypes.length === 0 || allowedDocumentTypes.includes('boleta')) && (
+                    {/* availableDocTypes ya cruza: comprobantes del negocio
+                        (un RUS desactiva Factura), permiso del sub-usuario y
+                        conexion SUNAT. */}
+                    {availableDocTypes.includes('boleta') && (
                       <option value="boleta">Boleta de Venta</option>
                     )}
-                    {canEmitFiscal && (!allowedDocumentTypes || allowedDocumentTypes.length === 0 || allowedDocumentTypes.includes('factura')) && (
+                    {availableDocTypes.includes('factura') && (
                       <option value="factura">Factura Electrónica</option>
                     )}
-                    {(!allowedDocumentTypes || allowedDocumentTypes.length === 0 || allowedDocumentTypes.includes('nota_venta')) && (
+                    {availableDocTypes.includes('nota_venta') && (
                       <option value="nota_venta">Nota de Venta</option>
                     )}
                   </select>

@@ -48,6 +48,7 @@ import {
 import { getWarehouses } from '@/services/warehouseService'
 import { getAllWarehouseSeries, updateWarehouseSeries, getAllBranchSeriesFS, updateBranchSeriesFS, getProductCategories, getProducts, updateProduct } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
+import { DOCUMENT_TYPES, DOCUMENT_TYPE_LABELS } from '@/utils/documentTypes'
 import { getYapeConfig } from '@/services/yapeService'
 import { getEmissionSecrets, saveEmissionSecrets } from '@/services/emissionSecretsService'
 import { getTables } from '@/services/tableService'
@@ -393,6 +394,9 @@ export default function Settings() {
   const [dispatchGuidesEnabled, setDispatchGuidesEnabled] = useState(false)
   const [exitNoteEnabled, setExitNoteEnabled] = useState(false)
   const [defaultDocumentType, setDefaultDocumentType] = useState('boleta') // boleta, factura, nota_venta
+  // Comprobantes que el negocio emite. Vacio = todos (los negocios que nunca
+  // tocaron la opcion siguen igual). Un negocio en el RUS desactiva Factura.
+  const [enabledDocumentTypes, setEnabledDocumentTypes] = useState([])
   const [defaultPaymentMethod, setDefaultPaymentMethod] = useState('') // '' = ninguno; o CASH/CARD/TRANSFER/YAPE/PLIN
   // Métodos de pago del negocio: cuáles se ocultan y cuáles agregó el usuario.
   const [hiddenPaymentMethods, setHiddenPaymentMethods] = useState([])
@@ -1305,6 +1309,7 @@ export default function Settings() {
         // Cargar flag de herramientas de administrador (solo habilitado manualmente en Firebase)
         setAdminToolsEnabled(businessData.adminTools?.enabled || false)
         setDefaultDocumentType(businessData.defaultDocumentType || 'boleta')
+        setEnabledDocumentTypes(businessData.enabledDocumentTypes || [])
         setDefaultPaymentMethod(businessData.defaultPaymentMethod || '')
         setHiddenPaymentMethods(businessData.hiddenPaymentMethods || [])
         setCustomPaymentMethods(businessData.customPaymentMethods || [])
@@ -5219,14 +5224,71 @@ export default function Settings() {
                       : '✗ Deshabilitado: El POS muestra los productos por partes y carga el resto con el botón "Ver más".'}
                   />
 
-                  {/* Tipo de documento por defecto en POS */}
+                  {/* Comprobantes habilitados + tipo por defecto en POS */}
                   <div className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
                     <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900">
+                        Comprobantes disponibles en el POS
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 mb-3 leading-relaxed">
+                        Desmarca los que tu negocio no emite y dejarán de aparecer en el Punto de Venta.
+                        Por ejemplo, en el <strong>RUS</strong> no se emiten facturas.
+                      </p>
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {DOCUMENT_TYPES.map(tipo => {
+                          // Vacio = todos habilitados, asi que "marcado" es
+                          // estar en la lista O que la lista este vacia.
+                          const marcado = enabledDocumentTypes.length === 0 || enabledDocumentTypes.includes(tipo)
+                          const esElUltimo = marcado && enabledDocumentTypes.length === 1
+                          return (
+                            <button
+                              key={tipo}
+                              type="button"
+                              disabled={esElUltimo}
+                              title={esElUltimo ? 'Debe quedar al menos un comprobante disponible' : ''}
+                              onClick={() => {
+                                // Al desmarcar el primero hay que materializar la
+                                // lista completa: hasta ahora estaba vacia ("todos").
+                                const actuales = enabledDocumentTypes.length === 0 ? [...DOCUMENT_TYPES] : enabledDocumentTypes
+                                const nuevos = actuales.includes(tipo)
+                                  ? actuales.filter(t => t !== tipo)
+                                  : [...actuales, tipo]
+                                if (nuevos.length === 0) return
+                                // Si quedaron todos, volver a "vacio = todos".
+                                setEnabledDocumentTypes(nuevos.length === DOCUMENT_TYPES.length ? [] : nuevos)
+                                // El default no puede apuntar a uno desactivado.
+                                if (!nuevos.includes(defaultDocumentType) && defaultDocumentType !== 'none') {
+                                  setDefaultDocumentType(nuevos[0])
+                                }
+                              }}
+                              className={`px-3 py-2 border-2 rounded-lg transition-colors flex items-center gap-2 ${
+                                marcado
+                                  ? 'border-primary-500 bg-primary-50 text-primary-700'
+                                  : 'border-gray-200 text-gray-400 hover:border-gray-300'
+                              } ${esElUltimo ? 'opacity-70 cursor-not-allowed' : ''}`}
+                            >
+                              <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${
+                                marcado ? 'bg-primary-600 border-primary-600' : 'border-gray-300'
+                              }`}>
+                                {marcado && <Check className="w-3 h-3 text-white" />}
+                              </span>
+                              <span className="text-sm font-medium">{DOCUMENT_TYPE_LABELS[tipo]}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                      {enabledDocumentTypes.length > 0 && !enabledDocumentTypes.includes('factura') && (
+                        <p className="text-xs text-amber-700 bg-amber-50 px-2 py-1.5 rounded mb-3">
+                          La Factura no aparecerá en el Punto de Venta. Las ya emitidas no se ven afectadas.
+                        </p>
+                      )}
+
+                      <div className="border-t border-gray-100 pt-3 mt-3" />
                       <span className="text-sm font-medium text-gray-900">
                         Tipo de comprobante por defecto en POS
                       </span>
                       <p className="text-xs text-gray-600 mt-1.5 mb-3 leading-relaxed">
-                        Selecciona qué tipo de comprobante aparecerá seleccionado por defecto al abrir el Punto de Venta.
+                        Cuál aparecerá seleccionado al abrir el Punto de Venta.
                         Elige <strong>Ninguno</strong> para que el cajero deba escogerlo cada venta (evita emitir el tipo equivocado por descuido).
                       </p>
                       <div className="flex flex-wrap gap-2">
@@ -5241,6 +5303,7 @@ export default function Settings() {
                         >
                           <span className="text-sm font-medium">Ninguno</span>
                         </button>
+                        {(enabledDocumentTypes.length === 0 || enabledDocumentTypes.includes('boleta')) && (
                         <button
                           type="button"
                           onClick={() => setDefaultDocumentType('boleta')}
@@ -5252,6 +5315,8 @@ export default function Settings() {
                         >
                           <span className="text-sm font-medium">Boleta</span>
                         </button>
+                        )}
+                        {(enabledDocumentTypes.length === 0 || enabledDocumentTypes.includes('factura')) && (
                         <button
                           type="button"
                           onClick={() => setDefaultDocumentType('factura')}
@@ -5263,6 +5328,8 @@ export default function Settings() {
                         >
                           <span className="text-sm font-medium">Factura</span>
                         </button>
+                        )}
+                        {(enabledDocumentTypes.length === 0 || enabledDocumentTypes.includes('nota_venta')) && (
                         <button
                           type="button"
                           onClick={() => setDefaultDocumentType('nota_venta')}
@@ -5274,6 +5341,7 @@ export default function Settings() {
                         >
                           <span className="text-sm font-medium">Nota de Venta</span>
                         </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -5983,6 +6051,7 @@ export default function Settings() {
                       allowEditNotaVenta: allowEditNotaVenta,
                       showAllProductsInPOS: showAllProductsInPOS,
                       defaultDocumentType: defaultDocumentType,
+                      enabledDocumentTypes: enabledDocumentTypes,
                       defaultPaymentMethod: defaultPaymentMethod || '',
                       hiddenPaymentMethods: hiddenPaymentMethods,
                       customPaymentMethods: customPaymentMethods,
