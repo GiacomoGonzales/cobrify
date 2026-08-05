@@ -218,6 +218,20 @@ export default function Products() {
   //   'all'  -> todo el catálogo
   //   'main' -> lo disponible en Sucursal Principal
   //   <id>   -> lo disponible en esa sucursal
+  //
+  // Se aplica UNA SOLA VEZ acá, sobre la lista cruda, y todo lo de abajo
+  // (tarjetas de totales, búsqueda, chips, exportaciones) lo hereda. Antes el
+  // filtro vivía solo en `filteredProducts` y las tarjetas seguían contando el
+  // catálogo entero: la tabla mostraba una sucursal y "Total Productos" otra.
+  // OJO: `products` sigue siendo el catalogo COMPLETO a proposito. Las
+  // validaciones de codigo/SKU duplicado y los conteos al borrar categorias o
+  // marcas tienen que ver todo el negocio: acotarlas por sucursal dejaria crear
+  // codigos repetidos en otra sede sin aviso.
+  const scopedProducts = React.useMemo(() => {
+    if (!branchCatalogOn || !branchScope || branchScope === 'all') return products
+    const branchId = branchScope === MAIN_BRANCH_TOKEN ? null : branchScope
+    return products.filter(p => isProductInBranch(p, branchId))
+  }, [products, branchScope, branchCatalogOn])
   // Seleccion de sedes del modal de accion masiva (independiente del form).
   const [bulkBranches, setBulkBranches] = useState([])
   const branchCatalogOn = businessSettings?.branchCatalogEnabled === true && branches.length > 0
@@ -4263,7 +4277,7 @@ export default function Products() {
 
   // Filtrar y ordenar productos por búsqueda y categoría (optimizado con useMemo)
   const filteredProducts = React.useMemo(() => {
-    const filtered = products.filter(product => {
+    const filtered = scopedProducts.filter(product => {
       const matchesSearch = matchesPrebuilt(deferredSearchTerm, productSearchIndex.get(product.id) || '')
 
       // Check category filter (backward compatible with old string-based categories)
@@ -4303,13 +4317,8 @@ export default function Products() {
         }
       }
 
-      // Sucursal: sale del selector del header. 'all' no filtra nada.
-      let matchesBranch = true
-      if (branchCatalogOn && branchScope && branchScope !== 'all') {
-        matchesBranch = isProductInBranch(product, branchScope === MAIN_BRANCH_TOKEN ? null : branchScope)
-      }
-
-      return matchesSearch && matchesCategory && matchesBrand && matchesExpiration && matchesBranch
+      // La sucursal ya se aplico en scopedProducts.
+      return matchesSearch && matchesCategory && matchesBrand && matchesExpiration
     })
 
     // Ordenar productos
@@ -4366,7 +4375,7 @@ export default function Products() {
     })
 
     return sorted
-  }, [products, deferredSearchTerm, productSearchIndex, selectedCategoryFilter, selectedBrandFilter, showExpiringOnly, categories, brands, sortField, sortDirection, branchScope, branchCatalogOn])
+  }, [scopedProducts, deferredSearchTerm, productSearchIndex, selectedCategoryFilter, selectedBrandFilter, showExpiringOnly, categories, brands, sortField, sortDirection])
 
   // Paginación de productos filtrados (optimizado con useMemo)
   const paginationData = React.useMemo(() => {
@@ -4414,7 +4423,7 @@ export default function Products() {
 
   // Calcular estadísticas (optimizado con useMemo)
   const statistics = React.useMemo(() => {
-    const totalValue = products.reduce((sum, product) => {
+    const totalValue = scopedProducts.reduce((sum, product) => {
       if (product.hasVariants && product.variants?.length > 0) {
         return sum + product.variants.reduce((vs, v) => vs + (v.stock || 0) * (v.price || 0), 0)
       }
@@ -4425,7 +4434,7 @@ export default function Products() {
       return sum
     }, 0)
 
-    const totalCostValue = products.reduce((sum, product) => {
+    const totalCostValue = scopedProducts.reduce((sum, product) => {
       if (product.hasVariants && product.variants?.length > 0) {
         // Para variantes, usar el costo de la variante si existe, si no usar el costo del producto padre
         const parentCost = parseFloat(product.cost) || 0
@@ -4436,19 +4445,19 @@ export default function Products() {
       return sum + (realStock * cost)
     }, 0)
 
-    const lowStockCount = products.filter(product => {
+    const lowStockCount = scopedProducts.filter(product => {
       const realStock = getRealStockValue(product)
       return realStock !== null && realStock <= (product?.minStock ?? 3)
     }).length
 
-    const expiringProductsCount = products.filter(product => {
+    const expiringProductsCount = scopedProducts.filter(product => {
       if (!product.trackExpiration || !product.expirationDate) return false
       const expStatus = getExpirationStatus(product.expirationDate)
       return expStatus && (expStatus.status === 'expired' || expStatus.status === 'warning')
     }).length
 
     return { totalValue, totalCostValue, lowStockCount, expiringProductsCount }
-  }, [products])
+  }, [scopedProducts])
 
   const { totalValue, totalCostValue, lowStockCount, expiringProductsCount } = statistics
 
@@ -4973,7 +4982,7 @@ export default function Products() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Productos</p>
-                <p className="text-2xl font-bold text-gray-900 mt-2">{products.length}</p>
+                <p className="text-2xl font-bold text-gray-900 mt-2">{scopedProducts.length}</p>
               </div>
               <Package className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600 flex-shrink-0" />
             </div>
