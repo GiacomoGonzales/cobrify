@@ -2039,7 +2039,7 @@ export default function Products() {
     }
   }
 
-  const handleImportProducts = async (productsToImport, targetWarehouseId = null) => {
+  const handleImportProducts = async (productsToImport, targetWarehouseId = null, hiddenForBatch = undefined) => {
     if (!user?.uid) return { success: 0, errors: ['Usuario no autenticado'] }
 
     const errors = []
@@ -2724,6 +2724,13 @@ export default function Products() {
             }
             // No persistir el array crudo del Excel en Firestore
             delete product.serialNumbers
+
+            // Disponibilidad por sucursal elegida en el modal de importacion.
+            // SOLO al crear: los productos existentes que el archivo actualiza
+            // conservan su configuracion (pisarla en masa seria destructivo).
+            if (hiddenForBatch !== undefined) {
+              product.hiddenInBranches = hiddenForBatch
+            }
 
             const result = await createProduct(getBusinessId(), product)
 

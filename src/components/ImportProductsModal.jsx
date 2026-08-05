@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
 import * as XLSX from 'xlsx'
-import { Upload, Download, X, AlertCircle, CheckCircle, Loader2, Warehouse } from 'lucide-react'
+import { Upload, Download, X, AlertCircle, CheckCircle, Loader2, Warehouse, Store } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
+import { getActiveBranches } from '@/services/branchService'
+import { MAIN_BRANCH_TOKEN, buildHiddenFromSelection } from '@/utils/branchCatalog'
 import { isMultiCurrencyEnabled } from '@/utils/currency'
 import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
@@ -25,6 +27,11 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
   const [success, setSuccess] = useState(0)
   const [warehouses, setWarehouses] = useState([])
   const [selectedWarehouseId, setSelectedWarehouseId] = useState('')
+  // ----- Disponibilidad por sucursal del LOTE (feature branchCatalogEnabled) -----
+  // Aplica solo a los productos NUEVOS del archivo; los que ya existen conservan
+  // su configuracion (pisarla desde una importacion seria destructivo).
+  const [importBranches, setImportBranches] = useState([])
+  const [selectedBranches, setSelectedBranches] = useState([])
   // Productos que ya tiene el negocio, para anticipar cuáles crea y cuáles
   // actualiza el archivo. `existingLoaded` distingue "no tiene productos" de
   // "no se pudieron cargar": si falló la consulta no bloqueamos la importación.
@@ -37,6 +44,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
   useEffect(() => {
     if (isOpen && !skipWarehouseSelector) {
       loadWarehouses()
+      loadBranchesForImport()
       loadExistingProducts()
     }
   }, [isOpen, skipWarehouseSelector])
@@ -75,6 +83,21 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
       }
     } catch (error) {
       console.error('Error al cargar almacenes:', error)
+    }
+  }
+
+  const loadBranchesForImport = async () => {
+    if (businessSettings?.branchCatalogEnabled !== true) return
+    try {
+      const res = await getActiveBranches(getBusinessId())
+      if (res.success) {
+        const sedes = res.data || []
+        setImportBranches(sedes)
+        // Default: todas marcadas (mismo default seguro que crear un producto).
+        setSelectedBranches([MAIN_BRANCH_TOKEN, ...sedes.map(b => b.id)])
+      }
+    } catch (error) {
+      console.error('Error al cargar sucursales:', error)
     }
   }
 
@@ -808,7 +831,12 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
     try {
       // Pasar warehouseId seleccionado
       const warehouseId = selectedWarehouseId || null
-      const result = await onImport(previewData, warehouseId)
+      // Disponibilidad por sucursal del lote (solo con la feature activa y
+      // sedes cargadas). undefined = no tocar nada, el llamador lo ignora.
+      const hiddenForBatch = (businessSettings?.branchCatalogEnabled === true && importBranches.length > 0)
+        ? buildHiddenFromSelection(selectedBranches, importBranches)
+        : undefined
+      const result = await onImport(previewData, warehouseId, hiddenForBatch)
       setSuccess(result.success || previewData.length)
 
       if (result.errors && result.errors.length > 0) {
@@ -1637,6 +1665,74 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
             </div>
           </div>
         )}
+
+        {/* Disponibilidad por sucursal del lote (feature branchCatalogEnabled).
+            Antes todo lo importado nacia visible en TODAS las sedes y habia que
+            corregirlo despues con la accion masiva. */}
+        {businessSettings?.branchCatalogEnabled === true && importBranches.length > 0 && (() => {
+          const todas = [
+            { key: MAIN_BRANCH_TOKEN, name: businessSettings?.mainBranchName || 'Sucursal Principal' },
+            ...importBranches.map(b => ({ key: b.id, name: b.name })),
+          ]
+          const enTodas = selectedBranches.length === todas.length
+          const toggle = (key) => setSelectedBranches(prev =>
+            prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+          )
+          return (
+            <div className="mb-6 p-4 bg-white border border-gray-200 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <Store className="w-5 h-5 text-gray-500" />
+                <label className="text-sm font-medium text-gray-900">
+                  Los productos nuevos estarán disponibles en
+                </label>
+              </div>
+              <div className="flex flex-wrap gap-4 mb-1">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    checked={enTodas}
+                    onChange={() => setSelectedBranches(todas.map(t => t.key))}
+                    className="text-primary-600"
+                  />
+                  <span className="text-sm text-gray-900">Todas las sucursales</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    checked={!enTodas}
+                    onChange={() => { if (enTodas) setSelectedBranches([MAIN_BRANCH_TOKEN]) }}
+                    className="text-primary-600"
+                  />
+                  <span className="text-sm text-gray-900">Solo en algunas</span>
+                </label>
+              </div>
+              {!enTodas && (
+                <div className="mt-2 pl-6 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {todas.map(t => (
+                    <label key={t.key} className="flex items-center gap-2 cursor-pointer text-sm">
+                      <input
+                        type="checkbox"
+                        checked={selectedBranches.includes(t.key)}
+                        onChange={() => toggle(t.key)}
+                        className="rounded text-primary-600"
+                      />
+                      <span className="text-gray-700 truncate" title={t.name}>{t.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              {!enTodas && selectedBranches.length === 0 && (
+                <p className="text-xs text-amber-700 bg-amber-50 px-2 py-1.5 rounded mt-2">
+                  Sin sucursales marcadas, los productos nuevos no aparecerán en ningún Punto de Venta.
+                </p>
+              )}
+              <p className="text-xs text-gray-500 mt-2">
+                Aplica solo a los productos que el archivo CREA. Los que ya existen
+                conservan su configuración de sucursales.
+              </p>
+            </div>
+          )
+        })()}
 
         {/* Descargar plantilla */}
         <div className="mb-6">

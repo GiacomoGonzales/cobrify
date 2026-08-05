@@ -1324,6 +1324,13 @@ export default function CreatePurchase() {
         marca: marcaText,
       }
 
+      // Disponibilidad por sucursal: viene del campo "Disponible en" del modal.
+      // El whitelist de arriba la dejaba caer y el producto nacia visible en
+      // todas las sedes aunque la compra fuera para una sola.
+      if (data.hiddenInBranches !== undefined) {
+        productData.hiddenInBranches = data.hiddenInBranches
+      }
+
       // Include pharmacy fields if present (la marca ya está arriba, no se duplica)
       if (businessMode === 'pharmacy') {
         productData.genericName = data.genericName || null

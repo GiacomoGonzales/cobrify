@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Loader2, X, Upload, Camera, ScanBarcode, Package, Plus, Trash2, AlertTriangle, Layers, Boxes } from 'lucide-react'
+import { Loader2, X, Upload, Camera, ScanBarcode, Package, Plus, Trash2, AlertTriangle, Layers, Boxes, Store } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
 import { Camera as CapacitorCamera, CameraResultType, CameraSource } from '@capacitor/camera'
 import { useAppContext } from '@/hooks/useAppContext'
+import { getActiveBranches } from '@/services/branchService'
+import { MAIN_BRANCH_TOKEN, buildHiddenFromSelection, buildSelectionFromHidden } from '@/utils/branchCatalog'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useToast } from '@/contexts/ToastContext'
 import Modal from '@/components/ui/Modal'
@@ -155,6 +157,23 @@ const ProductFormModal = ({
   brands = [],
 }) => {
   const { user, businessSettings, hasFeature, getBusinessId } = useAppContext()
+
+  useEffect(() => {
+    if (!isOpen || businessSettings?.branchCatalogEnabled !== true) return
+    let cancelado = false
+    getActiveBranches(getBusinessId()).then(res => {
+      if (cancelado || !res.success) return
+      const sedes = res.data || []
+      setFormBranches(sedes)
+      // Creacion: todas marcadas (default seguro del modelo de excepciones).
+      // Edicion: reconstruir la seleccion desde hiddenInBranches guardado.
+      setAvailableBranches(initialData
+        ? buildSelectionFromHidden(initialData, sedes)
+        : [MAIN_BRANCH_TOKEN, ...sedes.map(b => b.id)])
+    })
+    return () => { cancelado = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, businessSettings?.branchCatalogEnabled, initialData?.id])
   const appNavigate = useAppNavigate()
   const toast = useToast()
 
@@ -227,6 +246,13 @@ const ProductFormModal = ({
   const [igvRate, setIgvRate] = useState(businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18)
   const [isScanningBarcode, setIsScanningBarcode] = useState(false)
   const [warehouseInitialStocks, setWarehouseInitialStocks] = useState({})
+
+  // ----- Disponibilidad por sucursal (feature branchCatalogEnabled) -----
+  // El modal carga sus propias sucursales: sus padres (Compras) no las tienen
+  // y pasarlas por props obligaria a tocar cada llamador. Sin la feature no se
+  // consulta nada y el campo no se renderiza.
+  const [formBranches, setFormBranches] = useState([])
+  const [availableBranches, setAvailableBranches] = useState([])
 
   // Códigos de barra adicionales (mismo producto, múltiples EANs)
   const [extraBarcodes, setExtraBarcodes] = useState([])
@@ -560,6 +586,12 @@ const ProductFormModal = ({
       ...(taxType === 'standard' && taxAffectation === '10' && { igvRate }),
       presentations: showPresentations ? presentations : [],
       warehouseInitialStocks: showWarehouseStock ? warehouseInitialStocks : {},
+    }
+
+    // Disponibilidad por sucursal: solo con la feature activa y sedes cargadas
+    // (si esta apagada no tocamos lo guardado, igual que en Products.jsx).
+    if (businessSettings?.branchCatalogEnabled === true && formBranches.length > 0) {
+      productData.hiddenInBranches = buildHiddenFromSelection(availableBranches, formBranches)
     }
 
     // Product location (works in all modes when enabled)
@@ -1545,6 +1577,72 @@ const ProductFormModal = ({
               </label>
             )}
           </div>
+
+          {/* Disponibilidad por sucursal (misma UI compacta que Products.jsx).
+              Sin esto, todo producto creado desde Compras nacia visible en
+              TODAS las sedes aunque la compra fuera para una sola. */}
+          {businessSettings?.branchCatalogEnabled === true && formBranches.length > 0 && (() => {
+            const todas = [
+              { key: MAIN_BRANCH_TOKEN, name: businessSettings?.mainBranchName || 'Sucursal Principal' },
+              ...formBranches.map(b => ({ key: b.id, name: b.name })),
+            ]
+            const enTodas = availableBranches.length === todas.length
+            const toggle = (key) => setAvailableBranches(prev =>
+              prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+            )
+            return (
+              <div className="border border-gray-200 rounded-lg p-3 mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Store className="w-4 h-4 text-gray-400" />
+                  <span className="text-sm font-medium text-gray-900">Disponible en</span>
+                </div>
+                <div className="flex flex-wrap gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={enTodas}
+                      onChange={() => setAvailableBranches(todas.map(t => t.key))}
+                      className="text-primary-600"
+                    />
+                    <span className="text-sm text-gray-900">Todas las sucursales</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={!enTodas}
+                      onChange={() => {
+                        // Al pasar a "solo algunas" queda marcada la Principal para
+                        // que nunca quede un producto sin ninguna sede.
+                        if (enTodas) setAvailableBranches([MAIN_BRANCH_TOKEN])
+                      }}
+                      className="text-primary-600"
+                    />
+                    <span className="text-sm text-gray-900">Solo en algunas</span>
+                  </label>
+                </div>
+                {!enTodas && (
+                  <div className="mt-3 pl-6 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {todas.map(t => (
+                      <label key={t.key} className="flex items-center gap-2 cursor-pointer text-sm">
+                        <input
+                          type="checkbox"
+                          checked={availableBranches.includes(t.key)}
+                          onChange={() => toggle(t.key)}
+                          className="rounded text-primary-600"
+                        />
+                        <span className="text-gray-700 truncate" title={t.name}>{t.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                {!enTodas && availableBranches.length === 0 && (
+                  <p className="text-xs text-amber-700 bg-amber-50 px-2 py-1.5 rounded mt-2">
+                    Sin sucursales marcadas el producto no aparecerá en ningún Punto de Venta.
+                  </p>
+                )}
+              </div>
+            )
+          })()}
 
           {/* Campos de Stock (solo si controla stock) */}
           {!noStock && (
