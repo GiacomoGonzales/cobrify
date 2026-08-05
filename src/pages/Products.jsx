@@ -7383,16 +7383,32 @@ export default function Products() {
                         Las sucursales elegidas no tienen almacenes activos. Podrás cargarle stock
                         después, desde Inventario.
                       </p>
-                    ) : (
-                    <div className="space-y-2">
-                      {warehousesForProduct.map((wh) => (
+                    ) : (() => {
+                      // Agrupado POR SUCURSAL. Antes se listaban los almacenes sueltos
+                      // y no habia forma de saber a que sede pertenecia cada uno; con
+                      // dos almacenes marcados "(Principal)" —que ahi significaba "por
+                      // defecto de SU sede", no "Sucursal Principal"— la lista se leia
+                      // como si todos fueran de la misma sucursal.
+                      const grupos = []
+                      const sinSede = warehousesForProduct.filter(w => !w.branchId)
+                      if (sinSede.length > 0) {
+                        grupos.push({
+                          key: MAIN_BRANCH_TOKEN,
+                          nombre: businessSettings?.mainBranchName || 'Sucursal Principal',
+                          almacenes: sinSede,
+                        })
+                      }
+                      branches.forEach(b => {
+                        const suyos = warehousesForProduct.filter(w => w.branchId === b.id)
+                        if (suyos.length > 0) grupos.push({ key: b.id, nombre: b.name, almacenes: suyos })
+                      })
+
+                      const fila = (wh) => (
                         <div key={wh.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
-                          <div className="flex-1">
-                            <span className="text-sm font-medium text-gray-700">
-                              {wh.name}
-                            </span>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-medium text-gray-700">{wh.name}</span>
                             {wh.isDefault && (
-                              <span className="ml-2 text-xs text-primary-600">(Principal)</span>
+                              <span className="ml-2 text-xs text-gray-500">(por defecto)</span>
                             )}
                           </div>
                           <div className="w-28">
@@ -7411,9 +7427,32 @@ export default function Products() {
                           </div>
                           <span className="text-xs text-gray-500 w-12">uds.</span>
                         </div>
-                      ))}
-                    </div>
-                    )}
+                      )
+
+                      // Sin sucursales configuradas no hay nada que agrupar: la
+                      // cabecera seria ruido.
+                      if (branches.length === 0) {
+                        return <div className="space-y-2">{warehousesForProduct.map(fila)}</div>
+                      }
+
+                      return (
+                        <div className="space-y-3">
+                          {grupos.map(g => (
+                            <div key={g.key}>
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                <Store className="w-3.5 h-3.5 text-gray-400" />
+                                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide truncate" title={g.nombre}>
+                                  {g.nombre}
+                                </span>
+                              </div>
+                              <div className="space-y-2 pl-1">
+                                {g.almacenes.map(fila)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    })()}
                     {/* Total */}
                     {Object.values(warehouseInitialStocks).some(v => v && parseFloat(v) > 0) && (
                       <div className="mt-2 pt-2 border-t border-gray-200 flex justify-between items-center">
