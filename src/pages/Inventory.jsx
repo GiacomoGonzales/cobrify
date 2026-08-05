@@ -2117,11 +2117,11 @@ export default function Inventory() {
             aparece durante los 7 dias posteriores a una verificacion y es el
             deshacer de una operacion que puede descuadrar el stock — enterrarla
             en un menu es lo ultimo que se quiere cuando hace falta. */}
-        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-          <div className="relative w-full sm:w-auto">
+        <div className="flex gap-2 w-full lg:w-auto lg:justify-end">
+          {/* Menú único de acciones secundarias */}
+          <div className="relative flex-1 sm:flex-initial">
             <Button
               variant="outline"
-              size="sm"
               onClick={() => setOptionsMenuOpen(!optionsMenuOpen)}
               className="w-full sm:w-auto"
               title="Más opciones: traslado masivo, recuento, historial"
@@ -2133,7 +2133,7 @@ export default function Inventory() {
             {optionsMenuOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setOptionsMenuOpen(false)} />
-                <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-1 w-60 max-w-[calc(100vw-2rem)] bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-1 w-60 max-w-[calc(100vw-2rem)] max-h-[70vh] overflow-y-auto bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
                   <button
                     onClick={() => { setOptionsMenuOpen(false); setShowMassTransferModal(true) }}
                     className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
@@ -2180,9 +2180,8 @@ export default function Inventory() {
           {latestStockBackup && !isDemoMode && (
             <Button
               variant="outline"
-              size="sm"
               onClick={() => setShowRevertModal(true)}
-              className="text-amber-700 border-amber-300 hover:bg-amber-50"
+              className="flex-1 sm:flex-initial text-amber-700 border-amber-300 hover:bg-amber-50"
               title={`Restaura el stock al estado previo a la verificación del ${latestStockBackup.createdAt?.toLocaleString?.('es-PE') || 'reciente'}`}
             >
               <RotateCcw className="w-4 h-4 mr-2" />
@@ -2193,8 +2192,8 @@ export default function Inventory() {
           {!hidePrivateData && (
             <Button
               variant="outline"
-              size="sm"
               onClick={handleOpenExportModal}
+              className="flex-1 sm:flex-initial"
             >
               <FileSpreadsheet className="w-4 h-4 mr-2" />
               Exportar Excel
