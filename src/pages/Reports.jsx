@@ -15,7 +15,6 @@ import {
   TrendingDown,
   Zap,
   Truck,
-  Store,
   MapPin,
   BedDouble,
   Search,
@@ -192,7 +191,7 @@ const getInvoiceDate = (invoice) => {
 }
 
 export default function Reports() {
-  const { user, isDemoMode, demoData, getBusinessId, hasFeature, businessMode, filterBranchesByAccess, hasMainBranchAccess, allowedBranches, allowedWarehouses, isBusinessOwner, isAdmin, businessSettings, assignedSellerId } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, hasFeature, businessMode, filterBranchesByAccess, hasMainBranchAccess, allowedBranches, allowedWarehouses, isBusinessOwner, isAdmin, businessSettings, assignedSellerId, branchScope } = useAppContext()
   const hidePrivateData = useHidePrivateData()
   // Filtro de seguridad por ubicación (sucursal/almacén) para usuarios secundarios.
   // Debe declararse antes de cualquier return condicional para no romper el orden de hooks.
@@ -238,7 +237,11 @@ export default function Reports() {
   const [customEndDate, setCustomEndDate] = useState('')
   const [branches, setBranches] = useState([])
   const [warehouses, setWarehouses] = useState([])
-  const [filterBranch, setFilterBranch] = useState('all')
+  // La sucursal sale del selector del HEADER (branchScope), global a toda la
+  // app, igual que en Productos e Inventario. Tener un select propio aca era
+  // duplicarlo y podian contradecirse: el header en "Cabo Lopez" y el reporte
+  // en "Los Agustinos". Los tokens coinciden: 'all' | 'main' | <branchId>.
+  const filterBranch = branchScope || 'all'
   const [productSearch, setProductSearch] = useState('')
   const [productPage, setProductPage] = useState(0)
   const PRODUCTS_PER_PAGE = 25
@@ -2611,23 +2614,6 @@ export default function Reports() {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
-          {/* Selector de Sucursal */}
-          {branches.length > 0 && (
-            <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
-              <Store className="w-4 h-4 text-gray-500" />
-              <select
-                value={filterBranch}
-                onChange={e => setFilterBranch(e.target.value)}
-                className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
-              >
-                <option value="all">Todas las sucursales</option>
-                {hasMainBranchAccess && <option value="main">{businessSettings?.mainBranchName || 'Sucursal Principal'}</option>}
-                {branches.map(branch => (
-                  <option key={branch.id} value={branch.id}>{branch.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
           <div className="flex flex-wrap items-center gap-2">
             {[
               { value: 'today', label: 'Hoy' },
