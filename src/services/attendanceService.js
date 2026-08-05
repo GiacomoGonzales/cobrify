@@ -394,7 +394,14 @@ export const getAttendanceRecords = async (businessId, filters = {}) => {
     if (typeof max === 'number') q = query(q, limit(max))
     const snap = await getDocs(q)
     let data = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-    if (branchId) data = data.filter(r => r.branchId === branchId)
+    // Los registros de la Sucursal Principal guardan branchId = null (ver
+    // createManualAttendance), asi que 'main' NO se puede comparar directo:
+    // filtrar por igualdad devolvia cero registros.
+    if (branchId) {
+      data = branchId === 'main'
+        ? data.filter(r => !r.branchId)
+        : data.filter(r => r.branchId === branchId)
+    }
     if (fromDate) {
       const from = new Date(fromDate)
       data = data.filter(r => {

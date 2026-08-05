@@ -56,7 +56,7 @@ import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import { useLocationAccess } from '@/utils/locationAccess'
 
 export default function Quotations() {
-  const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess, hasMainBranchAccess, allowedBranches, allowedWarehouses } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess, hasMainBranchAccess, allowedBranches, allowedWarehouses , branchScope } = useAppContext()
   // Filtro de seguridad por sucursal/almacén habilitado del usuario (helper compartido)
   const canAccessQuotation = useLocationAccess()
   const navigate = useNavigate()
@@ -69,7 +69,11 @@ export default function Quotations() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
   const [branches, setBranches] = useState([])
-  const [filterBranch, setFilterBranch] = useState('all')
+  // La sucursal sale del selector del HEADER (branchScope), global a toda la
+  // app. Tener un select propio aca era duplicarlo: si el usuario ya entro a
+  // una sede, la pagina debe mostrarla sin que la elija dos veces.
+  // Tokens: 'all' | 'main' | <branchId>.
+  const filterBranch = branchScope || 'all'
   const [dateFilter, setDateFilter] = useState('30days') // 'all', 'today', '3days', '7days', '30days', 'custom'
   const [filterStartDate, setFilterStartDate] = useState('')
   const [filterEndDate, setFilterEndDate] = useState('')
@@ -784,23 +788,6 @@ export default function Quotations() {
             {/* Filtros adicionales */}
             <div className="flex flex-col sm:flex-row gap-3 sm:justify-between sm:items-center">
               <div className="flex flex-col sm:flex-row gap-3">
-                {/* Filtro de Sucursal */}
-                {branches.length > 0 && (
-                  <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
-                    <Store className="w-4 h-4 text-gray-500" />
-                    <select
-                      value={filterBranch}
-                      onChange={e => setFilterBranch(e.target.value)}
-                      className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
-                    >
-                      <option value="all">Todas las sucursales</option>
-                      {hasMainBranchAccess && <option value="main">{companySettings?.mainBranchName || 'Sucursal Principal'}</option>}
-                      {branches.map(branch => (
-                        <option key={branch.id} value={branch.id}>{branch.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
                 {/* Filtro de Estado */}
                 <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
                   <FileText className="w-4 h-4 text-gray-500" />
@@ -828,7 +815,6 @@ export default function Quotations() {
                     setFilterStartDate('')
                     setFilterEndDate('')
                     setFilterStatus('all')
-                    setFilterBranch('all')
                     setSearchTerm('')
                   }}
                   className="text-sm text-gray-500 hover:text-gray-700 underline"

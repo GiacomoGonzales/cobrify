@@ -70,7 +70,7 @@ const DEMO_SELLERS = [
 
 
 export default function Sellers() {
-  const { getBusinessId, isDemoMode, filterBranchesByAccess, user, hasMainBranchAccess, businessSettings } = useAppContext()
+  const { getBusinessId, isDemoMode, filterBranchesByAccess, user, hasMainBranchAccess, businessSettings , branchScope } = useAppContext()
   const toast = useToast()
 
   const [sellers, setSellers] = useState([])
@@ -79,7 +79,11 @@ export default function Sellers() {
   const [isFormModalOpen, setIsFormModalOpen] = useState(false)
   const [editingSeller, setEditingSeller] = useState(null)
   const [branches, setBranches] = useState([])
-  const [filterBranch, setFilterBranch] = useState('all')
+  // La sucursal sale del selector del HEADER (branchScope), global a toda la
+  // app. Tener un select propio aca era duplicarlo: si el usuario ya entro a
+  // una sede, la pagina debe mostrarla sin que la elija dos veces.
+  // Tokens: 'all' | 'main' | <branchId>.
+  const filterBranch = branchScope || 'all'
   const [searchTerm, setSearchTerm] = useState('')
   const [viewingSeller, setViewingSeller] = useState(null)
   const [openMenuId, setOpenMenuId] = useState(null)
@@ -528,22 +532,6 @@ export default function Sellers() {
               />
             </div>
             {/* Filtro de Sucursal */}
-            {branches.length > 0 && (
-              <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
-                <Store className="w-4 h-4 text-gray-500" />
-                <select
-                  value={filterBranch}
-                  onChange={e => setFilterBranch(e.target.value)}
-                  className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
-                >
-                  <option value="all">Todas las sucursales</option>
-                  {hasMainBranchAccess && <option value="main">{businessSettings?.mainBranchName || 'Sucursal Principal'}</option>}
-                  {branches.map(branch => (
-                    <option key={branch.id} value={branch.id}>{branch.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
           </div>
 
           {/* Filtro de fechas */}

@@ -58,7 +58,7 @@ const warehouseSchema = z.object({
 })
 
 export default function Warehouses() {
-  const { user, getBusinessId, filterBranchesByAccess, isDemoMode, demoData, isBusinessOwner } = useAppContext()
+  const { user, getBusinessId, filterBranchesByAccess, isDemoMode, demoData, isBusinessOwner , branchScope } = useAppContext()
   const toast = useToast()
   const [warehouses, setWarehouses] = useState([])
   const [companySettings, setCompanySettings] = useState(null)
@@ -74,7 +74,11 @@ export default function Warehouses() {
   const [branchSeries, setBranchSeries] = useState({})
   const [globalSeries, setGlobalSeries] = useState({})
   const [branches, setBranches] = useState([])
-  const [filterBranch, setFilterBranch] = useState('all')
+  // La sucursal sale del selector del HEADER (branchScope), global a toda la
+  // app. Tener un select propio aca era duplicarlo: si el usuario ya entro a
+  // una sede, la pagina debe mostrarla sin que la elija dos veces.
+  // Tokens: 'all' | 'main' | <branchId>.
+  const filterBranch = branchScope || 'all'
   const [searchTerm, setSearchTerm] = useState('')
   const [openMenuId, setOpenMenuId] = useState(null)
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: false })
@@ -1066,23 +1070,6 @@ export default function Warehouses() {
                 className="flex-1 text-sm border-none bg-transparent focus:ring-0 focus:outline-none"
               />
             </div>
-            {/* Filtro de Sucursal */}
-            {branches.length > 0 && (
-              <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
-                <Store className="w-4 h-4 text-gray-500" />
-                <select
-                  value={filterBranch}
-                  onChange={e => setFilterBranch(e.target.value)}
-                  className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
-                >
-                  <option value="all">Todas las sucursales</option>
-                  <option value="main">{mainBranchName}</option>
-                  {branches.map(branch => (
-                    <option key={branch.id} value={branch.id}>{branch.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
           </div>
         </CardContent>
       </Card>

@@ -93,7 +93,7 @@ const ORDER_TYPE_LABELS = {
 }
 
 export default function InvoiceList() {
-  const { user, isDemoMode, demoData, getBusinessId, businessSettings, businessMode, filterBranchesByAccess, hasMainBranchAccess, isBusinessOwner, isAdmin, allowedBranches, allowedWarehouses, assignedSellerId } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessSettings, businessMode, filterBranchesByAccess, hasMainBranchAccess, isBusinessOwner, isAdmin, allowedBranches, allowedWarehouses, assignedSellerId , branchScope } = useAppContext()
   const hidePrivateData = useHidePrivateData()
   const { branding } = useBranding()
   const navigate = useNavigate()
@@ -190,7 +190,11 @@ export default function InvoiceList() {
   const [isBulkSendingSunat, setIsBulkSendingSunat] = useState(false)
   const [bulkSunatProgress, setBulkSunatProgress] = useState({ current: 0, total: 0 })
   const [filterSeller, setFilterSeller] = useState('all')
-  const [filterBranch, setFilterBranch] = useState('all') // 'all', 'main', o branchId
+  // La sucursal sale del selector del HEADER (branchScope), global a toda la
+  // app. Tener un select propio aca era duplicarlo: si el usuario ya entro a
+  // una sede, la pagina debe mostrarla sin que la elija dos veces.
+  // Tokens: 'all' | 'main' | <branchId>.
+  const filterBranch = branchScope || 'all'
   const [filterPaymentMethod, setFilterPaymentMethod] = useState('all')
   const [filterConversion, setFilterConversion] = useState('all') // 'all', 'converted', 'not_converted'
   const [branches, setBranches] = useState([])
@@ -3077,22 +3081,6 @@ Gracias por tu preferencia.`
                 </option>
               ))}
             </select>
-            {/* Filtro de Sucursal */}
-            {branches.length > 0 && (
-              <select
-                value={filterBranch}
-                onChange={e => setFilterBranch(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900 text-sm"
-              >
-                <option value="all">Todas las sucursales</option>
-                {hasMainBranchAccess && <option value="main">{companySettings?.mainBranchName || 'Sucursal Principal'}</option>}
-                {branches.map(branch => (
-                  <option key={branch.id} value={branch.id}>
-                    {branch.name}
-                  </option>
-                ))}
-              </select>
-            )}
             {/* Filtro de método de pago */}
             <select
               value={filterPaymentMethod}
@@ -3149,7 +3137,6 @@ Gracias por tu preferencia.`
                   setFilterType('all')
                   setFilterStatus('all')
                   setFilterSeller('all')
-                  setFilterBranch('all')
                   setFilterPaymentMethod('all')
                   setFilterConversion('all')
                 }}

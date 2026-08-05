@@ -148,7 +148,7 @@ const getLocalDateString = (date = new Date()) => {
 }
 
 export default function Expenses() {
-  const { user, getBusinessId, isDemoMode, hasMainBranchAccess, businessSettings, allowedBranches, allowedWarehouses, filterBranchesByAccess, activeBranchId } = useAppContext()
+  const { user, getBusinessId, isDemoMode, hasMainBranchAccess, businessSettings, allowedBranches, allowedWarehouses, filterBranchesByAccess, activeBranchId , branchScope } = useAppContext()
   // Seguridad: el usuario secundario solo ve gastos de sus sucursales habilitadas
   const canAccess = useLocationAccess()
   // Los gastos GENERALES/corporativos (sin sucursal) NO son de una sede específica, así
@@ -173,7 +173,11 @@ export default function Expenses() {
 
   // Sucursales
   const [branches, setBranches] = useState([])
-  const [branchFilter, setBranchFilter] = useState('all') // 'all', 'main', or branch.id
+  // La sucursal sale del selector del HEADER (branchScope), global a toda la
+  // app. Tener un select propio aca era duplicarlo: si el usuario ya entro a
+  // una sede, la pagina debe mostrarla sin que la elija dos veces.
+  // Tokens: 'all' | 'main' | <branchId>.
+  const branchFilter = branchScope || 'all'
   const [dateRange, setDateRange] = useState({
     startDate: getLocalDateString(new Date(new Date().getFullYear(), new Date().getMonth(), 1)),
     endDate: getLocalDateString()
@@ -941,22 +945,6 @@ export default function Expenses() {
             </div>
 
             {/* Branch Filter */}
-            {branches.length > 0 && (
-              <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-1.5 shadow-sm w-full sm:w-auto">
-                <Store className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                <select
-                  value={branchFilter}
-                  onChange={e => setBranchFilter(e.target.value)}
-                  className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer flex-1"
-                >
-                  <option value="all">Todas las sucursales</option>
-                  {hasMainBranchAccess && <option value="main">{businessSettings?.mainBranchName || 'Sucursal Principal'}</option>}
-                  {branches.map(branch => (
-                    <option key={branch.id} value={branch.id}>{branch.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
           </div>
         </div>
 

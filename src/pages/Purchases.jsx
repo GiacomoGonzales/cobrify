@@ -89,7 +89,7 @@ const getInvoiceDocTypeLabel = (type) => {
 }
 
 export default function Purchases() {
-  const { user, isDemoMode, demoData, getBusinessId, hasMainBranchAccess, allowedBranches, allowedWarehouses, isBusinessOwner, isAdmin, filterBranchesByAccess } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, hasMainBranchAccess, allowedBranches, allowedWarehouses, isBusinessOwner, isAdmin, filterBranchesByAccess , branchScope } = useAppContext()
   const toast = useToast()
   const navigate = useNavigate()
   const appNavigate = useAppNavigate()
@@ -144,7 +144,11 @@ export default function Purchases() {
   // Filtro de sucursal
   const [branches, setBranches] = useState([])
   const [warehouses, setWarehouses] = useState([])
-  const [filterBranch, setFilterBranch] = useState('all') // 'all', 'main', or branch.id
+  // La sucursal sale del selector del HEADER (branchScope), global a toda la
+  // app. Tener un select propio aca era duplicarlo: si el usuario ya entro a
+  // una sede, la pagina debe mostrarla sin que la elija dos veces.
+  // Tokens: 'all' | 'main' | <branchId>.
+  const filterBranch = branchScope || 'all'
 
   // Exportación a Excel. Mismos criterios que el modal de Comprobantes: un filtro
   // vacío significa "todos", no "ninguno".
@@ -1529,22 +1533,6 @@ export default function Purchases() {
                 <span className="text-sm text-gray-600 font-medium">Sucursal:</span>
               </div>
               <div className="flex-1">
-                <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
-                  <Store className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                  <select
-                    value={filterBranch}
-                    onChange={(e) => setFilterBranch(e.target.value)}
-                    className="flex-1 text-sm bg-transparent border-none focus:outline-none focus:ring-0 cursor-pointer"
-                  >
-                    <option value="all">Todas las sucursales</option>
-                    {hasMainBranchAccess && <option value="main">{companySettings?.mainBranchName || 'Sucursal Principal'}</option>}
-                    {branches.map((branch) => (
-                      <option key={branch.id} value={branch.id}>
-                        {branch.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
               </div>
             </div>
           )}

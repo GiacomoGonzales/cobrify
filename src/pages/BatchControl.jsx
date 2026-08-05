@@ -17,7 +17,7 @@ function BatchControl() {
   const {
     user, getBusinessId, isDemoMode, demoData, hasMainBranchAccess,
     allowedWarehouses, isBusinessOwner, isAdmin,
-    filterWarehousesByAccess, filterBranchesByAccess,
+    filterWarehousesByAccess, filterBranchesByAccess, branchScope,
   } = useAppContext()
   const toast = useToast()
   const [products, setProducts] = useState([])
@@ -27,7 +27,11 @@ function BatchControl() {
   const [expandedProducts, setExpandedProducts] = useState({})
   const [warehouses, setWarehouses] = useState([])
   const [branches, setBranches] = useState([])
-  const [filterBranch, setFilterBranch] = useState('all')
+  // La sucursal sale del selector del HEADER (branchScope), global a toda la
+  // app. Tener un select propio aca era duplicarlo: si el usuario ya entro a
+  // una sede, la pagina debe mostrarla sin que la elija dos veces.
+  // Tokens: 'all' | 'main' | <branchId>.
+  const filterBranch = branchScope || 'all'
   const [filterWarehouse, setFilterWarehouse] = useState('all')
   // Paginación: para negocios con miles de productos, renderizar todo de golpe
   // hace que React tarde varios segundos. 25 por página es suficiente.
@@ -690,22 +694,6 @@ function BatchControl() {
           {/* Filtros de sucursal y almacén */}
           {(accessibleWarehouses.length > 0 || accessibleBranches.length > 0) && (
             <div className="flex flex-col sm:flex-row gap-3 mt-3 pt-3 border-t border-gray-100">
-              {accessibleBranches.length > 0 && (
-                <div className="flex items-center gap-2 flex-1">
-                  <Store className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                  <select
-                    value={filterBranch}
-                    onChange={(e) => { setFilterBranch(e.target.value); setFilterWarehouse('all') }}
-                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  >
-                    <option value="all">Todas las sucursales</option>
-                    {hasMainBranchAccess && <option value="main">Sede principal</option>}
-                    {accessibleBranches.map(b => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
               {accessibleWarehouses.length > 0 && (
                 <div className="flex items-center gap-2 flex-1">
                   <Warehouse className="w-4 h-4 text-gray-400 flex-shrink-0" />

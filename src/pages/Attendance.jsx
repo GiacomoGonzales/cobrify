@@ -126,7 +126,7 @@ const statusBadge = (record) => {
 }
 
 export default function Attendance() {
-  const { user, isBusinessOwner, isAdmin, getBusinessId, filterBranchesByAccess, hasMainBranchAccess, isDemoMode, demoData, businessSettings, hasPageAccess } = useAppContext()
+  const { user, isBusinessOwner, isAdmin, getBusinessId, filterBranchesByAccess, hasMainBranchAccess, isDemoMode, demoData, businessSettings, hasPageAccess , branchScope } = useAppContext()
   const canManage = !!(isBusinessOwner || isAdmin)
   // Sub-usuario con permiso "Horarios": puede usar SOLO el planificador de
   // horarios (no el resto de la gestión de personal). Requiere también el
@@ -166,7 +166,12 @@ export default function Attendance() {
     return { from: toYmd(monday), to: toYmd(sunday) }
   }
   const [filterUser, setFilterUser] = useState('')
-  const [filterBranch, setFilterBranch] = useState('')
+  // La sucursal sale del selector del HEADER (branchScope), como en el resto
+  // de la app. Ojo con los tokens: aca '' significa "todas" (se envia como
+  // `branchId: filterBranch || undefined`), asi que el 'all' del header se
+  // traduce a ''. 'main' si viaja tal cual: el servicio ya sabe que los
+  // registros de la Principal guardan branchId null.
+  const filterBranch = (!branchScope || branchScope === 'all') ? '' : branchScope
   const [filterFrom, setFilterFrom] = useState(() => getCurrentWeekRange().from)
   const [filterTo, setFilterTo] = useState(() => getCurrentWeekRange().to)
 
@@ -342,7 +347,7 @@ export default function Attendance() {
   }
 
   const clearFilters = async () => {
-    setFilterUser(''); setFilterBranch(''); setFilterFrom(''); setFilterTo('')
+    setFilterUser(''); setFilterFrom(''); setFilterTo('')
     await loadRecords()
   }
 
@@ -858,12 +863,6 @@ export default function Attendance() {
                           <option value="">Todos</option>
                           {subUsers.map(u => (
                             <option key={u.uid || u.id} value={u.uid || u.id}>{u.displayName || u.name || u.email}</option>
-                          ))}
-                        </Select>
-                        <Select label="Sucursal" value={filterBranch} onChange={e => setFilterBranch(e.target.value)}>
-                          <option value="">Todas</option>
-                          {branches.map(b => (
-                            <option key={b.id} value={b.id}>{b.name}</option>
                           ))}
                         </Select>
                         <Input type="date" label="Desde" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} />
