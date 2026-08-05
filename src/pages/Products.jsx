@@ -373,6 +373,16 @@ export default function Products() {
   // Estado para impresión de etiquetas
   const [labelModalOpen, setLabelModalOpen] = useState(false)
   const [labelQuantities, setLabelQuantities] = useState({}) // { productId: cantidad }
+  // Cantidad POR VARIANTE para las etiquetas ricas: { `${productId}__${sku}`: n }.
+  // Un producto con 10 variantes imprimia 10 etiquetas si o si ("pongo 1 y salen
+  // 10") — el cliente cree que es el stock, pero es una por variante. Con esto
+  // elige cuantas de CADA variante, y 0 la salta. Sin entrada = 1 (default).
+  const [labelVariantQuantities, setLabelVariantQuantities] = useState({})
+  const variantQtyKey = (productId, v, i) => `${productId}__${v?.sku || i}`
+  const getVariantQty = (productId, v, i) => {
+    const raw = labelVariantQuantities[variantQtyKey(productId, v, i)]
+    return raw === undefined ? 1 : raw
+  }
   const [labelSize, setLabelSize] = useState('53x26') // Tamaño de etiqueta seleccionado
   // Estado para impresión en ticketera térmica (POS, 58/80mm con barcode nativo ESC/POS)
   const [thermalPaperWidth, setThermalPaperWidth] = useState(58)
@@ -3488,12 +3498,16 @@ export default function Products() {
       const hasVars = product.hasVariants && Array.isArray(product.variants) && product.variants.length > 0
 
       if (hasVars) {
-        for (const v of product.variants) {
+        product.variants.forEach((v, vi) => {
+          // Cantidad propia de la variante (0 = no imprimirla). El "Cant" del
+          // producto NO multiplica aca: con variantes, la unidad es la variante.
+          const vQty = getVariantQty(product.id, v, vi)
+          if (vQty <= 0) return
           const variant = Object.entries(v.attributes || {}).map(([k, val]) => `${k}: ${val}`).join('  ')
           const barcodeVal = String(v.barcode || v.sku || product.code || baseSku || product.id.slice(-8)).replace(/-/g, '')
           const item = { name, marca, code: v.sku || baseSku, variant, category, number: barcodeVal, barcodeVal, priceText: buildPriceText(v, product) }
-          for (let i = 0; i < qty; i++) items.push(item)
-        }
+          for (let i = 0; i < vQty; i++) items.push(item)
+        })
       } else {
         const barcodeVal = String(product.code || baseSku || product.id.slice(-8)).replace(/-/g, '')
         const item = { name, marca, code: baseSku, variant: '', category, number: barcodeVal, barcodeVal, priceText: buildPriceText(product, null) }
@@ -9954,30 +9968,75 @@ export default function Products() {
 
           {/* Lista de productos seleccionados */}
           <div className="max-h-80 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
-            {products.filter(p => selectedProducts.has(p.id)).map(product => (
-              <div key={product.id} className="flex items-center justify-between px-4 py-3">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{product.name}</p>
-                  <p className="text-xs text-gray-500">
-                    {product.code || product.sku || 'Sin código'}
-                  </p>
+            {products.filter(p => selectedProducts.has(p.id)).map(product => {
+              // En los tamaños ricos, un producto con variantes imprime UNA
+              // etiqueta por variante; el control de cantidad va por variante
+              // (0 = saltarla). El "Cant" unico del producto era la causa del
+              // reclamo "pongo 1 y salen 10": las 10 eran sus 10 variantes.
+              const richVariants = RICH_LABEL_SIZES.includes(labelSize) &&
+                product.hasVariants && Array.isArray(product.variants) && product.variants.length > 0
+              return (
+              <div key={product.id} className="px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{product.name}</p>
+                    <p className="text-xs text-gray-500">
+                      {product.code || product.sku || 'Sin código'}
+                      {richVariants && ` · ${product.variants.length} variantes`}
+                    </p>
+                  </div>
+                  {!richVariants && (
+                    <div className="flex items-center gap-2 ml-3">
+                      <label className="text-xs text-gray-500">Cant:</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={labelQuantities[product.id] || 1}
+                        onChange={(e) => setLabelQuantities(prev => ({
+                          ...prev,
+                          [product.id]: Math.max(1, Math.min(100, parseInt(e.target.value) || 1))
+                        }))}
+                        className="w-16 px-2 py-1 border border-gray-300 rounded text-sm text-center"
+                      />
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center gap-2 ml-3">
-                  <label className="text-xs text-gray-500">Cant:</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="100"
-                    value={labelQuantities[product.id] || 1}
-                    onChange={(e) => setLabelQuantities(prev => ({
-                      ...prev,
-                      [product.id]: Math.max(1, Math.min(100, parseInt(e.target.value) || 1))
-                    }))}
-                    className="w-16 px-2 py-1 border border-gray-300 rounded text-sm text-center"
-                  />
-                </div>
+
+                {richVariants && (
+                  <div className="mt-2 space-y-1 pl-3 border-l-2 border-gray-100">
+                    {product.variants.map((v, vi) => {
+                      const attrs = Object.values(v.attributes || {}).join(' / ') || v.sku || `Variante ${vi + 1}`
+                      const key = variantQtyKey(product.id, v, vi)
+                      return (
+                        <div key={key} className="flex items-center justify-between gap-2">
+                          <p className="text-xs text-gray-600 truncate flex-1" title={attrs}>
+                            {attrs}
+                            {(v.sku || v.barcode) && (
+                              <span className="font-mono text-[10px] text-gray-400 ml-1.5">{v.barcode || v.sku}</span>
+                            )}
+                          </p>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={getVariantQty(product.id, v, vi)}
+                            onChange={(e) => setLabelVariantQuantities(prev => ({
+                              ...prev,
+                              [key]: Math.max(0, Math.min(100, parseInt(e.target.value) || 0))
+                            }))}
+                            className="w-14 px-2 py-0.5 border border-gray-300 rounded text-sm text-center"
+                            title="0 = no imprimir esta variante"
+                          />
+                        </div>
+                      )
+                    })}
+                    <p className="text-[10px] text-gray-400">0 = no imprimir esa variante</p>
+                  </div>
+                )}
               </div>
-            ))}
+              )
+            })}
           </div>
 
           {/* Info */}
@@ -9993,12 +10052,52 @@ export default function Products() {
             </p>
           </div>
 
-          {/* Total (cuenta 1 etiqueta por variante × cantidad) */}
+          {/* Guia de problemas fisicos de impresion. El PDF genera una pagina
+              EXACTA por etiqueta; cuando sale una si y una en blanco, o cortada,
+              la causa esta en el driver o en la escala de Chrome — es la duda
+              mas repetida de los clientes y asi se resuelve sin soporte. */}
+          {RICH_LABEL_SIZES.includes(labelSize) && (
+            <details className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <summary className="text-xs font-medium text-amber-900 cursor-pointer">
+                ¿Sale una etiqueta impresa y la siguiente en blanco, o el texto cortado?
+              </summary>
+              <div className="mt-2 text-xs text-amber-800 space-y-1.5">
+                <p>
+                  El PDF trae una página exacta del tamaño elegido por cada etiqueta. Si la
+                  impresora salta etiquetas en blanco o imprime corrido, está avanzando más
+                  papel del que mide la etiqueta. Revisa en este orden:
+                </p>
+                <ol className="list-decimal pl-4 space-y-1">
+                  <li>
+                    <strong>Tamaño de papel del driver</strong>: en Windows, Preferencias de
+                    impresión de la etiquetera → tamaño <strong>{labelSize === '53x26' ? '5.3 × 2.6' : '5.0 × 2.5'} cm</strong>.
+                    Muchas Zebra vienen de fábrica en 3" × 2" (7.6 × 5.1 cm): justo el doble de alto,
+                    por eso sale una sí y una en blanco.
+                  </li>
+                  <li>
+                    En el diálogo de imprimir de Chrome: <strong>Tamaño del papel</strong> = el mismo,
+                    y <strong>Escala = 100%</strong> (no "Ajustar a la página").
+                  </li>
+                  <li>
+                    Si ya cambiaste el tamaño y sale igual, <strong>recalibra</strong> la impresora:
+                    apágala, mantén presionado el botón de avance, enciéndela sin soltar hasta que
+                    expulse varias etiquetas, y suelta.
+                  </li>
+                </ol>
+              </div>
+            </details>
+          )}
+
+          {/* Total: en tamaños ricos suma la cantidad POR VARIANTE; en los
+              clasicos (solo-barcode) es cantidad por producto, sin variantes. */}
           <p className="text-sm text-gray-700">
             Total: <strong>{products.filter(p => selectedProducts.has(p.id)).reduce((sum, p) => {
-              const qty = labelQuantities[p.id] || 1
-              const nVars = (p.hasVariants && Array.isArray(p.variants) && p.variants.length > 0) ? p.variants.length : 1
-              return sum + qty * nVars
+              const conVariantes = RICH_LABEL_SIZES.includes(labelSize) &&
+                p.hasVariants && Array.isArray(p.variants) && p.variants.length > 0
+              if (conVariantes) {
+                return sum + p.variants.reduce((vs, v, vi) => vs + getVariantQty(p.id, v, vi), 0)
+              }
+              return sum + (labelQuantities[p.id] || 1)
             }, 0)}</strong> etiquetas de <strong>{selectedProducts.size}</strong> productos
           </p>
 
