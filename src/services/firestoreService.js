@@ -2084,18 +2084,38 @@ export const getPurchase = async (userId, purchaseId) => {
 /**
  * Obtener compras de un usuario
  */
-export const getPurchases = async (userId, { sinceDate = null } = {}) => {
+export const getPurchases = async (userId, { sinceDate = null, includeCreditHistory = false } = {}) => {
   try {
     // PERF: con sinceDate (Flujo de Caja, por periodo) trae solo compras desde
     // esa fecha. Sin sinceDate = todas (compatibilidad con Compras/Historial).
     const ref = collection(db, 'businesses', userId, 'purchases')
-    const querySnapshot = sinceDate
-      ? await getDocs(query(ref, where('createdAt', '>=', sinceDate), orderBy('createdAt', 'desc')))
-      : await getDocs(ref)
-    const purchases = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-    }))
+    let purchases
+    if (sinceDate) {
+      // `createdAt` es la fecha de la COMPRA, no la del abono. Para el Flujo de
+      // Caja eso dejaba fuera justo lo que define al credito: comprar en julio
+      // y pagar en agosto. Mirando agosto, la compra de julio no entraba en la
+      // consulta y su abono desaparecia del reporte (reportado por CYBY Plast).
+      // Por eso se suman las compras al credito de CUALQUIER fecha: sus abonos
+      // pueden caer en el periodo. Es un filtro de campo simple, sin indice
+      // compuesto, y las compras al credito son una minoria del total.
+      const consultas = [
+        getDocs(query(ref, where('createdAt', '>=', sinceDate), orderBy('createdAt', 'desc'))),
+      ]
+      if (includeCreditHistory) {
+        consultas.push(getDocs(query(ref, where('paymentType', '==', 'credito'))))
+      }
+      const snaps = await Promise.all(consultas)
+      // Map por id: una compra al credito reciente cae en las dos consultas.
+      const porId = new Map()
+      snaps.forEach(snap => snap.docs.forEach(d => porId.set(d.id, { id: d.id, ...d.data() })))
+      purchases = Array.from(porId.values())
+    } else {
+      const querySnapshot = await getDocs(ref)
+      purchases = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      }))
+    }
 
     // Ordenar por fecha de creación (más reciente primero)
     purchases.sort((a, b) => {

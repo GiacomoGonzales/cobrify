@@ -321,7 +321,9 @@ export default function CashFlow() {
       const [invoicesRes, expensesData, purchasesRes, loansRes, cashMovementsRes, financialRes, branchesRes, warehousesRes] = await Promise.all([
         getRecentInvoices(getBusinessId(), sinceDate),
         getExpenses(getBusinessId(), { startDate: dateRange.startDate, endDate: dateRange.endDate }),
-        getPurchases(getBusinessId(), { sinceDate }),
+        // includeCreditHistory: los abonos del periodo pueden ser de compras
+        // anteriores (se compra a credito en julio y se abona en agosto).
+        getPurchases(getBusinessId(), { sinceDate, includeCreditHistory: true }),
         getLoans(getBusinessId()),
         getAllCashMovements(getBusinessId(), sinceDate),
         getFinancialMovements(getBusinessId()),
