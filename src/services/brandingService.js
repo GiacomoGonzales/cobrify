@@ -248,6 +248,28 @@ function hexToRgba(hex, alpha = 1) {
 }
 
 /**
+ * Deja un dominio en la forma EXACTA con la que se guarda y se busca:
+ * solo el host, en minusculas, sin protocolo, sin www y sin ruta.
+ *
+ * Existe porque la busqueda por dominio es una comparacion literal contra
+ * Firestore: si el admin pega "https://www.midominio.com/" desde la barra del
+ * navegador, no coincide con el hostname real y el reseller ve la landing de
+ * Cobrify sin ningun mensaje de error. Paso de verdad (ago-2026).
+ *
+ * Se usa en los DOS lados —al guardar en el panel admin y al resolver el
+ * hostname aca— para que no puedan divergir.
+ */
+export function normalizeCustomDomain(value) {
+  let s = String(value || '').trim().toLowerCase()
+  if (!s) return ''
+  s = s.replace(/^https?:\/\//, '')      // protocolo
+  s = s.split('/')[0]                     // ruta / barra final
+  s = s.split('?')[0].split('#')[0]       // query o ancla pegados
+  if (s.startsWith('www.')) s = s.substring(4)
+  return s
+}
+
+/**
  * Obtiene el reseller por hostname (dominio personalizado)
  * @param {string} hostname - El hostname actual (ej: factuperu.com)
  * @returns {Promise<{resellerId: string, branding: object} | null>}
@@ -272,11 +294,8 @@ export async function getResellerByHostname(hostname) {
   }
 
   try {
-    // Normalizar hostname: quitar www. si existe y convertir a minúsculas
-    let normalizedHostname = hostname.toLowerCase()
-    if (normalizedHostname.startsWith('www.')) {
-      normalizedHostname = normalizedHostname.substring(4)
-    }
+    // Mismo criterio que usa el panel admin al guardar.
+    const normalizedHostname = normalizeCustomDomain(hostname)
 
     console.log('🔍 Searching reseller by custom domain:', normalizedHostname, '(original:', hostname, ')')
 

@@ -14,6 +14,7 @@ import {
   where
 } from 'firebase/firestore'
 import { getTiersConfig, calculateTier } from '@/services/resellerTierService'
+import { normalizeCustomDomain } from '@/services/brandingService'
 import {
   Users,
   Plus,
@@ -276,7 +277,10 @@ export default function AdminResellers() {
         discountOverride: discountOverride,
         balance: parseFloat(formData.balance) || 0,
         isActive: formData.isActive,
-        customDomain: formData.customDomain || null,
+        // Normalizar SIEMPRE: si se pega la URL del navegador
+        // ("https://www.x.com/") no coincidiria con el hostname y el reseller
+        // veria la landing de Cobrify sin ningun aviso.
+        customDomain: normalizeCustomDomain(formData.customDomain) || null,
         pricingModel: formData.pricingModel || 'legacy'
       }
 
@@ -920,7 +924,8 @@ export default function AdminResellers() {
                         <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
                           <strong>Configuración requerida:</strong>
                           <ol className="list-decimal ml-4 mt-1 space-y-0.5">
-                            <li>Agregar dominio en Vercel: {formData.customDomain}</li>
+                            <li>Se guardará como: <strong>{normalizeCustomDomain(formData.customDomain)}</strong></li>
+                            <li>Agregar dominio en Vercel: {normalizeCustomDomain(formData.customDomain)}</li>
                             <li>Configurar DNS: CNAME → cname.vercel-dns.com</li>
                           </ol>
                         </div>
