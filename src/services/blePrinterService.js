@@ -480,7 +480,7 @@ export const printBLETest = async (paperWidth = 58) => {
       ESCPOSCommands.lineFeed(),
       ESCPOSCommands.text('Impresora configurada\n'),
       ESCPOSCommands.text('correctamente!\n'),
-      ESCPOSCommands.feed(4),
+      ESCPOSCommands.feed(getCutFeedLines()),
     ];
 
     // Intentar cortar papel (puede no estar soportado)

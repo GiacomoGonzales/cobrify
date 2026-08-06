@@ -2076,7 +2076,7 @@ export const testPrinter = async (paperWidth = 58) => {
         .newLine()
         .text('correctamente!')
         .newLine()
-        .feed(2)
+        .feed(getCutFeedLines())
         .cut();
 
       const result = await TcpPrinter.printDirect({ ip, port, data: builder.toBase64() });
@@ -2791,7 +2791,7 @@ const printWifiKitchenOrder = async (order, table = null, paperWidth = 58, stati
     const lines = buildKitchenLines(order, table, paperWidth, stationName);
     renderKitchenLinesEscPos(builder, lines, format);
 
-    builder.feed(order._ultraCompact ? 1 : 2)
+    builder.feed(getCutFeedLines())
       .cut();
 
     const base64Data = builder.toBase64();
@@ -2836,7 +2836,7 @@ export const printStationTicket = async (printerIp, order, station, items, paper
     const lines = buildKitchenLines(stationOrder, stationTable, paperWidth, station.name || 'ESTACION');
     renderKitchenLinesEscPos(builder, lines, format);
 
-    builder.feed(2).cut();
+    builder.feed(getCutFeedLines()).cut();
 
     const base64Data = builder.toBase64();
 
@@ -3076,7 +3076,7 @@ const buildPreBillEscPos = (order, table, business, taxConfig = { igvRate: 18, i
       .newLine()
       .text('Gracias por su preferencia')
       .newLine()
-      .feed(2)
+      .feed(getCutFeedLines())
       .cut();
 
     return builder.toBase64();
@@ -3173,7 +3173,7 @@ const buildSplitPreBillEscPos = (order, table, business, taxConfig, paperWidth, 
     .text('No valido como comprobante').newLine()
     .text('Solicite su factura o boleta').newLine()
     .newLine().text('Gracias por su preferencia').newLine()
-    .feed(2).cut();
+    .feed(getCutFeedLines()).cut();
 
   return builder.toBase64();
 };
@@ -3749,7 +3749,7 @@ const printWifiCashClosure = async (sessionData, movements, business, paperWidth
       .newLine()
       .text(formatDateTime(new Date()))
       .newLine()
-      .feed(2)
+      .feed(getCutFeedLines())
       .cut();
 
     const base64Data = builder.toBase64();
@@ -4014,7 +4014,7 @@ export const printCashMovementTicket = async (movement, business, paperWidth = 5
         .text(dotLine).newLine().text('Entregado por (Nombre/DNI)').newLine().newLine()
         .text(dotLine).newLine().text('Recibido por (Nombre/DNI)').newLine().newLine();
       builder.text('Documento interno').newLine().text('Sin valor tributario').newLine()
-        .newLine().text(printedAt).newLine().feed(2).cut();
+        .newLine().text(printedAt).newLine().feed(getCutFeedLines()).cut();
       const result = await sendEscPosData(builder.toBase64());
       return (result && result.success) ? { success: true } : { success: false, error: 'Error al imprimir constancia via WiFi' };
     } catch (error) {
@@ -4263,7 +4263,7 @@ const buildDispatchGuideEscPos = (guide, business, paperWidth = 58) => {
     .text('REPRESENTACION IMPRESA DE LA\n')
     .text('GUIA DE REMISION ELECTRONICA\n')
     .text('Consulte en: www.sunat.gob.pe\n')
-    .feed(4).cut();
+    .feed(getCutFeedLines()).cut();
 
   return builder.toBase64();
 };
@@ -4882,7 +4882,7 @@ const buildProductBarcodesEscPos = (items, paperWidth = 58) => {
     }
   }
 
-  builder.feed(2).cut();
+  builder.feed(getCutFeedLines()).cut();
   return builder.toBase64();
 };
 
