@@ -1165,7 +1165,7 @@ export default function CashRegister() {
       const sessionData = closedSessionData || currentSession
 
       const sessionInvoices = getSessionOnlyInvoices(sessionData)
-      await generateCashReportExcel(sessionData, movements, sessionInvoices, businessData, totals.deferredPayments || [])
+      await generateCashReportExcel(sessionData, movements, sessionInvoices, businessData, totals.deferredPayments || [], { hideExpected: hideExpectedForCashier })
       toast.success('Reporte Excel descargado correctamente')
     } catch (error) {
       console.error('Error al generar Excel:', error)
@@ -1196,7 +1196,7 @@ export default function CashRegister() {
       const orderModificationsData = modsResult.success ? modsResult.data : []
 
       const sessionInvoices = getSessionOnlyInvoices(sessionData)
-      await generateCashReportPDF(sessionData, movements, sessionInvoices, businessData, closedWithoutReceiptData, orderModificationsData, totals.deferredPayments || [])
+      await generateCashReportPDF(sessionData, movements, sessionInvoices, businessData, closedWithoutReceiptData, orderModificationsData, totals.deferredPayments || [], { hideExpected: hideExpectedForCashier })
       toast.success('Reporte PDF descargado correctamente')
     } catch (error) {
       console.error('Error al generar PDF:', error)
@@ -1280,7 +1280,8 @@ export default function CashRegister() {
         companySettings,
         printerConfig.paperWidth || 58,
         branchName,
-        closedSessionData?.deferredPayments || totals.deferredPayments || []
+        closedSessionData?.deferredPayments || totals.deferredPayments || [],
+        hideExpectedForCashier
       )
 
       if (result.success) {
@@ -1336,7 +1337,8 @@ export default function CashRegister() {
         businessData,
         printerConfig.paperWidth || 58,
         branchName,
-        deferred
+        deferred,
+        hideExpectedForCashier
       )
 
       if (result.success) {
@@ -3200,12 +3202,15 @@ export default function CashRegister() {
                               <p className="text-xs text-gray-500">Cierre</p>
                               <p className="font-semibold text-gray-900">{formatCurrency(session.closingCash || 0)}</p>
                             </div>
-                            <div className="text-center">
-                              <p className="text-xs text-gray-500">Diferencia</p>
-                              <p className={`font-semibold ${difference >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                {difference > 0 ? '+' : ''}{formatCurrency(difference)}
-                              </p>
-                            </div>
+                            {/* Cuadre oculto al cajero: la diferencia delata el esperado */}
+                            {!hideExpectedForCashier && (
+                              <div className="text-center">
+                                <p className="text-xs text-gray-500">Diferencia</p>
+                                <p className={`font-semibold ${difference >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                  {difference > 0 ? '+' : ''}{formatCurrency(difference)}
+                                </p>
+                              </div>
+                            )}
                             <ChevronRight className="w-5 h-5 text-gray-400 hidden sm:block" />
                           </div>
                         </div>
@@ -3446,21 +3451,26 @@ export default function CashRegister() {
                     <span className="font-semibold">{formatCurrency(monto)}</span>
                   </div>
                 ))}
-                <div className="flex justify-between border-t border-gray-200 pt-2 mt-2">
-                  <span className="text-gray-600">Efectivo Esperado:</span>
-                  <span className="font-semibold">{formatCurrency(selectedHistorySession.expectedAmount || 0)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-medium text-gray-700">Diferencia:</span>
-                  <span className={`font-bold ${(selectedHistorySession.difference || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {(selectedHistorySession.difference || 0) > 0 ? '+' : ''}{formatCurrency(selectedHistorySession.difference || 0)}
-                    {(selectedHistorySession.difference || 0) !== 0 && (
-                      <span className="text-xs ml-1">
-                        ({(selectedHistorySession.difference || 0) > 0 ? 'Sobrante' : 'Faltante'})
+                {/* Cuadre oculto al cajero (Config > Documentos): ni esperado ni diferencia */}
+                {!hideExpectedForCashier && (
+                  <>
+                    <div className="flex justify-between border-t border-gray-200 pt-2 mt-2">
+                      <span className="text-gray-600">Efectivo Esperado:</span>
+                      <span className="font-semibold">{formatCurrency(selectedHistorySession.expectedAmount || 0)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-medium text-gray-700">Diferencia:</span>
+                      <span className={`font-bold ${(selectedHistorySession.difference || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {(selectedHistorySession.difference || 0) > 0 ? '+' : ''}{formatCurrency(selectedHistorySession.difference || 0)}
+                        {(selectedHistorySession.difference || 0) !== 0 && (
+                          <span className="text-xs ml-1">
+                            ({(selectedHistorySession.difference || 0) > 0 ? 'Sobrante' : 'Faltante'})
+                          </span>
+                        )}
                       </span>
-                    )}
-                  </span>
-                </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -3829,7 +3839,7 @@ export default function CashRegister() {
                     const businessResult = await getCompanySettings(getBusinessId())
                     const businessData = businessResult.success ? businessResult.data : null
                     const { deferred, sessionInvoices } = getHistoryDerived(selectedHistorySession, historyInvoices)
-                    await generateCashReportPDF(selectedHistorySession, historyMovements, sessionInvoices, businessData, historyClosedWithoutReceipt, historyOrderModifications, deferred)
+                    await generateCashReportPDF(selectedHistorySession, historyMovements, sessionInvoices, businessData, historyClosedWithoutReceipt, historyOrderModifications, deferred, { hideExpected: hideExpectedForCashier })
                     toast.success('PDF descargado')
                   } catch (error) {
                     toast.error('Error al generar PDF')
@@ -3849,7 +3859,7 @@ export default function CashRegister() {
                       const businessResult = await getCompanySettings(getBusinessId())
                       const businessData = businessResult.success ? businessResult.data : null
                       const { deferred, sessionInvoices } = getHistoryDerived(selectedHistorySession, historyInvoices)
-                      await generateCashReportExcel(selectedHistorySession, historyMovements, sessionInvoices, businessData, deferred)
+                      await generateCashReportExcel(selectedHistorySession, historyMovements, sessionInvoices, businessData, deferred, { hideExpected: hideExpectedForCashier })
                       toast.success('Excel descargado')
                     } catch (error) {
                       toast.error('Error al generar Excel')
@@ -4388,25 +4398,31 @@ export default function CashRegister() {
 
             {/* Resumen de cierre */}
             <div className="bg-gray-50 p-4 rounded-lg space-y-3">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Efectivo Esperado:</span>
-                <span className="font-semibold">{formatCurrency(closedSessionData?.expectedAmount || 0)}</span>
-              </div>
+              {/* Cuadre oculto al cajero: si el conteo fue "a ciegas", el modal de
+                  éxito no puede revelar el esperado ni el sobrante/faltante */}
+              {!hideExpectedForCashier && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Efectivo Esperado:</span>
+                  <span className="font-semibold">{formatCurrency(closedSessionData?.expectedAmount || 0)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Efectivo Contado:</span>
                 <span className="font-semibold">{formatCurrency(closedSessionData?.closingCash || 0)}</span>
               </div>
-              <div className="flex justify-between text-sm border-t border-gray-300 pt-2">
-                <span className="text-gray-700 font-medium">Diferencia:</span>
-                <span className={`font-bold ${
-                  (closedSessionData?.difference || 0) >= 0 ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {formatCurrency(closedSessionData?.difference || 0)}
-                  <span className="text-xs ml-1">
-                    {(closedSessionData?.difference || 0) > 0 ? '(Sobrante)' : (closedSessionData?.difference || 0) < 0 ? '(Faltante)' : ''}
+              {!hideExpectedForCashier && (
+                <div className="flex justify-between text-sm border-t border-gray-300 pt-2">
+                  <span className="text-gray-700 font-medium">Diferencia:</span>
+                  <span className={`font-bold ${
+                    (closedSessionData?.difference || 0) >= 0 ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {formatCurrency(closedSessionData?.difference || 0)}
+                    <span className="text-xs ml-1">
+                      {(closedSessionData?.difference || 0) > 0 ? '(Sobrante)' : (closedSessionData?.difference || 0) < 0 ? '(Faltante)' : ''}
+                    </span>
                   </span>
-                </span>
-              </div>
+                </div>
+              )}
             </div>
 
             {/* Botones de descarga e impresión */}
@@ -4706,6 +4722,7 @@ export default function CashRegister() {
       {printSessionData && companySettings && (
         <div className="hidden print:block">
           <CashClosureTicket
+            hideExpected={hideExpectedForCashier}
             sessionData={printSessionData}
             movements={printMovements}
             invoices={printSessionData === closedSessionData ? todayInvoices : []}

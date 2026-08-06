@@ -254,7 +254,10 @@ const docTypeLabels = {
  * Genera el reporte de cierre de caja en Excel con estilo moderno
  * (estilos, colores, KPI cards, soporte multi-divisa PEN/USD).
  */
-export const generateCashReportExcel = async (sessionData, movements, invoices, businessData, deferredPayments = []) => {
+export const generateCashReportExcel = async (sessionData, movements, invoices, businessData, deferredPayments = [], opts = {}) => {
+  // Cierre "a ciegas" (hideCashExpectedFromCashier): el reporte que descarga el
+  // sub-usuario no lleva esperado, diferencia ni total de dinero
+  const hideExpected = !!opts.hideExpected
   const workbook = XLSX.utils.book_new()
 
   const openedAtDate = getDateFromTimestamp(sessionData.openedAt)
@@ -339,14 +342,17 @@ export const generateCashReportExcel = async (sessionData, movements, invoices, 
   const totalsRow = aoa.length - 1
   aoa.push([])
 
-  // Efectivo esperado + diferencia
-  aoa.push(['Efectivo Esperado (Inicial + Ventas Efectivo + Ingresos - Egresos)', '', '', Number((sessionData.expectedAmount || 0).toFixed(2))])
-  const expectedRow = aoa.length - 1
-  const difference = (sessionData.closingCash || 0) - (sessionData.expectedAmount || 0)
-  const diffOk = difference >= 0
-  const diffLabel = difference === 0 ? 'Cuadra' : (diffOk ? 'Sobrante' : 'Faltante')
-  aoa.push([`DIFERENCIA EN EFECTIVO — ${diffLabel}`, '', '', Number(difference.toFixed(2))])
-  const diffRow = aoa.length - 1
+  // Efectivo esperado + diferencia (ocultos en el cierre "a ciegas")
+  let expectedRow = -1, diffRow = -1, diffOk = false
+  if (!hideExpected) {
+    aoa.push(['Efectivo Esperado (Inicial + Ventas Efectivo + Ingresos - Egresos)', '', '', Number((sessionData.expectedAmount || 0).toFixed(2))])
+    expectedRow = aoa.length - 1
+    const difference = (sessionData.closingCash || 0) - (sessionData.expectedAmount || 0)
+    diffOk = difference >= 0
+    const diffLabel = difference === 0 ? 'Cuadra' : (diffOk ? 'Sobrante' : 'Faltante')
+    aoa.push([`DIFERENCIA EN EFECTIVO — ${diffLabel}`, '', '', Number(difference.toFixed(2))])
+    diffRow = aoa.length - 1
+  }
   aoa.push([])
 
   // ========== BLOQUE USD (solo si tuvo actividad) ==========
@@ -406,13 +412,15 @@ export const generateCashReportExcel = async (sessionData, movements, invoices, 
     usdTotalsRow = aoa.length - 1
     aoa.push([])
 
-    aoa.push(['Efectivo USD Esperado (Inicial + Ventas Efectivo + Ingresos - Egresos)', '', '', Number((usd.expectedAmount || 0).toFixed(2))])
-    usdExpectedRow = aoa.length - 1
-    const diffUSD = (usd.closingCash || 0) - (usd.expectedAmount || 0)
-    usdDiffOk = diffUSD >= 0
-    const diffUSDLbl = diffUSD === 0 ? 'Cuadra' : (usdDiffOk ? 'Sobrante' : 'Faltante')
-    aoa.push([`DIFERENCIA USD — ${diffUSDLbl}`, '', '', Number(diffUSD.toFixed(2))])
-    usdDiffRow = aoa.length - 1
+    if (!hideExpected) {
+      aoa.push(['Efectivo USD Esperado (Inicial + Ventas Efectivo + Ingresos - Egresos)', '', '', Number((usd.expectedAmount || 0).toFixed(2))])
+      usdExpectedRow = aoa.length - 1
+      const diffUSD = (usd.closingCash || 0) - (usd.expectedAmount || 0)
+      usdDiffOk = diffUSD >= 0
+      const diffUSDLbl = diffUSD === 0 ? 'Cuadra' : (usdDiffOk ? 'Sobrante' : 'Faltante')
+      aoa.push([`DIFERENCIA USD — ${diffUSDLbl}`, '', '', Number(diffUSD.toFixed(2))])
+      usdDiffRow = aoa.length - 1
+    }
   }
 
   // ========== BLOQUE YAPE (sólo si tuvo actividad en la billetera) ==========
@@ -449,17 +457,21 @@ export const generateCashReportExcel = async (sessionData, movements, invoices, 
     const expectedYape = sessionData.expectedAmountYape !== undefined
       ? sessionData.expectedAmountYape
       : (yapeOpening + yapeSales + yapeIncome - yapeExpense)
-    aoa.push(['Yape Esperado (Inicial + Ventas + Ingresos − Gastos)', '', '', Number(expectedYape.toFixed(2))])
-    yapeExpectedRow = aoa.length - 1
+    if (!hideExpected) {
+      aoa.push(['Yape Esperado (Inicial + Ventas + Ingresos − Gastos)', '', '', Number(expectedYape.toFixed(2))])
+      yapeExpectedRow = aoa.length - 1
+    }
     aoa.push(['Yape Real (al cierre)', '', '', Number(yapeClosing.toFixed(2))])
     yapeRealRow = aoa.length - 1
-    const diffYape = sessionData.differenceYape !== undefined
-      ? sessionData.differenceYape
-      : (yapeClosing - expectedYape)
-    yapeDiffOk = diffYape >= 0
-    const diffYapeLbl = Math.abs(diffYape) < 0.005 ? 'Cuadra' : (yapeDiffOk ? 'Sobrante' : 'Faltante')
-    aoa.push([`DIFERENCIA YAPE — ${diffYapeLbl}`, '', '', Number(diffYape.toFixed(2))])
-    yapeDiffRow = aoa.length - 1
+    if (!hideExpected) {
+      const diffYape = sessionData.differenceYape !== undefined
+        ? sessionData.differenceYape
+        : (yapeClosing - expectedYape)
+      yapeDiffOk = diffYape >= 0
+      const diffYapeLbl = Math.abs(diffYape) < 0.005 ? 'Cuadra' : (yapeDiffOk ? 'Sobrante' : 'Faltante')
+      aoa.push([`DIFERENCIA YAPE — ${diffYapeLbl}`, '', '', Number(diffYape.toFixed(2))])
+      yapeDiffRow = aoa.length - 1
+    }
   }
 
   // ===== SALDO EN PLIN ===== (identico a Yape)
@@ -489,23 +501,27 @@ export const generateCashReportExcel = async (sessionData, movements, invoices, 
     ])
     plinKpiValueRow = aoa.length - 1
     aoa.push([])
-    aoa.push(['Plin Esperado (Inicial + Ventas + Ingresos − Gastos)', '', '', Number(expectedPlinCalc.toFixed(2))])
-    plinExpectedRow = aoa.length - 1
+    if (!hideExpected) {
+      aoa.push(['Plin Esperado (Inicial + Ventas + Ingresos − Gastos)', '', '', Number(expectedPlinCalc.toFixed(2))])
+      plinExpectedRow = aoa.length - 1
+    }
     aoa.push(['Plin Real (al cierre)', '', '', Number(plinClosing.toFixed(2))])
     plinRealRow = aoa.length - 1
-    const diffPlin = sessionData.differencePlin !== undefined
-      ? sessionData.differencePlin
-      : (plinClosing - expectedPlinCalc)
-    plinDiffOk = diffPlin >= 0
-    const diffPlinLbl = Math.abs(diffPlin) < 0.005 ? 'Cuadra' : (plinDiffOk ? 'Sobrante' : 'Faltante')
-    aoa.push([`DIFERENCIA PLIN — ${diffPlinLbl}`, '', '', Number(diffPlin.toFixed(2))])
-    plinDiffRow = aoa.length - 1
+    if (!hideExpected) {
+      const diffPlin = sessionData.differencePlin !== undefined
+        ? sessionData.differencePlin
+        : (plinClosing - expectedPlinCalc)
+      plinDiffOk = diffPlin >= 0
+      const diffPlinLbl = Math.abs(diffPlin) < 0.005 ? 'Cuadra' : (plinDiffOk ? 'Sobrante' : 'Faltante')
+      aoa.push([`DIFERENCIA PLIN — ${diffPlinLbl}`, '', '', Number(diffPlin.toFixed(2))])
+      plinDiffRow = aoa.length - 1
+    }
   }
 
   // ===== TOTAL DEL DINERO ===== efectivo esperado + saldos de billeteras.
   // Pedido por CYBY Plast: los tres numeros estaban sueltos y habia que
   // sumarlos a mano para saber cuanto dinero tiene el negocio al cierre.
-  if (hasYapeActivity || hasPlinActivity) {
+  if (!hideExpected && (hasYapeActivity || hasPlinActivity)) {
     const expectedYapeForTotal = hasYapeActivity
       ? (sessionData.expectedAmountYape !== undefined
         ? sessionData.expectedAmountYape
@@ -525,33 +541,49 @@ export const generateCashReportExcel = async (sessionData, movements, invoices, 
     { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }, // título
     { s: { r: sectionsRow, c: 0 }, e: { r: sectionsRow, c: 1 } },
     { s: { r: sectionsRow, c: 2 }, e: { r: sectionsRow, c: 3 } },
-    { s: { r: expectedRow, c: 0 }, e: { r: expectedRow, c: 2 } },
-    { s: { r: diffRow, c: 0 }, e: { r: diffRow, c: 2 } },
   ]
+  if (expectedRow >= 0) {
+    ws['!merges'].push(
+      { s: { r: expectedRow, c: 0 }, e: { r: expectedRow, c: 2 } },
+      { s: { r: diffRow, c: 0 }, e: { r: diffRow, c: 2 } },
+    )
+  }
   if (usd) {
     ws['!merges'].push(
       { s: { r: usdSectionRow, c: 0 }, e: { r: usdSectionRow, c: 3 } },
       { s: { r: usdTableSectionRow, c: 0 }, e: { r: usdTableSectionRow, c: 1 } },
       { s: { r: usdTableSectionRow, c: 2 }, e: { r: usdTableSectionRow, c: 3 } },
-      { s: { r: usdExpectedRow, c: 0 }, e: { r: usdExpectedRow, c: 2 } },
-      { s: { r: usdDiffRow, c: 0 }, e: { r: usdDiffRow, c: 2 } },
     )
+    if (usdExpectedRow >= 0) {
+      ws['!merges'].push(
+        { s: { r: usdExpectedRow, c: 0 }, e: { r: usdExpectedRow, c: 2 } },
+        { s: { r: usdDiffRow, c: 0 }, e: { r: usdDiffRow, c: 2 } },
+      )
+    }
   }
   if (hasYapeActivity) {
     ws['!merges'].push(
       { s: { r: yapeSectionRow, c: 0 }, e: { r: yapeSectionRow, c: 3 } },
-      { s: { r: yapeExpectedRow, c: 0 }, e: { r: yapeExpectedRow, c: 2 } },
       { s: { r: yapeRealRow, c: 0 }, e: { r: yapeRealRow, c: 2 } },
-      { s: { r: yapeDiffRow, c: 0 }, e: { r: yapeDiffRow, c: 2 } },
     )
+    if (yapeExpectedRow >= 0) {
+      ws['!merges'].push(
+        { s: { r: yapeExpectedRow, c: 0 }, e: { r: yapeExpectedRow, c: 2 } },
+        { s: { r: yapeDiffRow, c: 0 }, e: { r: yapeDiffRow, c: 2 } },
+      )
+    }
   }
   if (hasPlinActivity) {
     ws['!merges'].push(
       { s: { r: plinSectionRow, c: 0 }, e: { r: plinSectionRow, c: 3 } },
-      { s: { r: plinExpectedRow, c: 0 }, e: { r: plinExpectedRow, c: 2 } },
       { s: { r: plinRealRow, c: 0 }, e: { r: plinRealRow, c: 2 } },
-      { s: { r: plinDiffRow, c: 0 }, e: { r: plinDiffRow, c: 2 } },
     )
+    if (plinExpectedRow >= 0) {
+      ws['!merges'].push(
+        { s: { r: plinExpectedRow, c: 0 }, e: { r: plinExpectedRow, c: 2 } },
+        { s: { r: plinDiffRow, c: 0 }, e: { r: plinDiffRow, c: 2 } },
+      )
+    }
   }
   if (totalMoneyRow >= 0) {
     ws['!merges'].push({ s: { r: totalMoneyRow, c: 0 }, e: { r: totalMoneyRow, c: 2 } })
@@ -594,10 +626,12 @@ export const generateCashReportExcel = async (sessionData, movements, invoices, 
   setS(ws, totalsRow, 3, sTotalNumber('PEN'))
 
   // Esperado + diferencia
-  setS(ws, expectedRow, 0, { ...sMetaLabel, font: { ...sMetaLabel.font, italic: true } })
-  setS(ws, expectedRow, 3, sTotalNumber('PEN'))
-  setS(ws, diffRow, 0, sDifferenceLabel(diffOk))
-  setS(ws, diffRow, 3, sDifferenceNumber(diffOk, 'PEN'))
+  if (expectedRow >= 0) {
+    setS(ws, expectedRow, 0, { ...sMetaLabel, font: { ...sMetaLabel.font, italic: true } })
+    setS(ws, expectedRow, 3, sTotalNumber('PEN'))
+    setS(ws, diffRow, 0, sDifferenceLabel(diffOk))
+    setS(ws, diffRow, 3, sDifferenceNumber(diffOk, 'PEN'))
+  }
 
   // Bloque USD
   if (usd) {
@@ -622,10 +656,12 @@ export const generateCashReportExcel = async (sessionData, movements, invoices, 
     setS(ws, usdTotalsRow, 2, sTotalLabel)
     setS(ws, usdTotalsRow, 3, sTotalNumber('USD'))
 
-    setS(ws, usdExpectedRow, 0, { ...sMetaLabel, font: { ...sMetaLabel.font, italic: true } })
-    setS(ws, usdExpectedRow, 3, sTotalNumber('USD'))
-    setS(ws, usdDiffRow, 0, sDifferenceLabel(usdDiffOk))
-    setS(ws, usdDiffRow, 3, sDifferenceNumber(usdDiffOk, 'USD'))
+    if (usdExpectedRow >= 0) {
+      setS(ws, usdExpectedRow, 0, { ...sMetaLabel, font: { ...sMetaLabel.font, italic: true } })
+      setS(ws, usdExpectedRow, 3, sTotalNumber('USD'))
+      setS(ws, usdDiffRow, 0, sDifferenceLabel(usdDiffOk))
+      setS(ws, usdDiffRow, 3, sDifferenceNumber(usdDiffOk, 'USD'))
+    }
   }
 
   // Bloque Yape
@@ -636,12 +672,16 @@ export const generateCashReportExcel = async (sessionData, movements, invoices, 
       setS(ws, yapeKpiValueRow, c, sKpiValue(kpiPalette[c].bg, kpiPalette[c].fg, 'PEN'))
     }
     ws['!rows'][yapeKpiValueRow] = { hpt: 26 }
-    setS(ws, yapeExpectedRow, 0, { ...sMetaLabel, font: { ...sMetaLabel.font, italic: true } })
-    setS(ws, yapeExpectedRow, 3, sTotalNumber('PEN'))
+    if (yapeExpectedRow >= 0) {
+      setS(ws, yapeExpectedRow, 0, { ...sMetaLabel, font: { ...sMetaLabel.font, italic: true } })
+      setS(ws, yapeExpectedRow, 3, sTotalNumber('PEN'))
+    }
     setS(ws, yapeRealRow, 0, sMetaLabel)
     setS(ws, yapeRealRow, 3, sTotalNumber('PEN'))
-    setS(ws, yapeDiffRow, 0, sDifferenceLabel(yapeDiffOk))
-    setS(ws, yapeDiffRow, 3, sDifferenceNumber(yapeDiffOk, 'PEN'))
+    if (yapeDiffRow >= 0) {
+      setS(ws, yapeDiffRow, 0, sDifferenceLabel(yapeDiffOk))
+      setS(ws, yapeDiffRow, 3, sDifferenceNumber(yapeDiffOk, 'PEN'))
+    }
   }
 
   // Bloque Plin
@@ -652,12 +692,16 @@ export const generateCashReportExcel = async (sessionData, movements, invoices, 
       setS(ws, plinKpiValueRow, c, sKpiValue(kpiPalette[c].bg, kpiPalette[c].fg, 'PEN'))
     }
     ws['!rows'][plinKpiValueRow] = { hpt: 26 }
-    setS(ws, plinExpectedRow, 0, { ...sMetaLabel, font: { ...sMetaLabel.font, italic: true } })
-    setS(ws, plinExpectedRow, 3, sTotalNumber('PEN'))
+    if (plinExpectedRow >= 0) {
+      setS(ws, plinExpectedRow, 0, { ...sMetaLabel, font: { ...sMetaLabel.font, italic: true } })
+      setS(ws, plinExpectedRow, 3, sTotalNumber('PEN'))
+    }
     setS(ws, plinRealRow, 0, sMetaLabel)
     setS(ws, plinRealRow, 3, sTotalNumber('PEN'))
-    setS(ws, plinDiffRow, 0, sDifferenceLabel(plinDiffOk))
-    setS(ws, plinDiffRow, 3, sDifferenceNumber(plinDiffOk, 'PEN'))
+    if (plinDiffRow >= 0) {
+      setS(ws, plinDiffRow, 0, sDifferenceLabel(plinDiffOk))
+      setS(ws, plinDiffRow, 3, sDifferenceNumber(plinDiffOk, 'PEN'))
+    }
   }
 
   // Total del dinero
@@ -947,7 +991,9 @@ const hexToRgb = (hex) => {
 /**
  * Generar reporte de cierre de caja en PDF (estilo profesional compacto)
  */
-export const generateCashReportPDF = async (sessionData, movements, invoices, businessData, closedWithoutReceipt = [], orderModifications = [], deferredPayments = []) => {
+export const generateCashReportPDF = async (sessionData, movements, invoices, businessData, closedWithoutReceipt = [], orderModifications = [], deferredPayments = [], opts = {}) => {
+  // Cierre "a ciegas": sin esperado ni diferencia para el sub-usuario
+  const hideExpected = !!opts.hideExpected
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
 
   const openedAtDate = getDateFromTimestamp(sessionData.openedAt);
@@ -1157,34 +1203,36 @@ export const generateCashReportPDF = async (sessionData, movements, invoices, bu
 
   y = Math.max(yL, yR) + 5;
 
-  // ===== EFECTIVO ESPERADO + DIFERENCIA =====
-  doc.setFillColor(240, 240, 240);
-  doc.roundedRect(ML, y, CW, 7, 1, 1, 'F');
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(6);
-  doc.setTextColor(...MED);
-  doc.text('Efectivo Esperado (Inicial + Ventas Efectivo + Ingresos - Egresos)', ML + 2, y + 4.5);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(...DARK);
-  doc.text(fmt(sessionData.expectedAmount), RX - 2, y + 4.8, { align: 'right' });
-  y += 9;
+  // ===== EFECTIVO ESPERADO + DIFERENCIA ===== (ocultos en cierre "a ciegas")
+  if (!hideExpected) {
+    doc.setFillColor(240, 240, 240);
+    doc.roundedRect(ML, y, CW, 7, 1, 1, 'F');
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6);
+    doc.setTextColor(...MED);
+    doc.text('Efectivo Esperado (Inicial + Ventas Efectivo + Ingresos - Egresos)', ML + 2, y + 4.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(...DARK);
+    doc.text(fmt(sessionData.expectedAmount), RX - 2, y + 4.8, { align: 'right' });
+    y += 9;
 
-  const difference = (sessionData.closingCash || 0) - (sessionData.expectedAmount || 0);
-  const diffOk = difference >= 0;
-  const diffBg = diffOk ? [230, 250, 240] : [255, 235, 235];
-  const diffTc = diffOk ? [5, 120, 80] : [180, 30, 30];
-  const diffLbl = difference === 0 ? 'Cuadra' : (diffOk ? 'Sobrante' : 'Faltante');
+    const difference = (sessionData.closingCash || 0) - (sessionData.expectedAmount || 0);
+    const diffOk = difference >= 0;
+    const diffBg = diffOk ? [230, 250, 240] : [255, 235, 235];
+    const diffTc = diffOk ? [5, 120, 80] : [180, 30, 30];
+    const diffLbl = difference === 0 ? 'Cuadra' : (diffOk ? 'Sobrante' : 'Faltante');
 
-  doc.setFillColor(...diffBg);
-  doc.roundedRect(ML, y, CW, 9, 1, 1, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7);
-  doc.setTextColor(...diffTc);
-  doc.text(`DIFERENCIA EN EFECTIVO — ${diffLbl}`, ML + 2, y + 5.5);
-  doc.setFontSize(10);
-  doc.text(fmt(difference), RX - 2, y + 6, { align: 'right' });
-  y += 13;
+    doc.setFillColor(...diffBg);
+    doc.roundedRect(ML, y, CW, 9, 1, 1, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(...diffTc);
+    doc.text(`DIFERENCIA EN EFECTIVO — ${diffLbl}`, ML + 2, y + 5.5);
+    doc.setFontSize(10);
+    doc.text(fmt(difference), RX - 2, y + 6, { align: 'right' });
+    y += 13;
+  }
 
   // ===== BLOQUE USD (solo si la sesión tuvo actividad en dólares) =====
   // Diseñado para verse como una continuación natural del bloque PEN:
@@ -1288,28 +1336,29 @@ export const generateCashReportPDF = async (sessionData, movements, invoices, bu
 
     y = Math.max(yLu, yRu) + 5
 
-    // Efectivo esperado USD (mismo estilo que PEN)
-    doc.setFillColor(240, 240, 240)
-    doc.roundedRect(ML, y, CW, 7, 1, 1, 'F')
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(...MED)
-    doc.text('Efectivo Esperado (Inicial + Ventas Efectivo + Ingresos - Egresos)', ML + 2, y + 4.5)
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...DARK)
-    doc.text(fmt(usd.expectedAmount || 0, 'USD'), RX - 2, y + 4.8, { align: 'right' })
-    y += 9
+    // Efectivo esperado + diferencia USD (ocultos en cierre "a ciegas")
+    if (!hideExpected) {
+      doc.setFillColor(240, 240, 240)
+      doc.roundedRect(ML, y, CW, 7, 1, 1, 'F')
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(...MED)
+      doc.text('Efectivo Esperado (Inicial + Ventas Efectivo + Ingresos - Egresos)', ML + 2, y + 4.5)
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...DARK)
+      doc.text(fmt(usd.expectedAmount || 0, 'USD'), RX - 2, y + 4.8, { align: 'right' })
+      y += 9
 
-    // Diferencia USD (mismo estilo que PEN)
-    const diffUSD = (usd.closingCash || 0) - (usd.expectedAmount || 0)
-    const diffUSDOk = diffUSD >= 0
-    const diffUSDBg = diffUSDOk ? [230, 250, 240] : [255, 235, 235]
-    const diffUSDTc = diffUSDOk ? [5, 120, 80] : [180, 30, 30]
-    const diffUSDLbl = diffUSD === 0 ? 'Cuadra' : (diffUSDOk ? 'Sobrante' : 'Faltante')
-    doc.setFillColor(...diffUSDBg)
-    doc.roundedRect(ML, y, CW, 9, 1, 1, 'F')
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(...diffUSDTc)
-    doc.text(`DIFERENCIA EN EFECTIVO — ${diffUSDLbl}`, ML + 2, y + 5.5)
-    doc.setFontSize(10)
-    doc.text(fmt(diffUSD, 'USD'), RX - 2, y + 6, { align: 'right' })
-    y += 13
+      const diffUSD = (usd.closingCash || 0) - (usd.expectedAmount || 0)
+      const diffUSDOk = diffUSD >= 0
+      const diffUSDBg = diffUSDOk ? [230, 250, 240] : [255, 235, 235]
+      const diffUSDTc = diffUSDOk ? [5, 120, 80] : [180, 30, 30]
+      const diffUSDLbl = diffUSD === 0 ? 'Cuadra' : (diffUSDOk ? 'Sobrante' : 'Faltante')
+      doc.setFillColor(...diffUSDBg)
+      doc.roundedRect(ML, y, CW, 9, 1, 1, 'F')
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(...diffUSDTc)
+      doc.text(`DIFERENCIA EN EFECTIVO — ${diffUSDLbl}`, ML + 2, y + 5.5)
+      doc.setFontSize(10)
+      doc.text(fmt(diffUSD, 'USD'), RX - 2, y + 6, { align: 'right' })
+      y += 13
+    }
   }
 
   // ===== BLOQUE YAPE (sólo si la sesión tuvo actividad en la billetera) =====
@@ -1363,18 +1412,20 @@ export const generateCashReportPDF = async (sessionData, movements, invoices, bu
     if (incomeYape > 0) yapeRow('+ Otros Ingresos Yape', incomeYape, [30, 80, 180])
     if (expenseYape > 0) yapeRow('− Gastos en Yape', expenseYape, [180, 30, 30])
 
-    // Esperado
-    y += 1
-    doc.setFillColor(240, 230, 250)
-    doc.roundedRect(ML, y, CW, 7, 1, 1, 'F')
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(...MED)
-    doc.text('Saldo Yape Esperado (Inicial + Ventas + Ingresos − Gastos)', ML + 2, y + 4.5)
+    // Esperado (oculto en cierre "a ciegas")
     const expectedYape = sessionData.expectedAmountYape !== undefined
       ? sessionData.expectedAmountYape
       : (openingYape + salesYapeAmt + incomeYape - expenseYape)
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...DARK)
-    doc.text(fmt(expectedYape), RX - 2, y + 4.8, { align: 'right' })
-    y += 9
+    y += 1
+    if (!hideExpected) {
+      doc.setFillColor(240, 230, 250)
+      doc.roundedRect(ML, y, CW, 7, 1, 1, 'F')
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(...MED)
+      doc.text('Saldo Yape Esperado (Inicial + Ventas + Ingresos − Gastos)', ML + 2, y + 4.5)
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...DARK)
+      doc.text(fmt(expectedYape), RX - 2, y + 4.8, { align: 'right' })
+      y += 9
+    }
 
     // Real
     doc.setFillColor(245, 245, 245)
@@ -1385,21 +1436,23 @@ export const generateCashReportPDF = async (sessionData, movements, invoices, bu
     doc.text(fmt(closingYape), RX - 2, y + 4.8, { align: 'right' })
     y += 9
 
-    // Diferencia Yape (mismo estilo que diferencia efectivo)
-    const diffYape = sessionData.differenceYape !== undefined
-      ? sessionData.differenceYape
-      : (closingYape - expectedYape)
-    const diffYapeOk = diffYape >= 0
-    const diffYapeBg = diffYapeOk ? [230, 250, 240] : [255, 235, 235]
-    const diffYapeTc = diffYapeOk ? [5, 120, 80] : [180, 30, 30]
-    const diffYapeLbl = Math.abs(diffYape) < 0.005 ? 'Cuadra' : (diffYapeOk ? 'Sobrante' : 'Faltante')
-    doc.setFillColor(...diffYapeBg)
-    doc.roundedRect(ML, y, CW, 9, 1, 1, 'F')
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(...diffYapeTc)
-    doc.text(`DIFERENCIA EN YAPE — ${diffYapeLbl}`, ML + 2, y + 5.5)
-    doc.setFontSize(10)
-    doc.text(fmt(diffYape), RX - 2, y + 6, { align: 'right' })
-    y += 13
+    // Diferencia Yape (oculta en cierre "a ciegas")
+    if (!hideExpected) {
+      const diffYape = sessionData.differenceYape !== undefined
+        ? sessionData.differenceYape
+        : (closingYape - expectedYape)
+      const diffYapeOk = diffYape >= 0
+      const diffYapeBg = diffYapeOk ? [230, 250, 240] : [255, 235, 235]
+      const diffYapeTc = diffYapeOk ? [5, 120, 80] : [180, 30, 30]
+      const diffYapeLbl = Math.abs(diffYape) < 0.005 ? 'Cuadra' : (diffYapeOk ? 'Sobrante' : 'Faltante')
+      doc.setFillColor(...diffYapeBg)
+      doc.roundedRect(ML, y, CW, 9, 1, 1, 'F')
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(...diffYapeTc)
+      doc.text(`DIFERENCIA EN YAPE — ${diffYapeLbl}`, ML + 2, y + 5.5)
+      doc.setFontSize(10)
+      doc.text(fmt(diffYape), RX - 2, y + 6, { align: 'right' })
+      y += 13
+    }
   }
 
   // ===== PAGOS DE COMPROBANTES ANTERIORES (cobros diferidos) =====

@@ -3232,7 +3232,7 @@ export const printSplitPreBillThermal = async (order, table, business, taxConfig
  * @param {number} paperWidth - Ancho de papel (58 o 80mm)
  * @param {string} branchName - Nombre de la sucursal (opcional)
  */
-export const printCashClosureTicket = async (sessionData, movements = [], business, paperWidth = 58, branchName = null, deferredPayments = []) => {
+export const printCashClosureTicket = async (sessionData, movements = [], business, paperWidth = 58, branchName = null, deferredPayments = [], hideExpected = false) => {
   const isNative = Capacitor.isNativePlatform();
 
   if (!isNative || !isPrinterConnected) {
@@ -3452,22 +3452,25 @@ export const printCashClosureTicket = async (sessionData, movements = [], busine
     }
 
     // ========== CÁLCULO ==========
-    printer = printer
-      .bold(true)
-      .text('CALCULO\n')
-      .bold(false)
-      .text(createLine('Apertura:', formatCurrency(openingAmount)) + '\n')
-      .text(createLine('+ Ventas Efectivo:', formatCurrency(salesCash)) + '\n');
+    // Cierre "a ciegas": el CALCULO delata el esperado — fuera para el cajero
+    if (!hideExpected) {
+      printer = printer
+        .bold(true)
+        .text('CALCULO\n')
+        .bold(false)
+        .text(createLine('Apertura:', formatCurrency(openingAmount)) + '\n')
+        .text(createLine('+ Ventas Efectivo:', formatCurrency(salesCash)) + '\n');
 
-    if (totalIncome > 0) printer = printer.text(createLine('+ Ingresos:', formatCurrency(totalIncome)) + '\n');
-    if (totalExpense > 0) printer = printer.text(createLine('- Egresos:', formatCurrency(totalExpense)) + '\n');
+      if (totalIncome > 0) printer = printer.text(createLine('+ Ingresos:', formatCurrency(totalIncome)) + '\n');
+      if (totalExpense > 0) printer = printer.text(createLine('- Egresos:', formatCurrency(totalExpense)) + '\n');
 
-    printer = printer
-      .text(format.halfSeparator + '\n')
-      .bold(true)
-      .text(createLine('Efectivo Esperado:', formatCurrency(expectedAmount)) + '\n')
-      .bold(false)
-      .text(format.separator + '\n');
+      printer = printer
+        .text(format.halfSeparator + '\n')
+        .bold(true)
+        .text(createLine('Efectivo Esperado:', formatCurrency(expectedAmount)) + '\n')
+        .bold(false)
+        .text(format.separator + '\n');
+    }
 
     // ========== CONTEO DE CIERRE ==========
     printer = printer
@@ -3483,15 +3486,17 @@ export const printCashClosureTicket = async (sessionData, movements = [], busine
       .bold(false)
       .text(format.separator + '\n');
 
-    // ========== DIFERENCIA ==========
-    const diffLabel = difference > 0 ? 'Diferencia (Sobrante):' : difference < 0 ? 'Diferencia (Faltante):' : 'Diferencia:';
-    printer = printer
-      .bold(true)
-      .doubleHeight(true)
-      .text(createLine(diffLabel, formatCurrency(difference)) + '\n')
-      .doubleHeight(false)
-      .bold(false)
-      .text(format.separator + '\n');
+    // ========== DIFERENCIA ========== (oculta en cierre "a ciegas")
+    if (!hideExpected) {
+      const diffLabel = difference > 0 ? 'Diferencia (Sobrante):' : difference < 0 ? 'Diferencia (Faltante):' : 'Diferencia:';
+      printer = printer
+        .bold(true)
+        .doubleHeight(true)
+        .text(createLine(diffLabel, formatCurrency(difference)) + '\n')
+        .doubleHeight(false)
+        .bold(false)
+        .text(format.separator + '\n');
+    }
 
     // ========== BLOQUE YAPE (sólo si hubo actividad en la billetera) ==========
     if (hasYapeActivity) {
@@ -3503,16 +3508,17 @@ export const printCashClosureTicket = async (sessionData, movements = [], busine
       if (salesYape > 0) printer = printer.text(createLine('+ Ventas Yape:', formatCurrency(salesYape)) + '\n');
       if (totalIncomeYape > 0) printer = printer.text(createLine('+ Ingresos Yape:', formatCurrency(totalIncomeYape)) + '\n');
       if (totalExpenseYape > 0) printer = printer.text(createLine('- Gastos Yape:', formatCurrency(totalExpenseYape)) + '\n');
-      printer = printer
-        .text(format.halfSeparator + '\n')
-        .text(createLine('Yape Esperado:', formatCurrency(expectedAmountYape)) + '\n')
-        .text(createLine('Yape Real:', formatCurrency(closingYape)) + '\n');
-      const diffYapeLabel = differenceYape > 0 ? 'Dif. Yape (Sobrante):' : differenceYape < 0 ? 'Dif. Yape (Faltante):' : 'Dif. Yape:';
-      printer = printer
-        .bold(true)
-        .text(createLine(diffYapeLabel, formatCurrency(differenceYape)) + '\n')
-        .bold(false)
-        .text(format.separator + '\n');
+      printer = printer.text(format.halfSeparator + '\n');
+      if (!hideExpected) printer = printer.text(createLine('Yape Esperado:', formatCurrency(expectedAmountYape)) + '\n');
+      printer = printer.text(createLine('Yape Real:', formatCurrency(closingYape)) + '\n');
+      if (!hideExpected) {
+        const diffYapeLabel = differenceYape > 0 ? 'Dif. Yape (Sobrante):' : differenceYape < 0 ? 'Dif. Yape (Faltante):' : 'Dif. Yape:';
+        printer = printer
+          .bold(true)
+          .text(createLine(diffYapeLabel, formatCurrency(differenceYape)) + '\n')
+          .bold(false);
+      }
+      printer = printer.text(format.separator + '\n');
     }
 
     // ========== FOOTER ==========
@@ -3680,15 +3686,17 @@ const printWifiCashClosure = async (sessionData, movements, business, paperWidth
         .text(format.separator).newLine();
     }
 
-    // Cálculo
-    builder.bold(true).text('CALCULO').newLine().bold(false)
-      .text(createLine('Apertura:', formatCurrency(openingAmount))).newLine()
-      .text(createLine('+ Ventas Efectivo:', formatCurrency(salesCash))).newLine();
-    if (totalIncome > 0) builder.text(createLine('+ Ingresos:', formatCurrency(totalIncome))).newLine();
-    if (totalExpense > 0) builder.text(createLine('- Egresos:', formatCurrency(totalExpense))).newLine();
-    builder.text(format.halfSeparator).newLine()
-      .bold(true).text(createLine('Efectivo Esperado:', formatCurrency(expectedAmount))).newLine().bold(false)
-      .text(format.separator).newLine();
+    // Cálculo (oculto en cierre "a ciegas": delata el esperado)
+    if (!hideExpected) {
+      builder.bold(true).text('CALCULO').newLine().bold(false)
+        .text(createLine('Apertura:', formatCurrency(openingAmount))).newLine()
+        .text(createLine('+ Ventas Efectivo:', formatCurrency(salesCash))).newLine();
+      if (totalIncome > 0) builder.text(createLine('+ Ingresos:', formatCurrency(totalIncome))).newLine();
+      if (totalExpense > 0) builder.text(createLine('- Egresos:', formatCurrency(totalExpense))).newLine();
+      builder.text(format.halfSeparator).newLine()
+        .bold(true).text(createLine('Efectivo Esperado:', formatCurrency(expectedAmount))).newLine().bold(false)
+        .text(format.separator).newLine();
+    }
 
     // Conteo
     builder.bold(true).text('CONTEO DE CIERRE').newLine().bold(false)
@@ -3699,16 +3707,18 @@ const printWifiCashClosure = async (sessionData, movements, business, paperWidth
       .bold(true).text(createLine('Total Contado:', formatCurrency(closingAmount))).newLine().bold(false)
       .text(format.separator).newLine();
 
-    // Diferencia
-    const diffLabel = difference > 0 ? 'Diferencia (Sobrante):' : difference < 0 ? 'Diferencia (Faltante):' : 'Diferencia:';
-    builder.bold(true)
-      .doubleHeight(true)
-      .text(createLine(diffLabel, formatCurrency(difference)))
-      .newLine()
-      .doubleHeight(false)
-      .bold(false)
-      .text(format.separator)
-      .newLine();
+    // Diferencia (oculta en cierre "a ciegas")
+    if (!hideExpected) {
+      const diffLabel = difference > 0 ? 'Diferencia (Sobrante):' : difference < 0 ? 'Diferencia (Faltante):' : 'Diferencia:';
+      builder.bold(true)
+        .doubleHeight(true)
+        .text(createLine(diffLabel, formatCurrency(difference)))
+        .newLine()
+        .doubleHeight(false)
+        .bold(false)
+        .text(format.separator)
+        .newLine();
+    }
 
     // Bloque Yape (sólo si hubo actividad en la billetera)
     if (hasYapeActivity) {
@@ -3717,16 +3727,17 @@ const printWifiCashClosure = async (sessionData, movements, business, paperWidth
       if (salesYape > 0) builder.text(createLine('+ Ventas Yape:', formatCurrency(salesYape))).newLine();
       if (totalIncomeYape > 0) builder.text(createLine('+ Ingresos Yape:', formatCurrency(totalIncomeYape))).newLine();
       if (totalExpenseYape > 0) builder.text(createLine('- Gastos Yape:', formatCurrency(totalExpenseYape))).newLine();
-      builder.text(format.halfSeparator).newLine()
-        .text(createLine('Yape Esperado:', formatCurrency(expectedAmountYape))).newLine()
-        .text(createLine('Yape Real:', formatCurrency(closingYape))).newLine();
-      const diffYapeLabel = differenceYape > 0 ? 'Dif. Yape (Sobrante):' : differenceYape < 0 ? 'Dif. Yape (Faltante):' : 'Dif. Yape:';
-      builder.bold(true)
-        .text(createLine(diffYapeLabel, formatCurrency(differenceYape)))
-        .newLine()
-        .bold(false)
-        .text(format.separator)
-        .newLine();
+      builder.text(format.halfSeparator).newLine();
+      if (!hideExpected) builder.text(createLine('Yape Esperado:', formatCurrency(expectedAmountYape))).newLine();
+      builder.text(createLine('Yape Real:', formatCurrency(closingYape))).newLine();
+      if (!hideExpected) {
+        const diffYapeLabel = differenceYape > 0 ? 'Dif. Yape (Sobrante):' : differenceYape < 0 ? 'Dif. Yape (Faltante):' : 'Dif. Yape:';
+        builder.bold(true)
+          .text(createLine(diffYapeLabel, formatCurrency(differenceYape)))
+          .newLine()
+          .bold(false);
+      }
+      builder.text(format.separator).newLine();
     }
 
     // Footer
@@ -3866,15 +3877,17 @@ const printBLECashClosure = async (sessionData, movements, business, paperWidth,
       ticketText += format.separator + '\n';
     }
 
-    // Cálculo
-    ticketText += 'CALCULO\n';
-    ticketText += createLine('Apertura:', formatCurrency(openingAmount)) + '\n';
-    ticketText += createLine('+ Ventas Efectivo:', formatCurrency(salesCash)) + '\n';
-    if (totalIncome > 0) ticketText += createLine('+ Ingresos:', formatCurrency(totalIncome)) + '\n';
-    if (totalExpense > 0) ticketText += createLine('- Egresos:', formatCurrency(totalExpense)) + '\n';
-    ticketText += format.halfSeparator + '\n';
-    ticketText += createLine('Efectivo Esperado:', formatCurrency(expectedAmount)) + '\n';
-    ticketText += format.separator + '\n';
+    // Cálculo (oculto en cierre "a ciegas": delata el esperado)
+    if (!hideExpected) {
+      ticketText += 'CALCULO\n';
+      ticketText += createLine('Apertura:', formatCurrency(openingAmount)) + '\n';
+      ticketText += createLine('+ Ventas Efectivo:', formatCurrency(salesCash)) + '\n';
+      if (totalIncome > 0) ticketText += createLine('+ Ingresos:', formatCurrency(totalIncome)) + '\n';
+      if (totalExpense > 0) ticketText += createLine('- Egresos:', formatCurrency(totalExpense)) + '\n';
+      ticketText += format.halfSeparator + '\n';
+      ticketText += createLine('Efectivo Esperado:', formatCurrency(expectedAmount)) + '\n';
+      ticketText += format.separator + '\n';
+    }
 
     // Conteo
     ticketText += 'CONTEO DE CIERRE\n';
@@ -3885,10 +3898,12 @@ const printBLECashClosure = async (sessionData, movements, business, paperWidth,
     ticketText += createLine('Total Contado:', formatCurrency(closingAmount)) + '\n';
     ticketText += format.separator + '\n';
 
-    // Diferencia
-    const diffLabel = difference > 0 ? 'Diferencia (Sobrante):' : difference < 0 ? 'Diferencia (Faltante):' : 'Diferencia:';
-    ticketText += createLine(diffLabel, formatCurrency(difference)) + '\n';
-    ticketText += format.separator + '\n';
+    // Diferencia (oculta en cierre "a ciegas")
+    if (!hideExpected) {
+      const diffLabel = difference > 0 ? 'Diferencia (Sobrante):' : difference < 0 ? 'Diferencia (Faltante):' : 'Diferencia:';
+      ticketText += createLine(diffLabel, formatCurrency(difference)) + '\n';
+      ticketText += format.separator + '\n';
+    }
 
     // Bloque Yape (sólo si hubo actividad en la billetera)
     if (hasYapeActivity) {
@@ -3898,10 +3913,12 @@ const printBLECashClosure = async (sessionData, movements, business, paperWidth,
       if (totalIncomeYape > 0) ticketText += createLine('+ Ingresos Yape:', formatCurrency(totalIncomeYape)) + '\n';
       if (totalExpenseYape > 0) ticketText += createLine('- Gastos Yape:', formatCurrency(totalExpenseYape)) + '\n';
       ticketText += format.halfSeparator + '\n';
-      ticketText += createLine('Yape Esperado:', formatCurrency(expectedAmountYape)) + '\n';
+      if (!hideExpected) ticketText += createLine('Yape Esperado:', formatCurrency(expectedAmountYape)) + '\n';
       ticketText += createLine('Yape Real:', formatCurrency(closingYape)) + '\n';
-      const diffYapeLabel = differenceYape > 0 ? 'Dif. Yape (Sobrante):' : differenceYape < 0 ? 'Dif. Yape (Faltante):' : 'Dif. Yape:';
-      ticketText += createLine(diffYapeLabel, formatCurrency(differenceYape)) + '\n';
+      if (!hideExpected) {
+        const diffYapeLabel = differenceYape > 0 ? 'Dif. Yape (Sobrante):' : differenceYape < 0 ? 'Dif. Yape (Faltante):' : 'Dif. Yape:';
+        ticketText += createLine(diffYapeLabel, formatCurrency(differenceYape)) + '\n';
+      }
       ticketText += format.separator + '\n';
     }
 

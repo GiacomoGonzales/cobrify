@@ -14,6 +14,8 @@ const CashClosureTicket = forwardRef(({
   paperWidth = 80,
   branchName = null,
   printMargins = 8,
+  // Cierre "a ciegas": sin calculo, esperado ni diferencias para el cajero
+  hideExpected = false,
   simplePrint = false,
 }, ref) => {
   // Estado para detectar si el logo es cuadrado
@@ -536,7 +538,8 @@ const CashClosureTicket = forwardRef(({
         </div>
       )}
 
-      {/* Efectivo Esperado */}
+      {/* Efectivo Esperado (oculto en cierre "a ciegas": el cálculo lo delata) */}
+      {!hideExpected && (
       <div className="ticket-section">
         <div className="section-title">Cálculo</div>
         <div className="info-row sub-item">
@@ -565,6 +568,7 @@ const CashClosureTicket = forwardRef(({
           <span>{formatCurrency(expectedAmount)}</span>
         </div>
       </div>
+      )}
 
       {/* Conteo Real */}
       <div className="ticket-section">
@@ -624,7 +628,8 @@ const CashClosureTicket = forwardRef(({
         </div>
       </div>
 
-      {/* Diferencia */}
+      {/* Diferencia (oculta en cierre "a ciegas") */}
+      {!hideExpected && (
       <div className="ticket-section" style={{ borderBottom: 'none' }}>
         <div className={`total-row highlight ${
           difference > 0 ? 'difference-positive' :
@@ -638,6 +643,7 @@ const CashClosureTicket = forwardRef(({
           <span>{formatCurrency(difference)}</span>
         </div>
       </div>
+      )}
 
       {/* ===== Bloque YAPE ===== */}
       {/* Saldo paralelo en la billetera digital, sólo si hubo actividad Yape */}
@@ -670,25 +676,29 @@ const CashClosureTicket = forwardRef(({
             </div>
           )}
           <div className="separator" />
-          <div className="info-row">
-            <span>Yape Esperado:</span>
-            <span>{formatCurrency(expectedAmountYape)}</span>
-          </div>
+          {!hideExpected && (
+            <div className="info-row">
+              <span>Yape Esperado:</span>
+              <span>{formatCurrency(expectedAmountYape)}</span>
+            </div>
+          )}
           <div className="info-row">
             <span>Yape Real:</span>
             <span>{formatCurrency(closingYape)}</span>
           </div>
-          <div className={`total-row highlight ${
-            differenceYape > 0 ? 'difference-positive' :
-            differenceYape < 0 ? 'difference-negative' :
-            'difference-zero'
-          }`}>
-            <span>
-              Diferencia Yape:
-              {differenceYape > 0 ? ' (Sobrante)' : differenceYape < 0 ? ' (Faltante)' : ''}
-            </span>
-            <span>{formatCurrency(differenceYape)}</span>
-          </div>
+          {!hideExpected && (
+            <div className={`total-row highlight ${
+              differenceYape > 0 ? 'difference-positive' :
+              differenceYape < 0 ? 'difference-negative' :
+              'difference-zero'
+            }`}>
+              <span>
+                Diferencia Yape:
+                {differenceYape > 0 ? ' (Sobrante)' : differenceYape < 0 ? ' (Faltante)' : ''}
+              </span>
+              <span>{formatCurrency(differenceYape)}</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -747,25 +757,29 @@ const CashClosureTicket = forwardRef(({
               </div>
             )}
 
-            <div className="total-row" style={{ marginTop: '4px' }}>
-              <span>EFECTIVO USD ESPERADO:</span>
-              <span>{formatCurrency(usd.expectedAmount || 0, 'USD')}</span>
-            </div>
+            {!hideExpected && (
+              <div className="total-row" style={{ marginTop: '4px' }}>
+                <span>EFECTIVO USD ESPERADO:</span>
+                <span>{formatCurrency(usd.expectedAmount || 0, 'USD')}</span>
+              </div>
+            )}
             <div className="total-row">
               <span>EFECTIVO USD CONTADO:</span>
               <span>{formatCurrency(usd.closingCash || 0, 'USD')}</span>
             </div>
-            <div className={`total-row highlight ${
-              (usd.difference || 0) > 0 ? 'difference-positive' :
-              (usd.difference || 0) < 0 ? 'difference-negative' :
-              'difference-zero'
-            }`}>
-              <span>
-                DIFERENCIA USD:
-                {(usd.difference || 0) > 0 ? ' (Sobrante)' : (usd.difference || 0) < 0 ? ' (Faltante)' : ''}
-              </span>
-              <span>{formatCurrency(usd.difference || 0, 'USD')}</span>
-            </div>
+            {!hideExpected && (
+              <div className={`total-row highlight ${
+                (usd.difference || 0) > 0 ? 'difference-positive' :
+                (usd.difference || 0) < 0 ? 'difference-negative' :
+                'difference-zero'
+              }`}>
+                <span>
+                  DIFERENCIA USD:
+                  {(usd.difference || 0) > 0 ? ' (Sobrante)' : (usd.difference || 0) < 0 ? ' (Faltante)' : ''}
+                </span>
+                <span>{formatCurrency(usd.difference || 0, 'USD')}</span>
+              </div>
+            )}
           </div>
         </>
       )}
