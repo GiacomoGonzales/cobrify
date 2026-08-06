@@ -6,6 +6,7 @@ import { db } from '@/lib/firebase'
 import {
   updateResellerBranding,
   uploadResellerLogo,
+  normalizeCustomDomain,
   PRESET_COLORS
 } from '@/services/brandingService'
 import {
@@ -282,7 +283,16 @@ export default function ResellerSettings() {
         phone: formData.phone,
         address: formData.address,
         contactName: formData.contactName,
-        customDomain: formData.customDomain?.toLowerCase().trim() || null,
+        // El dominio se escribe SOLO si el reseller puso uno. Antes iba
+        // `|| null`, asi que guardar cualquier otro dato con el campo vacio
+        // BORRABA el dominio que habia configurado el admin — y el reseller
+        // volvia a ver la landing de Cobrify sin entender por que (paso el
+        // 5-ago-2026 con estudioasecontt.com). Para quitarlo, el admin lo hace
+        // desde su panel, que es donde ademas se provisiona en Vercel y se
+        // autoriza en Firebase.
+        ...(normalizeCustomDomain(formData.customDomain)
+          ? { customDomain: normalizeCustomDomain(formData.customDomain) }
+          : {}),
         // Datos de cobro a tus clientes (pantalla de "suscripción vencida")
         paymentInfo: {
           yapeNumber: formData.yapeNumber?.trim() || '',
