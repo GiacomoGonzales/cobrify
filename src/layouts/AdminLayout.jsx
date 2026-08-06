@@ -89,39 +89,15 @@ export default function AdminLayout() {
   const location = useLocation()
   const navigate = useNavigate()
 
-  // Cambiar color del StatusBar para admin (navy de marca)
+  // Iconos del status bar en claro (Style.Dark = contenido claro sobre fondo
+  // oscuro). El COLOR de fondo ya no se pide por la API: setBackgroundColor
+  // quedo obsoleto en Android 15 y en Android 16 no hace nada, asi que la
+  // franja salia sin pintar y el reloj blanco quedaba invisible. Se pinta con
+  // CSS mas abajo, igual que en MainLayout.
   useEffect(() => {
-    const configureAdminStatusBar = async () => {
-      if (Capacitor.isNativePlatform()) {
-        try {
-          await StatusBar.setStyle({ style: Style.Dark })
-          if (Capacitor.getPlatform() === 'android') {
-            await StatusBar.setBackgroundColor({ color: '#0A2540' })
-          }
-        } catch (error) {
-          console.warn('Error configurando StatusBar admin:', error)
-        }
-      }
-    }
-
-    const restoreDefaultStatusBar = async () => {
-      if (Capacitor.isNativePlatform()) {
-        try {
-          await StatusBar.setStyle({ style: Style.Dark })
-          if (Capacitor.getPlatform() === 'android') {
-            await StatusBar.setBackgroundColor({ color: '#1e40af' }) // primary-800
-          }
-        } catch (error) {
-          console.warn('Error restaurando StatusBar:', error)
-        }
-      }
-    }
-
-    configureAdminStatusBar()
-
-    return () => {
-      restoreDefaultStatusBar()
-    }
+    if (!Capacitor.isNativePlatform()) return
+    StatusBar.setStyle({ style: Style.Dark })
+      .catch(error => console.warn('Error configurando StatusBar admin:', error))
   }, [])
 
   if (isLoading) {
@@ -143,8 +119,19 @@ export default function AdminLayout() {
 
   return (
     <div className="bg-gray-50 overflow-x-hidden max-w-full" style={{ zoom: 0.8, minHeight: '125vh' }}>
-      {/* iOS Status Bar */}
-      <div className="ios-status-bar bg-gray-900 lg:hidden flex-shrink-0" />
+      {/* Franja del status bar, pintada con CSS (safe-area).
+          - Sin `lg:hidden`: una tablet grande entra en el breakpoint lg y
+            tambien tiene status bar; sin la franja el reloj blanco quedaba
+            sobre la cabecera blanca, ilegible.
+          - El `zoom: 0.8` del contenedor tambien escala esta franja, asi que
+            se divide entre 0.8 para que mida el safe-area REAL; si no, queda
+            una tira sin pintar arriba. */}
+      {Capacitor.isNativePlatform() && (
+        <div
+          className="bg-gray-900 flex-shrink-0"
+          style={{ height: 'calc(env(safe-area-inset-top, 0px) / 0.8)' }}
+        />
+      )}
 
       {/* Mobile Header */}
       <div className="lg:hidden bg-gray-900 text-white p-4 flex items-center justify-between">
