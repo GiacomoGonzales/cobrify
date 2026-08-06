@@ -2403,7 +2403,7 @@ export const getOpenCashSessions = async (businessId, branchId = null) => {
  * @param {string|null} userUid - Firebase UID del usuario que abre la caja
  * @param {string|null} userName - Nombre del usuario que abre la caja
  */
-export const openCashRegister = async (userId, openingAmount, branchId = null, userUid = null, userName = null, openingAmountUSD = 0, openingAmountYape = 0) => {
+export const openCashRegister = async (userId, openingAmount, branchId = null, userUid = null, userName = null, openingAmountUSD = 0, openingAmountYape = 0, openingAmountPlin = 0) => {
   try {
     // Verificar que no haya una caja abierta para esta sucursal Y este usuario
     const currentSession = await getCashRegisterSession(userId, branchId, userUid)
@@ -2429,6 +2429,9 @@ export const openCashRegister = async (userId, openingAmount, branchId = null, u
     // Yape: monto inicial declarado en la billetera digital. Sólo se persiste
     // si > 0 (negocios que no usan Yape no contaminan sus docs con el campo).
     // Cajas legacy sin este campo → tratar como 0 al leer.
+    if (Number(openingAmountPlin) > 0) {
+      sessionData.openingAmountPlin = Number(openingAmountPlin)
+    }
     if (Number(openingAmountYape) > 0) {
       sessionData.openingAmountYape = Number(openingAmountYape)
     }
@@ -2470,7 +2473,7 @@ export const closeCashRegister = async (userId, sessionId, closingData, userUid 
       return { success: true, alreadyClosed: true }
     }
 
-    const { cash, card, transfer, yape, plin, rappi, pedidosYa, diDiFood, totalSales, salesCash, salesCard, salesTransfer, salesYape, salesPlin, salesRappi, salesPedidosYa, salesDiDiFood, salesByCustomMethod, totalIncome, totalExpense, totalIncomeYape, totalExpenseYape, expectedAmount, difference, expectedAmountYape, differenceYape, invoiceCount, deferredPayments, deferredTotal, usd } = closingData
+    const { cash, card, transfer, yape, plin, rappi, pedidosYa, diDiFood, totalSales, salesCash, salesCard, salesTransfer, salesYape, salesPlin, salesRappi, salesPedidosYa, salesDiDiFood, salesByCustomMethod, totalIncome, totalExpense, totalIncomeYape, totalExpenseYape, expectedAmount, difference, expectedAmountYape, differenceYape, totalIncomePlin, totalExpensePlin, expectedAmountPlin, differencePlin, invoiceCount, deferredPayments, deferredTotal, usd } = closingData
     const closingAmount = cash + card + transfer + (yape || 0) + (plin || 0) + (rappi || 0) + (pedidosYa || 0) + (diDiFood || 0)
 
     const updateData = {
@@ -2510,6 +2513,14 @@ export const closeCashRegister = async (userId, sessionId, closingData, userUid 
       // Yape: ingresos/gastos en la billetera y cálculo separado de cierre.
       // Sólo se persiste si hay algún flujo Yape, para mantener limpios los
       // docs de cajas que no usan Yape.
+      // Plin: mismo criterio que Yape — solo se guardan estos campos si hubo
+      // actividad, para no ensuciar los cierres de cajas que no usan Plin.
+      ...((totalIncomePlin || totalExpensePlin || expectedAmountPlin || (plin || 0) > 0) ? {
+        totalIncomePlin: totalIncomePlin || 0,
+        totalExpensePlin: totalExpensePlin || 0,
+        expectedAmountPlin: expectedAmountPlin || 0,
+        differencePlin: differencePlin || 0,
+      } : {}),
       ...((totalIncomeYape || totalExpenseYape || expectedAmountYape || (yape || 0) > 0) ? {
         totalIncomeYape: totalIncomeYape || 0,
         totalExpenseYape: totalExpenseYape || 0,

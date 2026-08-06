@@ -419,6 +419,10 @@ export const generateCashReportExcel = async (sessionData, movements, invoices, 
   let yapeSectionRow = -1, yapeKpiLabelRow = -1, yapeKpiValueRow = -1
   let yapeExpectedRow = -1, yapeRealRow = -1, yapeDiffRow = -1
   let yapeDiffOk = false
+  let plinSectionRow = -1, plinKpiLabelRow = -1, plinKpiValueRow = -1
+  let plinExpectedRow = -1, plinRealRow = -1, plinDiffRow = -1
+  let plinDiffOk = false
+  let totalMoneyRow = -1
 
   const yapeOpening = sessionData.openingAmountYape || 0
   const yapeSales = sessionData.salesYape || 0
@@ -458,6 +462,61 @@ export const generateCashReportExcel = async (sessionData, movements, invoices, 
     yapeDiffRow = aoa.length - 1
   }
 
+  // ===== SALDO EN PLIN ===== (identico a Yape)
+  const plinOpening = sessionData.openingAmountPlin || 0
+  const plinSales = sessionData.salesPlin || 0
+  const plinIncome = sessionData.totalIncomePlin || 0
+  const plinExpense = sessionData.totalExpensePlin || 0
+  const plinClosing = sessionData.closingPlin || 0
+  const hasPlinActivity = plinOpening > 0 || plinSales > 0 || plinIncome > 0 || plinExpense > 0 || plinClosing > 0
+
+  const expectedPlinCalc = sessionData.expectedAmountPlin !== undefined
+    ? sessionData.expectedAmountPlin
+    : (plinOpening + plinSales + plinIncome - plinExpense)
+
+  if (hasPlinActivity) {
+    aoa.push([])
+    aoa.push(['SALDO EN PLIN (BILLETERA DIGITAL)', '', '', ''])
+    plinSectionRow = aoa.length - 1
+    aoa.push([])
+    aoa.push(['Inicial Plin', 'Ventas Plin', 'Ingresos Plin', 'Gastos Plin'])
+    plinKpiLabelRow = aoa.length - 1
+    aoa.push([
+      Number(plinOpening.toFixed(2)),
+      Number(plinSales.toFixed(2)),
+      Number(plinIncome.toFixed(2)),
+      Number(plinExpense.toFixed(2)),
+    ])
+    plinKpiValueRow = aoa.length - 1
+    aoa.push([])
+    aoa.push(['Plin Esperado (Inicial + Ventas + Ingresos − Gastos)', '', '', Number(expectedPlinCalc.toFixed(2))])
+    plinExpectedRow = aoa.length - 1
+    aoa.push(['Plin Real (al cierre)', '', '', Number(plinClosing.toFixed(2))])
+    plinRealRow = aoa.length - 1
+    const diffPlin = sessionData.differencePlin !== undefined
+      ? sessionData.differencePlin
+      : (plinClosing - expectedPlinCalc)
+    plinDiffOk = diffPlin >= 0
+    const diffPlinLbl = Math.abs(diffPlin) < 0.005 ? 'Cuadra' : (plinDiffOk ? 'Sobrante' : 'Faltante')
+    aoa.push([`DIFERENCIA PLIN — ${diffPlinLbl}`, '', '', Number(diffPlin.toFixed(2))])
+    plinDiffRow = aoa.length - 1
+  }
+
+  // ===== TOTAL DEL DINERO ===== efectivo esperado + saldos de billeteras.
+  // Pedido por CYBY Plast: los tres numeros estaban sueltos y habia que
+  // sumarlos a mano para saber cuanto dinero tiene el negocio al cierre.
+  if (hasYapeActivity || hasPlinActivity) {
+    const expectedYapeForTotal = hasYapeActivity
+      ? (sessionData.expectedAmountYape !== undefined
+        ? sessionData.expectedAmountYape
+        : (yapeOpening + yapeSales + yapeIncome - yapeExpense))
+      : 0
+    const totalMoney = (sessionData.expectedAmount || 0) + expectedYapeForTotal + (hasPlinActivity ? expectedPlinCalc : 0)
+    aoa.push([])
+    aoa.push(['TOTAL DINERO (Efectivo esperado + saldos de billeteras)', '', '', Number(totalMoney.toFixed(2))])
+    totalMoneyRow = aoa.length - 1
+  }
+
   const ws = XLSX.utils.aoa_to_sheet(aoa)
   ws['!cols'] = [{ wch: 35 }, { wch: 16 }, { wch: 28 }, { wch: 16 }]
   ws['!rows'] = []
@@ -485,6 +544,17 @@ export const generateCashReportExcel = async (sessionData, movements, invoices, 
       { s: { r: yapeRealRow, c: 0 }, e: { r: yapeRealRow, c: 2 } },
       { s: { r: yapeDiffRow, c: 0 }, e: { r: yapeDiffRow, c: 2 } },
     )
+  }
+  if (hasPlinActivity) {
+    ws['!merges'].push(
+      { s: { r: plinSectionRow, c: 0 }, e: { r: plinSectionRow, c: 3 } },
+      { s: { r: plinExpectedRow, c: 0 }, e: { r: plinExpectedRow, c: 2 } },
+      { s: { r: plinRealRow, c: 0 }, e: { r: plinRealRow, c: 2 } },
+      { s: { r: plinDiffRow, c: 0 }, e: { r: plinDiffRow, c: 2 } },
+    )
+  }
+  if (totalMoneyRow >= 0) {
+    ws['!merges'].push({ s: { r: totalMoneyRow, c: 0 }, e: { r: totalMoneyRow, c: 2 } })
   }
 
   // Aplicar estilos
@@ -572,6 +642,30 @@ export const generateCashReportExcel = async (sessionData, movements, invoices, 
     setS(ws, yapeRealRow, 3, sTotalNumber('PEN'))
     setS(ws, yapeDiffRow, 0, sDifferenceLabel(yapeDiffOk))
     setS(ws, yapeDiffRow, 3, sDifferenceNumber(yapeDiffOk, 'PEN'))
+  }
+
+  // Bloque Plin
+  if (hasPlinActivity) {
+    for (let c = 0; c < 4; c++) setS(ws, plinSectionRow, c, sSection)
+    for (let c = 0; c < 4; c++) {
+      setS(ws, plinKpiLabelRow, c, sKpiLabel(kpiPalette[c].bg))
+      setS(ws, plinKpiValueRow, c, sKpiValue(kpiPalette[c].bg, kpiPalette[c].fg, 'PEN'))
+    }
+    ws['!rows'][plinKpiValueRow] = { hpt: 26 }
+    setS(ws, plinExpectedRow, 0, { ...sMetaLabel, font: { ...sMetaLabel.font, italic: true } })
+    setS(ws, plinExpectedRow, 3, sTotalNumber('PEN'))
+    setS(ws, plinRealRow, 0, sMetaLabel)
+    setS(ws, plinRealRow, 3, sTotalNumber('PEN'))
+    setS(ws, plinDiffRow, 0, sDifferenceLabel(plinDiffOk))
+    setS(ws, plinDiffRow, 3, sDifferenceNumber(plinDiffOk, 'PEN'))
+  }
+
+  // Total del dinero
+  if (totalMoneyRow >= 0) {
+    setS(ws, totalMoneyRow, 0, sSection)
+    for (let c = 1; c < 3; c++) setS(ws, totalMoneyRow, c, sSection)
+    setS(ws, totalMoneyRow, 3, sTotalNumber('PEN'))
+    ws['!rows'][totalMoneyRow] = { hpt: 24 }
   }
 
   XLSX.utils.book_append_sheet(workbook, ws, 'Resumen')

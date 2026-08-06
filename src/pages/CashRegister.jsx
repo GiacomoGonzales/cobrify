@@ -131,6 +131,8 @@ export default function CashRegister() {
   // Paralelo a openingAmount (efectivo). El feature siempre está activo pero
   // si vale 0 toda la UI/reportes Yape se ocultan (auto-hide).
   const [openingAmountYape, setOpeningAmountYape] = useState('')
+  // Plin: mismo criterio que Yape — si vale 0 toda la UI de Plin se oculta.
+  const [openingAmountPlin, setOpeningAmountPlin] = useState('')
   const [closingCounts, setClosingCounts] = useState({
     cash: '',
     card: '',
@@ -815,6 +817,9 @@ export default function CashRegister() {
           ...(parseFloat(openingAmountYape) > 0 && {
             openingAmountYape: parseFloat(openingAmountYape),
           }),
+          ...(parseFloat(openingAmountPlin) > 0 && {
+            openingAmountPlin: parseFloat(openingAmountPlin),
+          }),
           openedAt: new Date(),
           openedBy: user.displayName,
           status: 'open'
@@ -826,6 +831,7 @@ export default function CashRegister() {
         setOpeningAmount('')
         setOpeningAmountUSD('')
         setOpeningAmountYape('')
+        setOpeningAmountPlin('')
         return
       }
 
@@ -841,13 +847,15 @@ export default function CashRegister() {
       // inicial en USD > 0, lo enviamos al servicio. Si no, parámetro 0.
       const openUSD = cashMultiCurrencyOn ? (parseFloat(openingAmountUSD) || 0) : 0
       const openYape = parseFloat(openingAmountYape) || 0
-      const result = await openCashRegister(getBusinessId(), parseFloat(openingAmount), branchId, openUserUid, openUserName, openUSD, openYape)
+      const openPlin = parseFloat(openingAmountPlin) || 0
+      const result = await openCashRegister(getBusinessId(), parseFloat(openingAmount), branchId, openUserUid, openUserName, openUSD, openYape, openPlin)
       if (result.success) {
         toast.success('Caja abierta correctamente')
         setShowOpenModal(false)
         setOpeningAmount('')
         setOpeningAmountUSD('')
         setOpeningAmountYape('')
+        setOpeningAmountPlin('')
         loadData()
         refreshOpenSessions()
       } else {
@@ -975,6 +983,12 @@ export default function CashRegister() {
       const expectedAmountYape = openingAmountYape + totalsClose.salesYape + (totalsClose.incomeYape || 0) - (totalsClose.expenseYape || 0)
       const differenceYape = yape - expectedAmountYape
 
+      // Plin: identico a Yape. Sin esto, el monto contado de Plin se guardaba
+      // pero no habia contra que compararlo, asi que esa billetera no cuadraba.
+      const openingAmountPlin = currentSession.openingAmountPlin || 0
+      const expectedAmountPlin = openingAmountPlin + totalsClose.salesPlin + (totalsClose.incomePlin || 0) - (totalsClose.expensePlin || 0)
+      const differencePlin = plin - expectedAmountPlin
+
       // Guardar datos de la sesión cerrada con hora de cierre
       const closedData = {
         ...currentSession,
@@ -1003,10 +1017,14 @@ export default function CashRegister() {
         totalExpense: totalsClose.expense,
         totalIncomeYape: totalsClose.incomeYape || 0,
         totalExpenseYape: totalsClose.expenseYape || 0,
+        totalIncomePlin: totalsClose.incomePlin || 0,
+        totalExpensePlin: totalsClose.expensePlin || 0,
         expectedAmount: totalsClose.expected,
         difference: cash - totalsClose.expected,
         expectedAmountYape,
         differenceYape,
+        expectedAmountPlin,
+        differencePlin,
         invoiceCount: sessionOnlyInvoicesCount,
         deferredPayments: totalsClose.deferredPayments || [],
         deferredTotal: totalsClose.deferredTotal || 0,
@@ -1055,6 +1073,10 @@ export default function CashRegister() {
         totalExpenseYape: totalsClose.expenseYape || 0,
         expectedAmountYape,
         differenceYape,
+        totalIncomePlin: totalsClose.incomePlin || 0,
+        totalExpensePlin: totalsClose.expensePlin || 0,
+        expectedAmountPlin,
+        differencePlin,
         invoiceCount: sessionOnlyInvoicesCount,
         deferredPayments: totalsClose.deferredPayments || [],
         deferredTotal: totalsClose.deferredTotal || 0,
@@ -1488,7 +1510,7 @@ export default function CashRegister() {
     const fechaStr = fecha.toLocaleString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
     const isIncome = movement.type === 'income'
     const tipo = isIncome ? 'INGRESO' : 'EGRESO'
-    const metodo = movement.method === 'yape' ? 'Yape' : 'Efectivo'
+    const metodo = movement.method === 'yape' ? 'Yape' : movement.method === 'plin' ? 'Plin' : 'Efectivo'
     const monto = formatCurrency(movement.amount, movement.currency)
     const correlativo = (movement.id || '').toString().slice(-8).toUpperCase()
 
@@ -1656,6 +1678,8 @@ export default function CashRegister() {
       expense: 0,
       incomeYape: 0,
       expenseYape: 0,
+      incomePlin: 0,
+      expensePlin: 0,
       expected: 0,
       difference: 0,
       pendingTotal: 0,
@@ -1876,17 +1900,21 @@ export default function CashRegister() {
     // saldo en billetera digital. Movimientos legacy sin .method → 'cash'.
     let income = 0, expense = 0, incomeUSD = 0, expenseUSD = 0
     let incomeYape = 0, expenseYape = 0
+    let incomePlin = 0, expensePlin = 0
     movementsList.forEach(m => {
       const amt = Number(m.amount) || 0
       const isUSD = m.currency === 'USD'
       const isYape = m.method === 'yape'
+      const isPlin = m.method === 'plin'
       if (m.type === 'income') {
         if (isUSD) incomeUSD += amt
         else if (isYape) incomeYape += amt
+        else if (isPlin) incomePlin += amt
         else income += amt
       } else if (m.type === 'expense') {
         if (isUSD) expenseUSD += amt
         else if (isYape) expenseYape += amt
+        else if (isPlin) expensePlin += amt
         else expense += amt
       }
     })
@@ -1914,6 +1942,10 @@ export default function CashRegister() {
     // Esperado Yape = apertura Yape + ventas Yape + ingresos Yape − gastos Yape
     const openingYape = currentSession.openingAmountYape || 0
     const expectedYape = openingYape + salesYape + incomeYape - expenseYape
+    // Plin: mismo tratamiento que Yape. Antes solo se contaba como venta y no
+    // tenia saldo propio, asi que el cajero no podia cuadrar esa billetera.
+    const openingPlin = currentSession.openingAmountPlin || 0
+    const expectedPlin = openingPlin + salesPlin + incomePlin - expensePlin
 
     // Diferencia (si hay cierre)
     let difference = 0
@@ -1925,6 +1957,10 @@ export default function CashRegister() {
       differenceUSD = (currentSession.usd.closingCash || 0) - expectedUSD
     }
     // Diferencia Yape: sólo aplica al cerrar (se compara closingYape vs expectedYape)
+    let differencePlin = 0
+    if (currentSession.closingPlin !== undefined && currentSession.closingPlin !== null) {
+      differencePlin = (currentSession.closingPlin || 0) - expectedPlin
+    }
     let differenceYape = 0
     if (currentSession.closingYape !== undefined && currentSession.closingYape !== null) {
       differenceYape = (currentSession.closingYape || 0) - expectedYape
@@ -1984,6 +2020,23 @@ export default function CashRegister() {
       closing: currentSession.closingYape || 0,
     } : null
 
+    const hasPlinActivity = openingPlin > 0 || salesPlin > 0 || incomePlin > 0 || expensePlin > 0
+    const plinBlock = hasPlinActivity ? {
+      openingAmount: openingPlin,
+      sales: salesPlin,
+      income: incomePlin,
+      expense: expensePlin,
+      expected: expectedPlin,
+      difference: differencePlin,
+      closing: currentSession.closingPlin || 0,
+    } : null
+
+    // Total del dinero del negocio al cierre: el efectivo del cajon MAS los
+    // saldos de las billeteras. Pedido por CYBY Plast: el cajero veia tres
+    // numeros sueltos y tenia que sumarlos a mano para saber cuanto tiene.
+    // Solo PEN — el efectivo en dolares se cuadra en su propio bloque.
+    const totalMoney = expected + (hasYapeActivity ? expectedYape : 0) + (hasPlinActivity ? expectedPlin : 0)
+
     return {
       sales,
       salesCash,
@@ -2010,6 +2063,13 @@ export default function CashRegister() {
       salesByCustomMethod: customSales,
       usd: usdBlock,
       yape: yapeBlock,
+      plin: plinBlock,
+      // Efectivo del cajon + saldos de billeteras (PEN).
+      totalMoney,
+      incomePlin,
+      expensePlin,
+      expectedPlin,
+      differencePlin,
     }
   }
 
@@ -2581,6 +2641,65 @@ export default function CashRegister() {
                     )}
                   </div>
                 )}
+
+                {/* ===== BLOQUE PLIN ===== */}
+                {/* Mismo tratamiento que Yape: Plin se contaba como venta pero */}
+                {/* no tenia saldo propio, asi que esa billetera no se cuadraba. */}
+                {totals.plin && (
+                  <div className="mt-5 pt-4 border-t-2 border-cyan-200 space-y-3">
+                    <div className="bg-cyan-50 border border-cyan-200 rounded p-2.5">
+                      <p className="text-sm font-semibold text-cyan-900">Saldo en Plin</p>
+                    </div>
+
+                    {totals.plin.openingAmount > 0 && (
+                      <div className="flex justify-between items-center py-1.5 border-b">
+                        <span className="text-xs sm:text-sm text-gray-600">Monto Inicial Plin:</span>
+                        <span className="text-sm font-semibold">{formatCurrency(totals.plin.openingAmount)}</span>
+                      </div>
+                    )}
+                    {totals.plin.sales > 0 && (
+                      <div className="flex justify-between items-center py-1.5 border-b">
+                        <span className="text-xs sm:text-sm text-gray-600">+ Ventas Plin:</span>
+                        <span className="text-sm font-semibold text-green-600">{formatCurrency(totals.plin.sales)}</span>
+                      </div>
+                    )}
+                    {totals.plin.income > 0 && (
+                      <div className="flex justify-between items-center py-1.5 border-b">
+                        <span className="text-xs sm:text-sm text-blue-600">+ Otros Ingresos Plin:</span>
+                        <span className="text-sm font-semibold text-blue-600">{formatCurrency(totals.plin.income)}</span>
+                      </div>
+                    )}
+                    {totals.plin.expense > 0 && (
+                      <div className="flex justify-between items-center py-1.5 border-b">
+                        <span className="text-xs sm:text-sm text-red-600">- Gastos Plin:</span>
+                        <span className="text-sm font-semibold text-red-600">{formatCurrency(totals.plin.expense)}</span>
+                      </div>
+                    )}
+                    {!hideExpectedForCashier && (
+                      <div className="flex justify-between items-center py-2.5 bg-cyan-50 px-3 rounded-lg">
+                        <span className="text-sm font-semibold text-cyan-900">Saldo Plin Esperado:</span>
+                        <span className="text-lg font-bold text-cyan-700">{formatCurrency(totals.plin.expected)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ===== TOTAL DEL DINERO ===== */}
+                {/* Efectivo del cajon + billeteras. Solo aparece si hay al menos */}
+                {/* una billetera con saldo: sin ellas seria repetir el efectivo. */}
+                {!hideExpectedForCashier && (totals.yape || totals.plin) && (
+                  <div className="mt-5 pt-4 border-t-2 border-gray-300">
+                    <div className="flex justify-between items-center py-3 bg-gray-900 px-3 rounded-lg">
+                      <span className="text-sm font-semibold text-white">Total dinero:</span>
+                      <span className="text-xl font-bold text-white">{formatCurrency(totals.totalMoney)}</span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-1.5 text-center">
+                      Efectivo esperado
+                      {totals.yape ? ' + saldo Yape' : ''}
+                      {totals.plin ? ' + saldo Plin' : ''}
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -2630,6 +2749,11 @@ export default function CashRegister() {
                               {movement.method === 'yape' && (
                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 border border-purple-200 text-[10px] font-semibold">
                                   Yape
+                                </span>
+                              )}
+                              {movement.method === 'plin' && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-cyan-100 text-cyan-700 border border-cyan-200 text-[10px] font-semibold">
+                                  Plin
                                 </span>
                               )}
                             </p>
@@ -3784,6 +3908,7 @@ export default function CashRegister() {
           setOpeningAmount('')
           setOpeningAmountUSD('')
           setOpeningAmountYape('')
+        setOpeningAmountPlin('')
         }}
         title="Abrir Caja"
       >
@@ -3828,6 +3953,19 @@ export default function CashRegister() {
               Saldo disponible en la billetera Yape al abrir. Déjalo vacío si no usas Yape.
             </p>
           </div>
+          <div>
+            <Input
+              label="Monto Inicial en Plin (S/) — opcional"
+              type="number"
+              step="0.01"
+              placeholder="0.00"
+              value={openingAmountPlin}
+              onChange={(e) => setOpeningAmountPlin(e.target.value)}
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Saldo disponible en la billetera Plin al abrir. Déjalo vacío si no usas Plin.
+            </p>
+          </div>
           <div className="flex justify-end gap-3 pt-4">
             <Button
               variant="outline"
@@ -3836,6 +3974,7 @@ export default function CashRegister() {
                 setOpeningAmount('')
                 setOpeningAmountUSD('')
                 setOpeningAmountYape('')
+                setOpeningAmountPlin('')
               }}
             >
               Cancelar
@@ -4029,16 +4168,37 @@ export default function CashRegister() {
             </div>
           )}
 
-          {totals.salesPlin > 0 && (
-            <Input
-              label="Total en Plin"
-              type="number"
-              step="0.01"
-              placeholder="0.00"
-              value={closingCounts.plin}
-              onChange={(e) => setClosingCounts({ ...closingCounts, plin: e.target.value })}
-              helperText="Suma de pagos recibidos por Plin"
-            />
+          {/* Plin: mismo tratamiento que Yape — es un saldo de billetera, no
+              solo la suma de ventas, asi que se compara contra el esperado. */}
+          {totals.plin && (
+            <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-3 space-y-2">
+              <Input
+                label="Saldo real en Plin"
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                value={closingCounts.plin}
+                onChange={(e) => setClosingCounts({ ...closingCounts, plin: e.target.value })}
+                helperText={!hideExpectedForCashier
+                  ? `Esperado: ${formatCurrency(totals.plin.expected)} — Inicial ${formatCurrency(totals.plin.openingAmount)} + Ventas ${formatCurrency(totals.plin.sales)}${totals.plin.income > 0 ? ` + Ingresos ${formatCurrency(totals.plin.income)}` : ''}${totals.plin.expense > 0 ? ` − Gastos ${formatCurrency(totals.plin.expense)}` : ''}`
+                  : 'Saldo actual de la billetera Plin al cierre'}
+              />
+              {!hideExpectedForCashier && parseFloat(closingCounts.plin) > 0 && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-600">Diferencia:</span>
+                  <span className={`font-bold ${
+                    Math.abs(parseFloat(closingCounts.plin) - totals.plin.expected) < 0.01
+                      ? 'text-green-600'
+                      : parseFloat(closingCounts.plin) > totals.plin.expected
+                        ? 'text-blue-600'
+                        : 'text-red-600'
+                  }`}>
+                    {parseFloat(closingCounts.plin) >= totals.plin.expected ? '+' : ''}
+                    {formatCurrency(parseFloat(closingCounts.plin) - totals.plin.expected)}
+                  </span>
+                </div>
+              )}
+            </div>
           )}
 
           {totals.salesRappi > 0 && (
@@ -4392,7 +4552,7 @@ export default function CashRegister() {
             </div>
           )}
 
-          {/* Selector de fondo: efectivo o Yape. Aplica a ingresos y gastos
+          {/* Selector de fondo: efectivo, Yape o Plin. Aplica a ingresos y gastos
               para que el cálculo de saldo por fondo se mantenga separado. */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Método / Fondo</label>
@@ -4418,6 +4578,17 @@ export default function CashRegister() {
                 }`}
               >
                 Yape
+              </button>
+              <button
+                type="button"
+                onClick={() => setMovementData({ ...movementData, method: 'plin' })}
+                className={`flex-1 px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                  movementData.method === 'plin'
+                    ? 'bg-cyan-600 text-white border-cyan-600'
+                    : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                Plin
               </button>
             </div>
           </div>
