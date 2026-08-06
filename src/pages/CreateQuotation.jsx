@@ -24,6 +24,7 @@ import {
 import { getRateForDate } from '@/services/exchangeRateService'
 import { getCustomers, getProducts, createCustomer } from '@/services/firestoreService'
 import { filterProductsForBranch } from '@/utils/branchCatalog'
+import { getUnitShortLabel } from '@/utils/units'
 import { applyBranchPricing } from '@/utils/branchPricing'
 import { createQuotation, getNextQuotationNumber, getQuotation, updateQuotation } from '@/services/quotationService'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
@@ -878,6 +879,8 @@ export default function CreateQuotation() {
       finalPrice = selectedPresentation.price
       finalName = `${product.name} (${selectedPresentation.name})`
       presentationInfo = selectedPresentation.name
+      // Unidad SUNAT de la presentación (ej. SA = saco); sin ella, la base
+      finalUnit = selectedPresentation.unit || finalUnit
       const presUsd = parseFloat(selectedPresentation.priceUSD)
       anchorUSD = Number.isFinite(presUsd) && presUsd > 0 ? presUsd : null
     }
@@ -2939,8 +2942,9 @@ export default function CreateQuotation() {
                   <Package className="w-5 h-5 text-primary-500" />
                   <div>
                     <p className="font-medium">{presentation.name}</p>
+                    {/* Unidad base real: "49 kg", no "49 unidades" */}
                     <p className="text-xs text-gray-500">
-                      {presentation.factor} unidades
+                      {presentation.factor} {getUnitShortLabel(pendingProductSelection?.product?.unit)}
                     </p>
                   </div>
                 </div>
@@ -2956,13 +2960,13 @@ export default function CreateQuotation() {
             <div className="p-3 bg-gray-50 rounded-lg space-y-1">
               <p className="text-xs font-medium text-gray-700">Stock disponible:</p>
               <p className="text-sm text-gray-600">
-                <span className="font-semibold">{pendingProductSelection.product.stock}</span> unidades
+                <span className="font-semibold">{pendingProductSelection.product.stock}</span> {getUnitShortLabel(pendingProductSelection.product.unit)}
               </p>
               {pendingProductSelection.product.presentations?.map((pres, idx) => {
                 const equivalentQty = Math.floor(pendingProductSelection.product.stock / pres.factor)
                 return (
                   <p key={idx} className="text-sm text-gray-600">
-                    <span className="font-semibold">{equivalentQty}</span> {pres.name} <span className="text-gray-400">(x{pres.factor} unid.)</span>
+                    <span className="font-semibold">{equivalentQty}</span> {pres.name} <span className="text-gray-400">(x{pres.factor} {getUnitShortLabel(pendingProductSelection.product.unit)})</span>
                   </p>
                 )
               })}

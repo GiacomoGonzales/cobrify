@@ -1,4 +1,5 @@
 import Modal from '@/components/ui/Modal'
+import { getUnitShortLabel } from '@/utils/units'
 
 /**
  * Selector de presentación de venta de un producto (ej. Ron: Vaso / Botella).
@@ -69,7 +70,8 @@ export default function PresentationSelectorModal({
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium text-gray-900">{pres.name}</p>
-                  <p className="text-xs text-gray-500">Contiene {pres.factor} unidades</p>
+                  {/* Unidad base real: "Contiene 49 kg", no "49 unidades" */}
+                  <p className="text-xs text-gray-500">Contiene {pres.factor} {getUnitShortLabel(product.unit)}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-xl font-bold text-green-600">

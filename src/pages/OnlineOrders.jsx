@@ -218,7 +218,9 @@ export default function OnlineOrders() {
           name: item.name,
           price: item.price,
           quantity: item.quantity,
-          unit: 'NIU',
+          // Unidad real del producto (los pedidos nuevos la guardan); antes se
+          // hardcodeaba NIU y un producto en kilos se facturaba como "unidad"
+          unit: item.unit || 'NIU',
           ...(item.isVariant && {
             isVariant: true,
             variantSku: item.variantSku,
@@ -247,7 +249,7 @@ export default function OnlineOrders() {
           name: item.name,
           price: item.price,
           quantity: item.quantity,
-          unit: 'UNIDAD',
+          unit: item.unit || 'UNIDAD',
           ...(item.isVariant && {
             isVariant: true,
             variantSku: item.variantSku,

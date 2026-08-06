@@ -96,6 +96,23 @@ export function getUnitLabel(code, fallback = 'und') {
   return UNIT_LABEL_BY_CODE[code] || code
 }
 
+// Abreviaturas para textos compactos ("49 kg", "240 und"). Mismo criterio que
+// el carrito del POS; lo que no tenga abreviatura cae a la etiqueta larga.
+const UNIT_SHORT_LABELS = {
+  KGM: 'kg', GRM: 'g', LTR: 'lt', MTR: 'm', MTK: 'm²', MTQ: 'm³',
+  NIU: 'und', ZZ: 'srv', BX: 'caja', PK: 'paq', TNE: 'ton',
+  GLL: 'gal', MLT: 'ml', ONZ: 'oz', LBR: 'lb', DZN: 'doc',
+}
+
+/**
+ * Abreviatura de un código de unidad SUNAT ('KGM' → 'kg', 'NIU' → 'und').
+ * Sin abreviatura definida, cae a la etiqueta larga en minúsculas.
+ */
+export function getUnitShortLabel(code, fallback = 'und') {
+  if (!code) return fallback
+  return UNIT_SHORT_LABELS[code] || getUnitLabel(code, fallback).toLowerCase()
+}
+
 /**
  * Etiqueta de unidad para un item de inventario, que puede ser PRODUCTO o
  * INSUMO. Los productos guardan un código SUNAT en `unit`; los insumos guardan
@@ -111,4 +128,35 @@ export function getItemUnitLabel(item, fallback = 'und') {
     return item.purchaseUnit || fallback
   }
   return getUnitLabel(item.unit, fallback)
+}
+
+/**
+ * Equivalencia del stock en presentaciones: "5 × Saco x 49 kg + 5 kg".
+ *
+ * Un producto a granel (245 KGM con presentación "Saco x49") se entiende mejor
+ * como "5 sacos" que como un número suelto de kilos. Criterio compartido entre
+ * Inventario y Productos para que ambos digan lo mismo.
+ *
+ * - Una línea por presentación con factor > 1, unidas con " · ".
+ * - El sobrante se expresa en la unidad base solo si existe.
+ * - Devuelve '' para insumos, productos con variantes (su stock vive en la
+ *   variante, no en la base) o sin presentaciones aplicables.
+ *
+ * @param {object} item   Producto con `presentations[]` y `unit`.
+ * @param {number} stock  Stock en unidad base sobre el que se calcula.
+ */
+export function formatPresentationEquivalence(item, stock) {
+  if (!item || item.isIngredient || item.itemType === 'ingredient' || item.hasVariants) return ''
+  const s = Number(stock)
+  if (!Number.isFinite(s) || s <= 0) return ''
+  const presentaciones = (Array.isArray(item.presentations) ? item.presentations : [])
+    .filter(p => Number(p.factor) > 1)
+  if (presentaciones.length === 0) return ''
+  const base = getUnitShortLabel(item.unit)
+  return presentaciones.map(p => {
+    const factor = Number(p.factor)
+    const enteras = Math.floor(s / factor)
+    const sobra = Number((s - enteras * factor).toFixed(2))
+    return `${enteras} × ${p.name}${sobra > 0 ? ` + ${sobra} ${base}` : ''}`
+  }).join(' · ')
 }

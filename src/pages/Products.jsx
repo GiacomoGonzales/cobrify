@@ -19,7 +19,7 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { productSchema } from '@/utils/schemas'
-import { UNITS, getUnitLabel } from '@/utils/units'
+import { UNITS, getUnitLabel, formatPresentationEquivalence } from '@/utils/units'
 import { formatCurrency, formatProductPrice, applyMarginToCost, matchesSearchQuery, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import {
   getProducts,
@@ -424,7 +424,8 @@ export default function Products() {
 
   // Presentations state (venta por presentaciones: unidad, pack, caja, etc.)
   const [presentations, setPresentations] = useState([])
-  const [newPresentation, setNewPresentation] = useState({ name: '', factor: '', price: '', priceUSD: '' })
+  // unit: '' = usar la unidad base del producto al agregar (se resuelve al pulsar +)
+  const [newPresentation, setNewPresentation] = useState({ name: '', factor: '', price: '', priceUSD: '', unit: '' })
   const [editingPresentationIdx, setEditingPresentationIdx] = useState(null) // null = ninguna en edicion
 
   // Image upload state
@@ -784,7 +785,7 @@ export default function Products() {
     setModifiers([]) // Limpiar modificadores
     setPresentations([]) // Limpiar presentaciones
     setShowPresentations(false)
-    setNewPresentation({ name: '', factor: '', price: '', priceUSD: '' })
+    setNewPresentation({ name: '', factor: '', price: '', priceUSD: '', unit: '' })
     setEditingPresentationIdx(null)
     setTaxAffectation(businessSettings?.defaultTaxAffectation || '10') // Default configurable (Configuración > Preferencias)
     setIgvRate(businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18)
@@ -863,7 +864,7 @@ export default function Products() {
     // Load presentations if product has them (venta por presentaciones)
     setPresentations(product.presentations || [])
     setShowPresentations((product.presentations || []).length > 0)
-    setNewPresentation({ name: '', factor: '', price: '', priceUSD: '' })
+    setNewPresentation({ name: '', factor: '', price: '', priceUSD: '', unit: '' })
     setEditingPresentationIdx(null)
 
     // Load pharmacy data if exists (pharmacy mode)
@@ -1023,7 +1024,7 @@ export default function Products() {
     const clonedPresentations = (product.presentations || []).map(({ id, ...rest }) => rest)
     setPresentations(clonedPresentations)
     setShowPresentations(clonedPresentations.length > 0)
-    setNewPresentation({ name: '', factor: '', price: '', priceUSD: '' })
+    setNewPresentation({ name: '', factor: '', price: '', priceUSD: '', unit: '' })
 
     // Cargar datos de farmacia si existen
     setPharmacyData({
@@ -1128,7 +1129,7 @@ export default function Products() {
     setModifiers([]) // Limpiar modificadores
     setPresentations([]) // Limpiar presentaciones
     setShowPresentations(false)
-    setNewPresentation({ name: '', factor: '', price: '', priceUSD: '' })
+    setNewPresentation({ name: '', factor: '', price: '', priceUSD: '', unit: '' })
     // Limpiar imágenes
     setProductImages([])
     // Limpiar códigos de barra adicionales
@@ -5293,6 +5294,12 @@ export default function Products() {
                             ) : (
                               <span className="text-gray-400 text-xs">Sin stock</span>
                             )}
+                            {/* Equivalencia en presentaciones: "5 × Saco x 49 kg + 5 kg" */}
+                            {formatPresentationEquivalence(product, stockDisplay) && (
+                              <p className="text-[11px] text-gray-500 mt-1">
+                                = {formatPresentationEquivalence(product, stockDisplay)}
+                              </p>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -7026,7 +7033,7 @@ export default function Products() {
                       setShowPresentations(e.target.checked)
                       if (!e.target.checked) {
                         setPresentations([])
-                        setNewPresentation({ name: '', factor: '', price: '', priceUSD: '' })
+                        setNewPresentation({ name: '', factor: '', price: '', priceUSD: '', unit: '' })
                       }
                     }}
                     className="w-4 h-4 mt-0.5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
@@ -7079,7 +7086,8 @@ export default function Products() {
               </h3>
 
               <p className="text-xs text-gray-500">
-                Define cómo se puede vender este producto (unidad, pack, caja, etc.). El stock se maneja en la unidad base.
+                Define cómo se puede vender este producto (unidad, pack, caja, saco, etc.). El stock se maneja en la unidad base.
+                La unidad SUNAT de cada presentación es la que sale en el comprobante.
               </p>
 
               {/* Lista de presentaciones */}
@@ -7088,7 +7096,7 @@ export default function Products() {
                   {presentations.map((pres, idx) => (
                     <div key={idx} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
                       {editingPresentationIdx === idx ? (
-                        <div className={`flex-1 grid ${businessSettings?.multiCurrencyEnabled ? 'grid-cols-4' : 'grid-cols-3'} gap-2`}>
+                        <div className={`flex-1 grid grid-cols-2 ${businessSettings?.multiCurrencyEnabled ? 'sm:grid-cols-5' : 'sm:grid-cols-4'} gap-2`}>
                           <div>
                             <span className="text-xs text-gray-500">Nombre</span>
                             <input
@@ -7108,6 +7116,18 @@ export default function Products() {
                               onChange={(e) => setPresentations(prev => prev.map((p, i) => i === idx ? { ...p, factor: e.target.value } : p))}
                               className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                             />
+                          </div>
+                          <div>
+                            <span className="text-xs text-gray-500">Unidad (SUNAT)</span>
+                            <select
+                              value={pres.unit || watch('unit') || 'NIU'}
+                              onChange={(e) => setPresentations(prev => prev.map((p, i) => i === idx ? { ...p, unit: e.target.value } : p))}
+                              className="w-full px-1 py-1 text-sm border border-gray-300 rounded bg-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            >
+                              {UNITS.map(u => (
+                                <option key={u.value} value={u.value}>{u.label}</option>
+                              ))}
+                            </select>
                           </div>
                           <div>
                             <span className="text-xs text-gray-500">{businessSettings?.multiCurrencyEnabled ? 'Precio (S/)' : 'Precio'}</span>
@@ -7133,7 +7153,7 @@ export default function Products() {
                           )}
                         </div>
                       ) : (
-                        <div className={`flex-1 grid ${businessSettings?.multiCurrencyEnabled ? 'grid-cols-4' : 'grid-cols-3'} gap-2`}>
+                        <div className={`flex-1 grid grid-cols-2 ${businessSettings?.multiCurrencyEnabled ? 'sm:grid-cols-5' : 'sm:grid-cols-4'} gap-2`}>
                           <div>
                             <span className="text-xs text-gray-500">Nombre</span>
                             <p className="text-sm font-medium">{pres.name}</p>
@@ -7141,6 +7161,10 @@ export default function Products() {
                           <div>
                             <span className="text-xs text-gray-500">Factor</span>
                             <p className="text-sm font-medium">×{pres.factor}</p>
+                          </div>
+                          <div>
+                            <span className="text-xs text-gray-500">Unidad (SUNAT)</span>
+                            <p className="text-sm font-medium">{getUnitLabel(pres.unit || watch('unit'), 'Unidad')}</p>
                           </div>
                           <div>
                             <span className="text-xs text-gray-500">{businessSettings?.multiCurrencyEnabled ? 'Precio (S/)' : 'Precio'}</span>
@@ -7193,8 +7217,8 @@ export default function Products() {
               )}
 
               {/* Agregar nueva presentación */}
-              <div className="flex items-end gap-2">
-                <div className="flex-1">
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="w-full sm:w-auto sm:flex-1">
                   <label className="block text-xs font-medium text-gray-700 mb-1">Nombre</label>
                   <input
                     type="text"
@@ -7215,6 +7239,18 @@ export default function Products() {
                     onChange={(e) => setNewPresentation(prev => ({ ...prev, factor: e.target.value }))}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   />
+                </div>
+                <div className="w-32">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Unidad (SUNAT)</label>
+                  <select
+                    value={newPresentation.unit || watch('unit') || 'NIU'}
+                    onChange={(e) => setNewPresentation(prev => ({ ...prev, unit: e.target.value }))}
+                    className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  >
+                    {UNITS.map(u => (
+                      <option key={u.value} value={u.value}>{u.label}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="w-24">
                   <label className="block text-xs font-medium text-gray-700 mb-1">{businessSettings?.multiCurrencyEnabled ? 'Precio (S/)' : 'Precio'}</label>
@@ -7268,9 +7304,12 @@ export default function Products() {
                       name: newPresentation.name.trim(),
                       factor: parseFloat(newPresentation.factor),
                       price: parseFloat(presPen),
-                      priceUSD: (businessSettings?.multiCurrencyEnabled && newPresentation.priceUSD) ? parseFloat(newPresentation.priceUSD) : null
+                      priceUSD: (businessSettings?.multiCurrencyEnabled && newPresentation.priceUSD) ? parseFloat(newPresentation.priceUSD) : null,
+                      // Unidad SUNAT propia de la presentación (ej. SA para un saco
+                      // de un producto que se vende en KGM). Sin elegir: la base.
+                      unit: newPresentation.unit || watch('unit') || 'NIU',
                     }])
-                    setNewPresentation({ name: '', factor: '', price: '', priceUSD: '' })
+                    setNewPresentation({ name: '', factor: '', price: '', priceUSD: '', unit: '' })
                   }}
                   className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-1"
                 >
@@ -8546,14 +8585,21 @@ export default function Products() {
                     <label className="text-xs font-medium text-gray-500">Stock Total</label>
                     {(() => {
                       const realStock = getRealStockValue(viewingProduct) || 0
+                      const presEq = formatPresentationEquivalence(viewingProduct, realStock)
                       return (
-                        <p className={`text-2xl font-bold mt-1 ${
-                          realStock > (viewingProduct?.minStock ?? 3) ? 'text-green-600' :
-                          realStock > 0 ? 'text-yellow-600' :
-                          'text-red-600'
-                        }`}>
-                          {realStock} {getUnitLabel(viewingProduct.unit, 'unidades').toLowerCase()}
-                        </p>
+                        <>
+                          <p className={`text-2xl font-bold mt-1 ${
+                            realStock > (viewingProduct?.minStock ?? 3) ? 'text-green-600' :
+                            realStock > 0 ? 'text-yellow-600' :
+                            'text-red-600'
+                          }`}>
+                            {realStock} {getUnitLabel(viewingProduct.unit, 'unidades').toLowerCase()}
+                          </p>
+                          {/* Equivalencia en presentaciones */}
+                          {presEq && (
+                            <p className="text-xs text-gray-500 mt-0.5">= {presEq}</p>
+                          )}
+                        </>
                       )
                     })()}
                   </div>

@@ -265,7 +265,8 @@ const ProductFormModal = ({
 
   // Presentations state
   const [presentations, setPresentations] = useState([])
-  const [newPresentation, setNewPresentation] = useState({ name: '', factor: '', price: '' })
+  // unit: '' = usar la unidad base del producto al agregar (se resuelve al pulsar +)
+  const [newPresentation, setNewPresentation] = useState({ name: '', factor: '', price: '', unit: '' })
 
   // Pharmacy mode state
   const [pharmacyData, setPharmacyData] = useState({
@@ -1401,7 +1402,8 @@ const ProductFormModal = ({
             </h3>
 
             <p className="text-xs text-gray-500">
-              Define cómo se puede vender este producto (unidad, pack, caja, etc.)
+              Define cómo se puede vender este producto (unidad, pack, caja, saco, etc.).
+              La unidad SUNAT de cada presentación es la que sale en el comprobante.
             </p>
 
             {/* Lista de presentaciones */}
@@ -1409,7 +1411,7 @@ const ProductFormModal = ({
               <div className="space-y-2">
                 {presentations.map((pres, idx) => (
                   <div key={idx} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
-                    <div className="flex-1 grid grid-cols-3 gap-2">
+                    <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-2">
                       <div>
                         <span className="text-xs text-gray-500">Nombre</span>
                         <p className="text-sm font-medium">{pres.name}</p>
@@ -1417,6 +1419,24 @@ const ProductFormModal = ({
                       <div>
                         <span className="text-xs text-gray-500">Factor</span>
                         <p className="text-sm font-medium">×{pres.factor}</p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-gray-500">Unidad (SUNAT)</span>
+                        {/* Editable inline: las presentaciones viejas no tienen unidad
+                            guardada y así se corrigen sin borrar y recrear */}
+                        <select
+                          value={pres.unit || watch('unit') || 'NIU'}
+                          onChange={(e) => {
+                            const updated = [...presentations]
+                            updated[idx] = { ...updated[idx], unit: e.target.value }
+                            setPresentations(updated)
+                          }}
+                          className="w-full text-sm font-medium border border-gray-200 rounded px-1 py-0.5 bg-white focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                        >
+                          {UNITS.map(u => (
+                            <option key={u.value} value={u.value}>{u.label}</option>
+                          ))}
+                        </select>
                       </div>
                       <div>
                         <span className="text-xs text-gray-500">Precio</span>
@@ -1439,8 +1459,8 @@ const ProductFormModal = ({
             )}
 
             {/* Agregar nueva presentación */}
-            <div className="flex items-end gap-2">
-              <div className="flex-1">
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="w-full sm:w-auto sm:flex-1">
                 <label className="block text-xs font-medium text-gray-700 mb-1">Nombre</label>
                 <input
                   type="text"
@@ -1455,11 +1475,24 @@ const ProductFormModal = ({
                 <input
                   type="number"
                   placeholder="24"
-                  min="1"
+                  min="0.01"
+                  step="any"
                   value={newPresentation.factor}
                   onChange={(e) => setNewPresentation(prev => ({ ...prev, factor: e.target.value }))}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 />
+              </div>
+              <div className="w-32">
+                <label className="block text-xs font-medium text-gray-700 mb-1">Unidad (SUNAT)</label>
+                <select
+                  value={newPresentation.unit || watch('unit') || 'NIU'}
+                  onChange={(e) => setNewPresentation(prev => ({ ...prev, unit: e.target.value }))}
+                  className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+                >
+                  {UNITS.map(u => (
+                    <option key={u.value} value={u.value}>{u.label}</option>
+                  ))}
+                </select>
               </div>
               <div className="w-24">
                 <label className="block text-xs font-medium text-gray-700 mb-1">Precio</label>
@@ -1479,8 +1512,10 @@ const ProductFormModal = ({
                     toast.error('Ingresa un nombre para la presentación')
                     return
                   }
-                  if (!newPresentation.factor || parseInt(newPresentation.factor) < 1) {
-                    toast.error('El factor debe ser al menos 1')
+                  // parseFloat: permite presentaciones fraccionarias de productos a
+                  // granel (ej. "Bolsa x0.5" de un producto en KGM)
+                  if (!newPresentation.factor || parseFloat(newPresentation.factor) <= 0) {
+                    toast.error('El factor debe ser mayor a 0')
                     return
                   }
                   if (!newPresentation.price || parseFloat(newPresentation.price) <= 0) {
@@ -1489,10 +1524,13 @@ const ProductFormModal = ({
                   }
                   setPresentations([...presentations, {
                     name: newPresentation.name.trim(),
-                    factor: parseInt(newPresentation.factor),
-                    price: parseFloat(newPresentation.price)
+                    factor: parseFloat(newPresentation.factor),
+                    price: parseFloat(newPresentation.price),
+                    // Unidad SUNAT propia de la presentación (ej. SA para un saco de
+                    // un producto que se vende en KGM). Si no eligió, la unidad base.
+                    unit: newPresentation.unit || watch('unit') || 'NIU',
                   }])
-                  setNewPresentation({ name: '', factor: '', price: '' })
+                  setNewPresentation({ name: '', factor: '', price: '', unit: '' })
                 }}
                 className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-1"
               >

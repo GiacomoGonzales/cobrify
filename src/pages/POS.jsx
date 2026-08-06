@@ -4025,6 +4025,9 @@ export default function POS() {
       ...(presAnchor && { fixedPriceUSD: presAnchor.fixedPriceUSD }),
       presentationName: presentation.name,
       presentationFactor: presentation.factor,
+      // Unidad SUNAT de la presentación: un saco se factura como SA, no con la
+      // unidad base del producto (KGM). Sin unidad propia, hereda la base.
+      unit: presentation.unit || product.unit || 'NIU',
       quantity: 1,
       // Sin lote: marcar isNoLot y LIMPIAR batchNumber del producto
       ...(isNoLotSale && {
@@ -4046,7 +4049,7 @@ export default function POS() {
     const maxPresentations = Math.floor(availableStock / presentation.factor)
     if (product.stock !== null && maxPresentations < 1 && !companySettings?.allowNegativeStock) {
       const stockSource = isNoLotSale ? 'stock sin lote' : batchToUse ? `lote ${batchToUse.lotNumber}` : 'almacén'
-      toast.error(`Stock insuficiente en ${stockSource}. Se necesita mínimo ${presentation.factor} unidades para 1 ${presentation.name}, disponible: ${parseFloat(availableStock.toFixed(2))}`)
+      toast.error(`Stock insuficiente en ${stockSource}. Se necesita mínimo ${presentation.factor} ${getUnitShortLabel(product.unit || 'NIU')} para 1 ${presentation.name}, disponible: ${parseFloat(availableStock.toFixed(2))}`)
       setShowPresentationModal(false)
       setProductForPresentationSelection(null)
       setPendingBatchForPresentation(null)
@@ -12166,8 +12169,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-medium text-gray-900">Unidad</p>
-                    <p className="text-xs text-gray-500">Precio base por unidad</p>
+                    <p className="font-medium text-gray-900">{UNIT_TYPES.find(u => u.code === (productForPresentationSelection.unit || 'NIU'))?.label || 'Unidad'}</p>
+                    <p className="text-xs text-gray-500">Precio base por {getUnitShortLabel(productForPresentationSelection.unit || 'NIU')}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-xl font-bold text-primary-600">
@@ -12188,7 +12191,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-medium text-gray-900">{pres.name}</p>
-                      <p className="text-xs text-gray-500">Contiene {pres.factor} unidades</p>
+                      {/* Unidad base real: "Contiene 49 kg", no "49 unidades" */}
+                      <p className="text-xs text-gray-500">Contiene {pres.factor} {getUnitShortLabel(productForPresentationSelection.unit || 'NIU')}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-xl font-bold text-green-600">
@@ -12214,13 +12218,13 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   return (
                     <>
                       <p className="text-sm text-gray-600">
-                        <span className="font-semibold">{stockDisponible}</span> unidades
+                        <span className="font-semibold">{stockDisponible}</span> {getUnitShortLabel(productForPresentationSelection.unit || 'NIU')}
                       </p>
                       {productForPresentationSelection.presentations?.map((pres, idx) => {
                         const equivalentQty = Math.floor(stockDisponible / pres.factor)
                         return (
                           <p key={idx} className="text-sm text-gray-600">
-                            <span className="font-semibold">{equivalentQty}</span> {pres.name} <span className="text-gray-400">(x{pres.factor} unid.)</span>
+                            <span className="font-semibold">{equivalentQty}</span> {pres.name} <span className="text-gray-400">(x{pres.factor} {getUnitShortLabel(productForPresentationSelection.unit || 'NIU')})</span>
                           </p>
                         )
                       })}

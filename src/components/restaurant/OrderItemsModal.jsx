@@ -390,6 +390,8 @@ export default function OrderItemsModal({
             presentationName: presentation.name,
             presentationFactor: presentation.factor || 1,
             name: `${product.name} (${presentation.name})`,
+            // Unidad SUNAT de la presentación (ej. SA = saco)
+            ...(presentation.unit && { unit: presentation.unit }),
           }),
         },
       ])
@@ -537,6 +539,7 @@ export default function OrderItemsModal({
           ...(mPres && {
             presentationName: mPres.name,
             presentationFactor: mPres.factor || 1,
+            ...(mPres.unit && { unit: mPres.unit }),
           }),
         },
       ])

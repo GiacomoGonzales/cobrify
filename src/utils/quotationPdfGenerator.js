@@ -7,6 +7,7 @@ import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 import { resolveBranchCompanyInfo } from '@/utils/companyDisplay'
 import { getWalletLogoDataUrl } from '@/utils/walletLogos'
+import { unitDisplayName } from '@/data/sunatUnits'
 
 // Sistema de caché compartido con pdfGenerator
 const LOGO_CACHE_KEY = 'cobrify_logo_cache'
@@ -943,7 +944,9 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   }
   const getUnitText = (item) => {
     const code = item.unit || 'UNIDAD'
-    return unitLabels[code] || code
+    // Legacy en texto primero; códigos SUNAT al nombre legible (NIU → UNIDAD,
+    // SA → SACO). Antes un código desconocido se imprimía crudo ("NIU").
+    return unitLabels[code] || unitDisplayName(code)
   }
 
   // Cuando hay imágenes activas se agrega una columna IMAGEN dedicada antes de DESCRIPCIÓN.

@@ -73,7 +73,7 @@ import { getCompanySettings } from '@/services/firestoreService'
 import { isProductInBranch } from '@/utils/branchCatalog'
 import { computeBatchDeduction, computeProductBatchMetadata } from '@/utils/batchStock'
 import { getExitReasons, getExitReasonLabel } from '@/utils/warehouseExitReasons'
-import { getItemUnitLabel } from '@/utils/units'
+import { getItemUnitLabel, formatPresentationEquivalence } from '@/utils/units'
 
 // Helper functions for category hierarchy
 const migrateLegacyCategories = (cats) => {
@@ -2794,6 +2794,13 @@ export default function Inventory() {
                             {stockStatus.status === 'Sin control' ? 'S/C' : stockStatus.status === 'Stock Bajo' ? 'Bajo' : stockStatus.status}
                           </Badge>
                         </div>
+
+                        {/* Equivalencia en presentaciones: "5 × Saco x 49 kg + 5 kg" */}
+                        {isProduct && formatPresentationEquivalence(item, realStock) && (
+                          <p className="text-[11px] text-gray-500 mt-1" style={canExpand ? { paddingLeft: '1.375rem' } : undefined}>
+                            = {formatPresentationEquivalence(item, realStock)}
+                          </p>
+                        )}
                       </div>
 
                       {/* Expandible: Variantes agrupadas por sucursal → almacén */}
@@ -3313,6 +3320,12 @@ export default function Inventory() {
                                       }`}
                                     >
                                       {item.isIngredient || !Number.isInteger(realStock) ? Number(realStock).toFixed(2) : realStock}
+                                    </span>
+                                  )}
+                                  {/* Equivalencia en presentaciones */}
+                                  {isProduct && formatPresentationEquivalence(item, realStock) && (
+                                    <span className="block text-[10px] text-gray-500 font-normal">
+                                      = {formatPresentationEquivalence(item, realStock)}
                                     </span>
                                   )}
                                 </div>

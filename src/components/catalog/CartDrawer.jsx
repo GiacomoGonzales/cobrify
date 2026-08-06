@@ -384,6 +384,9 @@ export default function CartDrawer({
           price: priceDisplay,
           quantity: item.quantity,
           total: totalDisplay,
+          // Unidad SUNAT del producto: sin ella, al facturar el pedido todo
+          // salía como NIU aunque el producto se venda en kilos
+          ...(item.unit && { unit: item.unit }),
           modifiers: item.selectedModifiers || [],
           ...(item.isVariant && { isVariant: true, variantSku: item.variantSku, variantAttributes: item.variantAttributes }),
           notes: item.notes || '',

@@ -1504,7 +1504,8 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   })
   const getUnitText = (item) => {
     const code = item.unit || 'UNIDAD'
-    return unitLabels[code] || code
+    // Mayúsculas: la U.M. acompaña a cabeceras y descripciones en mayúsculas
+    return (unitLabels[code] || code).toUpperCase()
   }
 
   // Definir columnas dinámicamente según si hay descuentos y modo farmacia
@@ -3434,7 +3435,11 @@ export const generateExitNotePDF = async (invoice, companySettings) => {
       'HORA': 'HR',
       'SERVICIO': 'SRV'
     }
-    const unitCode = unitLabels[item.unit] || item.unit || 'UND'
+    // Legacy en texto primero; códigos SUNAT al nombre del catálogo (NIU →
+    // UNIDAD, SA → SACO). Antes un código se imprimía crudo ("NIU").
+    const unitCode = (unitLabels[item.unit]
+      || UNITS.find(u => u.value === item.unit)?.label
+      || item.unit || 'UND').toUpperCase()
 
     // Calcular alto de la fila según el texto de descripción
     const descLines = doc.splitTextToSize(itemName, colWidths.desc - 10)

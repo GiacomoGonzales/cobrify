@@ -590,8 +590,11 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
             const nombre = String(row[`presentacion${pi}_nombre`] || row[`Presentacion${pi}_Nombre`] || row[`PRESENTACION${pi}_NOMBRE`] || '').trim()
             const cantidad = parseFloat(row[`presentacion${pi}_cantidad`] || row[`Presentacion${pi}_Cantidad`] || row[`PRESENTACION${pi}_CANTIDAD`] || 0)
             const precio = parseFloat(row[`presentacion${pi}_precio`] || row[`Presentacion${pi}_Precio`] || row[`PRESENTACION${pi}_PRECIO`] || 0)
+            // Unidad SUNAT propia de la presentación (ej. SA = saco, BX = caja).
+            // Opcional: sin ella, la venta usa la unidad base del producto.
+            const unidad = String(row[`presentacion${pi}_unidad`] || row[`Presentacion${pi}_Unidad`] || row[`PRESENTACION${pi}_UNIDAD`] || '').trim().toUpperCase()
             if (nombre && cantidad > 0 && precio > 0) {
-              pres.push({ name: nombre, factor: cantidad, price: precio })
+              pres.push({ name: nombre, factor: cantidad, price: precio, ...(unidad && { unit: unidad }) })
             }
           }
           return pres.length > 0 ? pres : null
@@ -923,12 +926,15 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           presentacion1_nombre: 'Caja x30',
           presentacion1_cantidad: 30,
           presentacion1_precio: 40.00,
+          presentacion1_unidad: 'BX',
           presentacion2_nombre: '',
           presentacion2_cantidad: '',
           presentacion2_precio: '',
+          presentacion2_unidad: '',
           presentacion3_nombre: '',
           presentacion3_cantidad: '',
           presentacion3_precio: '',
+          presentacion3_unidad: '',
         },
         {
           sku: 'MED-002',
@@ -964,12 +970,15 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           presentacion1_nombre: 'Caja x100',
           presentacion1_cantidad: 100,
           presentacion1_precio: 100.00,
+          presentacion1_unidad: 'BX',
           presentacion2_nombre: '',
           presentacion2_cantidad: '',
           presentacion2_precio: '',
+          presentacion2_unidad: '',
           presentacion3_nombre: '',
           presentacion3_cantidad: '',
           presentacion3_precio: '',
+          presentacion3_unidad: '',
         },
         {
           sku: 'MED-003',
@@ -1005,12 +1014,15 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           presentacion1_nombre: '',
           presentacion1_cantidad: '',
           presentacion1_precio: '',
+          presentacion1_unidad: '',
           presentacion2_nombre: '',
           presentacion2_cantidad: '',
           presentacion2_precio: '',
+          presentacion2_unidad: '',
           presentacion3_nombre: '',
           presentacion3_cantidad: '',
           presentacion3_precio: '',
+          presentacion3_unidad: '',
         },
         // ──────────────────────────────────────────────────────────────────
         // Ejemplo: PRODUCTO CON MÚLTIPLES LOTES
@@ -1052,12 +1064,15 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           presentacion1_nombre: '',
           presentacion1_cantidad: '',
           presentacion1_precio: '',
+          presentacion1_unidad: '',
           presentacion2_nombre: '',
           presentacion2_cantidad: '',
           presentacion2_precio: '',
+          presentacion2_unidad: '',
           presentacion3_nombre: '',
           presentacion3_cantidad: '',
           presentacion3_precio: '',
+          presentacion3_unidad: '',
         },
         {
           sku: 'MED-004',
@@ -1093,12 +1108,15 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           presentacion1_nombre: '',
           presentacion1_cantidad: '',
           presentacion1_precio: '',
+          presentacion1_unidad: '',
           presentacion2_nombre: '',
           presentacion2_cantidad: '',
           presentacion2_precio: '',
+          presentacion2_unidad: '',
           presentacion3_nombre: '',
           presentacion3_cantidad: '',
           presentacion3_precio: '',
+          presentacion3_unidad: '',
         }
       ]
     } else {
@@ -1148,12 +1166,15 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           presentacion1_nombre: '',
           presentacion1_cantidad: '',
           presentacion1_precio: '',
+          presentacion1_unidad: '',
           presentacion2_nombre: '',
           presentacion2_cantidad: '',
           presentacion2_precio: '',
+          presentacion2_unidad: '',
           presentacion3_nombre: '',
           presentacion3_cantidad: '',
           presentacion3_precio: '',
+          presentacion3_unidad: '',
           variante1_atributo: '',
           variante1_valor: '',
           variante1_sku: '',
@@ -1375,12 +1396,15 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           presentacion1_nombre: 'Six Pack',
           presentacion1_cantidad: 6,
           presentacion1_precio: 16.00,
+          presentacion1_unidad: 'PK',
           presentacion2_nombre: 'Caja x24',
           presentacion2_cantidad: 24,
           presentacion2_precio: 60.00,
+          presentacion2_unidad: 'BX',
           presentacion3_nombre: '',
           presentacion3_cantidad: '',
           presentacion3_precio: '',
+          presentacion3_unidad: '',
           variante1_atributo: '', variante1_valor: '', variante1_sku: '', variante1_codigo_barras: '', variante1_precio: '', variante1_stock: '',
           variante2_atributo: '', variante2_valor: '', variante2_sku: '', variante2_codigo_barras: '', variante2_precio: '', variante2_stock: '',
           variante3_atributo: '', variante3_valor: '', variante3_sku: '', variante3_codigo_barras: '', variante3_precio: '', variante3_stock: '',
