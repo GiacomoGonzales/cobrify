@@ -322,6 +322,12 @@ export default function Reports() {
         setProducts(demoData.products || [])
         setRecipes([]) // En demo no hay recetas por ahora
         setExpenses(demoData.expenses || [])
+        // Rentabilidad: sin compras el Costo de Ventas salia 0 y el Margen
+        // Bruto 100%, que hacia parecer roto el reporte. Los movimientos
+        // financieros alimentan "Otros Ingresos / Otros Egresos".
+        setPurchases(demoData.purchases || [])
+        setFinancialMovements(demoData.financialMovements || [])
+        setCashMovements(demoData.cashMovements || [])
         setIsLoading(false)
         return
       }

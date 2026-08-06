@@ -1188,6 +1188,62 @@ const generateDemoData = () => {
       { id: 'cat-servicios-tecnicos', name: 'Servicios Técnicos', parentId: null },
       { id: 'cat-servicios-spa', name: 'Servicios Spa', parentId: null },
     ],
+    // Movimientos financieros: los "Otros Ingresos / Otros Egresos" del
+    // reporte de Rentabilidad. Sin estos, esa parte del reporte salia vacia y
+    // la Utilidad Total era igual a la Operativa, que no muestra para que
+    // sirve la seccion.
+    financialMovements: [
+      {
+        id: 'fin1',
+        type: 'income',
+        category: 'aporte_capital',
+        description: 'Aporte del socio para ampliar stock',
+        amount: 5000.00,
+        paymentMethod: 'transferencia',
+        date: new Date(today.getFullYear(), today.getMonth(), 3),
+        createdAt: new Date(today.getFullYear(), today.getMonth(), 3),
+      },
+      {
+        id: 'fin2',
+        type: 'income',
+        category: 'venta_activo',
+        description: 'Venta de vitrina antigua',
+        amount: 850.00,
+        paymentMethod: 'efectivo',
+        date: new Date(today.getFullYear(), today.getMonth(), 12),
+        createdAt: new Date(today.getFullYear(), today.getMonth(), 12),
+      },
+      {
+        id: 'fin3',
+        type: 'expense',
+        category: 'retiro_dueno',
+        description: 'Retiro del dueño',
+        amount: 3000.00,
+        paymentMethod: 'transferencia',
+        date: new Date(today.getFullYear(), today.getMonth(), 15),
+        createdAt: new Date(today.getFullYear(), today.getMonth(), 15),
+      },
+      {
+        id: 'fin4',
+        type: 'expense',
+        category: 'compra_activo',
+        description: 'Compra de estantería nueva',
+        amount: 1200.00,
+        paymentMethod: 'transferencia',
+        date: new Date(today.getFullYear(), today.getMonth(), 18),
+        createdAt: new Date(today.getFullYear(), today.getMonth(), 18),
+      },
+      {
+        id: 'fin5',
+        type: 'income',
+        category: 'aporte_capital',
+        description: 'Aporte de capital del mes anterior',
+        amount: 2500.00,
+        paymentMethod: 'transferencia',
+        date: new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 8),
+        createdAt: new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 8),
+      },
+    ],
     expenses: [
       // Gastos del mes actual
       {
