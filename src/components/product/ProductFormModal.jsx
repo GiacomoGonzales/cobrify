@@ -18,6 +18,7 @@ import { productSchema } from '@/utils/schemas'
 import { uploadProductImage, deleteProductImage, createImagePreview, revokeImagePreview } from '@/services/productImageService'
 import { getNextSkuNumber } from '@/services/firestoreService'
 import ProductImagesManager, { productToImageItems, resolveImageUrls } from '@/components/product/ProductImagesManager'
+import { getPresentationCostInfo } from '@/utils/presentationCost'
 
 // Unidades de medida SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
 export const UNITS = [
@@ -1411,37 +1412,58 @@ const ProductFormModal = ({
               <div className="space-y-2">
                 {presentations.map((pres, idx) => (
                   <div key={idx} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
-                    <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      <div>
-                        <span className="text-xs text-gray-500">Nombre</span>
-                        <p className="text-sm font-medium">{pres.name}</p>
+                    <div className="flex-1">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <div>
+                          <span className="text-xs text-gray-500">Nombre</span>
+                          <p className="text-sm font-medium">{pres.name}</p>
+                        </div>
+                        <div>
+                          <span className="text-xs text-gray-500">Factor</span>
+                          <p className="text-sm font-medium">×{pres.factor}</p>
+                        </div>
+                        <div>
+                          <span className="text-xs text-gray-500">Unidad (SUNAT)</span>
+                          {/* Editable inline: las presentaciones viejas no tienen unidad
+                              guardada y así se corrigen sin borrar y recrear */}
+                          <select
+                            value={pres.unit || watch('unit') || 'NIU'}
+                            onChange={(e) => {
+                              const updated = [...presentations]
+                              updated[idx] = { ...updated[idx], unit: e.target.value }
+                              setPresentations(updated)
+                            }}
+                            className="w-full text-sm font-medium border border-gray-200 rounded px-1 py-0.5 bg-white focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                          >
+                            {UNITS.map(u => (
+                              <option key={u.value} value={u.value}>{u.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <span className="text-xs text-gray-500">Precio</span>
+                          <p className="text-sm font-medium">S/ {parseFloat(pres.price).toFixed(2)}</p>
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-xs text-gray-500">Factor</span>
-                        <p className="text-sm font-medium">×{pres.factor}</p>
-                      </div>
-                      <div>
-                        <span className="text-xs text-gray-500">Unidad (SUNAT)</span>
-                        {/* Editable inline: las presentaciones viejas no tienen unidad
-                            guardada y así se corrigen sin borrar y recrear */}
-                        <select
-                          value={pres.unit || watch('unit') || 'NIU'}
-                          onChange={(e) => {
-                            const updated = [...presentations]
-                            updated[idx] = { ...updated[idx], unit: e.target.value }
-                            setPresentations(updated)
-                          }}
-                          className="w-full text-sm font-medium border border-gray-200 rounded px-1 py-0.5 bg-white focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
-                        >
-                          {UNITS.map(u => (
-                            <option key={u.value} value={u.value}>{u.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <span className="text-xs text-gray-500">Precio</span>
-                        <p className="text-sm font-medium">S/ {parseFloat(pres.price).toFixed(2)}</p>
-                      </div>
+                      {/* Niveles de precio propios de la presentación */}
+                      {businessSettings?.multiplePricesEnabled && ['price2', 'price3', 'price4'].some(k => Number(pres[k]) > 0) && (
+                        <p className="text-[11px] text-gray-500 mt-1">
+                          {['price2', 'price3', 'price4'].filter(k => Number(pres[k]) > 0)
+                            .map(k => `${businessSettings?.priceLabels?.[k] || `Precio ${k.slice(-1)}`} S/ ${Number(pres[k]).toFixed(2)}`)
+                            .join(' · ')}
+                        </p>
+                      )}
+                      {/* Costo equivalente (factor × costo base) y margen: informativo,
+                          el costo vive solo en la unidad base del producto */}
+                      {(() => {
+                        const info = getPresentationCostInfo(pres, watch('cost'))
+                        if (!info) return null
+                        return (
+                          <p className="text-[11px] text-gray-500 mt-1">
+                            Costo equiv. S/ {info.costEq.toFixed(2)} · <span className={info.margin < 0 ? 'text-red-600 font-medium' : ''}>Margen S/ {info.margin.toFixed(2)}{info.marginPct != null ? ` (${info.marginPct.toFixed(0)}%)` : ''}</span>
+                          </p>
+                        )
+                      })()}
                     </div>
                     <button
                       type="button"
@@ -1495,7 +1517,7 @@ const ProductFormModal = ({
                 </select>
               </div>
               <div className="w-24">
-                <label className="block text-xs font-medium text-gray-700 mb-1">Precio</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{businessSettings?.multiplePricesEnabled ? (businessSettings?.priceLabels?.price1 || 'Precio 1') : 'Precio'}</label>
                 <input
                   type="number"
                   step="any"
@@ -1505,6 +1527,20 @@ const ProductFormModal = ({
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 />
               </div>
+              {/* Niveles de precio propios de la presentación (opcionales) */}
+              {businessSettings?.multiplePricesEnabled && ['price2', 'price3', 'price4'].map(key => (
+                <div key={key} className="w-24">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">{businessSettings?.priceLabels?.[key] || `Precio ${key.slice(-1)}`}</label>
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="Opcional"
+                    value={newPresentation[key] ?? ''}
+                    onChange={(e) => setNewPresentation(prev => ({ ...prev, [key]: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  />
+                </div>
+              ))}
               <button
                 type="button"
                 onClick={() => {
@@ -1526,6 +1562,10 @@ const ProductFormModal = ({
                     name: newPresentation.name.trim(),
                     factor: parseFloat(newPresentation.factor),
                     price: parseFloat(newPresentation.price),
+                    // Niveles de precio propios (opcionales, solo manuales)
+                    price2: parseFloat(newPresentation.price2) > 0 ? parseFloat(newPresentation.price2) : null,
+                    price3: parseFloat(newPresentation.price3) > 0 ? parseFloat(newPresentation.price3) : null,
+                    price4: parseFloat(newPresentation.price4) > 0 ? parseFloat(newPresentation.price4) : null,
                     // Unidad SUNAT propia de la presentación (ej. SA para un saco de
                     // un producto que se vende en KGM). Si no eligió, la unidad base.
                     unit: newPresentation.unit || watch('unit') || 'NIU',

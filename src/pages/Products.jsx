@@ -20,6 +20,7 @@ import Select from '@/components/ui/Select'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { productSchema } from '@/utils/schemas'
 import { UNITS, getUnitLabel, formatPresentationEquivalence } from '@/utils/units'
+import { getPresentationCostInfo } from '@/utils/presentationCost'
 import { formatCurrency, formatProductPrice, applyMarginToCost, matchesSearchQuery, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import {
   getProducts,
@@ -1327,7 +1328,18 @@ export default function Products() {
         // Add modifiers if in restaurant mode (only include if exists)
         ...(businessMode === 'restaurant' && modifiers ? { modifiers } : {}),
         // Add presentations if enabled (venta por presentaciones)
-        ...(businessSettings?.presentationsEnabled ? { presentations: presentations.map(p => ({ ...p, factor: parseFloat(p.factor) || 1, price: parseFloat(p.price) || 0, priceUSD: (businessSettings?.multiCurrencyEnabled && p.priceUSD) ? parseFloat(p.priceUSD) : null })) } : {}),
+        ...(businessSettings?.presentationsEnabled ? { presentations: presentations.map(p => ({
+          ...p,
+          factor: parseFloat(p.factor) || 1,
+          price: parseFloat(p.price) || 0,
+          priceUSD: (businessSettings?.multiCurrencyEnabled && p.priceUSD) ? parseFloat(p.priceUSD) : null,
+          // Niveles de precio propios de la presentación (solo manuales, sin
+          // derivación por %: el % sobre costo usa el costo por unidad BASE y
+          // daría precios absurdos para un paquete de 20)
+          price2: parseFloat(p.price2) > 0 ? parseFloat(p.price2) : null,
+          price3: parseFloat(p.price3) > 0 ? parseFloat(p.price3) : null,
+          price4: parseFloat(p.price4) > 0 ? parseFloat(p.price4) : null,
+        })) } : {}),
         // Add pharmacy data if in pharmacy mode
         ...(businessMode === 'pharmacy' ? {
           genericName: pharmacyData.genericName || null,
@@ -7096,7 +7108,8 @@ export default function Products() {
                   {presentations.map((pres, idx) => (
                     <div key={idx} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
                       {editingPresentationIdx === idx ? (
-                        <div className={`flex-1 grid grid-cols-2 ${businessSettings?.multiCurrencyEnabled ? 'sm:grid-cols-5' : 'sm:grid-cols-4'} gap-2`}>
+                        <div className="flex-1">
+                        <div className={`grid grid-cols-2 ${businessSettings?.multiCurrencyEnabled ? 'sm:grid-cols-5' : 'sm:grid-cols-4'} gap-2`}>
                           <div>
                             <span className="text-xs text-gray-500">Nombre</span>
                             <input
@@ -7152,37 +7165,77 @@ export default function Products() {
                             </div>
                           )}
                         </div>
+                        {/* Niveles de precio propios de la presentación (opcionales) */}
+                        {businessSettings?.multiplePricesEnabled && (
+                          <div className="grid grid-cols-3 gap-2 mt-2">
+                            {['price2', 'price3', 'price4'].map(key => (
+                              <div key={key}>
+                                <span className="text-xs text-gray-500">{businessSettings?.priceLabels?.[key] || `Precio ${key.slice(-1)}`}</span>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  placeholder="Opcional"
+                                  value={pres[key] ?? ''}
+                                  onChange={(e) => setPresentations(prev => prev.map((p, i) => i === idx ? { ...p, [key]: e.target.value } : p))}
+                                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        </div>
                       ) : (
-                        <div className={`flex-1 grid grid-cols-2 ${businessSettings?.multiCurrencyEnabled ? 'sm:grid-cols-5' : 'sm:grid-cols-4'} gap-2`}>
-                          <div>
-                            <span className="text-xs text-gray-500">Nombre</span>
-                            <p className="text-sm font-medium">{pres.name}</p>
-                          </div>
-                          <div>
-                            <span className="text-xs text-gray-500">Factor</span>
-                            <p className="text-sm font-medium">×{pres.factor}</p>
-                          </div>
-                          <div>
-                            <span className="text-xs text-gray-500">Unidad (SUNAT)</span>
-                            <p className="text-sm font-medium">{getUnitLabel(pres.unit || watch('unit'), 'Unidad')}</p>
-                          </div>
-                          <div>
-                            <span className="text-xs text-gray-500">{businessSettings?.multiCurrencyEnabled ? 'Precio (S/)' : 'Precio'}</span>
-                            <p className="text-sm font-medium">S/ {parseFloat(pres.price || 0).toFixed(2)}</p>
-                          </div>
-                          {businessSettings?.multiCurrencyEnabled && (
+                        <div className="flex-1">
+                          <div className={`grid grid-cols-2 ${businessSettings?.multiCurrencyEnabled ? 'sm:grid-cols-5' : 'sm:grid-cols-4'} gap-2`}>
                             <div>
-                              <span className="text-xs text-gray-500">Precio ($)</span>
-                              <p className="text-sm font-medium">{pres.priceUSD != null ? `$${parseFloat(pres.priceUSD).toFixed(2)}` : '-'}</p>
+                              <span className="text-xs text-gray-500">Nombre</span>
+                              <p className="text-sm font-medium">{pres.name}</p>
                             </div>
+                            <div>
+                              <span className="text-xs text-gray-500">Factor</span>
+                              <p className="text-sm font-medium">×{pres.factor}</p>
+                            </div>
+                            <div>
+                              <span className="text-xs text-gray-500">Unidad (SUNAT)</span>
+                              <p className="text-sm font-medium">{getUnitLabel(pres.unit || watch('unit'), 'Unidad')}</p>
+                            </div>
+                            <div>
+                              <span className="text-xs text-gray-500">{businessSettings?.multiCurrencyEnabled ? 'Precio (S/)' : 'Precio'}</span>
+                              <p className="text-sm font-medium">S/ {parseFloat(pres.price || 0).toFixed(2)}</p>
+                            </div>
+                            {businessSettings?.multiCurrencyEnabled && (
+                              <div>
+                                <span className="text-xs text-gray-500">Precio ($)</span>
+                                <p className="text-sm font-medium">{pres.priceUSD != null ? `$${parseFloat(pres.priceUSD).toFixed(2)}` : '-'}</p>
+                              </div>
+                            )}
+                          </div>
+                          {/* Niveles de precio propios de la presentación */}
+                          {businessSettings?.multiplePricesEnabled && ['price2', 'price3', 'price4'].some(k => Number(pres[k]) > 0) && (
+                            <p className="text-[11px] text-gray-500 mt-1">
+                              {['price2', 'price3', 'price4'].filter(k => Number(pres[k]) > 0)
+                                .map(k => `${businessSettings?.priceLabels?.[k] || `Precio ${k.slice(-1)}`} S/ ${Number(pres[k]).toFixed(2)}`)
+                                .join(' · ')}
+                            </p>
                           )}
+                          {/* Costo equivalente (factor × costo base) y margen: informativo,
+                              el costo vive solo en la unidad base del producto */}
+                          {(() => {
+                            const info = getPresentationCostInfo(pres, watchedCost)
+                            if (!info) return null
+                            return (
+                              <p className="text-[11px] text-gray-500 mt-1">
+                                Costo equiv. S/ {info.costEq.toFixed(2)} · <span className={info.margin < 0 ? 'text-red-600 font-medium' : ''}>Margen S/ {info.margin.toFixed(2)}{info.marginPct != null ? ` (${info.marginPct.toFixed(0)}%)` : ''}</span>
+                              </p>
+                            )
+                          })()}
                         </div>
                       )}
                       {editingPresentationIdx === idx ? (
                         <button
                           type="button"
                           onClick={() => {
-                            setPresentations(prev => prev.map((p, i) => i === idx ? { ...p, factor: parseFloat(p.factor) || 1, price: parseFloat(p.price) || 0, priceUSD: (businessSettings?.multiCurrencyEnabled && p.priceUSD) ? parseFloat(p.priceUSD) : null } : p))
+                            setPresentations(prev => prev.map((p, i) => i === idx ? { ...p, factor: parseFloat(p.factor) || 1, price: parseFloat(p.price) || 0, priceUSD: (businessSettings?.multiCurrencyEnabled && p.priceUSD) ? parseFloat(p.priceUSD) : null, price2: parseFloat(p.price2) > 0 ? parseFloat(p.price2) : null, price3: parseFloat(p.price3) > 0 ? parseFloat(p.price3) : null, price4: parseFloat(p.price4) > 0 ? parseFloat(p.price4) : null } : p))
                             setEditingPresentationIdx(null)
                           }}
                           className="p-1.5 text-green-600 hover:bg-green-50 rounded"
@@ -7253,7 +7306,7 @@ export default function Products() {
                   </select>
                 </div>
                 <div className="w-24">
-                  <label className="block text-xs font-medium text-gray-700 mb-1">{businessSettings?.multiCurrencyEnabled ? 'Precio (S/)' : 'Precio'}</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">{businessSettings?.multiplePricesEnabled ? (businessSettings?.priceLabels?.price1 || 'Precio 1') : (businessSettings?.multiCurrencyEnabled ? 'Precio (S/)' : 'Precio')}</label>
                   <input
                     type="number"
                     step="any"
@@ -7263,6 +7316,20 @@ export default function Products() {
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   />
                 </div>
+                {/* Niveles de precio propios de la presentación (opcionales) */}
+                {businessSettings?.multiplePricesEnabled && ['price2', 'price3', 'price4'].map(key => (
+                  <div key={key} className="w-24">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">{businessSettings?.priceLabels?.[key] || `Precio ${key.slice(-1)}`}</label>
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="Opcional"
+                      value={newPresentation[key] ?? ''}
+                      onChange={(e) => setNewPresentation(prev => ({ ...prev, [key]: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    />
+                  </div>
+                ))}
                 {businessSettings?.multiCurrencyEnabled && (
                   <div className="w-24">
                     <label className="block text-xs font-medium text-gray-700 mb-1" title="Ancla al dólar: si dejas el precio en soles vacío, se calcula con el TC del día">Precio ($)</label>
@@ -7305,6 +7372,10 @@ export default function Products() {
                       factor: parseFloat(newPresentation.factor),
                       price: parseFloat(presPen),
                       priceUSD: (businessSettings?.multiCurrencyEnabled && newPresentation.priceUSD) ? parseFloat(newPresentation.priceUSD) : null,
+                      // Niveles de precio propios (opcionales, solo manuales)
+                      price2: parseFloat(newPresentation.price2) > 0 ? parseFloat(newPresentation.price2) : null,
+                      price3: parseFloat(newPresentation.price3) > 0 ? parseFloat(newPresentation.price3) : null,
+                      price4: parseFloat(newPresentation.price4) > 0 ? parseFloat(newPresentation.price4) : null,
                       // Unidad SUNAT propia de la presentación (ej. SA para un saco
                       // de un producto que se vende en KGM). Sin elegir: la base.
                       unit: newPresentation.unit || watch('unit') || 'NIU',

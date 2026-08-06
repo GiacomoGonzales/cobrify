@@ -876,13 +876,23 @@ export default function CreateQuotation() {
 
     // Si se seleccionó una presentación
     if (selectedPresentation) {
-      finalPrice = selectedPresentation.price
+      // Nivel de precio de la presentación: elegido en el modal (llega en
+      // selectedPrice) o automático por el nivel asignado al cliente.
+      // Solo niveles MANUALES de la presentación (sin derivar por %).
+      const presCustomer = selectedCustomer || (customerMode === 'manual' ? manualCustomer : null)
+      const presLevelKey = !selectedPrice && businessSettings?.multiplePricesEnabled
+        && presCustomer?.priceLevel && presCustomer.priceLevel !== 'price1'
+        && Number(selectedPresentation[presCustomer.priceLevel]) > 0
+        ? presCustomer.priceLevel
+        : null
+      finalPrice = selectedPrice || (presLevelKey ? Number(selectedPresentation[presLevelKey]) : selectedPresentation.price)
       finalName = `${product.name} (${selectedPresentation.name})`
       presentationInfo = selectedPresentation.name
       // Unidad SUNAT de la presentación (ej. SA = saco); sin ella, la base
       finalUnit = selectedPresentation.unit || finalUnit
+      // Ancla USD solo con el precio principal (regla existente de niveles)
       const presUsd = parseFloat(selectedPresentation.priceUSD)
-      anchorUSD = Number.isFinite(presUsd) && presUsd > 0 ? presUsd : null
+      anchorUSD = !selectedPrice && !presLevelKey && Number.isFinite(presUsd) && presUsd > 0 ? presUsd : null
     }
 
     const newItems = [...quotationItems]
@@ -958,12 +968,15 @@ export default function CreateQuotation() {
   }
 
   // Manejar selección de presentación desde el modal
-  const handlePresentationSelection = (presentation) => {
+  const handlePresentationSelection = (presentation, priceKey = null) => {
     if (!pendingProductSelection) return
 
     const { index, product } = pendingProductSelection
     setShowPresentationModal(false)
-    selectProduct(index, product, null, presentation)
+    // Nivel de precio propio de la presentación elegido en el modal: viaja
+    // como selectedPrice (en PEN, selectProduct lo convierte a la sesión)
+    const levelPen = priceKey && Number(presentation[priceKey]) > 0 ? Number(presentation[priceKey]) : null
+    selectProduct(index, product, levelPen, presentation)
   }
 
   // Cancelar selección pendiente
@@ -2931,28 +2944,64 @@ export default function CreateQuotation() {
             </button>
 
             {/* Presentaciones disponibles */}
-            {pendingProductSelection?.product?.presentations?.map((presentation, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => handlePresentationSelection(presentation)}
-                className="w-full p-4 border-2 border-gray-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-left flex items-center justify-between"
-              >
-                <div className="flex items-center gap-3">
-                  <Package className="w-5 h-5 text-primary-500" />
-                  <div>
-                    <p className="font-medium">{presentation.name}</p>
-                    {/* Unidad base real: "49 kg", no "49 unidades" */}
-                    <p className="text-xs text-gray-500">
-                      {presentation.factor} {getUnitShortLabel(pendingProductSelection?.product?.unit)}
-                    </p>
-                  </div>
+            {pendingProductSelection?.product?.presentations?.map((presentation, idx) => {
+              // Niveles de precio propios de la presentación (solo manuales)
+              const presLevels = businessSettings?.multiplePricesEnabled
+                ? ['price2', 'price3', 'price4'].filter(k => Number(presentation[k]) > 0)
+                : []
+              // Cliente con nivel asignado: el botón muestra y aplica SU precio
+              const qCustomer = selectedCustomer || (customerMode === 'manual' ? manualCustomer : null)
+              const customerKey = businessSettings?.multiplePricesEnabled
+                && qCustomer?.priceLevel && qCustomer.priceLevel !== 'price1'
+                && Number(presentation[qCustomer.priceLevel]) > 0
+                ? qCustomer.priceLevel
+                : null
+              return (
+                <div key={idx}>
+                  <button
+                    type="button"
+                    onClick={() => handlePresentationSelection(presentation)}
+                    className="w-full p-4 border-2 border-gray-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-left flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Package className="w-5 h-5 text-primary-500" />
+                      <div>
+                        <p className="font-medium">{presentation.name}</p>
+                        {/* Unidad base real: "49 kg", no "49 unidades" */}
+                        <p className="text-xs text-gray-500">
+                          {presentation.factor} {getUnitShortLabel(pendingProductSelection?.product?.unit)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-primary-600">
+                        {formatCurrency(toSessionCurrency(customerKey ? Number(presentation[customerKey]) : presentation.price), currency)}
+                      </p>
+                      {customerKey && (
+                        <p className="text-xs text-gray-400">
+                          {businessSettings?.priceLabels?.[customerKey] || `Precio ${customerKey.slice(-1)}`} del cliente
+                        </p>
+                      )}
+                    </div>
+                  </button>
+                  {/* Sin nivel del cliente: se elige el nivel de esta presentación */}
+                  {presLevels.length > 0 && !customerKey && (
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {presLevels.map(k => (
+                        <button
+                          key={k}
+                          type="button"
+                          onClick={() => handlePresentationSelection(presentation, k)}
+                          className="px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-lg text-gray-700 hover:border-primary-500 hover:bg-primary-50 transition-colors"
+                        >
+                          {businessSettings?.priceLabels?.[k] || `Precio ${k.slice(-1)}`}: {formatCurrency(toSessionCurrency(Number(presentation[k])), currency)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <p className="text-lg font-bold text-primary-600">
-                  {formatCurrency(toSessionCurrency(presentation.price), currency)}
-                </p>
-              </button>
-            ))}
+              )
+            })}
           </div>
 
           {/* Info de stock por presentación */}

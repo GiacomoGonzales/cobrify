@@ -3996,25 +3996,41 @@ export default function POS() {
   }
 
   // Manejar selección de presentación desde el modal
-  const handlePresentationSelection = (presentation) => {
+  const handlePresentationSelection = (presentation, priceKey = null) => {
     if (!productForPresentationSelection) return
 
     const product = productForPresentationSelection
     const batchToUse = pendingBatchForPresentation
     const isNoLotSale = batchToUse?.isNoLot === true
 
-    // ID único por lote + presentación (nunca se mezclan lotes diferentes)
+    // Nivel de precio de la presentación: elegido en el modal (priceKey) o
+    // automático por el nivel asignado al cliente. Solo niveles MANUALES de la
+    // presentación (sin derivar por %: el % sobre costo usa el costo por unidad
+    // base y daría precios absurdos para un paquete de 20).
+    let effectiveKey = priceKey
+    if (!effectiveKey && businessSettings?.multiplePricesEnabled
+        && selectedCustomer?.priceLevel && selectedCustomer.priceLevel !== 'price1'
+        && Number(presentation[selectedCustomer.priceLevel]) > 0) {
+      effectiveKey = selectedCustomer.priceLevel
+    }
+    const levelPen = effectiveKey && effectiveKey !== 'price1' && Number(presentation[effectiveKey]) > 0
+      ? Number(presentation[effectiveKey])
+      : null
+
+    // ID único por lote + presentación + nivel (nunca se mezclan lotes ni precios)
     const batchKey = isNoLotSale ? '-nolot' : batchToUse ? `-batch-${batchToUse.lotNumber}` : ''
-    const cartId = `${product.id}${batchKey}-pres-${presentation.name}`
+    const cartId = `${product.id}${batchKey}-pres-${presentation.name}${levelPen != null ? `-lvl-${effectiveKey}` : ''}`
 
     // Pricing de la presentación: anclado al dólar si tiene priceUSD; si no, su precio en soles
     // convertido a la moneda de sesión. Guardamos basePrice (PEN) como fuente de verdad.
+    // Regla existente de niveles: el ancla USD solo aplica al precio principal.
+    const chosenPen = levelPen != null ? levelPen : (Number(presentation.price) || 0)
     const presUSD = Number(presentation.priceUSD)
-    const presAnchor = Number.isFinite(presUSD) && presUSD > 0
+    const presAnchor = levelPen == null && Number.isFinite(presUSD) && presUSD > 0
       ? buildUsdAnchoredCartPricing(presUSD, Number(presentation.price) || 0)
       : null
-    const presPrice = presAnchor ? presAnchor.price : toSessionCurrency(Number(presentation.price) || 0)
-    const presBasePrice = presAnchor ? presAnchor.basePrice : (Number(presentation.price) || 0)
+    const presPrice = presAnchor ? presAnchor.price : toSessionCurrency(chosenPen)
+    const presBasePrice = presAnchor ? presAnchor.basePrice : chosenPen
 
     // Crear un item del carrito con la información de la presentación y lote
     const cartItem = {
@@ -12182,27 +12198,58 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               </button>
 
               {/* Presentaciones definidas */}
-              {productForPresentationSelection.presentations?.map((pres, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handlePresentationSelection(pres)}
-                  className="w-full p-4 border-2 border-gray-200 rounded-lg text-left hover:border-green-500 hover:bg-green-50 transition-all"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-gray-900">{pres.name}</p>
-                      {/* Unidad base real: "Contiene 49 kg", no "49 unidades" */}
-                      <p className="text-xs text-gray-500">Contiene {pres.factor} {getUnitShortLabel(productForPresentationSelection.unit || 'NIU')}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xl font-bold text-green-600">
-                        {formatCurrency(pres.price)}
-                      </p>
-                      <p className="text-xs text-gray-400">×{pres.factor}</p>
-                    </div>
+              {productForPresentationSelection.presentations?.map((pres, idx) => {
+                // Niveles de precio propios de la presentación (solo manuales)
+                const presLevels = businessSettings?.multiplePricesEnabled
+                  ? ['price2', 'price3', 'price4'].filter(k => Number(pres[k]) > 0)
+                  : []
+                // Cliente con nivel asignado: el botón muestra y aplica SU precio
+                const customerKey = businessSettings?.multiplePricesEnabled
+                  && selectedCustomer?.priceLevel && selectedCustomer.priceLevel !== 'price1'
+                  && Number(pres[selectedCustomer.priceLevel]) > 0
+                  ? selectedCustomer.priceLevel
+                  : null
+                return (
+                  <div key={idx}>
+                    <button
+                      onClick={() => handlePresentationSelection(pres)}
+                      className="w-full p-4 border-2 border-gray-200 rounded-lg text-left hover:border-green-500 hover:bg-green-50 transition-all"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-gray-900">{pres.name}</p>
+                          {/* Unidad base real: "Contiene 49 kg", no "49 unidades" */}
+                          <p className="text-xs text-gray-500">Contiene {pres.factor} {getUnitShortLabel(productForPresentationSelection.unit || 'NIU')}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xl font-bold text-green-600">
+                            {formatCurrency(customerKey ? Number(pres[customerKey]) : pres.price)}
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            {customerKey
+                              ? `${businessSettings?.priceLabels?.[customerKey] || `Precio ${customerKey.slice(-1)}`} del cliente`
+                              : `×${pres.factor}`}
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                    {/* Sin nivel del cliente: el cajero elige el nivel de esta presentación */}
+                    {presLevels.length > 0 && !customerKey && (
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {presLevels.map(k => (
+                          <button
+                            key={k}
+                            onClick={() => handlePresentationSelection(pres, k)}
+                            className="px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-lg text-gray-700 hover:border-green-500 hover:bg-green-50 transition-all"
+                          >
+                            {businessSettings?.priceLabels?.[k] || `Precio ${k.slice(-1)}`}: {formatCurrency(Number(pres[k]))}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </button>
-              ))}
+                )
+              })}
             </div>
 
             {/* Info de stock por presentación */}
