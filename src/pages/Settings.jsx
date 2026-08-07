@@ -9775,7 +9775,7 @@ export default function Settings() {
 
               {/* === Ajustes de impresión === */}
               <h3 className="text-sm font-semibold text-gray-900 mt-6 mb-1">Ajustes de impresión</h3>
-              <p className="text-xs text-gray-500 mb-4">Cómo salen los tickets al imprimir desde el navegador/USB. No afecta la impresión térmica Bluetooth directa.</p>
+              <p className="text-xs text-gray-500 mb-4">Cómo salen los tickets al imprimir. El avance antes del corte y el tamaño de letra también aplican a la impresión térmica directa (Bluetooth/WiFi).</p>
 
               {/* Avance de papel antes del corte */}
               {(
@@ -9786,6 +9786,7 @@ export default function Settings() {
                   </label>
                   <p className="text-xs text-gray-600 mb-3">
                     Cantidad de líneas en blanco antes de cortar el ticket. Si el ticket tiene mucho espacio arriba, reduce el valor. Si el contenido se corta abajo, auméntalo. Depende de cada modelo de impresora.
+                    Se guarda en este dispositivo: configúralo en el equipo desde el que se imprime.
                   </p>
                   <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                     <div className="flex items-center gap-2">
