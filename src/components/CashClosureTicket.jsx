@@ -484,6 +484,15 @@ const CashClosureTicket = forwardRef(({
             <span>{formatCurrency(salesDiDiFood)}</span>
           </div>
         )}
+        {/* Métodos propios del negocio (FISE, vales, etc.). El ticket no los
+            mostraba: una venta cobrada con ellos entraba al Total Ventas sin
+            aparecer en el desglose, y el ticket no cuadraba consigo mismo. */}
+        {Object.entries(sessionData?.salesByCustomMethod || {}).map(([label, monto]) => monto > 0 && (
+          <div className="info-row" key={label}>
+            <span className="info-label">{label}:</span>
+            <span>{formatCurrency(monto)}</span>
+          </div>
+        ))}
 
         <div className="separator" />
         <div className="total-row" style={{ fontWeight: 700 }}>
@@ -621,6 +630,14 @@ const CashClosureTicket = forwardRef(({
             <span>{formatCurrency(closingDiDiFood)}</span>
           </div>
         )}
+        {/* Métodos propios contados en el arqueo. Los que se comportan como
+            efectivo no tienen conteo propio: su plata va en el Efectivo. */}
+        {Object.entries(sessionData?.closingByCustomMethod || {}).map(([label, monto]) => monto > 0 && (
+          <div className="info-row" key={label}>
+            <span className="info-label">{label}:</span>
+            <span>{formatCurrency(monto)}</span>
+          </div>
+        ))}
 
         <div className="separator" />
         <div className="total-row highlight">

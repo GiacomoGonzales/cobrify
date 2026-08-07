@@ -324,6 +324,10 @@ export const generateCashReportExcel = async (sessionData, movements, invoices, 
     ...(sessionData.closingRappi ? [['Rappi', sessionData.closingRappi]] : []),
     ...(sessionData.closingPedidosYa ? [['PedidosYa', sessionData.closingPedidosYa]] : []),
     ...(sessionData.closingDiDiFood ? [['DiDiFood', sessionData.closingDiDiFood]] : []),
+    // Metodos propios contados en el arqueo (cierres desde ago-2026). Los que
+    // se comportan como efectivo no tienen conteo propio: su plata va dentro
+    // del Efectivo Contado.
+    ...Object.entries(sessionData.closingByCustomMethod || {}).filter(([, v]) => v > 0),
   ]
 
   const maxRows = Math.max(salesMethods.length, closingMethods.length)
@@ -1183,6 +1187,8 @@ export const generateCashReportPDF = async (sessionData, movements, invoices, bu
     ...(sessionData.closingRappi ? [['Rappi', sessionData.closingRappi]] : []),
     ...(sessionData.closingPedidosYa ? [['PedidosYa', sessionData.closingPedidosYa]] : []),
     ...(sessionData.closingDiDiFood ? [['DiDiFood', sessionData.closingDiDiFood]] : []),
+    // Metodos propios contados en el arqueo (ver nota en el Excel)
+    ...Object.entries(sessionData.closingByCustomMethod || {}).filter(([, v]) => v > 0),
   ];
 
   closingItems.forEach(([lbl, val], i) => {

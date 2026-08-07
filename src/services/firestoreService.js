@@ -2497,8 +2497,11 @@ export const closeCashRegister = async (userId, sessionId, closingData, userUid 
       return { success: true, alreadyClosed: true }
     }
 
-    const { cash, card, transfer, yape, plin, rappi, pedidosYa, diDiFood, totalSales, salesCash, salesCard, salesTransfer, salesYape, salesPlin, salesRappi, salesPedidosYa, salesDiDiFood, salesByCustomMethod, totalIncome, totalExpense, totalIncomeYape, totalExpenseYape, expectedAmount, difference, expectedAmountYape, differenceYape, totalIncomePlin, totalExpensePlin, expectedAmountPlin, differencePlin, invoiceCount, deferredPayments, deferredTotal, usd } = closingData
-    const closingAmount = cash + card + transfer + (yape || 0) + (plin || 0) + (rappi || 0) + (pedidosYa || 0) + (diDiFood || 0)
+    const { cash, card, transfer, yape, plin, rappi, pedidosYa, diDiFood, totalSales, salesCash, salesCard, salesTransfer, salesYape, salesPlin, salesRappi, salesPedidosYa, salesDiDiFood, salesByCustomMethod, closingByCustomMethod, totalIncome, totalExpense, totalIncomeYape, totalExpenseYape, expectedAmount, difference, expectedAmountYape, differenceYape, totalIncomePlin, totalExpensePlin, expectedAmountPlin, differencePlin, invoiceCount, deferredPayments, deferredTotal, usd } = closingData
+    // Los metodos propios contados suman al total del arqueo: si quedaran
+    // fuera, el cierre cuadraria corto por el monto cobrado con ellos.
+    const customCounted = Object.values(closingByCustomMethod || {}).reduce((sum, v) => sum + (Number(v) || 0), 0)
+    const closingAmount = cash + card + transfer + (yape || 0) + (plin || 0) + (rappi || 0) + (pedidosYa || 0) + (diDiFood || 0) + customCounted
 
     const updateData = {
       closingAmount,
@@ -2526,6 +2529,7 @@ export const closeCashRegister = async (userId, sessionId, closingData, userUid 
       // Métodos propios del negocio: etiqueta → monto. Solo se escribe si hubo
       // (sesiones sin métodos propios no cargan un mapa vacío en el doc).
       ...(salesByCustomMethod && Object.keys(salesByCustomMethod).length > 0 && { salesByCustomMethod }),
+      ...(closingByCustomMethod && Object.keys(closingByCustomMethod).length > 0 && { closingByCustomMethod }),
       totalIncome: totalIncome || 0,
       totalExpense: totalExpense || 0,
       expectedAmount: expectedAmount || 0,

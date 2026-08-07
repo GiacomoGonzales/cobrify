@@ -3480,7 +3480,12 @@ export const printCashClosureTicket = async (sessionData, movements = [], busine
       .bold(false)
       .text(createLine('Efectivo:', formatCurrency(closingCash)) + '\n')
       .text(createLine('Tarjeta:', formatCurrency(closingCard)) + '\n')
-      .text(createLine('Transferencia:', formatCurrency(closingTransfer)) + '\n')
+      .text(createLine('Transferencia:', formatCurrency(closingTransfer)) + '\n');
+    // Metodos propios contados en el arqueo (los que no son efectivo)
+    Object.entries(sessionData?.closingByCustomMethod || {}).forEach(([label, monto]) => {
+      if (monto > 0) printer = printer.text(createLine(label + ':', formatCurrency(monto)) + '\n');
+    });
+    printer = printer
       .text(format.halfSeparator + '\n')
       .bold(true)
       .text(createLine('Total Contado:', formatCurrency(closingAmount)) + '\n')
@@ -3716,8 +3721,12 @@ const printWifiCashClosure = async (sessionData, movements, business, paperWidth
     builder.bold(true).text('CONTEO DE CIERRE').newLine().bold(false)
       .text(createLine('Efectivo:', formatCurrency(closingCash))).newLine()
       .text(createLine('Tarjeta:', formatCurrency(closingCard))).newLine()
-      .text(createLine('Transferencia:', formatCurrency(closingTransfer))).newLine()
-      .text(format.halfSeparator).newLine()
+      .text(createLine('Transferencia:', formatCurrency(closingTransfer))).newLine();
+    // Metodos propios contados en el arqueo (los que no son efectivo)
+    Object.entries(sessionData?.closingByCustomMethod || {}).forEach(([label, monto]) => {
+      if (monto > 0) builder.text(createLine(label + ':', formatCurrency(monto))).newLine();
+    });
+    builder.text(format.halfSeparator).newLine()
       .bold(true).text(createLine('Total Contado:', formatCurrency(closingAmount))).newLine().bold(false)
       .text(format.separator).newLine();
 
@@ -3918,6 +3927,10 @@ const printBLECashClosure = async (sessionData, movements, business, paperWidth,
     ticketText += createLine('Efectivo:', formatCurrency(closingCash)) + '\n';
     ticketText += createLine('Tarjeta:', formatCurrency(closingCard)) + '\n';
     ticketText += createLine('Transferencia:', formatCurrency(closingTransfer)) + '\n';
+    // Metodos propios contados en el arqueo (los que no son efectivo)
+    Object.entries(sessionData?.closingByCustomMethod || {}).forEach(([label, monto]) => {
+      if (monto > 0) ticketText += createLine(label + ':', formatCurrency(monto)) + '\n';
+    });
     ticketText += format.halfSeparator + '\n';
     ticketText += createLine('Total Contado:', formatCurrency(closingAmount)) + '\n';
     ticketText += format.separator + '\n';

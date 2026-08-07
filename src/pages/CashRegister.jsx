@@ -143,6 +143,10 @@ export default function CashRegister() {
     rappi: '',
     pedidosYa: '',
     diDiFood: '',
+    // Metodos propios del negocio (FISE, vales, etc.): { etiqueta: monto }.
+    // Los que se comportan como efectivo NO entran aca — su plata se cuenta
+    // dentro del Efectivo Contado, contarla aparte la duplicaria.
+    custom: {},
   })
   // Multi-divisa: paralelo en USD. Solo se usan/muestran cuando el negocio
   // activó la flag multiCurrencyEnabled en Configuración → Ventas.
@@ -872,6 +876,15 @@ export default function CashRegister() {
 
   const handleCloseCashRegister = async () => {
     if (isClosing) return
+    // Métodos propios contados (etiqueta → monto). Solo los que el cajero
+    // declaró; los que se comportan como efectivo no tienen campo y su plata
+    // ya está dentro del conteo de Efectivo.
+    const closingByCustomMethod = Object.fromEntries(
+      Object.entries(closingCounts.custom || {})
+        .map(([label, v]) => [label, parseFloat(v) || 0])
+        .filter(([, monto]) => monto > 0)
+    )
+    const closingCustomTotal = Object.values(closingByCustomMethod).reduce((s, v) => s + v, 0)
     const cash = parseFloat(closingCounts.cash) || 0
     const card = parseFloat(closingCounts.card) || 0
     const transfer = parseFloat(closingCounts.transfer) || 0
@@ -1002,7 +1015,10 @@ export default function CashRegister() {
         closingRappi: rappi,
         closingPedidosYa: pedidosYa,
         closingDiDiFood: diDiFood,
-        closingAmount: cash + card + transfer + yape + plin + rappi + pedidosYa + diDiFood,
+        // Conteo de los métodos propios (FISE, vales, etc.). Suma al total
+        // contado igual que los demás: si no, el arqueo cerraría corto.
+        closingByCustomMethod,
+        closingAmount: cash + card + transfer + yape + plin + rappi + pedidosYa + diDiFood + closingCustomTotal,
         closedAt: new Date(), // Hora de cierre
         totalSales: totalsClose.sales,
         salesCash: totalsClose.salesCash,
@@ -1063,6 +1079,8 @@ export default function CashRegister() {
         // Desglose de métodos propios (etiqueta → monto). Persistirlo permite
         // que el historial y las impresiones lo muestren sin recalcular.
         salesByCustomMethod: totalsClose.salesByCustomMethod || {},
+        // Lo CONTADO en cada método propio al cerrar (arqueo)
+        closingByCustomMethod,
         totalIncome: totalsClose.income,
         totalExpense: totalsClose.expense,
         expectedAmount: totalsClose.expected,
@@ -3442,13 +3460,25 @@ export default function CashRegister() {
                     )}
                   </div>
                 )}
-                {/* Métodos propios de la sesión (solo lectura: no tienen conteo
-                    de cierre propio, su plata en efectivo va dentro del conteo
-                    de Efectivo). Sesiones anteriores al desglose no traen el
-                    mapa y no muestran nada, como siempre. */}
+                {/* Métodos propios de la sesión. Desde el arqueo por método, los
+                    que no son efectivo traen su CONTADO y se muestra la
+                    diferencia. Los que sí son efectivo (y los cierres viejos, sin
+                    el mapa) siguen mostrando solo lo vendido. */}
                 {Object.entries(selectedHistorySession.salesByCustomMethod || {}).map(([label, monto]) => monto > 0 && (
                   <div key={label} className="flex justify-between items-center">
-                    <span className="text-gray-600">{label} (ventas):</span>
+                    <span className="text-gray-600">
+                      {label} (ventas):
+                      {(() => {
+                        const contado = Number(selectedHistorySession.closingByCustomMethod?.[label])
+                        if (!Number.isFinite(contado)) return null
+                        const dif = contado - monto
+                        return (
+                          <span className={`text-xs ml-1 ${Math.abs(dif) < 0.01 ? 'text-green-600' : dif > 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                            contado {formatCurrency(contado)}{Math.abs(dif) >= 0.01 && ` (${dif > 0 ? '+' : ''}${formatCurrency(dif)})`}
+                          </span>
+                        )
+                      })()}
+                    </span>
                     <span className="font-semibold">{formatCurrency(monto)}</span>
                   </div>
                 ))}
@@ -4224,6 +4254,45 @@ export default function CashRegister() {
               )}
             </div>
           )}
+
+          {/* Metodos propios que NO son efectivo: un campo por cada uno con
+              ventas en la sesion. Sin esto se desglosaban en el resumen pero no
+              habia donde declarar cuanto entro realmente. */}
+          {Object.entries(totals.salesByCustomMethod || {})
+            .filter(([label, monto]) => monto > 0 && !isCashLikePayment(label, businessSettings))
+            .map(([label, monto]) => {
+              const contado = parseFloat(closingCounts.custom?.[label])
+              return (
+                <div key={label} className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+                  <Input
+                    label={`Total en ${label}`}
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={closingCounts.custom?.[label] ?? ''}
+                    onChange={(e) => setClosingCounts({
+                      ...closingCounts,
+                      custom: { ...(closingCounts.custom || {}), [label]: e.target.value },
+                    })}
+                    helperText={!hideExpectedForCashier
+                      ? `Esperado: ${formatCurrency(monto)} — ventas cobradas con ${label}`
+                      : `Monto cobrado con ${label}`}
+                  />
+                  {!hideExpectedForCashier && Number.isFinite(contado) && contado > 0 && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-600">Diferencia:</span>
+                      <span className={`font-bold ${
+                        Math.abs(contado - monto) < 0.01
+                          ? 'text-green-600'
+                          : contado > monto ? 'text-blue-600' : 'text-red-600'
+                      }`}>
+                        {contado >= monto ? '+' : ''}{formatCurrency(contado - monto)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
 
           {totals.salesRappi > 0 && (
             <Input
