@@ -9793,15 +9793,15 @@ export default function Settings() {
                       <input
                         type="number"
                         min="0"
-                        max="10"
+                        max="15"
                         step="1"
                         value={printerConfig.cutFeedLines ?? 5}
                         onChange={(e) => {
-                          const val = Math.max(0, Math.min(10, parseInt(e.target.value) || 0))
+                          const val = Math.max(0, Math.min(15, parseInt(e.target.value) || 0))
                           setPrinterConfig({ ...printerConfig, cutFeedLines: val })
                         }}
                         onBlur={async (e) => {
-                          const val = Math.max(0, Math.min(10, parseInt(e.target.value) || 0))
+                          const val = Math.max(0, Math.min(15, parseInt(e.target.value) || 0))
                           const newConfig = { ...printerConfig, cutFeedLines: val }
                           setPrinterConfig(newConfig)
                           await savePrinterConfig(getBusinessId(), newConfig)
@@ -9812,7 +9812,7 @@ export default function Settings() {
                       <span className="text-sm text-gray-600">líneas</span>
                     </div>
                     <div className="flex flex-wrap gap-1">
-                      {[0, 1, 2, 3, 4, 5, 6].map(val => (
+                      {[0, 1, 2, 3, 4, 5, 6, 8, 10, 12, 15].map(val => (
                         <button
                           key={val}
                           type="button"
