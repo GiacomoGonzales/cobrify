@@ -437,7 +437,11 @@ export default function Settings() {
   // Aca vive lo que NOMBRA los niveles de precio. El CALCULO (base, formula y
   // porcentajes) se configura en Productos > Ajuste de precios, junto al ajuste
   // masivo: las dos cosas responden a de donde sale el numero de un precio.
-  const [multiplePricesEnabled, setMultiplePricesEnabled] = useState(false)
+  // Arrancan en TRUE, igual que el default de AuthContext. Con  inicial,
+  // guardar Config > Ventas ANTES de que cargaran los datos del negocio persistia
+  // un  que nadie eligio — asi 403 negocios quedaron con las
+  // presentaciones "apagadas" sin saberlo.
+  const [multiplePricesEnabled, setMultiplePricesEnabled] = useState(true)
   const [priceLabels, setPriceLabels] = useState({
     price1: 'Público',
     price2: 'Mayorista',
@@ -456,8 +460,9 @@ export default function Settings() {
   const [reportsCurrency, setReportsCurrency] = useState('PEN') // moneda de visualización de reportes
 
 
-  // Estado para presentaciones de venta
-  const [presentationsEnabled, setPresentationsEnabled] = useState(false)
+  // Presentaciones de venta: SIEMPRE activas para todos. No hay interruptor y
+  // esta pantalla ya no escribe el campo — lo escribia sin UI que lo controlara
+  // y persistia un "apagado" fantasma que dejo a 403 negocios sin la opcion.
   const [showDescriptionInPOS, setShowDescriptionInPOS] = useState(false)
 
   // Afectación IGV por defecto al CREAR productos e items personalizados
@@ -1268,7 +1273,6 @@ export default function Settings() {
         // default que aplica AuthContext (encendidas si nunca se configuraron).
         // Con `|| false` el interruptor salía apagado mientras la función estaba
         // activa en el modal de productos.
-        setPresentationsEnabled(businessData.presentationsEnabled ?? true)
         setShowDescriptionInPOS(businessData.showDescriptionInPOS || false)
         setMultiplePricesEnabled(businessData.multiplePricesEnabled ?? true)
         if (businessData.priceLabels) {
@@ -5810,7 +5814,6 @@ export default function Settings() {
                       multiCurrencyEnabled: multiCurrencyEnabled,
                       defaultCurrency: defaultCurrency,
                       reportsCurrency: reportsCurrency,
-                      presentationsEnabled: presentationsEnabled,
                       showDescriptionInPOS: showDescriptionInPOS,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })

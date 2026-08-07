@@ -23,16 +23,20 @@ const AuthContext = createContext(null)
 // mostrarlos ("parpadeo/recarga al iniciar sesión").
 const EMPTY_PERMS = Object.freeze([])
 
-// Features que nacieron como "encendidas para todos" y DESPUÉS ganaron su
-// interruptor en Configuración. Antes se forzaban a `true` aquí, así que
-// apagarlas no tenía efecto: el modal de producto seguía mostrando los niveles
-// de precio y las presentaciones. Ahora manda lo guardado y `true` es solo el
-// default para negocios que nunca tocaron la opción (no pierden la función).
-// El catálogo público lee el flag del documento de Firestore, no de aquí.
+// PRESENTACIONES: activas para TODOS, siempre. No son configurables — se fuerza
+// aquí a propósito porque 403 negocios tienen un `presentationsEnabled: false`
+// guardado que nadie eligió (lo escribía Configuración > Ventas sin tener
+// interruptor, con el estado inicial apagado). Ignorar el valor almacenado
+// evita tener que corregir esos documentos.
+//
+// NIVELES DE PRECIO: sí son configurables. Manda lo guardado; `true` es el
+// default para quien nunca tocó la opción, para que nadie pierda la función.
+//
+// El catálogo público lee los flags del documento de Firestore, no de aquí.
 const withFeatureDefaults = (businessData) => ({
   ...businessData,
   multiplePricesEnabled: businessData?.multiplePricesEnabled ?? true,
-  presentationsEnabled: businessData?.presentationsEnabled ?? true,
+  presentationsEnabled: true,
 })
 
 export const AuthProvider = ({ children }) => {
