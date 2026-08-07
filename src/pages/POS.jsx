@@ -3238,8 +3238,26 @@ export default function POS() {
         return
       }
 
+      // ¿Lo tecleado es el COMIENZO del código de alguna variante más larga?
+      // Caso real: producto PROD-0001 con variante PROD-0001-1. Al escribir a
+      // mano, el debounce disparaba en cuanto el texto igualaba al padre, abría
+      // el selector de variantes y LIMPIABA el buscador — así el código de la
+      // variante no se podía terminar de escribir nunca.
+      // Con la pistola no aplica: manda el código completo de una.
+      const esPrefijoDeVariante = !wasGunScan && products.some(p => {
+        if (p.isActive === false || !p.hasVariants || !Array.isArray(p.variants)) return false
+        return p.variants.some(v => {
+          if (!v) return false
+          return [v.sku, v.barcode].some(cod => {
+            const c = String(cod || '').toLowerCase()
+            if (!c || c === searchLower) return false
+            return c.startsWith(searchLower) || c.replace(/-/g, '').startsWith(searchNoHyphens)
+          })
+        })
+      })
+
       // Si hay exactamente una coincidencia exacta por código, agregarlo automáticamente
-      if (exactMatches.length === 1) {
+      if (exactMatches.length === 1 && !esPrefijoDeVariante) {
         const product = exactMatches[0]
 
         // Verificar que el producto tenga stock disponible en el almacén seleccionado.
@@ -3259,8 +3277,13 @@ export default function POS() {
           addToCart(product)
           // Limpiar el campo de búsqueda después de agregar
           setSearchTerm('')
-          // Mostrar feedback al usuario
-          toast.success(`${product.name} agregado al carrito`)
+          // Con variantes, addToCart NO agrega: abre el selector. Decir
+          // "agregado al carrito" ahí era mentira y confundía al cajero.
+          if (product.hasVariants) {
+            toast.info(`${product.name}: elige la variante`)
+          } else {
+            toast.success(`${product.name} agregado al carrito`)
+          }
         } else {
           toast.error(`${product.name} no tiene stock disponible en ${selectedWarehouse?.name || 'este almacén'}`)
           setSearchTerm('')

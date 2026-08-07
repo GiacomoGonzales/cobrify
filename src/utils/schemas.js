@@ -96,7 +96,9 @@ export const warehouseStockSchema = z.object({
 
 // Schema para variante de producto
 export const productVariantSchema = z.object({
-  sku: z.string().min(1, 'SKU es requerido'),
+  // Opcional: si el usuario no lo escribe, el sistema le asigna un correlativo
+  // derivado del SKU del producto (ver generateVariantSku en Products.jsx)
+  sku: z.string().optional(),
   attributes: z.record(z.string()), // { size: "M", color: "Rojo" }
   price: z
     .number({ required_error: 'Precio es requerido' })
@@ -322,6 +324,13 @@ export const productSchema = z.object({
   basePrice: z.number().positive().optional(), // Precio de referencia cuando hasVariants es true
   variantAttributes: z.array(z.string()).optional(), // ["size", "color", "material"]
   variants: z.array(productVariantSchema).optional(), // Array de variantes
+  // Vencimiento y lote del stock inicial. DEBEN estar declarados: zod descarta
+  // las claves que no figuran en el schema, así que sin esto el campo "Fecha de
+  // vencimiento" del modal se registraba en el form pero llegaba `undefined` a
+  // onSubmit — la fecha nunca se guardaba y trackExpiration quedaba siempre en
+  // false. (Mismo problema que tuvo brandId en su momento.)
+  expirationDate: z.string().optional(),
+  batchNumber: z.string().optional(),
 }).superRefine((data, ctx) => {
   // Validar precio solo si NO tiene variantes (variantes se validan en onSubmit con state
   // local) Y NO hay precio en dólares. Si el producto está anclado al dólar (priceUSD),

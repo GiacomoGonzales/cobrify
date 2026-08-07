@@ -1264,10 +1264,13 @@ export default function Settings() {
         // Cargar configuración de múltiples precios
         setBranchPricingEnabled(businessData.branchPricingEnabled || false)
         setBranchCatalogEnabled(businessData.branchCatalogEnabled || false)
-        // Cargar configuración de presentaciones de venta
-        setPresentationsEnabled(businessData.presentationsEnabled || false)
+        // Presentaciones y niveles de precio: `?? true` para reflejar el mismo
+        // default que aplica AuthContext (encendidas si nunca se configuraron).
+        // Con `|| false` el interruptor salía apagado mientras la función estaba
+        // activa en el modal de productos.
+        setPresentationsEnabled(businessData.presentationsEnabled ?? true)
         setShowDescriptionInPOS(businessData.showDescriptionInPOS || false)
-        setMultiplePricesEnabled(businessData.multiplePricesEnabled || false)
+        setMultiplePricesEnabled(businessData.multiplePricesEnabled ?? true)
         if (businessData.priceLabels) {
           setPriceLabels({
             price1: businessData.priceLabels.price1 || 'Público',

@@ -813,6 +813,9 @@ const ProductFormModal = ({
                     onClick={async () => {
                       const nextSku = await getNextSkuNumber(getBusinessId())
                       setValue('sku', nextSku)
+                      // Un solo número por producto: mismo código al campo de
+                      // código de barras si está vacío (etiqueta = escáner)
+                      if (!(watch('code') || '').trim()) setValue('code', nextSku)
                     }}
                     className="mt-1 text-xs text-primary-600 hover:text-primary-800 font-medium hover:underline"
                   >
@@ -834,20 +837,23 @@ const ProductFormModal = ({
                   className={`flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${errors.code ? 'border-red-500' : 'border-gray-300'}`}
                   {...register('code')}
                 />
-                <button
-                  type="button"
-                  onClick={handleScanBarcode}
-                  disabled={isScanningBarcode}
-                  className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                  title="Escanear código de barras"
-                >
-                  {isScanningBarcode ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <ScanBarcode className="w-5 h-5" />
-                  )}
-                  <span className="hidden sm:inline">Escanear</span>
-                </button>
+                {/* Solo en la app: el escaner usa la camara del dispositivo */}
+                {Capacitor.isNativePlatform() && (
+                  <button
+                    type="button"
+                    onClick={handleScanBarcode}
+                    disabled={isScanningBarcode}
+                    className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                    title="Escanear código de barras"
+                  >
+                    {isScanningBarcode ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <ScanBarcode className="w-5 h-5" />
+                    )}
+                    <span className="hidden sm:inline">Escanear</span>
+                  </button>
+                )}
               </div>
               <p className="text-xs text-gray-500 mt-1">EAN, UPC u otro</p>
               {errors.code && <p className="text-xs text-red-500 mt-1">{errors.code.message}</p>}
@@ -907,19 +913,22 @@ const ProductFormModal = ({
                   >
                     <Plus className="w-4 h-4" />
                   </button>
-                  <button
-                    type="button"
-                    onClick={handleScanExtraBarcode}
-                    disabled={isScanningExtraBarcode}
-                    className="px-3 py-1.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg flex items-center gap-1 text-sm"
-                    title="Escanear y agregar"
-                  >
-                    {isScanningExtraBarcode ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <ScanBarcode className="w-4 h-4" />
-                    )}
-                  </button>
+                  {/* Solo en la app: el escaner usa la camara del dispositivo */}
+                  {Capacitor.isNativePlatform() && (
+                    <button
+                      type="button"
+                      onClick={handleScanExtraBarcode}
+                      disabled={isScanningExtraBarcode}
+                      className="px-3 py-1.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg flex items-center gap-1 text-sm"
+                      title="Escanear y agregar"
+                    >
+                      {isScanningExtraBarcode ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <ScanBarcode className="w-4 h-4" />
+                      )}
+                    </button>
+                  )}
                 </div>
                 <p className="text-xs text-gray-400 mt-1">
                   Al escanear cualquiera de estos códigos, se agregará este mismo producto.

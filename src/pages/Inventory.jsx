@@ -2412,18 +2412,21 @@ export default function Inventory() {
                   className="flex-1 text-sm border-none bg-transparent focus:ring-0 focus:outline-none"
                 />
               </div>
-              <Button
-                onClick={handleScanBarcode}
-                disabled={isScanning}
-                size="sm"
-                title="Escanear código de barras"
-              >
-                {isScanning ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <ScanBarcode className="w-5 h-5" />
-                )}
-              </Button>
+              {/* Solo en la app: el escaner usa la camara del dispositivo */}
+              {Capacitor.isNativePlatform() && (
+                <Button
+                  onClick={handleScanBarcode}
+                  disabled={isScanning}
+                  size="sm"
+                  title="Escanear código de barras"
+                >
+                  {isScanning ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <ScanBarcode className="w-5 h-5" />
+                  )}
+                </Button>
+              )}
             </div>
 
             {/* Fila 2: Filtros */}

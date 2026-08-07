@@ -1331,24 +1331,48 @@ export const deleteProduct = async (userId, productId) => {
 // ==================== SKU AUTOMÁTICO ====================
 
 export const getNextSkuNumber = async (businessId) => {
-  const counterRef = doc(db, 'businesses', businessId, 'counters', 'sku')
+  // Modelo unificado (ago-2026): el SKU automático sale del MISMO contador que
+  // los códigos de barras (counters/barcode) y con el mismo formato de 7
+  // dígitos. Un solo número identifica a cada cosa vendible: SKU = código de
+  // barras = lo impreso en la etiqueta. Dos contadores separados producían
+  // números del mismo rango y el escáner del POS (que busca en sku Y code a la
+  // vez) podía traer el producto equivocado. El contador viejo counters/sku
+  // queda abandonado; los SKU "PROD-0001" existentes no se tocan.
   try {
-    const newNumber = await runTransaction(db, async (transaction) => {
-      const counterDoc = await transaction.get(counterRef)
-      let currentNumber = 0
-      if (counterDoc.exists()) {
-        currentNumber = counterDoc.data().lastNumber || 0
-      }
-      const nextNumber = currentNumber + 1
-      transaction.set(counterRef, { lastNumber: nextNumber }, { merge: true })
-      return nextNumber
-    })
-    return `PROD-${String(newNumber).padStart(4, '0')}`
+    const [code] = await getNextBarcodeNumbers(businessId, 1)
+    return code
   } catch (error) {
     console.error('Error obteniendo siguiente SKU:', error)
-    const timestamp = Date.now().toString().slice(-6)
-    return `PROD-${timestamp}`
+    // Fallback sin transacción: 7 dígitos derivados del reloj
+    return String(1000000 + (Date.now() % 9000000))
   }
+}
+
+/**
+ * Reservar N códigos de barras correlativos del negocio (contador transaccional,
+ * como el de SKU). Formato: 7 dígitos numéricos empezando en 1000001, ej.
+ * "1045475" — corto, legible bajo el barcode y fácil de dictar por teléfono
+ * (es el formato de las etiquetas de tienda que usan los clientes).
+ * Numérico puro para que cualquier lector lo lea igual.
+ *
+ * NO es un EAN: no lleva dígito verificador ni prefijo GS1, y se imprime como
+ * CODE128. Es un código de circulación interna, válido solo dentro del negocio.
+ *
+ * Se usan al imprimir etiquetas de productos que no tienen código: el código
+ * generado SE GUARDA en el producto/variante para que el POS lo encuentre.
+ *
+ * @returns {string[]} array de `count` códigos consecutivos
+ */
+export const getNextBarcodeNumbers = async (businessId, count = 1) => {
+  const counterRef = doc(db, 'businesses', businessId, 'counters', 'barcode')
+  const first = await runTransaction(db, async (transaction) => {
+    const counterDoc = await transaction.get(counterRef)
+    const current = counterDoc.exists() ? (counterDoc.data().lastNumber || 0) : 0
+    transaction.set(counterRef, { lastNumber: current + count }, { merge: true })
+    return current + 1
+  })
+  // Base 1000000: el primer código es 1000001 y hay margen hasta 9999999
+  return Array.from({ length: count }, (_, i) => String(1000000 + first + i))
 }
 
 // ==================== CONFIGURACIÓN DE EMPRESA ====================

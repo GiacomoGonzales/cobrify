@@ -32,6 +32,7 @@ import {
   getProductBrands,
   saveProductBrands,
   getNextSkuNumber,
+  getNextBarcodeNumbers,
 } from '@/services/firestoreService'
 import { exportProductsForImport, exportProductsForRappi } from '@/services/productExportService'
 import ImportProductsModal from '@/components/ImportProductsModal'
@@ -289,6 +290,10 @@ export default function Products() {
 
   // Presentaciones y Variantes
   const [showPresentations, setShowPresentations] = useState(false)
+  // Control de vencimiento: interruptor propio en Opciones del Producto. Sin él
+  // los campos de fecha y lote estaban siempre visibles en Inventario aunque el
+  // negocio no controle vencimientos.
+  const [showExpiration, setShowExpiration] = useState(false)
   const [hasVariants, setHasVariants] = useState(false)
   const [variantAttributes, setVariantAttributes] = useState([]) // ["size", "color"]
   const [newAttributeName, setNewAttributeName] = useState('')
@@ -477,6 +482,7 @@ export default function Products() {
       trackExpiration: false,
       trackSerials: false,
       expirationDate: '',
+      batchNumber: '',
     },
   })
 
@@ -781,11 +787,13 @@ export default function Products() {
       trackExpiration: false,
       trackSerials: false,
       expirationDate: '',
+      batchNumber: '',
     })
     setTrackSerials(false)
     setModifiers([]) // Limpiar modificadores
     setPresentations([]) // Limpiar presentaciones
     setShowPresentations(false)
+    setShowExpiration(false)
     setNewPresentation({ name: '', factor: '', price: '', priceUSD: '', unit: '' })
     setEditingPresentationIdx(null)
     setTaxAffectation(businessSettings?.defaultTaxAffectation || '10') // Default configurable (Configuración > Preferencias)
@@ -934,6 +942,8 @@ export default function Products() {
         formattedExpirationDate = `${expDate.getFullYear()}-${String(expDate.getMonth() + 1).padStart(2, '0')}-${String(expDate.getDate()).padStart(2, '0')}`
       }
     }
+    // Interruptor de vencimiento encendido si el producto ya lo controla
+    setShowExpiration(hasExpiration || !!formattedExpirationDate)
 
     reset({
       code: product.code || '',
@@ -957,6 +967,7 @@ export default function Products() {
       hasVariants: productHasVariants,
       trackExpiration: hasExpiration,
       expirationDate: formattedExpirationDate,
+      batchNumber: product.batchNumber || '',
       minStock: product.minStock != null ? product.minStock.toString() : '',
     })
 
@@ -1090,6 +1101,8 @@ export default function Products() {
         formattedExpirationDate = `${expDate.getFullYear()}-${String(expDate.getMonth() + 1).padStart(2, '0')}-${String(expDate.getDate()).padStart(2, '0')}`
       }
     }
+    // Interruptor de vencimiento encendido si el producto ya lo controla
+    setShowExpiration(hasExpiration || !!formattedExpirationDate)
 
     // Copia: arrancar sin códigos extra (los reasigna manualmente el usuario)
     setExtraBarcodes([])
@@ -1116,6 +1129,7 @@ export default function Products() {
       hasVariants: productHasVariants,
       trackExpiration: hasExpiration,
       expirationDate: formattedExpirationDate,
+      batchNumber: product.batchNumber || '',
       minStock: product.minStock != null ? product.minStock.toString() : '',
     })
 
@@ -1130,6 +1144,7 @@ export default function Products() {
     setModifiers([]) // Limpiar modificadores
     setPresentations([]) // Limpiar presentaciones
     setShowPresentations(false)
+    setShowExpiration(false)
     setNewPresentation({ name: '', factor: '', price: '', priceUSD: '', unit: '' })
     // Limpiar imágenes
     setProductImages([])
@@ -1171,6 +1186,34 @@ export default function Products() {
 
     if (hasVariants && variantAttributes.length === 0) {
       toast.error('Debes definir al menos un atributo de variante (ej: talla, color)')
+      setIsSaving(false)
+      return
+    }
+
+    // Lote y vencimiento van juntos o no van. Si el stock inicial entra con uno
+    // solo de los dos, el inventario queda a medias: sin lote no hay FEFO (el
+    // recuento lo lista como "sin lote asignado") y sin fecha el lote no sirve
+    // para avisar de vencidos. Solo aplica al CREAR con stock inicial > 0.
+    const loteIngresado = String((businessMode === 'pharmacy' ? pharmacyData.batchNumber : data.batchNumber) || '').trim()
+    const vencimientoIngresado = (data.expirationDate || '').trim()
+    const stockInicialTotal = Object.values(warehouseInitialStocks)
+      .reduce((sum, v) => sum + (parseFloat(v) || 0), 0) || (parseFloat(data.initialStock) || 0)
+    const conStockInicial = !editingProduct && !noStock && !hasVariants && stockInicialTotal > 0
+
+    // Con el control de vencimiento ENCENDIDO, el stock inicial exige los dos
+    // datos: sin ellos el stock nacería suelto y el control no serviría de nada.
+    if (conStockInicial && showExpiration && (!loteIngresado || !vencimientoIngresado)) {
+      toast.error('Con el control de vencimiento activado, el stock inicial necesita número de lote y fecha de vencimiento.')
+      setIsSaving(false)
+      return
+    }
+    if (conStockInicial && vencimientoIngresado && !loteIngresado) {
+      toast.error('Falta el número de lote. Si el stock inicial tiene fecha de vencimiento, debe ingresarse con su lote.')
+      setIsSaving(false)
+      return
+    }
+    if (conStockInicial && loteIngresado && !vencimientoIngresado) {
+      toast.error('Falta la fecha de vencimiento. Si el stock inicial tiene lote, debe ingresarse con su fecha.')
       setIsSaving(false)
       return
     }
@@ -1286,6 +1329,11 @@ export default function Products() {
         ...(hasActiveBatches
           ? {}
           : { expirationDate: data.expirationDate ? new Date(data.expirationDate) : null }
+        ),
+        // Lote (acceso rápido). En farmacia lo maneja su propia sección más abajo.
+        ...(hasActiveBatches || businessMode === 'pharmacy'
+          ? {}
+          : { batchNumber: data.batchNumber?.trim() || null }
         ),
         allowDecimalQuantity: allowDecimalQuantity, // Venta por peso (decimales)
         // Stock mínimo por producto para alerta de bajo stock. Si está vacío
@@ -1494,6 +1542,36 @@ export default function Products() {
               productData.stock = initialStockValue
               productData.initialStock = initialStockValue
               productData.warehouseStocks = []
+            }
+
+            // Stock inicial con lote y vencimiento: se registra COMO LOTE, igual
+            // que lo haría una compra. Sin esto el stock nacía "suelto": FEFO no
+            // tenía de dónde descontar, Control de Lotes lo mostraba vacío y el
+            // recuento lo listaba como "sin lote asignado".
+            // Un lote por almacén (mismo número, cantidad propia), que es como
+            // modela los lotes el resto del sistema.
+            if (loteIngresado && vencimientoIngresado && !trackSerials) {
+              const fechaVenc = new Date(vencimientoIngresado)
+              const costoUnitario = data.cost && data.cost !== '' ? parseFloat(data.cost) : null
+              const destinos = warehouseStocksArray.length > 0
+                ? warehouseStocksArray.map(ws => ({ warehouseId: ws.warehouseId, quantity: ws.stock }))
+                : [{ warehouseId: null, quantity: productData.stock || 0 }]
+
+              productData.batches = destinos
+                .filter(d => d.quantity > 0)
+                .map((d, i) => ({
+                  id: `batch-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 6)}`,
+                  batchNumber: loteIngresado,
+                  quantity: d.quantity,
+                  expirationDate: fechaVenc,
+                  warehouseId: d.warehouseId,
+                  costPrice: costoUnitario,
+                  purchaseId: null,
+                  createdAt: new Date(),
+                }))
+              productData.trackExpiration = true
+              productData.batchNumber = loteIngresado
+              productData.expirationDate = fechaVenc
             }
           }
         }
@@ -3657,14 +3735,97 @@ export default function Products() {
 
   // Dispatcher: solo 53×26 usa la etiqueta completa (nombre + datos, PDF).
   // Los demás tamaños conservan el comportamiento original (solo código de barras).
-  const handlePrintLabels = () => {
+  // Garantiza que el campo de código de barras contenga EXACTAMENTE lo que la
+  // etiqueta imprime. Dos casos que rompían el círculo etiqueta→escáner:
+  // 1) Sin código ni SKU: la etiqueta salía con un pedazo del ID de Firestore,
+  //    un valor que no vive en ningún campo → se genera un correlativo.
+  // 2) Con SKU pero sin código: la etiqueta imprime el SKU SIN guiones
+  //    ("POLOSNEGRO") pero el POS busca coincidencia exacta y el SKU guardado
+  //    los tiene ("POLO-S-NEGRO") → el escaneo no encontraba nada. Se copia el
+  //    SKU sin guiones al campo de código de barras.
+  // Todo se PERSISTE (product.code / variant.barcode) y devuelve la lista
+  // fresca para imprimir.
+  const ensureLabelCodes = async (selectedProds, includeVariants) => {
+    const stripped = (s) => String(s).replace(/-/g, '')
+    const faltantes = [] // { productId, type: 'product'|'variant', variantIndex, value: string|null (null = generar) }
+    for (const p of selectedProds) {
+      const hasVars = includeVariants && p.hasVariants && Array.isArray(p.variants) && p.variants.length > 0
+      if (hasVars) {
+        p.variants.forEach((v, vi) => {
+          if (getVariantQty(p.id, v, vi) <= 0) return
+          if (!v.barcode) faltantes.push({ productId: p.id, type: 'variant', variantIndex: vi, value: v.sku ? stripped(v.sku) : null })
+        })
+      } else if (!p.code) {
+        faltantes.push({ productId: p.id, type: 'product', value: p.sku ? stripped(p.sku) : null })
+      }
+    }
+    if (faltantes.length === 0) return selectedProds
+
+    // Correlativos solo para los que no tienen NADA de dónde derivar
+    const aGenerar = faltantes.filter(f => f.value === null)
+    // Demo: códigos de sesión sin tocar Firestore
+    const codes = aGenerar.length === 0
+      ? []
+      : isDemoMode
+        ? aGenerar.map((_, i) => String(1000000 + (Date.now() % 900000) + i))
+        : await getNextBarcodeNumbers(getBusinessId(), aGenerar.length)
+    let codeIdx = 0
+
+    const updatedById = {}
+    const changes = {} // id -> { code?: bool, variants?: bool }
+    const copyOf = (id) => {
+      if (!updatedById[id]) {
+        const orig = selectedProds.find(sp => sp.id === id)
+        updatedById[id] = { ...orig, variants: Array.isArray(orig.variants) ? orig.variants.map(v => ({ ...v })) : orig.variants }
+        changes[id] = {}
+      }
+      return updatedById[id]
+    }
+    faltantes.forEach((f) => {
+      const p = copyOf(f.productId)
+      const nuevo = f.value !== null ? f.value : codes[codeIdx++]
+      if (f.type === 'product') {
+        p.code = nuevo
+        changes[f.productId].code = true
+      } else {
+        p.variants[f.variantIndex].barcode = nuevo
+        changes[f.productId].variants = true
+      }
+    })
+
+    if (!isDemoMode) {
+      for (const [id, flags] of Object.entries(changes)) {
+        const updates = {}
+        if (flags.code) updates.code = updatedById[id].code
+        if (flags.variants) updates.variants = updatedById[id].variants
+        const res = await updateProduct(getBusinessId(), id, updates)
+        if (!res.success) throw new Error(res.error || 'No se pudo guardar el código generado')
+      }
+      setProducts(prev => prev.map(p => updatedById[p.id] || p))
+      const n = faltantes.length
+      toast.success(n === 1
+        ? 'Se guardó el código de barras de la etiqueta en el producto'
+        : `Se guardaron los códigos de barras de las etiquetas en ${Object.keys(changes).length} producto(s)`)
+    }
+
+    return selectedProds.map(p => updatedById[p.id] || p)
+  }
+
+  const handlePrintLabels = async () => {
     const selectedProds = products.filter(p => selectedProducts.has(p.id))
     if (selectedProds.length === 0) {
       toast.error('Selecciona al menos un producto')
       return
     }
-    if (RICH_LABEL_SIZES.includes(labelSize)) return handlePrintRichLabels(selectedProds)
-    return handlePrintSimpleLabels(selectedProds)
+    let ensured
+    try {
+      ensured = await ensureLabelCodes(selectedProds, RICH_LABEL_SIZES.includes(labelSize))
+    } catch (e) {
+      toast.error(`No se pudieron generar los códigos: ${e.message}`)
+      return
+    }
+    if (RICH_LABEL_SIZES.includes(labelSize)) return handlePrintRichLabels(ensured)
+    return handlePrintSimpleLabels(ensured)
   }
 
   // Imprimir los códigos de barra de los productos seleccionados directamente en
@@ -3675,7 +3836,14 @@ export default function Products() {
       toast.error('No hay ticketera térmica conectada. Conéctala desde Configuración.', 5000)
       return
     }
-    const selectedProds = products.filter(p => selectedProducts.has(p.id))
+    let selectedProds = products.filter(p => selectedProducts.has(p.id))
+    // La ticketera etiqueta el producto padre: generar/guardar código si falta
+    try {
+      selectedProds = await ensureLabelCodes(selectedProds, false)
+    } catch (e) {
+      toast.error(`No se pudieron generar los códigos: ${e.message}`)
+      return
+    }
     const items = selectedProds
       .map(p => {
         const rawCode = p.code || p.sku || p.id.slice(-8)
@@ -4151,11 +4319,30 @@ export default function Products() {
     }))
   }
 
+  // Código propio para la variante, del MISMO contador que los códigos de
+  // barras del negocio (7 dígitos). Cada variante es una cosa vendible y lleva
+  // su propio número — NO deriva del padre: un SKU que era prefijo de otro
+  // (PROD-0001 / PROD-0001-1) hacía imposible terminar de tipear el código de
+  // la variante en el POS (el padre se auto-agregaba y limpiaba el buscador).
+  const generateVariantSku = async () => {
+    if (isDemoMode) return String(1000000 + (Date.now() % 900000))
+    return await getNextSkuNumber(getBusinessId())
+  }
+
   const handleAddVariant = async () => {
-    // Validate all attributes are filled
-    if (!newVariant.sku.trim()) {
-      toast.error('El SKU es requerido')
-      return
+    // SKU opcional: si el usuario no lo teclea, el sistema asigna un número de
+    // 7 dígitos y lo pone TAMBIÉN como código de barras (un solo número por
+    // variante — es lo que imprime la etiqueta y lo que escanea el POS)
+    let variantSku = newVariant.sku.trim()
+    let variantBarcode = newVariant.barcode?.trim() || null
+    if (!variantSku) {
+      try {
+        variantSku = await generateVariantSku()
+        if (!variantBarcode) variantBarcode = variantSku
+      } catch (e) {
+        toast.error('No se pudo generar el SKU automático. Escríbelo a mano.')
+        return
+      }
     }
 
     // Variante anclada al dólar sin precio en soles: derivarlo con el TC del día
@@ -4181,14 +4368,14 @@ export default function Products() {
     }
 
     // Check if SKU already exists
-    if (variants.some(v => v.sku === newVariant.sku.trim())) {
+    if (variants.some(v => v.sku === variantSku)) {
       toast.error('Ya existe una variante con este SKU')
       return
     }
 
     setVariants([...variants, {
-      sku: newVariant.sku.trim(),
-      barcode: newVariant.barcode?.trim() || null,
+      sku: variantSku,
+      barcode: variantBarcode,
       attributes: { ...newVariant.attributes },
       price: parseFloat(variantPen),
       price2: newVariant.price2 ? parseFloat(newVariant.price2) : null,
@@ -4239,9 +4426,18 @@ export default function Products() {
   }
 
   const handleSaveEditVariant = async () => {
-    if (!editingVariant.sku.trim()) {
-      toast.error('El SKU es requerido')
-      return
+    // SKU opcional también al editar: si lo dejan vacío, lo asigna el sistema
+    // (y de paso el código de barras si también estaba vacío)
+    let editSku = editingVariant.sku.trim()
+    let editBarcode = editingVariant.barcode?.trim() || null
+    if (!editSku) {
+      try {
+        editSku = await generateVariantSku()
+        if (!editBarcode) editBarcode = editSku
+      } catch (e) {
+        toast.error('No se pudo generar el SKU automático. Escríbelo a mano.')
+        return
+      }
     }
     // Anclada al dólar sin soles: derivar con el TC del día (ver handleAddVariant)
     let editPen = editingVariant.price
@@ -4257,15 +4453,15 @@ export default function Products() {
       return
     }
     // Check SKU uniqueness (excluding current)
-    if (variants.some((v, i) => i !== editingVariantIndex && v.sku === editingVariant.sku.trim())) {
+    if (variants.some((v, i) => i !== editingVariantIndex && v.sku === editSku)) {
       toast.error('Ya existe otra variante con este SKU')
       return
     }
     const updated = [...variants]
     updated[editingVariantIndex] = {
       ...variants[editingVariantIndex], // preservar campos no editados (warehouseStocks, etc.)
-      sku: editingVariant.sku.trim(),
-      barcode: editingVariant.barcode?.trim() || null,
+      sku: editSku,
+      barcode: editBarcode,
       attributes: { ...editingVariant.attributes },
       price: parseFloat(editPen),
       price2: editingVariant.price2 ? parseFloat(editingVariant.price2) : null,
@@ -6294,6 +6490,10 @@ export default function Products() {
                   onClick={async () => {
                     const nextSku = await getNextSkuNumber(getBusinessId())
                     setValue('sku', nextSku)
+                    // Un solo número por producto: el mismo código va también
+                    // al campo de código de barras (si está vacío) — es lo que
+                    // imprime la etiqueta y lo que escanea el POS
+                    if (!(watch('code') || '').trim()) setValue('code', nextSku)
                   }}
                   className="mt-1 text-xs text-primary-600 hover:text-primary-800 font-medium hover:underline"
                 >
@@ -6314,20 +6514,23 @@ export default function Products() {
                   className={`flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${errors.code ? 'border-red-500' : 'border-gray-300'}`}
                   {...register('code')}
                 />
-                <button
-                  type="button"
-                  onClick={handleScanBarcode}
-                  disabled={isScanningBarcode}
-                  className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                  title="Escanear código de barras"
-                >
-                  {isScanningBarcode ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <ScanBarcode className="w-5 h-5" />
-                  )}
-                  <span className="hidden sm:inline">Escanear</span>
-                </button>
+                {/* Solo en la app: el escaner usa la camara del dispositivo */}
+                {Capacitor.isNativePlatform() && (
+                  <button
+                    type="button"
+                    onClick={handleScanBarcode}
+                    disabled={isScanningBarcode}
+                    className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                    title="Escanear código de barras"
+                  >
+                    {isScanningBarcode ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <ScanBarcode className="w-5 h-5" />
+                    )}
+                    <span className="hidden sm:inline">Escanear</span>
+                  </button>
+                )}
               </div>
               <p className="text-xs text-gray-500 mt-1">EAN, UPC u otro</p>
               {errors.code && <p className="text-xs text-red-500 mt-1">{errors.code.message}</p>}
@@ -6387,19 +6590,22 @@ export default function Products() {
                   >
                     <Plus className="w-4 h-4" />
                   </button>
-                  <button
-                    type="button"
-                    onClick={handleScanExtraBarcode}
-                    disabled={isScanningExtraBarcode}
-                    className="px-3 py-1.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg flex items-center gap-1 text-sm"
-                    title="Escanear y agregar"
-                  >
-                    {isScanningExtraBarcode ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <ScanBarcode className="w-4 h-4" />
-                    )}
-                  </button>
+                  {/* Solo en la app: el escaner usa la camara del dispositivo */}
+                  {Capacitor.isNativePlatform() && (
+                    <button
+                      type="button"
+                      onClick={handleScanExtraBarcode}
+                      disabled={isScanningExtraBarcode}
+                      className="px-3 py-1.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg flex items-center gap-1 text-sm"
+                      title="Escanear y agregar"
+                    >
+                      {isScanningExtraBarcode ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <ScanBarcode className="w-4 h-4" />
+                      )}
+                    </button>
+                  )}
                 </div>
                 <p className="text-xs text-gray-400 mt-1">
                   Al escanear cualquiera de estos códigos, se agregará este mismo producto.
@@ -6949,7 +7155,15 @@ export default function Products() {
               Opciones del Producto
             </h3>
 
+            {/* Orden fijo en 3 filas de 3 (pedido del usuario):
+                  1) que ES el producto  -> stock, presentaciones, variantes
+                  2) como se CONTROLA    -> decimales, vencimiento, series
+                  3) catalogo online     -> visible, destacado, ocultar precio
+                Las tarjetas que dependen de otra opcion se muestran SIEMPRE
+                (deshabilitadas si no aplica) para que la grilla no se
+                descuadre al marcar y desmarcar. */}
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+              {/* Fila 1 */}
               <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
                 <input
                   type="checkbox"
@@ -6966,77 +7180,7 @@ export default function Products() {
                 </div>
               </label>
 
-              <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={allowDecimalQuantity}
-                  onChange={e => setAllowDecimalQuantity(e.target.checked)}
-                  className="w-4 h-4 mt-0.5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                />
-                <div>
-                  <span className="text-sm font-medium text-gray-700">Permitir decimales</span>
-                  <p className="text-xs text-gray-500 mt-0.5">Vender por kg, litros, etc.</p>
-                </div>
-              </label>
-
-              {!noStock && (
-                <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={trackSerials}
-                    onChange={e => setTrackSerials(e.target.checked)}
-                    className="w-4 h-4 mt-0.5 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
-                  />
-                  <div>
-                    <span className="text-sm font-medium text-gray-700">Control de N° de serie</span>
-                    <p className="text-xs text-gray-500 mt-0.5">Registrar serie por unidad (IMEI, S/N, etc.)</p>
-                  </div>
-                </label>
-              )}
-
-              <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={catalogVisible}
-                  onChange={e => setCatalogVisible(e.target.checked)}
-                  className="w-4 h-4 mt-0.5 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
-                />
-                <div>
-                  <span className="text-sm font-medium text-gray-700">Mostrar en catálogo</span>
-                  <p className="text-xs text-gray-500 mt-0.5">Visible en tienda online</p>
-                </div>
-              </label>
-
-              {catalogVisible && (
-                <>
-                  <label className="flex items-start gap-3 p-3 bg-amber-50 rounded-lg cursor-pointer hover:bg-amber-100 transition-colors ml-4">
-                    <input
-                      type="checkbox"
-                      checked={isFeatured}
-                      onChange={e => setIsFeatured(e.target.checked)}
-                      className="w-4 h-4 mt-0.5 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
-                    />
-                    <div>
-                      <span className="text-sm font-medium text-gray-700">Producto destacado</span>
-                      <p className="text-xs text-gray-500 mt-0.5">Aparece en la sección de destacados del catálogo</p>
-                    </div>
-                  </label>
-                  <label className="flex items-start gap-3 p-3 bg-yellow-50 rounded-lg cursor-pointer hover:bg-yellow-100 transition-colors ml-4">
-                    <input
-                      type="checkbox"
-                      checked={catalogHidePrice}
-                      onChange={e => setCatalogHidePrice(e.target.checked)}
-                      className="w-4 h-4 mt-0.5 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500"
-                    />
-                    <div>
-                      <span className="text-sm font-medium text-gray-700">Ocultar precio en catálogo</span>
-                      <p className="text-xs text-gray-500 mt-0.5">Muestra "Consultar" en vez del precio</p>
-                    </div>
-                  </label>
-                </>
-              )}
-
-              {businessSettings?.presentationsEnabled && (
+              {businessSettings?.presentationsEnabled ? (
                 <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
                   <input
                     type="checkbox"
@@ -7055,7 +7199,7 @@ export default function Products() {
                     <p className="text-xs text-gray-500 mt-0.5">Vender en pack, caja, etc.</p>
                   </div>
                 </label>
-              )}
+              ) : <div />}
 
               <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
                 <input
@@ -7080,6 +7224,114 @@ export default function Products() {
                 <div>
                   <span className="text-sm font-medium text-gray-700">Variantes</span>
                   <p className="text-xs text-gray-500 mt-0.5">Talla, color, tamaño, etc.</p>
+                </div>
+              </label>
+
+              {/* Fila 2 */}
+              <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={allowDecimalQuantity}
+                  onChange={e => setAllowDecimalQuantity(e.target.checked)}
+                  className="w-4 h-4 mt-0.5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <div>
+                  <span className="text-sm font-medium text-gray-700">Permitir decimales</span>
+                  <p className="text-xs text-gray-500 mt-0.5">Vender por kg, litros, etc.</p>
+                </div>
+              </label>
+
+              {/* Vencimiento: al apagarlo se limpian fecha y lote. Si no, un
+                  producto quedaba con fecha guardada y el control apagado. */}
+              <label className={`flex items-start gap-3 p-3 rounded-lg transition-colors ${noStock ? 'bg-gray-50 opacity-50 cursor-not-allowed' : 'bg-gray-50 cursor-pointer hover:bg-gray-100'}`}>
+                <input
+                  type="checkbox"
+                  checked={showExpiration}
+                  disabled={noStock}
+                  onChange={e => {
+                    setShowExpiration(e.target.checked)
+                    if (!e.target.checked) {
+                      setValue('expirationDate', '')
+                      setValue('batchNumber', '')
+                    }
+                  }}
+                  className="w-4 h-4 mt-0.5 text-primary-600 border-gray-300 rounded focus:ring-primary-500 disabled:cursor-not-allowed"
+                />
+                <div>
+                  <span className="text-sm font-medium text-gray-700">Fecha de vencimiento</span>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {noStock ? 'Requiere manejar stock' : 'Controlar lote y vencimiento'}
+                  </p>
+                </div>
+              </label>
+
+              <label className={`flex items-start gap-3 p-3 rounded-lg transition-colors ${noStock ? 'bg-gray-50 opacity-50 cursor-not-allowed' : 'bg-gray-50 cursor-pointer hover:bg-gray-100'}`}>
+                <input
+                  type="checkbox"
+                  checked={trackSerials}
+                  disabled={noStock}
+                  onChange={e => setTrackSerials(e.target.checked)}
+                  className="w-4 h-4 mt-0.5 text-amber-600 border-gray-300 rounded focus:ring-amber-500 disabled:cursor-not-allowed"
+                />
+                <div>
+                  <span className="text-sm font-medium text-gray-700">Control de N° de serie</span>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {noStock ? 'Requiere manejar stock' : 'Registrar serie por unidad (IMEI, S/N, etc.)'}
+                  </p>
+                </div>
+              </label>
+
+              {/* Fila 3: catalogo */}
+              <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={catalogVisible}
+                  onChange={e => {
+                    setCatalogVisible(e.target.checked)
+                    // Apagar el catalogo apaga sus dependientes: si no, quedaban
+                    // guardadas en true y revivian al volver a mostrar el producto
+                    if (!e.target.checked) {
+                      setIsFeatured(false)
+                      setCatalogHidePrice(false)
+                    }
+                  }}
+                  className="w-4 h-4 mt-0.5 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+                />
+                <div>
+                  <span className="text-sm font-medium text-gray-700">Mostrar en catálogo</span>
+                  <p className="text-xs text-gray-500 mt-0.5">Visible en tienda online</p>
+                </div>
+              </label>
+
+              <label className={`flex items-start gap-3 p-3 rounded-lg transition-colors ${catalogVisible ? 'bg-gray-50 cursor-pointer hover:bg-gray-100' : 'bg-gray-50 opacity-50 cursor-not-allowed'}`}>
+                <input
+                  type="checkbox"
+                  checked={isFeatured}
+                  disabled={!catalogVisible}
+                  onChange={e => setIsFeatured(e.target.checked)}
+                  className="w-4 h-4 mt-0.5 text-amber-600 border-gray-300 rounded focus:ring-amber-500 disabled:cursor-not-allowed"
+                />
+                <div>
+                  <span className="text-sm font-medium text-gray-700">Producto destacado</span>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {catalogVisible ? 'Aparece en la sección de destacados' : 'Requiere mostrar en catálogo'}
+                  </p>
+                </div>
+              </label>
+
+              <label className={`flex items-start gap-3 p-3 rounded-lg transition-colors ${catalogVisible ? 'bg-gray-50 cursor-pointer hover:bg-gray-100' : 'bg-gray-50 opacity-50 cursor-not-allowed'}`}>
+                <input
+                  type="checkbox"
+                  checked={catalogHidePrice}
+                  disabled={!catalogVisible}
+                  onChange={e => setCatalogHidePrice(e.target.checked)}
+                  className="w-4 h-4 mt-0.5 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500 disabled:cursor-not-allowed"
+                />
+                <div>
+                  <span className="text-sm font-medium text-gray-700">Ocultar precio en catálogo</span>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {catalogVisible ? 'Muestra "Consultar" en vez del precio' : 'Requiere mostrar en catálogo'}
+                  </p>
                 </div>
               </label>
             </div>
@@ -7658,14 +7910,29 @@ export default function Products() {
 
                     Vaciar el campo apaga el aviso; al guardar, trackExpiration sigue a
                     si hay fecha o no. */}
-                {!(Array.isArray(editingProduct?.batches) && editingProduct.batches.some(b => (Number(b.quantity) || 0) > 0)) && (
-                  <Input
-                    label="Fecha de vencimiento (opcional)"
-                    type="date"
-                    error={errors.expirationDate?.message}
-                    {...register('expirationDate')}
-                    helperText="Si la pones, el punto de venta avisa cuando el producto esté por vencer o vencido. Déjala vacía para no controlar vencimiento."
-                  />
+                {showExpiration && !(Array.isArray(editingProduct?.batches) && editingProduct.batches.some(b => (Number(b.quantity) || 0) > 0)) && (
+                  <>
+                    <Input
+                      label="Fecha de vencimiento"
+                      type="date"
+                      error={errors.expirationDate?.message}
+                      {...register('expirationDate')}
+                      helperText="Si la pones, el punto de venta avisa cuando el producto esté por vencer o vencido. Déjala vacía para no controlar vencimiento."
+                    />
+                    {/* Lote: va de la mano con el vencimiento. El stock inicial se
+                        registra COMO LOTE, así FEFO puede elegir el más próximo a
+                        vencer y el recuento no lo marca como "sin lote asignado".
+                        En farmacia el lote ya tiene su campo en la sección propia. */}
+                    {businessMode !== 'pharmacy' && (
+                      <Input
+                        label="Número de lote"
+                        placeholder="Ej: L2026-001"
+                        error={errors.batchNumber?.message}
+                        {...register('batchNumber')}
+                        helperText="Obligatorio si pones fecha de vencimiento y stock inicial. El stock entra como lote y se descuenta por vencimiento más próximo (FEFO)."
+                      />
+                    )}
+                  </>
                 )}
 
               </div>
@@ -8124,7 +8391,7 @@ export default function Products() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
-                            SKU
+                            SKU <span className="text-xs text-gray-400">(opcional)</span>
                           </label>
                           <input
                             type="text"
@@ -8133,6 +8400,27 @@ export default function Products() {
                             placeholder="POLO-M-ROJO"
                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                           />
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                const codigo = await generateVariantSku()
+                                // Mismo número en SKU y código de barras (si
+                                // está vacío): un solo código por variante
+                                setNewVariant(prev => ({
+                                  ...prev,
+                                  sku: codigo,
+                                  barcode: prev.barcode?.trim() ? prev.barcode : codigo,
+                                }))
+                              } catch (e) {
+                                toast.error('No se pudo generar el SKU automático')
+                              }
+                            }}
+                            className="mt-1 text-xs text-primary-600 hover:text-primary-800 font-medium hover:underline"
+                          >
+                            Generar SKU automático
+                          </button>
+                          <p className="text-xs text-gray-500">Si lo dejas vacío, el sistema le asigna uno</p>
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -10098,7 +10386,12 @@ export default function Products() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{product.name}</p>
                     <p className="text-xs text-gray-500">
-                      {product.code || product.sku || 'Sin código'}
+                      {/* El código que llevará la etiqueta (misma cascada que la
+                          impresión). Sin código ni SKU: se genera uno correlativo
+                          al imprimir y SE GUARDA en el producto. */}
+                      {(product.code || product.sku)
+                        ? <span className="font-mono">{String(product.code || product.sku).replace(/-/g, '')}</span>
+                        : <span className="text-amber-600 font-medium">Se generará un código al imprimir</span>}
                       {richVariants && ` · ${product.variants.length} variantes`}
                     </p>
                   </div>
@@ -10129,9 +10422,9 @@ export default function Products() {
                         <div key={key} className="flex items-center justify-between gap-2">
                           <p className="text-xs text-gray-600 truncate flex-1" title={attrs}>
                             {attrs}
-                            {(v.sku || v.barcode) && (
-                              <span className="font-mono text-[10px] text-gray-400 ml-1.5">{v.barcode || v.sku}</span>
-                            )}
+                            {(v.sku || v.barcode)
+                              ? <span className="font-mono text-[10px] text-gray-400 ml-1.5">{String(v.barcode || v.sku).replace(/-/g, '')}</span>
+                              : <span className="text-[10px] text-amber-600 font-medium ml-1.5">se generará al imprimir</span>}
                           </p>
                           <input
                             type="number"
@@ -10149,6 +10442,19 @@ export default function Products() {
                       )
                     })}
                     <p className="text-[10px] text-gray-400">0 = no imprimir esa variante</p>
+                    {/* Dos variantes con el mismo sku/barcode salen con etiquetas
+                        idénticas y el escáner no puede distinguirlas */}
+                    {(() => {
+                      const codigos = product.variants
+                        .map((v, vi) => getVariantQty(product.id, v, vi) > 0 ? String(v.barcode || v.sku || '').replace(/-/g, '') : '')
+                        .filter(Boolean)
+                      const repetidos = codigos.length !== new Set(codigos).size
+                      return repetidos ? (
+                        <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-1">
+                          Hay variantes con el mismo código: sus etiquetas saldrán idénticas y el escáner no podrá distinguirlas. Asigna un código de barras propio a cada variante en el producto.
+                        </p>
+                      ) : null
+                    })()}
                   </div>
                 )}
               </div>

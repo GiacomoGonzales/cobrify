@@ -334,6 +334,13 @@ export default function InventoryCountModal({
     })
   }, [countData, searchTerm, categoryFilter, differenceFilter, itemTypeFilter])
 
+  // La columna Lote solo existe si el recuento tiene filas de lote o stock sin
+  // asignar; en negocios sin lotes era una columna entera de guiones.
+  const hasLotColumn = useMemo(
+    () => Object.values(countData).some(i => i.isBatchRow || i.isUnassignedStock),
+    [countData]
+  )
+
   // Manejar cambio en conteo físico
   const handleCountChange = (productId, value) => {
     if (value === '' || (!isNaN(value) && parseFloat(value) >= 0)) {
@@ -344,6 +351,24 @@ export default function InventoryCountModal({
           physicalCount: value,
         }
       }))
+    }
+  }
+
+  // Enter salta al siguiente input de conteo: quien cuenta con teclado o lector
+  // va fila por fila sin tocar el mouse. Los inputs se marcan con data-count-input
+  // y se recorren en el orden visual de la lista filtrada.
+  const focusNextCountInput = (e) => {
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    // Solo los VISIBLES: la lista móvil y la tabla de escritorio existen ambas en
+    // el DOM (se ocultan por CSS), así que sin este filtro el foco saltaría a un
+    // input invisible del otro layout.
+    const inputs = Array.from(document.querySelectorAll('input[data-count-input="1"]'))
+      .filter(el => el.offsetParent !== null)
+    const next = inputs[inputs.indexOf(e.currentTarget) + 1]
+    if (next) {
+      next.focus()
+      next.select()
     }
   }
 
@@ -1046,75 +1071,63 @@ export default function InventoryCountModal({
           })()
         ) : (
         <div className="flex flex-col h-[calc(100vh-120px)] md:h-[calc(100vh-160px)]">
-          {/* Header con estadísticas - Compacto en móvil */}
-          <div className="bg-gray-50 p-2 md:p-4 rounded-lg mb-3 flex-shrink-0">
-            {/* Vista móvil: 2x2 grid con las estadísticas principales */}
-            <div className="grid grid-cols-2 gap-2 md:hidden">
-              <div className="bg-white p-2 rounded-lg shadow-sm text-center">
-                <p className="text-[10px] text-gray-500">Contados</p>
-                <p className="text-lg font-bold text-blue-600">{countStats.countedProducts}/{countStats.totalProducts}</p>
-              </div>
-              <div className="bg-white p-2 rounded-lg shadow-sm text-center">
-                <p className="text-[10px] text-gray-500">Con Diferencia</p>
-                <p className="text-lg font-bold text-orange-600">{countStats.productsWithDifference}</p>
-              </div>
-              <div className="bg-white p-2 rounded-lg shadow-sm text-center">
-                <p className="text-[10px] text-gray-500">Faltantes</p>
-                <p className="text-sm font-bold text-red-600">-{countStats.totalMissing} ({formatCurrency(countStats.totalMissingValue)})</p>
-              </div>
-              <div className="bg-white p-2 rounded-lg shadow-sm text-center">
-                <p className="text-[10px] text-gray-500">Sobrantes</p>
-                <p className="text-sm font-bold text-green-600">+{countStats.totalSurplus} ({formatCurrency(countStats.totalSurplusValue)})</p>
-              </div>
+          {/* Barra de progreso del conteo. Reemplaza las 7 tarjetas de
+              estadísticas: el usuario trabaja en la lista, arriba solo necesita
+              saber cuánto lleva y si hay diferencias. Los chips solo aparecen
+              cuando existen faltantes/sobrantes y al tocarlos FILTRAN la lista. */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mb-3 flex-shrink-0">
+            <span className="text-sm font-semibold text-gray-900 whitespace-nowrap">
+              Contados {countStats.countedProducts}/{countStats.totalProducts}
+            </span>
+            <div className="flex-1 min-w-[70px] h-1.5 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary-500 rounded-full transition-all"
+                style={{ width: `${countStats.totalProducts > 0 ? Math.round((countStats.countedProducts / countStats.totalProducts) * 100) : 0}%` }}
+              />
             </div>
-
-            {/* Vista desktop: 7 columnas */}
-            <div className="hidden md:grid md:grid-cols-7 gap-3 text-center">
-              <div className="bg-white p-3 rounded-lg shadow-sm">
-                <p className="text-xs text-gray-500">Total Productos</p>
-                <p className="text-xl font-bold text-gray-900">{countStats.totalProducts}</p>
-              </div>
-              <div className="bg-white p-3 rounded-lg shadow-sm">
-                <p className="text-xs text-gray-500">Contados</p>
-                <p className="text-xl font-bold text-blue-600">{countStats.countedProducts}</p>
-              </div>
-              <div className="bg-white p-3 rounded-lg shadow-sm">
-                <p className="text-xs text-gray-500">Con Diferencia</p>
-                <p className="text-xl font-bold text-orange-600">{countStats.productsWithDifference}</p>
-              </div>
-              <div className="bg-white p-3 rounded-lg shadow-sm">
-                <p className="text-xs text-gray-500">Faltantes</p>
-                <p className="text-xl font-bold text-red-600">-{countStats.totalMissing}</p>
-              </div>
-              <div className="bg-white p-3 rounded-lg shadow-sm">
-                <p className="text-xs text-gray-500">Sobrantes</p>
-                <p className="text-xl font-bold text-green-600">+{countStats.totalSurplus}</p>
-              </div>
-              <div className="bg-white p-3 rounded-lg shadow-sm">
-                <p className="text-xs text-gray-500">Valor Faltante</p>
-                <p className="text-lg font-bold text-red-600">{formatCurrency(countStats.totalMissingValue)}</p>
-              </div>
-              <div className="bg-white p-3 rounded-lg shadow-sm">
-                <p className="text-xs text-gray-500">Valor Sobrante</p>
-                <p className="text-lg font-bold text-green-600">{formatCurrency(countStats.totalSurplusValue)}</p>
-              </div>
-            </div>
+            {countStats.totalMissing > 0 && (
+              <button
+                onClick={() => setDifferenceFilter(prev => prev === 'missing' ? 'all' : 'missing')}
+                title="Ver solo los productos con faltante"
+                className={`px-2.5 py-1 text-xs font-semibold rounded-full border transition-colors ${
+                  differenceFilter === 'missing'
+                    ? 'bg-red-600 text-white border-red-600'
+                    : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                }`}
+              >
+                −{countStats.totalMissing} faltan · {formatCurrency(countStats.totalMissingValue)}
+              </button>
+            )}
+            {countStats.totalSurplus > 0 && (
+              <button
+                onClick={() => setDifferenceFilter(prev => prev === 'surplus' ? 'all' : 'surplus')}
+                title="Ver solo los productos con sobrante"
+                className={`px-2.5 py-1 text-xs font-semibold rounded-full border transition-colors ${
+                  differenceFilter === 'surplus'
+                    ? 'bg-green-600 text-white border-green-600'
+                    : 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+                }`}
+              >
+                +{countStats.totalSurplus} sobran · {formatCurrency(countStats.totalSurplusValue)}
+              </button>
+            )}
           </div>
 
-          {/* Filtros - Compacto en móvil */}
-          <div className="flex-shrink-0 mb-3 space-y-2">
-            {/* Búsqueda */}
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Buscar producto..."
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
-              </div>
+          {/* Filtros en una sola fila (el filtro por diferencia son los chips
+              de la barra de arriba). En móvil el buscador toma su propia línea. */}
+          <div className="flex-shrink-0 mb-3 flex flex-wrap gap-2">
+            <div className="relative flex-1 min-w-[180px]">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar producto..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            {/* Solo en la app: el escaner usa la camara del dispositivo */}
+            {Capacitor.isNativePlatform() && (
               <button
                 onClick={handleScanBarcode}
                 disabled={isScanning}
@@ -1127,54 +1140,40 @@ export default function InventoryCountModal({
                   <ScanBarcode className="w-5 h-5" />
                 )}
               </button>
-            </div>
-
-            {/* Filtros y botones de acción */}
-            <div className="flex flex-wrap gap-2">
-              <select
-                value={itemTypeFilter}
-                onChange={e => setItemTypeFilter(e.target.value)}
-                className="flex-1 min-w-[100px] px-2 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="all">Todo</option>
-                <option value="products">Productos</option>
-                <option value="ingredients">Insumos</option>
-              </select>
-              <select
-                value={categoryFilter}
-                onChange={e => setCategoryFilter(e.target.value)}
-                className="flex-1 min-w-[120px] px-2 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="all">Categorías</option>
-                {categories.map(cat => (
-                  <option key={cat.id} value={cat.id}>{cat.name}</option>
-                ))}
-              </select>
-              <select
-                value={differenceFilter}
-                onChange={e => setDifferenceFilter(e.target.value)}
-                className="flex-1 min-w-[100px] px-2 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="all">Todos</option>
-                <option value="with_difference">Con dif.</option>
-                <option value="missing">Faltantes</option>
-                <option value="surplus">Sobrantes</option>
-              </select>
-              <button
-                onClick={handleCopyAllSystemStock}
-                className="p-2 text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
-                title="Copiar todo el stock del sistema"
-              >
-                <Copy className="w-4 h-4" />
-              </button>
-              <button
-                onClick={handleClearAll}
-                className="p-2 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
-                title="Limpiar todos los conteos"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
+            )}
+            <select
+              value={itemTypeFilter}
+              onChange={e => setItemTypeFilter(e.target.value)}
+              className="min-w-[90px] px-2 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="all">Todo</option>
+              <option value="products">Productos</option>
+              <option value="ingredients">Insumos</option>
+            </select>
+            <select
+              value={categoryFilter}
+              onChange={e => setCategoryFilter(e.target.value)}
+              className="min-w-[110px] px-2 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="all">Categorías</option>
+              {categories.map(cat => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
+              ))}
+            </select>
+            <button
+              onClick={handleCopyAllSystemStock}
+              className="p-2 text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+              title="Copiar todo el stock del sistema"
+            >
+              <Copy className="w-4 h-4" />
+            </button>
+            <button
+              onClick={handleClearAll}
+              className="p-2 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+              title="Limpiar todos los conteos"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
           </div>
 
           {/* Lista de productos - Scrollable */}
@@ -1191,8 +1190,18 @@ export default function InventoryCountModal({
                 filteredProducts.map(item => {
                   const { diff, diffDisplay, value, status } = getDifference(item)
                   const mobileKey = item._countKey || (item.isBatchRow ? `${item.productId}_batch_${item.batchId}` : item.isVariantRow ? `${item.productId}_variant_${item.variantSku}` : item.productId)
+                  // Mismo criterio de color que la tabla: verde = cuadra,
+                  // ámbar = con diferencia
+                  const cardTint = status === 'equal'
+                    ? 'bg-green-50/60'
+                    : (status === 'missing' || status === 'surplus')
+                    ? 'bg-amber-50/70'
+                    : item.isBatchRow ? 'bg-amber-50/30'
+                    : item.isUnassignedStock ? 'bg-red-50/30'
+                    : item.isVariantRow ? 'bg-purple-50/30'
+                    : 'bg-white'
                   return (
-                    <div key={mobileKey} className={`p-3 bg-white ${item.isBatchRow ? 'bg-amber-50/30' : item.isUnassignedStock ? 'bg-red-50/30' : item.isVariantRow ? 'bg-purple-50/30' : ''}`}>
+                    <div key={mobileKey} className={`p-3 ${cardTint}`}>
                       <div className="flex justify-between items-start mb-2">
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-sm truncate">{item.productName}</p>
@@ -1237,6 +1246,9 @@ export default function InventoryCountModal({
                             min="0"
                             value={item.physicalCount}
                             onChange={e => handleCountChange(item._countKey, e.target.value)}
+                            onKeyDown={focusNextCountInput}
+                            onFocus={e => e.target.select()}
+                            data-count-input="1"
                             placeholder="Conteo físico"
                             className={`w-full px-3 py-2 text-center text-lg font-semibold border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
                               status === 'missing' ? 'border-red-300 bg-red-50' :
@@ -1276,7 +1288,9 @@ export default function InventoryCountModal({
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Código</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lote</th>
+                  {hasLotColumn && (
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lote</th>
+                  )}
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Categoría</th>
                   <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Sistema</th>
                   <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Conteo</th>
@@ -1287,7 +1301,7 @@ export default function InventoryCountModal({
               <tbody className="divide-y divide-gray-200">
                 {filteredProducts.length === 0 ? (
                   <tr>
-                    <td colSpan="8" className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={hasLotColumn ? 8 : 7} className="px-4 py-8 text-center text-gray-500">
                       {searchTerm || categoryFilter !== 'all' || differenceFilter !== 'all'
                         ? 'No se encontraron productos con los filtros aplicados'
                         : 'No hay productos con control de stock'}
@@ -1297,8 +1311,20 @@ export default function InventoryCountModal({
                   filteredProducts.map(item => {
                     const { diff, diffDisplay, value, status } = getDifference(item)
                     const itemKey = item._countKey || (item.isBatchRow ? `${item.productId}_batch_${item.batchId}` : item.isVariantRow ? `${item.productId}_variant_${item.variantSku}` : item.productId)
+                    // Fila pintada por estado del conteo: verde = cuadra, ámbar =
+                    // con diferencia. Se ve de un vistazo qué va contado sin mirar
+                    // los números de arriba. Sin contar, conserva el tinte especial
+                    // de lote/variante/sin-asignar.
+                    const rowTint = status === 'equal'
+                      ? 'bg-green-50/60'
+                      : (status === 'missing' || status === 'surplus')
+                      ? 'bg-amber-50/70'
+                      : item.isBatchRow ? 'bg-amber-50/30'
+                      : item.isUnassignedStock ? 'bg-red-50/30'
+                      : item.isVariantRow ? 'bg-purple-50/30'
+                      : ''
                     return (
-                      <tr key={itemKey} className={`hover:bg-gray-50 ${item.isBatchRow ? 'bg-amber-50/30' : item.isUnassignedStock ? 'bg-red-50/30' : item.isVariantRow ? 'bg-purple-50/30' : ''}`}>
+                      <tr key={itemKey} className={`hover:bg-gray-50 ${rowTint}`}>
                         <td className="px-4 py-3">
                           <span className="font-mono text-sm">{item.productCode}</span>
                         </td>
@@ -1310,6 +1336,7 @@ export default function InventoryCountModal({
                             </span>
                           )}
                         </td>
+                        {hasLotColumn && (
                         <td className="px-4 py-3">
                           {item.isBatchRow ? (
                             <div>
@@ -1331,6 +1358,7 @@ export default function InventoryCountModal({
                             <span className="text-xs text-gray-400">-</span>
                           )}
                         </td>
+                        )}
                         <td className="px-4 py-3">
                           <Badge variant="default" className="text-xs">
                             {getCategoryName(item.category)}
@@ -1355,8 +1383,11 @@ export default function InventoryCountModal({
                               step="1"
                               value={item.physicalCount}
                               onChange={e => handleCountChange(item._countKey, e.target.value)}
+                              onKeyDown={focusNextCountInput}
+                              onFocus={e => e.target.select()}
+                              data-count-input="1"
                               placeholder="-"
-                              className={`w-20 px-3 py-2 text-center border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+                              className={`w-24 px-3 py-2 text-center text-base font-semibold border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
                                 status === 'missing' ? 'border-red-300 bg-red-50' :
                                 status === 'surplus' ? 'border-green-300 bg-green-50' :
                                 status === 'equal' ? 'border-green-300 bg-green-50' :
@@ -1373,10 +1404,10 @@ export default function InventoryCountModal({
                           </div>
                           )}
                         </td>
+                        {/* Dif. y Valor solo muestran algo cuando la fila fue contada:
+                            menos guiones, menos ruido */}
                         <td className="px-4 py-3 text-center">
-                          {item.trackSerials ? (
-                            <span className="text-gray-400">-</span>
-                          ) : diff !== null ? (
+                          {!item.trackSerials && diff !== null && (
                             <div className="flex items-center justify-center gap-1">
                               {status === 'missing' && <MinusCircle className="w-4 h-4 text-red-500" />}
                               {status === 'surplus' && <PlusCircle className="w-4 h-4 text-green-500" />}
@@ -1389,19 +1420,15 @@ export default function InventoryCountModal({
                                 {diffDisplay > 0 ? '+' : ''}{diffDisplay}
                               </span>
                             </div>
-                          ) : (
-                            <span className="text-gray-400">-</span>
                           )}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          {value !== null && value !== 0 ? (
+                          {value !== null && value !== 0 && (
                             <span className={`font-semibold ${
                               value < 0 ? 'text-red-600' : 'text-green-600'
                             }`}>
                               {formatCurrency(Math.abs(value))}
                             </span>
-                          ) : (
-                            <span className="text-gray-400">-</span>
                           )}
                         </td>
                       </tr>

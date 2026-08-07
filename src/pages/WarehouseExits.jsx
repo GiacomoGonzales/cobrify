@@ -994,9 +994,12 @@ export default function WarehouseExits() {
                   </div>
                 )}
               </div>
-              <Button type="button" onClick={handleScanBarcode} variant="outline" className="flex-shrink-0">
-                <ScanBarcode className="w-4 h-4" />
-              </Button>
+              {/* Solo en la app: el escaner usa la camara del dispositivo */}
+              {Capacitor.isNativePlatform() && (
+                <Button type="button" onClick={handleScanBarcode} variant="outline" className="flex-shrink-0">
+                  <ScanBarcode className="w-4 h-4" />
+                </Button>
+              )}
             </div>
           </div>
 
