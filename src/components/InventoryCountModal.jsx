@@ -18,6 +18,9 @@ import {
   ScanBarcode,
   Warehouse,
   ArrowLeft,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
@@ -65,6 +68,10 @@ export default function InventoryCountModal({
   const [searchTerm, setSearchTerm] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [differenceFilter, setDifferenceFilter] = useState('all')
+  // Orden alfabético por nombre: null = orden natural del recuento (agrupado
+  // por producto y sus lotes), 'asc' = A-Z, 'desc' = Z-A. Arranca en null a
+  // propósito: el orden natural mantiene juntas las filas de un mismo producto.
+  const [sortByName, setSortByName] = useState(null)
   const [itemTypeFilter, setItemTypeFilter] = useState('all')
   const [isScanning, setIsScanning] = useState(false)
 
@@ -351,7 +358,18 @@ export default function InventoryCountModal({
 
       return matchesSearch && matchesCategory && matchesDifference && matchesItemType
     })
-  }, [countData, rowHaystacks, searchTerm, categoryFilter, differenceFilter, itemTypeFilter])
+    // Orden por nombre (clic en la cabecera "Producto"). `localeCompare` con
+    // 'es' para que la Ñ y los acentos queden donde el usuario los busca:
+    // con el orden por defecto de JS, "Ñandú" cae después de "Zapato".
+    // Empate por nombre → desempata el lote, así las filas de un mismo
+    // producto con varios lotes no bailan entre renders.
+    .sort((a, b) => {
+      if (!sortByName) return 0
+      const cmp = String(a.productName || '').localeCompare(String(b.productName || ''), 'es', { sensitivity: 'base', numeric: true })
+      if (cmp !== 0) return sortByName === 'asc' ? cmp : -cmp
+      return String(a.batchId || '').localeCompare(String(b.batchId || ''), 'es', { numeric: true })
+    })
+  }, [countData, rowHaystacks, searchTerm, categoryFilter, differenceFilter, itemTypeFilter, sortByName])
 
   // La columna Lote solo existe si el recuento tiene filas de lote o stock sin
   // asignar; en negocios sin lotes era una columna entera de guiones.
@@ -1179,6 +1197,21 @@ export default function InventoryCountModal({
                 <option key={cat.id} value={cat.id}>{cat.name}</option>
               ))}
             </select>
+            {/* Orden alfabético también en móvil, donde la tabla (y su cabecera
+                clicable) no existe: ahí la lista son tarjetas. */}
+            <button
+              type="button"
+              onClick={() => setSortByName(prev => prev === 'asc' ? 'desc' : prev === 'desc' ? null : 'asc')}
+              className={`md:hidden px-3 py-2 text-sm rounded-lg border transition-colors flex items-center gap-1.5 ${
+                sortByName ? 'bg-primary-50 border-primary-300 text-primary-700' : 'bg-white border-gray-300 text-gray-600'
+              }`}
+              title="Ordenar por nombre"
+            >
+              {sortByName === 'asc' ? <ArrowUp className="w-4 h-4" />
+                : sortByName === 'desc' ? <ArrowDown className="w-4 h-4" />
+                : <ArrowUpDown className="w-4 h-4" />}
+              A-Z
+            </button>
             <button
               onClick={handleCopyAllSystemStock}
               className="p-2 text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
@@ -1306,7 +1339,24 @@ export default function InventoryCountModal({
               <thead className="bg-gray-100 sticky top-0">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Código</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
+                  {/* Producto: clic alterna A-Z → Z-A → orden natural */}
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <button
+                      type="button"
+                      onClick={() => setSortByName(prev => prev === 'asc' ? 'desc' : prev === 'desc' ? null : 'asc')}
+                      className="inline-flex items-center gap-1 uppercase hover:text-gray-700 transition-colors"
+                      title={
+                        sortByName === 'asc' ? 'Ordenado A-Z. Clic para Z-A'
+                          : sortByName === 'desc' ? 'Ordenado Z-A. Clic para volver al orden original'
+                          : 'Clic para ordenar alfabéticamente'
+                      }
+                    >
+                      Producto
+                      {sortByName === 'asc' ? <ArrowUp className="w-3 h-3" />
+                        : sortByName === 'desc' ? <ArrowDown className="w-3 h-3" />
+                        : <ArrowUpDown className="w-3 h-3 text-gray-400" />}
+                    </button>
+                  </th>
                   {hasLotColumn && (
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lote</th>
                   )}
