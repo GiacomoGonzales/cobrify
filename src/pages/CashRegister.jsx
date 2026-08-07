@@ -30,6 +30,7 @@ import {
 import { getManagedUsers } from '@/services/userManagementService'
 import { generateCashReportExcel, generateCashReportPDF } from '@/services/cashReportService'
 import CashClosureTicket from '@/components/CashClosureTicket'
+import { getSessionMoneyTotals } from '@/utils/cashTotals'
 import { Capacitor } from '@capacitor/core'
 import { getPaymentBucketLabel, getCustomMethodByLabel, isCashLikePayment } from '@/utils/paymentMethods'
 
@@ -3469,6 +3470,19 @@ export default function CashRegister() {
                         )}
                       </span>
                     </div>
+                    {/* Total dinero: efectivo del cajón + saldos de billeteras.
+                        Solo si hubo billeteras — con puro efectivo repetiría el
+                        Efectivo Esperado de arriba. */}
+                    {(() => {
+                      const t = getSessionMoneyTotals(selectedHistorySession)
+                      if (!t.hasWallets) return null
+                      return (
+                        <div className="flex justify-between border-t border-gray-300 pt-2 mt-2">
+                          <span className="font-semibold text-gray-900">Total dinero:</span>
+                          <span className="font-bold text-primary-700">{formatCurrency(t.totalMoney)}</span>
+                        </div>
+                      )
+                    })()}
                   </>
                 )}
               </div>
@@ -4423,6 +4437,16 @@ export default function CashRegister() {
                   </span>
                 </div>
               )}
+              {!hideExpectedForCashier && (() => {
+                const t = getSessionMoneyTotals(closedSessionData)
+                if (!t.hasWallets) return null
+                return (
+                  <div className="flex justify-between text-sm border-t border-gray-300 pt-2">
+                    <span className="font-semibold text-gray-900">Total dinero:</span>
+                    <span className="font-bold text-primary-700">{formatCurrency(t.totalMoney)}</span>
+                  </div>
+                )
+              })()}
             </div>
 
             {/* Botones de descarga e impresión */}

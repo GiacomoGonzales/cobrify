@@ -1,5 +1,6 @@
 import { forwardRef } from 'react'
 import React from 'react'
+import { getSessionMoneyTotals } from '@/utils/cashTotals'
 
 /**
  * Componente de Ticket de Cierre de Caja
@@ -783,6 +784,26 @@ const CashClosureTicket = forwardRef(({
           </div>
         </>
       )}
+
+      {/* Total dinero: efectivo del cajón + saldos de billeteras. Va al final,
+          después de los bloques que lo componen. Se omite en el cierre "a
+          ciegas" (es una suma de esperados) y cuando no hubo billeteras (sería
+          repetir el efectivo esperado). */}
+      {!hideExpected && (() => {
+        const t = getSessionMoneyTotals(sessionData)
+        if (!t.hasWallets) return null
+        return (
+          <div className="ticket-section" style={{ borderTop: '2px solid #000', paddingTop: '6px', marginTop: '6px' }}>
+            <div className="total-row highlight">
+              <span>TOTAL DINERO:</span>
+              <span>{formatCurrency(t.totalMoney)}</span>
+            </div>
+            <div className="info-row">
+              <span style={{ fontSize: '0.85em' }}>Efectivo + billeteras</span>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Footer */}
       <div className="ticket-footer">

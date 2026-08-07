@@ -7,6 +7,7 @@ import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { preloadLogo } from '@/utils/pdfGenerator';
+import { getSessionMoneyTotals } from '@/utils/cashTotals'
 
 /**
  * Helper para guardar y compartir archivos en móvil
@@ -522,12 +523,8 @@ export const generateCashReportExcel = async (sessionData, movements, invoices, 
   // Pedido por CYBY Plast: los tres numeros estaban sueltos y habia que
   // sumarlos a mano para saber cuanto dinero tiene el negocio al cierre.
   if (!hideExpected && (hasYapeActivity || hasPlinActivity)) {
-    const expectedYapeForTotal = hasYapeActivity
-      ? (sessionData.expectedAmountYape !== undefined
-        ? sessionData.expectedAmountYape
-        : (yapeOpening + yapeSales + yapeIncome - yapeExpense))
-      : 0
-    const totalMoney = (sessionData.expectedAmount || 0) + expectedYapeForTotal + (hasPlinActivity ? expectedPlinCalc : 0)
+    // Mismo criterio que la pantalla, el ticket y el PDF (src/utils/cashTotals)
+    const totalMoney = getSessionMoneyTotals(sessionData).totalMoney
     aoa.push([])
     aoa.push(['TOTAL DINERO (Efectivo esperado + saldos de billeteras)', '', '', Number(totalMoney.toFixed(2))])
     totalMoneyRow = aoa.length - 1
@@ -1453,6 +1450,22 @@ export const generateCashReportPDF = async (sessionData, movements, invoices, bu
       doc.text(fmt(diffYape), RX - 2, y + 6, { align: 'right' })
       y += 13
     }
+  }
+
+  // ===== TOTAL DINERO ===== efectivo del cajón + saldos de billeteras.
+  // Va después de los bloques que lo componen. Oculto en el cierre "a ciegas"
+  // (suma de esperados) y si no hubo billeteras (repetiría el efectivo).
+  const totalesDinero = getSessionMoneyTotals(sessionData)
+  if (!hideExpected && totalesDinero.hasWallets) {
+    if (y > PH - 24) { doc.addPage(); y = 10; }
+    doc.setFillColor(...ACCENT)
+    doc.roundedRect(ML, y, CW, 10, 1, 1, 'F')
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(255, 255, 255)
+    doc.text('TOTAL DINERO (efectivo esperado + saldos de billeteras)', ML + 2, y + 6)
+    doc.setFontSize(10)
+    doc.text(fmt(totalesDinero.totalMoney), RX - 2, y + 6.3, { align: 'right' })
+    doc.setTextColor(...DARK)
+    y += 14
   }
 
   // ===== PAGOS DE COMPROBANTES ANTERIORES (cobros diferidos) =====

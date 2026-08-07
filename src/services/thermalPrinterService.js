@@ -8,6 +8,7 @@ import { getPricedModifiers } from '@/utils/modifierHelpers';
 import { unitDisplayName } from '@/data/sunatUnits';
 import { getComprobanteBreakdown } from '@/utils/peruUtils';
 import { buildKitchenLines, stationsForOrder } from '@/utils/kitchenComandaFormat';
+import { getSessionMoneyTotals } from '@/utils/cashTotals';
 
 /**
  * Servicio para manejar impresoras térmicas WiFi/Bluetooth
@@ -3521,6 +3522,19 @@ export const printCashClosureTicket = async (sessionData, movements = [], busine
       printer = printer.text(format.separator + '\n');
     }
 
+    // ========== TOTAL DINERO ========== efectivo del cajón + billeteras
+    if (!hideExpected) {
+      const td = getSessionMoneyTotals(sessionData);
+      if (td.hasWallets) {
+        printer = printer
+          .bold(true)
+          .text(createLine('TOTAL DINERO:', formatCurrency(td.totalMoney)) + '\n')
+          .bold(false)
+          .text('Efectivo + billeteras\n')
+          .text(format.separator + '\n');
+      }
+    }
+
     // ========== FOOTER ==========
     printer = printer
       .align('center')
@@ -3740,6 +3754,16 @@ const printWifiCashClosure = async (sessionData, movements, business, paperWidth
       builder.text(format.separator).newLine();
     }
 
+    // Total dinero: efectivo del cajón + billeteras
+    if (!hideExpected) {
+      const td = getSessionMoneyTotals(sessionData);
+      if (td.hasWallets) {
+        builder.bold(true).text(createLine('TOTAL DINERO:', formatCurrency(td.totalMoney))).newLine().bold(false)
+          .text('Efectivo + billeteras').newLine()
+          .text(format.separator).newLine();
+      }
+    }
+
     // Footer
     builder.alignCenter()
       .text('Documento interno')
@@ -3920,6 +3944,16 @@ const printBLECashClosure = async (sessionData, movements, business, paperWidth,
         ticketText += createLine(diffYapeLabel, formatCurrency(differenceYape)) + '\n';
       }
       ticketText += format.separator + '\n';
+    }
+
+    // Total dinero: efectivo del cajón + billeteras
+    if (!hideExpected) {
+      const td = getSessionMoneyTotals(sessionData);
+      if (td.hasWallets) {
+        ticketText += createLine('TOTAL DINERO:', formatCurrency(td.totalMoney)) + '\n';
+        ticketText += 'Efectivo + billeteras\n';
+        ticketText += format.separator + '\n';
+      }
     }
 
     // Footer
