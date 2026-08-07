@@ -11,7 +11,8 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import { calculateInvoiceAmounts, ID_TYPES } from '@/utils/peruUtils'
-import { formatCurrency, matchesSearchQuery } from '@/lib/utils'
+import { formatCurrency, matchesSearchQuery, matchesPrebuilt } from '@/lib/utils'
+import { buildProductHaystack } from '@/utils/productSearch'
 import {
   isMultiCurrencyEnabled,
   getDefaultCurrency,
@@ -1004,21 +1005,8 @@ export default function CreateQuotation() {
 
     // Búsqueda flexible: cada palabra parcial debe aparecer en alguno de los
     // campos, en cualquier orden, sin acentos. "pol roj x" matchea "POLO ROJO XXL".
-    const code = (p) => p.code || ''
-    const sku = (p) => p.sku || ''
     return activeProducts
-      .filter(p => matchesSearchQuery(
-        searchTerm,
-        p.name,
-        code(p),
-        code(p).replace(/-/g, ''),
-        sku(p),
-        sku(p).replace(/-/g, ''),
-        p.marca,
-        p.laboratoryName,
-        p.genericName,
-        p.description,
-      ))
+      .filter(p => matchesPrebuilt(searchTerm, buildProductHaystack(p)))
       .slice(0, 10) // Máximo 10 resultados
   }
 

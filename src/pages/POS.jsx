@@ -51,6 +51,7 @@ import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
 import PostSaleModal from '@/components/pos/PostSaleModal'
 import { formatCurrency, formatUnitPrice, formatLineAmount, formatProductPrice, applyMarginToCost, matchesSearchQuery, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
+import { buildProductHaystack } from '@/utils/productSearch'
 import {
   isMultiCurrencyEnabled,
   getDefaultCurrency,
@@ -2955,28 +2956,10 @@ export default function POS() {
   const productSearchIndex = React.useMemo(() => {
     const map = new Map()
     for (const p of products) {
-      const code = p.code || ''
-      const sku = p.sku || ''
-      const variantTokens = (p.hasVariants && Array.isArray(p.variants))
-        ? p.variants.flatMap(v => [v?.sku || '', (v?.sku || '').replace(/-/g, ''), v?.barcode || '']).filter(Boolean)
-        : []
-      const extraBarcodeTokens = Array.isArray(p.barcodes)
-        ? p.barcodes.flatMap(b => [b || '', String(b || '').replace(/-/g, '')]).filter(Boolean)
-        : []
-      map.set(p.id, buildSearchHaystack(
-        p.name,
-        code,
-        code.replace(/-/g, ''),
-        sku,
-        sku.replace(/-/g, ''),
-        p.marca,
-        p.laboratoryName,
-        ...variantTokens,
-        ...extraBarcodeTokens,
-      ))
+      map.set(p.id, buildProductHaystack(p, { categories }))
     }
     return map
-  }, [products])
+  }, [products, categories])
 
   // Optimizar filtrado de productos con useMemo
   const filteredProducts = React.useMemo(() => {

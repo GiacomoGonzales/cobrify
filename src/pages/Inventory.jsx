@@ -74,6 +74,7 @@ import { isProductInBranch } from '@/utils/branchCatalog'
 import { computeBatchDeduction, computeProductBatchMetadata } from '@/utils/batchStock'
 import { getExitReasons, getExitReasonLabel } from '@/utils/warehouseExitReasons'
 import { getItemUnitLabel, formatPresentationEquivalence } from '@/utils/units'
+import { buildProductHaystack, buildIngredientHaystack } from '@/utils/productSearch'
 
 // Helper functions for category hierarchy
 const migrateLegacyCategories = (cats) => {
@@ -1740,21 +1741,13 @@ export default function Inventory() {
       // Key compuesta porque productos e ingredientes pueden compartir id.
       const key = `${item.itemType}-${item.id}`
       if (item.itemType === 'ingredient') {
-        // Los insumos solo tienen name + category relevantes.
-        map.set(key, buildSearchHaystack(item.name, item.code, item.category))
+        map.set(key, buildIngredientHaystack(item))
       } else {
-        map.set(key, buildSearchHaystack(
-          item.name,
-          item.code,
-          item.sku,
-          item.category,
-          item.marca,
-          item.laboratoryName,
-        ))
+        map.set(key, buildProductHaystack(item, { categories: productCategories }))
       }
     }
     return map
-  }, [allItems])
+  }, [allItems, productCategories])
 
   // Filtrar y ordenar items (optimizado con useMemo)
   const filteredProducts = React.useMemo(() => {

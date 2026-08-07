@@ -11,6 +11,7 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Alert from '@/components/ui/Alert'
 import { formatCurrency, matchesSearchQuery, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
+import { buildProductHaystack, buildIngredientHaystack } from '@/utils/productSearch'
 import {
   isMultiCurrencyEnabled,
   getDefaultCurrency,
@@ -829,15 +830,15 @@ export default function CreatePurchase() {
   const productSearchIndex = useMemo(() => {
     const map = new Map()
     for (const p of products) {
-      map.set(p.id, buildSearchHaystack(p.name, p.code, p.sku, p.category, p.marca))
+      map.set(p.id, buildProductHaystack(p, { categories }))
     }
     return map
-  }, [products])
+  }, [products, categories])
 
   const ingredientSearchIndex = useMemo(() => {
     const map = new Map()
     for (const ing of ingredients) {
-      map.set(ing.id, buildSearchHaystack(ing.name))
+      map.set(ing.id, buildIngredientHaystack(ing))
     }
     return map
   }, [ingredients])

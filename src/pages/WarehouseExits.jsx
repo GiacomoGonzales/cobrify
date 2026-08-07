@@ -19,6 +19,8 @@ import { generateExitReportExcel } from '@/services/exitReportExportService'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import { useLocationAccess } from '@/utils/locationAccess'
 import { matchesSearchQuery, formatCurrency } from '@/lib/utils'
+import { buildProductHaystack } from '@/utils/productSearch'
+import { matchesPrebuilt } from '@/lib/utils'
 
 export default function WarehouseExits() {
   const { user, getBusinessId, isDemoMode, demoData, filterWarehousesByAccess, allowedBranches, allowedWarehouses } = useAppContext()
@@ -601,12 +603,7 @@ export default function WarehouseExits() {
 
   // Filtrar productos en el buscador del modal
   const filteredProducts = productSearch.length >= 1
-    ? products.filter(p => {
-      const words = productSearch.toLowerCase().split(/\s+/).filter(Boolean)
-      const extraCodes = Array.isArray(p.barcodes) ? p.barcodes.join(' ') : ''
-      const searchable = `${p.name || ''} ${p.code || ''} ${p.barcode || ''} ${extraCodes}`.toLowerCase()
-      return words.every(w => searchable.includes(w))
-    }).slice(0, 10)
+    ? products.filter(p => matchesPrebuilt(productSearch, buildProductHaystack(p))).slice(0, 10)
     : []
 
   return (

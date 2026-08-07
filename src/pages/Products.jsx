@@ -22,6 +22,7 @@ import { productSchema } from '@/utils/schemas'
 import { UNITS, getUnitLabel, formatPresentationEquivalence } from '@/utils/units'
 import { getPresentationCostInfo } from '@/utils/presentationCost'
 import { formatCurrency, formatProductPrice, applyMarginToCost, matchesSearchQuery, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
+import { buildProductHaystack } from '@/utils/productSearch'
 import {
   getProducts,
   createProduct,
@@ -4503,22 +4504,9 @@ export default function Products() {
   const productSearchIndex = React.useMemo(() => {
     const map = new Map()
     for (const product of products) {
-      const categoryName = product.category
-        ? (getCategoryById(categories, product.category)?.name || product.category)
-        : ''
-      const code = product.code || ''
-      const sku = product.sku || ''
-      map.set(product.id, buildSearchHaystack(
-        code,
-        code.replace(/-/g, ''),
-        sku,
-        sku.replace(/-/g, ''),
-        product.name,
-        categoryName,
-        product.description,
-        product.marca,
-        product.laboratoryName,
-      ))
+      map.set(product.id, buildProductHaystack(product, {
+        getCategoryName: (id) => getCategoryById(categories, id)?.name,
+      }))
     }
     return map
   }, [products, categories])

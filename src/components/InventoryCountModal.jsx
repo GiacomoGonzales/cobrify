@@ -26,7 +26,8 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Badge from '@/components/ui/Badge'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
+import { buildProductHaystack, buildIngredientHaystack } from '@/utils/productSearch'
 import { useToast } from '@/contexts/ToastContext'
 import { updateProduct } from '@/services/firestoreService'
 import { updateIngredient } from '@/services/ingredientService'
@@ -297,19 +298,37 @@ export default function InventoryCountModal({
     return category?.name || categoryId
   }
 
+  // Texto buscable por producto, con el MISMO criterio que el resto del sistema
+  // (marca, categoría, descripción, principio activo, códigos sin guiones...).
+  // Antes este buscador comparaba a mano y sin quitar tildes: "cafe" no
+  // encontraba "Café" y no se podía buscar por marca.
+  const productHaystacks = useMemo(() => {
+    const map = new Map()
+    for (const p of products) {
+      map.set(p.id, p.isIngredient ? buildIngredientHaystack(p) : buildProductHaystack(p, { categories }))
+    }
+    return map
+  }, [products, categories])
+
+  // Haystack por FILA: el del producto + lo propio de la fila (lote, variante)
+  const rowHaystacks = useMemo(() => {
+    const map = new Map()
+    for (const [key, item] of Object.entries(countData)) {
+      map.set(key, buildSearchHaystack(
+        productHaystacks.get(item.productId) || item.productName,
+        item.productCode,
+        item.variantSku,
+        item.variantLabel,
+        item.batchId,
+      ))
+    }
+    return map
+  }, [countData, productHaystacks])
+
   // Filtrar productos
   const filteredProducts = useMemo(() => {
     return Object.entries(countData).map(([key, item]) => ({ ...item, _countKey: key })).filter(item => {
-      // Búsqueda flexible: dividir en palabras y verificar que TODAS estén presentes
-      const searchWords = searchTerm.toLowerCase().split(/\s+/).filter(word => word.length > 0)
-      const searchableText = [
-        item.productName || '',
-        item.productCode || '',
-        item.variantSku || '',
-        item.variantLabel || '',
-        item.batchId || ''
-      ].join(' ').toLowerCase()
-      const matchesSearch = searchWords.length === 0 || searchWords.every(word => searchableText.includes(word))
+      const matchesSearch = matchesPrebuilt(searchTerm, rowHaystacks.get(item._countKey) || '')
 
       const matchesCategory = categoryFilter === 'all' || item.category === categoryFilter
       const matchesItemType = itemTypeFilter === 'all'
@@ -332,7 +351,7 @@ export default function InventoryCountModal({
 
       return matchesSearch && matchesCategory && matchesDifference && matchesItemType
     })
-  }, [countData, searchTerm, categoryFilter, differenceFilter, itemTypeFilter])
+  }, [countData, rowHaystacks, searchTerm, categoryFilter, differenceFilter, itemTypeFilter])
 
   // La columna Lote solo existe si el recuento tiene filas de lote o stock sin
   // asignar; en negocios sin lotes era una columna entera de guiones.

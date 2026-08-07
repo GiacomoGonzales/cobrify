@@ -16,6 +16,8 @@ import { getCompanySettings } from '@/services/firestoreService'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import { useLocationAccess } from '@/utils/locationAccess'
 import { matchesSearchQuery } from '@/lib/utils'
+import { buildProductHaystack } from '@/utils/productSearch'
+import { matchesPrebuilt } from '@/lib/utils'
 
 const CONDITION_CONFIG = {
   good: { label: 'Buen estado', color: 'bg-green-100 text-green-700', icon: CheckCircle },
@@ -260,12 +262,7 @@ export default function WarehouseReturns() {
   })
 
   const filteredProducts = productSearch.length >= 1
-    ? products.filter(p => {
-      const words = productSearch.toLowerCase().split(/\s+/).filter(Boolean)
-      const extraCodes = Array.isArray(p.barcodes) ? p.barcodes.join(' ') : ''
-      const searchable = `${p.name || ''} ${p.code || ''} ${p.barcode || ''} ${extraCodes}`.toLowerCase()
-      return words.every(w => searchable.includes(w))
-    }).slice(0, 10)
+    ? products.filter(p => matchesPrebuilt(productSearch, buildProductHaystack(p))).slice(0, 10)
     : []
 
   // Stats
