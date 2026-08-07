@@ -148,7 +148,7 @@ const getLocalDateString = (date = new Date()) => {
 }
 
 export default function Expenses() {
-  const { user, getBusinessId, isDemoMode, hasMainBranchAccess, businessSettings, allowedBranches, allowedWarehouses, filterBranchesByAccess, activeBranchId , branchScope } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData, hasMainBranchAccess, businessSettings, allowedBranches, allowedWarehouses, filterBranchesByAccess, activeBranchId , branchScope } = useAppContext()
   // Seguridad: el usuario secundario solo ve gastos de sus sucursales habilitadas
   const canAccess = useLocationAccess()
   // Los gastos GENERALES/corporativos (sin sucursal) NO son de una sede específica, así
@@ -268,8 +268,12 @@ export default function Expenses() {
       if (isDemoMode) {
         console.log('🎭 MODO DEMO: Cargando gastos simulados...')
         await new Promise(resolve => setTimeout(resolve, 500))
-        setExpenses(DEMO_EXPENSES)
-        setLast6MonthsExpenses(DEMO_EXPENSES)
+        // Los gastos del contexto del demo mandan: son los mismos que suma el
+        // reporte de Rentabilidad. Con la lista fija de aqui, Gastos y
+        // Reportes mostraban totales distintos en la misma demo.
+        const demoExpenses = demoData?.expenses?.length ? demoData.expenses : DEMO_EXPENSES
+        setExpenses(demoExpenses)
+        setLast6MonthsExpenses(demoExpenses)
         setLoading(false)
         return
       }
