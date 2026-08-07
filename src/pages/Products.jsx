@@ -391,6 +391,13 @@ export default function Products() {
     return raw === undefined ? 1 : raw
   }
   const [labelSize, setLabelSize] = useState('53x26') // Tamaño de etiqueta seleccionado
+  // Impresion por tandas: '' = todo en un solo trabajo (comportamiento de
+  // siempre). Con un numero, cada trabajo lleva esa cantidad de etiquetas.
+  // Existe porque las etiqueteras chicas tienen un buffer de recepcion
+  // limitado: reciben lo que les entra, imprimen eso y dejan el resto colgado
+  // en la cola (caso real: GC420t, siempre 3 de 15).
+  const [labelBatchSize, setLabelBatchSize] = useState('')
+  const [labelBatchIndex, setLabelBatchIndex] = useState(0)
   // Estado para impresión en ticketera térmica (POS, 58/80mm con barcode nativo ESC/POS)
   const [thermalPaperWidth, setThermalPaperWidth] = useState(58)
   const [printingThermal, setPrintingThermal] = useState(false)
@@ -3458,6 +3465,39 @@ export default function Products() {
     setLabelModalOpen(true)
   }
 
+  // Corta la lista de etiquetas segun la tanda actual. Sin tamaño de tanda
+  // devuelve todo, que es el comportamiento de siempre.
+  const sliceTanda = (lista) => {
+    const n = parseInt(labelBatchSize)
+    if (!Number.isFinite(n) || n <= 0) return lista
+    const desde = labelBatchIndex * n
+    return lista.slice(desde, desde + n)
+  }
+
+  // Total de etiquetas a imprimir. UN solo criterio: lo usan el contador del
+  // modal y el calculo de tandas. Con variantes en tamaños ricos, la unidad es
+  // la variante (cada una lleva su propia etiqueta).
+  const totalEtiquetas = products.filter(p => selectedProducts.has(p.id)).reduce((sum, p) => {
+    const conVariantes = RICH_LABEL_SIZES.includes(labelSize) &&
+      p.hasVariants && Array.isArray(p.variants) && p.variants.length > 0
+    if (conVariantes) return sum + p.variants.reduce((vs, v, vi) => vs + getVariantQty(p.id, v, vi), 0)
+    return sum + (labelQuantities[p.id] || 1)
+  }, 0)
+
+  // Cuantas tandas salen con el tamaño elegido (0 = sin tandas).
+  const totalTandas = (() => {
+    const n = parseInt(labelBatchSize)
+    if (!Number.isFinite(n) || n <= 0) return 0
+    return Math.ceil(totalEtiquetas / n)
+  })()
+
+  // Avanza a la siguiente tanda despues de mandar a imprimir. Al terminar
+  // vuelve a la primera, para que se pueda reimprimir todo sin cerrar el modal.
+  const avanzarTanda = () => {
+    if (totalTandas <= 1) return
+    setLabelBatchIndex(prev => (prev + 1 >= totalTandas ? 0 : prev + 1))
+  }
+
   // Etiquetas de tamaños clásicos (30x20, 50x38, 58x40): SOLO el código de barras,
   // comportamiento original (HTML). NO llevan nombre ni datos del producto —
   // a propósito, para no cambiar lo que ya estaba configurado y funcionando.
@@ -3488,18 +3528,23 @@ export default function Products() {
       }
     }
 
-    let labelsHTML = ''
+    // Se expande a una etiqueta por elemento ANTES de cortar la tanda: si se
+    // cortara por producto, una tanda podria llevar 30 etiquetas de uno solo.
+    const etiquetas = []
     for (const product of selectedProds) {
       const qty = labelQuantities[product.id] || 1
       const rawCode = product.code || product.sku || product.id.slice(-8)
       const code = rawCode.replace(/-/g, '')
-      const barcodeSVG = generateBarcodeSVG(code)
-      for (let i = 0; i < qty; i++) {
-        labelsHTML += `
+      for (let i = 0; i < qty; i++) etiquetas.push(code)
+    }
+    const svgCache = {}
+    let labelsHTML = ''
+    for (const code of sliceTanda(etiquetas)) {
+      if (svgCache[code] === undefined) svgCache[code] = generateBarcodeSVG(code)
+      labelsHTML += `
           <div class="label">
-            <div class="barcode">${barcodeSVG}</div>
+            <div class="barcode">${svgCache[code]}</div>
           </div>`
-      }
     }
 
     const printWindow = window.open('', '_blank')
@@ -3530,8 +3575,14 @@ export default function Products() {
     printWindow.document.close()
     printWindow.onload = () => { setTimeout(() => printWindow.print(), 200) }
 
-    setLabelModalOpen(false)
-    toast.success('Preparando etiquetas para imprimir...')
+    // Con tandas el modal NO se cierra: hay que poder mandar la siguiente.
+    if (totalTandas > 1) {
+      toast.success(`Tanda ${labelBatchIndex + 1} de ${totalTandas} enviada`)
+      avanzarTanda()
+    } else {
+      setLabelModalOpen(false)
+      toast.success('Preparando etiquetas para imprimir...')
+    }
   }
 
   // Etiqueta completa 53×26 mm (nombre, código, categoría, marca, variante,
@@ -3609,6 +3660,13 @@ export default function Products() {
 
     if (items.length === 0) {
       toast.error('No hay productos para imprimir')
+      return
+    }
+
+    // Tanda actual (sin tandas, la lista completa)
+    const itemsTanda = sliceTanda(items)
+    if (itemsTanda.length === 0) {
+      toast.error('No hay etiquetas en esta tanda')
       return
     }
 
@@ -3709,7 +3767,7 @@ export default function Products() {
     }
 
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [W, H] })
-    items.forEach((d, i) => {
+    itemsTanda.forEach((d, i) => {
       if (i > 0) doc.addPage([W, H], 'landscape')
       drawLabel(doc, d)
     })
@@ -3730,8 +3788,14 @@ export default function Products() {
       return
     }
 
-    setLabelModalOpen(false)
-    toast.success(`Preparando ${items.length} etiqueta${items.length === 1 ? '' : 's'} para imprimir...`)
+    // Con tandas el modal NO se cierra: hay que poder mandar la siguiente.
+    if (totalTandas > 1) {
+      toast.success(`Tanda ${labelBatchIndex + 1} de ${totalTandas} enviada (${itemsTanda.length} etiquetas)`)
+      avanzarTanda()
+    } else {
+      setLabelModalOpen(false)
+      toast.success(`Preparando ${itemsTanda.length} etiqueta${itemsTanda.length === 1 ? '' : 's'} para imprimir...`)
+    }
   }
 
   // Dispatcher: solo 53×26 usa la etiqueta completa (nombre + datos, PDF).
@@ -10499,18 +10563,41 @@ export default function Products() {
             </details>
           )}
 
-          {/* Total: en tamaños ricos suma la cantidad POR VARIANTE; en los
-              clasicos (solo-barcode) es cantidad por producto, sin variantes. */}
+          {/* Total (criterio compartido con el cálculo de tandas): en tamaños
+              ricos la unidad es la VARIANTE; en los clásicos, el producto. */}
           <p className="text-sm text-gray-700">
-            Total: <strong>{products.filter(p => selectedProducts.has(p.id)).reduce((sum, p) => {
-              const conVariantes = RICH_LABEL_SIZES.includes(labelSize) &&
-                p.hasVariants && Array.isArray(p.variants) && p.variants.length > 0
-              if (conVariantes) {
-                return sum + p.variants.reduce((vs, v, vi) => vs + getVariantQty(p.id, v, vi), 0)
-              }
-              return sum + (labelQuantities[p.id] || 1)
-            }, 0)}</strong> etiquetas de <strong>{selectedProducts.size}</strong> productos
+            Total: <strong>{totalEtiquetas}</strong> etiquetas de <strong>{selectedProducts.size}</strong> productos
           </p>
+
+          {/* Impresión por tandas. Las etiqueteras chicas tienen un buffer de
+              recepción limitado: reciben lo que les entra, imprimen eso y dejan
+              el resto colgado en la cola (caso real: una GC420t sacaba siempre
+              3 de 15). Partir el trabajo hace que cada uno entre completo. */}
+          <div className="p-3 border border-gray-200 rounded-lg">
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-sm font-medium text-gray-700">Imprimir por tandas de</label>
+              <input
+                type="number"
+                min="1"
+                max="100"
+                placeholder="todas"
+                value={labelBatchSize}
+                onChange={(e) => { setLabelBatchSize(e.target.value); setLabelBatchIndex(0) }}
+                className="w-24 px-2 py-1.5 text-sm text-center border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              <span className="text-sm text-gray-600">etiquetas</span>
+              {totalTandas > 1 && (
+                <span className="text-sm font-semibold text-primary-700 ml-auto">
+                  Tanda {labelBatchIndex + 1} de {totalTandas}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 mt-1.5">
+              {totalTandas > 1
+                ? 'Cada tanda se manda como un trabajo aparte. Espera que termine de imprimir antes de enviar la siguiente.'
+                : 'Déjalo vacío para mandar todo junto. Úsalo solo si tu impresora imprime unas pocas y se queda colgada en la cola.'}
+            </p>
+          </div>
 
           {/* Bloque alternativo: imprimir en ticketera térmica POS (58/80mm) */}
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-2">
@@ -10547,11 +10634,13 @@ export default function Products() {
           {/* Botones */}
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={() => setLabelModalOpen(false)}>
-              Cancelar
+              {totalTandas > 1 ? 'Cerrar' : 'Cancelar'}
             </Button>
             <Button onClick={handlePrintLabels}>
               <Printer className="w-4 h-4 mr-2" />
-              Imprimir etiquetas
+              {totalTandas > 1
+                ? `Imprimir tanda ${labelBatchIndex + 1} de ${totalTandas}`
+                : 'Imprimir etiquetas'}
             </Button>
           </div>
         </div>
