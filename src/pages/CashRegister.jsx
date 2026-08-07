@@ -34,6 +34,65 @@ import { getSessionMoneyTotals } from '@/utils/cashTotals'
 import { Capacitor } from '@capacitor/core'
 import { getPaymentBucketLabel, getCustomMethodByLabel, isCashLikePayment } from '@/utils/paymentMethods'
 
+/**
+ * Fila de conteo del arqueo de cierre. MISMA estructura para todos los métodos.
+ *
+ * Antes cada uno traía su propio color de fondo (morado Yape, cyan Plin, gris
+ * los propios, sin caja los fijos): el modal parecía un arcoíris y el color no
+ * significaba nada, solo indicaba qué se programó primero. Acá el único color
+ * es el de la diferencia, que sí quiere decir algo y es lo que el cajero busca.
+ *
+ * A NIVEL DE MÓDULO a propósito: definido dentro del componente, React lo trata
+ * como un tipo nuevo en cada render y el input pierde el foco a cada tecla.
+ */
+function CountRow({ label, hint, value, onChange, expected, currency = 'PEN', required = false, autoFocus = false }) {
+  const contado = parseFloat(value)
+  const hayConteo = Number.isFinite(contado) && value !== ''
+  const dif = hayConteo && expected != null ? contado - expected : null
+  const cuadra = dif != null && Math.abs(dif) < 0.01
+
+  return (
+    <div className="py-3 border-b border-gray-100 last:border-b-0">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <label className="block text-sm font-medium text-gray-900">
+            {label}
+            {required && <span className="text-red-500 ml-0.5">*</span>}
+          </label>
+          {expected != null ? (
+            <p className="text-xs text-gray-500 mt-0.5">
+              Esperado {formatCurrency(expected, currency)}
+            </p>
+          ) : hint ? (
+            <p className="text-xs text-gray-500 mt-0.5">{hint}</p>
+          ) : null}
+        </div>
+        <div className="flex-shrink-0 w-32 sm:w-36">
+          <input
+            type="number"
+            step="0.01"
+            inputMode="decimal"
+            placeholder="0.00"
+            value={value}
+            autoFocus={autoFocus}
+            onChange={onChange}
+            className={`w-full px-3 py-2 text-right text-base font-semibold border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
+              dif == null ? 'border-gray-300' : cuadra ? 'border-green-300 bg-green-50' : 'border-amber-300 bg-amber-50'
+            }`}
+          />
+        </div>
+      </div>
+      {dif != null && !cuadra && (
+        <div className="flex justify-end mt-1">
+          <span className={`text-xs font-semibold ${dif > 0 ? 'text-blue-600' : 'text-red-600'}`}>
+            {dif > 0 ? 'Sobra' : 'Falta'} {formatCurrency(Math.abs(dif), currency)}
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function CashRegister() {
   const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess, allowedBranches, userPermissions, independentCashRegister, isAdmin, isBusinessOwner, businessSettings } = useAppContext()
   // Si está activado el toggle "ocultar efectivo esperado a cajeros" y el usuario actual
@@ -4066,367 +4125,346 @@ export default function CashRegister() {
         {!closedSuccessfully ? (
           // Formulario de cierre
           <div className="space-y-4">
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-            <p className="text-sm text-yellow-800">
-              <strong>Arqueo de Caja:</strong> Cuenta el dinero físico y registra los montos por método de pago
-            </p>
-          </div>
+          <p className="text-sm text-gray-600">
+            Cuenta el dinero de cada método y escribe lo que realmente tienes.
+          </p>
 
-          {/* Desglose de ventas esperadas */}
-          <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-            <p className="text-sm font-medium text-gray-700 mb-3">Resumen de Ventas de la Sesión:</p>
+          {/* Ventas de la sesion: es la referencia contra la que se cuenta.
+              Sin vinetas ni colores por metodo — el unico valor destacado es el
+              efectivo esperado, que es el que hay que cuadrar. */}
+          <div className="bg-gray-50 rounded-lg p-4">
+            <p className="text-sm font-semibold text-gray-900 mb-2">Ventas de la sesión</p>
 
-            {totals.salesCash > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">• Ventas en Efectivo:</span>
-                <span className="font-semibold text-green-600">{formatCurrency(totals.salesCash)}</span>
-              </div>
-            )}
+            <div className="space-y-1.5">
+              {totals.salesCash > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Efectivo</span>
+                  <span className="font-medium text-gray-900">{formatCurrency(totals.salesCash)}</span>
+                </div>
+              )}
+              {totals.salesCard > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Tarjeta</span>
+                  <span className="font-medium text-gray-900">{formatCurrency(totals.salesCard)}</span>
+                </div>
+              )}
+              {totals.salesTransfer > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Transferencia</span>
+                  <span className="font-medium text-gray-900">{formatCurrency(totals.salesTransfer)}</span>
+                </div>
+              )}
+              {totals.salesYape > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Yape</span>
+                  <span className="font-medium text-gray-900">{formatCurrency(totals.salesYape)}</span>
+                </div>
+              )}
+              {totals.salesPlin > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Plin</span>
+                  <span className="font-medium text-gray-900">{formatCurrency(totals.salesPlin)}</span>
+                </div>
+              )}
+              {totals.salesRappi > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Rappi</span>
+                  <span className="font-medium text-gray-900">{formatCurrency(totals.salesRappi)}</span>
+                </div>
+              )}
+              {totals.salesPedidosYa > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">PedidosYa</span>
+                  <span className="font-medium text-gray-900">{formatCurrency(totals.salesPedidosYa)}</span>
+                </div>
+              )}
+              {totals.salesDiDiFood > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">DiDiFood</span>
+                  <span className="font-medium text-gray-900">{formatCurrency(totals.salesDiDiFood)}</span>
+                </div>
+              )}
+              {/* Metodos propios. Los de efectivo fisico avisan que su plata va
+                  DENTRO del conteo de efectivo, no aparte. */}
+              {Object.entries(totals.salesByCustomMethod || {}).map(([label, monto]) => monto > 0 && (
+                <div key={label} className="flex justify-between text-sm">
+                  <span className="text-gray-600">
+                    {label}
+                    {isCashLikePayment(label, businessSettings) && (
+                      <span className="text-xs text-gray-400"> (en el cajón)</span>
+                    )}
+                  </span>
+                  <span className="font-medium text-gray-900">{formatCurrency(monto)}</span>
+                </div>
+              ))}
+            </div>
 
-            {totals.salesCard > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">• Ventas en Tarjeta:</span>
-                <span className="font-semibold text-gray-700">{formatCurrency(totals.salesCard)}</span>
+            {/* Total del dia: la suma de TODOS los metodos de arriba. Sin esto
+                el cajero tenia que sumarlos de cabeza para saber cuanto vendio.
+                Se muestra siempre — no revela el efectivo esperado, asi que
+                tambien aplica al cierre "a ciegas". */}
+            <div className="border-t border-gray-200 pt-3 mt-3">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-semibold text-gray-900">Total vendido en el día</span>
+                <span className="text-lg font-bold text-gray-900">{formatCurrency(totals.sales)}</span>
               </div>
-            )}
-
-            {totals.salesTransfer > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">• Ventas en Transferencia:</span>
-                <span className="font-semibold text-gray-700">{formatCurrency(totals.salesTransfer)}</span>
-              </div>
-            )}
-
-            {totals.salesYape > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">• Ventas en Yape:</span>
-                <span className="font-semibold text-gray-700">{formatCurrency(totals.salesYape)}</span>
-              </div>
-            )}
-
-            {totals.salesPlin > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">• Ventas en Plin:</span>
-                <span className="font-semibold text-gray-700">{formatCurrency(totals.salesPlin)}</span>
-              </div>
-            )}
-
-            {totals.salesRappi > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">• Ventas en Rappi:</span>
-                <span className="font-semibold text-gray-700">{formatCurrency(totals.salesRappi)}</span>
-              </div>
-            )}
-            {totals.salesPedidosYa > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">• Ventas en PedidosYa:</span>
-                <span className="font-semibold text-gray-700">{formatCurrency(totals.salesPedidosYa)}</span>
-              </div>
-            )}
-            {totals.salesDiDiFood > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">• Ventas en DiDiFood:</span>
-                <span className="font-semibold text-gray-700">{formatCurrency(totals.salesDiDiFood)}</span>
-              </div>
-            )}
-            {/* Métodos propios. Los que son efectivo físico llevan la nota "(en
-                el cajón)": el cajero tiene que saber que ese monto va DENTRO del
-                conteo de efectivo, no aparte. */}
-            {Object.entries(totals.salesByCustomMethod || {}).map(([label, monto]) => monto > 0 && (
-              <div key={label} className="flex justify-between text-sm">
-                <span className="text-gray-600">
-                  • Ventas en {label}:{isCashLikePayment(label, businessSettings) && (
-                    <span className="text-green-700 text-xs"> (en el cajón)</span>
-                  )}
-                </span>
-                <span className="font-semibold text-gray-700">{formatCurrency(monto)}</span>
-              </div>
-            ))}
+            </div>
 
             {!hideExpectedForCashier && (
-              <div className="border-t border-gray-300 pt-2 mt-3">
-                <div className="flex justify-between">
-                  <span className="text-sm font-semibold text-gray-700">Efectivo Esperado:</span>
-                  <span className="text-xl font-bold text-primary-600">{formatCurrency(totals.expected)}</span>
+              <div className="border-t border-gray-200 pt-3 mt-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-semibold text-gray-900">Efectivo esperado</span>
+                  <span className="text-2xl font-bold text-gray-900">{formatCurrency(totals.expected)}</span>
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
-                  Inicial ({formatCurrency(currentSession?.openingAmount || 0)}) + Ventas Efectivo + Ingresos - Egresos
+                  Inicial {formatCurrency(currentSession?.openingAmount || 0)} + ventas en efectivo + ingresos − egresos
                 </p>
               </div>
             )}
           </div>
 
-          <Input
-            label="Efectivo Contado"
-            type="number"
-            step="0.01"
-            placeholder="0.00"
-            value={closingCounts.cash}
-            onChange={(e) => setClosingCounts({ ...closingCounts, cash: e.target.value })}
-            helperText="Cuenta el dinero en efectivo de la caja"
-            required
-          />
-
-          <Input
-            label="Total en Tarjetas"
-            type="number"
-            step="0.01"
-            placeholder="0.00"
-            value={closingCounts.card}
-            onChange={(e) => setClosingCounts({ ...closingCounts, card: e.target.value })}
-            helperText="Suma de vouchers o reportes de tarjetas"
-          />
-
-          <Input
-            label="Total en Transferencias"
-            type="number"
-            step="0.01"
-            placeholder="0.00"
-            value={closingCounts.transfer}
-            onChange={(e) => setClosingCounts({ ...closingCounts, transfer: e.target.value })}
-            helperText="Suma de transferencias recibidas"
-          />
-
-          {/* Yape: muestra el input si hay cualquier actividad Yape (apertura,
-              ventas, ingresos o gastos), no sólo ventas. El helper expone el
-              saldo esperado (inicial + ventas + ingresos − gastos) para que el
-              cajero compare contra el saldo real de la billetera. */}
-          {totals.yape && (
-            <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 space-y-2">
-              <Input
-                label="Saldo real en Yape"
-                type="number"
-                step="0.01"
-                placeholder="0.00"
-                value={closingCounts.yape}
-                onChange={(e) => setClosingCounts({ ...closingCounts, yape: e.target.value })}
-                helperText={!hideExpectedForCashier
-                  ? `Esperado: ${formatCurrency(totals.yape.expected)} — Inicial ${formatCurrency(totals.yape.openingAmount)} + Ventas ${formatCurrency(totals.yape.sales)}${totals.yape.income > 0 ? ` + Ingresos ${formatCurrency(totals.yape.income)}` : ''}${totals.yape.expense > 0 ? ` − Gastos ${formatCurrency(totals.yape.expense)}` : ''}`
-                  : 'Saldo actual de la billetera Yape al cierre'}
+          {/* Conteo del cierre: UNA estructura para todos los metodos. Antes
+              cada uno traia su propio color de fondo y el modal parecia un
+              arcoiris; ahora el color solo aparece donde significa algo (la
+              diferencia entre lo contado y lo esperado). */}
+          <div>
+            <p className="text-sm font-semibold text-gray-900 mb-2">Conteo del cierre</p>
+            <div className="border border-gray-200 rounded-lg px-4 bg-white">
+              <CountRow
+                label="Efectivo en caja"
+                hint="Cuenta los billetes y monedas"
+                required
+                value={closingCounts.cash}
+                onChange={(e) => setClosingCounts({ ...closingCounts, cash: e.target.value })}
+                expected={hideExpectedForCashier ? null : totals.expected}
               />
-              {!hideExpectedForCashier && parseFloat(closingCounts.yape) > 0 && (
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-600">Diferencia:</span>
-                  <span className={`font-bold ${
-                    Math.abs(parseFloat(closingCounts.yape) - totals.yape.expected) < 0.01
-                      ? 'text-green-600'
-                      : parseFloat(closingCounts.yape) > totals.yape.expected
-                        ? 'text-blue-600'
-                        : 'text-red-600'
-                  }`}>
-                    {parseFloat(closingCounts.yape) >= totals.yape.expected ? '+' : ''}
-                    {formatCurrency(parseFloat(closingCounts.yape) - totals.yape.expected)}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
 
-          {/* Plin: mismo tratamiento que Yape — es un saldo de billetera, no
-              solo la suma de ventas, asi que se compara contra el esperado. */}
-          {totals.plin && (
-            <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-3 space-y-2">
-              <Input
-                label="Saldo real en Plin"
-                type="number"
-                step="0.01"
-                placeholder="0.00"
-                value={closingCounts.plin}
-                onChange={(e) => setClosingCounts({ ...closingCounts, plin: e.target.value })}
-                helperText={!hideExpectedForCashier
-                  ? `Esperado: ${formatCurrency(totals.plin.expected)} — Inicial ${formatCurrency(totals.plin.openingAmount)} + Ventas ${formatCurrency(totals.plin.sales)}${totals.plin.income > 0 ? ` + Ingresos ${formatCurrency(totals.plin.income)}` : ''}${totals.plin.expense > 0 ? ` − Gastos ${formatCurrency(totals.plin.expense)}` : ''}`
-                  : 'Saldo actual de la billetera Plin al cierre'}
+              <CountRow
+                label="Tarjetas"
+                hint="Suma de vouchers o reportes"
+                value={closingCounts.card}
+                onChange={(e) => setClosingCounts({ ...closingCounts, card: e.target.value })}
+                expected={hideExpectedForCashier || !(totals.salesCard > 0) ? null : totals.salesCard}
               />
-              {!hideExpectedForCashier && parseFloat(closingCounts.plin) > 0 && (
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-600">Diferencia:</span>
-                  <span className={`font-bold ${
-                    Math.abs(parseFloat(closingCounts.plin) - totals.plin.expected) < 0.01
-                      ? 'text-green-600'
-                      : parseFloat(closingCounts.plin) > totals.plin.expected
-                        ? 'text-blue-600'
-                        : 'text-red-600'
-                  }`}>
-                    {parseFloat(closingCounts.plin) >= totals.plin.expected ? '+' : ''}
-                    {formatCurrency(parseFloat(closingCounts.plin) - totals.plin.expected)}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
 
-          {/* Metodos propios que NO son efectivo: un campo por cada uno con
-              ventas en la sesion. Sin esto se desglosaban en el resumen pero no
-              habia donde declarar cuanto entro realmente. */}
-          {Object.entries(totals.salesByCustomMethod || {})
-            .filter(([label, monto]) => monto > 0 && !isCashLikePayment(label, businessSettings))
-            .map(([label, monto]) => {
-              const contado = parseFloat(closingCounts.custom?.[label])
-              return (
-                <div key={label} className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
-                  <Input
-                    label={`Total en ${label}`}
-                    type="number"
-                    step="0.01"
-                    placeholder="0.00"
+              <CountRow
+                label="Transferencias"
+                hint="Suma de transferencias recibidas"
+                value={closingCounts.transfer}
+                onChange={(e) => setClosingCounts({ ...closingCounts, transfer: e.target.value })}
+                expected={hideExpectedForCashier || !(totals.salesTransfer > 0) ? null : totals.salesTransfer}
+              />
+
+              {/* Yape y Plin son SALDOS de billetera (inicial + ventas +
+                  ingresos - gastos), no solo la suma de ventas: por eso su
+                  esperado sale del bloque y no de salesYape/salesPlin. */}
+              {totals.yape && (
+                <CountRow
+                  label="Saldo en Yape"
+                  hint="Saldo actual de la billetera"
+                  value={closingCounts.yape}
+                  onChange={(e) => setClosingCounts({ ...closingCounts, yape: e.target.value })}
+                  expected={hideExpectedForCashier ? null : totals.yape.expected}
+                />
+              )}
+
+              {totals.plin && (
+                <CountRow
+                  label="Saldo en Plin"
+                  hint="Saldo actual de la billetera"
+                  value={closingCounts.plin}
+                  onChange={(e) => setClosingCounts({ ...closingCounts, plin: e.target.value })}
+                  expected={hideExpectedForCashier ? null : totals.plin.expected}
+                />
+              )}
+
+              {/* Metodos propios del negocio que NO son efectivo. Los que si lo
+                  son no llevan fila: su plata ya se conto en Efectivo. */}
+              {Object.entries(totals.salesByCustomMethod || {})
+                .filter(([label, monto]) => monto > 0 && !isCashLikePayment(label, businessSettings))
+                .map(([label, monto]) => (
+                  <CountRow
+                    key={label}
+                    label={label}
+                    hint={`Cobrado con ${label}`}
                     value={closingCounts.custom?.[label] ?? ''}
                     onChange={(e) => setClosingCounts({
                       ...closingCounts,
                       custom: { ...(closingCounts.custom || {}), [label]: e.target.value },
                     })}
-                    helperText={!hideExpectedForCashier
-                      ? `Esperado: ${formatCurrency(monto)} — ventas cobradas con ${label}`
-                      : `Monto cobrado con ${label}`}
+                    expected={hideExpectedForCashier ? null : monto}
                   />
-                  {!hideExpectedForCashier && Number.isFinite(contado) && contado > 0 && (
-                    <div className="flex justify-between text-xs">
-                      <span className="text-gray-600">Diferencia:</span>
-                      <span className={`font-bold ${
-                        Math.abs(contado - monto) < 0.01
-                          ? 'text-green-600'
-                          : contado > monto ? 'text-blue-600' : 'text-red-600'
-                      }`}>
-                        {contado >= monto ? '+' : ''}{formatCurrency(contado - monto)}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
+                ))}
 
-          {totals.salesRappi > 0 && (
-            <Input
-              label="Total en Rappi"
-              type="number"
-              step="0.01"
-              placeholder="0.00"
-              value={closingCounts.rappi}
-              onChange={(e) => setClosingCounts({ ...closingCounts, rappi: e.target.value })}
-              helperText="Monto total de ventas por Rappi"
-            />
-          )}
+              {totals.salesRappi > 0 && (
+                <CountRow
+                  label="Rappi"
+                  value={closingCounts.rappi}
+                  onChange={(e) => setClosingCounts({ ...closingCounts, rappi: e.target.value })}
+                  expected={hideExpectedForCashier ? null : totals.salesRappi}
+                />
+              )}
 
-          {totals.salesPedidosYa > 0 && (
-            <Input
-              label="Total en PedidosYa"
-              type="number"
-              step="0.01"
-              placeholder="0.00"
-              value={closingCounts.pedidosYa}
-              onChange={(e) => setClosingCounts({ ...closingCounts, pedidosYa: e.target.value })}
-              helperText="Monto total de ventas por PedidosYa"
-            />
-          )}
+              {totals.salesPedidosYa > 0 && (
+                <CountRow
+                  label="PedidosYa"
+                  value={closingCounts.pedidosYa}
+                  onChange={(e) => setClosingCounts({ ...closingCounts, pedidosYa: e.target.value })}
+                  expected={hideExpectedForCashier ? null : totals.salesPedidosYa}
+                />
+              )}
 
-          {totals.salesDiDiFood > 0 && (
-            <Input
-              label="Total en DiDiFood"
-              type="number"
-              step="0.01"
-              placeholder="0.00"
-              value={closingCounts.diDiFood}
-              onChange={(e) => setClosingCounts({ ...closingCounts, diDiFood: e.target.value })}
-              helperText="Monto total de ventas por DiDiFood"
-            />
-          )}
-
-          {closingCounts.cash && !hideExpectedForCashier && (
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="text-sm font-medium text-gray-700 mb-1">Diferencia:</p>
-              <p
-                className={`text-xl font-bold ${
-                  parseFloat(closingCounts.cash) - totals.expected >= 0
-                    ? 'text-green-600'
-                    : 'text-red-600'
-                }`}
-              >
-                {formatCurrency(parseFloat(closingCounts.cash || 0) - totals.expected)}
-              </p>
-              {parseFloat(closingCounts.cash) - totals.expected !== 0 && (
-                <p className="text-xs text-gray-500 mt-1">
-                  {parseFloat(closingCounts.cash) - totals.expected > 0 ? 'Sobrante' : 'Faltante'}
-                </p>
+              {totals.salesDiDiFood > 0 && (
+                <CountRow
+                  label="DiDiFood"
+                  value={closingCounts.diDiFood}
+                  onChange={(e) => setClosingCounts({ ...closingCounts, diDiFood: e.target.value })}
+                  expected={hideExpectedForCashier ? null : totals.salesDiDiFood}
+                />
               )}
             </div>
-          )}
 
-          {/* ========== ARQUEO EN DÓLARES (opt-in) ========== */}
-          {/* Solo se muestra cuando hay actividad USD en la sesión.    */}
+            {/* Resultado del arqueo de EFECTIVO, que es el que se cuadra
+                fisicamente. Al pie del bloque, no flotando entre los campos. */}
+            {closingCounts.cash !== '' && !hideExpectedForCashier && (() => {
+              const dif = (parseFloat(closingCounts.cash) || 0) - totals.expected
+              const cuadra = Math.abs(dif) < 0.01
+              return (
+                <div className={`mt-3 rounded-lg border px-4 py-3 flex items-center justify-between ${
+                  cuadra ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'
+                }`}>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">
+                      {cuadra ? 'La caja cuadra' : dif > 0 ? 'Sobrante en efectivo' : 'Faltante en efectivo'}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Contado {formatCurrency(parseFloat(closingCounts.cash) || 0)} contra esperado {formatCurrency(totals.expected)}
+                    </p>
+                  </div>
+                  <span className={`text-xl font-bold ${
+                    cuadra ? 'text-green-600' : dif > 0 ? 'text-blue-600' : 'text-red-600'
+                  }`}>
+                    {cuadra ? formatCurrency(0) : `${dif > 0 ? '+' : '-'}${formatCurrency(Math.abs(dif))}`}
+                  </span>
+                </div>
+              )
+            })()}
+          </div>
+
+          {/* ========== ARQUEO EN DÓLARES (opt-in) ==========
+              Solo si hubo actividad USD. Mismo lenguaje visual que el bloque de
+              soles: la moneda se distingue por el titulo y el simbolo, no
+              tinendo de verde toda la seccion. */}
           {cashMultiCurrencyOn && totals.usd && (
-            <div className="border-t-2 border-emerald-200 pt-4 mt-4 space-y-3">
-              <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded p-3">
-                <DollarSign className="w-4 h-4 text-emerald-700" />
-                <p className="text-sm font-semibold text-emerald-900">Arqueo en Dólares (USD)</p>
+            <div className="pt-4 mt-4 border-t border-gray-200">
+              <div className="flex items-center gap-2 mb-2">
+                <DollarSign className="w-4 h-4 text-gray-500" />
+                <p className="text-sm font-semibold text-gray-900">Arqueo en dólares</p>
               </div>
 
-              {/* Resumen ventas USD */}
-              <div className="bg-emerald-50/40 p-3 rounded space-y-1.5 text-sm">
+              {/* Ventas USD de la sesion */}
+              <div className="bg-gray-50 rounded-lg p-3 space-y-1.5 text-sm mb-3">
                 {totals.usd.salesCash > 0 && (
-                  <div className="flex justify-between"><span className="text-gray-600">• Efectivo:</span><span className="font-semibold text-green-700">{formatCurrency(totals.usd.salesCash, 'USD')}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Efectivo</span><span className="font-medium text-gray-900">{formatCurrency(totals.usd.salesCash, 'USD')}</span></div>
                 )}
                 {totals.usd.salesCard > 0 && (
-                  <div className="flex justify-between"><span className="text-gray-600">• Tarjeta:</span><span className="font-semibold">{formatCurrency(totals.usd.salesCard, 'USD')}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Tarjeta</span><span className="font-medium text-gray-900">{formatCurrency(totals.usd.salesCard, 'USD')}</span></div>
                 )}
                 {totals.usd.salesTransfer > 0 && (
-                  <div className="flex justify-between"><span className="text-gray-600">• Transferencia:</span><span className="font-semibold">{formatCurrency(totals.usd.salesTransfer, 'USD')}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Transferencia</span><span className="font-medium text-gray-900">{formatCurrency(totals.usd.salesTransfer, 'USD')}</span></div>
                 )}
                 {totals.usd.salesYape > 0 && (
-                  <div className="flex justify-between"><span className="text-gray-600">• Yape:</span><span className="font-semibold">{formatCurrency(totals.usd.salesYape, 'USD')}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Yape</span><span className="font-medium text-gray-900">{formatCurrency(totals.usd.salesYape, 'USD')}</span></div>
                 )}
                 {totals.usd.salesPlin > 0 && (
-                  <div className="flex justify-between"><span className="text-gray-600">• Plin:</span><span className="font-semibold">{formatCurrency(totals.usd.salesPlin, 'USD')}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Plin</span><span className="font-medium text-gray-900">{formatCurrency(totals.usd.salesPlin, 'USD')}</span></div>
                 )}
                 {Object.entries(totals.usd.salesByCustomMethod || {}).map(([label, monto]) => monto > 0 && (
-                  <div key={label} className="flex justify-between"><span className="text-gray-600">• {label}:</span><span className={`font-semibold ${isCashLikePayment(label, businessSettings) ? 'text-green-700' : ''}`}>{formatCurrency(monto, 'USD')}</span></div>
+                  <div key={label} className="flex justify-between">
+                    <span className="text-gray-600">
+                      {label}
+                      {isCashLikePayment(label, businessSettings) && <span className="text-xs text-gray-400"> (en el cajón)</span>}
+                    </span>
+                    <span className="font-medium text-gray-900">{formatCurrency(monto, 'USD')}</span>
+                  </div>
                 ))}
+                <div className="border-t border-gray-200 pt-2 mt-2 flex justify-between items-center">
+                  <span className="text-sm font-semibold text-gray-900">Total vendido en dólares</span>
+                  <span className="text-base font-bold text-gray-900">{formatCurrency(totals.usd.sales, 'USD')}</span>
+                </div>
                 {!hideExpectedForCashier && (
-                  <div className="border-t border-emerald-200 pt-2 mt-2 flex justify-between">
-                    <span className="text-sm font-semibold text-gray-700">Efectivo USD Esperado:</span>
-                    <span className="text-lg font-bold text-emerald-700">{formatCurrency(totals.usd.expected, 'USD')}</span>
+                  <div className="border-t border-gray-200 pt-2 mt-2 flex justify-between items-center">
+                    <span className="text-sm font-semibold text-gray-900">Efectivo USD esperado</span>
+                    <span className="text-lg font-bold text-gray-900">{formatCurrency(totals.usd.expected, 'USD')}</span>
                   </div>
                 )}
-                <p className="text-[11px] text-gray-500">
-                  Apertura USD ({formatCurrency(currentSession?.openingAmountUSD || 0, 'USD')}) + Ventas Efectivo USD + Ingresos USD - Egresos USD
-                </p>
               </div>
 
-              <Input
-                label="Efectivo USD Contado"
-                type="number"
-                step="0.01"
-                placeholder="0.00"
-                value={closingCountsUSD.cash}
-                onChange={(e) => setClosingCountsUSD({ ...closingCountsUSD, cash: e.target.value })}
-                helperText="Cuenta los dólares en efectivo de la caja"
-              />
-              {totals.usd.salesCard > 0 && (
-                <Input label="Total USD en Tarjetas" type="number" step="0.01" placeholder="0.00" value={closingCountsUSD.card} onChange={(e) => setClosingCountsUSD({ ...closingCountsUSD, card: e.target.value })} />
-              )}
-              {totals.usd.salesTransfer > 0 && (
-                <Input label="Total USD en Transferencias" type="number" step="0.01" placeholder="0.00" value={closingCountsUSD.transfer} onChange={(e) => setClosingCountsUSD({ ...closingCountsUSD, transfer: e.target.value })} />
-              )}
-              {totals.usd.salesYape > 0 && (
-                <Input label="Total USD en Yape" type="number" step="0.01" placeholder="0.00" value={closingCountsUSD.yape} onChange={(e) => setClosingCountsUSD({ ...closingCountsUSD, yape: e.target.value })} />
-              )}
-              {totals.usd.salesPlin > 0 && (
-                <Input label="Total USD en Plin" type="number" step="0.01" placeholder="0.00" value={closingCountsUSD.plin} onChange={(e) => setClosingCountsUSD({ ...closingCountsUSD, plin: e.target.value })} />
-              )}
+              <div className="border border-gray-200 rounded-lg px-4 bg-white">
+                <CountRow
+                  label="Efectivo en dólares"
+                  hint="Cuenta los billetes en dólares"
+                  currency="USD"
+                  value={closingCountsUSD.cash}
+                  onChange={(e) => setClosingCountsUSD({ ...closingCountsUSD, cash: e.target.value })}
+                  expected={hideExpectedForCashier ? null : totals.usd.expected}
+                />
+                {totals.usd.salesCard > 0 && (
+                  <CountRow
+                    label="Tarjetas (USD)"
+                    currency="USD"
+                    value={closingCountsUSD.card}
+                    onChange={(e) => setClosingCountsUSD({ ...closingCountsUSD, card: e.target.value })}
+                    expected={hideExpectedForCashier ? null : totals.usd.salesCard}
+                  />
+                )}
+                {totals.usd.salesTransfer > 0 && (
+                  <CountRow
+                    label="Transferencias (USD)"
+                    currency="USD"
+                    value={closingCountsUSD.transfer}
+                    onChange={(e) => setClosingCountsUSD({ ...closingCountsUSD, transfer: e.target.value })}
+                    expected={hideExpectedForCashier ? null : totals.usd.salesTransfer}
+                  />
+                )}
+                {totals.usd.salesYape > 0 && (
+                  <CountRow
+                    label="Yape (USD)"
+                    currency="USD"
+                    value={closingCountsUSD.yape}
+                    onChange={(e) => setClosingCountsUSD({ ...closingCountsUSD, yape: e.target.value })}
+                    expected={hideExpectedForCashier ? null : totals.usd.salesYape}
+                  />
+                )}
+                {totals.usd.salesPlin > 0 && (
+                  <CountRow
+                    label="Plin (USD)"
+                    currency="USD"
+                    value={closingCountsUSD.plin}
+                    onChange={(e) => setClosingCountsUSD({ ...closingCountsUSD, plin: e.target.value })}
+                    expected={hideExpectedForCashier ? null : totals.usd.salesPlin}
+                  />
+                )}
+              </div>
 
-              {closingCountsUSD.cash && !hideExpectedForCashier && (
-                <div className="bg-emerald-50/60 border border-emerald-200 p-3 rounded">
-                  <p className="text-xs font-medium text-gray-700 mb-1">Diferencia USD:</p>
-                  <p className={`text-lg font-bold ${
-                    parseFloat(closingCountsUSD.cash) - totals.usd.expected >= 0 ? 'text-green-600' : 'text-red-600'
+              {closingCountsUSD.cash !== '' && !hideExpectedForCashier && (() => {
+                const difUSD = (parseFloat(closingCountsUSD.cash) || 0) - totals.usd.expected
+                const cuadraUSD = Math.abs(difUSD) < 0.01
+                return (
+                  <div className={`mt-3 rounded-lg border px-4 py-3 flex items-center justify-between ${
+                    cuadraUSD ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'
                   }`}>
-                    {formatCurrency(parseFloat(closingCountsUSD.cash || 0) - totals.usd.expected, 'USD')}
-                  </p>
-                  {parseFloat(closingCountsUSD.cash) - totals.usd.expected !== 0 && (
-                    <p className="text-[11px] text-gray-500 mt-1">
-                      {parseFloat(closingCountsUSD.cash) - totals.usd.expected > 0 ? 'Sobrante' : 'Faltante'}
+                    <p className="text-sm font-semibold text-gray-900">
+                      {cuadraUSD ? 'Los dólares cuadran' : difUSD > 0 ? 'Sobrante en dólares' : 'Faltante en dólares'}
                     </p>
-                  )}
-                </div>
-              )}
+                    <span className={`text-xl font-bold ${
+                      cuadraUSD ? 'text-green-600' : difUSD > 0 ? 'text-blue-600' : 'text-red-600'
+                    }`}>
+                      {cuadraUSD ? formatCurrency(0, 'USD') : `${difUSD > 0 ? '+' : '-'}${formatCurrency(Math.abs(difUSD), 'USD')}`}
+                    </span>
+                  </div>
+                )
+              })()}
             </div>
           )}
 
