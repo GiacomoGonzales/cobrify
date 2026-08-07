@@ -138,6 +138,17 @@ export default function CreatePurchase() {
     return new Date(dateValue)
   }
 
+  // El input nativo de fecha muestra el formato del NAVEGADOR (mm/dd/aaaa si
+  // está en inglés), no el nuestro, y eso no se puede forzar desde el código.
+  // En un vencimiento de lote la ambigüedad es peligrosa: 07/06/2029 puede
+  // leerse 7-jun o 6-jul. Esta confirmación en texto no deja lugar a duda.
+  const fechaLegible = (valor) => {
+    if (!valor || !/^\d{4}-\d{2}-\d{2}$/.test(valor)) return ''
+    const [y, m, d] = valor.split('-').map(Number)
+    const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'set', 'oct', 'nov', 'dic']
+    return `${String(d).padStart(2, '0')} ${meses[m - 1]} ${y}`
+  }
+
   const [invoiceDate, setInvoiceDate] = useState(getLocalDateString())
   const [notes, setNotes] = useState('')
 
@@ -3146,6 +3157,12 @@ export default function CreatePurchase() {
                             style={{ height: '30px', minHeight: 0, paddingTop: 0, paddingBottom: 0 }}
                             className="w-full px-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                           />
+                          {/* El input muestra el formato del navegador; esto confirma la fecha sin ambigüedad */}
+                          {fechaLegible(item.expirationDate) && (
+                            <p className="text-[10px] text-gray-500 text-center mt-0.5 whitespace-nowrap">
+                              {fechaLegible(item.expirationDate)}
+                            </p>
+                          )}
                         </td>
                       </>
                     )}
@@ -3458,6 +3475,9 @@ export default function CreatePurchase() {
                         style={{ height: '30px', minHeight: 0, paddingTop: 0, paddingBottom: 0 }}
                         className="w-full px-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
+                      {fechaLegible(item.expirationDate) && (
+                        <p className="text-[10px] text-gray-500 mt-0.5">{fechaLegible(item.expirationDate)}</p>
+                      )}
                     </div>
                   </div>
                 )}

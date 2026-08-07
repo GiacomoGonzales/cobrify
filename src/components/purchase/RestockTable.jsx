@@ -482,6 +482,27 @@ export default function RestockTable({
             Stock bajo ({lowCount})
           </button>
 
+          {/* Marcar/desmarcar todo lo que se está viendo. Existía solo en la
+              cabecera de la tabla de escritorio: en móvil (vista de tarjetas) no
+              había forma de desmarcar los 178 pre-seleccionados y había que
+              tocarlos uno por uno. Acá sirve en las dos vistas. */}
+          {filteredRows.length > 0 && (
+            <button
+              type="button"
+              onClick={toggleAllFiltered}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors flex items-center gap-1.5 ${
+                allFilteredSelected
+                  ? 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
+                  : 'bg-primary-50 text-primary-700 border-primary-300 hover:border-primary-400'
+              }`}
+              title={allFilteredSelected ? 'Quitar la selección de todos' : 'Seleccionar todos los de la lista'}
+            >
+              {allFilteredSelected
+                ? <><Square className="w-3.5 h-3.5" /> Deseleccionar todos</>
+                : <><CheckSquare className="w-3.5 h-3.5" /> Seleccionar todos</>}
+            </button>
+          )}
+
           <div className="relative flex-1 min-w-[180px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
@@ -493,6 +514,13 @@ export default function RestockTable({
             />
           </div>
         </div>
+
+        {/* Cuántos van marcados de lo que se ve: sin esto, tras filtrar o buscar
+            no se sabe si lo que se está por pedir es la lista completa. */}
+        <p className="text-xs text-gray-500">
+          {selectedSet.size} de {rows.length} productos seleccionados
+          {filteredRows.length !== rows.length && ` · mostrando ${filteredRows.length}`}
+        </p>
 
         {/* Proveedor + almacén (a nivel de lista) */}
         <div className="flex flex-col lg:flex-row lg:items-center gap-2 lg:gap-4">
