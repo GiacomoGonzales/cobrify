@@ -5887,6 +5887,23 @@ export default function POS() {
     // Tolerancia de medio centavo para evitar falsos negativos por imprecisión de
     // punto flotante (p.ej. 27.9 + 46.80 = 74.69999... < 74.70 en JS).
     const PAYMENT_EPSILON = 0.005
+
+    // Monto tipeado en una línea SIN método elegido. Al agregar un método el
+    // sistema PRE-LLENA el saldo restante y deja el método vacío, así que la
+    // línea parece completa: la validación de abajo la daba por pagada (suma
+    // todas las líneas) pero al guardar se descartaba (solo se guardan las que
+    // tienen método). Resultado: la venta se cobraba completa y ese monto
+    // desaparecía del resumen por método de pago — dinero cobrado que no
+    // figuraba en ningún lado (caso BRASA CRIOLLA: 4 ventas, S/177).
+    if (!isHidePaymentMethods) {
+      const sinMetodo = payments.filter(p => !p.method && parseFloat(p.amount) > 0)
+      if (sinMetodo.length > 0) {
+        const monto = sinMetodo.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0)
+        abortCheckout(`Falta elegir el método de pago de ${formatCurrency(monto)}. Selecciónalo antes de cobrar.`)
+        return
+      }
+    }
+
     if (!isCreditSale && !isHidePaymentMethods && totalPaid < amountToPay - PAYMENT_EPSILON) {
       abortCheckout(`Falta pagar ${formatCurrency(remaining)}. Agrega más métodos de pago.`)
       return

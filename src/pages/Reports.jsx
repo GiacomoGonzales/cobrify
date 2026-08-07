@@ -1289,9 +1289,21 @@ export default function Reports() {
           methods[method].count += 1
         })
       } else {
-        // Compatibilidad con facturas antiguas que solo tienen paymentMethod
+        // Compatibilidad con facturas antiguas que solo tienen paymentMethod.
+        // OJO con las ventas al CRÉDITO: llegan acá con `payments` y
+        // `paymentHistory` vacíos, y contarlas por su total metía en el resumen
+        // plata que nunca entró a caja (una venta al crédito sin cobros
+        // aparecía como cobrada en Efectivo). Se cuenta solo lo realmente
+        // cobrado; si no se cobró nada, no entra.
+        const esCredito = invoice.status === 'pending'
+          || invoice.paymentStatus === 'pending'
+          || invoice.paymentStatus === 'partial'
+        const amount = esCredito
+          ? toBase(Number(invoice.amountPaid) || 0)
+          : getDocumentTotalInBase(invoice)
+        if (amount <= 0) return
+
         const method = invoice.paymentMethod || 'Efectivo'
-        const amount = getDocumentTotalInBase(invoice)
 
         if (!methods[method]) {
           methods[method] = {
@@ -1309,6 +1321,17 @@ export default function Reports() {
     return Object.values(methods)
       .sort((a, b) => b.total - a.total)
   }, [filteredInvoices])
+
+  // Cobrado vs vendido. "Total Ventas" es lo que se VENDIÓ; el resumen por
+  // método es lo que se COBRÓ. Difieren cuando hay ventas al crédito, pagos
+  // parciales o anticipos aplicados. Sin esta línea, la diferencia parecía un
+  // error de cálculo (reporte de usuario: 1,059 vendido vs 1,030 en métodos).
+  const collectionSummary = useMemo(() => {
+    const cobrado = paymentMethodStats.reduce((sum, m) => sum + m.total, 0)
+    const vendido = stats.totalRevenue
+    const diferencia = Math.round((vendido - cobrado) * 100) / 100
+    return { cobrado, vendido, pendiente: diferencia > 0 ? diferencia : 0 }
+  }, [paymentMethodStats, stats.totalRevenue])
 
   // Datos para gráfico de métodos de pago
   const paymentMethodsData = useMemo(() => {
@@ -3126,6 +3149,9 @@ export default function Reports() {
             <Card>
               <CardHeader>
                 <CardTitle>Resumen por Método de Pago</CardTitle>
+                <p className="text-sm text-gray-500 mt-1">
+                  Lo que se cobró. Puede ser menor que Total Ventas si hay ventas al crédito o pagos parciales.
+                </p>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -3150,6 +3176,27 @@ export default function Reports() {
                     </div>
                   ))}
                 </div>
+
+                {/* Cuadre explícito: de dónde sale la diferencia con Total Ventas */}
+                {collectionSummary.pendiente > 0.009 && (
+                  <div className="mt-4 pt-4 border-t border-gray-200 space-y-1 text-sm">
+                    <div className="flex justify-between text-gray-600">
+                      <span>Total vendido</span>
+                      <span className="font-medium">{formatMoney(collectionSummary.vendido)}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-600">
+                      <span>Cobrado (suma de los métodos)</span>
+                      <span className="font-medium">{formatMoney(collectionSummary.cobrado)}</span>
+                    </div>
+                    <div className="flex justify-between text-amber-700 font-semibold">
+                      <span>Pendiente de cobro</span>
+                      <span>{formatMoney(collectionSummary.pendiente)}</span>
+                    </div>
+                    <p className="text-xs text-gray-500 pt-1">
+                      Son ventas al crédito o con pago parcial dentro del período. El detalle por cliente está en Ventas &gt; Pagos pendientes.
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
