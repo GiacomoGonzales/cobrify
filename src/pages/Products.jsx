@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useDeferredValue } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, EyeOff, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store, Copy, MoreVertical, Check, Printer, Layers, Boxes, Scale, Percent, Leaf, Ban, Utensils } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, Warehouse, CheckSquare, Square, MinusSquare, CheckCheck, FolderEdit, Calendar, Eye, EyeOff, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store, Copy, MoreVertical, Check, Printer, Layers, Boxes, Scale, Percent, Leaf, Ban, Utensils } from 'lucide-react'
 import JsBarcode from 'jsbarcode'
 import jsPDF from 'jspdf'
 import { Capacitor } from '@capacitor/core'
@@ -169,6 +169,62 @@ const getExpirationStatus = (expirationDate) => {
 // código de barras. Está acá para que el ruteo y el texto que ve el usuario no se
 // contradigan: antes el aviso prometía la etiqueta completa en todos los tamaños.
 const RICH_LABEL_SIZES = ['53x26', '50x25']
+
+// Tamaños disponibles. UN solo criterio: lo usan el selector del modal y la
+// validación del predeterminado guardado, para que no puedan desincronizarse.
+const LABEL_SIZE_OPTIONS = [
+  { value: '53x26', label: '53 × 26 mm (5.3 × 2.6 cm)' },
+  { value: '50x25', label: '50 × 25 mm (5 × 2.5 cm)' },
+  { value: '30x20', label: '30 × 20 mm (3 × 2 cm)' },
+  { value: '50x38', label: '50 × 38 mm (5 × 3.8 cm)' },
+  { value: '58x40', label: '58 × 40 mm (5.8 × 4 cm)' }
+]
+const FALLBACK_LABEL_SIZE = '53x26'
+const LABEL_SIZE_KEY = 'products_label_size'
+
+// El predeterminado se guarda POR EQUIPO, no en el negocio: el rollo cargado en
+// la etiquetera es algo físico de cada local, y dos sucursales del mismo negocio
+// pueden tener rollos distintos. Un valor guardado que ya no existe se ignora.
+const readDefaultLabelSize = () => {
+  try {
+    const saved = localStorage.getItem(LABEL_SIZE_KEY)
+    return LABEL_SIZE_OPTIONS.some(o => o.value === saved) ? saved : FALLBACK_LABEL_SIZE
+  } catch { return FALLBACK_LABEL_SIZE }
+}
+
+// Botón de la barra de selección. A nivel de módulo (no dentro del render) para
+// que React no lo remonte en cada pintado. El texto se esconde en pantallas
+// angostas y queda el icono con su tooltip.
+const BulkActionButton = ({ icon: Icon, label, onClick, danger = false, iconOnly = false }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    title={label}
+    className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+      danger ? 'text-red-600 hover:bg-red-50' : 'text-gray-700 hover:bg-gray-100'
+    }`}
+  >
+    <Icon className="w-4 h-4 flex-shrink-0" />
+    {!iconOnly && <span className="hidden lg:inline whitespace-nowrap">{label}</span>}
+  </button>
+)
+
+// Ítem del menú "Más acciones". Mismo estilo que el menú "Opciones" del header
+// para que la página no tenga dos lenguajes de menú distintos.
+const BulkMenuItem = ({ icon: Icon, label, onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+  >
+    <Icon className="w-4 h-4 text-gray-500 flex-shrink-0" />
+    {label}
+  </button>
+)
+
+const BulkMenuGroup = ({ title }) => (
+  <p className="px-3 pt-2 pb-1 text-xs font-semibold text-gray-500 uppercase">{title}</p>
+)
 
 export default function Products() {
   const { user, isDemoMode, demoData, getBusinessId, businessMode, hasFeature, businessSettings, filterWarehousesByAccess, branchScope, refreshBusinessSettings } = useAppContext()
@@ -390,14 +446,10 @@ export default function Products() {
     const raw = labelVariantQuantities[variantQtyKey(productId, v, i)]
     return raw === undefined ? 1 : raw
   }
-  const [labelSize, setLabelSize] = useState('53x26') // Tamaño de etiqueta seleccionado
-  // Impresion por tandas: '' = todo en un solo trabajo (comportamiento de
-  // siempre). Con un numero, cada trabajo lleva esa cantidad de etiquetas.
-  // Existe porque las etiqueteras chicas tienen un buffer de recepcion
-  // limitado: reciben lo que les entra, imprimen eso y dejan el resto colgado
-  // en la cola (caso real: GC420t, siempre 3 de 15).
-  const [labelBatchSize, setLabelBatchSize] = useState('')
-  const [labelBatchIndex, setLabelBatchIndex] = useState(0)
+  // Tamaño de etiqueta. Arranca en el predeterminado de este equipo para no
+  // tener que elegirlo en cada impresión.
+  const [labelSize, setLabelSize] = useState(readDefaultLabelSize)
+  const [defaultLabelSize, setDefaultLabelSize] = useState(readDefaultLabelSize)
   // Estado para impresión en ticketera térmica (POS, 58/80mm con barcode nativo ESC/POS)
   const [thermalPaperWidth, setThermalPaperWidth] = useState(58)
   const [printingThermal, setPrintingThermal] = useState(false)
@@ -454,6 +506,7 @@ export default function Products() {
     } catch { return {} }
   })
   const [optionsMenuOpen, setOptionsMenuOpen] = useState(false) // menú único "Opciones" del header
+  const [bulkMenuOpen, setBulkMenuOpen] = useState(false) // menú "Más acciones" de la barra de selección
 
   // Imágenes de productos: habilitadas para todos por defecto (ya no es una opción configurable).
   const canUseProductImages = true
@@ -3465,17 +3518,7 @@ export default function Products() {
     setLabelModalOpen(true)
   }
 
-  // Corta la lista de etiquetas segun la tanda actual. Sin tamaño de tanda
-  // devuelve todo, que es el comportamiento de siempre.
-  const sliceTanda = (lista) => {
-    const n = parseInt(labelBatchSize)
-    if (!Number.isFinite(n) || n <= 0) return lista
-    const desde = labelBatchIndex * n
-    return lista.slice(desde, desde + n)
-  }
-
-  // Total de etiquetas a imprimir. UN solo criterio: lo usan el contador del
-  // modal y el calculo de tandas. Con variantes en tamaños ricos, la unidad es
+  // Total de etiquetas a imprimir. Con variantes en tamaños ricos la unidad es
   // la variante (cada una lleva su propia etiqueta).
   const totalEtiquetas = products.filter(p => selectedProducts.has(p.id)).reduce((sum, p) => {
     const conVariantes = RICH_LABEL_SIZES.includes(labelSize) &&
@@ -3484,18 +3527,18 @@ export default function Products() {
     return sum + (labelQuantities[p.id] || 1)
   }, 0)
 
-  // Cuantas tandas salen con el tamaño elegido (0 = sin tandas).
-  const totalTandas = (() => {
-    const n = parseInt(labelBatchSize)
-    if (!Number.isFinite(n) || n <= 0) return 0
-    return Math.ceil(totalEtiquetas / n)
-  })()
-
-  // Avanza a la siguiente tanda despues de mandar a imprimir. Al terminar
-  // vuelve a la primera, para que se pueda reimprimir todo sin cerrar el modal.
-  const avanzarTanda = () => {
-    if (totalTandas <= 1) return
-    setLabelBatchIndex(prev => (prev + 1 >= totalTandas ? 0 : prev + 1))
+  // Deja el tamaño elegido como predeterminado de este equipo.
+  const guardarTamanoPredeterminado = () => {
+    try {
+      localStorage.setItem(LABEL_SIZE_KEY, labelSize)
+    } catch {
+      // Navegación privada o almacenamiento lleno: no se guarda, pero la
+      // impresión de ahora no tiene por qué fallar.
+      toast.error('No se pudo guardar el tamaño en este equipo')
+      return
+    }
+    setDefaultLabelSize(labelSize)
+    toast.success(`${labelSize.replace('x', ' × ')} mm quedó como tamaño predeterminado`)
   }
 
   // Etiquetas de tamaños clásicos (30x20, 50x38, 58x40): SOLO el código de barras,
@@ -3528,8 +3571,8 @@ export default function Products() {
       }
     }
 
-    // Se expande a una etiqueta por elemento ANTES de cortar la tanda: si se
-    // cortara por producto, una tanda podria llevar 30 etiquetas de uno solo.
+    // Una etiqueta por elemento. El SVG del barcode se cachea por código: con
+    // 30 etiquetas del mismo producto se genera una sola vez.
     const etiquetas = []
     for (const product of selectedProds) {
       const qty = labelQuantities[product.id] || 1
@@ -3539,7 +3582,7 @@ export default function Products() {
     }
     const svgCache = {}
     let labelsHTML = ''
-    for (const code of sliceTanda(etiquetas)) {
+    for (const code of etiquetas) {
       if (svgCache[code] === undefined) svgCache[code] = generateBarcodeSVG(code)
       labelsHTML += `
           <div class="label">
@@ -3575,14 +3618,8 @@ export default function Products() {
     printWindow.document.close()
     printWindow.onload = () => { setTimeout(() => printWindow.print(), 200) }
 
-    // Con tandas el modal NO se cierra: hay que poder mandar la siguiente.
-    if (totalTandas > 1) {
-      toast.success(`Tanda ${labelBatchIndex + 1} de ${totalTandas} enviada`)
-      avanzarTanda()
-    } else {
-      setLabelModalOpen(false)
-      toast.success('Preparando etiquetas para imprimir...')
-    }
+    setLabelModalOpen(false)
+    toast.success('Preparando etiquetas para imprimir...')
   }
 
   // Etiqueta completa 53×26 mm (nombre, código, categoría, marca, variante,
@@ -3660,13 +3697,6 @@ export default function Products() {
 
     if (items.length === 0) {
       toast.error('No hay productos para imprimir')
-      return
-    }
-
-    // Tanda actual (sin tandas, la lista completa)
-    const itemsTanda = sliceTanda(items)
-    if (itemsTanda.length === 0) {
-      toast.error('No hay etiquetas en esta tanda')
       return
     }
 
@@ -3767,7 +3797,7 @@ export default function Products() {
     }
 
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [W, H] })
-    itemsTanda.forEach((d, i) => {
+    items.forEach((d, i) => {
       if (i > 0) doc.addPage([W, H], 'landscape')
       drawLabel(doc, d)
     })
@@ -3788,14 +3818,8 @@ export default function Products() {
       return
     }
 
-    // Con tandas el modal NO se cierra: hay que poder mandar la siguiente.
-    if (totalTandas > 1) {
-      toast.success(`Tanda ${labelBatchIndex + 1} de ${totalTandas} enviada (${itemsTanda.length} etiquetas)`)
-      avanzarTanda()
-    } else {
-      setLabelModalOpen(false)
-      toast.success(`Preparando ${itemsTanda.length} etiqueta${itemsTanda.length === 1 ? '' : 's'} para imprimir...`)
-    }
+    setLabelModalOpen(false)
+    toast.success(`Preparando ${items.length} etiqueta${items.length === 1 ? '' : 's'} para imprimir...`)
   }
 
   // Dispatcher: solo 53×26 usa la etiqueta completa (nombre + datos, PDF).
@@ -5219,112 +5243,6 @@ export default function Products() {
         </CardContent>
       </Card>
 
-      {/* Bulk Actions Bar */}
-      {!priceUpdateMode && selectedProducts.size > 0 && (
-        <Card>
-          <CardContent className="p-3">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-gray-700">
-                  {selectedProducts.size} seleccionado{selectedProducts.size !== 1 ? 's' : ''}
-                </span>
-                <button
-                  onClick={() => setSelectedProducts(new Set())}
-                  className="text-sm text-gray-500 hover:text-gray-700"
-                >
-                  Limpiar
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => openBulkActionModal('changeCategory')}
-                  className="flex-1 sm:flex-initial"
-                >
-                  <FolderEdit className="w-4 h-4 mr-2" />
-                  Cambiar Categoría
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => openBulkActionModal('toggleActive')}
-                  className="flex-1 sm:flex-initial"
-                >
-                  <Package className="w-4 h-4 mr-2" />
-                  Activar/Desactivar
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => openBulkActionModal('showInCatalog')}
-                  className="flex-1 sm:flex-initial"
-                >
-                  <Eye className="w-4 h-4 mr-2" />
-                  Mostrar en catálogo
-                </Button>
-                {branchCatalogOn && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => openBulkActionModal('branches')}
-                    className="flex-1 sm:flex-initial"
-                  >
-                    <Store className="w-4 h-4 mr-2" />
-                    Asignar sucursales
-                  </Button>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => openBulkActionModal('allowDecimals')}
-                  className="flex-1 sm:flex-initial"
-                >
-                  <Scale className="w-4 h-4 mr-2" />
-                  Permitir decimales
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => openBulkActionModal('manageStock')}
-                  className="flex-1 sm:flex-initial"
-                >
-                  <Boxes className="w-4 h-4 mr-2" />
-                  Manejar stock
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => openBulkActionModal('taxAffectation')}
-                  className="flex-1 sm:flex-initial"
-                >
-                  <Percent className="w-4 h-4 mr-2" />
-                  Afectación IGV
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={openLabelModal}
-                  className="flex-1 sm:flex-initial"
-                >
-                  <Printer className="w-4 h-4 mr-2" />
-                  Etiquetas
-                </Button>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onClick={() => openBulkActionModal('delete')}
-                  className="flex-1 sm:flex-initial"
-                >
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  Eliminar
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Vista de actualización de precios (modo enfocado) */}
       {priceUpdateMode ? (
         <PriceUpdateTable
@@ -5362,6 +5280,107 @@ export default function Products() {
           </CardContent>
         ) : (
           <>
+            {/* Barra de selección. La fila EXISTE SIEMPRE y sólo cambia de
+                contenido al seleccionar: antes aparecía una tarjeta nueva entre
+                los filtros y la tabla que empujaba todo hacia abajo. Es sticky
+                para que las acciones sigan a la vista al recorrer listas largas
+                (antes había que volver arriba). Vive dentro de la tarjeta de la
+                tabla, así también existe en móvil, donde no había forma de
+                seleccionar todo. */}
+            <div className="sticky top-0 z-20 rounded-t-xl border-b border-gray-200 bg-white/95 backdrop-blur px-3 sm:px-4 py-2">
+              {selectedProducts.size > 0 ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setSelectedProducts(new Set())}
+                    className="p-1 rounded hover:bg-gray-100 transition-colors flex-shrink-0"
+                    title="Quitar la selección"
+                  >
+                    {selectedProducts.size === filteredProducts.length
+                      ? <CheckSquare className="w-5 h-5 text-primary-600" />
+                      : <MinusSquare className="w-5 h-5 text-primary-600" />}
+                  </button>
+                  <div className="min-w-0 flex items-baseline gap-2">
+                    <span className="text-sm font-medium text-gray-900 whitespace-nowrap">
+                      {selectedProducts.size} seleccionado{selectedProducts.size !== 1 ? 's' : ''}
+                    </span>
+                    {selectedProducts.size < filteredProducts.length && (
+                      <button
+                        onClick={toggleSelectAll}
+                        className="hidden sm:inline text-xs text-primary-600 hover:underline whitespace-nowrap"
+                      >
+                        Seleccionar los {filteredProducts.length}
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="ml-auto flex items-center gap-0.5 flex-shrink-0">
+                    {/* Las tres de uso diario quedan a la vista; el resto vive
+                        en el menú, ordenado por frecuencia de uso. */}
+                    <BulkActionButton icon={Printer} label="Etiquetas" onClick={openLabelModal} />
+                    <BulkActionButton icon={FolderEdit} label="Categoría" onClick={() => openBulkActionModal('changeCategory')} />
+                    <BulkActionButton icon={Package} label="Activar" onClick={() => openBulkActionModal('toggleActive')} />
+
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setBulkMenuOpen(!bulkMenuOpen)}
+                        className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+                        title="Más acciones"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                        <span className="hidden lg:inline whitespace-nowrap">Más acciones</span>
+                      </button>
+                      {bulkMenuOpen && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setBulkMenuOpen(false)} />
+                          <div className="absolute right-0 top-full mt-1 w-56 max-w-[calc(100vw-2rem)] bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                            <BulkMenuGroup title="Organizar" />
+                            <BulkMenuItem icon={FolderEdit} label="Cambiar categoría" onClick={() => { setBulkMenuOpen(false); openBulkActionModal('changeCategory') }} />
+                            {branchCatalogOn && (
+                              <BulkMenuItem icon={Store} label="Asignar sucursales" onClick={() => { setBulkMenuOpen(false); openBulkActionModal('branches') }} />
+                            )}
+                            <div className="border-t border-gray-100 my-1" />
+                            <BulkMenuGroup title="Visibilidad" />
+                            <BulkMenuItem icon={Package} label="Activar / Desactivar" onClick={() => { setBulkMenuOpen(false); openBulkActionModal('toggleActive') }} />
+                            <BulkMenuItem icon={Eye} label="Mostrar en catálogo" onClick={() => { setBulkMenuOpen(false); openBulkActionModal('showInCatalog') }} />
+                            <div className="border-t border-gray-100 my-1" />
+                            <BulkMenuGroup title="Configuración de venta" />
+                            <BulkMenuItem icon={Boxes} label="Manejar stock" onClick={() => { setBulkMenuOpen(false); openBulkActionModal('manageStock') }} />
+                            <BulkMenuItem icon={Scale} label="Permitir decimales" onClick={() => { setBulkMenuOpen(false); openBulkActionModal('allowDecimals') }} />
+                            <BulkMenuItem icon={Percent} label="Afectación IGV" onClick={() => { setBulkMenuOpen(false); openBulkActionModal('taxAffectation') }} />
+                            <div className="border-t border-gray-100 my-1" />
+                            <BulkMenuGroup title="Imprimir" />
+                            <BulkMenuItem icon={Printer} label="Etiquetas" onClick={() => { setBulkMenuOpen(false); openLabelModal() }} />
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Eliminar aparte: separado por un divisor y sólo icono, para
+                        que no quede al lado de las acciones de uso diario. */}
+                    <div className="w-px h-5 bg-gray-200 mx-1" />
+                    <BulkActionButton icon={Trash2} label="Eliminar" danger iconOnly onClick={() => openBulkActionModal('delete')} />
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={toggleSelectAll}
+                    className="p-1 rounded hover:bg-gray-100 transition-colors flex-shrink-0"
+                    title="Seleccionar todos"
+                  >
+                    <Square className="w-5 h-5 text-gray-400" />
+                  </button>
+                  <span className="text-sm text-gray-600">
+                    {totalFilteredProducts} producto{totalFilteredProducts !== 1 ? 's' : ''}
+                  </span>
+                  <span className="ml-auto hidden sm:inline text-xs text-gray-400">
+                    Selecciona productos para ver las acciones
+                  </span>
+                </div>
+              )}
+            </div>
+
             {/* Vista de tarjetas para móvil */}
             <div className="lg:hidden p-3 space-y-3 bg-gray-50">
               {paginatedProducts.map((product) => {
@@ -10405,7 +10424,8 @@ export default function Products() {
             Configura el tamaño y la cantidad de etiquetas por producto.
           </p>
 
-          {/* Selector de tamaño de etiqueta */}
+          {/* Selector de tamaño de etiqueta. El predeterminado se guarda en este
+              equipo, así el modal abre siempre con el rollo que tiene cargado. */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Tamaño de etiqueta
@@ -10415,12 +10435,30 @@ export default function Products() {
               onChange={(e) => setLabelSize(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
             >
-              <option value="53x26">53 × 26 mm (5.3 × 2.6 cm)</option>
-              <option value="50x25">50 × 25 mm (5 × 2.5 cm)</option>
-              <option value="30x20">30 × 20 mm (3 × 2 cm)</option>
-              <option value="50x38">50 × 38 mm (5 × 3.8 cm)</option>
-              <option value="58x40">58 × 40 mm (5.8 × 4 cm)</option>
+              {LABEL_SIZE_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
             </select>
+            <div className="flex items-center gap-2 mt-1.5">
+              {labelSize === defaultLabelSize ? (
+                <p className="text-xs text-gray-500">
+                  Es tu tamaño predeterminado en este equipo.
+                </p>
+              ) : (
+                <>
+                  <p className="text-xs text-gray-500 flex-1">
+                    Tu predeterminado es {defaultLabelSize.replace('x', ' × ')} mm.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={guardarTamanoPredeterminado}
+                    className="text-xs font-medium text-primary-600 hover:text-primary-700 hover:underline whitespace-nowrap"
+                  >
+                    Usar este como predeterminado
+                  </button>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Lista de productos seleccionados */}
@@ -10563,41 +10601,11 @@ export default function Products() {
             </details>
           )}
 
-          {/* Total (criterio compartido con el cálculo de tandas): en tamaños
-              ricos la unidad es la VARIANTE; en los clásicos, el producto. */}
+          {/* Total: en tamaños ricos la unidad es la VARIANTE; en los clásicos,
+              el producto. */}
           <p className="text-sm text-gray-700">
             Total: <strong>{totalEtiquetas}</strong> etiquetas de <strong>{selectedProducts.size}</strong> productos
           </p>
-
-          {/* Impresión por tandas. Las etiqueteras chicas tienen un buffer de
-              recepción limitado: reciben lo que les entra, imprimen eso y dejan
-              el resto colgado en la cola (caso real: una GC420t sacaba siempre
-              3 de 15). Partir el trabajo hace que cada uno entre completo. */}
-          <div className="p-3 border border-gray-200 rounded-lg">
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="text-sm font-medium text-gray-700">Imprimir por tandas de</label>
-              <input
-                type="number"
-                min="1"
-                max="100"
-                placeholder="todas"
-                value={labelBatchSize}
-                onChange={(e) => { setLabelBatchSize(e.target.value); setLabelBatchIndex(0) }}
-                className="w-24 px-2 py-1.5 text-sm text-center border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-              <span className="text-sm text-gray-600">etiquetas</span>
-              {totalTandas > 1 && (
-                <span className="text-sm font-semibold text-primary-700 ml-auto">
-                  Tanda {labelBatchIndex + 1} de {totalTandas}
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-gray-500 mt-1.5">
-              {totalTandas > 1
-                ? 'Cada tanda se manda como un trabajo aparte. Espera que termine de imprimir antes de enviar la siguiente.'
-                : 'Déjalo vacío para mandar todo junto. Úsalo solo si tu impresora imprime unas pocas y se queda colgada en la cola.'}
-            </p>
-          </div>
 
           {/* Bloque alternativo: imprimir en ticketera térmica POS (58/80mm) */}
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-2">
@@ -10634,13 +10642,11 @@ export default function Products() {
           {/* Botones */}
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={() => setLabelModalOpen(false)}>
-              {totalTandas > 1 ? 'Cerrar' : 'Cancelar'}
+              Cancelar
             </Button>
             <Button onClick={handlePrintLabels}>
               <Printer className="w-4 h-4 mr-2" />
-              {totalTandas > 1
-                ? `Imprimir tanda ${labelBatchIndex + 1} de ${totalTandas}`
-                : 'Imprimir etiquetas'}
+              Imprimir etiquetas
             </Button>
           </div>
         </div>
