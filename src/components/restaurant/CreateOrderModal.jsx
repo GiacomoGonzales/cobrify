@@ -22,7 +22,13 @@ const ORDER_SOURCES = [
 
 export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = [] }) {
   const toast = useToast()
-  const { getBusinessId } = useAuth()
+  const { getBusinessId, businessSettings } = useAuth()
+  // El estado de pago es dato PARA EL REPARTIDOR: le dice si tiene que cobrar
+  // al entregar. Solo tiene sentido si ese dato viaja impreso en la comanda, y
+  // eso lo decide la misma opción de Configuración. Con la opción apagada el
+  // negocio cobra después por el POS (el flujo normal), así que preguntarlo
+  // acá era pedir un dato que no se usa en ningún lado.
+  const cobroEnComanda = businessSettings?.showCustomerDataOnKitchenTicket === true
   const [orderType, setOrderType] = useState('takeaway') // 'takeaway' or 'delivery'
   const [source, setSource] = useState('counter')
   const [customerName, setCustomerName] = useState('')
@@ -155,9 +161,11 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
       brandId: brandId || null,
       brandName: selectedBrand?.name || null,
       brandColor: selectedBrand?.color || null,
-      // Estado de pago: para que la comanda y la nota de envío sepan si hay que cobrar
-      paid,
-      paymentMethod,
+      // Estado de pago: para que la comanda y la nota de envío sepan si hay que
+      // cobrar. Sin el cobro en comanda el pedido sale SIEMPRE por cobrar, que
+      // es el flujo normal: se cobra después en el POS.
+      paid: cobroEnComanda ? paid : false,
+      paymentMethod: cobroEnComanda ? paymentMethod : 'efectivo',
     }
 
     onConfirm(orderData)
@@ -475,7 +483,8 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
           )}
         </div>
 
-        {/* Pago: para que la comanda diga si el repartidor debe cobrar o ya está pagado */}
+        {/* Pago: solo cuando la comanda lleva el cobro impreso (ver arriba) */}
+        {cobroEnComanda && (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-3">
             <div className="flex items-center gap-2">
@@ -532,6 +541,7 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
             </Select>
           </div>
         </div>
+        )}
 
         {/* Prioridad */}
         <div>
@@ -595,13 +605,15 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
                 {priority === 'urgent' ? '🔴 Urgente' : 'Normal'}
               </span>
             </li>
-            <li>
-              • <span className="font-medium">Pago:</span>{' '}
-              <span className={paid ? 'text-green-600 font-semibold' : 'text-amber-600 font-semibold'}>
-                {paid ? 'Pagado' : 'Por cobrar'}
-              </span>
-              {' '}({paymentMethod})
-            </li>
+            {cobroEnComanda && (
+              <li>
+                • <span className="font-medium">Pago:</span>{' '}
+                <span className={paid ? 'text-green-600 font-semibold' : 'text-amber-600 font-semibold'}>
+                  {paid ? 'Pagado' : 'Por cobrar'}
+                </span>
+                {' '}({paymentMethod})
+              </li>
+            )}
             {brandId && brands.find(b => b.id === brandId) && (
               <li className="flex items-center gap-1">
                 • <span className="font-medium">Marca:</span>{' '}
