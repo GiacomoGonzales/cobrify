@@ -5286,8 +5286,15 @@ export default function Products() {
                 para que las acciones sigan a la vista al recorrer listas largas
                 (antes había que volver arriba). Vive dentro de la tarjeta de la
                 tabla, así también existe en móvil, donde no había forma de
-                seleccionar todo. */}
-            <div className="sticky top-0 z-20 rounded-t-xl border-b border-gray-200 bg-white/95 backdrop-blur px-3 sm:px-4 py-2">
+                seleccionar todo.
+                El top NEGATIVO no es un capricho: el <main> que hace scroll
+                tiene p-2/sm:p-4, y la barra se pegaba al borde del CONTENIDO,
+                dejando esos 8/16 px de padding descubiertos por encima — se
+                veían pasar las filas por esa franja. El valor tiene que ser
+                exactamente el padding del <main>: si allí se cambia, acá
+                también. El `top` sólo actúa mientras está pegada, así que en
+                reposo la barra se ve igual. */}
+            <div className="sticky -top-2 sm:-top-4 z-20 rounded-t-xl border-b border-gray-200 bg-white px-3 sm:px-4 py-2">
               {selectedProducts.size > 0 ? (
                 <div className="flex items-center gap-2">
                   <button
