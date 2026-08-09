@@ -283,6 +283,31 @@ service cloud.firestore {
                        request.resource.data.resellerId != null &&
                        isReseller(request.resource.data.resellerId);
 
+      // Resellers pueden LEER y CORREGIR los datos que ellos mismos cargaron al
+      // crear al cliente (razón social mal escrita, nombre comercial, RUC,
+      // teléfono, dirección). Antes solo podían CREAR: escribían esos datos y
+      // después no podían ni consultarlos.
+      // SEGURIDAD: la lista blanca es obligatoria. Un `allow update` abierto le
+      // daría al reseller escritura sobre TODA la configuración del negocio de
+      // un cliente en producción — series de comprobantes, configuración SUNAT,
+      // ajustes de emisión. hasOnly() garantiza que la escritura no toque
+      // ningún otro campo, y resellerId debe quedar igual para que no puedan
+      // reasignarse el negocio de otro.
+      // El guard `in` es necesario: la mayoría de negocios NO tiene resellerId
+      // (los creó su propio dueño), y leer un campo inexistente hace fallar la
+      // evaluación de la regla.
+      allow read: if isAuthenticated() &&
+                     'resellerId' in resource.data &&
+                     resource.data.resellerId != null &&
+                     isReseller(resource.data.resellerId);
+      allow update: if isAuthenticated() &&
+                       'resellerId' in resource.data &&
+                       resource.data.resellerId != null &&
+                       isReseller(resource.data.resellerId) &&
+                       request.resource.data.resellerId == resource.data.resellerId &&
+                       request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['razonSocial', 'tradeName', 'ruc', 'phone', 'address', 'updatedAt']);
+
       // Lectura pública para catálogo - permite buscar negocios por catalogSlug
       // Para que funcione en usuarios no autenticados, permitimos lectura pública
       // pero solo de negocios con catalogEnabled == true

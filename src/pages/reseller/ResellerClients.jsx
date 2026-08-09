@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { collection, query, where, getDocs, doc, updateDoc, Timestamp } from 'firebase/firestore'
+import { collection, query, where, getDocs, doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { getFunctions, httpsCallable } from 'firebase/functions'
 import { PLANS } from '@/services/subscriptionService'
@@ -24,7 +24,8 @@ import {
   X,
   CreditCard,
   Wallet,
-  Loader2
+  Loader2,
+  Pencil
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
@@ -62,6 +63,16 @@ export default function ResellerClients() {
   const [useSunatDirect, setUseSunatDirect] = useState(false) // v2: toggle QPse/SUNAT directo (ilimitado)
   const [renewalLoading, setRenewalLoading] = useState(false)
   const [tierInfo, setTierInfo] = useState(null)
+
+  // Datos del negocio del cliente (businesses/{clienteId}). Viven en otro
+  // documento que la suscripción: ahí están razón social, nombre comercial,
+  // RUC, teléfono y dirección — justo lo que el reseller cargó al crearlo.
+  const [businessInfo, setBusinessInfo] = useState(null)
+  const [loadingBusiness, setLoadingBusiness] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editForm, setEditForm] = useState({ razonSocial: '', tradeName: '', ruc: '', phone: '', address: '' })
+  const [editLoading, setEditLoading] = useState(false)
+  const [editError, setEditError] = useState(null)
 
   // Estados para add-on de comprobantes
   const [showAddonModal, setShowAddonModal] = useState(false)
@@ -176,6 +187,93 @@ export default function ResellerClients() {
       expiring: 'Por vencer'
     }
     return labels[status] || status
+  }
+
+  // Al abrir el detalle se trae el negocio del cliente. Se hace acá y no en
+  // loadClients() para no pedir un documento por cada cliente de la lista.
+  useEffect(() => {
+    if (!selectedClient?.id) {
+      setBusinessInfo(null)
+      return
+    }
+    let cancelled = false
+    setLoadingBusiness(true)
+    getDoc(doc(db, 'businesses', selectedClient.id))
+      .then(snap => { if (!cancelled) setBusinessInfo(snap.exists() ? snap.data() : null) })
+      .catch(err => {
+        console.error('Error cargando el negocio del cliente:', err)
+        if (!cancelled) setBusinessInfo(null)
+      })
+      .finally(() => { if (!cancelled) setLoadingBusiness(false) })
+    return () => { cancelled = true }
+  }, [selectedClient?.id])
+
+  function openEditModal() {
+    setEditForm({
+      razonSocial: businessInfo?.razonSocial || selectedClient?.businessName || '',
+      tradeName: businessInfo?.tradeName || '',
+      ruc: businessInfo?.ruc || '',
+      phone: businessInfo?.phone || '',
+      address: businessInfo?.address || '',
+    })
+    setEditError(null)
+    setShowEditModal(true)
+  }
+
+  async function handleSaveClientInfo() {
+    if (!selectedClient?.id) return
+    const razonSocial = editForm.razonSocial.trim()
+    if (!razonSocial) {
+      setEditError('La razón social es obligatoria')
+      return
+    }
+    const ruc = editForm.ruc.trim()
+    if (ruc && !/^\d{11}$/.test(ruc)) {
+      setEditError('El RUC debe tener 11 dígitos')
+      return
+    }
+
+    setEditLoading(true)
+    setEditError(null)
+    try {
+      // Solo estos campos: las reglas de Firestore rechazan la escritura si
+      // toca cualquier otro (ver firestore.rules, businesses/{userId}).
+      await updateDoc(doc(db, 'businesses', selectedClient.id), {
+        razonSocial,
+        tradeName: editForm.tradeName.trim() || razonSocial,
+        ruc,
+        phone: editForm.phone.trim(),
+        address: editForm.address.trim(),
+        updatedAt: Timestamp.now(),
+      })
+
+      // La lista de clientes se arma con la SUSCRIPCIÓN, no con el negocio. Si
+      // no se espeja acá, el nombre corregido no aparecería en la lista.
+      if (razonSocial !== selectedClient.businessName) {
+        await updateDoc(doc(db, 'subscriptions', selectedClient.id), { businessName: razonSocial })
+      }
+
+      setBusinessInfo(prev => ({
+        ...(prev || {}),
+        razonSocial,
+        tradeName: editForm.tradeName.trim() || razonSocial,
+        ruc,
+        phone: editForm.phone.trim(),
+        address: editForm.address.trim(),
+      }))
+      setSelectedClient(prev => (prev ? { ...prev, businessName: razonSocial } : prev))
+      setShowEditModal(false)
+      loadClients()
+    } catch (error) {
+      console.error('Error al guardar los datos del cliente:', error)
+      setEditError(
+        error?.code === 'permission-denied'
+          ? 'No tienes permiso para editar este cliente'
+          : 'No se pudieron guardar los cambios'
+      )
+    } finally {
+      setEditLoading(false)
+    }
   }
 
   async function toggleClientAccess(clientId, block) {
@@ -552,6 +650,42 @@ export default function ResellerClients() {
                 </div>
               </div>
 
+              {/* Datos del negocio: lo que el reseller cargó al crear al cliente
+                  y hasta ahora no podía ni ver ni corregir. */}
+              <div className="border border-gray-200 rounded-lg">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                  <h4 className="font-semibold text-gray-900">Datos del negocio</h4>
+                  <button
+                    onClick={openEditModal}
+                    disabled={loadingBusiness}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50 rounded-lg disabled:opacity-50"
+                  >
+                    <Pencil className="w-4 h-4" />
+                    Editar
+                  </button>
+                </div>
+                {loadingBusiness ? (
+                  <div className="px-4 py-6 flex items-center justify-center text-gray-400">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  </div>
+                ) : (
+                  <dl className="px-4 py-3 space-y-2 text-sm">
+                    {[
+                      ['Razón social', businessInfo?.razonSocial || selectedClient.businessName],
+                      ['Nombre comercial', businessInfo?.tradeName],
+                      ['RUC', businessInfo?.ruc],
+                      ['Teléfono', businessInfo?.phone],
+                      ['Dirección', businessInfo?.address],
+                    ].map(([label, value]) => (
+                      <div key={label} className="flex gap-3">
+                        <dt className="text-gray-500 w-36 flex-shrink-0">{label}</dt>
+                        <dd className={value ? 'text-gray-900' : 'text-gray-400'}>{value || 'Sin registrar'}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+              </div>
+
               {/* Actions */}
               <div className="space-y-3">
                 {/* Add-on de comprobantes (solo para planes QPse, no ilimitados) */}
@@ -595,6 +729,84 @@ export default function ResellerClients() {
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de edición de datos del cliente. z mayor que el de detalles
+          porque se abre encima de él. */}
+      {showEditModal && selectedClient && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[110] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-900">Editar datos del cliente</h2>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+                disabled={editLoading}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {[
+                { key: 'razonSocial', label: 'Razón social', placeholder: 'Nombre legal del negocio' },
+                { key: 'tradeName', label: 'Nombre comercial', placeholder: 'Como lo conocen sus clientes' },
+                { key: 'ruc', label: 'RUC', placeholder: '11 dígitos', inputMode: 'numeric', maxLength: 11 },
+                { key: 'phone', label: 'Teléfono', placeholder: '999 999 999' },
+                { key: 'address', label: 'Dirección', placeholder: 'Dirección del negocio' },
+              ].map(f => (
+                <div key={f.key}>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{f.label}</label>
+                  <input
+                    type="text"
+                    value={editForm[f.key]}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, [f.key]: e.target.value }))}
+                    placeholder={f.placeholder}
+                    inputMode={f.inputMode}
+                    maxLength={f.maxLength}
+                    disabled={editLoading}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-50"
+                  />
+                </div>
+              ))}
+
+              {/* El RUC es el emisor de los comprobantes: cambiarlo en un negocio
+                  que ya emitió deja documentos con dos RUC distintos. */}
+              <div className="flex gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-800">
+                  El RUC es el emisor de los comprobantes electrónicos. Si el cliente ya emitió
+                  facturas o boletas, cámbialo solo si estás seguro: los documentos ya emitidos
+                  conservan el RUC anterior.
+                </p>
+              </div>
+
+              {editError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  {editError}
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-gray-200 flex gap-3">
+              <button
+                onClick={() => setShowEditModal(false)}
+                disabled={editLoading}
+                className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveClientInfo}
+                disabled={editLoading}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {editLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
+                Guardar cambios
+              </button>
             </div>
           </div>
         </div>
