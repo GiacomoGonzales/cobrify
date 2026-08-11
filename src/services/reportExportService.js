@@ -1350,13 +1350,25 @@ export const exportGeneralReport = async (data) => {
 
   // ============== HOJA 5: DETALLE DE VENTAS ==============
   if (filteredInvoices && filteredInvoices.length > 0) {
+    // Con ventas en otra moneda, Subtotal/IGV/Total van en la moneda del
+    // comprobante pero Costo y Utilidad SIEMPRE en soles. Sin decir cuál es
+    // cuál, la hoja parece que se contradice. Las dos columnas extra solo
+    // aparecen si de verdad hubo ventas en otra moneda, para no cambiarle la
+    // hoja a los negocios que solo venden en soles.
+    const hasForeignCurrency = filteredInvoices.some(
+      inv => inv.currency && inv.currency !== 'PEN'
+    )
     const headers = [
       'Número', 'Fecha', 'Tipo', 'Cliente', 'Documento',
       'Estado', 'Estado SUNAT', 'Método Pago',
       'Descuento', 'Op. Gravada', 'Op. Exonerada', 'Op. Inafecta',
-      'Subtotal', 'IGV', 'Total', 'Costo', 'Utilidad', 'Margen %',
+      'Subtotal', 'IGV', 'Total',
+      ...(hasForeignCurrency ? ['Moneda', 'Total S/'] : []),
+      'Costo', 'Utilidad', 'Margen %',
     ]
     const totalCols = headers.length
+    // Índice de la columna Moneda (texto), para no formatearla como número
+    const currencyColIdx = hasForeignCurrency ? 15 : -1
 
     const aoa = [['DETALLE DE VENTAS'], []]
     const metaStart = aoa.length
@@ -1395,6 +1407,9 @@ export const exportGeneralReport = async (data) => {
         Number((inv.subtotal || 0).toFixed(2)),
         Number((inv.igv || 0).toFixed(2)),
         Number((inv.total || 0).toFixed(2)),
+        ...(hasForeignCurrency
+          ? [inv.currency || 'PEN', Number(getDocumentTotalInBase(inv).toFixed(2))]
+          : []),
         Number((inv.totalCost || 0).toFixed(2)),
         Number((inv.profit || 0).toFixed(2)),
         Number((inv.profitMargin || 0).toFixed(2)),
@@ -1403,7 +1418,9 @@ export const exportGeneralReport = async (data) => {
 
     const ws = XLSX.utils.aoa_to_sheet(aoa)
     applyColumnWidths(ws, [
-      15, 12, 14, 30, 15, 12, 14, 25, 12, 14, 14, 14, 12, 10, 12, 12, 12, 10,
+      15, 12, 14, 30, 15, 12, 14, 25, 12, 14, 14, 14, 12, 10, 12,
+      ...(hasForeignCurrency ? [9, 12] : []),
+      12, 12, 10,
     ])
     applyTitleRow(ws, 0, totalCols)
     applyMetadataRows(ws, metaStart, metaEnd)
@@ -1420,7 +1437,9 @@ export const exportGeneralReport = async (data) => {
       setStyle(ws, r, 5, centerStyle(i))
       setStyle(ws, r, 6, centerStyle(i))
       setStyle(ws, r, 7, cellStyle(i))
-      for (let c = 8; c < totalCols; c++) setStyle(ws, r, c, numberStyle(i))
+      for (let c = 8; c < totalCols; c++) {
+        setStyle(ws, r, c, c === currencyColIdx ? centerStyle(i) : numberStyle(i))
+      }
     }
     applyFreezeBelow(ws, headerRow)
     XLSX.utils.book_append_sheet(wb, ws, 'Detalle de Ventas')

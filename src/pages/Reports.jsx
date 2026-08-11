@@ -572,8 +572,15 @@ export default function Reports() {
         }
         totalCost += calculateItemCost(item)
       })
-      const profit = (invoice.total || 0) - totalCost
-      const profitMargin = invoice.total > 0 ? (profit / invoice.total) * 100 : 0
+      // El ingreso va en PEN base, con el TC congelado del propio documento.
+      // El costo (`costAtSale`) SIEMPRE está en soles, así que comparar contra
+      // `invoice.total` —que está en la moneda del comprobante— daba márgenes
+      // absurdos en las ventas en dólares: una boleta de $2,400 contra un costo
+      // de S/6,376 salía en -165%. Mismo criterio que `itemRevenueInBase` y que
+      // las agregaciones de `stats`, que ya usaban la base.
+      const revenueInBase = getDocumentTotalInBase(invoice)
+      const profit = revenueInBase - totalCost
+      const profitMargin = revenueInBase > 0 ? (profit / revenueInBase) * 100 : 0
       // Banderas para la UI: si TODO es personalizado no hay costo registrado;
       // si el margen es muy negativo probablemente el `cost` del producto está
       // descalibrado (cambio de unidad / costo editado a mano / presentación mal).
