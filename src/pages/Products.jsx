@@ -192,6 +192,20 @@ const readDefaultLabelSize = () => {
   } catch { return FALLBACK_LABEL_SIZE }
 }
 
+// El costo del producto se guarda con hasta 6 decimales A PROPÓSITO: es un
+// PROMEDIO PONDERADO de las compras, y esa precisión hace que `stock × costo`
+// cuadre con el dinero realmente gastado (con 2 decimales el redondeo del
+// unitario × cantidad acumulaba descuadre, sobre todo comprando por
+// presentación). Pero en pantalla "1.46699" no le dice nada a nadie, así que el
+// formulario lo muestra redondeado a 2. Lo guardado no se toca — ver
+// `resolveCostToSave`.
+const formatCostForInput = (cost) => {
+  if (cost === undefined || cost === null || cost === '') return ''
+  const n = Number(cost)
+  if (!Number.isFinite(n)) return ''
+  return (Math.round(n * 100) / 100).toString()
+}
+
 // Botón de la barra de selección. A nivel de módulo (no dentro del render) para
 // que React no lo remonte en cada pintado. El texto se esconde en pantallas
 // angostas y queda el icono con su tooltip.
@@ -244,6 +258,8 @@ export default function Products() {
   // márgenes/reportes. Guardamos la data del form mientras se confirma.
   const [pendingUnitChange, setPendingUnitChange] = useState(null)
   const unitWarningConfirmedRef = useRef(false)
+  // Costo del producto que se está editando, SIN redondear (ver formatCostForInput)
+  const originalCostRef = useRef(null)
   const [deletingProduct, setDeletingProduct] = useState(null)
   const [viewingProduct, setViewingProduct] = useState(null)
   const [isViewModalOpen, setIsViewModalOpen] = useState(false)
@@ -806,8 +822,24 @@ export default function Products() {
     }
   }
 
+  // Costo que se va a GUARDAR. Si el usuario no tocó el campo, el input trae el
+  // valor redondeado a 2 decimales; guardarlo tal cual degradaría el promedio
+  // ponderado por el solo hecho de abrir y guardar el producto. En ese caso se
+  // conserva el valor original completo. Si lo cambió, manda lo que escribió.
+  const resolveCostToSave = (raw) => {
+    if (raw === undefined || raw === null || raw === '') return null
+    const typed = parseFloat(raw)
+    if (!Number.isFinite(typed)) return null
+    const original = Number(originalCostRef.current)
+    if (originalCostRef.current != null && Number.isFinite(original)) {
+      if (typed === Math.round(original * 100) / 100) return original
+    }
+    return typed
+  }
+
   const openCreateModal = () => {
     setEditingProduct(null)
+    originalCostRef.current = null
     setNoStock(false)
     setAllowDecimalQuantity(false)
     setCatalogVisible(false)
@@ -890,6 +922,9 @@ export default function Products() {
       return
     }
     setEditingProduct(product)
+    // Costo original SIN redondear: el input muestra 2 decimales, y si el
+    // usuario no lo toca se vuelve a guardar este valor (ver resolveCostToSave).
+    originalCostRef.current = product?.cost ?? null
     // Para productos con variantes, siempre manejan stock (trackStock = true)
     // Para otros productos, usar el campo trackStock guardado en lugar de inferir del stock
     const hasNoStock = product.hasVariants ? false : (product.trackStock === false)
@@ -1018,7 +1053,7 @@ export default function Products() {
       price3: product.price3?.toString() || '',
       price4: product.price4?.toString() || '',
       priceUSD: product.priceUSD != null ? product.priceUSD.toString() : '',
-      cost: product.cost?.toString() || '',
+      cost: formatCostForInput(product.cost),
       weight: product.weight?.toString() || '',
       unit: product.unit || 'NIU',
       category: product.category || '',
@@ -1181,7 +1216,7 @@ export default function Products() {
       price3: product.price3?.toString() || '',
       price4: product.price4?.toString() || '',
       priceUSD: product.priceUSD != null ? product.priceUSD.toString() : '',
-      cost: product.cost?.toString() || '',
+      cost: formatCostForInput(product.cost),
       weight: product.weight?.toString() || '',
       unit: product.unit || 'NIU',
       category: product.category || '', // Mantener la categoría
@@ -1375,7 +1410,7 @@ export default function Products() {
         // el form (updateDoc hace merge y preserva el costo sincronizado por la receta).
         ...(editingProduct?.hasRecipe
           ? {}
-          : { cost: data.cost && data.cost !== '' ? parseFloat(data.cost) : null }),
+          : { cost: resolveCostToSave(data.cost) }),
         weight: data.weight && data.weight !== '' ? parseFloat(data.weight) : null,
         hasVariants: hasVariants,
         // Con batches activos, forzar trackExpiration:true (los lotes lo implican).
