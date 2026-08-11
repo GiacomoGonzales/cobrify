@@ -4347,7 +4347,7 @@ export const printDispatchGuideTicket = async (guide, business, paperWidth = 58)
     try {
       console.log(`📶 Usando impresión ${connectionType} para guía de remisión...`);
       const base64Data = buildDispatchGuideEscPos(guide, business, paperWidth);
-      const result = await TcpPrinter.printRawData({ ip: connectedPrinterAddress, port: 9100, data: base64Data });
+      await sendEscPosData(base64Data);
       return { success: true };
     } catch (error) {
       console.error('Error WiFi printing dispatch guide:', error);
@@ -4688,7 +4688,7 @@ export const printQuotationTicket = async (quotation, business, paperWidth = 58)
     try {
       console.log(`📶 Usando impresión ${connectionType} para cotización...`);
       const base64Data = buildQuotationEscPos(quotation, business, paperWidth);
-      await TcpPrinter.printRawData({ ip: connectedPrinterAddress, port: 9100, data: base64Data });
+      await sendEscPosData(base64Data);
       return { success: true };
     } catch (error) {
       console.error('Error WiFi printing quotation:', error);
@@ -4872,7 +4872,7 @@ export const printDeliveryTicket = async (delivery, business, paperWidth = 58) =
   // WiFi o interna
   if (connectionType === 'wifi' || connectionType === 'internal') {
     try {
-      await TcpPrinter.printRawData({ ip: connectedPrinterAddress, port: 9100, data: base64Data });
+      await sendEscPosData(base64Data);
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
@@ -4970,7 +4970,7 @@ export const printProductBarcodes = async (items, paperWidth = 58) => {
 
   if (connectionType === 'wifi' || connectionType === 'internal') {
     try {
-      await TcpPrinter.printRawData({ ip: connectedPrinterAddress, port: 9100, data: base64Data });
+      await sendEscPosData(base64Data);
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };

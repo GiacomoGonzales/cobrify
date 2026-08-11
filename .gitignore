@@ -43,8 +43,11 @@ fix-admin*.cjs
 setup-business-owner.js
 test-sunat.js
 
-# Capacitor - Mobile platforms
-ios/
+# iOS - versionar los fuentes nativos (igual que Android), NO lo generado.
+# Lo generado (Pods, build, DerivedData, el bundle web de App/App/public y los
+# capacitor.config.json / config.xml que reescribe `npx cap sync`) lo excluye
+# ios/.gitignore. Se versiona porque ahí viven plugins nativos propios
+# (TcpPrinterPlugin, MainViewController) que `cap sync` NO regenera.
 
 # Android - ignore most but keep configuration
 android/build/

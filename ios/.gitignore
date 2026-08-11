@@ -1,0 +1,15 @@
+App/build
+App/Pods
+App/output
+App/App/public
+# Copias sueltas que deja el Finder/cap sync ("public 2", "public 3", ...)
+App/App/public [0-9]*
+DerivedData
+xcuserdata
+
+# Cordova plugins for Capacitor
+capacitor-cordova-ios-plugins
+
+# Generated Config files
+App/App/capacitor.config.json
+App/App/config.xml
