@@ -2050,7 +2050,7 @@ export const exportProductsReport = async (data) => {
  */
 export const exportBrandsReport = async (data) => {
   const {
-    salesByBrand,
+    salesByBrand, salesByVariant,
     dateRange, customStartDate, customEndDate, branchLabel, businessData,
   } = data
 
@@ -2175,6 +2175,77 @@ export const exportBrandsReport = async (data) => {
     for (let c = 3; c <= 8; c++) setStyle(ws, totalRowIdx, c, totalNumberStyle)
     applyFreezeBelow(ws, headerRow)
     XLSX.utils.book_append_sheet(wb, ws, 'Marcas')
+  }
+
+  // ============== HOJA 3: VENTAS POR VARIANTE (talla, color, ...) ==============
+  // Las hojas de arriba agrupan por marca, y el reporte de productos agrupa por
+  // nombre: en los dos casos las tallas se suman entre sí. Esta hoja abre el
+  // desglose, que es lo que una tienda de ropa o calzado necesita para reponer.
+  // Solo aparece si hubo ventas de productos con variantes.
+  if (salesByVariant && salesByVariant.length > 0) {
+    const headers = ['#', 'Marca', 'Producto', 'Variante', 'SKU', 'Unidades', 'Ingresos', 'Costo', 'Utilidad', 'Margen %', '% Unidades']
+    const totalCols = headers.length
+
+    const totalVarUnidades = salesByVariant.reduce((s, v) => s + (v.quantity || 0), 0)
+    const totalVarIngresos = salesByVariant.reduce((s, v) => s + (v.revenue || 0), 0)
+    const totalVarCostos = salesByVariant.reduce((s, v) => s + (v.cost || 0), 0)
+    const totalVarUtilidad = totalVarIngresos - totalVarCostos
+    const margenVar = totalVarIngresos > 0 ? (totalVarUtilidad / totalVarIngresos) * 100 : 0
+
+    const aoa = [['VENTAS POR VARIANTE'], []]
+    const metaStart = aoa.length
+    aoa.push(...buildBusinessMetadataRows(businessData, { periodLabel, branchLabel: branchLabel || 'Todas' }))
+    const metaEnd = aoa.length - 1
+    aoa.push([])
+    const headerRow = aoa.length
+    aoa.push(headers)
+    const dataStart = aoa.length
+    salesByVariant.forEach((v, idx) => {
+      const pctUnidades = totalVarUnidades > 0 ? ((v.quantity || 0) / totalVarUnidades) * 100 : 0
+      aoa.push([
+        idx + 1,
+        v.brand || 'Sin marca',
+        v.name || 'Producto',
+        v.variantLabel || '—',
+        v.sku || '',
+        Number((v.quantity || 0).toFixed(2)),
+        Number((v.revenue || 0).toFixed(2)),
+        Number((v.cost || 0).toFixed(2)),
+        Number((v.profit || 0).toFixed(2)),
+        Number((v.profitMargin || 0).toFixed(1)),
+        Number(pctUnidades.toFixed(1)),
+      ])
+    })
+    aoa.push([])
+    const totalRowIdx = aoa.length
+    aoa.push([
+      '', 'TOTALES', '', '', '',
+      Number(totalVarUnidades.toFixed(2)),
+      Number(totalVarIngresos.toFixed(2)),
+      Number(totalVarCostos.toFixed(2)),
+      Number(totalVarUtilidad.toFixed(2)),
+      Number(margenVar.toFixed(1)),
+      100.0,
+    ])
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    applyColumnWidths(ws, [6, 22, 32, 22, 16, 12, 14, 12, 14, 12, 12])
+    applyTitleRow(ws, 0, totalCols)
+    applyMetadataRows(ws, metaStart, metaEnd)
+    applyHeaderRow(ws, headerRow, totalCols)
+    for (let i = 0; i < salesByVariant.length; i++) {
+      const r = dataStart + i
+      setStyle(ws, r, 0, centerStyle(i))
+      setStyle(ws, r, 1, cellStyle(i))
+      setStyle(ws, r, 2, cellStyle(i))
+      setStyle(ws, r, 3, cellStyle(i))
+      setStyle(ws, r, 4, centerStyle(i))
+      for (let c = 5; c <= 10; c++) setStyle(ws, r, c, numberStyle(i))
+    }
+    for (let c = 0; c <= 4; c++) setStyle(ws, totalRowIdx, c, totalLabelStyle)
+    for (let c = 5; c <= 10; c++) setStyle(ws, totalRowIdx, c, totalNumberStyle)
+    applyFreezeBelow(ws, headerRow)
+    XLSX.utils.book_append_sheet(wb, ws, 'Variantes')
   }
 
   const fileName = buildExcelFileName('Reporte_Marcas', [periodLabel])

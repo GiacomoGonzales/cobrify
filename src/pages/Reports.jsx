@@ -1087,6 +1087,68 @@ export default function Reports() {
       .sort((a, b) => b.revenue - a.revenue)
   }, [filteredInvoices, products, recipes, getBrandName, itemRevenueInBase])
 
+  // Ventas desglosadas por VARIANTE (talla, color, ...).
+  //
+  // `topProducts` agrupa por nombre de producto, así que las variantes se suman
+  // entre sí: un zapatito que se vendió en tallas 4, 5 y 6 aparece como una sola
+  // línea. Para una tienda de ropa o calzado eso es justo el dato que necesita
+  // para reponer — cuánto salió de cada talla.
+  //
+  // La clave es producto + SKU de variante, no solo el SKU: dos productos
+  // distintos pueden repetir el código de variante.
+  const salesByVariant = useMemo(() => {
+    const stats = {}
+
+    filteredInvoices.forEach(invoice => {
+      const invoiceSubtotal = invoice.items?.reduce((sum, item) => {
+        const itemPrice = item.unitPrice || item.price || 0
+        return sum + (item.subtotal || ((item.quantity || 0) * itemPrice))
+      }, 0) || 0
+      const invoiceTotal = invoice.total || invoiceSubtotal
+      const discountFactor = invoiceSubtotal > 0 ? invoiceTotal / invoiceSubtotal : 1
+
+      invoice.items?.forEach(item => {
+        // Solo los items que se vendieron como variante
+        if (!item.isVariant && !item.variantSku) return
+
+        const productId = item.productId || item.id
+        const key = `${productId}__${item.variantSku || ''}`
+
+        if (!stats[key]) {
+          const product = products.find(p => p.id === productId)
+          const attrs = Object.entries(item.variantAttributes || {})
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(' / ')
+          stats[key] = {
+            name: item.name || item.description || 'Producto',
+            // Sin atributos guardados queda el SKU, que al menos identifica cuál es
+            variantLabel: attrs || item.variantSku || '—',
+            sku: item.variantSku || '',
+            brand: getBrandName(product),
+            quantity: 0,
+            revenue: 0,
+            cost: 0,
+          }
+        }
+
+        const s = stats[key]
+        s.quantity += item.quantity || 0
+        // Mismo criterio de ingreso y de costo que el resto de la página
+        s.revenue = Number((s.revenue + itemRevenueInBase(item, invoice) * discountFactor).toFixed(2))
+        s.cost = Number((s.cost + calculateItemCost(item)).toFixed(2))
+      })
+    })
+
+    return Object.values(stats)
+      .map(v => ({
+        ...v,
+        profit: Number((v.revenue - v.cost).toFixed(2)),
+        profitMargin: v.revenue > 0 ? ((v.revenue - v.cost) / v.revenue) * 100 : 0,
+      }))
+      // Por unidades: la pregunta es cuánto salió de cada talla, no cuánto facturó
+      .sort((a, b) => b.quantity - a.quantity)
+  }, [filteredInvoices, products, getBrandName, itemRevenueInBase, calculateItemCost])
+
   // Top clientes
   const topCustomers = useMemo(() => {
     const customerStats = {}
@@ -4512,7 +4574,7 @@ export default function Reports() {
           <div className="flex justify-end">
             {!hidePrivateData && (
             <button
-              onClick={async () => await exportBrandsReport({ salesByBrand, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })}
+              onClick={async () => await exportBrandsReport({ salesByBrand, salesByVariant, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })}
               disabled={salesByBrand.length === 0}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
