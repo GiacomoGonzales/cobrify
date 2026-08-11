@@ -4620,7 +4620,12 @@ export default function Products() {
       price2: editingVariant.price2 ? parseFloat(editingVariant.price2) : null,
       price3: editingVariant.price3 ? parseFloat(editingVariant.price3) : null,
       price4: editingVariant.price4 ? parseFloat(editingVariant.price4) : null,
-      stock: editingVariant.stock === '' ? null : parseInt(editingVariant.stock),
+      // Con la edición manual apagada el campo se muestra de solo lectura; acá
+      // se conserva el valor original en vez de confiar en el estado del form,
+      // para que ese camino no pueda tocar el stock ni por accidente.
+      stock: (!editingProduct || businessSettings?.enableManualStockEdit === true)
+        ? (editingVariant.stock === '' ? null : parseInt(editingVariant.stock))
+        : (variants[editingVariantIndex]?.stock ?? null),
       priceUSD: editingVariant.priceUSD ? parseFloat(editingVariant.priceUSD) : null,
     }
     setVariants(updated)
@@ -8745,8 +8750,23 @@ export default function Products() {
                                       </td>
                                     </>
                                   )}
+                                  {/* El stock de una variante YA EXISTENTE sigue el mismo
+                                      interruptor que el resto de la edición manual de stock
+                                      (Configuración > Inventario). Antes esta casilla se lo
+                                      saltaba: con la opción apagada igual se podía cuadrar el
+                                      inventario tecleando acá. Al CREAR el producto sí se deja
+                                      editable — ahí es stock inicial, no un ajuste. */}
                                   <td className="px-2 py-1">
-                                    <input type="number" value={editingVariant.stock} onChange={e => setEditingVariant({ ...editingVariant, stock: e.target.value })} className="w-16 px-2 py-1 text-xs border border-gray-300 rounded" />
+                                    {(!editingProduct || businessSettings?.enableManualStockEdit === true) ? (
+                                      <input type="number" value={editingVariant.stock} onChange={e => setEditingVariant({ ...editingVariant, stock: e.target.value })} className="w-16 px-2 py-1 text-xs border border-gray-300 rounded" />
+                                    ) : (
+                                      <span
+                                        className="inline-block w-16 px-2 py-1 text-xs text-gray-500 text-center bg-gray-100 rounded"
+                                        title="Para corregir el stock usa Inventario > Recuento, o activa la edición manual en Configuración"
+                                      >
+                                        {editingVariant.stock === '' || editingVariant.stock == null ? '—' : editingVariant.stock}
+                                      </span>
+                                    )}
                                   </td>
                                   {businessSettings?.multiCurrencyEnabled && (
                                     <td className="px-2 py-1">
