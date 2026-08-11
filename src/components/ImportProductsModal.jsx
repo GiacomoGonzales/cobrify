@@ -7,6 +7,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { getActiveBranches } from '@/services/branchService'
 import { MAIN_BRANCH_TOKEN, buildHiddenFromSelection } from '@/utils/branchCatalog'
 import { isMultiCurrencyEnabled } from '@/utils/currency'
+import { cleanText } from '@/lib/utils'
 import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
@@ -400,7 +401,10 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
         sku: sku,
         code: code,
         barcodes: extraBarcodes,
-        name: String(row.nombre || row.Nombre || row.NOMBRE || row.name || row.Name || row.NAME || '').trim(),
+        // cleanText y no .trim(): además de los extremos colapsa tabuladores y
+        // saltos de línea internos, que en un nombre de una sola línea siempre
+        // son basura pegada y rompen el orden alfabético y las impresiones.
+        name: cleanText(row.nombre || row.Nombre || row.NOMBRE || row.name || row.Name || row.NAME || ''),
         description: String(row.descripcion || row.Descripcion || row.DESCRIPCION || row.description || row.Description || row.DESCRIPTION || '').trim(),
         cost: row.costo || row.Costo || row.COSTO || row.cost || row.Cost || row.COST || row.valor_unitario || row.valor_Unitario || row.VALOR_UNITARIO || row.precio_unitario || row.Precio_Unitario || row.PRECIO_UNITARIO || null,
         price: parseFloat(row.precio || row.Precio || row.PRECIO || row.price || row.Price || row.PRICE || row.precio_compra || row.Precio_Compra || row.PRECIO_COMPRA || 0),

@@ -1,9 +1,14 @@
 import { z } from 'zod'
 import { validateRUC, validateDNI, ID_TYPES } from './peruUtils'
+import { cleanText } from '@/lib/utils'
 
 /**
  * Schemas de validación con Zod para formularios
  */
+
+// Igual que cleanText pero conserva `undefined` como undefined, para no
+// convertir un campo opcional que nadie llenó en un string vacío.
+const cleanOptionalText = (v) => (v === undefined || v === null ? v : cleanText(v))
 
 // Schema para Login
 export const loginSchema = z.object({
@@ -154,8 +159,14 @@ export const productSchema = z.object({
   // mismo stock). El `code` queda como principal (para etiquetas/facturas)
   // y `barcodes` lista los alternativos.
   barcodes: z.array(z.string()).optional(),
-  sku: z.string().optional(), // Código interno/SKU (opcional)
-  name: z.string().min(1, 'Nombre es requerido'),
+  sku: z.preprocess(cleanOptionalText, z.string().optional()), // Código interno/SKU (opcional)
+  // `cleanText` colapsa espacios, tabuladores y saltos de línea. Al pegar el
+  // nombre desde Excel viene con un TAB y un salto adelante ("\t\nCaño
+  // lavatorio..."): no se ve, pero ordena antes que cualquier letra y esos
+  // productos quedaban clavados arriba de la lista por más que estuviera en
+  // orden alfabético. Va como preprocess para que se limpie ANTES de validar,
+  // y un nombre de puros espacios siga dando "Nombre es requerido".
+  name: z.preprocess(cleanText, z.string().min(1, 'Nombre es requerido')),
   description: z.string().optional(),
   // Precio: permitir 0 para marcar el producto como bonificación/cortesía.
   // Con 0 se agrega al carrito sin costo y se imprime con la etiqueta BONIFICACIÓN.

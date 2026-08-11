@@ -24,6 +24,28 @@ export function cn(...inputs) {
  * @param {string} str - Texto a normalizar (acepta null/undefined)
  * @returns {string}
  */
+/**
+ * Limpia un texto de una sola línea: colapsa cualquier corrida de espacios,
+ * tabuladores, saltos de línea y espacios duros en un solo espacio, y recorta
+ * los extremos.
+ *
+ * Existe por un caso real: al pegar el nombre de un producto desde Excel viene
+ * con un TABULADOR y un salto de línea adelante ("\t\nCaño lavatorio..."). Eso
+ * no se ve en pantalla, pero esos caracteres de control ordenan ANTES que
+ * cualquier letra, así que los productos pegados se quedaban clavados arriba de
+ * la lista por más que estuviera ordenada alfabéticamente. También ensucia los
+ * tickets y los PDF.
+ *
+ * Usar en campos de UNA línea (nombre, SKU, código). Para textos con saltos
+ * intencionales —una descripción larga— usar `.trim()` a secas.
+ *
+ * @param {string} value - Texto a limpiar (acepta null/undefined)
+ * @returns {string}
+ */
+export function cleanText(value) {
+  return String(value == null ? '' : value).replace(/\s+/g, ' ').trim()
+}
+
 export function normalizeText(str) {
   return String(str || '')
     .normalize('NFD')
