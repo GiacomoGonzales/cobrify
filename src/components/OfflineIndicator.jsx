@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { WifiOff, Wifi, CloudOff, RefreshCw, AlertCircle } from 'lucide-react'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { getPendingSalesCount } from '@/services/offlineQueueService'
-import { processPendingSales, onSyncEvent } from '@/services/offlineSyncService'
+import { processPendingSales, startAutoSync, onSyncEvent } from '@/services/offlineSyncService'
 import { useAppContext } from '@/hooks/useAppContext'
 
 /**
@@ -11,11 +11,47 @@ import { useAppContext } from '@/hooks/useAppContext'
  */
 export default function OfflineIndicator() {
   const { isOnline, isOffline, wasOffline } = useOnlineStatus()
-  const { user, isDemoMode } = useAppContext()
+  const { isDemoMode, getBusinessId } = useAppContext()
   const [pendingCount, setPendingCount] = useState(0)
   const [isSyncing, setIsSyncing] = useState(false)
   const [syncMessage, setSyncMessage] = useState('')
   const [showReconnected, setShowReconnected] = useState(false)
+
+  // Se calcula en el render y NO se pasa `getBusinessId` como dependencia: su
+  // identidad cambia en cada render del contexto y los efectos se re-montarían
+  // sin parar.
+  const businessId = getBusinessId?.() || null
+
+  // Sincronización automática al recuperar la conexión. Existía la función pero
+  // NADIE la llamaba: el cliente tenía que darle al botón a mano, y si no se
+  // daba cuenta las ventas se quedaban encoladas indefinidamente.
+  useEffect(() => {
+    if (!businessId || isDemoMode) return
+    return startAutoSync(businessId)
+  }, [businessId, isDemoMode])
+
+  // Al abrir el sistema: si quedaron ventas encoladas de una sesión anterior,
+  // sincronizarlas sin esperar a que el usuario vea el botón. El evento
+  // 'online' no cubre este caso — nunca se dispara si la app arranca con
+  // conexión, que es justo lo que pasa cuando el cajero cierra el navegador sin
+  // internet y lo vuelve a abrir al día siguiente.
+  useEffect(() => {
+    if (!businessId || isDemoMode) return
+    let cancelled = false
+    // Margen para que la sesión y Firestore terminen de levantar
+    const timer = setTimeout(async () => {
+      if (cancelled || !navigator.onLine) return
+      try {
+        const count = await getPendingSalesCount()
+        if (cancelled || count === 0) return
+        console.log(`🔄 ${count} venta(s) pendiente(s) de una sesión anterior; sincronizando...`)
+        await processPendingSales(businessId)
+      } catch (error) {
+        console.error('Error en la sincronización de arranque:', error)
+      }
+    }, 3000)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [businessId, isDemoMode])
 
   // Cargar conteo de ventas pendientes
   useEffect(() => {
@@ -51,7 +87,12 @@ export default function OfflineIndicator() {
           break
         case 'sync_completed':
           setIsSyncing(false)
-          if (data.processed > 0) {
+          if (data.stockIssues > 0) {
+            // La venta se registró pero el inventario no se movió: hay que
+            // revisarlo a mano y el cajero tiene que enterarse.
+            setSyncMessage(`${data.processed} venta(s) sincronizada(s) · ${data.stockIssues} sin descontar stock, revisa el inventario`)
+            setTimeout(() => setSyncMessage(''), 12000)
+          } else if (data.processed > 0) {
             setSyncMessage(`${data.processed} venta(s) sincronizada(s)`)
             setTimeout(() => setSyncMessage(''), 3000)
           } else {
@@ -76,11 +117,14 @@ export default function OfflineIndicator() {
     }
   }, [wasOffline, isOnline])
 
-  // Manejar sincronización manual
+  // Manejar sincronización manual. Va el ID del NEGOCIO, no el uid del usuario:
+  // con un sub-usuario el uid no es el negocio y las ventas terminaban en una
+  // ruta fantasma (ver offlineSyncService).
   const handleManualSync = async () => {
-    if (!user?.uid || isSyncing) return
+    const businessId = getBusinessId?.()
+    if (!businessId || isSyncing) return
     setIsSyncing(true)
-    await processPendingSales(user.uid)
+    await processPendingSales(businessId)
     setIsSyncing(false)
   }
 
