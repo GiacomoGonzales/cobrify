@@ -39,6 +39,7 @@ import {
   mergeTables,
   unmergeTable,
   markPreBillPrinted,
+  compareTableNumber,
 } from '@/services/tableService'
 import { getWaiters } from '@/services/waiterService'
 import { getOrder, updateOrder, updateItemStatus } from '@/services/orderService'
@@ -345,7 +346,11 @@ export default function Tables() {
     // Modo normal - usar Firestore
     const businessId = getBusinessId()
     const tablesRef = collection(db, 'businesses', businessId, 'tables')
-    const q = query(tablesRef, orderBy('number', 'asc'))
+    // Sin orderBy de Firestore: `number` está guardado como número en los
+    // negocios viejos y como texto en los nuevos, y Firestore ordena por TIPO
+    // primero (todos los números y luego los textos alfabéticamente). Se ordena
+    // acá con comparación natural — ver compareTableNumber.
+    const q = query(tablesRef)
 
     // Listener en tiempo real - se ejecuta cada vez que hay cambios
     const unsubscribe = onSnapshot(
@@ -360,6 +365,7 @@ export default function Tables() {
           if (!canAccessTable(t)) return
           tablesData.push(t)
         })
+        tablesData.sort(compareTableNumber)
 
         setTables(tablesData)
 

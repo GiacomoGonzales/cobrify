@@ -24,18 +24,36 @@ import { createOrder, completeOrder, addOrderItems } from './orderService'
 // =====================================================
 
 /**
+ * Ordena mesas por su número de forma NATURAL: la 7 antes que la 10, y las
+ * mesas con nombre ("Delivery 40") entre ellas por su parte numérica.
+ *
+ * No se puede delegar en el `orderBy` de Firestore. El campo `number` está
+ * guardado a veces como NÚMERO y a veces como TEXTO —los negocios viejos lo
+ * tienen numérico y desde hace tiempo se crea como texto (`formData.number.trim()`)—
+ * y Firestore ordena primero POR TIPO: todos los números y después todos los
+ * textos en orden alfabético. Resultado real de un cliente con 32 mesas:
+ * 1,2,3,4,5,6 y enseguida "10","11","12","13",…,"7","8","9". Parecía un
+ * desorden aleatorio y era eso.
+ */
+export const compareTableNumber = (a, b) =>
+  String(a?.number ?? '').localeCompare(String(b?.number ?? ''), 'es', {
+    numeric: true,
+    sensitivity: 'base',
+  })
+
+/**
  * Obtener todas las mesas de un negocio
  */
 export const getTables = async (businessId) => {
   try {
     const tablesRef = collection(db, 'businesses', businessId, 'tables')
-    const q = query(tablesRef, orderBy('number', 'asc'))
-    const snapshot = await getDocs(q)
+    const snapshot = await getDocs(tablesRef)
 
     const tables = []
     snapshot.forEach((doc) => {
       tables.push({ id: doc.id, ...doc.data() })
     })
+    tables.sort(compareTableNumber)
 
     return { success: true, data: tables }
   } catch (error) {
@@ -1259,17 +1277,14 @@ export const transferTable = async (businessId, tableId, transferData) => {
 export const getTablesByZone = async (businessId, zone) => {
   try {
     const tablesRef = collection(db, 'businesses', businessId, 'tables')
-    const q = query(
-      tablesRef,
-      where('zone', '==', zone),
-      orderBy('number', 'asc')
-    )
+    const q = query(tablesRef, where('zone', '==', zone))
     const snapshot = await getDocs(q)
 
     const tables = []
     snapshot.forEach((doc) => {
       tables.push({ id: doc.id, ...doc.data() })
     })
+    tables.sort(compareTableNumber)
 
     return { success: true, data: tables }
   } catch (error) {
@@ -1284,17 +1299,14 @@ export const getTablesByZone = async (businessId, zone) => {
 export const getTablesByStatus = async (businessId, status) => {
   try {
     const tablesRef = collection(db, 'businesses', businessId, 'tables')
-    const q = query(
-      tablesRef,
-      where('status', '==', status),
-      orderBy('number', 'asc')
-    )
+    const q = query(tablesRef, where('status', '==', status))
     const snapshot = await getDocs(q)
 
     const tables = []
     snapshot.forEach((doc) => {
       tables.push({ id: doc.id, ...doc.data() })
     })
+    tables.sort(compareTableNumber)
 
     return { success: true, data: tables }
   } catch (error) {
