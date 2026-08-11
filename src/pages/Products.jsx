@@ -1545,7 +1545,36 @@ export default function Products() {
               stock: stockValue,
               minStock: 0
             }]
+          } else if (editingProduct && stockValue != null && variantWarehouseStocks.length > 0) {
+            // El usuario editó a mano el stock de una variante que YA tiene
+            // almacenes. Antes ese número entraba solo en `stock` y los
+            // almacenes quedaban intactos: la lista de Productos (que suma
+            // `stock`) mostraba 4 y el POS —que vende contra warehouseStocks—
+            // decía "Sin stock". Reporte real de una zapatería.
+            const currentTotal = variantWarehouseStocks.reduce((s, x) => s + (x.stock || 0), 0)
+            if (stockValue !== currentTotal) {
+              // La diferencia va al almacén elegido; si no está entre los de la
+              // variante, al primero que tenga. Con un solo almacén —el caso
+              // normal— equivale a dejarlo en lo que el usuario escribió.
+              const targetId = (targetWarehouseForVariants &&
+                variantWarehouseStocks.some(x => x.warehouseId === targetWarehouseForVariants))
+                ? targetWarehouseForVariants
+                : variantWarehouseStocks[0].warehouseId
+              const delta = stockValue - currentTotal
+              variantWarehouseStocks = variantWarehouseStocks.map(x =>
+                x.warehouseId === targetId
+                  ? { ...x, stock: Math.max(0, (x.stock || 0) + delta) }
+                  : x
+              )
+            }
           }
+
+          // INVARIANTE: con almacenes, `stock` es SIEMPRE su suma. Es lo que
+          // impide que las dos cifras vuelvan a separarse. Sin almacenes queda
+          // el valor tipeado (producto que todavía no se asignó a ninguno).
+          const finalStock = variantWarehouseStocks.length > 0
+            ? variantWarehouseStocks.reduce((s, x) => s + (x.stock || 0), 0)
+            : stockValue
 
           // Multi-divisa: precio fijo en USD por variante. Solo se persiste si
           // el negocio tiene multi-divisa activada; PEN-only siempre null.
@@ -1563,7 +1592,7 @@ export default function Products() {
             price2: v.price2 || null,
             price3: v.price3 || null,
             price4: v.price4 || null,
-            stock: stockValue,
+            stock: finalStock,
             warehouseStocks: variantWarehouseStocks,
             priceUSD: variantPriceUSD,
           }
