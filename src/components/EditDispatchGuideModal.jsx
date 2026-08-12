@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { X, Truck, MapPin, User, Package, Calendar, FileText, Plus, Trash2, ChevronDown, ChevronUp, Store, AlertTriangle, Search, Loader2 } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import { validatePlate, normalizePlate, PLATE_MAX_LENGTH, PLATE_EXAMPLE } from '@/utils/vehiclePlate'
@@ -133,6 +133,9 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
 
   // Establecimientos (anexos) del RUC del destinatario: lista + modal para elegir (igual que el POS)
   const [recipientEstablishments, setRecipientEstablishments] = useState([])
+  // Cuál de las direcciones de entrega guardadas del cliente está elegida
+  // ('' = su domicilio fiscal).
+  const [selectedDeliveryAddressId, setSelectedDeliveryAddressId] = useState('')
   const [showRecipientEstablishmentsModal, setShowRecipientEstablishmentsModal] = useState(false)
   const [loadingRecipientEstablishments, setLoadingRecipientEstablishments] = useState(false)
 
@@ -599,6 +602,56 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
     } finally {
       setIsSearchingDriver(false)
     }
+  }
+
+  // Direcciones de entrega que el cliente tiene guardadas en su ficha.
+  // Se ubica al cliente por su NÚMERO DE DOCUMENTO: la guía guarda una copia de
+  // los datos del destinatario, no una referencia al cliente.
+  const recipientSavedAddresses = useMemo(() => {
+    const doc = String(recipientDocNumber || '').replace(/\D/g, '')
+    if (!doc) return []
+    const cliente = customers.find(
+      c => String(c.documentNumber || '').replace(/\D/g, '') === doc
+    )
+    return (cliente?.deliveryAddresses || []).filter(d => d?.address)
+  }, [customers, recipientDocNumber])
+
+  // Si cambia el destinatario, la dirección elegida del anterior ya no aplica.
+  useEffect(() => {
+    setSelectedDeliveryAddressId('')
+  }, [recipientDocNumber])
+
+  // Igual que al elegir un establecimiento: mueve destinatario Y punto de
+  // llegada, porque acá no hay useEffect que los sincronice.
+  const applySavedDeliveryAddress = (id) => {
+    setSelectedDeliveryAddressId(id)
+
+    if (!id) {
+      const doc = String(recipientDocNumber || '').replace(/\D/g, '')
+      const cliente = customers.find(
+        c => String(c.documentNumber || '').replace(/\D/g, '') === doc
+      )
+      if (cliente?.address) setRecipientAddress(cliente.address)
+      return
+    }
+
+    const dir = recipientSavedAddresses.find(d => d.id === id)
+    if (!dir) return
+
+    setRecipientAddress(dir.address)
+    setDestinationAddress(dir.address)
+
+    const { valid, departamento, provincia, distrito } = resolveUbigeoParts(dir.ubigeo)
+    if (!valid) {
+      toast.info('Esa dirección no tiene distrito guardado — elígelo en el punto de llegada')
+      return
+    }
+    setRecipientDepartment(departamento)
+    setRecipientProvince(provincia)
+    setRecipientDistrict(distrito)
+    setDestinationDepartment(departamento)
+    setDestinationProvince(provincia)
+    setDestinationDistrict(distrito)
   }
 
   // Aplicar un establecimiento (anexo SUNAT) del destinatario: dirección Y ubigeo.
@@ -1278,6 +1331,29 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                 )}
               </div>
             </div>
+
+            {/* Direcciones de entrega guardadas en la ficha del cliente. Solo
+                aparece si tiene alguna: quien no las usa no ve el campo. */}
+            {recipientSavedAddresses.length > 0 && (
+              <div>
+                <Select
+                  label="Dirección de entrega"
+                  value={selectedDeliveryAddressId}
+                  onChange={(e) => applySavedDeliveryAddress(e.target.value)}
+                >
+                  <option value="">Domicilio fiscal</option>
+                  {recipientSavedAddresses.map((dir) => (
+                    <option key={dir.id} value={dir.id}>
+                      {dir.label ? `${dir.label} — ${dir.address}` : dir.address}
+                    </option>
+                  ))}
+                </Select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Guardadas en la ficha del cliente. Traen su distrito, así que
+                  el punto de llegada queda completo.
+                </p>
+              </div>
+            )}
 
             <Input
               label="Dirección"

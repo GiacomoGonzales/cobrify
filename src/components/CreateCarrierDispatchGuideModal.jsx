@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { X, Truck, MapPin, User, Package, Calendar, FileText, Building2, Car, Plus, Trash2, Search, Loader2, Save, Info, Store } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import { validatePlate, normalizePlate, PLATE_MAX_LENGTH, PLATE_EXAMPLE } from '@/utils/vehiclePlate'
@@ -7,7 +7,7 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { useToast } from '@/contexts/ToastContext'
 import { useAppContext } from '@/hooks/useAppContext'
-import { createCarrierDispatchGuide, saveCarrierDispatchGuideDraft, deleteCarrierDispatchGuide, updateCarrierDispatchGuide, getCompanySettings, sendCarrierDispatchGuideToSunat } from '@/services/firestoreService'
+import { createCarrierDispatchGuide, saveCarrierDispatchGuideDraft, deleteCarrierDispatchGuide, updateCarrierDispatchGuide, getCompanySettings, sendCarrierDispatchGuideToSunat, getCustomers } from '@/services/firestoreService'
 import { consultarRUC, consultarDNI, consultarEstablecimientos } from '@/services/documentLookupService'
 import { DEPARTAMENTOS, getProvincias, getDistritos, buildUbigeo, resolveUbigeoParts } from '@/data/peruUbigeos'
 
@@ -153,6 +153,9 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
   const [recipientDepartamento, setRecipientDepartamento] = useState('')
   const [recipientProvincia, setRecipientProvincia] = useState('')
   const [recipientDistrito, setRecipientDistrito] = useState('')
+  // Clientes del negocio, para ofrecer sus direcciones de entrega guardadas.
+  const [customers, setCustomers] = useState([])
+  const [selectedDeliveryAddressId, setSelectedDeliveryAddressId] = useState('')
 
   // Establecimientos (anexos) del RUC del destinatario: lista + modal para elegir (igual que el POS)
   const [recipientEstablishments, setRecipientEstablishments] = useState([])
@@ -223,6 +226,38 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
   const [isLookingUpShipper, setIsLookingUpShipper] = useState(false)
   const [isLookingUpRecipient, setIsLookingUpRecipient] = useState(false)
   const [autoSendToSunat, setAutoSendToSunat] = useState(false)
+
+  // Cargar clientes registrados, para ofrecer sus direcciones de entrega
+  // guardadas como punto de llegada.
+  useEffect(() => {
+    const loadCustomers = async () => {
+      if (!isOpen) return
+      try {
+        const businessId = getBusinessId()
+        const result = await getCustomers(businessId)
+        if (result.success) setCustomers(result.data || [])
+      } catch (error) {
+        console.error('Error al cargar clientes:', error)
+      }
+    }
+    loadCustomers()
+  }, [isOpen, getBusinessId])
+
+  // Direcciones de entrega guardadas del destinatario, ubicadas por su número
+  // de documento (la guía guarda una copia de sus datos, no una referencia).
+  const recipientSavedAddresses = useMemo(() => {
+    const doc = String(recipientDocNumber || '').replace(/\D/g, '')
+    if (!doc) return []
+    const cliente = customers.find(
+      c => String(c.documentNumber || '').replace(/\D/g, '') === doc
+    )
+    return (cliente?.deliveryAddresses || []).filter(d => d?.address)
+  }, [customers, recipientDocNumber])
+
+  // Si cambia el destinatario, la dirección elegida del anterior ya no aplica.
+  useEffect(() => {
+    setSelectedDeliveryAddressId('')
+  }, [recipientDocNumber])
 
   // Cargar datos de la empresa transportista
   useEffect(() => {
@@ -548,6 +583,46 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
       setDestinationDistrito
     )
     return okDestinatario && okLlegada
+  }
+
+  // Elegir una de las direcciones de entrega guardadas del cliente. Igual que
+  // con los establecimientos, mueve al destinatario Y al punto de llegada.
+  // Volver a "Domicilio fiscal" repone la dirección de la ficha, pero no un
+  // ubigeo: la ficha no guarda uno para el domicilio fiscal.
+  const applySavedDeliveryAddress = (id) => {
+    setSelectedDeliveryAddressId(id)
+
+    const doc = String(recipientDocNumber || '').replace(/\D/g, '')
+    const cliente = customers.find(
+      c => String(c.documentNumber || '').replace(/\D/g, '') === doc
+    )
+
+    if (!id) {
+      if (cliente?.address) setRecipientAddress(cliente.address)
+      return
+    }
+
+    const dir = recipientSavedAddresses.find(d => d.id === id)
+    if (!dir) return
+
+    setRecipientAddress(dir.address)
+    setDestinationAddress(dir.address)
+
+    const okDestinatario = aplicarUbigeoExterno(
+      dir.ubigeo,
+      setRecipientDepartamento,
+      setRecipientProvincia,
+      setRecipientDistrito
+    )
+    aplicarUbigeoExterno(
+      dir.ubigeo,
+      setDestinationDepartamento,
+      setDestinationProvincia,
+      setDestinationDistrito
+    )
+    if (!okDestinatario) {
+      toast.info('Esa dirección no tiene distrito guardado — elígelo abajo')
+    }
   }
 
   // Consultar establecimientos (anexos) del RUC del destinatario; varios → modal, uno → directo. (Igual que el POS.)
@@ -1339,6 +1414,29 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
               onChange={(e) => setRecipientName(e.target.value)}
             />
           </div>
+          {/* Direcciones de entrega guardadas en la ficha del cliente. Solo
+              aparece si tiene alguna. */}
+          {recipientSavedAddresses.length > 0 && (
+            <div>
+              <Select
+                label="Dirección de entrega"
+                value={selectedDeliveryAddressId}
+                onChange={(e) => applySavedDeliveryAddress(e.target.value)}
+              >
+                <option value="">Domicilio fiscal</option>
+                {recipientSavedAddresses.map((dir) => (
+                  <option key={dir.id} value={dir.id}>
+                    {dir.label ? `${dir.label} — ${dir.address}` : dir.address}
+                  </option>
+                ))}
+              </Select>
+              <p className="text-xs text-gray-500 mt-1">
+                Guardadas en la ficha del cliente. Traen su distrito, así que el
+                punto de llegada queda completo.
+              </p>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
               label="Dirección del Destinatario"
