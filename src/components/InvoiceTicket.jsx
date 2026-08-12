@@ -44,8 +44,18 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
 
   // Leyenda de Amazonía (Ley 27037): se imprime en el ticket cuando el negocio
   // está acogido (motivo de exoneración = Amazonía).
-  const _amazonTaxType = companySettings?.emissionConfig?.taxConfig?.taxType || companySettings?.taxConfig?.taxType || ''
-  const _amazonReason = companySettings?.emissionConfig?.taxConfig?.exemptionReason || companySettings?.taxConfig?.exemptionReason || ''
+  // Primero la config guardada EN EL COMPROBANTE y recién después la del
+  // negocio, igual que el PDF y que el generador del XML: con el selector de
+  // IGV por venta, una venta gravada a Lima desde la Amazonía no puede salir
+  // impresa diciendo que los bienes se consumen en la selva.
+  const _amazonTaxType = invoice?.taxConfig?.taxType
+    ?? companySettings?.emissionConfig?.taxConfig?.taxType
+    ?? companySettings?.taxConfig?.taxType
+    ?? ''
+  const _amazonReason = invoice?.taxConfig?.exemptionReason
+    ?? companySettings?.emissionConfig?.taxConfig?.exemptionReason
+    ?? companySettings?.taxConfig?.exemptionReason
+    ?? ''
   // 'exempt' = Exonerado (0%) Ley 27037 (Amazonía). Fallback al reason legado.
   const showAmazonLegend = _amazonTaxType === 'exempt' || (typeof _amazonReason === 'string' && _amazonReason.toLowerCase().includes('amazon'))
 

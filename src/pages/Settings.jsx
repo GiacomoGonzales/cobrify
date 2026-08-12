@@ -517,6 +517,9 @@ export default function Settings() {
   // Útil para negocios de zona de selva con taxConfig estándar que venden
   // mayormente exonerado y solo gravan algunos productos puntuales.
   const [defaultTaxAffectation, setDefaultTaxAffectation] = useState('10')
+  // Selector de afectación por VENTA en el POS (caso Amazonía: exonerado en la
+  // región, gravado cuando vende fuera). Apagado por defecto.
+  const [allowManualTaxAffectation, setAllowManualTaxAffectation] = useState(false)
 
   // Estados para privacidad
   const [hideDashboardDataFromSecondary, setHideDashboardDataFromSecondary] = useState(false)
@@ -1334,6 +1337,7 @@ export default function Settings() {
         }
         // Afectación IGV por defecto al crear productos
         setDefaultTaxAffectation(businessData.defaultTaxAffectation || '10')
+        setAllowManualTaxAffectation(businessData.allowManualTaxAffectation === true)
 
         // Multi-divisa (USD) — opt-in
         setMultiCurrencyEnabled(businessData.multiCurrencyEnabled === true)
@@ -3823,6 +3827,20 @@ export default function Settings() {
                       <option value="30">Inafecto</option>
                     </select>
                   </div>
+
+                  {/* Elegir la afectación en cada venta. Va junto a la afectación
+                      por defecto porque resuelve el caso que esa NO cubre: no que
+                      unos productos sean gravados y otros exonerados, sino que el
+                      MISMO producto cambie según a quién se le venda. */}
+                  <SettingToggle
+                    id="opcion-allowManualTaxAffectation"
+                    checked={allowManualTaxAffectation}
+                    onChange={(e) => setAllowManualTaxAffectation(e.target.checked)}
+                    title="Elegir el IGV en cada venta"
+                    description={allowManualTaxAffectation
+                      ? 'Habilitado: en el punto de venta aparece un selector para emitir esa venta como gravada o exonerada, sin importar cómo esté configurado el producto. El total no cambia — solo cambia cómo se declara a SUNAT.'
+                      : 'Agrega un selector en el punto de venta para decidir, venta por venta, si el comprobante sale gravado o exonerado. Pensado para negocios de la Amazonía (Ley 27037): están exonerados por lo que se consume en la región, pero cuando venden fuera la operación sí lleva IGV.'}
+                  />
                 </div>
               </div>
 
@@ -4492,6 +4510,7 @@ export default function Settings() {
                       enableProductLocation: enableProductLocation,
                       enableManualStockEdit: enableManualStockEdit,
                       defaultTaxAffectation: defaultTaxAffectation,
+                      allowManualTaxAffectation: allowManualTaxAffectation,
                       enableCustomerDisplay: enableCustomerDisplay,
                       hiddenMenuItems: hiddenMenuItems,
                       metaAdsEnabled: metaAdsEnabled,

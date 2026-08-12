@@ -157,6 +157,38 @@ export default {
     },
 
     {
+      id: 'igv-por-venta',
+      title: 'Cobrar o no cobrar IGV en una venta',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Normalmente el IGV lo define cada producto y no hay que pensarlo. Pero hay negocios donde el **mismo producto** va exonerado unas veces y gravado otras: los acogidos a la **Ley 27037 (Amazonía)**, que están exonerados por lo que se consume en la región, pero cuando venden fuera la operación sí lleva IGV.',
+        },
+        {
+          type: 'texto',
+          text: 'Si activas la opción, en el POS aparece el selector **IGV de esta venta** debajo del tipo de comprobante, con tres opciones: **Según lo configurado** (lo normal), **Gravado** y **Exonerado**.',
+        },
+        {
+          type: 'ojo',
+          text: 'El total **no cambia**. Si el producto está a S/ 100, el cliente paga S/ 100 en los dos casos: gravado se declaran S/ 84.75 de base más S/ 15.25 de IGV, y exonerado se declaran S/ 100 sin IGV. Lo que cambia es cómo se declara a SUNAT, no lo que cobras.',
+        },
+        {
+          type: 'consejo',
+          text: 'La elección vale **solo para esa venta**: al terminar vuelve sola a "Según lo configurado". Así nadie deja el POS gravando por olvido.',
+        },
+        {
+          type: 'texto',
+          text: 'Cuando eliges Gravado, el comprobante tampoco lleva la leyenda de Amazonía — sería contradictorio en una factura que cobra IGV justamente por venderse fuera de la región.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=preferencias&opcion=allowManualTaxAffectation',
+          label: 'Activar el selector de IGV por venta',
+        },
+      ],
+    },
+
+    {
       id: 'cliente',
       title: 'Datos del cliente',
       blocks: [

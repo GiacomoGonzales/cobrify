@@ -1394,8 +1394,20 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // Leyenda de Amazonía (Ley 27037): se imprime debajo del "SON:" cuando el
   // negocio está acogido (motivo de exoneración = Amazonía). Reserva su alto en
   // el footer para no romper el salto de página.
-  const amazonTaxType = companySettings?.emissionConfig?.taxConfig?.taxType || companySettings?.taxConfig?.taxType || ''
-  const amazonReason = companySettings?.emissionConfig?.taxConfig?.exemptionReason || companySettings?.taxConfig?.exemptionReason || ''
+  // Se lee PRIMERO la config guardada en el comprobante y solo después la del
+  // negocio, igual que hace el generador del XML. Con el selector de IGV por
+  // venta, un negocio de la Amazonía puede emitir una venta GRAVADA a Lima: esa
+  // factura cobra IGV y no puede llevar impresa una leyenda que declara que los
+  // bienes se consumen en la selva. Su taxConfig viaja con taxType 'standard' y
+  // exemptionReason vacío, así que aquí la leyenda se apaga sola.
+  const amazonTaxType = invoice?.taxConfig?.taxType
+    ?? companySettings?.emissionConfig?.taxConfig?.taxType
+    ?? companySettings?.taxConfig?.taxType
+    ?? ''
+  const amazonReason = invoice?.taxConfig?.exemptionReason
+    ?? companySettings?.emissionConfig?.taxConfig?.exemptionReason
+    ?? companySettings?.taxConfig?.exemptionReason
+    ?? ''
   // 'exempt' = Exonerado (0%) Ley 27037 (Amazonía) del panel admin. Fallback al reason legado.
   const HAS_AMAZON_LEGEND = amazonTaxType === 'exempt' || (typeof amazonReason === 'string' && amazonReason.toLowerCase().includes('amazon'))
   const AMAZON_LEGEND_HEIGHT = HAS_AMAZON_LEGEND ? (20 * S) : 0

@@ -188,6 +188,7 @@ export const registerBusinessAsAdmin = async (email, password, displayName, busi
         enableProductLocation: businessData?.enableProductLocation || false,
         enableManualStockEdit: businessData?.enableManualStockEdit || false,
         defaultTaxAffectation: businessData?.defaultTaxAffectation || '10',
+        allowManualTaxAffectation: businessData?.allowManualTaxAffectation === true,
         posCustomFields: businessData?.posCustomFields || {},
         hiddenMenuItems: Array.isArray(businessData?.hiddenMenuItems) ? businessData.hiddenMenuItems : [],
         // Ventas / POS (solo se escriben los que el onboarding envía; el resto usa
