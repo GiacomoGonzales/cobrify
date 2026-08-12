@@ -9,7 +9,7 @@ import { unitDisplayName } from '@/data/sunatUnits';
 import { getComprobanteBreakdown } from '@/utils/peruUtils';
 import { buildKitchenLines, stationsForOrder } from '@/utils/kitchenComandaFormat';
 import { getSessionMoneyTotals } from '@/utils/cashTotals';
-import { getTicketFooterText } from '@/utils/ticketFooter';
+import { getTicketFooterParts } from '@/utils/ticketFooter';
 
 /**
  * Servicio para manejar impresoras térmicas WiFi/Bluetooth
@@ -1456,17 +1456,27 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
       .text(convertSpanishText('!Gracias por su preferencia!\n'))
       .clearFormatting();
 
-    // Mensaje al pie + términos y condiciones si están activados para el ticket
-    // (criterio único en @/utils/ticketFooter)
-    const footerText = getTicketFooterText(business)
-    if (footerText) {
+    // Pie del ticket (criterio único en @/utils/ticketFooter):
+    // el mensaje corto va centrado; los términos, a la izquierda y a todo el
+    // ancho. Al final se restaura 'center' porque lo que sigue (QR, web) no
+    // fija su propia alineación y la heredaría.
+    const footer = getTicketFooterParts(business)
+    if (footer.mensaje) {
       printer = printer
         .align('center')
         .text('\n');
-      const footerLines = footerText.split(/\r?\n/)
-      for (const line of footerLines) {
+      for (const line of footer.mensaje.split(/\r?\n/)) {
         printer = printer.text(convertSpanishText(line + '\n'));
       }
+    }
+    if (footer.terminos) {
+      printer = printer
+        .align('left')
+        .text('\n');
+      for (const line of footer.terminos.split(/\r?\n/)) {
+        printer = printer.text(convertSpanishText(line + '\n'));
+      }
+      printer = printer.align('center');
     }
 
     // QR personalizado al pie (configurado por el usuario).
@@ -1973,9 +1983,11 @@ const printBLETicket = async (invoice, business, paperWidth = 58) => {
       sunatHash: invoice.sunatHash || '',
       qrCode: invoice.qrCode || '',
 
-      // Pie del ticket ya resuelto (mensaje + términos si el negocio los activó).
-      // Se manda calculado para que el path Bluetooth no repita el criterio.
-      ticketFooterMessage: getTicketFooterText(business),
+      // Pie del ticket ya resuelto, en dos partes porque se alinean distinto
+      // (mensaje centrado, términos a la izquierda). Se manda calculado para
+      // que el path Bluetooth no repita el criterio.
+      ticketFooterMessage: getTicketFooterParts(business).mensaje,
+      ticketTermsText: getTicketFooterParts(business).terminos,
 
       // QR personalizado al pie del ticket (configurable en Settings)
       ticketQrEnabled: business?.ticketQrEnabled === true,
@@ -2710,15 +2722,22 @@ const buildTicketEscPos = async (invoice, business, paperWidth = 58) => {
       .newLine()
       .bold(false)
 
-    // Mensaje al pie + términos y condiciones si están activados para el ticket
-    // (criterio único en @/utils/ticketFooter)
-    const footerTextBuilder = getTicketFooterText(business)
-    if (footerTextBuilder) {
+    // Pie del ticket (criterio único en @/utils/ticketFooter): mensaje corto
+    // centrado y términos a la izquierda a todo el ancho. Se restaura el
+    // centrado al final porque el QR y la web que siguen no fijan alineación.
+    const footerParts = getTicketFooterParts(business)
+    if (footerParts.mensaje) {
       builder.newLine()
-      const footerLines = footerTextBuilder.split(/\r?\n/)
-      for (const line of footerLines) {
+      for (const line of footerParts.mensaje.split(/\r?\n/)) {
         builder.text(line).newLine()
       }
+    }
+    if (footerParts.terminos) {
+      builder.alignLeft().newLine()
+      for (const line of footerParts.terminos.split(/\r?\n/)) {
+        builder.text(line).newLine()
+      }
+      builder.alignCenter()
     }
 
     // QR personalizado al pie (configurado por el usuario).

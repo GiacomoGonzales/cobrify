@@ -1191,15 +1191,27 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
     commands.push(ESCPOSCommands.text('!Gracias por su preferencia!\n'));
     commands.push(ESCPOSCommands.bold(false));
 
-    // Pie del ticket. Llega YA RESUELTO desde printBLETicket (mensaje al pie +
-    // términos y condiciones si el negocio los activó): el criterio vive en
-    // @/utils/ticketFooter y no se repite acá.
+    // Pie del ticket. Llega YA RESUELTO desde printBLETicket en dos partes: el
+    // criterio vive en @/utils/ticketFooter y no se repite acá.
+    // El mensaje corto va centrado (alineación heredada); los términos, a la
+    // izquierda y a todo el ancho — centrar un párrafo largo lo vuelve
+    // ilegible. Al terminar se vuelve a centrar porque el QR y la web que
+    // siguen no fijan su propia alineación.
     if (receiptData.ticketFooterMessage && receiptData.ticketFooterMessage.trim()) {
       commands.push(ESCPOSCommands.text('\n'));
       const footerLines = receiptData.ticketFooterMessage.trim().split(/\r?\n/);
       for (const line of footerLines) {
         commands.push(ESCPOSCommands.text(convertSpanishText(line) + '\n'));
       }
+    }
+    if (receiptData.ticketTermsText && receiptData.ticketTermsText.trim()) {
+      commands.push(ESCPOSCommands.align(0)); // Izquierda
+      commands.push(ESCPOSCommands.text('\n'));
+      const termsLines = receiptData.ticketTermsText.trim().split(/\r?\n/);
+      for (const line of termsLines) {
+        commands.push(ESCPOSCommands.text(convertSpanishText(line) + '\n'));
+      }
+      commands.push(ESCPOSCommands.align(1)); // Centro (restaurar)
     }
 
     // QR personalizado al pie (configurable en Settings)

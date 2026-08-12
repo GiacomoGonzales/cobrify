@@ -6,7 +6,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { formatPricedModifierLines } from '@/utils/modifierHelpers'
 import { unitDisplayName } from '@/data/sunatUnits'
 import { getComprobanteBreakdown } from '@/utils/peruUtils'
-import { getTicketFooterText } from '@/utils/ticketFooter'
+import { getTicketFooterParts } from '@/utils/ticketFooter'
 
 /**
  * Componente de Ticket Imprimible según formato SUNAT
@@ -1294,23 +1294,48 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           ¡Gracias por su preferencia!
         </div>
 
-        {/* Mensaje al pie + términos y condiciones si el negocio los activó
-            para el ticket. El criterio vive en @/utils/ticketFooter. */}
-        {getTicketFooterText(companySettings) && (
-          <div
-            className="footer-text"
-            style={{
-              marginTop: '8px',
-              fontStyle: 'italic',
-              fontSize: '9px',
-              lineHeight: '1.3',
-              whiteSpace: 'pre-wrap',
-              padding: '0 4px',
-            }}
-          >
-            {getTicketFooterText(companySettings)}
-          </div>
-        )}
+        {/* Pie del ticket: mensaje corto CENTRADO + términos (si el negocio los
+            activó) a la IZQUIERDA y a todo el ancho — centrar un párrafo largo
+            lo vuelve ilegible. El criterio vive en @/utils/ticketFooter. */}
+        {(() => {
+          const { mensaje, terminos } = getTicketFooterParts(companySettings)
+          if (!mensaje && !terminos) return null
+          return (
+            <>
+              {mensaje && (
+                <div
+                  className="footer-text"
+                  style={{
+                    marginTop: '8px',
+                    fontStyle: 'italic',
+                    fontSize: '9px',
+                    lineHeight: '1.3',
+                    whiteSpace: 'pre-wrap',
+                    padding: '0 4px',
+                  }}
+                >
+                  {mensaje}
+                </div>
+              )}
+              {terminos && (
+                <div
+                  className="footer-text"
+                  style={{
+                    marginTop: '8px',
+                    fontSize: '9px',
+                    lineHeight: '1.3',
+                    whiteSpace: 'pre-wrap',
+                    padding: '0 2px',
+                    // El contenedor .footer centra todo; acá se vuelve a texto normal
+                    textAlign: 'left',
+                  }}
+                >
+                  {terminos}
+                </div>
+              )}
+            </>
+          )
+        })()}
 
         {companySettings?.ticketQrEnabled && (() => {
           const qrMode = companySettings.ticketQrMode === 'image' ? 'image' : 'auto'
