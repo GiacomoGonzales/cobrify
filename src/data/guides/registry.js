@@ -34,6 +34,16 @@ export const GUIDE_CATEGORIES = [
 
 export const GUIDES = [
   {
+    id: 'dashboard',
+    route: '/app/dashboard',
+    title: 'Dashboard',
+    category: 'Primeros pasos',
+    description: 'La pantalla de inicio: ventas del día y del mes, ticket promedio, gráficos, top productos y clientes.',
+    keywords: 'dashboard inicio resumen ventas del dia del mes ticket promedio grafico ultimos 7 dias 12 meses metodos de pago top productos clientes facturas recientes ocultar montos sucursal consolidada',
+    modos: null,
+    load: () => import('./dashboard.js'),
+  },
+  {
     id: 'pos',
     route: '/app/pos',
     title: 'Punto de Venta (POS)',
@@ -114,6 +124,167 @@ export const GUIDES = [
     load: () => import('./reportes.js'),
   },
   {
+    id: 'compras',
+    route: '/app/compras',
+    title: 'Compras',
+    category: 'Inventario',
+    description: 'Registrar la mercadería que entra, importar la factura del proveedor por XML, costos, lotes y cuentas por pagar.',
+    keywords: 'compras proveedor factura xml importar costo con igv sin igv stock entrada lote vencimiento serie registro sanitario presentacion caja unidad de compra credito contado cuentas por pagar abonos dolares sbs no afectar inventario revertir',
+    modos: null,
+    load: () => import('./compras.js'),
+  },
+  {
+    id: 'proveedores',
+    route: '/app/proveedores',
+    title: 'Proveedores',
+    category: 'Inventario',
+    description: 'Registrar a quién le compras, con búsqueda automática por RUC, e importar tu lista completa.',
+    keywords: 'proveedores ruc razon social sunat contacto telefono importar cuentas por pagar compras',
+    modos: null,
+    load: () => import('./proveedores.js'),
+  },
+  {
+    id: 'ordenes-compra',
+    route: '/app/ordenes-compra',
+    title: 'Órdenes de Compra',
+    category: 'Inventario',
+    description: 'Pedidos formales al proveedor: estados, PDF para enviar y conversión en compra cuando llega la mercadería.',
+    keywords: 'orden de compra pedido proveedor borrador enviada recibida cancelada convertir en compra pdf observaciones en camino',
+    modos: null,
+    load: () => import('./ordenes-compra.js'),
+  },
+  {
+    id: 'cotizaciones',
+    route: '/app/cotizaciones',
+    title: 'Cotizaciones',
+    category: 'Ventas',
+    description: 'Armar propuestas de precio, compartirlas en PDF o ticket, hacerles seguimiento y convertirlas en venta.',
+    keywords: 'cotizacion proforma presupuesto propuesta validez vence duplicar aceptada rechazada convertida convertir a factura pdf ticket guia remitente no descuenta stock',
+    modos: null,
+    load: () => import('./cotizaciones.js'),
+  },
+  {
+    id: 'almacenes',
+    route: '/app/almacenes',
+    title: 'Almacenes',
+    category: 'Inventario',
+    description: 'Definir dónde guardas la mercadería, cuándo conviene tener más de uno y cómo afecta al POS y a las compras.',
+    keywords: 'almacenes deposito trastienda principal activo inactivo codigo sucursal stock por almacen transferencia eliminar',
+    modos: null,
+    load: () => import('./almacenes.js'),
+  },
+  {
+    id: 'movimientos',
+    route: '/app/movimientos',
+    title: 'Movimientos de Inventario',
+    category: 'Inventario',
+    description: 'El historial de todo lo que movió tu stock: entradas, salidas, transferencias y ajustes, con el saldo resultante.',
+    keywords: 'movimientos historial stock entradas salidas sin ventas transferencias ajustes produccion motivo saldo descuadre auditar entre sucursales',
+    modos: null,
+    load: () => import('./movimientos.js'),
+  },
+  {
+    id: 'guias-remision',
+    route: '/app/guias-remision',
+    title: 'Guías de Remisión',
+    category: 'Operación',
+    description: 'Emitir la GRE del traslado: origen y destino, datos del transporte, descuento de stock, anulación y rechazos frecuentes.',
+    keywords: 'guia de remision gre remitente traslado despacho transporte placa conductor licencia dni modalidad origen destino peso motivo venta consignacion anular clonar xml cdr sunat rechazo',
+    modos: null,
+    load: () => import('./guias-remision.js'),
+  },
+  {
+    id: 'mesas',
+    route: '/app/mesas',
+    title: 'Mesas',
+    category: 'Operación',
+    description: 'El tablero del salón: crear mesas y zonas, tomar el pedido, juntar mesas, precuenta y cobro individual.',
+    keywords: 'mesas salon zona ocupada disponible reservada consumo precuenta cobrar cobro individual dividir cuenta juntar agrupar barra mozo restaurante',
+    modos: ['restaurant'],
+    load: () => import('./mesas.js'),
+  },
+  {
+    id: 'ordenes',
+    route: '/app/ordenes',
+    title: 'Órdenes',
+    category: 'Operación',
+    description: 'Todo lo que está en curso: salón, para llevar y delivery, con precuenta, división de cuenta y repartidor.',
+    keywords: 'ordenes activas pendientes en preparacion delivery para llevar repartidor precuenta crear comprobante dividir cuenta cerrar cuenta ventas hoy menu digital restaurante',
+    modos: ['restaurant'],
+    load: () => import('./ordenes.js'),
+  },
+  {
+    id: 'cocina',
+    route: '/app/cocina',
+    title: 'Cocina',
+    category: 'Operación',
+    description: 'La pantalla de producción: pendientes, en preparación y listas, ordenadas por tiempo de llegada.',
+    keywords: 'cocina comanda pendientes en preparacion listas iniciar marcar como lista entregado estacion filtro tablet monitor restaurante',
+    modos: ['restaurant'],
+    load: () => import('./cocina.js'),
+  },
+  {
+    id: 'ingredientes',
+    route: '/app/ingredientes',
+    title: 'Insumos / Ingredientes',
+    category: 'Inventario',
+    description: 'La materia prima: registrar insumos, controlar su stock y costo promedio, compras de insumos y modificadores.',
+    keywords: 'insumos ingredientes materia prima stock bajo costo promedio valor total solo para costos compras de insumos modificadores extras receta descuento',
+    modos: null,
+    load: () => import('./ingredientes.js'),
+  },
+  {
+    id: 'recetas',
+    route: '/app/recetas',
+    title: 'Recetas / Composición',
+    category: 'Inventario',
+    description: 'Cuánto insumo lleva cada producto: descuento automático al vender y costo real de cada plato.',
+    keywords: 'recetas composicion producto compuesto ingredientes insumos cantidad costo total descontar insumos al vender rentabilidad plato margen',
+    modos: null,
+    load: () => import('./recetas.js'),
+  },
+  {
+    id: 'vendedores',
+    route: '/app/vendedores',
+    title: 'Vendedores',
+    category: 'Operación',
+    description: 'Registrar a quién se le atribuyen las ventas, metas y comisiones, y por qué un vendedor no es lo mismo que un usuario.',
+    keywords: 'vendedores comision meta ventas hoy ordenes codigo activo inactivo sin vendedor asignado reporte por vendedor atribuir venta',
+    modos: null,
+    load: () => import('./vendedores.js'),
+  },
+  {
+    id: 'usuarios',
+    route: '/app/usuarios',
+    title: 'Usuarios y permisos',
+    category: 'Configuración',
+    description: 'Crear cuentas para tu equipo y decidir qué páginas ve cada uno, a qué sucursal accede y qué información se le oculta.',
+    keywords: 'usuarios permisos acceso paginas sucursales almacenes sub-usuario cajero ocultar descuentos ocultar stock caja independiente tipos de comprobante vendedor asignado desactivar contrasena email',
+    modos: null,
+    load: () => import('./usuarios.js'),
+  },
+  {
+    id: 'catalogo-online',
+    // Sin ruta propia: es la pestaña "catalogo" de Configuración. Guía de solo manual.
+    route: null,
+    title: 'Mi Catálogo Online',
+    category: 'Operación',
+    description: 'Tu tienda web armada con los productos que ya tienes: activarla, compartir el enlace y el QR, y recibir pedidos.',
+    keywords: 'catalogo online tienda web vitrina enlace qr compartir whatsapp mostrar precios ignorar stock recepcion de pedidos delivery para llevar carta digital menu qr por mesa',
+    modos: null,
+    load: () => import('./catalogo-online.js'),
+  },
+  {
+    id: 'pedidos-online',
+    route: '/app/pedidos-online',
+    title: 'Pedidos Online',
+    category: 'Operación',
+    description: 'La bandeja de pedidos del catálogo digital: cómo te avisan, cómo atenderlos y cómo convertirlos en venta.',
+    keywords: 'pedidos online catalogo digital alerta sonido notas del cliente historial desde hasta convertir en venta auto-aceptar delivery para llevar stock',
+    modos: null,
+    load: () => import('./pedidos-online.js'),
+  },
+  {
     id: 'configuracion',
     route: '/app/configuracion',
     title: 'Configuración',
@@ -131,11 +302,17 @@ export const GUIDES = [
  */
 const normalizePath = (pathname = '') => pathname.replace(/^\/demo[a-z]*(\/|$)/, '/app$1')
 
-/** Guía correspondiente a la ruta actual (o null si la página aún no tiene). */
+/**
+ * Guía correspondiente a la ruta actual (o null si la página aún no tiene).
+ *
+ * Una guía con `route: null` es de SOLO MANUAL: cubre una función que no vive
+ * en una página propia (p. ej. el catálogo online, que es una pestaña de
+ * Configuración) y por eso no debe secuestrar el panel de ayuda de otra página.
+ */
 export const getGuideByPath = (pathname) => {
   const path = normalizePath(pathname)
   return (
-    GUIDES.find(g => g.route === path || path.startsWith(g.route + '/')) || null
+    GUIDES.find(g => g.route && (g.route === path || path.startsWith(g.route + '/'))) || null
   )
 }
 
