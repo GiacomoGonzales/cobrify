@@ -3838,8 +3838,8 @@ export default function Settings() {
                     onChange={(e) => setAllowManualTaxAffectation(e.target.checked)}
                     title="Elegir el IGV en cada venta"
                     description={allowManualTaxAffectation
-                      ? 'Habilitado: en el punto de venta aparece un selector para emitir esa venta como gravada o exonerada, sin importar cómo esté configurado el producto. El total no cambia — solo cambia cómo se declara a SUNAT.'
-                      : 'Agrega un selector en el punto de venta para decidir, venta por venta, si el comprobante sale gravado o exonerado. Pensado para negocios de la Amazonía (Ley 27037): están exonerados por lo que se consume en la región, pero cuando venden fuera la operación sí lleva IGV.'}
+                      ? 'Habilitado: en el punto de venta aparece un selector para emitir esa venta como gravada o exonerada. La elección manda sobre lo que diga cada producto: si eliges Gravado, va gravado todo el comprobante aunque haya productos marcados exonerados. El total no cambia — solo cambia cómo se declara a SUNAT. No aplica al Nuevo RUS, que por su régimen no cobra IGV.'
+                      : 'Agrega un selector en el punto de venta para decidir, venta por venta, si el comprobante sale gravado o exonerado, sin importar cómo esté configurado cada producto. Pensado para negocios de la Amazonía (Ley 27037): están exonerados por lo que se consume en la región, pero cuando venden fuera la operación sí lleva IGV.'}
                   />
                 </div>
               </div>

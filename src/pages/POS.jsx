@@ -361,7 +361,15 @@ export default function POS() {
   //
   // 'auto' = manda lo configurado (el producto y el régimen del negocio).
   const [saleTaxMode, setSaleTaxMode] = useState('auto')
-  const allowManualTaxAffectation = businessSettings?.allowManualTaxAffectation === true
+  // El interruptor de Configuración, cruzado con el régimen del negocio.
+  //
+  // Un Nuevo RUS queda FUERA a propósito: su régimen no discrimina IGV. Su
+  // boleta viaja con tipo de operación 0113 e IGV 0 justamente para que SUNAT no
+  // le exija desglosarlo, y un RUS no está autorizado a cobrarlo. Ofrecerle
+  // "Gravado 18%" produciría una boleta 0113 con IGV — un comprobante que se
+  // contradice a sí mismo y que SUNAT rechaza.
+  const allowManualTaxAffectation =
+    businessSettings?.allowManualTaxAffectation === true && taxConfig.taxType !== 'nrus'
 
   // Configuración de impuestos que realmente rige esta venta.
   //
@@ -400,6 +408,30 @@ export default function POS() {
       exemptionReason: '',
     }
   }, [taxConfig, allowManualTaxAffectation, saleTaxMode])
+
+  // Afectación con la que sale un ítem en ESTA venta.
+  //
+  // Cuando se elige Gravado o Exonerado, la elección MANDA sobre lo que diga el
+  // producto: un producto marcado exonerado sale gravado igual, y al revés. Esa
+  // es toda la razón de ser de la opción — el caso es "este producto, a este
+  // cliente, hoy", no "este producto siempre". Con 'auto' manda lo configurado.
+  //
+  // Las bonificaciones se resuelven aparte (afectación 15/30) y no pasan por acá.
+  const resolveItemTaxAffectation = React.useCallback((item) => {
+    if (allowManualTaxAffectation && saleTaxMode === 'gravado') return '10'
+    if (effectiveTaxConfig.igvExempt) return '20'
+    return item?.taxAffectation || '10'
+  }, [allowManualTaxAffectation, saleTaxMode, effectiveTaxConfig])
+
+  // Tasa de IGV del ítem, con el mismo criterio.
+  // En Gravado se fuerza UNA sola tasa para todo el comprobante: SUNAT (regla
+  // 3462) exige que todas las líneas gravadas lleven la misma, y al forzar
+  // productos que estaban exonerados podrían entrar con tasas distintas.
+  const resolveItemIgvRate = React.useCallback((item) => {
+    if (allowManualTaxAffectation && saleTaxMode === 'gravado') return effectiveTaxConfig.igvRate
+    if (effectiveTaxConfig.igvExempt) return 0
+    return effectiveTaxConfig.taxType === 'reduced' ? effectiveTaxConfig.igvRate : item?.igvRate
+  }, [allowManualTaxAffectation, saleTaxMode, effectiveTaxConfig])
   const [recargoConsumoConfig, setRecargoConsumoConfig] = useState({ enabled: false, rate: 10 }) // Recargo al Consumo (restaurantes)
   // Recargo por pago con tarjeta (Configuración > Ventas). Cuando aplica, SUBE el
   // precio de los productos (no se muestra como línea); el comprobante sale como
@@ -2036,7 +2068,7 @@ export default function POS() {
           unit: item.unit || 'NIU',
           code: item.code || '',
           observations: item.observations || '',
-          taxAffectation: effectiveTaxConfig.igvExempt ? '20' : (item.taxAffectation || '10'),
+          taxAffectation: resolveItemTaxAffectation(item),
           itemDiscount: item.itemDiscount || 0,
           notes: item.notes || '',
           presentationName: item.presentationName || '',
@@ -4370,7 +4402,7 @@ export default function POS() {
       quantity: quantity,
       unit: customProduct.unit || 'NIU',
       // Bonificaciones son inafectas (no generan IGV)
-      taxAffectation: customProduct.isBonificacion ? '30' : (effectiveTaxConfig.igvExempt ? '20' : (customProduct.taxAffectation || '10')),
+      taxAffectation: customProduct.isBonificacion ? '30' : resolveItemTaxAffectation(customProduct),
       // Solo incluir igvRate si es standard y gravado
       ...(effectiveTaxConfig.taxType === 'standard' && customProduct.taxAffectation === '10' && !customProduct.isBonificacion && { igvRate: customIgvRate }),
       stock: null, // Productos personalizados no tienen control de stock
@@ -5247,8 +5279,8 @@ export default function POS() {
         return {
           price: effectivePrice,
           quantity: item.quantity,
-          taxAffectation: effectiveTaxConfig.igvExempt ? '20' : (item.taxAffectation || '10'), // Si empresa exonerada, forzar exonerado
-          igvRate: effectiveTaxConfig.igvExempt ? 0 : (effectiveTaxConfig.taxType === 'reduced' ? effectiveTaxConfig.igvRate : item.igvRate), // Ley restaurantes: forzar tasa global
+          taxAffectation: resolveItemTaxAffectation(item),
+          igvRate: resolveItemIgvRate(item),
         }
       }),
       effectiveTaxConfig.igvRate
@@ -5327,8 +5359,8 @@ export default function POS() {
           return {
             price: effectivePricePEN,
             quantity: item.quantity,
-            taxAffectation: effectiveTaxConfig.igvExempt ? '20' : (item.taxAffectation || '10'),
-            igvRate: effectiveTaxConfig.igvExempt ? 0 : (effectiveTaxConfig.taxType === 'reduced' ? effectiveTaxConfig.igvRate : item.igvRate),
+            taxAffectation: resolveItemTaxAffectation(item),
+            igvRate: resolveItemIgvRate(item),
           }
         }),
         effectiveTaxConfig.igvRate
@@ -5366,7 +5398,7 @@ export default function POS() {
       exonerado: baseAmounts.exonerado,
       inafecto: baseAmounts.inafecto,
     }
-  }, [effectiveCart, effectiveTaxConfig, discountAmount, recargoConsumoConfig, businessMode, currency, exchangeRate])
+  }, [effectiveCart, effectiveTaxConfig, resolveItemTaxAffectation, resolveItemIgvRate, discountAmount, recargoConsumoConfig, businessMode, currency, exchangeRate])
 
   // Actualizar pantalla de cliente cuando cambia el carrito
   useEffect(() => {
@@ -6030,7 +6062,7 @@ export default function POS() {
             basePrice: Number(item.basePrice),
           }),
           subtotal: item.price * item.quantity,
-          taxAffectation: effectiveTaxConfig.igvExempt ? '20' : (item.taxAffectation || '10'), // Si empresa exonerada, forzar exonerado
+          taxAffectation: resolveItemTaxAffectation(item),
           ...(item.observations && { observations: item.observations }),
           ...(item.itemDiscount > 0 && { itemDiscount: item.itemDiscount }),
           ...(item.presentationName && { presentationName: item.presentationName, presentationFactor: item.presentationFactor }),
@@ -6241,8 +6273,8 @@ export default function POS() {
           basePrice: Number(item.basePrice),
         }),
         subtotal: item.price * item.quantity,
-        taxAffectation: effectiveTaxConfig.igvExempt ? '20' : (item.taxAffectation || '10'), // Si empresa exonerada, forzar exonerado
-        ...(!effectiveTaxConfig.igvExempt && (effectiveTaxConfig.taxType === 'reduced' ? { igvRate: effectiveTaxConfig.igvRate } : (item.igvRate ? { igvRate: item.igvRate } : {}))), // Ley restaurantes: forzar tasa global
+        taxAffectation: resolveItemTaxAffectation(item),
+        ...(resolveItemIgvRate(item) ? { igvRate: resolveItemIgvRate(item) } : {}),
         ...(item.observations && { observations: item.observations }), // Incluir observaciones si existen (IMEI, placa, serie, etc.)
         ...(item.itemDiscount > 0 && { itemDiscount: item.itemDiscount }), // Descuento por ítem para XML SUNAT
         ...(item.notes && { notes: item.notes }), // Incluir notas si existen

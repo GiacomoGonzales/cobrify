@@ -170,6 +170,10 @@ export default {
         },
         {
           type: 'ojo',
+          text: 'Lo que elijas **manda sobre lo que diga cada producto**. Si eliges Gravado, el comprobante entero sale gravado aunque tengas productos marcados como exonerados; y al revés. No es una mezcla: es el mismo criterio para toda la venta.',
+        },
+        {
+          type: 'ojo',
           text: 'El total **no cambia**. Si el producto está a S/ 100, el cliente paga S/ 100 en los dos casos: gravado se declaran S/ 84.75 de base más S/ 15.25 de IGV, y exonerado se declaran S/ 100 sin IGV. Lo que cambia es cómo se declara a SUNAT, no lo que cobras.',
         },
         {
