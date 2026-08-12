@@ -72,6 +72,7 @@ import {
   Heart,
   Bell,
   Facebook,
+  HelpCircle,
 } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -1874,6 +1875,15 @@ function Sidebar() {
   // Agregar opciones adicionales según el rol
   const additionalItems = [
     {
+      // Manual de uso: para TODOS los usuarios (pageId null = sin permiso propio).
+      // Oculto en demo: los demos corren bajo /demo* y no montan la ruta del manual.
+      path: '/manual',
+      icon: HelpCircle,
+      label: 'Manual de uso',
+      pageId: null,
+      hideInDemo: true,
+    },
+    {
       path: '/mi-suscripcion',
       icon: CreditCard,
       label: 'Mi Suscripción',
@@ -1963,6 +1973,10 @@ function Sidebar() {
   const filteredAdditionalItems = additionalItems.filter((item) => {
     // Ocultar en iOS si tiene la bandera hideOnIOS (política Apple Guideline 3.1.1)
     if (item.hideOnIOS && isIOSNative) return false
+
+    // Ocultar en demo (misma bandera que usa itemPasses). Va ANTES del atajo
+    // "en demo mostrar todo" de más abajo, o no tendría efecto.
+    if (item.hideInDemo && isDemoMode) return false
 
     // Si es solo para admin y el usuario no es admin, no mostrar
     if (item.adminOnly && !isAdmin) return false
