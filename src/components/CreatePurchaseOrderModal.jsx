@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { getSuppliers, getProducts, createSupplier } from '@/services/firestoreService'
+import { getWarehouses } from '@/services/warehouseService'
 import { createPurchaseOrder, getNextPurchaseOrderNumber, updatePurchaseOrder } from '@/services/purchaseOrderService'
 import { formatCurrency } from '@/lib/utils'
 import { consultarRUC } from '@/services/documentLookupService'
@@ -81,6 +82,13 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
   const [exchangeRateSource, setExchangeRateSource] = useState(null)
   const [notes, setNotes] = useState('')
 
+  // Lugar de entrega: sale de los ALMACENES del negocio, que ya guardan su
+  // dirección ("Dirección del Local" en Almacenes). Antes había que escribirla
+  // a mano dentro de Observaciones en cada orden.
+  const [warehouses, setWarehouses] = useState([])
+  const [deliveryWarehouseId, setDeliveryWarehouseId] = useState('')
+  const [deliveryAddress, setDeliveryAddress] = useState('')
+
   // Auto-fetch TC del día al cambiar a USD (solo si no fue editado a mano).
   useEffect(() => {
     if (currency === 'USD' && exchangeRate <= 1 && !editingOrder) {
@@ -133,6 +141,8 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
         setExchangeRate(Number(editingOrder.exchangeRate) > 0 ? Number(editingOrder.exchangeRate) : 1)
         setExchangeRateSource(editingOrder.exchangeRate ? 'manual' : null)
         setNotes(editingOrder.notes || '')
+        setDeliveryWarehouseId(editingOrder.deliveryWarehouseId || '')
+        setDeliveryAddress(editingOrder.deliveryAddress || '')
         setPricesIncludeIgv(editingOrder.pricesIncludeIgv !== false)
         if (editingOrder.items && editingOrder.items.length > 0) {
           setItems(editingOrder.items.map(item => ({
@@ -155,6 +165,12 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
         const defaultDelivery = new Date()
         defaultDelivery.setDate(defaultDelivery.getDate() + 7)
         setDeliveryDate(getLocalDateString(defaultDelivery))
+        // Observaciones por defecto: el texto que se repite en todas las
+        // órdenes (requisitos al proveedor, horarios, etc.) se escribe una vez
+        // en Configuración y se precarga acá. Queda editable: es un punto de
+        // partida, no una imposición. Antes había que copiarlo de una orden a
+        // otra a mano y se olvidaba.
+        setNotes(businessSettings?.purchaseOrderDefaultNotes || '')
       }
     }
   }, [isOpen, user, editingOrder])
@@ -164,9 +180,10 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
 
     setIsLoading(true)
     try {
-      const [suppliersResult, productsResult] = await Promise.all([
+      const [suppliersResult, productsResult, warehousesResult] = await Promise.all([
         getSuppliers(getBusinessId()),
         getProducts(getBusinessId()),
+        getWarehouses(getBusinessId()),
       ])
 
       if (suppliersResult.success) {
@@ -175,6 +192,12 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
 
       if (productsResult.success) {
         setProducts(productsResult.data || [])
+      }
+
+      if (warehousesResult.success) {
+        // Solo los que tienen dirección cargada: un almacén sin dirección no
+        // sirve como lugar de entrega y ensuciaría el desplegable.
+        setWarehouses((warehousesResult.data || []).filter(w => String(w.address || '').trim()))
       }
     } catch (error) {
       console.error('Error al cargar datos:', error)
@@ -484,6 +507,8 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
           deliveryDate: deliveryDate,
           paymentCondition: paymentCondition,
           notes: notes,
+          deliveryWarehouseId: deliveryWarehouseId || null,
+          deliveryAddress: deliveryAddress || "",
         }
 
         const result = await updatePurchaseOrder(getBusinessId(), editingOrder.id, orderData)
@@ -511,6 +536,8 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
           deliveryDate: deliveryDate,
           paymentCondition: paymentCondition,
           notes: notes,
+          deliveryWarehouseId: deliveryWarehouseId || null,
+          deliveryAddress: deliveryAddress || "",
           status: 'draft',
           sentVia: [],
         }
@@ -554,6 +581,8 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
     setCurrency('PEN')
     setPricesIncludeIgv(true)
     setNotes('')
+    setDeliveryWarehouseId('')
+    setDeliveryAddress('')
   }
 
   if (isLoading) {
@@ -1143,6 +1172,40 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess, e
             </div>
 
             {/* Notas */}
+            {/* Lugar de entrega: solo si el negocio tiene almacenes con
+                dirección cargada. Sin ellos no se muestra nada, para no
+                ofrecer un selector vacío. */}
+            {warehouses.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Building2 className="w-5 h-5 text-gray-600" />
+                  <label className="block text-sm font-medium text-gray-700">
+                    Lugar de entrega
+                  </label>
+                </div>
+                <Select
+                  value={deliveryWarehouseId}
+                  onChange={(e) => {
+                    const id = e.target.value
+                    setDeliveryWarehouseId(id)
+                    const almacen = warehouses.find(w => w.id === id)
+                    // Se guarda también el TEXTO de la dirección: si mañana el
+                    // almacén cambia de local, la orden ya emitida conserva la
+                    // dirección a la que realmente se pidió entregar.
+                    setDeliveryAddress(almacen ? String(almacen.address || '').trim() : '')
+                  }}
+                >
+                  <option value="">Sin especificar</option>
+                  {warehouses.map(w => (
+                    <option key={w.id} value={w.id}>{w.name}</option>
+                  ))}
+                </Select>
+                {deliveryAddress && (
+                  <p className="text-xs text-gray-500">{deliveryAddress}</p>
+                )}
+              </div>
+            )}
+
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-gray-600" />

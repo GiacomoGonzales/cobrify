@@ -1087,10 +1087,16 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
     doc.setFontSize(8)
     doc.setFont('helvetica', 'normal')
     const obsLines = doc.splitTextToSize(observations, CONTENT_WIDTH)
-    obsLines.slice(0, 3).forEach((line, i) => {
-      doc.text(line, MARGIN_LEFT, currentY + (i * 10))
+    // Se imprimen TODAS: antes se cortaba en 3 líneas sin avisar y el usuario
+    // perdía lo que hubiera escrito de ahí en adelante (mismo problema que
+    // apareció en la orden de compra con el lugar de entrega). El salto de
+    // página lo resuelve checkPageBreak, que ya usa el resto del documento.
+    obsLines.forEach(line => {
+      checkPageBreak(12, true)
+      doc.text(line, MARGIN_LEFT, currentY)
+      currentY += 10
     })
-    currentY += Math.min(obsLines.length, 3) * 10 + 5
+    currentY += 5
   }
 
   // ========== 10. FOOTER CON QR Y SELLO SUNAT ==========

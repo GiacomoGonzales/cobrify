@@ -502,6 +502,24 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
 
   currentY = Math.max(leftY, rightY) + 10
 
+  // ========== LUGAR DE ENTREGA ==========
+  // Campo propio, a todo el ancho. Antes esta dirección se escribía a mano
+  // dentro de las Observaciones y ahí quedaba enterrada — y encima se perdía
+  // cuando el texto pasaba de 4 líneas.
+  if (order.deliveryAddress && String(order.deliveryAddress).trim()) {
+    doc.setFont('helvetica', 'bold')
+    doc.text('LUGAR DE ENTREGA:', MARGIN_LEFT, currentY)
+    doc.setFont('helvetica', 'normal')
+    const entregaLines = doc.splitTextToSize(
+      String(order.deliveryAddress).trim(),
+      CONTENT_WIDTH - 100
+    )
+    entregaLines.forEach((line, idx) => {
+      doc.text(line, MARGIN_LEFT + 100, currentY + (idx * dataLineHeight))
+    })
+    currentY += dataLineHeight * entregaLines.length + 8
+  }
+
   // ========== TABLA DE PRODUCTOS ==========
   const tableY = currentY
   const headerRowHeight = 18
@@ -766,7 +784,16 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
     doc.setFontSize(7)
     doc.setTextColor(...DARK_GRAY)
     const notesLines = doc.splitTextToSize(order.notes, CONTENT_WIDTH - 10)
-    notesLines.slice(0, 4).forEach(line => {
+    // Se imprimen TODAS las líneas. Antes había un `.slice(0, 4)` y las
+    // observaciones largas se cortaban en silencio: un cliente perdía la última
+    // línea, que era justo el LUGAR DE ENTREGA de la orden. Si no entran en la
+    // página, se continúa en la siguiente en vez de recortar.
+    const LIMITE_Y = PAGE_HEIGHT - MARGIN_BOTTOM - 20 // deja aire para el pie
+    notesLines.forEach(line => {
+      if (currentY > LIMITE_Y) {
+        doc.addPage()
+        currentY = MARGIN_TOP
+      }
       doc.text(line, MARGIN_LEFT + 5, currentY)
       currentY += 9
     })

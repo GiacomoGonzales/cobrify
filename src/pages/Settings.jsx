@@ -340,6 +340,8 @@ export default function Settings() {
   // ¿Esos mismos términos se imprimen TAMBIÉN en el ticket térmico? Apagado por
   // defecto: son largos y gastan papel en cada venta.
   const [showTermsOnTicket, setShowTermsOnTicket] = useState(false)
+  // Observaciones que se precargan al crear una orden de compra nueva
+  const [purchaseOrderDefaultNotes, setPurchaseOrderDefaultNotes] = useState('')
   // QR personalizado al pie del ticket térmico (URL, texto libre, datos de pago, etc.)
   const [ticketQrEnabled, setTicketQrEnabled] = useState(false)
   const [ticketQrContent, setTicketQrContent] = useState('')
@@ -1158,6 +1160,7 @@ export default function Settings() {
         setNotaVentaLegend(businessData.notaVentaLegend || '')
         setInvoiceFooterTerms(businessData.invoiceFooterTerms || '')
         setShowTermsOnTicket(businessData.showTermsOnTicket === true)
+        setPurchaseOrderDefaultNotes(businessData.purchaseOrderDefaultNotes || '')
         setTicketQrEnabled(businessData.ticketQrEnabled === true)
         setTicketQrContent(businessData.ticketQrContent || '')
         setTicketQrCaption(businessData.ticketQrCaption || '')
@@ -1950,6 +1953,7 @@ export default function Settings() {
         notaVentaLegend: notaVentaLegend.trim() || '',
         invoiceFooterTerms: invoiceFooterTerms || '',
         showTermsOnTicket: showTermsOnTicket === true,
+        purchaseOrderDefaultNotes: purchaseOrderDefaultNotes || "",
         ticketQrEnabled: ticketQrEnabled === true,
         ticketQrContent: ticketQrContent || '',
         ticketQrCaption: ticketQrCaption || '',
@@ -6134,6 +6138,35 @@ export default function Settings() {
                     />
                   </div>
                 </div>
+
+                {/* Observaciones fijas de las órdenes de compra. Mismo problema
+                    que resolvían los términos: un texto que se repite en cada
+                    documento y que había que copiar a mano de una orden a otra. */}
+                <div id="opcion-purchaseOrderDefaultNotes" className="mt-6 scroll-mt-24">
+                  <label className="block text-sm font-semibold text-gray-900 mb-2">
+                    Observaciones por defecto en Órdenes de Compra
+                  </label>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Texto que aparece ya escrito al crear una orden de compra nueva: tus
+                    requisitos al proveedor, horarios de atención, condiciones. Lo escribes una
+                    vez acá y en cada orden puedes editarlo o borrarlo. Déjalo vacío si no lo
+                    necesitas.
+                  </p>
+                  <textarea
+                    value={purchaseOrderDefaultNotes}
+                    onChange={(e) => setPurchaseOrderDefaultNotes(e.target.value.slice(0, 1000))}
+                    rows={5}
+                    maxLength={1000}
+                    placeholder={'Ej: TODO PRODUCTO DEBE CUMPLIR CON:\n*FECHA MÍNIMA DE VENCIMIENTO MAYOR A 18 MESES.\n*ADJUNTAR PROTOCOLO Y REGISTRO SANITARIO VIGENTE.\n*HORARIO DE ATENCIÓN: LUNES A VIERNES DE 8:30 A 17:00'}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                  <div className="flex justify-between items-center mt-1">
+                    <span className="text-xs text-gray-400">
+                      El lugar de entrega ya no va acá: se elige en la orden desde tus almacenes
+                    </span>
+                    <span className="text-xs text-gray-400">{purchaseOrderDefaultNotes.length}/1000</span>
+                  </div>
+                </div>
               </div>
 
               {/* Divider */}
@@ -6684,6 +6717,7 @@ export default function Settings() {
                       notaVentaLegend: notaVentaLegend.trim() || '',
                       invoiceFooterTerms: invoiceFooterTerms || '',
                       showTermsOnTicket: showTermsOnTicket === true,
+                      purchaseOrderDefaultNotes: purchaseOrderDefaultNotes || "",
                       ticketQrEnabled: ticketQrEnabled === true,
                       ticketQrContent: ticketQrContent || '',
                       ticketQrCaption: ticketQrCaption || '',

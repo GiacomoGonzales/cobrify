@@ -51,6 +51,21 @@ export default {
     },
 
     {
+      id: 'lugar-entrega',
+      title: 'Lugar de entrega',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Si tienes más de un local, el selector **Lugar de entrega** te deja elegir a cuál debe llegar la mercadería. Lista tus **almacenes** con la dirección que tengan cargada, y esa dirección sale impresa como un campo propio del PDF.',
+        },
+        {
+          type: 'consejo',
+          text: 'Si el selector no aparece o te falta un local, es porque a ese almacén no le has puesto la **Dirección del Local**. Se carga en la página Almacenes y desde ahí queda disponible para todas tus órdenes.',
+        },
+      ],
+    },
+
+    {
       id: 'enviar',
       title: 'Enviarla al proveedor',
       blocks: [
@@ -61,6 +76,15 @@ export default {
         {
           type: 'consejo',
           text: 'Las **Observaciones** son el lugar para dejar por escrito lo que se suele acordar de palabra: plazo de entrega, forma de pago, condiciones. Después evita discusiones.',
+        },
+        {
+          type: 'texto',
+          text: 'Si siempre pides lo mismo (requisitos al proveedor, horarios de atención, documentación que deben adjuntar), escríbelo **una sola vez** en Configuración y aparecerá ya cargado en cada orden nueva, listo para editar o borrar si esa orden es distinta.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=documentos&opcion=purchaseOrderDefaultNotes',
+          label: 'Escribir mis observaciones por defecto',
         },
       ],
     },

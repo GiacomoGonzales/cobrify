@@ -695,10 +695,17 @@ export default function PurchaseOrders() {
               </div>
             </div>
 
+            {viewingOrder.deliveryAddress && (
+              <div>
+                <p className="text-sm text-gray-500">Lugar de entrega</p>
+                <p className="text-sm">{viewingOrder.deliveryAddress}</p>
+              </div>
+            )}
+
             {viewingOrder.notes && (
               <div>
                 <p className="text-sm text-gray-500">Observaciones</p>
-                <p className="text-sm">{viewingOrder.notes}</p>
+                <p className="text-sm whitespace-pre-wrap">{viewingOrder.notes}</p>
               </div>
             )}
           </div>
