@@ -1191,7 +1191,9 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
     commands.push(ESCPOSCommands.text('!Gracias por su preferencia!\n'));
     commands.push(ESCPOSCommands.bold(false));
 
-    // Mensaje personalizado al pie (configurable en Settings)
+    // Pie del ticket. Llega YA RESUELTO desde printBLETicket (mensaje al pie +
+    // términos y condiciones si el negocio los activó): el criterio vive en
+    // @/utils/ticketFooter y no se repite acá.
     if (receiptData.ticketFooterMessage && receiptData.ticketFooterMessage.trim()) {
       commands.push(ESCPOSCommands.text('\n'));
       const footerLines = receiptData.ticketFooterMessage.trim().split(/\r?\n/);

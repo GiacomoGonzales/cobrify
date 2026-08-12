@@ -6,6 +6,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { formatPricedModifierLines } from '@/utils/modifierHelpers'
 import { unitDisplayName } from '@/data/sunatUnits'
 import { getComprobanteBreakdown } from '@/utils/peruUtils'
+import { getTicketFooterText } from '@/utils/ticketFooter'
 
 /**
  * Componente de Ticket Imprimible según formato SUNAT
@@ -1293,7 +1294,9 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           ¡Gracias por su preferencia!
         </div>
 
-        {companySettings?.ticketFooterMessage && companySettings.ticketFooterMessage.trim() && (
+        {/* Mensaje al pie + términos y condiciones si el negocio los activó
+            para el ticket. El criterio vive en @/utils/ticketFooter. */}
+        {getTicketFooterText(companySettings) && (
           <div
             className="footer-text"
             style={{
@@ -1305,7 +1308,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
               padding: '0 4px',
             }}
           >
-            {companySettings.ticketFooterMessage}
+            {getTicketFooterText(companySettings)}
           </div>
         )}
 

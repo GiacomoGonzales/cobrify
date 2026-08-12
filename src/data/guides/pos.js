@@ -261,6 +261,15 @@ export default {
           to: '/app/configuracion?tab=ventas&opcion=autoPrintTicket',
           label: 'Activar la impresión automática',
         },
+        {
+          type: 'texto',
+          text: 'Qué se imprime al pie del ticket se arma en Configuración > Documentos: el **Mensaje al pie del ticket térmico** (hasta 300 caracteres) y, si lo activas, tus **Términos y condiciones** completos. Estos últimos se escriben una sola vez y con un interruptor decides si salen solo en el PDF o también impresos.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=documentos&opcion=showTermsOnTicket',
+          label: 'Imprimir los términos en el ticket',
+        },
       ],
     },
 

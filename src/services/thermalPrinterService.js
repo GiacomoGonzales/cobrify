@@ -9,6 +9,7 @@ import { unitDisplayName } from '@/data/sunatUnits';
 import { getComprobanteBreakdown } from '@/utils/peruUtils';
 import { buildKitchenLines, stationsForOrder } from '@/utils/kitchenComandaFormat';
 import { getSessionMoneyTotals } from '@/utils/cashTotals';
+import { getTicketFooterText } from '@/utils/ticketFooter';
 
 /**
  * Servicio para manejar impresoras térmicas WiFi/Bluetooth
@@ -1455,12 +1456,14 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
       .text(convertSpanishText('!Gracias por su preferencia!\n'))
       .clearFormatting();
 
-    // Mensaje personalizado al pie (configurado por el usuario)
-    if (business.ticketFooterMessage && business.ticketFooterMessage.trim()) {
+    // Mensaje al pie + términos y condiciones si están activados para el ticket
+    // (criterio único en @/utils/ticketFooter)
+    const footerText = getTicketFooterText(business)
+    if (footerText) {
       printer = printer
         .align('center')
         .text('\n');
-      const footerLines = business.ticketFooterMessage.trim().split(/\r?\n/)
+      const footerLines = footerText.split(/\r?\n/)
       for (const line of footerLines) {
         printer = printer.text(convertSpanishText(line + '\n'));
       }
@@ -1970,8 +1973,9 @@ const printBLETicket = async (invoice, business, paperWidth = 58) => {
       sunatHash: invoice.sunatHash || '',
       qrCode: invoice.qrCode || '',
 
-      // Mensaje personalizado al pie del ticket (configurable en Settings)
-      ticketFooterMessage: business?.ticketFooterMessage || '',
+      // Pie del ticket ya resuelto (mensaje + términos si el negocio los activó).
+      // Se manda calculado para que el path Bluetooth no repita el criterio.
+      ticketFooterMessage: getTicketFooterText(business),
 
       // QR personalizado al pie del ticket (configurable en Settings)
       ticketQrEnabled: business?.ticketQrEnabled === true,
@@ -2706,10 +2710,12 @@ const buildTicketEscPos = async (invoice, business, paperWidth = 58) => {
       .newLine()
       .bold(false)
 
-    // Mensaje personalizado al pie (configurado por el usuario)
-    if (business.ticketFooterMessage && business.ticketFooterMessage.trim()) {
+    // Mensaje al pie + términos y condiciones si están activados para el ticket
+    // (criterio único en @/utils/ticketFooter)
+    const footerTextBuilder = getTicketFooterText(business)
+    if (footerTextBuilder) {
       builder.newLine()
-      const footerLines = business.ticketFooterMessage.trim().split(/\r?\n/)
+      const footerLines = footerTextBuilder.split(/\r?\n/)
       for (const line of footerLines) {
         builder.text(line).newLine()
       }

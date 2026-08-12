@@ -337,6 +337,9 @@ export default function Settings() {
   // Leyenda al pie de las NOTAS DE VENTA. Vacío = se usa la de por defecto.
   const [notaVentaLegend, setNotaVentaLegend] = useState('')
   const [invoiceFooterTerms, setInvoiceFooterTerms] = useState('') // Términos y condiciones libres al pie del comprobante PDF (solo PDF, no SUNAT)
+  // ¿Esos mismos términos se imprimen TAMBIÉN en el ticket térmico? Apagado por
+  // defecto: son largos y gastan papel en cada venta.
+  const [showTermsOnTicket, setShowTermsOnTicket] = useState(false)
   // QR personalizado al pie del ticket térmico (URL, texto libre, datos de pago, etc.)
   const [ticketQrEnabled, setTicketQrEnabled] = useState(false)
   const [ticketQrContent, setTicketQrContent] = useState('')
@@ -1154,6 +1157,7 @@ export default function Settings() {
         setTicketFooterMessage(businessData.ticketFooterMessage || '')
         setNotaVentaLegend(businessData.notaVentaLegend || '')
         setInvoiceFooterTerms(businessData.invoiceFooterTerms || '')
+        setShowTermsOnTicket(businessData.showTermsOnTicket === true)
         setTicketQrEnabled(businessData.ticketQrEnabled === true)
         setTicketQrContent(businessData.ticketQrContent || '')
         setTicketQrCaption(businessData.ticketQrCaption || '')
@@ -1945,6 +1949,7 @@ export default function Settings() {
         ticketFooterMessage: ticketFooterMessage || '',
         notaVentaLegend: notaVentaLegend.trim() || '',
         invoiceFooterTerms: invoiceFooterTerms || '',
+        showTermsOnTicket: showTermsOnTicket === true,
         ticketQrEnabled: ticketQrEnabled === true,
         ticketQrContent: ticketQrContent || '',
         ticketQrCaption: ticketQrCaption || '',
@@ -6108,8 +6113,25 @@ export default function Settings() {
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   />
                   <div className="flex justify-between items-center mt-1">
-                    <span className="text-xs text-gray-400">Solo aparece en el PDF (no en SUNAT)</span>
+                    <span className="text-xs text-gray-400">
+                      {showTermsOnTicket ? 'Aparece en el PDF y en el ticket térmico (no en SUNAT)' : 'Solo aparece en el PDF (no en SUNAT)'}
+                    </span>
                     <span className="text-xs text-gray-400">{invoiceFooterTerms.length}/1000</span>
+                  </div>
+
+                  {/* Imprimir estos mismos términos en el ticket térmico.
+                      Evita tener que copiarlos al "Mensaje al pie del ticket",
+                      que está topado a 300 caracteres. */}
+                  <div className="mt-3">
+                    <SettingToggle
+                      id="opcion-showTermsOnTicket"
+                      checked={showTermsOnTicket}
+                      onChange={(e) => setShowTermsOnTicket(e.target.checked)}
+                      title="Imprimir también en el ticket térmico"
+                      description={showTermsOnTicket
+                        ? '✓ Activado: estos términos se imprimen al pie de cada ticket, después del mensaje del ticket. Ojo: si son largos, cada venta gasta más papel.'
+                        : '✗ Desactivado: los términos salen solo en el PDF. Actívalo si quieres que también se impriman en la ticketera.'}
+                    />
                   </div>
                 </div>
               </div>
@@ -6661,6 +6683,7 @@ export default function Settings() {
                       ticketFooterMessage: ticketFooterMessage || '',
                       notaVentaLegend: notaVentaLegend.trim() || '',
                       invoiceFooterTerms: invoiceFooterTerms || '',
+                      showTermsOnTicket: showTermsOnTicket === true,
                       ticketQrEnabled: ticketQrEnabled === true,
                       ticketQrContent: ticketQrContent || '',
                       ticketQrCaption: ticketQrCaption || '',
