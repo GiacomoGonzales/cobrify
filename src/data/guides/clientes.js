@@ -33,6 +33,37 @@ export default {
     },
 
     {
+      id: 'direcciones-entrega',
+      title: 'Direcciones de entrega',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'La **Dirección** de la ficha es el domicilio fiscal: el que SUNAT tiene registrado y el que sale en sus comprobantes. Pero la mercadería muchas veces va a otro lado — su almacén, su tienda, una obra. Para eso está el bloque **Direcciones de entrega**.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Si el cliente tiene RUC, presiona **Traer de SUNAT**: se agregan sus locales anexos con dirección y distrito ya cargados.',
+            'Si el punto de entrega no está registrado en SUNAT, usa **Agregar** y escríbelo a mano.',
+            'Ponle un nombre corto a cada una (Almacén Central, Tienda Surco) para reconocerlas después.',
+          ],
+        },
+        {
+          type: 'texto',
+          text: 'Al armar una guía de remisión para ese cliente aparecerá un desplegable con estas direcciones, y el punto de llegada se completa solo.',
+        },
+        {
+          type: 'consejo',
+          text: 'Guardar el **distrito** es lo que realmente ahorra trabajo. Es el dato que SUNAT lee de la guía, y es el que había que elegir a mano cada vez. Si una dirección quedó sin distrito, la ficha te lo avisa en ámbar.',
+        },
+        {
+          type: 'texto',
+          text: 'Traerlas de SUNAT una vez también te evita repetir esa consulta —que se paga— en cada guía, y hace que funcione sin internet.',
+        },
+      ],
+    },
+
+    {
       id: 'importar-exportar',
       title: 'Importar y exportar en Excel',
       blocks: [

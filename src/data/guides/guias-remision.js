@@ -48,6 +48,42 @@ export default {
     },
 
     {
+      id: 'punto-llegada',
+      title: 'Adónde llega la mercadería',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'El punto de llegada tiene dos partes: la **dirección** escrita y el **departamento, provincia y distrito**. La segunda es la que SUNAT lee de verdad; la dirección es texto libre. Por eso no basta con que la calle esté bien.',
+        },
+        {
+          type: 'texto',
+          text: 'Tienes tres formas de completarlo, de la más rápida a la más manual:',
+        },
+        {
+          type: 'pasos',
+          items: [
+            '**Dirección de entrega**: si el cliente tiene direcciones guardadas en su ficha, este desplegable las ofrece y completa dirección y distrito de una vez.',
+            '**Ver establecimientos**: consulta a SUNAT los locales anexos del RUC en el momento. Trae también el distrito.',
+            'A mano: escribes la dirección y eliges los tres niveles.',
+          ],
+        },
+        {
+          type: 'consejo',
+          text: 'Si le despachas seguido al mismo cliente, guarda sus direcciones una vez en su ficha. La consulta a SUNAT se paga cada vez que la usas y necesita internet; lo guardado, no.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/clientes',
+          label: 'Ir a Clientes para guardar sus direcciones',
+        },
+        {
+          type: 'ojo',
+          text: 'En la guía de **transportista**, el departamento, provincia y distrito de partida y de llegada ahora son obligatorios. Antes se podían dejar vacíos y el sistema declaraba **Lima** por defecto, así que un despacho a provincia salía con destino equivocado sin que nadie se enterara.',
+        },
+      ],
+    },
+
+    {
       id: 'stock',
       title: 'Guía y stock',
       blocks: [

@@ -603,6 +603,21 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
       return
     }
 
+    // El ubigeo (departamento + provincia + distrito) es lo que SUNAT lee del
+    // XML; la dirección escrita es texto libre. Estos selectores no eran
+    // obligatorios y el generador ponía LIMA (150101) por defecto cuando venían
+    // vacíos: una guía a provincia se emitía declarando Lima, en silencio.
+    // Mejor frenar aquí y pedir el distrito que emitir un destino falso.
+    if (!getOriginUbigeo()) {
+      toast.error('Debe elegir departamento, provincia y distrito del punto de partida')
+      return
+    }
+
+    if (!getDestinationUbigeo()) {
+      toast.error('Debe elegir departamento, provincia y distrito del punto de llegada')
+      return
+    }
+
     if (!totalWeight || parseFloat(totalWeight) <= 0) {
       toast.error('Debe ingresar el peso total de la mercancía')
       return
@@ -1525,6 +1540,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Select
                 label="Departamento"
+                required
                 value={originDepartamento}
                 onChange={(e) => {
                   setOriginDepartamento(e.target.value)
@@ -1539,6 +1555,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
               </Select>
               <Select
                 label="Provincia"
+                required
                 value={originProvincia}
                 onChange={(e) => {
                   setOriginProvincia(e.target.value)
@@ -1553,6 +1570,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
               </Select>
               <Select
                 label="Distrito"
+                required
                 value={originDistrito}
                 onChange={(e) => setOriginDistrito(e.target.value)}
                 disabled={!originProvincia}
@@ -1582,6 +1600,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Select
                 label="Departamento"
+                required
                 value={destinationDepartamento}
                 onChange={(e) => {
                   setDestinationDepartamento(e.target.value)
@@ -1596,6 +1615,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
               </Select>
               <Select
                 label="Provincia"
+                required
                 value={destinationProvincia}
                 onChange={(e) => {
                   setDestinationProvincia(e.target.value)
@@ -1610,6 +1630,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
               </Select>
               <Select
                 label="Distrito"
+                required
                 value={destinationDistrito}
                 onChange={(e) => setDestinationDistrito(e.target.value)}
                 disabled={!destinationProvincia}

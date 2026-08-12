@@ -156,6 +156,9 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   // Establecimientos (anexos) del PROPIO emisor, guardados en "Mi Empresa".
   // Permiten elegir la dirección de partida sin re-consultar a SUNAT (no gasta créditos).
   const [myEstablishments, setMyEstablishments] = useState([])
+  // Cuál de las direcciones de entrega guardadas del cliente está elegida
+  // ('' = su domicilio fiscal).
+  const [selectedDeliveryAddressId, setSelectedDeliveryAddressId] = useState('')
   const [selectedOriginEstablishment, setSelectedOriginEstablishment] = useState('')
 
   // Punto de llegada
@@ -1221,6 +1224,57 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   // Consultar establecimientos (anexos) del RUC del destinatario. Si hay varios, abre un
   // modal para elegir la dirección; si hay uno solo, la aplica directo. Es una consulta
   // aparte a la API (1 crédito), por eso va con botón explícito. (Misma función que el POS.)
+  // Direcciones de entrega que el cliente tiene guardadas en su ficha.
+  //
+  // Se ubican por el número de documento y no por el id del cliente porque el
+  // destinatario puede haber llegado de tres formas: desde el comprobante que
+  // origina la guía (que lleva una COPIA del cliente, sin este campo), elegido
+  // de la lista, o escrito a mano. El documento es lo único común a las tres.
+  const recipientSavedAddresses = useMemo(() => {
+    const doc = String(recipientDocNumber || '').replace(/\D/g, '')
+    if (!doc) return []
+    const cliente = customers.find(
+      c => String(c.documentNumber || '').replace(/\D/g, '') === doc
+    )
+    return (cliente?.deliveryAddresses || []).filter(d => d?.address)
+  }, [customers, recipientDocNumber])
+
+  // Si cambia el destinatario, la dirección elegida del anterior ya no aplica.
+  // (Elegir una dirección no toca el documento, así que esto no se re-dispara.)
+  useEffect(() => {
+    setSelectedDeliveryAddressId('')
+  }, [recipientDocNumber])
+
+  // Volver a "Domicilio fiscal" restaura la dirección de la ficha del cliente.
+  // No restaura el ubigeo porque la ficha no guarda uno para el domicilio
+  // fiscal: solo las direcciones de entrega lo tienen.
+  const applySavedDeliveryAddress = (id) => {
+    setSelectedDeliveryAddressId(id)
+
+    if (!id) {
+      const doc = String(recipientDocNumber || '').replace(/\D/g, '')
+      const cliente = customers.find(
+        c => String(c.documentNumber || '').replace(/\D/g, '') === doc
+      )
+      if (cliente?.address) setRecipientAddress(cliente.address)
+      return
+    }
+
+    const dir = recipientSavedAddresses.find(d => d.id === id)
+    if (!dir) return
+
+    setRecipientAddress(dir.address)
+
+    const { valid, departamento, provincia, distrito } = resolveUbigeoParts(dir.ubigeo)
+    if (valid) {
+      setRecipientDepartment(departamento)
+      setRecipientProvince(provincia)
+      setRecipientDistrict(distrito)
+    } else {
+      toast.info('Esa dirección no tiene distrito guardado — elígelo en el punto de llegada')
+    }
+  }
+
   // Aplicar un establecimiento (anexo SUNAT) del destinatario: dirección Y ubigeo.
   //
   // El ubigeo importa más que la dirección escrita: es lo que SUNAT lee del XML.
@@ -2045,6 +2099,29 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                 )}
               </div>
             </div>
+
+            {/* Direcciones de entrega guardadas en la ficha del cliente. Solo
+                aparece si tiene alguna: quien no las usa no ve el campo. */}
+            {recipientSavedAddresses.length > 0 && (
+              <div>
+                <Select
+                  label="Dirección de entrega"
+                  value={selectedDeliveryAddressId}
+                  onChange={(e) => applySavedDeliveryAddress(e.target.value)}
+                >
+                  <option value="">Domicilio fiscal</option>
+                  {recipientSavedAddresses.map((dir) => (
+                    <option key={dir.id} value={dir.id}>
+                      {dir.label ? `${dir.label} — ${dir.address}` : dir.address}
+                    </option>
+                  ))}
+                </Select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Guardadas en la ficha del cliente. Traen su distrito, así que
+                  el punto de llegada queda completo.
+                </p>
+              </div>
+            )}
 
             <Input
               label="Dirección"

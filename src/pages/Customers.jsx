@@ -27,6 +27,7 @@ import ImportCustomersModal from '@/components/ImportCustomersModal'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import MedicalHistoryModal from '@/components/veterinary/MedicalHistoryModal'
 import { normalizePets, createEmptyPet } from '@/utils/petUtils'
+import DeliveryAddressesEditor, { limpiarDireccionesParaGuardar } from '@/components/customer/DeliveryAddressesEditor'
 
 // Etiquetas cortas por tipo de comprobante (para el modal de pedidos)
 const DOC_TYPE_LABELS = {
@@ -735,6 +736,9 @@ export default function Customers() {
   const [ordersCustomer, setOrdersCustomer] = useState(null)
   // Estado para múltiples mascotas (veterinaria)
   const [pets, setPets] = useState([])
+  // Direcciones de entrega del cliente (aparte del domicilio fiscal). Van fuera
+  // de react-hook-form, igual que las mascotas, porque son una lista editable.
+  const [deliveryAddresses, setDeliveryAddresses] = useState([])
 
   const {
     register,
@@ -840,6 +844,7 @@ export default function Customers() {
     if (businessMode === 'veterinary') {
       setPets([createEmptyPet()])
     }
+    setDeliveryAddresses([])
     setIsModalOpen(true)
   }
 
@@ -872,6 +877,9 @@ export default function Customers() {
     })
     // Cargar mascotas normalizadas
     setPets(normalizePets(customer))
+    setDeliveryAddresses(
+      Array.isArray(customer.deliveryAddresses) ? customer.deliveryAddresses : []
+    )
     setIsModalOpen(true)
   }
 
@@ -879,6 +887,7 @@ export default function Customers() {
     setIsModalOpen(false)
     setEditingCustomer(null)
     setPets([])
+    setDeliveryAddresses([])
     reset()
   }
 
@@ -971,6 +980,11 @@ export default function Customers() {
           data.petNotes = primary.notes || ''
         }
       }
+
+      // Direcciones de entrega: se guardan siempre (incluso vacías, para que
+      // borrar la última quede registrado). limpiarDireccionesParaGuardar quita
+      // los tramos temporales del selector de ubigeo y las filas sin dirección.
+      data.deliveryAddresses = limpiarDireccionesParaGuardar(deliveryAddresses)
 
       let result
 
@@ -1901,6 +1915,14 @@ export default function Customers() {
             placeholder="Av. Principal 123, Distrito, Lima"
             error={errors.address?.message}
             {...register('address')}
+          />
+
+          {/* Direcciones de entrega: adónde va la mercadería cuando no es el
+              domicilio fiscal de arriba. Se usan en las guías de remisión. */}
+          <DeliveryAddressesEditor
+            value={deliveryAddresses}
+            onChange={setDeliveryAddresses}
+            documentNumber={watch('documentNumber')}
           />
 
           <Input
