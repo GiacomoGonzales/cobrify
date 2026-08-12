@@ -47,17 +47,25 @@ export default function Kitchen() {
     return kitchenStationsAll.filter(st => !st.branchId || st.branchId === claveSede)
   }, [kitchenStationsAll, selectedBranchId])
 
+  const [selectedStation, setSelectedStation] = useState('all') // 'all' o el ID de una estación
+  const [categoryMap, setCategoryMap] = useState({}) // Mapeo de ID a nombre de categoría
+
   // Si al cambiar de sede la estacion elegida ya no existe aca, volver a
   // "Todas": si no, quedaba seleccionada una pestana invisible y la pantalla
   // se veia vacia sin explicacion.
+  //
+  // OJO: este efecto tiene que ir DESPUES del useState de arriba. El array de
+  // dependencias se evalua DURANTE el render, en la linea donde esta escrito el
+  // useEffect: si el useState viene despues, `selectedStation` todavia esta sin
+  // inicializar y la pagina entera revienta con "Cannot access 'X' before
+  // initialization". Pasó de verdad (12-ago-2026) y dejaba Cocina en blanco.
+  // `vite build` NO lo detecta: es un error de ejecucion, no de compilacion.
   useEffect(() => {
     if (selectedStation === 'all') return
     if (!kitchenStations.some(st => st.id === selectedStation)) {
       setSelectedStation('all')
     }
   }, [kitchenStations, selectedStation])
-  const [selectedStation, setSelectedStation] = useState('all') // 'all' o el ID de una estación
-  const [categoryMap, setCategoryMap] = useState({}) // Mapeo de ID a nombre de categoría
 
   // Listener para la configuración del negocio
   useEffect(() => {
