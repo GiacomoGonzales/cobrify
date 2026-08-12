@@ -29,6 +29,7 @@ import PaymentMethodsPieChart from '@/components/charts/PaymentMethodsPieChart'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getDocumentTotalInBase, getDocumentRate, isMultiCurrencyEnabled, normalizeCurrency, getReportsCurrency, resolveReportsRate, convertBaseToDisplay } from '@/utils/currency'
 import { getRecentInvoices } from '@/services/firestoreService'
+import { getInvoiceDate as getInvoiceDateShared } from '@/utils/invoiceDate'
 import { useBranding } from '@/contexts/BrandingContext'
 import { getTables } from '@/services/tableService'
 import { useLocationAccess, useSellerScope } from '@/utils/locationAccess'
@@ -271,6 +272,23 @@ export default function Dashboard() {
     return new Date(`${year}-${month}-01T00:00:00-05:00`)
   }, [])
 
+  // Helper: fin del mes actual en hora Perú, EXCLUSIVO (= inicio del mes siguiente).
+  //
+  // POR QUÉ EXISTE (caso real, 12-ago-2026): un negocio veía "Ventas del Día S/ 4.00"
+  // todos los días, con la página de Ventas en cero. Era una nota de venta guardada
+  // con fecha de emisión del año 275760 (el tope que acepta un <input type="date">
+  // cuando se escribe el año a mano). Los totales de hoy y del mes solo miraban el
+  // piso del período, así que una fecha futura cumplía "es de hoy" para siempre.
+  // Todo período tiene que acotarse por ARRIBA también.
+  const getEndOfMonthPeru = useCallback(() => {
+    const now = new Date()
+    const peruDate = now.toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
+    const [year, month] = peruDate.split('-').map(Number)
+    const nextMonth = month === 12 ? 1 : month + 1
+    const nextYear = month === 12 ? year + 1 : year
+    return new Date(`${nextYear}-${String(nextMonth).padStart(2, '0')}-01T00:00:00-05:00`)
+  }, [])
+
   // Helper: Obtener inicio del día N días atrás en hora Perú
   const getDaysAgo = useCallback((days) => {
     const today = (() => {
@@ -475,25 +493,12 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, isDemoMode, demoData, businessMode, filterBranch, allowedBranches])
 
-  // Helper to get date from invoice - usa fecha de emisión si existe, sino createdAt
-  const getInvoiceDate = useCallback((inv) => {
-    if (inv?.emissionDate) {
-      if (inv.emissionDate.toDate) return inv.emissionDate.toDate()
-      if (typeof inv.emissionDate === 'string') {
-        const createdAt = inv.createdAt?.toDate?.() || (inv.createdAt ? new Date(inv.createdAt) : null)
-        if (createdAt) {
-          const [year, month, day] = inv.emissionDate.split('-').map(Number)
-          const combined = new Date(createdAt)
-          combined.setFullYear(year, month - 1, day)
-          return combined
-        }
-        return new Date(inv.emissionDate + 'T12:00:00')
-      }
-      return new Date(inv.emissionDate)
-    }
-    if (!inv?.createdAt) return null
-    return inv.createdAt.toDate ? inv.createdAt.toDate() : new Date(inv.createdAt)
-  }, [])
+  // Fecha oficial del comprobante (emisión si existe, si no createdAt).
+  // El criterio vive en @/utils/invoiceDate y lo comparten Ventas, la exportación
+  // a Excel y esta pantalla. Acá era una copia idéntica: se delega para que no
+  // puedan volver a separarse. El useCallback se conserva porque varios useMemo
+  // lo tienen en sus dependencias y necesitan una referencia estable.
+  const getInvoiceDate = useCallback((inv) => getInvoiceDateShared(inv), [])
 
   // === Filtrado por sucursal (memoized) ===
   // `invoices` ya viene saneado por permisos de ubicación (loadDashboardData), pero
@@ -540,6 +545,9 @@ export default function Dashboard() {
   // === Stats del día (memoized: un solo pase calcula hoy + ayer) ===
   const todayStats = useMemo(() => {
     const todayStart = getStartOfTodayPeru()
+    // Tope superior obligatorio: sin él, una fecha futura cuenta como "hoy" todos
+    // los días (ver el comentario de getEndOfMonthPeru).
+    const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000 - 1)
     const yesterdayStart = getDaysAgo(1)
     const yesterdayEnd = new Date(yesterdayStart.getTime() + 24 * 60 * 60 * 1000 - 1)
 
@@ -551,7 +559,7 @@ export default function Dashboard() {
       const invDate = getInvoiceDate(inv)
       if (!invDate) continue
       const totalBase = getDocumentTotalInBase(inv)
-      if (invDate >= todayStart) {
+      if (invDate >= todayStart && invDate <= todayEnd) {
         todaySales += totalBase
         if (normalizeCurrency(inv.currency) === 'USD') {
           todaySalesUSD += Number(inv.total) || 0
@@ -579,6 +587,7 @@ export default function Dashboard() {
   // Esto reemplaza ~60 iteraciones anteriores con UNA sola.
   const monthStats = useMemo(() => {
     const monthStart = getStartOfMonthPeru()
+    const monthEnd = getEndOfMonthPeru() // exclusivo: inicio del mes siguiente
     const dailyMap = {}
     const productMap = {}
     const customerMap = {}
@@ -589,7 +598,7 @@ export default function Dashboard() {
 
     for (const inv of validInvoicesForSales) {
       const invDate = getInvoiceDate(inv)
-      if (!invDate || invDate < monthStart) continue
+      if (!invDate || invDate < monthStart || invDate >= monthEnd) continue
 
       const totalBase = getDocumentTotalInBase(inv)
       const currency = normalizeCurrency(inv.currency)
@@ -700,7 +709,7 @@ export default function Dashboard() {
       topCustomers,
       paymentMethodsData,
     }
-  }, [validInvoicesForSales, getStartOfMonthPeru, getInvoiceDate])
+  }, [validInvoicesForSales, getStartOfMonthPeru, getEndOfMonthPeru, getInvoiceDate])
 
   // === Chart 12 meses ajustado con datos validados ===
   // El aggregate server-side sum('total') incluye TODO: notas de crédito/débito,

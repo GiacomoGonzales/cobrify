@@ -29,27 +29,41 @@ export const toDateString = (date = new Date()) => {
 
 /**
  * Días hacia atrás admitidos por tipo de documento. La nota de venta no es un
- * comprobante electrónico —no va a SUNAT— así que no tiene plazo.
+ * comprobante electrónico —no va a SUNAT— así que no tiene plazo hacia atrás.
  */
 const DAYS_BACK = { factura: 3, boleta: 7 }
 
-/** ¿Este documento viaja a SUNAT y por lo tanto tiene plazo? */
+/**
+ * ¿Este documento viaja a SUNAT y por lo tanto tiene plazo HACIA ATRÁS?
+ *
+ * Ojo: esto NO decide si se valida la fecha, solo si hay un mínimo. El tope de
+ * hoy aplica a todos (ver `getEmissionDateLimits`).
+ */
 export const hasEmissionDateLimits = (documentType) =>
   documentType !== 'nota_venta' && !!documentType
 
 /**
- * Límites para el campo de fecha. Devuelve `{ min, max }` en YYYY-MM-DD, o
- * `{ min: undefined, max: undefined }` cuando el documento no tiene plazo.
+ * Límites para el campo de fecha, en YYYY-MM-DD.
+ *
+ * `max` es SIEMPRE hoy, para cualquier tipo de documento. `min` solo existe para
+ * los que van a SUNAT.
+ *
+ * SEGUNDO CASO REAL (12-ago-2026): una nota de venta quedó guardada con fecha del
+ * año **275760** —el tope que acepta un `<input type="date">` si se escribe el año
+ * a mano— y el Dashboard la sumó a "Ventas del Día" todos los días desde entonces.
+ * Antes las notas de venta se saltaban la validación entera porque no tienen plazo
+ * de SUNAT; "no tiene plazo hacia atrás" se había implementado como "no se revisa
+ * nada". Una venta futura no existe: ya ocurrió o no ocurrió.
  */
 export const getEmissionDateLimits = (documentType, today = new Date()) => {
-  if (!hasEmissionDateLimits(documentType)) return { min: undefined, max: undefined }
+  const max = toDateString(today)
+  if (!hasEmissionDateLimits(documentType)) return { min: undefined, max }
 
   const daysBack = DAYS_BACK[documentType] ?? 7
   const minDate = new Date(today)
   minDate.setDate(today.getDate() - daysBack)
 
-  // El máximo es HOY: SUNAT nunca acepta una fecha de emisión futura.
-  return { min: toDateString(minDate), max: toDateString(today), daysBack }
+  return { min: toDateString(minDate), max, daysBack }
 }
 
 /**
@@ -57,24 +71,34 @@ export const getEmissionDateLimits = (documentType, today = new Date()) => {
  * con un mensaje que explica el plazo, para mostrarlo tal cual en un toast.
  */
 export const validateEmissionDate = (dateStr, documentType, today = new Date()) => {
-  if (!hasEmissionDateLimits(documentType)) return { valid: true }
+  const vaAsunat = hasEmissionDateLimits(documentType)
+  const { min, max, daysBack } = getEmissionDateLimits(documentType, today)
 
-  if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-    return { valid: false, error: 'La fecha de emisión no es válida. Usa el formato día/mes/año.' }
+  // Sin fecha: los comprobantes electrónicos la exigen; una nota de venta sin
+  // fecha explícita sale con la de hoy, así que no se bloquea la venta.
+  if (!dateStr) {
+    return vaAsunat
+      ? { valid: false, error: 'La fecha de emisión no es válida. Usa el formato día/mes/año.' }
+      : { valid: true }
   }
 
-  const { min, max, daysBack } = getEmissionDateLimits(documentType, today)
+  // El año DEBE tener 4 dígitos: así se descarta el "275760-06-06" del caso real.
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return { valid: false, error: 'La fecha de emisión no es válida. Usa el formato día/mes/año.' }
+  }
 
   // Comparación como texto: en formato YYYY-MM-DD el orden alfabético es el
   // cronológico, y así no entra en juego ninguna zona horaria.
   if (dateStr > max) {
     return {
       valid: false,
-      error: `La fecha de emisión no puede ser futura. Elegiste ${formatDisplay(dateStr)} y hoy es ${formatDisplay(max)}. SUNAT rechaza el comprobante y el número queda inutilizable.`,
+      error: vaAsunat
+        ? `La fecha de emisión no puede ser futura. Elegiste ${formatDisplay(dateStr)} y hoy es ${formatDisplay(max)}. SUNAT rechaza el comprobante y el número queda inutilizable.`
+        : `La fecha de emisión no puede ser futura. Elegiste ${formatDisplay(dateStr)} y hoy es ${formatDisplay(max)}. Una fecha adelantada descuadra los reportes y el Dashboard.`,
     }
   }
 
-  if (dateStr < min) {
+  if (min && dateStr < min) {
     const nombre = documentType === 'factura' ? 'Las facturas' : 'Las boletas'
     return {
       valid: false,
@@ -83,6 +107,51 @@ export const validateEmissionDate = (dateStr, documentType, today = new Date()) 
   }
 
   return { valid: true }
+}
+
+/**
+ * Devuelve la fecha ajustada al límite más cercano si quedó fuera de rango:
+ * `{ value, changed, message }`. Si estaba bien, `changed` es false.
+ *
+ * POR QUÉ AL SALIR DEL CAMPO Y NO AL TECLEAR (caso real, 12-ago-2026): un
+ * usuario que escribe la fecha a mano terminó con una factura al año **8097**.
+ * El `max` del `<input type="date">` solo pinta gris el calendario; tecleando
+ * los dígitos el valor entra igual.
+ *
+ * No se puede corregir en cada tecla: el campo emite un cambio por cada dígito
+ * del año, así que al escribir "2026" pasa por 0002, 0020 y 0202. Si se ajusta
+ * en cada uno, el año se reinicia solo y escribir la fecha a mano —que es como
+ * la carga el usuario— se vuelve imposible. Por eso se ajusta al salir del
+ * campo, cuando el valor ya está completo.
+ *
+ * La validación de `validateEmissionDate` al cobrar sigue siendo la barrera
+ * final, por si nunca se sale del campo.
+ */
+export const clampEmissionDate = (dateStr, documentType, today = new Date()) => {
+  const sinCambio = { value: dateStr, changed: false, message: null }
+  if (!dateStr) return sinCambio
+
+  const { min, max } = getEmissionDateLimits(documentType, today)
+
+  // Comparación como texto: en YYYY-MM-DD el orden alfabético es el cronológico
+  // y funciona igual con años de más de 4 dígitos ("275760-06-06" > "2026-08-12").
+  if (dateStr > max) {
+    return {
+      value: max,
+      changed: true,
+      message: `La fecha de emisión no puede ser futura. Se ajustó a hoy, ${formatDisplay(max)}.`,
+    }
+  }
+
+  if (min && dateStr < min) {
+    return {
+      value: min,
+      changed: true,
+      message: `Esa fecha de emisión es muy antigua para este comprobante. Se ajustó al ${formatDisplay(min)}, que es lo más atrás permitido.`,
+    }
+  }
+
+  return sinCambio
 }
 
 /** YYYY-MM-DD a DD/MM/YYYY, para los mensajes. */

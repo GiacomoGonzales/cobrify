@@ -102,7 +102,7 @@ import { getWarehouses, getDefaultWarehouse, updateWarehouseStock, getStockInWar
 import { getActiveBranches, getDefaultBranch } from '@/services/branchService'
 import { shortenUrl } from '@/services/urlShortenerService'
 import { releaseTable, updateTableAmount } from '@/services/tableService'
-import { getEmissionDateLimits, validateEmissionDate } from '@/utils/emissionDate'
+import { clampEmissionDate, getEmissionDateLimits, validateEmissionDate } from '@/utils/emissionDate'
 import { computeSaleCommission } from '@/utils/commissions'
 import { getSellers } from '@/services/sellerService'
 import { markOrderAsPaid, updateOrder, updateOrderStatus, claimOrderForInvoicing, releaseOrderInvoicingClaim, markOrderInvoiced } from '@/services/orderService'
@@ -9348,11 +9348,23 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   type="date"
                   value={emissionDate}
                   // Los límites salen del mismo módulo que la validación al emitir.
-                  // Ojo: min/max NO restringen nada (se puede teclear la fecha a
-                  // mano); la barrera real está en handleCheckout.
+                  // Ojo: min/max solo pintan gris el calendario, NO restringen lo
+                  // que se teclea. Por eso el ajuste va en onBlur (y la barrera
+                  // final sigue estando en handleCheckout).
                   min={emissionDateLimits.min}
                   max={emissionDateLimits.max}
                   onChange={e => { setEmissionDate(e.target.value); emissionDateEditedRef.current = true }}
+                  // Al salir del campo, una fecha fuera de rango se ajusta al
+                  // límite y se avisa. No se hace en onChange porque el campo
+                  // emite un cambio por cada dígito del año (2026 pasa por 0002,
+                  // 0020, 0202) y se volvería imposible escribirla a mano.
+                  onBlur={e => {
+                    const ajuste = clampEmissionDate(e.target.value, documentType)
+                    if (ajuste.changed) {
+                      setEmissionDate(ajuste.value)
+                      toast.warning(ajuste.message)
+                    }
+                  }}
                   className="w-full px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                 />
               </div>
