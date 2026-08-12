@@ -2043,8 +2043,17 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const totalsX = MARGIN_LEFT + CONTENT_WIDTH - totalsWidth
   const bankSectionWidth = totalsX - MARGIN_LEFT - 10
 
-  const igvExempt = companySettings?.emissionConfig?.taxConfig?.igvExempt || companySettings?.taxConfig?.igvExempt || false
-  const rawIgvRate = companySettings?.emissionConfig?.taxConfig?.igvRate ?? companySettings?.taxConfig?.igvRate ?? 18
+  // Mismo criterio que getComprobanteBreakdown: manda lo guardado en el
+  // comprobante. Si no, una venta gravada emitida por un negocio de la Amazonía
+  // saldría rotulada "OP. EXONERADA" con el IGV ya cobrado adentro.
+  const igvExempt = invoice?.taxConfig?.igvExempt
+    ?? companySettings?.emissionConfig?.taxConfig?.igvExempt
+    ?? companySettings?.taxConfig?.igvExempt
+    ?? false
+  const rawIgvRate = invoice?.taxConfig?.igvRate
+    ?? companySettings?.emissionConfig?.taxConfig?.igvRate
+    ?? companySettings?.taxConfig?.igvRate
+    ?? 18
   const igvRate = rawIgvRate === 10 ? 10.5 : rawIgvRate
   const labelGravada = igvExempt ? 'OP. EXONERADA' : 'OP. GRAVADA'
 

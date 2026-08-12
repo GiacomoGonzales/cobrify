@@ -235,9 +235,18 @@ export function getComprobanteBreakdown(invoice, companySettings) {
   const igv = Number(invoice?.igv ?? invoice?.tax ?? 0)
   const subtotal = Number(invoice?.subtotal || 0) // base sin IGV (gravada + exonerada + inafecta)
 
-  const bizExempt = companySettings?.emissionConfig?.taxConfig?.igvExempt
-    || companySettings?.taxConfig?.igvExempt
-    || false
+  // Manda la config guardada EN EL COMPROBANTE y recién después la del negocio,
+  // igual que hace el generador del XML.
+  //
+  // Importa desde que existe el selector de IGV por venta: un negocio de la
+  // Amazonía puede emitir una venta GRAVADA a Lima. Esa venta trae opExoneradas
+  // en 0, así que sin esto caía en la rama de "negocio exonerado" y su base
+  // gravada se imprimía como OP. EXONERADA — con el IGV ya cobrado adentro.
+  // Se usa ?? y no ||: un `false` explícito del comprobante debe ganar.
+  const bizExempt = invoice?.taxConfig?.igvExempt
+    ?? companySettings?.emissionConfig?.taxConfig?.igvExempt
+    ?? companySettings?.taxConfig?.igvExempt
+    ?? false
 
   const hasOpBreakdown = opExo > 0 || opIna > 0
   let gravada, exonerada, inafecta
