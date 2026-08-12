@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { CREDIT_NOTE_REASONS } from '@/data/noteReasons'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
-import { ArrowLeft, Loader2, FileText, AlertCircle, Plus, Trash2, Search, Wallet, Banknote } from 'lucide-react'
+import { ArrowLeft, Loader2, FileText, AlertCircle, AlertTriangle, Plus, Trash2, Search, Wallet, Banknote } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useLocationAccess } from '@/utils/locationAccess'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -326,6 +326,11 @@ export default function CreateCreditNote() {
                 ...item,
                 selected: editingNC && !editingNC.items?.[0]?.isGlobalDiscount ? !!ncItem : true,
                 originalQuantity: qty,
+                // Descripción tal como salió en la factura. Se conserva aparte
+                // para el motivo 03 (corrección por error en la descripción):
+                // ahí `name` pasa a ser el texto CORREGIDO —es el que viaja al
+                // XML— y este guarda el "Dice" para mostrarlo al lado.
+                originalName: item.name || item.description || '',
                 price: unitEffective,
                 unitPrice: unitEffective,
                 subtotal: Number((ncQty != null ? unitEffective * ncQty : lineEffective).toFixed(2)),
@@ -387,17 +392,27 @@ export default function CreateCreditNote() {
     // NO en modo edición de NC rechazada — ahí las cantidades vienen bloqueadas
     // porque el stock ya se devolvió con la selección original.
     const isTotalCode = ['01', '02', '06'].includes(code) && !editingNC
-    setFormData(prev => ({
-      ...prev,
-      discrepancyCode: code,
-      discrepancyReason: reason?.description || '',
-      ...(isTotalCode && {
-        items: prev.items.map(item => {
-          const fullQty = item.originalQuantity || item.quantity
-          return { ...item, selected: true, quantity: fullQty, subtotal: fullQty * item.unitPrice }
-        }),
-      }),
-    }))
+    setFormData(prev => {
+      // Al SALIR del motivo 03 hay que devolver las descripciones a las de la
+      // factura: si el usuario alcanzó a escribir una corrección y después
+      // cambió de motivo, esa nota ya no es una corrección de texto y saldría
+      // con una descripción que no corresponde a nada.
+      const restoreNames = prev.discrepancyCode === '03' && code !== '03'
+      const items = restoreNames
+        ? prev.items.map(item => (item.originalName ? { ...item, name: item.originalName } : item))
+        : prev.items
+      return {
+        ...prev,
+        discrepancyCode: code,
+        discrepancyReason: reason?.description || '',
+        items: isTotalCode
+          ? items.map(item => {
+              const fullQty = item.originalQuantity || item.quantity
+              return { ...item, selected: true, quantity: fullQty, subtotal: fullQty * item.unitPrice }
+            })
+          : items,
+      }
+    })
     // Si el nuevo motivo NO admite "descuento global", desactivar ese modo
     // para volver al flujo de items.
     if (!GLOBAL_DISCOUNT_CODES.includes(code)) {
@@ -411,6 +426,23 @@ export default function CreateCreditNote() {
       ...prev,
       items: prev.items.map((item, i) =>
         i === index ? { ...item, selected: !item.selected } : item
+      )
+    }))
+  }
+
+  /**
+   * Descripción corregida del ítem (solo motivo 03).
+   *
+   * Escribe sobre `name` a propósito: es el campo que el generador de XML usa
+   * para `cac:Item/cbc:Description` (admite hasta 500 caracteres según la regla
+   * de SUNAT), así que el texto corregido es el que viaja al comprobante. El
+   * original queda intacto en `originalName` para mostrar el "Dice".
+   */
+  const handleItemNameChange = (index, newName) => {
+    setFormData(prev => ({
+      ...prev,
+      items: prev.items.map((item, i) =>
+        i === index ? { ...item, name: newName.slice(0, 500) } : item
       )
     }))
   }
@@ -1594,6 +1626,27 @@ export default function CreateCreditNote() {
                   Para descontar sobre boleta usa el motivo <strong>09 - Disminución en el valor</strong>.
                 </p>
               )}
+
+              {/* Motivo 03: hay que ser explícitos en que la nota SÍ acredita
+                  plata. SUNAT no admite una nota de importe cero (regla 2062;
+                  la única excepción es el motivo 13, que no ofrecemos), así que
+                  NO existe la corrección de texto "sin efecto" que sí tiene el
+                  portal de SUNAT. Sin este aviso la gente elige el 03 creyendo
+                  que solo cambia el texto y termina acreditando la venta. */}
+              {formData.discrepancyCode === '03' && (
+                <div className="mt-2 flex gap-2.5 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="text-xs text-amber-900 leading-relaxed">
+                    <p className="font-semibold mb-1">Esta nota sí acredita el importe de los ítems que incluyas.</p>
+                    <p>
+                      SUNAT no acepta notas de crédito por cero, así que no existe la corrección
+                      de solo texto. Si únicamente quieres arreglar la descripción, lo habitual es
+                      emitir esta nota y luego <strong>volver a emitir el comprobante con el texto correcto</strong>.
+                      Abajo, en cada ítem, escribe qué <strong>debe decir</strong>.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div>
@@ -1723,7 +1776,7 @@ export default function CreateCreditNote() {
                       <div className="flex-1 space-y-2">
                         <div className="flex justify-between">
                           <div>
-                            <p className="font-medium">{item.name}</p>
+                            <p className="font-medium">{item.originalName || item.name}</p>
                             <p className="text-sm text-gray-600">
                               Precio unitario: {formatCurrency(item.unitPrice, selectedInvoice?.currency)}
                             </p>
@@ -1732,6 +1785,37 @@ export default function CreateCreditNote() {
                             <p className="font-semibold">{formatCurrency(item.subtotal, selectedInvoice?.currency)}</p>
                           </div>
                         </div>
+
+                        {/* Motivo 03: "Dice" (lo que salió en la factura) y
+                            "Debe decir" (lo que se corrige). El texto corregido
+                            es el que viaja en la nota; SUNAT admite hasta 500
+                            caracteres en la descripción del ítem. */}
+                        {item.selected && formData.discrepancyCode === '03' && (
+                          <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 space-y-2">
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                Dice
+                              </label>
+                              <p className="text-sm text-gray-700 bg-white border border-gray-200 rounded px-2 py-1.5">
+                                {item.originalName || item.name}
+                              </p>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                Debe decir
+                              </label>
+                              <Input
+                                value={item.name}
+                                onChange={e => handleItemNameChange(index, e.target.value)}
+                                placeholder="Escribe la descripción corregida"
+                                maxLength={500}
+                              />
+                              <p className="text-xs text-gray-500 mt-1">
+                                Esta es la descripción que saldrá en la nota de crédito.
+                              </p>
+                            </div>
+                          </div>
+                        )}
 
                         {item.selected && (
                           <div className="flex items-center gap-2">
