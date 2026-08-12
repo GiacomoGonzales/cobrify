@@ -1,0 +1,332 @@
+/**
+ * GUÍA DE USO: Punto de Venta (POS)
+ *
+ * El formato de bloques está documentado en GuideRenderer.jsx; la metadata
+ * (título, categoría, búsqueda) vive en registry.js.
+ *
+ * Reglas de redacción (valen para todas las guías):
+ *  - Español simple, hablarle a un cajero, no a un contador.
+ *  - REGLA DE ORO: cada botón, campo o texto mencionado debe existir con ese
+ *    nombre EXACTO en la pantalla. Antes de escribir, verificar en el código.
+ *    (Los nombres de esta guía salen de POS.jsx y PostSaleModal.jsx.)
+ *  - Si una función depende de una opción, la sección lleva `requiereOpcion`
+ *    con la ruta a la página donde se activa.
+ *  - Cada afirmación tiene que ser cierta HOY. Si una función cambia, su
+ *    sección se actualiza en el mismo commit.
+ *  - Sin emojis.
+ */
+export default {
+  id: 'pos',
+  actualizado: '12/08/2026',
+  intro:
+    'El Punto de Venta es la pantalla para cobrar en el día a día. A la izquierda están tus productos; a la derecha, el **Carrito de Compras** y los datos de la venta. Esta guía recorre el flujo completo y las dudas más comunes.',
+
+  sections: [
+    {
+      id: 'cobrar-venta',
+      title: 'Cobrar una venta, paso a paso',
+      blocks: [
+        {
+          type: 'pasos',
+          items: [
+            'Busca el producto en **Buscar producto por nombre o código...** y tócalo para agregarlo al carrito. También puedes escanear su código de barras.',
+            'Ajusta las cantidades en el carrito con los botones + y -.',
+            'En el panel de la derecha elige el **Tipo de Comprobante**: Factura, Boleta o Nota de Venta.',
+            'Completa los **Datos del Cliente** si el comprobante lo necesita (el RUC es obligatorio para factura).',
+            'Elige el método de pago y presiona **Procesar Venta**.',
+          ],
+        },
+        {
+          type: 'ui',
+          kind: 'boton',
+          label: 'Procesar Venta',
+          nota: 'El botón grande al pie del panel derecho. Al terminar cambia a "Venta Completada".',
+        },
+        {
+          type: 'consejo',
+          text: 'Si tu negocio tiene varios almacenes, revisa el selector de **Almacén** antes de cobrar: el stock se descuenta del almacén elegido. También puedes asignar la venta a un **Vendedor** en el selector de al lado.',
+        },
+      ],
+    },
+
+    {
+      id: 'buscar-productos',
+      title: 'Buscar productos, escáner y vistas',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'El buscador encuentra por nombre, código, marca o categoría, sin importar tildes ni mayúsculas. Puedes escribir pedazos de palabras: "pol roj" encuentra "POLO ROJO XL".',
+        },
+        {
+          type: 'texto',
+          text: 'Con **pistola lectora** (computadora): dispara al código con el cursor en el buscador y el producto se agrega solo. Desde la **aplicación** (celular o tablet) tienes además un botón para escanear con la cámara, al costado del buscador.',
+        },
+        {
+          type: 'texto',
+          text: 'El botón de cuadraditos junto al buscador alterna entre ver los productos en **cuadrícula** (con foto) o en **lista** (más productos por pantalla).',
+        },
+        {
+          type: 'texto',
+          text: 'Si el producto tiene **variantes** (tallas, colores), al tocarlo se abre una ventana para elegir cuál. Si tiene **presentaciones** (unidad, caja, docena), eliges la presentación y el precio se ajusta solo.',
+        },
+        {
+          type: 'ojo',
+          text: 'Si un producto dice "Sin stock" pero tienes mercadería, casi siempre es una de dos: estás parado en un almacén distinto al que tiene el stock, o la variante elegida es otra. Revisa el selector de **Almacén** y la variante antes de asumir que el inventario está mal.',
+        },
+      ],
+    },
+
+    {
+      id: 'producto-personalizado',
+      title: 'Producto Personalizado (venta libre)',
+      requiereOpcion: {
+        flag: 'allowCustomProducts',
+        nombre: 'los productos personalizados',
+        donde: 'Configuración > Ventas',
+        // Enlace profundo: abre la pestaña y resalta la opción exacta
+        ruta: '/app/configuracion?tab=ventas&opcion=allowCustomProducts',
+        defaultOn: false,
+      },
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Sirve para cobrar algo que no está en tu catálogo: un servicio puntual, un arreglo, un artículo de paso. No descuenta stock ni queda registrado como producto.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Presiona el botón **Producto Personalizado**, arriba del buscador.',
+            'En la ventana **Agregar Producto Personalizado**, escribe la descripción, el precio y la cantidad.',
+            'Se agrega al carrito como un producto más y sale igual en el comprobante.',
+          ],
+        },
+        {
+          type: 'ui',
+          kind: 'boton',
+          label: 'Producto Personalizado',
+          nota: 'Arriba del buscador de productos. En celular se abrevia a "Personalizado".',
+        },
+      ],
+    },
+
+    {
+      id: 'carrito',
+      title: 'El carrito: precios, descuentos, limpiar y aparcar',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'En el **Carrito de Compras** cada producto permite más que cambiar la cantidad: con el ícono de lápiz editas el **precio** solo para esta venta, puedes aplicar **descuento**, y marcar un producto como **bonificación** (regalo: sale en el comprobante pero no suma al total, como pide SUNAT). El total va siempre visible arriba del carrito.',
+        },
+        {
+          type: 'texto',
+          text: 'El botón **Limpiar** (arriba a la derecha del área de productos) vacía el carrito para empezar de cero. Después de completar una venta, ese mismo botón se pone verde y dice **Nueva Venta**.',
+        },
+        {
+          type: 'texto',
+          text: '¿Llegó otro cliente y el primero sigue eligiendo? Presiona **Aparcar** (arriba del carrito): la venta queda en pausa y el carrito libre para atender al siguiente. Las ventas aparcadas se recuperan desde el botón **En espera**, que muestra cuántas tienes.',
+        },
+        {
+          type: 'consejo',
+          text: 'Si usas niveles de precio (público, mayorista), al agregar el producto se abre una ventana para elegir el nivel. Dos atajos: si el cliente seleccionado tiene un nivel asignado en su ficha, se aplica solo; y si el producto tiene precio automático por cantidad, el sistema baja el precio solo al llegar a la cantidad mínima.',
+        },
+      ],
+    },
+
+    {
+      id: 'tipos-comprobante',
+      title: 'Boleta, factura o nota de venta: cuál emitir',
+      blocks: [
+        {
+          type: 'texto',
+          text: '**Factura**: para clientes con RUC que necesitan sustentar el gasto. Va a SUNAT. **Boleta**: para consumidores finales. También va a SUNAT. **Nota de Venta**: documento interno, no viaja a SUNAT; sirve para ventas simples y luego puede convertirse en boleta o factura desde la página de Ventas.',
+        },
+        {
+          type: 'texto',
+          text: 'Para las boletas, SUNAT exige identificar al cliente con su DNI cuando la venta llega a S/ 700 o más.',
+        },
+        {
+          type: 'ojo',
+          text: 'Si en tu POS no aparece alguno de los tipos, revisa en Configuración qué comprobantes tiene habilitados tu negocio. Por ejemplo, un negocio del Nuevo RUS no emite facturas. Y si tu cuenta aún no tiene conexión con SUNAT, el sistema solo permite Nota de Venta.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=ventas&opcion=enabledDocumentTypes',
+          label: 'Ver mis comprobantes habilitados',
+        },
+      ],
+    },
+
+    {
+      id: 'cliente',
+      title: 'Datos del cliente',
+      blocks: [
+        {
+          type: 'pasos',
+          items: [
+            'Si el cliente ya compró antes, escríbelo en **Buscar cliente registrado...** y selecciónalo: sus datos se completan solos.',
+            'Si es nuevo, escribe su **RUC** o **DNI** y toca la lupa: el sistema consulta el padrón y trae el nombre o razón social automáticamente.',
+            'Para boletas simples puedes cobrar sin datos del cliente.',
+          ],
+        },
+        {
+          type: 'consejo',
+          text: 'En facturas, junto a la dirección hay un botón para ver los **establecimientos anexos** que el cliente tiene registrados en SUNAT y elegir la dirección correcta.',
+        },
+        {
+          type: 'texto',
+          text: 'Los clientes que registras quedan guardados en la página **Clientes**, con su historial de compras.',
+        },
+      ],
+    },
+
+    {
+      id: 'medios-pago',
+      title: 'Medios de pago: contado, crédito y pago dividido',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'En boletas y facturas eliges la **Forma de Pago**: **Contado** o **Crédito**. Con crédito defines la fecha de vencimiento y, si quieres, las cuotas; la venta queda pendiente de cobro y se controla desde la página de Ventas.',
+        },
+        {
+          type: 'texto',
+          text: 'Dentro de contado eliges el método: efectivo, Yape, Plin, tarjeta o los métodos propios que hayas configurado. Si el cliente paga con varios métodos a la vez (una parte en efectivo y otra por Yape), agrega cada método con su monto hasta completar el total.',
+        },
+        {
+          type: 'consejo',
+          text: 'Los métodos de pago se personalizan en Configuración: puedes ocultar los que no usas y crear los tuyos. Cada método sale desglosado en el cierre de caja.',
+        },
+      ],
+    },
+
+    {
+      id: 'vuelto',
+      title: 'Recordatorio de vuelto en efectivo',
+      requiereOpcion: {
+        flag: 'showChangeReminder',
+        nombre: 'el recordatorio de vuelto',
+        donde: 'Configuración > Ventas',
+        ruta: '/app/configuracion?tab=ventas&opcion=showChangeReminder',
+        defaultOn: false,
+      },
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Con esta opción activa, al cobrar en efectivo aparece la ventana **Recordatorio de vuelto**: indicas con cuánto paga el cliente y el sistema muestra en grande el vuelto a entregar, antes de imprimir el ticket. Útil para no equivocarse en hora punta.',
+        },
+      ],
+    },
+
+    {
+      id: 'fecha-emision',
+      title: 'Fecha de emisión',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Por defecto toda venta sale con la fecha de hoy. Puedes cambiarla en el campo **Fecha de Emisión** del panel derecho, con estos límites que pone SUNAT:',
+        },
+        {
+          type: 'pasos',
+          items: [
+            '**Facturas**: hasta 3 días hacia atrás.',
+            '**Boletas**: hasta 7 días hacia atrás.',
+            '**Notas de Venta**: no tienen límite hacia atrás porque no van a SUNAT.',
+            'Ningún comprobante puede llevar **fecha futura**. Si escribes una por error, el sistema la corrige solo y te avisa.',
+          ],
+        },
+        {
+          type: 'ojo',
+          text: 'Si un comprobante llega a SUNAT con la fecha fuera del plazo, lo rechaza y ese número queda inutilizable. Por eso el sistema valida la fecha antes de cobrar.',
+        },
+      ],
+    },
+
+    {
+      id: 'despues-venta',
+      title: 'Después de cobrar: ticket, PDF y WhatsApp',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Al completar la venta se abre la ventana **Venta completada** con todo lo que puedes hacer con el comprobante: imprimir el **Ticket**, verlo en pantalla (**Preview**), descargar el **PDF** o **Enviar por WhatsApp** (si el cliente no tiene número registrado, te lo pide en el momento). El botón **Nueva venta** deja todo listo para el siguiente cliente.',
+        },
+        {
+          type: 'texto',
+          text: 'Si cierras esa ventana sin querer, no se pierde nada: queda un aviso verde con la venta y el botón **Opciones** para reabrirla.',
+        },
+        {
+          type: 'texto',
+          text: 'En Configuración puedes activar la **impresión automática** para que el ticket salga solo al completar cada venta, y también que el POS se limpie solo para la siguiente. Desde la aplicación Android puedes imprimir directo en una ticketera térmica Bluetooth (pestaña Impresora de Configuración).',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=ventas&opcion=autoPrintTicket',
+          label: 'Activar la impresión automática',
+        },
+      ],
+    },
+
+    {
+      id: 'referencias',
+      title: 'Referencias: guía, orden de compra y pedido',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'En el panel derecho, la sección **Referencias (opcional)** permite anotar el **N° Guía**, el **N° O/C** o el **N° Pedido** relacionados con la venta. Salen impresos en el comprobante; útil cuando el cliente exige referenciar su orden de compra en la factura.',
+        },
+      ],
+    },
+
+    {
+      id: 'sin-internet',
+      title: 'Si se corta el internet',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Puedes seguir vendiendo con **Notas de Venta**: quedan guardadas en el equipo y se envían solas cuando vuelve la conexión (verás un indicador con las ventas pendientes). Las boletas y facturas sí necesitan conexión, porque se validan con SUNAT al momento.',
+        },
+        {
+          type: 'ojo',
+          text: 'Las ventas guardadas sin conexión viven en ese equipo y navegador. No cierres sesión ni borres los datos del navegador mientras tengas ventas pendientes de sincronizar.',
+        },
+      ],
+    },
+
+    {
+      id: 'restaurante',
+      title: 'En modo restaurante',
+      soloModos: ['restaurant'],
+      blocks: [
+        {
+          type: 'texto',
+          text: 'En restaurantes, lo habitual es atender desde la página **Mesas**: cada mesa acumula su pedido y se cobra al cerrar. El POS sirve para ventas directas sin mesa, como pedidos para llevar.',
+        },
+      ],
+    },
+  ],
+
+  preguntas: [
+    {
+      q: 'Emití mal una venta, ¿cómo la corrijo?',
+      a: 'Desde la página **Ventas**. Si fue una boleta o factura ya enviada a SUNAT, se corrige con una nota de crédito o se da de baja (según el caso). Si fue una Nota de Venta, puedes anularla, y si tu negocio tiene activada la edición de notas de venta, también editarla.',
+    },
+    {
+      q: '¿Por qué no me aparece la opción de Factura?',
+      a: 'Tu negocio tiene definido qué comprobantes emite en **Configuración**. Si estás en el Nuevo RUS, SUNAT no permite emitir facturas y la opción se oculta a propósito. También pasa si tu cuenta aún no tiene la conexión con SUNAT habilitada: en ese caso solo verás Nota de Venta.',
+    },
+    {
+      q: '¿Puedo vender aunque el producto esté en cero?',
+      a: 'Depende de una opción de tu negocio: en **Configuración** existe "permitir stock negativo". Si está apagada, el sistema no deja vender más de lo que hay; si está encendida, la venta pasa y el stock queda en negativo para que luego cuadres el inventario.',
+    },
+    {
+      q: '¿Cómo cambio el precio de un producto solo para esta venta?',
+      a: 'En el carrito, toca el ícono de lápiz junto al precio del producto y escribe el nuevo. Ese precio vale solo para esta venta; el del catálogo no cambia.',
+    },
+    {
+      q: 'Atendía a un cliente y llegó otro con apuro, ¿pierdo lo que llevaba?',
+      a: 'No. Presiona **Aparcar** arriba del carrito: la venta queda en pausa. Atiendes al otro cliente y luego la recuperas desde **En espera**.',
+    },
+    {
+      q: '¿La venta descuenta los insumos de una receta?',
+      a: 'Sí: si el producto tiene receta (modo restaurante), al venderlo se descuentan sus insumos del inventario, además del plato.',
+    },
+  ],
+}

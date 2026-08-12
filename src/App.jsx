@@ -30,6 +30,7 @@ import PurchaseOrders from './pages/PurchaseOrders'
 import CashRegister from './pages/CashRegister'
 import AccountSuspended from './pages/AccountSuspended'
 import MySubscription from './pages/MySubscription'
+import Manual from './pages/Manual'
 import UserManagement from './pages/admin/UserManagement'
 import AdminLayout from './layouts/AdminLayout'
 import AdminDashboard from './pages/admin/AdminDashboard'
@@ -490,6 +491,9 @@ function App() {
               <Route path="configuracion" element={<Settings />} />
               <Route path="usuarios" element={<Users />} />
               <Route path="mi-suscripcion" element={<MySubscription />} />
+              {/* Manual de uso: accesible para todos los usuarios (no requiere permiso de página) */}
+              <Route path="manual" element={<Manual />} />
+              <Route path="manual/:guideId" element={<Manual />} />
               <Route path="business/new" element={<BusinessCreate />} />
 
               {/* Rutas de modo restaurante */}

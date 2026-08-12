@@ -75,9 +75,13 @@ import {
 const PRODUCTION_URL = 'https://cobrifyperu.com'
 
 // Toggle de configuración con estilo unificado (checkbox a la izquierda).
-function SettingToggle({ checked, onChange, title, description, disabled = false, children }) {
+// `id` (opcional): ancla para los enlaces profundos del manual de uso
+// (/app/configuracion?tab=X&opcion=Y hace scroll y resalta esta opción).
+// Por convención el id es `opcion-<flag>` con el mismo nombre del flag en
+// businessSettings. El scroll-mt evita que el header pegajoso la tape.
+function SettingToggle({ checked, onChange, title, description, disabled = false, children, id }) {
   return (
-    <label className={`flex items-start gap-3 cursor-pointer p-3 border rounded-lg transition-colors ${
+    <label id={id} className={`flex items-start gap-3 cursor-pointer p-3 border rounded-lg transition-colors scroll-mt-24 ${
       checked ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
     } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
       <input
@@ -157,11 +161,15 @@ export default function Settings() {
   // Tab inicial: si la URL trae ?tab=xxx (ej: desde el sidebar "Mi Catálogo"
   // que apunta a /configuracion?tab=catalogo) lo respetamos. Si no, default.
   const _location = useLocation()
+  // Pestañas direccionables por URL (?tab=...). Solo las SIEMPRE visibles:
+  // las condicionales (rappi, shopifree, limpieza) no entran porque llegar por
+  // enlace a una pestaña que no se renderiza dejaría la pantalla vacía.
+  const DEEP_LINK_TABS = ['informacion', 'preferencias', 'ventas', 'documentos', 'series', 'impresora', 'seguridad', 'notificaciones', 'catalogo']
   const _initialTab = (() => {
     try {
       const params = new URLSearchParams(_location.search)
       const t = params.get('tab')
-      if (t && ['informacion', 'preferencias', 'documentos', 'catalogo'].includes(t)) return t
+      if (t && DEEP_LINK_TABS.includes(t)) return t
     } catch {}
     return 'informacion'
   })()
@@ -171,12 +179,46 @@ export default function Settings() {
     try {
       const params = new URLSearchParams(_location.search)
       const t = params.get('tab')
-      if (t && ['informacion', 'preferencias', 'documentos', 'catalogo'].includes(t) && t !== activeTab) {
+      if (t && DEEP_LINK_TABS.includes(t) && t !== activeTab) {
         setActiveTab(t)
       }
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [_location.search])
+
+  // Enlace profundo del manual de uso: ?tab=X&opcion=<flag> hace scroll hasta
+  // la opción (ancla `opcion-<flag>`, ver SettingToggle) y la resalta unos
+  // segundos para que el usuario la ubique de un vistazo. El pequeño reintento
+  // cubre el tiempo de render del contenido de la pestaña.
+  const _lastOpcionRef = useRef(null)
+  useEffect(() => {
+    let opcion = null
+    try {
+      opcion = new URLSearchParams(_location.search).get('opcion')
+    } catch {}
+    if (!opcion) return
+    const key = `${_location.search}`
+    if (_lastOpcionRef.current === key) return
+
+    let attempts = 0
+    let timer = null
+    const tryScroll = () => {
+      const el = document.getElementById(`opcion-${opcion}`)
+      if (el) {
+        _lastOpcionRef.current = key
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        el.classList.add('ring-2', 'ring-primary-500', 'ring-offset-2')
+        setTimeout(() => {
+          el.classList.remove('ring-2', 'ring-primary-500', 'ring-offset-2')
+        }, 2500)
+        return
+      }
+      if (attempts++ < 10) timer = setTimeout(tryScroll, 200)
+    }
+    timer = setTimeout(tryScroll, 200)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [_location.search, activeTab])
 
   // Auto-cargar logs de integración Shopifree cuando se entra al tab.
   // También se refresca tras hacer resync/poll exitosos (ver handlers).
@@ -5043,6 +5085,7 @@ export default function Settings() {
                   />
 
                   <SettingToggle
+                    id="opcion-allowCustomProducts"
                     checked={allowCustomProducts}
                     onChange={(e) => setAllowCustomProducts(e.target.checked)}
                     title="Permitir agregar productos personalizados en el POS"
@@ -5098,6 +5141,7 @@ export default function Settings() {
 
                   {/* Auto-imprimir ticket al completar venta */}
                   <SettingToggle
+                    id="opcion-autoPrintTicket"
                     checked={autoPrintTicket}
                     onChange={(e) => setAutoPrintTicket(e.target.checked)}
                     title="Imprimir ticket automáticamente al completar venta"
@@ -5108,6 +5152,7 @@ export default function Settings() {
 
                   {/* Recordatorio de vuelto en efectivo */}
                   <SettingToggle
+                    id="opcion-showChangeReminder"
                     checked={showChangeReminder}
                     onChange={(e) => setShowChangeReminder(e.target.checked)}
                     title="Recordatorio de vuelto en efectivo"
@@ -5148,8 +5193,9 @@ export default function Settings() {
 
                   {/* Comprobantes: cuales estan disponibles y cual viene por
                       defecto. Sin el tinte azul del hover — el color queda solo
-                      en el check y en el boton elegido. */}
-                  <div className="p-4 border border-gray-200 rounded-lg">
+                      en el check y en el boton elegido. El id es el ancla del
+                      enlace profundo del manual (?opcion=enabledDocumentTypes). */}
+                  <div id="opcion-enabledDocumentTypes" className="p-4 border border-gray-200 rounded-lg scroll-mt-24">
                     <div className="flex-1">
                       <span className="text-sm font-medium text-gray-900">
                         Comprobantes disponibles en el POS

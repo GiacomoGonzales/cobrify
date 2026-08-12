@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, memo } from 'react'
-import { Bell, User, LogOut, Menu, Download, ChevronDown, Check, Store, UtensilsCrossed, Pill, BedDouble, PawPrint, Truck, HardHat, Home, LayoutGrid } from 'lucide-react'
+import { Bell, User, LogOut, Menu, Download, ChevronDown, Check, Store, UtensilsCrossed, Pill, BedDouble, PawPrint, Truck, HardHat, Home, LayoutGrid, HelpCircle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useBranding } from '@/contexts/BrandingContext'
@@ -7,6 +7,7 @@ import { useStore } from '@/stores/useStore'
 import { usePWAInstall } from '@/hooks/usePWAInstall'
 import { getUnreadNotifications, checkAndCreateSubscriptionNotifications } from '@/services/notificationService'
 import NotificationPanel from './NotificationPanel'
+import GuidePanel from './guide/GuidePanel'
 
 // Modo de negocio → etiqueta + ícono (para el selector de local del Navbar)
 const MODE_META = {
@@ -30,6 +31,7 @@ function Navbar() {
   const [showNotifications, setShowNotifications] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const [showBranchMenu, setShowBranchMenu] = useState(false)
+  const [showGuide, setShowGuide] = useState(false)
 
   const notificationRef = useRef(null)
   const branchMenuRef = useRef(null)
@@ -202,6 +204,15 @@ function Navbar() {
           </button>
         )}
 
+        {/* Ayuda: guía de uso de la página actual (panel lateral) */}
+        <button
+          onClick={() => setShowGuide(true)}
+          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+          title="Guía de uso de esta página"
+        >
+          <HelpCircle className="w-5 h-5 text-gray-600" />
+        </button>
+
         {/* Notifications */}
         <div className="relative" ref={notificationRef}>
           <button
@@ -255,6 +266,9 @@ function Navbar() {
           </div>
         </div>
       </div>
+
+      {/* Panel lateral con la guía de la página actual */}
+      <GuidePanel open={showGuide} onClose={() => setShowGuide(false)} />
     </header>
   )
 }
