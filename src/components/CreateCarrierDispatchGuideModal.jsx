@@ -9,7 +9,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { useAppContext } from '@/hooks/useAppContext'
 import { createCarrierDispatchGuide, saveCarrierDispatchGuideDraft, deleteCarrierDispatchGuide, updateCarrierDispatchGuide, getCompanySettings, sendCarrierDispatchGuideToSunat } from '@/services/firestoreService'
 import { consultarRUC, consultarDNI, consultarEstablecimientos } from '@/services/documentLookupService'
-import { DEPARTAMENTOS, getProvincias, getDistritos, buildUbigeo } from '@/data/peruUbigeos'
+import { DEPARTAMENTOS, getProvincias, getDistritos, buildUbigeo, resolveUbigeoParts } from '@/data/peruUbigeos'
 
 const TRANSFER_REASONS = [
   { value: '01', label: '01 - Venta' },
@@ -215,12 +215,19 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
           setOriginDepartamento(prefillGuide.origin.departamento)
           setOriginProvincia(prefillGuide.origin.provincia || '')
           setOriginDistrito(prefillGuide.origin.distrito || '')
-        } else if (prefillGuide.origin?.ubigeo && prefillGuide.origin.ubigeo.length === 6) {
-          // Parsear ubigeo de 6 dígitos
-          const ubigeo = prefillGuide.origin.ubigeo
-          setOriginDepartamento(ubigeo.substring(0, 2))
-          setOriginProvincia(ubigeo.substring(0, 4))
-          setOriginDistrito(ubigeo)
+        } else if (prefillGuide.origin?.ubigeo) {
+          // Estos selectores guardan CÓDIGOS DE 2 DÍGITOS por nivel, no tramos
+          // acumulados: buildUbigeo() los concatena. Antes aquí se guardaba
+          // '15' / '1501' / '150101', que no coincide con ninguna opción de la
+          // lista: provincia y distrito se veían vacíos mientras el estado tenía
+          // datos, y buildUbigeo devolvía un ubigeo de 12 dígitos que SUNAT
+          // rechaza. resolveUbigeoParts devuelve los tres tramos de 2 dígitos.
+          const { valid, departamento, provincia, distrito } = resolveUbigeoParts(prefillGuide.origin.ubigeo)
+          if (valid) {
+            setOriginDepartamento(departamento)
+            setOriginProvincia(provincia)
+            setOriginDistrito(distrito)
+          }
         }
 
         // Destino - ubigeo
@@ -229,11 +236,14 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
           setDestinationDepartamento(prefillGuide.destination.departamento)
           setDestinationProvincia(prefillGuide.destination.provincia || '')
           setDestinationDistrito(prefillGuide.destination.distrito || '')
-        } else if (prefillGuide.destination?.ubigeo && prefillGuide.destination.ubigeo.length === 6) {
-          const ubigeo = prefillGuide.destination.ubigeo
-          setDestinationDepartamento(ubigeo.substring(0, 2))
-          setDestinationProvincia(ubigeo.substring(0, 4))
-          setDestinationDistrito(ubigeo)
+        } else if (prefillGuide.destination?.ubigeo) {
+          // Mismo criterio que el origen: tramos de 2 dígitos, no acumulados.
+          const { valid, departamento, provincia, distrito } = resolveUbigeoParts(prefillGuide.destination.ubigeo)
+          if (valid) {
+            setDestinationDepartamento(departamento)
+            setDestinationProvincia(provincia)
+            setDestinationDistrito(distrito)
+          }
         }
 
         // Vehículos
@@ -373,12 +383,33 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
     }
   }
 
-  // Aplica dirección + ciudad (distrito/provincia/departamento) del establecimiento elegido.
+  // Aplica dirección + ciudad (distrito/provincia/departamento) del establecimiento
+  // elegido, y además lo lleva al PUNTO DE LLEGADA con su ubigeo.
+  //
+  // La ciudad del destinatario es texto libre; el ubigeo del punto de llegada es
+  // lo que SUNAT lee del XML. Antes solo se llenaba lo primero, así que el local
+  // del cliente en otro distrito quedaba correcto en pantalla y con el distrito
+  // del domicilio fiscal en el comprobante. En una guía el destinatario es quien
+  // recibe la carga, así que el punto de llegada lo sigue. Queda editable.
+  //
+  // Devuelve true si se pudo aplicar el ubigeo.
   const applyRecipientEstablishment = (est) => {
     const dir = est.direccionCompleta || est.direccion || ''
-    if (dir) setRecipientAddress(dir)
+    if (dir) {
+      setRecipientAddress(dir)
+      setDestinationAddress(dir)
+    }
     const city = [est.distrito, est.provincia, est.departamento].filter(Boolean).join(', ')
     if (city) setRecipientCity(city)
+
+    // Ubigeo fuera de nuestro catálogo: se conserva lo que el usuario eligió.
+    const { valid, departamento, provincia, distrito } = resolveUbigeoParts(est.ubigeo)
+    if (!valid) return false
+
+    setDestinationDepartamento(departamento)
+    setDestinationProvincia(provincia)
+    setDestinationDistrito(distrito)
+    return true
   }
 
   // Consultar establecimientos (anexos) del RUC del destinatario; varios → modal, uno → directo. (Igual que el POS.)
@@ -401,8 +432,12 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
         return
       }
       if (list.length === 1) {
-        applyRecipientEstablishment(list[0])
-        toast.success('Este RUC tiene un solo establecimiento. Dirección actualizada.')
+        const aplicado = applyRecipientEstablishment(list[0])
+        toast.success(
+          aplicado
+            ? 'Este RUC tiene un solo establecimiento. Dirección y ubigeo actualizados.'
+            : 'Este RUC tiene un solo establecimiento. Dirección actualizada — revisa el distrito.'
+        )
         return
       }
       setRecipientEstablishments(list)
@@ -416,9 +451,13 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
   }
 
   const handleSelectRecipientEstablishment = (est) => {
-    applyRecipientEstablishment(est)
+    const aplicado = applyRecipientEstablishment(est)
     setShowRecipientEstablishmentsModal(false)
-    toast.success('Dirección del establecimiento aplicada')
+    toast.success(
+      aplicado
+        ? 'Dirección y ubigeo del establecimiento aplicados'
+        : 'Dirección aplicada — revisa el distrito del punto de llegada'
+    )
   }
 
   // Validar formato de número de guía (T001-00000001, EG07-00000001, etc.)

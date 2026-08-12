@@ -9,7 +9,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { useAppContext } from '@/hooks/useAppContext'
 import { updateDispatchGuide, getCompanySettings, getCustomers, getProducts } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
-import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
+import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS, resolveUbigeoParts } from '@/data/peruUbigeos'
 import SUNAT_UNITS, { normalizeSunatUnit } from '@/data/sunatUnits'
 import { matchesSearchQuery } from '@/lib/utils'
 import { consultarRUC, consultarDNI, consultarEstablecimientos } from '@/services/documentLookupService'
@@ -601,6 +601,40 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
     }
   }
 
+  // Aplicar un establecimiento (anexo SUNAT) del destinatario: dirección Y ubigeo.
+  //
+  // El ubigeo es lo que SUNAT lee del XML; la dirección escrita es texto libre.
+  // Antes solo se copiaba la dirección, así que elegir el anexo de un cliente en
+  // otro distrito dejaba la calle nueva con el distrito viejo.
+  //
+  // A diferencia del modal de creación, aquí NO hay un useEffect que sincronice
+  // destinatario → punto de llegada, así que hay que moverlo a mano. Se mueve
+  // porque en la guía el destinatario ES quien recibe la mercadería: dejar el
+  // punto de llegada en el domicilio fiscal es justamente el error a evitar.
+  // Todo queda editable después.
+  //
+  // Devuelve true si además de la dirección se pudo aplicar el ubigeo.
+  const applyRecipientEstablishment = (est) => {
+    const dir = est.direccionCompleta || est.direccion || ''
+    if (dir) {
+      setRecipientAddress(dir)
+      setDestinationAddress(dir)
+    }
+
+    // Ubigeo que no está en nuestro catálogo: se conserva lo que el usuario ya
+    // tenía elegido en vez de dejar los selectores en un valor fantasma.
+    const { valid, departamento, provincia, distrito } = resolveUbigeoParts(est.ubigeo)
+    if (!valid) return false
+
+    setRecipientDepartment(departamento)
+    setRecipientProvince(provincia)
+    setRecipientDistrict(distrito)
+    setDestinationDepartment(departamento)
+    setDestinationProvince(provincia)
+    setDestinationDistrict(distrito)
+    return true
+  }
+
   // Consultar establecimientos (anexos) del RUC del destinatario; varios → modal, uno → directo. (Igual que el POS.)
   const handleViewRecipientEstablishments = async () => {
     const ruc = (recipientDocNumber || '').replace(/\D/g, '')
@@ -621,9 +655,12 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
         return
       }
       if (list.length === 1) {
-        const dir = list[0].direccionCompleta || list[0].direccion || ''
-        if (dir) setRecipientAddress(dir)
-        toast.success('Este RUC tiene un solo establecimiento. Dirección actualizada.')
+        const aplicado = applyRecipientEstablishment(list[0])
+        toast.success(
+          aplicado
+            ? 'Este RUC tiene un solo establecimiento. Dirección y ubigeo actualizados.'
+            : 'Este RUC tiene un solo establecimiento. Dirección actualizada — revisa el distrito.'
+        )
         return
       }
       setRecipientEstablishments(list)
@@ -637,10 +674,13 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
   }
 
   const handleSelectRecipientEstablishment = (est) => {
-    const dir = est.direccionCompleta || est.direccion || ''
-    if (dir) setRecipientAddress(dir)
+    const aplicado = applyRecipientEstablishment(est)
     setShowRecipientEstablishmentsModal(false)
-    toast.success('Dirección del establecimiento aplicada')
+    toast.success(
+      aplicado
+        ? 'Dirección y ubigeo del establecimiento aplicados'
+        : 'Dirección aplicada — revisa el distrito del punto de llegada'
+    )
   }
 
   // === PROVEEDOR (motivo 02 Compra) ===

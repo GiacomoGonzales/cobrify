@@ -9,7 +9,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { filterProductsForBranch } from '@/utils/branchCatalog'
 import { createDispatchGuide, getCompanySettings, sendDispatchGuideToSunat, getProducts, getCustomers } from '@/services/firestoreService'
 import { getBranch, getActiveBranches } from '@/services/branchService'
-import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
+import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS, resolveUbigeoParts } from '@/data/peruUbigeos'
 import SUNAT_UNITS, { normalizeSunatUnit } from '@/data/sunatUnits'
 import { matchesSearchQuery } from '@/lib/utils'
 import { consultarRUC, consultarDNI, consultarEstablecimientos } from '@/services/documentLookupService'
@@ -1221,6 +1221,32 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   // Consultar establecimientos (anexos) del RUC del destinatario. Si hay varios, abre un
   // modal para elegir la dirección; si hay uno solo, la aplica directo. Es una consulta
   // aparte a la API (1 crédito), por eso va con botón explícito. (Misma función que el POS.)
+  // Aplicar un establecimiento (anexo SUNAT) del destinatario: dirección Y ubigeo.
+  //
+  // El ubigeo importa más que la dirección escrita: es lo que SUNAT lee del XML.
+  // Antes solo se copiaba la dirección, así que al elegir el anexo de un cliente
+  // en otro distrito quedaba la calle nueva con el distrito viejo — y el
+  // departamento/provincia/distrito del punto de llegada salían del domicilio
+  // fiscal. La consulta ya devuelve el ubigeo de cada local; solo se descartaba.
+  //
+  // Devuelve true si además de la dirección se pudo aplicar el ubigeo.
+  const applyRecipientEstablishment = (est) => {
+    const dir = est.direccionCompleta || est.direccion || ''
+    if (dir) setRecipientAddress(dir)
+
+    // Si SUNAT devuelve un ubigeo que no está en nuestro catálogo, se deja lo
+    // que el usuario ya tenía elegido en vez de dejar los selectores en un
+    // valor fantasma (ver resolveUbigeoParts).
+    const { valid, departamento, provincia, distrito } = resolveUbigeoParts(est.ubigeo)
+    if (!valid) return false
+
+    // Un useEffect sincroniza estos tres al punto de llegada en las ventas.
+    setRecipientDepartment(departamento)
+    setRecipientProvince(provincia)
+    setRecipientDistrict(distrito)
+    return true
+  }
+
   const handleViewRecipientEstablishments = async () => {
     const ruc = (recipientDocNumber || '').replace(/\D/g, '')
     if (ruc.length !== 11) {
@@ -1240,9 +1266,12 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
         return
       }
       if (list.length === 1) {
-        const dir = list[0].direccionCompleta || list[0].direccion || ''
-        if (dir) setRecipientAddress(dir)
-        toast.success('Este RUC tiene un solo establecimiento. Dirección actualizada.')
+        const aplicado = applyRecipientEstablishment(list[0])
+        toast.success(
+          aplicado
+            ? 'Este RUC tiene un solo establecimiento. Dirección y ubigeo actualizados.'
+            : 'Este RUC tiene un solo establecimiento. Dirección actualizada — revisa el distrito.'
+        )
         return
       }
       setRecipientEstablishments(list)
@@ -1336,13 +1365,16 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     setShowSupplierEstablishmentsModal(false)
   }
 
-  // Elegir un establecimiento del modal → poner su dirección en el destinatario
-  // (un useEffect ya sincroniza esa dirección al punto de llegada).
+  // Elegir un establecimiento del modal → poner su dirección y su ubigeo en el
+  // destinatario (un useEffect ya sincroniza ambos al punto de llegada).
   const handleSelectRecipientEstablishment = (est) => {
-    const dir = est.direccionCompleta || est.direccion || ''
-    if (dir) setRecipientAddress(dir)
+    const aplicado = applyRecipientEstablishment(est)
     setShowRecipientEstablishmentsModal(false)
-    toast.success('Dirección del establecimiento aplicada')
+    toast.success(
+      aplicado
+        ? 'Dirección y ubigeo del establecimiento aplicados'
+        : 'Dirección aplicada — revisa el distrito del punto de llegada'
+    )
   }
 
   // Elegir uno de MIS establecimientos (anexos SUNAT del emisor) como punto de partida.

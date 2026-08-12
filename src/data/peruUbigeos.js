@@ -2811,6 +2811,39 @@ export function parseUbigeo(ubigeo) {
   }
 }
 
+/**
+ * Igual que parseUbigeo pero VALIDANDO cada tramo contra este catálogo.
+ *
+ * Se usa para aplicar ubigeos que vienen de AFUERA (la consulta de
+ * establecimientos de SUNAT), no de nuestros propios selectores. Si ese ubigeo
+ * trae un código que aquí no existe —uno nuevo, o mal formado— y lo metiéramos
+ * igual en el estado, los selectores se verían VACÍOS mientras el formulario
+ * guarda un valor fantasma: el usuario cree que no eligió nada y el XML sale
+ * con un distrito inválido.
+ *
+ * Por eso devuelve `valid: false` en vez de tramos a medias: quien llama se
+ * queda con lo que el usuario ya había elegido, que es lo seguro.
+ *
+ * @param {string} ubigeo - Código de 6 dígitos (2 depto + 2 provincia + 2 distrito)
+ * @returns {{ valid: boolean, departamento: string, provincia: string, distrito: string }}
+ */
+export function resolveUbigeoParts(ubigeo) {
+  const vacio = { valid: false, departamento: '', provincia: '', distrito: '' }
+
+  const raw = String(ubigeo || '').trim()
+  if (!/^\d{6}$/.test(raw)) return vacio
+
+  const departamento = raw.substring(0, 2)
+  const provincia = raw.substring(2, 4)
+  const distrito = raw.substring(4, 6)
+
+  if (!DEPARTAMENTOS.some(d => d.code === departamento)) return vacio
+  if (!(PROVINCIAS[departamento] || []).some(p => p.code === provincia)) return vacio
+  if (!(DISTRITOS[`${departamento}${provincia}`] || []).some(d => d.code === distrito)) return vacio
+
+  return { valid: true, departamento, provincia, distrito }
+}
+
 export default {
   DEPARTAMENTOS,
   PROVINCIAS,
@@ -2820,4 +2853,5 @@ export default {
   buildUbigeo,
   getUbigeoName,
   parseUbigeo,
+  resolveUbigeoParts,
 }
