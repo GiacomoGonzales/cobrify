@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useDeferredValue } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, Warehouse, CheckSquare, Square, MinusSquare, CheckCheck, FolderEdit, Calendar, Eye, EyeOff, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store, Copy, MoreVertical, Check, Printer, Layers, Boxes, Scale, Percent, Leaf, Ban, Utensils } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, Warehouse, CheckSquare, Square, MinusSquare, CheckCheck, FolderEdit, Calendar, Eye, EyeOff, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store, Copy, MoreVertical, Check, Printer, Layers, Boxes, Scale, Percent, Leaf, Ban, Utensils, Hash } from 'lucide-react'
 import JsBarcode from 'jsbarcode'
 import jsPDF from 'jspdf'
 import { Capacitor } from '@capacitor/core'
@@ -36,6 +36,7 @@ import {
   getNextBarcodeNumbers,
 } from '@/services/firestoreService'
 import { exportProductsForImport, exportProductsForRappi } from '@/services/productExportService'
+import { previewUnifyCodes, applyUnifyCodes } from '@/services/unifyCodesService'
 import ImportProductsModal from '@/components/ImportProductsModal'
 import { getWarehouses, updateWarehouseStock, getDefaultWarehouse, createWarehouse, createStockMovement } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
@@ -523,6 +524,13 @@ export default function Products() {
   })
   const [optionsMenuOpen, setOptionsMenuOpen] = useState(false) // menú único "Opciones" del header
   const [bulkMenuOpen, setBulkMenuOpen] = useState(false) // menú "Más acciones" de la barra de selección
+
+  // Unificar códigos (opcional, ver unifyCodesService): previsualización antes
+  // de escribir nada, porque renumerar el catálogo no se deshace con un botón.
+  const [unifyModalOpen, setUnifyModalOpen] = useState(false)
+  const [unifyPreview, setUnifyPreview] = useState(null)
+  const [unifyLoading, setUnifyLoading] = useState(false)
+  const [unifyRunning, setUnifyRunning] = useState(false)
 
   // Imágenes de productos: habilitadas para todos por defecto (ya no es una opción configurable).
   const canUseProductImages = true
@@ -3194,6 +3202,45 @@ export default function Products() {
     setIsBrandsModalOpen(true)
   }
 
+  // ===== Unificar códigos internos =====
+  // Se abre en modo previsualización: primero se le dice al usuario CUÁNTOS
+  // productos van a cambiar y con qué ejemplos, y recién ahí puede aceptar.
+  const openUnifyCodesModal = async () => {
+    if (isDemoMode) {
+      toast.error('En la demostración no se pueden unificar los códigos')
+      return
+    }
+    setUnifyModalOpen(true)
+    setUnifyPreview(null)
+    setUnifyLoading(true)
+    const result = await previewUnifyCodes(getBusinessId())
+    setUnifyLoading(false)
+    if (result.success) {
+      setUnifyPreview(result.data)
+    } else {
+      toast.error('No se pudo revisar los códigos: ' + result.error)
+      setUnifyModalOpen(false)
+    }
+  }
+
+  const handleUnifyCodes = async () => {
+    setUnifyRunning(true)
+    const result = await applyUnifyCodes(getBusinessId())
+    setUnifyRunning(false)
+    if (result.success) {
+      const { productosActualizados, codigosAsignados } = result.data
+      toast.success(
+        productosActualizados === 0
+          ? 'Todos tus productos ya tenían su código'
+          : `Listo: ${codigosAsignados} código${codigosAsignados === 1 ? '' : 's'} asignado${codigosAsignados === 1 ? '' : 's'} en ${productosActualizados} producto${productosActualizados === 1 ? '' : 's'}`
+      )
+      setUnifyModalOpen(false)
+      await loadProducts()
+    } else {
+      toast.error('No se pudieron unificar los códigos: ' + result.error)
+    }
+  }
+
   const handleAddBrand = async () => {
     const name = newBrandName.trim()
     if (!name || !user?.uid) return
@@ -5003,6 +5050,17 @@ export default function Products() {
                   >
                     <Tag className="w-4 h-4 text-gray-500 flex-shrink-0" />
                     Gestionar marcas
+                  </button>
+                  {/* Unificar códigos: OPCIONAL a propósito. Hay negocios que
+                      escriben sus códigos a mano con su propio orden; esto solo
+                      corre si lo piden. */}
+                  <button
+                    onClick={() => { setOptionsMenuOpen(false); openUnifyCodesModal() }}
+                    className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                    title="Dar un código correlativo de 7 dígitos a los productos que no lo tienen"
+                  >
+                    <Hash className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                    Unificar códigos
                   </button>
                   {/* Columnas visibles (se mantiene abierto el menú al togglear) */}
                   <div className="border-t border-gray-100 my-1" />
@@ -9789,6 +9847,89 @@ export default function Products() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Modal Unificar códigos */}
+      <Modal
+        isOpen={unifyModalOpen}
+        onClose={() => !unifyRunning && setUnifyModalOpen(false)}
+        title="Unificar códigos de productos"
+        size="md"
+      >
+        {unifyLoading ? (
+          <div className="flex items-center justify-center py-10 text-gray-400">
+            <Loader2 className="w-6 h-6 animate-spin" />
+          </div>
+        ) : unifyPreview ? (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-700 leading-relaxed">
+              Esta herramienta le da un <strong>código correlativo de 7 dígitos</strong> a los
+              productos que todavía no lo tienen, ordenándolos <strong>alfabéticamente</strong>.
+              El mismo número queda como código interno y como código de barras, listo para
+              imprimir etiquetas y leerlas con el escáner.
+            </p>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 bg-primary-50 border border-primary-100 rounded-lg">
+                <p className="text-2xl font-bold text-primary-700">{unifyPreview.aCambiar}</p>
+                <p className="text-xs text-gray-600">
+                  producto{unifyPreview.aCambiar === 1 ? '' : 's'} recibirá{unifyPreview.aCambiar === 1 ? '' : 'n'} código
+                </p>
+              </div>
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <p className="text-2xl font-bold text-gray-700">{unifyPreview.yaCorrectos}</p>
+                <p className="text-xs text-gray-600">ya tienen el suyo y no se tocan</p>
+              </div>
+            </div>
+
+            {unifyPreview.ejemplos.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                  Algunos de los que cambian
+                </p>
+                <ul className="text-sm text-gray-700 space-y-1">
+                  {unifyPreview.ejemplos.map((e, i) => (
+                    <li key={i} className="flex gap-2">
+                      <span className="text-gray-400 font-mono text-xs pt-0.5">
+                        {e.skuActual || '(sin código)'}
+                      </span>
+                      <span className="truncate">{e.name}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="flex gap-2.5 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="text-xs text-amber-900 leading-relaxed">
+                <p className="font-semibold mb-1">Revisa antes de continuar</p>
+                <p>
+                  Si escribes tus códigos a mano y tienes tu propio orden, esto los reemplaza.
+                  El código anterior se guarda por si necesitas rastrearlo, y tus ventas ya
+                  emitidas no cambian. Si ya imprimiste etiquetas, vuelve a imprimirlas después.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <Button
+                variant="outline"
+                onClick={() => setUnifyModalOpen(false)}
+                disabled={unifyRunning}
+              >
+                Cancelar
+              </Button>
+              <Button onClick={handleUnifyCodes} disabled={unifyRunning || unifyPreview.aCambiar === 0}>
+                {unifyRunning ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Asignando códigos...</>
+                ) : (
+                  <>Unificar {unifyPreview.aCambiar} producto{unifyPreview.aCambiar === 1 ? '' : 's'}</>
+                )}
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </Modal>
 
       {/* Modal Gestionar Marcas */}

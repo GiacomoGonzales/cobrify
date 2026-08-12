@@ -157,7 +157,10 @@ export default function InventoryCountModal({
             initialCountData[key] = {
               productId: product.id,
               productName: product.name,
-              productCode: product.code || '-',
+              // Código de barras; si no tiene, el SKU. Antes caía directo al
+              // guion y los negocios que aún no imprimen etiquetas veían la
+              // columna CÓD. del reporte vacía en casi todo el inventario.
+              productCode: product.code || product.sku || '-',
               category: product.category,
               systemStock: batch.quantity,
               physicalCount: '',
@@ -180,7 +183,7 @@ export default function InventoryCountModal({
             initialCountData[`${product.id}_nolot_${warehouseId}`] = {
               productId: product.id,
               productName: product.name,
-              productCode: product.code || '-',
+              productCode: product.code || product.sku || '-',
               category: product.category,
               systemStock: unassignedStock,
               physicalCount: '',
@@ -202,7 +205,7 @@ export default function InventoryCountModal({
             initialCountData[key] = {
               productId: product.id,
               productName: product.name,
-              productCode: product.code || '-',
+              productCode: product.code || product.sku || '-',
               category: product.category,
               systemStock: variantStock,
               physicalCount: '',
@@ -223,7 +226,7 @@ export default function InventoryCountModal({
           initialCountData[product.id] = {
             productId: product.id,
             productName: product.name,
-            productCode: product.code || '-',
+            productCode: product.code || product.sku || '-',
             category: product.category,
             systemStock: warehouseStock,
             physicalCount: '',

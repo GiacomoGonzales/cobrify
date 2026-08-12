@@ -57,6 +57,33 @@ export default {
     },
 
     {
+      id: 'unificar-codigos',
+      title: 'Unificar códigos (poner todo en un solo sistema)',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Si tu catálogo quedó con dos sistemas de código conviviendo —unos productos con códigos viejos y otros con el correlativo nuevo— en el menú **Opciones** tienes **Unificar códigos**.',
+        },
+        {
+          type: 'texto',
+          text: 'Le da un **número correlativo de 7 dígitos** a los productos que aún no lo tienen, ordenados **alfabéticamente**, y ese mismo número queda como código interno y como código de barras: listo para imprimir etiquetas y leerlas con el escáner.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Abre **Opciones > Unificar códigos**.',
+            'Revisa el resumen: cuántos productos van a recibir código y cuántos ya tienen el suyo.',
+            'Confirma. Después imprime las etiquetas de los productos nuevos.',
+          ],
+        },
+        {
+          type: 'ojo',
+          text: 'Es opcional y no se ejecuta solo: si tú escribes tus códigos a mano y tienes tu propio orden, **no lo uses**, porque los reemplaza. Los productos que ya tienen el código correlativo no se tocan, el código anterior se guarda por si necesitas rastrearlo, y tus ventas ya emitidas no cambian.',
+        },
+      ],
+    },
+
+    {
       id: 'variantes-presentaciones',
       title: 'Variantes y presentaciones',
       blocks: [
