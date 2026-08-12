@@ -6555,6 +6555,7 @@ export default function Settings() {
 
                   {/* Ocultar efectivo esperado a cajeros en cierre de caja */}
                   <SettingToggle
+                    id="opcion-hideCashExpectedFromCashier"
                     checked={hideCashExpectedFromCashier}
                     onChange={(e) => setHideCashExpectedFromCashier(e.target.checked)}
                     title={'Ocultar "Efectivo Esperado" del cierre de caja a sub-usuarios'}
