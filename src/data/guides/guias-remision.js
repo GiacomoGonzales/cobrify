@@ -78,7 +78,11 @@ export default {
         },
         {
           type: 'ojo',
-          text: 'En la guía de **transportista**, el departamento, provincia y distrito de partida y de llegada ahora son obligatorios. Antes se podían dejar vacíos y el sistema declaraba **Lima** por defecto, así que un despacho a provincia salía con destino equivocado sin que nadie se enterara.',
+          text: 'En la guía de **transportista** ahora se pide departamento, provincia y distrito en los cuatro bloques: remitente, destinatario, punto de partida y punto de llegada. Antes se podían dejar vacíos y el sistema declaraba **Lima** por defecto, así que un despacho a provincia salía con ubicaciones equivocadas sin que nadie se enterara.',
+        },
+        {
+          type: 'consejo',
+          text: 'No hace falta llenarlos a mano: al buscar el RUC del remitente o del destinatario, su distrito se completa solo. El campo **Ciudad** que está al lado es solo texto de referencia y no ubica nada ante SUNAT.',
         },
       ],
     },

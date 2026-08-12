@@ -11,6 +11,59 @@ import { createCarrierDispatchGuide, saveCarrierDispatchGuideDraft, deleteCarrie
 import { consultarRUC, consultarDNI, consultarEstablecimientos } from '@/services/documentLookupService'
 import { DEPARTAMENTOS, getProvincias, getDistritos, buildUbigeo, resolveUbigeoParts } from '@/data/peruUbigeos'
 
+/**
+ * Los tres selectores de ubigeo: departamento → provincia → distrito.
+ *
+ * Están en CUATRO lugares de esta misma guía —remitente, destinatario, punto de
+ * partida y punto de llegada— y tienen que comportarse igual en los cuatro, así
+ * que viven acá y no copiados cuatro veces.
+ *
+ * Guardan CÓDIGOS DE 2 DÍGITOS por nivel, no tramos acumulados: buildUbigeo()
+ * los concatena para formar el ubigeo de 6 que va al XML. Elegir un nivel
+ * superior limpia los de abajo, porque las listas dependen de él.
+ */
+function UbigeoSelects({ dept, prov, dist, onChange, required = false }) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <Select
+        label="Departamento"
+        required={required}
+        value={dept}
+        onChange={(e) => onChange(e.target.value, '', '')}
+      >
+        <option value="">Seleccione</option>
+        {DEPARTAMENTOS.map((d) => (
+          <option key={d.code} value={d.code}>{d.name}</option>
+        ))}
+      </Select>
+      <Select
+        label="Provincia"
+        required={required}
+        value={prov}
+        onChange={(e) => onChange(dept, e.target.value, '')}
+        disabled={!dept}
+      >
+        <option value="">Seleccione</option>
+        {getProvincias(dept).map((p) => (
+          <option key={p.code} value={p.code}>{p.name}</option>
+        ))}
+      </Select>
+      <Select
+        label="Distrito"
+        required={required}
+        value={dist}
+        onChange={(e) => onChange(dept, prov, e.target.value)}
+        disabled={!prov}
+      >
+        <option value="">Seleccione</option>
+        {getDistritos(dept, prov).map((d) => (
+          <option key={d.code} value={d.code}>{d.name}</option>
+        ))}
+      </Select>
+    </div>
+  )
+}
+
 const TRANSFER_REASONS = [
   { value: '01', label: '01 - Venta' },
   { value: '02', label: '02 - Compra' },
@@ -83,6 +136,12 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
   const [shipperName, setShipperName] = useState('')
   const [shipperAddress, setShipperAddress] = useState('')
   const [shipperCity, setShipperCity] = useState('')
+  // Ubigeo del remitente. La "Ciudad" de arriba es texto libre y NO llega al
+  // XML como ubicación: SUNAT lee el ubigeo. Sin estos tres campos el generador
+  // ponía Lima (150101) por defecto para todos.
+  const [shipperDepartamento, setShipperDepartamento] = useState('')
+  const [shipperProvincia, setShipperProvincia] = useState('')
+  const [shipperDistrito, setShipperDistrito] = useState('')
 
   // Datos del destinatario
   const [recipientDocType, setRecipientDocType] = useState('6')
@@ -90,6 +149,10 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
   const [recipientName, setRecipientName] = useState('')
   const [recipientAddress, setRecipientAddress] = useState('')
   const [recipientCity, setRecipientCity] = useState('')
+  // Ubigeo del destinatario, por el mismo motivo que el del remitente.
+  const [recipientDepartamento, setRecipientDepartamento] = useState('')
+  const [recipientProvincia, setRecipientProvincia] = useState('')
+  const [recipientDistrito, setRecipientDistrito] = useState('')
 
   // Establecimientos (anexos) del RUC del destinatario: lista + modal para elegir (igual que el POS)
   const [recipientEstablishments, setRecipientEstablishments] = useState([])
@@ -191,11 +254,25 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
         setShipperName(prefillGuide.shipper?.businessName || '')
         setShipperAddress(prefillGuide.shipper?.address || '')
         setShipperCity(prefillGuide.shipper?.city || '')
+        // Las guías anteriores a este campo no traen ubigeo: quedan en blanco y
+        // hay que elegirlo. Es lo correcto — antes se emitían declarando Lima.
+        aplicarUbigeoExterno(
+          prefillGuide.shipper?.ubigeo,
+          setShipperDepartamento,
+          setShipperProvincia,
+          setShipperDistrito
+        )
         setRecipientDocType(prefillGuide.recipient?.documentType || '6')
         setRecipientDocNumber(prefillGuide.recipient?.documentNumber || '')
         setRecipientName(prefillGuide.recipient?.name || '')
         setRecipientAddress(prefillGuide.recipient?.address || '')
         setRecipientCity(prefillGuide.recipient?.city || '')
+        aplicarUbigeoExterno(
+          prefillGuide.recipient?.ubigeo,
+          setRecipientDepartamento,
+          setRecipientProvincia,
+          setRecipientDistrito
+        )
         setFreightPayer(prefillGuide.freightPayer || 'remitente')
         if (prefillGuide.thirdPartyPayer) {
           setThirdPartyPayer(prefillGuide.thirdPartyPayer)
@@ -291,6 +368,37 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
         // Valores por defecto para nueva guía
         setIssueDate(getLocalDateString())
         setTransferDate(getLocalDateString())
+
+        // El modal queda montado entre aperturas, así que sin esto una guía
+        // nueva heredaba las partes y los puntos de la anterior. Antes era
+        // molesto; desde que estos campos llevan UBIGEO es peligroso, porque
+        // arrastraría a SUNAT el distrito de otro despacho sin que se note.
+        setShipperRuc('')
+        setShipperName('')
+        setShipperAddress('')
+        setShipperCity('')
+        setShipperDepartamento('')
+        setShipperProvincia('')
+        setShipperDistrito('')
+
+        setRecipientDocType('6')
+        setRecipientDocNumber('')
+        setRecipientName('')
+        setRecipientAddress('')
+        setRecipientCity('')
+        setRecipientDepartamento('')
+        setRecipientProvincia('')
+        setRecipientDistrito('')
+
+        setOriginAddress('')
+        setOriginDepartamento('')
+        setOriginProvincia('')
+        setOriginDistrito('')
+
+        setDestinationAddress('')
+        setDestinationDepartamento('')
+        setDestinationProvincia('')
+        setDestinationDistrito('')
       }
     }
   }, [isOpen, getBusinessId, draftGuide, editGuide])
@@ -314,7 +422,19 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
         if (result.data.provincia) cityParts.push(result.data.provincia)
         if (result.data.departamento) cityParts.push(result.data.departamento)
         setShipperCity(cityParts.join(', ') || '')
-        toast.success('Datos del remitente obtenidos correctamente')
+        // La consulta ya trae el ubigeo del domicilio fiscal: se aplica para no
+        // tener que elegir departamento/provincia/distrito a mano.
+        const conUbigeo = aplicarUbigeoExterno(
+          result.data.ubigeo,
+          setShipperDepartamento,
+          setShipperProvincia,
+          setShipperDistrito
+        )
+        toast.success(
+          conUbigeo
+            ? 'Datos del remitente obtenidos correctamente'
+            : 'Datos del remitente obtenidos — elige su distrito'
+        )
       } else {
         toast.error(result.error || 'No se encontraron datos para este RUC')
       }
@@ -353,7 +473,17 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
           if (result.data.provincia) cityParts.push(result.data.provincia)
           if (result.data.departamento) cityParts.push(result.data.departamento)
           setRecipientCity(cityParts.join(', ') || '')
-          toast.success('Datos del destinatario obtenidos correctamente')
+          const conUbigeo = aplicarUbigeoExterno(
+            result.data.ubigeo,
+            setRecipientDepartamento,
+            setRecipientProvincia,
+            setRecipientDistrito
+          )
+          toast.success(
+            conUbigeo
+              ? 'Datos del destinatario obtenidos correctamente'
+              : 'Datos del destinatario obtenidos — elige su distrito'
+          )
         }
       } else if (recipientDocType === '1') {
         if (recipientDocNumber.length !== 8) {
@@ -403,13 +533,21 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
     if (city) setRecipientCity(city)
 
     // Ubigeo fuera de nuestro catálogo: se conserva lo que el usuario eligió.
-    const { valid, departamento, provincia, distrito } = resolveUbigeoParts(est.ubigeo)
-    if (!valid) return false
-
-    setDestinationDepartamento(departamento)
-    setDestinationProvincia(provincia)
-    setDestinationDistrito(distrito)
-    return true
+    // Se aplica a los dos: al destinatario (su ubicación en el XML) y al punto
+    // de llegada (adónde va la carga), que en una guía son el mismo lugar.
+    const okDestinatario = aplicarUbigeoExterno(
+      est.ubigeo,
+      setRecipientDepartamento,
+      setRecipientProvincia,
+      setRecipientDistrito
+    )
+    const okLlegada = aplicarUbigeoExterno(
+      est.ubigeo,
+      setDestinationDepartamento,
+      setDestinationProvincia,
+      setDestinationDistrito
+    )
+    return okDestinatario && okLlegada
   }
 
   // Consultar establecimientos (anexos) del RUC del destinatario; varios → modal, uno → directo. (Igual que el POS.)
@@ -574,6 +712,35 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
     return ''
   }
 
+  const getShipperUbigeo = () => {
+    if (shipperDepartamento && shipperProvincia && shipperDistrito) {
+      return buildUbigeo(shipperDepartamento, shipperProvincia, shipperDistrito)
+    }
+    return ''
+  }
+
+  const getRecipientUbigeo = () => {
+    if (recipientDepartamento && recipientProvincia && recipientDistrito) {
+      return buildUbigeo(recipientDepartamento, recipientProvincia, recipientDistrito)
+    }
+    return ''
+  }
+
+  // Aplica un ubigeo que viene de AFUERA (consulta de RUC o de establecimientos)
+  // a un trío de selectores. Las consultas ya devuelven el ubigeo de cada
+  // dirección; antes se descartaba y solo se armaba el texto de "Ciudad".
+  //
+  // Devuelve true si el ubigeo era válido. Si no lo era no se toca nada: un
+  // código fuera del catálogo dejaría los selectores vacíos con el estado lleno.
+  const aplicarUbigeoExterno = (ubigeo, setDept, setProv, setDist) => {
+    const { valid, departamento, provincia, distrito } = resolveUbigeoParts(ubigeo)
+    if (!valid) return false
+    setDept(departamento)
+    setProv(provincia)
+    setDist(distrito)
+    return true
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
 
@@ -588,8 +755,18 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
       return
     }
 
+    if (!getShipperUbigeo()) {
+      toast.error('Debe elegir departamento, provincia y distrito del remitente')
+      return
+    }
+
     if (!recipientDocNumber || !recipientName) {
       toast.error('Debe completar los datos del destinatario')
+      return
+    }
+
+    if (!getRecipientUbigeo()) {
+      toast.error('Debe elegir departamento, provincia y distrito del destinatario')
       return
     }
 
@@ -678,6 +855,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
           businessName: shipperName,
           address: shipperAddress,
           city: shipperCity,
+          ubigeo: getShipperUbigeo(),
         },
         recipient: {
           documentType: recipientDocType,
@@ -685,6 +863,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
           name: recipientName,
           address: recipientAddress,
           city: recipientCity,
+          ubigeo: getRecipientUbigeo(),
         },
         freightPayer,
         thirdPartyPayer: freightPayer === 'tercero' ? thirdPartyPayer : null,
@@ -844,6 +1023,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
           businessName: shipperName,
           address: shipperAddress,
           city: shipperCity,
+          ubigeo: getShipperUbigeo(),
         },
         recipient: {
           documentType: recipientDocType,
@@ -851,6 +1031,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
           name: recipientName,
           address: recipientAddress,
           city: recipientCity,
+          ubigeo: getRecipientUbigeo(),
         },
         freightPayer,
         thirdPartyPayer: freightPayer === 'tercero' ? thirdPartyPayer : null,
@@ -1073,6 +1254,21 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
             />
           </div>
 
+          {/* Ubicación del remitente. "Ciudad" de arriba es texto libre y no
+              ubica nada ante SUNAT: lo que se lee del XML es este ubigeo.
+              La búsqueda por RUC ya lo completa sola. */}
+          <UbigeoSelects
+            required
+            dept={shipperDepartamento}
+            prov={shipperProvincia}
+            dist={shipperDistrito}
+            onChange={(d, p, di) => {
+              setShipperDepartamento(d)
+              setShipperProvincia(p)
+              setShipperDistrito(di)
+            }}
+          />
+
           {/* Datos del Destinatario */}
           <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
             <User className="w-4 h-4 text-gray-400" />
@@ -1090,6 +1286,10 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
                 setRecipientName('')
                 setRecipientAddress('')
                 setRecipientCity('')
+                // El ubigeo era el de la persona anterior: se limpia con el resto.
+                setRecipientDepartamento('')
+                setRecipientProvincia('')
+                setRecipientDistrito('')
               }}
             >
               <option value="6">RUC</option>
@@ -1153,6 +1353,21 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
               onChange={(e) => setRecipientCity(e.target.value)}
             />
           </div>
+
+          {/* Ubicación del destinatario, por el mismo motivo que la del
+              remitente. La búsqueda por RUC y la de establecimientos la
+              completan solas. */}
+          <UbigeoSelects
+            required
+            dept={recipientDepartamento}
+            prov={recipientProvincia}
+            dist={recipientDistrito}
+            onChange={(d, p, di) => {
+              setRecipientDepartamento(d)
+              setRecipientProvincia(p)
+              setRecipientDistrito(di)
+            }}
+          />
           {recipientDocType === '6' && (
             <button
               type="button"
@@ -1537,50 +1752,17 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
               value={originAddress}
               onChange={(e) => setOriginAddress(e.target.value)}
             />
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Select
-                label="Departamento"
-                required
-                value={originDepartamento}
-                onChange={(e) => {
-                  setOriginDepartamento(e.target.value)
-                  setOriginProvincia('')
-                  setOriginDistrito('')
-                }}
-              >
-                <option value="">Seleccione</option>
-                {DEPARTAMENTOS.map(dept => (
-                  <option key={dept.code} value={dept.code}>{dept.name}</option>
-                ))}
-              </Select>
-              <Select
-                label="Provincia"
-                required
-                value={originProvincia}
-                onChange={(e) => {
-                  setOriginProvincia(e.target.value)
-                  setOriginDistrito('')
-                }}
-                disabled={!originDepartamento}
-              >
-                <option value="">Seleccione</option>
-                {getProvincias(originDepartamento).map(prov => (
-                  <option key={prov.code} value={prov.code}>{prov.name}</option>
-                ))}
-              </Select>
-              <Select
-                label="Distrito"
-                required
-                value={originDistrito}
-                onChange={(e) => setOriginDistrito(e.target.value)}
-                disabled={!originProvincia}
-              >
-                <option value="">Seleccione</option>
-                {getDistritos(originDepartamento, originProvincia).map(dist => (
-                  <option key={dist.code} value={dist.code}>{dist.name}</option>
-                ))}
-              </Select>
-            </div>
+            <UbigeoSelects
+              required
+              dept={originDepartamento}
+              prov={originProvincia}
+              dist={originDistrito}
+              onChange={(d, p, di) => {
+                setOriginDepartamento(d)
+                setOriginProvincia(p)
+                setOriginDistrito(di)
+              }}
+            />
           </div>
 
           {/* Punto de Llegada */}
@@ -1597,50 +1779,17 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
               value={destinationAddress}
               onChange={(e) => setDestinationAddress(e.target.value)}
             />
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Select
-                label="Departamento"
-                required
-                value={destinationDepartamento}
-                onChange={(e) => {
-                  setDestinationDepartamento(e.target.value)
-                  setDestinationProvincia('')
-                  setDestinationDistrito('')
-                }}
-              >
-                <option value="">Seleccione</option>
-                {DEPARTAMENTOS.map(dept => (
-                  <option key={dept.code} value={dept.code}>{dept.name}</option>
-                ))}
-              </Select>
-              <Select
-                label="Provincia"
-                required
-                value={destinationProvincia}
-                onChange={(e) => {
-                  setDestinationProvincia(e.target.value)
-                  setDestinationDistrito('')
-                }}
-                disabled={!destinationDepartamento}
-              >
-                <option value="">Seleccione</option>
-                {getProvincias(destinationDepartamento).map(prov => (
-                  <option key={prov.code} value={prov.code}>{prov.name}</option>
-                ))}
-              </Select>
-              <Select
-                label="Distrito"
-                required
-                value={destinationDistrito}
-                onChange={(e) => setDestinationDistrito(e.target.value)}
-                disabled={!destinationProvincia}
-              >
-                <option value="">Seleccione</option>
-                {getDistritos(destinationDepartamento, destinationProvincia).map(dist => (
-                  <option key={dist.code} value={dist.code}>{dist.name}</option>
-                ))}
-              </Select>
-            </div>
+            <UbigeoSelects
+              required
+              dept={destinationDepartamento}
+              prov={destinationProvincia}
+              dist={destinationDistrito}
+              onChange={(d, p, di) => {
+                setDestinationDepartamento(d)
+                setDestinationProvincia(p)
+                setDestinationDistrito(di)
+              }}
+            />
           </div>
 
           {/* Bienes */}
