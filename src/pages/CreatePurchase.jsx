@@ -889,6 +889,49 @@ export default function CreatePurchase() {
   // Mantener compatibilidad con nombre anterior
   const getFilteredProducts = getFilteredItems
 
+  /**
+   * Nombre del laboratorio de un producto, para el buscador en modo farmacia.
+   *
+   * Se resuelve primero por ID contra la lista de laboratorios ya cargada, y
+   * solo si no está se usa el nombre guardado en el producto: ese nombre es una
+   * copia del momento en que se creó, así que si el laboratorio se renombró
+   * después quedó viejo. El ID sigue siendo correcto.
+   */
+  const getLaboratoryName = (item) => {
+    if (businessMode !== 'pharmacy' || item?.itemType === 'ingredient') return ''
+    const porId = item?.laboratoryId
+      ? laboratories.find(l => l.id === item.laboratoryId)
+      : null
+    return String(porId?.name || item?.laboratoryName || '').trim()
+  }
+
+  /**
+   * Detalle que va debajo del nombre en el buscador de productos.
+   *
+   * Vive acá y no repetido en el JSX porque el buscador se dibuja DOS veces (la
+   * fila normal y la compacta) y los dos bloques ya habían empezado a divergir.
+   *
+   * En farmacia se agrega el LABORATORIO: es lo que distingue dos presentaciones
+   * del mismo principio activo, que en pantalla se ven casi iguales.
+   */
+  const renderItemSearchDetails = (searchItem) => {
+    if (searchItem.itemType === 'ingredient') {
+      return <>Stock: {searchItem.currentStock} {searchItem.purchaseUnit}</>
+    }
+    const laboratorio = getLaboratoryName(searchItem)
+    return (
+      <>
+        {searchItem.code && <div>{searchItem.code}</div>}
+        {/* Mismo azul que usa el POS para el laboratorio: el dato se ve igual
+            en las dos pantallas y se reconoce sin tener que leerlo. */}
+        {laboratorio && (
+          <div className="text-blue-600 font-medium">{laboratorio}</div>
+        )}
+        <StockByWarehouse product={searchItem} warehouses={warehouses} className="!mt-0 !ml-0" />
+      </>
+    )
+  }
+
   // Seleccionar producto o ingrediente
   const selectProduct = (index, item, selectedVariant = null) => {
     // Si el producto tiene variantes (talla, color, etc.) y no se eligió una,
@@ -3056,16 +3099,7 @@ export default function CreatePurchase() {
                                       <span className="font-medium text-sm text-gray-900">{searchItem.name}</span>
                                     </div>
                                     <div className="text-xs text-gray-500 ml-5.5 pl-0.5">
-                                      {searchItem.itemType === 'ingredient' ? (
-                                        <>Stock: {searchItem.currentStock} {searchItem.purchaseUnit}</>
-                                      ) : (
-                                        (
-                                        <>
-                                          {searchItem.code && <div>{searchItem.code}</div>}
-                                          <StockByWarehouse product={searchItem} warehouses={warehouses} className="!mt-0 !ml-0" />
-                                        </>
-                                      )
-                                      )}
+                                      {renderItemSearchDetails(searchItem)}
                                     </div>
                                   </div>
                                 ))
@@ -3385,16 +3419,7 @@ export default function CreatePurchase() {
                                 <span className="font-medium text-sm">{searchItem.name}</span>
                               </div>
                               <div className="text-xs text-gray-500 ml-5.5 pl-0.5">
-                                {searchItem.itemType === 'ingredient' ? (
-                                  <>Stock: {searchItem.currentStock} {searchItem.purchaseUnit}</>
-                                ) : (
-                                  (
-                                        <>
-                                          {searchItem.code && <div>{searchItem.code}</div>}
-                                          <StockByWarehouse product={searchItem} warehouses={warehouses} className="!mt-0 !ml-0" />
-                                        </>
-                                      )
-                                )}
+                                {renderItemSearchDetails(searchItem)}
                               </div>
                             </div>
                           ))
