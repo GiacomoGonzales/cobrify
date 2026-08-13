@@ -45,6 +45,7 @@ import {
   MAIN_BRANCH_TOKEN, buildHiddenFromSelection, buildSelectionFromHidden,
   isProductInBranch, getBranchScopeLabel,
 } from '@/utils/branchCatalog'
+import { needsRestock } from '@/utils/stockAlerts'
 import { buildProductIndex, findExistingProduct, indexProduct } from '@/utils/productImportMatch'
 import SunatProductCodeField from '@/components/SunatProductCodeField'
 import { getRateForDate } from '@/services/exchangeRateService'
@@ -4885,10 +4886,11 @@ export default function Products() {
       return sum + (realStock * cost)
     }, 0)
 
-    const lowStockCount = scopedProducts.filter(product => {
-      const realStock = getRealStockValue(product)
-      return realStock !== null && realStock <= (product?.minStock ?? 3)
-    }).length
+    // Una sola tarjeta para "conviene reabastecer", asi que agotado tambien
+    // cuenta. Los desactivados quedan fuera. Ver src/utils/stockAlerts.js.
+    const lowStockCount = scopedProducts.filter(product =>
+      needsRestock(product, getRealStockValue(product))
+    ).length
 
     const expiringProductsCount = scopedProducts.filter(product => {
       if (!product.trackExpiration || !product.expirationDate) return false

@@ -71,6 +71,7 @@ import { executeRecipeProduction, executeManualProduction, checkProductionReadin
 import { getRecipeByProductId, calculateRecipeCost } from '@/services/recipeService'
 import { getCompanySettings } from '@/services/firestoreService'
 import { isProductInBranch } from '@/utils/branchCatalog'
+import { getStockAlertStatus } from '@/utils/stockAlerts'
 import { computeBatchDeduction, computeProductBatchMetadata } from '@/utils/batchStock'
 import { getExitReasons, getExitReasonLabel } from '@/utils/warehouseExitReasons'
 import { getItemUnitLabel, formatPresentationEquivalence } from '@/utils/units'
@@ -1788,19 +1789,22 @@ export default function Inventory() {
 
       // Multi-select: array vacío = todos los estados
       // Stock mínimo por producto (default 3 si no está configurado).
-      const itemMinStock = Number.isFinite(Number(item?.minStock)) && Number(item?.minStock) >= 0
-        ? Number(item.minStock)
-        : 3
+      // Mismo criterio que las tarjetas de arriba, para que al hacer clic en
+      // "Bajo stock" la lista tenga exactamente los que dice el contador.
+      const alertStatus = getStockAlertStatus(item, branchStock)
       let matchesStatus = true
       if (filterStatuses.length > 0) {
         const itemStatuses = []
-        if (branchStock !== null && branchStock > 0 && branchStock <= itemMinStock) {
+        if (alertStatus === 'low') {
           itemStatuses.push('low')
         }
-        if (branchStock === 0) {
+        if (alertStatus === 'out') {
           itemStatuses.push('out')
         }
-        if (branchStock === null || branchStock > itemMinStock) {
+        // 'normal' es todo lo que no pide atención: con stock suficiente, sin
+        // control de stock, o desactivado. Los desactivados caen acá a
+        // propósito — dejaron de alertar, pero no deben desaparecer de la lista.
+        if (alertStatus === 'ok' || alertStatus === null) {
           itemStatuses.push('normal')
         }
         matchesStatus = filterStatuses.some(status => itemStatuses.includes(status))
@@ -1916,14 +1920,10 @@ export default function Inventory() {
   // Calcular estadísticas (basadas en productos filtrados para reflejar todos los filtros)
   const statistics = React.useMemo(() => {
     const itemsWithStock = filteredProducts.filter(i => getStockForBranch(i) !== null)
-    const lowStockItems = itemsWithStock.filter(i => {
-      const branchStock = getStockForBranch(i)
-      const itemMinStock = Number.isFinite(Number(i?.minStock)) && Number(i?.minStock) >= 0
-        ? Number(i.minStock)
-        : 3
-      return branchStock !== null && branchStock > 0 && branchStock <= itemMinStock
-    })
-    const outOfStockItems = itemsWithStock.filter(i => getStockForBranch(i) === 0)
+    // Los productos desactivados quedan fuera de las dos tarjetas: siguen en la
+    // lista, pero no piden atención. Ver src/utils/stockAlerts.js.
+    const lowStockItems = itemsWithStock.filter(i => getStockAlertStatus(i, getStockForBranch(i)) === 'low')
+    const outOfStockItems = itemsWithStock.filter(i => getStockAlertStatus(i, getStockForBranch(i)) === 'out')
     const totalValue = itemsWithStock.reduce((sum, i) => {
       if (i.hasVariants && i.variants?.length > 0) {
         return sum + i.variants.reduce((vs, v) => vs + (v.stock || 0) * (v.price || 0), 0)

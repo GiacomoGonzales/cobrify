@@ -27,6 +27,14 @@ export default {
           type: 'consejo',
           text: 'La diferencia entre Valor Costo y Valor Venta es tu ganancia potencial si vendieras todo el inventario. Si el Valor Costo sale en cero, es que a los productos les falta cargar el costo.',
         },
+        {
+          type: 'ojo',
+          text: 'Los productos **desactivados no cuentan** en Stock Bajo ni en Agotados. Desactivar un producto es decir "esto ya no se vende", así que seguir alertándolo solo taparía los que sí necesitas reponer. Siguen apareciendo en la lista; simplemente dejan de pedir atención.',
+        },
+        {
+          type: 'texto',
+          text: 'Si un producto dejó de venderse pero no quieres perder su historial, desactivarlo es mejor que borrarlo: sale de las alertas y del punto de venta, y sus ventas pasadas quedan intactas.',
+        },
       ],
     },
 

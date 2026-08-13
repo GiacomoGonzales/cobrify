@@ -9,6 +9,7 @@ import { formatCurrency } from '@/lib/utils'
 import { createPurchaseOrder, getNextPurchaseOrderNumber } from '@/services/purchaseOrderService'
 import { getWarehouses } from '@/services/warehouseService'
 import { useToast } from '@/contexts/ToastContext'
+import { needsRestock, getMinStockThreshold } from '@/utils/stockAlerts'
 
 /**
  * Inputs editables DEFINIDOS A NIVEL MÓDULO (no dentro del componente) para
@@ -82,11 +83,6 @@ const getRealStock = (item, warehouseId = null) => {
   return item.stock || 0
 }
 
-const getMinStock = (product) => {
-  const n = Number(product?.minStock)
-  return Number.isFinite(n) && n >= 0 ? n : 3
-}
-
 // Normalización simple para búsqueda sin tildes
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
 
@@ -126,11 +122,12 @@ export default function RestockTable({
   const rows = useMemo(() => {
     const list = []
     for (const p of products) {
-      if (p.isActive === false) continue
+      // Esta pantalla ya saltaba los desactivados; ahora el criterio es el
+      // mismo que usan las tarjetas de Inventario y Productos, que antes SI los
+      // contaban (de ahi que los numeros no cuadraran entre pantallas).
       const stock = getRealStock(p, warehouseId || null)
-      if (stock === null) continue // sin control de stock
-      const minStock = getMinStock(p)
-      if (stock > minStock) continue
+      if (!needsRestock(p, stock)) continue
+      const minStock = getMinStockThreshold(p)
       const lastPrice = Number(p.lastPurchasePrice)
       const cost = lastPrice > 0
         ? Math.round(lastPrice * 100) / 100
