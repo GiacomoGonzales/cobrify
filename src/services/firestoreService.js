@@ -3568,3 +3568,25 @@ export const deleteLoan = async (businessId, loanId) => {
     return { success: false, error: error.message }
   }
 }
+
+/**
+ * Laboratorios del negocio (modo farmacia).
+ *
+ * Vive acá para que las pantallas que necesitan mostrar el laboratorio de un
+ * producto —Compras y Cotizaciones— no repitan la consulta cada una por su lado.
+ * El nombre se resuelve con getProductLaboratoryName (src/utils/laboratoryName.js).
+ */
+export const getLaboratories = async (businessId) => {
+  try {
+    const labsRef = collection(db, 'businesses', businessId, 'laboratories')
+    const snapshot = await getDocs(labsRef)
+    const laboratories = []
+    snapshot.forEach((doc) => {
+      laboratories.push({ id: doc.id, ...doc.data() })
+    })
+    return { success: true, data: laboratories }
+  } catch (error) {
+    console.error('Error al cargar laboratorios:', error)
+    return { success: false, error: error.message, data: [] }
+  }
+}

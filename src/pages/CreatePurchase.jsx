@@ -39,6 +39,7 @@ import { consultarRUC } from '@/services/documentLookupService'
 import ImportPurchaseXmlModal from '@/components/ImportPurchaseXmlModal'
 import { getWarehouses, updateWarehouseStock, createStockMovement } from '@/services/warehouseService'
 import StockByWarehouse from '@/components/StockByWarehouse'
+import { getProductLaboratoryName } from '@/utils/laboratoryName'
 import { getActiveBranches } from '@/services/branchService'
 import { getIngredients, registerPurchase as registerIngredientPurchase, createIngredient, updateIngredient, convertUnit } from '@/services/ingredientService'
 import { recalculateRecipeCostsForIngredient } from '@/services/recipeService'
@@ -890,22 +891,6 @@ export default function CreatePurchase() {
   const getFilteredProducts = getFilteredItems
 
   /**
-   * Nombre del laboratorio de un producto, para el buscador en modo farmacia.
-   *
-   * Se resuelve primero por ID contra la lista de laboratorios ya cargada, y
-   * solo si no está se usa el nombre guardado en el producto: ese nombre es una
-   * copia del momento en que se creó, así que si el laboratorio se renombró
-   * después quedó viejo. El ID sigue siendo correcto.
-   */
-  const getLaboratoryName = (item) => {
-    if (businessMode !== 'pharmacy' || item?.itemType === 'ingredient') return ''
-    const porId = item?.laboratoryId
-      ? laboratories.find(l => l.id === item.laboratoryId)
-      : null
-    return String(porId?.name || item?.laboratoryName || '').trim()
-  }
-
-  /**
    * Detalle que va debajo del nombre en el buscador de productos.
    *
    * Vive acá y no repetido en el JSX porque el buscador se dibuja DOS veces (la
@@ -918,7 +903,9 @@ export default function CreatePurchase() {
     if (searchItem.itemType === 'ingredient') {
       return <>Stock: {searchItem.currentStock} {searchItem.purchaseUnit}</>
     }
-    const laboratorio = getLaboratoryName(searchItem)
+    const laboratorio = businessMode === 'pharmacy'
+      ? getProductLaboratoryName(searchItem, laboratories)
+      : ''
     return (
       <>
         {searchItem.code && <div>{searchItem.code}</div>}

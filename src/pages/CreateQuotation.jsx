@@ -23,7 +23,7 @@ import {
   BASE_CURRENCY,
 } from '@/utils/currency'
 import { getRateForDate } from '@/services/exchangeRateService'
-import { getCustomers, getProducts, createCustomer } from '@/services/firestoreService'
+import { getCustomers, getProducts, createCustomer, getLaboratories } from '@/services/firestoreService'
 import { filterProductsForBranch } from '@/utils/branchCatalog'
 import { getUnitShortLabel } from '@/utils/units'
 import { applyBranchPricing } from '@/utils/branchPricing'
@@ -32,6 +32,7 @@ import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import { getActiveBranches } from '@/services/branchService'
 import { getWarehouses } from '@/services/warehouseService'
 import StockByWarehouse from '@/components/StockByWarehouse'
+import { getProductLaboratoryName } from '@/utils/laboratoryName'
 import { getSellers } from '@/services/sellerService'
 
 // Unidades de medida SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
@@ -109,7 +110,7 @@ const UNITS = [
 
 export default function CreateQuotation() {
   const { user, filterWarehousesByAccess } = useAuth()
-  const { businessSettings, getBusinessId, filterBranchesByAccess, hasMainBranchAccess } = useAppContext()
+  const { businessSettings, businessMode, getBusinessId, filterBranchesByAccess, hasMainBranchAccess } = useAppContext()
   const navigate = useNavigate()
   const appNavigate = useAppNavigate()
   const { id: quotationId } = useParams() // Si hay ID, es modo edición
@@ -124,6 +125,9 @@ export default function CreateQuotation() {
   const [products, setProducts] = useState([])
   // Almacenes, solo para desglosar el stock informativo por almacén.
   const [warehouses, setWarehouses] = useState([])
+  // Laboratorios: solo se usan en modo farmacia, para distinguir productos con
+  // nombre casi idéntico en el buscador.
+  const [laboratories, setLaboratories] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
@@ -566,6 +570,13 @@ export default function CreateQuotation() {
 
       if (productsResult.success) {
         setProducts(productsResult.data || [])
+      }
+
+      // Solo en farmacia: se cargan aparte para no pedir una colección que el
+      // resto de los rubros no usa.
+      if (businessMode === 'pharmacy') {
+        const labsResult = await getLaboratories(getBusinessId())
+        if (labsResult.success) setLaboratories(labsResult.data || [])
       }
 
       if (branchesResult.success) {
@@ -1985,6 +1996,14 @@ export default function CreateQuotation() {
                                             {product.code && (
                                               <p className="text-xs text-gray-500">{product.code}</p>
                                             )}
+                                            {(() => {
+                                              const laboratorio = businessMode === 'pharmacy'
+                                                ? getProductLaboratoryName(product, laboratories)
+                                                : ''
+                                              return laboratorio
+                                                ? <p className="text-xs text-blue-600 font-medium">{laboratorio}</p>
+                                                : null
+                                            })()}
                                           </div>
                                           <span className="text-sm font-semibold text-primary-600 ml-2 flex-shrink-0">
                                             {hasVariants ? `Desde ${formatCurrency(toSessionCurrency(Math.min(...product.variants.map(v => v.price))), currency)}` : formatCurrency(toSessionCurrency(displayPrice), currency)}
@@ -2218,6 +2237,14 @@ export default function CreateQuotation() {
                                       {product.code && (
                                         <p className="text-xs text-gray-500">{product.code}</p>
                                       )}
+                                      {(() => {
+                                        const laboratorio = businessMode === 'pharmacy'
+                                          ? getProductLaboratoryName(product, laboratories)
+                                          : ''
+                                        return laboratorio
+                                          ? <p className="text-xs text-blue-600 font-medium">{laboratorio}</p>
+                                          : null
+                                      })()}
                                     </div>
                                     <span className="text-sm font-semibold text-primary-600 ml-2 flex-shrink-0">
                                       {hasVariants ? `Desde ${formatCurrency(Math.min(...product.variants.map(v => v.price)))}` : formatCurrency(displayPrice)}
