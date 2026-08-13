@@ -360,7 +360,6 @@ export default function InvoiceList() {
   const [voidingSunatInvoice, setVoidingSunatInvoice] = useState(null)
   const [isVoidingSunat, setIsVoidingSunat] = useState(false)
   const [voidSunatReason, setVoidSunatReason] = useState('')
-  const [syncingMovements, setSyncingMovements] = useState(false)
 
   // Estados para registro de pagos
   const [paymentInvoice, setPaymentInvoice] = useState(null)
@@ -1818,156 +1817,17 @@ Gracias por tu preferencia.`
   }
 
   // Sincronizar movimientos de stock faltantes de una venta
-  const handleSyncStockMovements = async (invoice) => {
-    if (!invoice?.items || invoice.items.length === 0) {
-      toast.warning('Esta venta no tiene productos')
-      return
-    }
-
-    // Si es factura/boleta convertida desde nota de venta, sincronizar usando la nota original
-    if (invoice.convertedFrom && invoice.convertedFrom.id) {
-      try {
-        const { doc: docRef, getDoc: getDocFn } = await import('firebase/firestore')
-        const { db: fireDb } = await import('@/lib/firebase')
-        const notaRef = docRef(fireDb, 'businesses', bId, 'invoices', invoice.convertedFrom.id)
-        const notaSnap = await getDocFn(notaRef)
-        if (notaSnap.exists()) {
-          const notaData = { id: notaSnap.id, ...notaSnap.data() }
-          // Sincronizar movimientos de la nota original
-          await handleSyncStockMovements(notaData)
-          return
-        }
-      } catch (e) {
-        console.error('Error al buscar nota original:', e)
-      }
-      toast.info('No se encontró la nota de venta original para sincronizar')
-      return
-    }
-
-    const bId = getBusinessId()
-    setSyncingMovements(true)
-    try {
-      const { getStockMovements, createStockMovement } = await import('@/services/warehouseService')
-      const { getProducts } = await import('@/services/firestoreService')
-      const { doc: docRef, updateDoc } = await import('firebase/firestore')
-      const { db: fireDb } = await import('@/lib/firebase')
-      const { computeBatchDeduction, computeProductBatchMetadata } = await import('@/utils/batchStock')
-
-      // Obtener movimientos existentes para esta venta
-      const movementsResult = await getStockMovements(bId)
-      const existingMovements = movementsResult.success ? movementsResult.data : []
-
-      // Filtrar movimientos de esta venta específica
-      const invoiceMovements = existingMovements.filter(m =>
-        m.referenceId === invoice.id && m.type === 'sale'
-      )
-
-      // Obtener productos para verificar trackStock
-      const productsResult = await getProducts(bId)
-      const products = productsResult.success ? productsResult.data : []
-
-      // Determinar la fecha de la venta
-      const invoiceDate = invoice.createdAt?.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt)
-
-      const warehouseId = invoice.warehouseId || ''
-      const docTypeName = invoice.documentType === 'boleta' ? 'Boleta' : invoice.documentType === 'factura' ? 'Factura' : 'Nota de Venta'
-
-      let syncCount = 0
-      let updatedCount = 0
-
-      for (const item of invoice.items) {
-        const productId = item.productId || item.id
-        if (!productId) continue
-        if (item.isCustom) continue
-
-        // Verificar si el producto controla stock
-        const productData = products.find(p => p.id === productId)
-        if (!productData || productData.trackStock === false) continue
-
-        // Verificar si ya existe un movimiento para este producto en esta venta
-        const existingMovement = invoiceMovements.find(m => m.productId === productId)
-
-        if (existingMovement) {
-          // Ya existe: actualizar referenceNumber si le falta
-          if (!existingMovement.referenceNumber && invoice.number) {
-            const movRef = docRef(fireDb, 'businesses', bId, 'stockMovements', existingMovement.id)
-            await updateDoc(movRef, {
-              referenceNumber: invoice.number,
-              notes: existingMovement.notes
-                ? `${existingMovement.notes} - ${docTypeName} ${invoice.number}`
-                : `Venta - ${docTypeName} ${invoice.number}`
-            })
-            updatedCount++
-          }
-          continue
-        }
-
-        // Crear el movimiento faltante y descontar stock del producto
-        const quantityForMovement = (item.quantity || 0) * (item.presentationFactor || 1)
-
-        // Descontar stock del producto (transacción atómica)
-        const { updateProductStockTransaction: updateStockTx } = await import('@/services/firestoreService')
-        const itemVariantSku = item.variantSku || null
-
-        // Lotes: descontar de batches[] (lote vendido si se registró, o FEFO) para que el
-        // detalle por lote no se descuadre del total al sincronizar productos con lote.
-        let syncBatchExtra = {}
-        let syncBatchNumber = null
-        if (!productData.hasVariants && productData.batches?.length > 0) {
-          const result = computeBatchDeduction(productData, item, warehouseId, quantityForMovement)
-          if (result && result.batchBreakdown?.length > 0) {
-            const meta = computeProductBatchMetadata(result.updatedBatches)
-            syncBatchExtra = { batches: result.updatedBatches, batchNumber: meta.batchNumber, expirationDate: meta.expirationDate }
-            syncBatchNumber = result.batchBreakdown[0].lotNumber || null
-          }
-        }
-
-        // Series: marcar la serie vendida si el ítem la registró
-        const syncSerialPayload = (item.serialNumber && productData.trackSerials)
-          ? { serialNumber: item.serialNumber, saleId: invoice.id, saleDate: invoiceDate }
-          : null
-
-        await updateStockTx(bId, productId, warehouseId, -quantityForMovement, syncBatchExtra, itemVariantSku, syncSerialPayload)
-
-        // Crear movimiento
-        await createStockMovement(bId, {
-          productId: productId,
-          productName: item.name || item.description || '',
-          warehouseId: warehouseId,
-          type: 'sale',
-          quantity: -quantityForMovement,
-          reason: 'Venta',
-          referenceType: 'invoice',
-          referenceId: invoice.id,
-          referenceNumber: invoice.number || '',
-          userId: user?.uid,
-          ...(itemVariantSku && { variantSku: itemVariantSku }),
-          ...(syncBatchNumber && { batchNumber: syncBatchNumber }),
-          ...(item.serialNumber && { serialNumber: item.serialNumber }),
-          notes: item.presentationName
-            ? `Venta ${item.name || item.description} - ${docTypeName} ${invoice.number || ''} - ${item.quantity} ${item.presentationName} (sincronizado)`
-            : `Venta ${item.name || item.description} - ${docTypeName} ${invoice.number || ''} (sincronizado)`,
-          originalDate: invoiceDate,
-        })
-        syncCount++
-      }
-
-      const messages = []
-      if (syncCount > 0) messages.push(`${syncCount} movimiento(s) creado(s)`)
-      if (updatedCount > 0) messages.push(`${updatedCount} movimiento(s) actualizado(s) con número de referencia`)
-
-      if (messages.length > 0) {
-        toast.success(messages.join(', '))
-      } else {
-        toast.info('Todos los movimientos ya estaban registrados y actualizados')
-      }
-    } catch (error) {
-      console.error('Error al sincronizar movimientos:', error)
-      toast.error('Error al sincronizar movimientos de stock')
-    } finally {
-      setSyncingMovements(false)
-    }
-  }
+  // El boton "Sincronizar movimientos de stock" se quito de este modal.
+  //
+  // Nacio cuando el sistema perdia movimientos al guardar la venta: recreaba el
+  // que faltaba. Ese problema ya no existe, y el boton quedo siendo una trampa:
+  // decidia si faltaba el movimiento mirando SOLO si existia el movimiento, no
+  // si el stock ya se habia descontado. Si el movimiento no estaba pero el stock
+  // si se habia descontado, lo descontaba OTRA VEZ. Un usuario (VIGUZZA) lo
+  // apreto sin querer y le dejo el almacen en negativo.
+  //
+  // Si alguna vez hace falta recrear un movimiento perdido, tiene que hacerse
+  // comparando contra el stock real, no contra la existencia del movimiento.
 
   // Convertir múltiples notas de venta en un solo comprobante
   const handleBulkArchive = async (shouldArchive) => {
@@ -4187,19 +4047,6 @@ Gracias por tu preferencia.`
                 <div className="text-right space-y-2">
                   {getStatusBadge(viewingInvoice.status)}
                   <div className="mt-1">{getSunatStatusBadge(viewingInvoice.sunatStatus)}</div>
-                  {viewingInvoice.status !== 'voided' && (
-                    <button
-                      onClick={() => handleSyncStockMovements(viewingInvoice)}
-                      disabled={syncingMovements}
-                      className="mt-1 p-1.5 rounded-full text-primary-200 hover:text-white hover:bg-primary-400/30 transition-colors"
-                      title="Sincronizar movimientos de stock"
-                    >
-                      {syncingMovements
-                        ? <Loader2 className="w-4 h-4 animate-spin" />
-                        : <RefreshCw className="w-4 h-4" />
-                      }
-                    </button>
-                  )}
                 </div>
               </div>
             </div>
