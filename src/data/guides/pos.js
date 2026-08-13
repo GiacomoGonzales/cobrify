@@ -193,6 +193,42 @@ export default {
     },
 
     {
+      id: 'moneda',
+      title: 'Vender en dólares',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Si activas el soporte multi-divisa, aparece **Moneda de cobro** debajo del tipo de comprobante, con dos botones: **S/ Soles** y **$ Dólares**. Se elige por venta, así que puedes cobrar en soles a uno y en dólares al siguiente sin cambiar nada.',
+        },
+        {
+          type: 'texto',
+          text: 'Al pasar a dólares se muestra el campo **TC (S/ por $)**. El sistema trae el tipo de cambio de la **SBS** y lo marca con una etiqueta; si no logra obtenerlo, te avisa para que lo escribas a mano y queda marcado como **Manual**.',
+        },
+        {
+          type: 'ojo',
+          text: 'Tu contabilidad y SUNAT siguen en **soles**. Cada documento en dólares guarda el tipo de cambio con el que se emitió y se convierte solo. Ese tipo de cambio queda **congelado en ese comprobante**: aunque el dólar cambie mañana, esa venta conserva el valor con el que se hizo.',
+        },
+        {
+          type: 'consejo',
+          text: 'Las **boletas también admiten dólares** — SUNAT lo permite en boletas y facturas. No hace falta emitir factura solo para cobrar en dólares.',
+        },
+        {
+          type: 'ojo',
+          text: 'Si activaste la opción y aun así no ves el selector, revisa el **rubro de tu negocio**: en el punto de venta el cobro en dólares está disponible para los rubros de **venta al público (retail)** y **transporte**.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=ventas&opcion=multiCurrencyEnabled',
+          label: 'Activar el cobro en dólares',
+        },
+        {
+          type: 'texto',
+          text: 'En esa misma pantalla eliges la **moneda por defecto** al abrir el formulario y la **moneda de tus reportes**, y cada producto puede tener su precio en soles o en dólares.',
+        },
+      ],
+    },
+
+    {
       id: 'cliente',
       title: 'Datos del cliente',
       blocks: [

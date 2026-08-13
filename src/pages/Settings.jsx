@@ -5734,6 +5734,7 @@ export default function Settings() {
 
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                   <SettingToggle
+                    id="opcion-multiCurrencyEnabled"
                     checked={multiCurrencyEnabled}
                     onChange={(e) => setMultiCurrencyEnabled(e.target.checked)}
                     title="Activar soporte multi-divisa"
