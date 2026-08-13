@@ -144,6 +144,12 @@ export default {
           text: 'Si tu catálogo quedó con dos sistemas de código conviviendo —unos productos con códigos viejos y otros con el correlativo nuevo— en el menú **Opciones** tienes **Unificar códigos**.',
         },
         {
+          type: 'ui',
+          kind: 'botonSecundario',
+          label: 'Opciones',
+          nota: 'Arriba a la derecha, junto a "Nuevo Producto". Ahí están Importar, Exportar, Actualizar precios, Unificar códigos, Gestionar Categorías y Gestionar Marcas.',
+        },
+        {
           type: 'texto',
           text: 'Le da un **número correlativo de 7 dígitos** a los productos que aún no lo tienen, ordenados **alfabéticamente**, y ese mismo número queda como código interno y como código de barras: listo para imprimir etiquetas y leerlas con el escáner.',
         },
@@ -387,7 +393,7 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'Marca las casillas de los productos que te interesan y aparece la barra de acciones. Desde ahí puedes, sobre todos los seleccionados de una sola vez:',
+          text: 'Marca la **casilla** que cada producto tiene a la izquierda de su fila. Al marcar la primera aparece una barra con las acciones que puedes aplicar sobre **todos los seleccionados** de una sola vez:',
         },
         {
           type: 'pasos',
@@ -561,11 +567,35 @@ export default {
 
     {
       id: 'buscar-organizar',
-      title: 'Buscar y organizar',
+      title: 'Buscar y ordenar la lista',
       blocks: [
         {
           type: 'texto',
-          text: 'El buscador acepta **código, nombre o categoría**. Puedes ordenar la lista por nombre, precio, stock, SKU o categoría, y con **Columnas visibles** decides qué datos ver en la tabla, para no marearte con columnas que no usas.',
+          text: 'El buscador va más allá del nombre: encuentra también por **código de barras**, **código interno (SKU)**, **marca**, **categoría** y hasta por los datos de las **variantes** y **presentaciones** de un producto.',
+        },
+        {
+          type: 'consejo',
+          text: 'No hace falta escribir completo ni cuidar las tildes: "pol roj" encuentra "POLO ROJO XL". Y si un producto tiene varios códigos de barras, cualquiera de ellos lo trae.',
+        },
+        {
+          type: 'texto',
+          text: 'Si buscas una **categoría**, escribe su nombre ("gaseosas"), no su código: el buscador entiende el nombre que tú le pusiste.',
+        },
+        {
+          type: 'texto',
+          text: 'Para ordenar la lista tienes cuatro criterios —**nombre**, **precio**, **stock** y **marca**— más el botón de orden **alfabético (A-Z)**. Cada uno alterna entre ascendente y descendente al tocarlo de nuevo.',
+        },
+        {
+          type: 'consejo',
+          text: 'Ordenar por **stock** de menor a mayor es la forma más rápida de ver qué se está por acabar, sin filtrar nada. Y por **precio** de mayor a menor, para revisar que no se te haya escapado un cero de más al cargar.',
+        },
+        {
+          type: 'texto',
+          text: 'Con **Columnas visibles** eliges qué datos muestra la tabla. La elección se guarda **en ese equipo**, así que la computadora del mostrador y la de la oficina pueden tener vistas distintas.',
+        },
+        {
+          type: 'consejo',
+          text: 'Si una columna no aparece en la lista, es porque **ningún producto tiene ese dato cargado**. El sistema esconde las columnas vacías solo. En cuanto un producto estrena, por ejemplo, su ubicación, la columna aparece.',
         },
       ],
     },

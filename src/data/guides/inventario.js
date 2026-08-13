@@ -44,7 +44,22 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'Cuando se rompe, se vence o se pierde mercadería, hay que descontarla para que el sistema siga diciendo la verdad. En las acciones del producto eliges la salida y su **Motivo**: Producto dañado, Producto expirado, Robo, Pérdida/Extravío u Otro.',
+          text: 'Cuando se rompe, se vence o se pierde mercadería, hay que descontarla para que el sistema siga diciendo la verdad.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Ubica el producto en la lista.',
+            'Al final de su fila, toca el botón de **tres puntos** para abrir sus acciones.',
+            'Elige **Registrar merma**.',
+            'Pon la cantidad y el **Motivo**: Producto dañado, Producto expirado, Robo, Pérdida/Extravío u Otro.',
+          ],
+        },
+        {
+          type: 'ui',
+          kind: 'menu',
+          label: 'Acciones del producto',
+          nota: 'Al final de cada fila del inventario. Desde ahí salen Transferir, Registrar merma, Registrar salida, Producir y Ver historial.',
         },
         {
           type: 'texto',
@@ -63,7 +78,15 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'Para mover mercadería de un almacén o sucursal a otro, usa la transferencia: eliges **almacén origen**, **almacén destino** y la **Cantidad a Transferir**. El sistema descuenta de uno y suma al otro en una sola operación.',
+          text: 'Para mover mercadería de un almacén o sucursal a otro se usa la transferencia: el sistema descuenta de uno y suma al otro en una sola operación.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'En la fila del producto, abre el menú de **tres puntos**.',
+            'Elige **Transferir**.',
+            'Selecciona el **almacén origen**, el **almacén destino** y la **Cantidad a Transferir**.',
+          ],
         },
         {
           type: 'texto',
@@ -73,6 +96,15 @@ export default {
           type: 'ojo',
           text: 'Transferir no cambia tu stock total, solo dónde está. Si el total bajó después de una transferencia, lo que ocurrió fue otra cosa (una venta o una merma).',
         },
+        {
+          type: 'texto',
+          text: 'Los almacenes se crean y se administran en su propia página. Si un almacén no te aparece como destino, revisa que esté **activo** ahí.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/almacenes',
+          label: 'Administrar mis almacenes',
+        },
       ],
     },
 
@@ -80,6 +112,12 @@ export default {
       id: 'recuento',
       title: 'Recuento físico (cuadrar el inventario)',
       blocks: [
+        {
+          type: 'ui',
+          kind: 'botonSecundario',
+          label: 'Opciones',
+          nota: 'Arriba a la derecha de la pantalla, junto al buscador.',
+        },
         {
           type: 'texto',
           text: 'Es la herramienta para poner el sistema de acuerdo con la realidad. En el menú **Opciones** entras a **Recuento físico**: cuentas la mercadería, anotas lo que hay de verdad y el sistema te muestra la **Diferencia** contra lo que él creía.',
@@ -106,6 +144,86 @@ export default {
     },
 
     {
+      id: 'herramientas-riesgo',
+      title: 'Las herramientas que reescriben stock',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Hay dos acciones en esta pantalla que no ajustan un producto: **reescriben stock en masa**. Resuelven problemas reales, pero conviene entender qué hacen antes de tocarlas, porque su efecto alcanza a todo el catálogo.',
+        },
+        {
+          type: 'ui',
+          kind: 'botonSecundario',
+          label: 'Opciones',
+          nota: 'Arriba a la derecha. Ahí viven Traslado masivo, Recuento físico, Historial de recuentos, Verificar stock, Revertir verificación y Exportar Excel.',
+        },
+        {
+          type: 'texto',
+          text: '**Stock sin asignar a almacén.** Este no está en ningún menú: aparece **solo**, como un aviso amarillo arriba de la lista, y únicamente cuando hay stock en esa situación. Si aparece, tienes mercadería que el sistema cuenta en el total pero que no está en ningún almacén activo — y por eso **no se puede vender**: en el punto de venta figura como agotada. Suele venir de productos cargados antes de crear los almacenes, o de un almacén que se eliminó.',
+        },
+        {
+          type: 'ojo',
+          text: 'El botón vuelca todo ese stock a **un solo almacén**: el principal. Si tienes **varias sucursales**, el sistema no puede saber de cuál era cada unidad, así que las apila todas en una. Con más de una sede, es preferible repartirlo a mano con transferencias antes que usar el botón.',
+        },
+        {
+          type: 'consejo',
+          text: 'Solo el **dueño** puede ejecutarlo, pide confirmación y **guarda un respaldo** antes de escribir. Si el resultado no es el que esperabas, se puede revertir.',
+        },
+        {
+          type: 'texto',
+          text: '**Verificar stock** (en el menú **Opciones**). Recalcula el stock de todos los productos **desde el historial de movimientos**, tomando ese historial como la verdad. Sirve cuando el stock quedó descuadrado por una falla y el historial sí está completo.',
+        },
+        {
+          type: 'ojo',
+          text: 'Es exactamente al revés de un recuento: el recuento cree en **lo que contaste**, esto cree en **el historial**. Si tu historial tiene movimientos viejos incompletos, puede dejar productos en negativo o mezclar stock entre sucursales. Termina con **Revertir verificación de stock** disponible por si hace falta deshacerla.',
+        },
+        {
+          type: 'consejo',
+          text: 'Ante la duda entre las dos, elige el **recuento físico**: contar y ajustar es siempre más seguro que reescribir el inventario desde un historial que no controlas.',
+        },
+      ],
+    },
+
+    {
+      id: 'produccion',
+      title: 'Producción rápida',
+      soloModos: ['restaurant'],
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Si un producto tiene **receta**, lo fabricas desde el inventario: en el menú de **tres puntos** de su fila, elige **Producir**. Pones la **cantidad a producir**, el sistema descuenta los **insumos** que consume y suma las unidades terminadas.',
+        },
+        {
+          type: 'texto',
+          text: 'Antes de ejecutar te avisa si **alcanzan los insumos**, así no arrancas una producción que se va a quedar a medias. También te muestra el costo de esa producción, calculado desde la receta.',
+        },
+        {
+          type: 'consejo',
+          text: 'Es la forma de que el inventario refleje lo que realmente pasa en cocina: sin registrar la producción, los insumos figuran completos y el producto terminado en cero.',
+        },
+      ],
+    },
+
+    {
+      id: 'costos',
+      title: 'Recalcular el costo desde las compras',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'El costo de un producto es lo que determina tu margen y tu utilidad. Si lo cargaste mal o nunca lo cargaste, esta acción lo **recalcula desde tu historial de compras**: toma lo que realmente pagaste por ese producto.',
+        },
+        {
+          type: 'consejo',
+          text: 'Es el atajo para cuando los reportes de utilidad salen en cero. En vez de escribir el costo producto por producto, si ya registraste las compras el dato ya lo tienes.',
+        },
+        {
+          type: 'ojo',
+          text: 'Solo puede calcular el costo de lo que **compraste dentro del sistema**. Los productos cargados a mano y nunca comprados quedan igual, porque no hay de dónde sacar el dato.',
+        },
+      ],
+    },
+
+    {
       id: 'movimientos',
       title: 'Historial: quién movió qué',
       blocks: [
@@ -114,8 +232,43 @@ export default {
           text: 'Cada cambio de stock deja rastro: **Entradas**, **Salidas**, **Transferencia Entrada**, **Transferencia Salida** y **Merma/Dañado**, con su fecha, motivo y el saldo que quedó. Es el lugar donde se resuelve la pregunta "¿por qué este producto tiene esta cantidad?".',
         },
         {
+          type: 'texto',
+          text: 'Para ver el historial de **un producto** concreto, abre el menú de **tres puntos** de su fila y elige **Ver historial**. El historial completo del negocio está en la página Movimientos.',
+        },
+        {
           type: 'consejo',
           text: 'Cuando un stock no cuadra, empieza siempre por el historial de ese producto: casi siempre aparece la venta, el traslado o la merma que explica la diferencia.',
+        },
+      ],
+    },
+
+    {
+      id: 'insumos',
+      title: 'Insumos, no solo productos',
+      soloModos: ['restaurant'],
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Esta pantalla no controla solo lo que vendes: también tus **insumos** —harina, aceite, envases—. Aparecen junto a los productos y se les hace lo mismo: transferir entre almacenes, registrar mermas y contarlos en un recuento.',
+        },
+        {
+          type: 'consejo',
+          text: 'Los insumos se descuentan solos cuando vendes un plato con receta. Llevarles inventario es lo que te permite saber cuánto te queda de verdad, en vez de descubrirlo cuando falta en pleno servicio.',
+        },
+      ],
+    },
+
+    {
+      id: 'exportar',
+      title: 'Exportar el inventario',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Desde **Opciones** puedes exportar el inventario a Excel para revisarlo fuera del sistema, pasárselo a tu contador o usarlo como planilla de conteo en papel.',
+        },
+        {
+          type: 'consejo',
+          text: 'Antes de un recuento grande, exportar la lista y salir a contar con ella impresa suele ser más rápido que ir con el celular estante por estante.',
         },
       ],
     },
@@ -159,7 +312,7 @@ export default {
     },
     {
       q: '¿Puedo dejar el stock en negativo?',
-      a: 'Depende de la opción "permitir stock negativo" de tu negocio en Configuración. Si está activada, el sistema deja vender de más y el producto queda en negativo hasta que lo cuadres.',
+      a: 'Depende de la opción **Permitir vender productos sin stock**, en Configuración > Ventas. Si está activada, el sistema deja vender de más y el producto queda en negativo hasta que lo cuadres.',
     },
   ],
 }

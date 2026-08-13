@@ -19,7 +19,8 @@ import { getVisibleSections } from '@/data/guides/registry'
  *   { type: 'consejo', text }                           recuadro de consejo
  *   { type: 'ojo',     text }                           recuadro de advertencia
  *   { type: 'ui',      kind, label, nota? }             maqueta de un control real
- *       kind: 'boton' | 'botonSecundario' | 'campo' | 'toggle'
+ *       kind: 'boton' | 'botonSecundario' | 'campo' | 'toggle' | 'menu'
+ *       'menu' dibuja los tres puntitos de acciones de una fila.
  *   { type: 'enlace',  to, label }                      botón que lleva a otra página
  *       del sistema (ej. Configuración). En modo demo no se muestra, porque las
  *       rutas /app no existen ahí.
@@ -80,6 +81,18 @@ const UiMock = ({ kind, label, nota }) => {
     control = (
       <span className="inline-flex items-center w-full max-w-xs px-3 py-1.5 bg-white border border-gray-300 text-gray-400 text-sm rounded-lg select-none">
         {label}
+      </span>
+    )
+  } else if (kind === 'menu') {
+    // Los tres puntitos que abren el menu de acciones de una fila. Se dibujan
+    // porque decir "en las acciones del producto" no le dice a nadie DONDE
+    // hacer clic: el usuario busca un boton con texto y no lo encuentra.
+    control = (
+      <span className="inline-flex items-center gap-2 select-none">
+        <span className="inline-flex items-center justify-center w-7 h-7 border border-gray-300 rounded-lg bg-white text-gray-500 leading-none">
+          <span className="text-base font-bold tracking-[0.08em] -mt-0.5">⋮</span>
+        </span>
+        {label && <span className="text-sm text-gray-700">{label}</span>}
       </span>
     )
   } else if (kind === 'toggle') {
@@ -143,15 +156,21 @@ const Block = ({ block, isDemoMode, onNavigate }) => {
     case 'enlace':
       // En demo las rutas /app no existen: se omite el enlace.
       if (isDemoMode) return null
+      // El <div> importa: el boton es inline-flex (para no estirarse a todo el
+      // ancho) y sin un contenedor de bloque varios enlaces seguidos fluyen en
+      // la MISMA linea y se ven amontonados. Envuelto, cada uno ocupa su renglon
+      // y el espaciado de la seccion los separa parejo.
       return (
-        <Link
-          to={block.to}
-          onClick={onNavigate}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary-700 border border-primary-200 rounded-lg hover:bg-primary-50 transition-colors"
-        >
-          {block.label}
-          <ArrowRight className="w-3.5 h-3.5" />
-        </Link>
+        <div>
+          <Link
+            to={block.to}
+            onClick={onNavigate}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary-700 border border-primary-200 rounded-lg hover:bg-primary-50 transition-colors"
+          >
+            {block.label}
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
       )
 
     default:
