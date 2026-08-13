@@ -1076,15 +1076,25 @@ export default function StockMovements() {
             {/* Tabla para desktop */}
             <div className="hidden lg:block">
               <table className="w-full table-fixed text-sm">
-                <thead className="bg-gray-50 sticky top-0">
+                {/* La cabecera se fija por CELDA, no por <thead>.
+                    Tailwind aplica `border-collapse: collapse` a todas las
+                    tablas, y con los bordes colapsados el navegador no fija
+                    bien un <thead> sticky: quedaba una franja por la que se
+                    veían pasar las filas justo encima de los títulos.
+                    Fijando cada <th> —con su propio fondo, porque el fondo del
+                    <thead> tampoco se pinta con bordes colapsados— la cabecera
+                    queda pegada de verdad. El z-10 la mantiene por ENCIMA de
+                    las filas, que al ir después en el DOM se dibujarían sobre
+                    ella. */}
+                <thead>
                   <tr>
-                    <th className="w-[12%] px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Fecha</th>
-                    <th className="w-[12%] px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
-                    <th className="w-[18%] px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
-                    <th className="w-[15%] px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Almacén</th>
-                    <th className="w-[7%] px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase">Cant.</th>
-                    <th className="w-[7%] px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase">Saldo</th>
-                    <th className="w-[29%] px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Motivo</th>
+                    <th className="sticky top-0 z-10 bg-gray-50 w-[12%] px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Fecha</th>
+                    <th className="sticky top-0 z-10 bg-gray-50 w-[12%] px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
+                    <th className="sticky top-0 z-10 bg-gray-50 w-[18%] px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
+                    <th className="sticky top-0 z-10 bg-gray-50 w-[15%] px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Almacén</th>
+                    <th className="sticky top-0 z-10 bg-gray-50 w-[7%] px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase">Cant.</th>
+                    <th className="sticky top-0 z-10 bg-gray-50 w-[7%] px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase">Saldo</th>
+                    <th className="sticky top-0 z-10 bg-gray-50 w-[29%] px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Motivo</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
