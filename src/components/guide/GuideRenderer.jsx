@@ -202,6 +202,27 @@ export default function GuideRenderer({
             </div>
           )}
 
+          {/* La opción YA está activa. El aviso de arriba no aplica, pero el
+              enlace a la configuración tiene que seguir a mano: quien lee esta
+              sección con la función encendida suele venir justamente a
+              ajustarla o a apagarla, y antes se quedaba sin camino. */}
+          {section.requiereOpcion?.ruta
+            && !optionIsOff(section.requiereOpcion, businessSettings)
+            && !isDemoMode && (
+            <p className="text-xs mb-3">
+              <Link
+                to={section.requiereOpcion.ruta}
+                onClick={onNavigate}
+                className="font-semibold text-primary-700 hover:underline"
+              >
+                Ajustar {section.requiereOpcion.nombre}
+              </Link>
+              {section.requiereOpcion.donde ? (
+                <span className="text-gray-500"> · {section.requiereOpcion.donde}</span>
+              ) : null}
+            </p>
+          )}
+
           <div className="space-y-3">
             {(section.blocks || []).map((block, i) => (
               <Block key={i} block={block} isDemoMode={isDemoMode} onNavigate={onNavigate} />

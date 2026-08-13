@@ -46,6 +46,24 @@ export default {
           type: 'consejo',
           text: 'Si tu negocio tiene varios almacenes, revisa el selector de **Almacén** antes de cobrar: el stock se descuenta del almacén elegido. También puedes asignar la venta a un **Vendedor** en el selector de al lado.',
         },
+        {
+          type: 'ojo',
+          text: 'Si al entrar al POS te pide abrir la caja antes de vender, es porque tienes activada esa exigencia. Sirve para que el cierre de caja cuadre siempre —nadie vende sin haber declarado con cuánto empezó—, pero es la causa más común de "no me deja vender" a primera hora.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=ventas&opcion=requireOpenCashRegister',
+          label: 'Exigir caja abierta para vender',
+        },
+        {
+          type: 'texto',
+          text: 'Al procesar la venta, el comprobante puede irse **solo a SUNAT** o quedar guardado para enviarlo después desde la página Ventas. Enviarlo en el momento es lo habitual; dejarlo manual sirve si prefieres revisar antes de que salga.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=documentos&opcion=autoSendToSunat',
+          label: 'Envío automático a SUNAT',
+        },
       ],
     },
 
@@ -72,6 +90,24 @@ export default {
         {
           type: 'ojo',
           text: 'Si un producto dice "Sin stock" pero tienes mercadería, casi siempre es una de dos: estás parado en un almacén distinto al que tiene el stock, o la variante elegida es otra. Revisa el selector de **Almacén** y la variante antes de asumir que el inventario está mal.',
+        },
+        {
+          type: 'texto',
+          text: 'Hay cuatro opciones que cambian cómo se comporta esta pantalla y conviene conocerlas, porque explican casi todas las dudas de "por qué veo esto":',
+        },
+        {
+          type: 'pasos',
+          items: [
+            '**Mostrar todos los productos**: el POS abre con el catálogo entero a la vista en vez de esperar a que busques. Cómodo con pocos productos; con catálogos grandes hace la pantalla más lenta.',
+            '**Ocultar los agotados**: los productos en cero no se muestran. Evita que el cajero los ofrezca, pero también los esconde de la vista.',
+            '**Mostrar la descripción**: agrega la descripción del producto debajo del nombre, para diferenciar artículos de nombre parecido.',
+            '**Reiniciar la búsqueda al agregar**: al sumar un producto el buscador se limpia solo, listo para el siguiente. Viene **activada**; apágala si sueles agregar varias unidades del mismo.',
+          ],
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=ventas&opcion=showAllProductsInPOS',
+          label: 'Ajustar cómo se ven los productos en el POS',
         },
       ],
     },
@@ -115,7 +151,34 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'En el **Carrito de Compras** cada producto permite más que cambiar la cantidad: con el ícono de lápiz editas el **precio** solo para esta venta, puedes aplicar **descuento**, y marcar un producto como **bonificación** (regalo: sale en el comprobante pero no suma al total, como pide SUNAT). El total va siempre visible arriba del carrito.',
+          text: 'En el **Carrito de Compras** cada producto permite más que cambiar la cantidad: puedes aplicar **descuento** por línea y marcar un producto como **bonificación** (regalo: sale en el comprobante pero no suma al total, como pide SUNAT). El total va siempre visible arriba del carrito.',
+        },
+        {
+          type: 'texto',
+          text: 'Cambiar el **precio** de un producto solo para esta venta requiere activar la opción antes: recién ahí aparece el ícono de lápiz junto al precio. Viene **apagada**, para que un cajero no pueda rebajar precios por su cuenta.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=ventas&opcion=allowPriceEdit',
+          label: 'Permitir modificar el precio en el POS',
+        },
+        {
+          type: 'texto',
+          text: 'Lo mismo con el **nombre** del producto: hay una opción aparte para dejar que se edite en el momento, útil cuando el comprobante necesita un detalle distinto al del catálogo.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=ventas&opcion=allowNameEdit',
+          label: 'Permitir modificar el nombre en el POS',
+        },
+        {
+          type: 'ojo',
+          text: 'Si intentas vender más de lo que tienes, el sistema te frena. Se puede permitir vender **sin stock** —para negocios que entregan después o hacen pedidos—, pero deja el inventario en negativo a propósito, así que actívalo solo si sabes por qué lo necesitas.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=ventas&opcion=allowNegativeStock',
+          label: 'Permitir vender sin stock',
         },
         {
           type: 'texto',
@@ -128,6 +191,11 @@ export default {
         {
           type: 'consejo',
           text: 'Si usas niveles de precio (público, mayorista), al agregar el producto se abre una ventana para elegir el nivel. Dos atajos: si el cliente seleccionado tiene un nivel asignado en su ficha, se aplica solo; y si el producto tiene precio automático por cantidad, el sistema baja el precio solo al llegar a la cantidad mínima.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=ventas&opcion=multiplePricesEnabled',
+          label: 'Ver los niveles de precio',
         },
       ],
     },
@@ -152,6 +220,10 @@ export default {
           type: 'enlace',
           to: '/app/configuracion?tab=ventas&opcion=enabledDocumentTypes',
           label: 'Ver mis comprobantes habilitados',
+        },
+        {
+          type: 'consejo',
+          text: 'En esa misma pantalla eliges con **qué comprobante abre el POS**. Si casi siempre emites boleta, ponla por defecto y te ahorras un clic por venta. También puedes dejarlo en **Ninguno**: así el cajero está obligado a elegir y no se emiten boletas por inercia cuando el cliente pedía factura.',
         },
       ],
     },
@@ -343,7 +415,21 @@ export default {
         },
         {
           type: 'consejo',
-          text: 'Los métodos de pago se personalizan en Configuración: puedes ocultar los que no usas y crear los tuyos. Cada método sale desglosado en el cierre de caja.',
+          text: 'Los métodos de pago se personalizan en Configuración: puedes ocultar los que no usas y crear los tuyos. Cada método sale desglosado en el cierre de caja. Ahí mismo puedes dejar uno **preseleccionado**, útil si casi todo te lo pagan en efectivo o por Yape.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=ventas&opcion=defaultPaymentMethod',
+          label: 'Configurar mis métodos de pago',
+        },
+        {
+          type: 'texto',
+          text: 'Las **notas de venta** salen al contado. Si también las das al crédito —con vencimiento y cuotas, igual que una factura— hay que habilitarlo aparte.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=ventas&opcion=notaVentaCreditTerms',
+          label: 'Permitir crédito en notas de venta',
         },
       ],
     },
@@ -412,6 +498,11 @@ export default {
           label: 'Activar la impresión automática',
         },
         {
+          type: 'enlace',
+          to: '/app/configuracion?tab=ventas&opcion=autoResetPOS',
+          label: 'Reiniciar el POS solo, después de imprimir',
+        },
+        {
           type: 'texto',
           text: 'Qué se imprime al pie del ticket se arma en Configuración > Documentos: el **Mensaje al pie del ticket térmico** (hasta 300 caracteres) y, si lo activas, tus **Términos y condiciones** completos. Estos últimos se escriben una sola vez y con un interruptor decides si salen solo en el PDF o también impresos.',
         },
@@ -430,6 +521,59 @@ export default {
         {
           type: 'texto',
           text: 'En el panel derecho, la sección **Referencias (opcional)** permite anotar el **N° Guía**, el **N° O/C** o el **N° Pedido** relacionados con la venta. Salen impresos en el comprobante; útil cuando el cliente exige referenciar su orden de compra en la factura.',
+        },
+      ],
+    },
+
+    {
+      id: 'pantalla-cliente',
+      title: 'Pantalla para el cliente',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Si tu equipo tiene **doble pantalla** (por ejemplo un iMin Swan 2), la segunda puede mostrarle al cliente el detalle de su compra en vivo, con el logo y los colores de tu negocio, mientras el cajero trabaja en la principal.',
+        },
+        {
+          type: 'consejo',
+          text: 'Reduce discusiones al cobrar: el cliente ve lo que se va agregando y a qué precio, en vez de enterarse recién con el total.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=preferencias&opcion=enableCustomerDisplay',
+          label: 'Activar la pantalla de cliente',
+        },
+      ],
+    },
+
+    {
+      id: 'sucursales',
+      title: 'Si vendes en varias sucursales',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Dos opciones cambian lo que ve el cajero según dónde esté parado, y conviene saber que existen porque explican diferencias que de otro modo parecen errores.',
+        },
+        {
+          type: 'texto',
+          text: '**Precios por sucursal**: un mismo producto puede costar distinto en cada local. El POS aplica el precio de la sucursal activa; los que no tengan precio propio usan el general.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=ventas&opcion=branchPricingEnabled',
+          label: 'Activar precios por sucursal',
+        },
+        {
+          type: 'texto',
+          text: '**Catálogo por sucursal**: puedes ocultar productos en los locales donde no se venden, para que el cajero no los ofrezca.',
+        },
+        {
+          type: 'ojo',
+          text: 'Ocultar un producto **no toca su stock**: solo deja de mostrarse. Si esa sucursal igual tiene mercadería, sigue existiendo en el inventario — esconderla no la hace desaparecer.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=ventas&opcion=branchCatalogEnabled',
+          label: 'Activar catálogo por sucursal',
         },
       ],
     },

@@ -3856,6 +3856,7 @@ export default function Settings() {
                 <div className="space-y-3">
                   {/* Pantalla de cliente (segunda pantalla) */}
                   <SettingToggle
+                    id="opcion-enableCustomerDisplay"
                     checked={enableCustomerDisplay}
                     onChange={(e) => setEnableCustomerDisplay(e.target.checked)}
                     title="Pantalla de cliente (segunda pantalla)"
@@ -5072,6 +5073,7 @@ export default function Settings() {
                 </p>
                 <div className="space-y-4">
                   <SettingToggle
+                    id="opcion-allowNegativeStock"
                     checked={allowNegativeStock}
                     onChange={(e) => setAllowNegativeStock(e.target.checked)}
                     title="Permitir vender productos sin stock"
@@ -5104,6 +5106,7 @@ export default function Settings() {
                 <div className="space-y-4">
                   {/* Vencimiento y cuotas en notas de venta al crédito */}
                   <SettingToggle
+                    id="opcion-notaVentaCreditTerms"
                     checked={notaVentaCreditTerms}
                     onChange={(e) => setNotaVentaCreditTerms(e.target.checked)}
                     title="Vencimiento y cuotas en notas de venta al crédito"
@@ -5123,6 +5126,7 @@ export default function Settings() {
                   />
 
                   <SettingToggle
+                    id="opcion-allowPriceEdit"
                     checked={allowPriceEdit}
                     onChange={(e) => setAllowPriceEdit(e.target.checked)}
                     title="Permitir modificar precio de productos en el POS"
@@ -5132,6 +5136,7 @@ export default function Settings() {
                   />
 
                   <SettingToggle
+                    id="opcion-posClearSearchOnAdd"
                     checked={posClearSearchOnAdd}
                     onChange={(e) => setPosClearSearchOnAdd(e.target.checked)}
                     title="Reiniciar búsqueda al agregar un producto al carrito"
@@ -5141,6 +5146,7 @@ export default function Settings() {
                   />
 
                   <SettingToggle
+                    id="opcion-allowNameEdit"
                     checked={allowNameEdit}
                     onChange={(e) => setAllowNameEdit(e.target.checked)}
                     title="Permitir modificar nombre de productos en el POS"
@@ -5159,6 +5165,7 @@ export default function Settings() {
 
                   {/* Auto-reset POS después de acción post-venta */}
                   <SettingToggle
+                    id="opcion-autoResetPOS"
                     checked={autoResetPOS}
                     onChange={(e) => setAutoResetPOS(e.target.checked)}
                     title="Reiniciar POS automáticamente después de imprimir/descargar"
@@ -5211,6 +5218,7 @@ export default function Settings() {
 
                   {/* Mostrar todos los productos en el POS (sin botón "Ver más") */}
                   <SettingToggle
+                    id="opcion-showAllProductsInPOS"
                     checked={showAllProductsInPOS}
                     onChange={(e) => setShowAllProductsInPOS(e.target.checked)}
                     title="Mostrar todos los productos en el POS"
@@ -5433,7 +5441,13 @@ export default function Settings() {
                         disponibles (incluidos los propios). Mismo orden que en
                         comprobantes: primero cuales hay, despues cual arranca. */}
                     <div className="border-t border-gray-100 pt-3 mt-4" />
-                    <span className="text-sm font-medium text-gray-900">
+                    {/* Ancla del enlace profundo de la guía del POS. No es un
+                        SettingToggle (es un grupo de botones), así que el id y
+                        el scroll-mt van acá a mano. */}
+                    <span
+                      id="opcion-defaultPaymentMethod"
+                      className="text-sm font-medium text-gray-900 scroll-mt-24"
+                    >
                       Método de pago por defecto en POS
                     </span>
                     <p className="text-xs text-gray-600 mt-1.5 mb-3 leading-relaxed">
@@ -5518,6 +5532,7 @@ export default function Settings() {
               {/* Precios de venta por sucursal */}
               <div>
                 <SettingToggle
+                  id="opcion-branchPricingEnabled"
                   checked={branchPricingEnabled}
                   onChange={(e) => setBranchPricingEnabled(e.target.checked)}
                   title="Precios de venta por sucursal"
@@ -5530,6 +5545,7 @@ export default function Settings() {
               {/* Catálogo por sucursal */}
               <div>
                 <SettingToggle
+                  id="opcion-branchCatalogEnabled"
                   checked={branchCatalogEnabled}
                   onChange={(e) => setBranchCatalogEnabled(e.target.checked)}
                   title="Catálogo de productos por sucursal"
@@ -5549,6 +5565,7 @@ export default function Settings() {
                 </p>
                 <div className="space-y-4">
                   <SettingToggle
+                    id="opcion-multiplePricesEnabled"
                     checked={multiplePricesEnabled}
                     onChange={(e) => setMultiplePricesEnabled(e.target.checked)}
                     title="Usar varios precios por producto"
@@ -5606,6 +5623,7 @@ export default function Settings() {
                 </p>
                 <div className="space-y-4">
                   <SettingToggle
+                    id="opcion-showDescriptionInPOS"
                     checked={showDescriptionInPOS}
                     onChange={(e) => setShowDescriptionInPOS(e.target.checked)}
                     title="Mostrar descripción del producto en el POS"
@@ -5651,6 +5669,7 @@ export default function Settings() {
                   />
 
                   <SettingToggle
+                    id="opcion-requireOpenCashRegister"
                     checked={requireOpenCashRegister}
                     onChange={(e) => setRequireOpenCashRegister(e.target.checked)}
                     title="Requerir caja diaria abierta para vender"
@@ -6547,6 +6566,7 @@ export default function Settings() {
 
                 <div className="space-y-4">
                   <SettingToggle
+                    id="opcion-autoSendToSunat"
                     checked={autoSendToSunat}
                     onChange={e => setAutoSendToSunat(e.target.checked)}
                     title="Envío automático a SUNAT desde el POS"
