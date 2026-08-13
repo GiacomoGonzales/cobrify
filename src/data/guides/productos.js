@@ -366,6 +366,20 @@ export default {
           text: 'En el menú **Opciones** de la cabecera tienes **Importar productos** y **Exportar a Excel**. La importación es la forma rápida de cargar un catálogo entero desde una hoja de cálculo, y admite variantes, series y presentaciones.',
         },
         {
+          type: 'texto',
+          soloModos: ['pharmacy', 'veterinary'],
+          text: 'Tu plantilla es la de **Medicamentos**: además de las columnas normales trae **nombre_generico**, **concentracion**, **presentacion**, **laboratorio**, **principio_activo**, **accion_terapeutica**, **condicion_venta** y **registro_sanitario**, más el lote y su vencimiento.',
+        },
+        {
+          type: 'consejo',
+          soloModos: ['veterinary'],
+          text: 'Esos campos de medicamento hoy se cargan **solo por importación**: la ficha del producto todavía no los muestra en modo veterinaria. Si los necesitas para todo tu catálogo, la vía es el Excel.',
+        },
+        {
+          type: 'consejo',
+          text: 'Exportar y volver a importar es la forma más cómoda de hacer cambios masivos: bajas tu catálogo, lo editas en Excel y lo subes. El archivo exportado usa las mismas columnas que espera la importación, así que el ida y vuelta no pierde datos.',
+        },
+        {
           type: 'ojo',
           text: 'Cuando pegues nombres desde Excel, ojo con los espacios y saltos de línea invisibles que se copian junto al texto: desordenan la lista alfabética. El sistema los limpia al guardar, pero si ves productos ordenados raro, casi siempre es eso.',
         },

@@ -26,6 +26,12 @@ import { getVisibleSections } from '@/data/guides/registry'
  *
  * Condiciones por sección:
  *   soloModos: ['retail', ...]   la sección solo existe en esos modos (se oculta)
+ *
+ * Condiciones por BLOQUE:
+ *   soloModos: ['pharmacy', ...]  el bloque solo se dibuja en esos modos. Para
+ *       matices chicos dentro de una seccion compartida (ej. la plantilla de
+ *       importacion que cambia en farmacia y veterinaria) sin partir la guia.
+ *
  *   requiereOpcion: { flag, nombre, donde, ruta?, defaultOn? }
  *       NO oculta: muestra la sección con una nota "requiere activar X" cuando
  *       la opción está apagada, para que el usuario descubra la función. Si trae
@@ -224,9 +230,15 @@ export default function GuideRenderer({
           )}
 
           <div className="space-y-3">
-            {(section.blocks || []).map((block, i) => (
-              <Block key={i} block={block} isDemoMode={isDemoMode} onNavigate={onNavigate} />
-            ))}
+            {(section.blocks || [])
+              // Un BLOQUE tambien puede ser de un rubro. Sirve para el matiz
+              // que no da para seccion propia: una plantilla distinta, un campo
+              // extra. Sin esto habia que elegir entre inventar una seccion
+              // entera o dejar el parrafo visible para todos.
+              .filter(b => !b.soloModos || b.soloModos.includes(businessMode))
+              .map((block, i) => (
+                <Block key={i} block={block} isDemoMode={isDemoMode} onNavigate={onNavigate} />
+              ))}
           </div>
         </section>
       ))}
