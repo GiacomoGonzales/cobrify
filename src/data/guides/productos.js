@@ -442,9 +442,41 @@ export default {
           type: 'texto',
           text: 'El buscador acepta **código, nombre o categoría**. Puedes ordenar la lista por nombre, precio, stock, SKU o categoría, y con **Columnas visibles** decides qué datos ver en la tabla, para no marearte con columnas que no usas.',
         },
+      ],
+    },
+
+    {
+      id: 'categorias-marcas',
+      title: 'Categorías y marcas',
+      blocks: [
         {
           type: 'texto',
-          text: 'Las **Categorías** y **Marcas** también se administran desde el menú **Opciones**.',
+          text: 'Se administran desde el menú **Opciones**, con **Gestionar Categorías** y **Gestionar Marcas**. Son las dos formas de ordenar el catálogo, y conviene definirlas temprano: reacomodar 500 productos después cuesta bastante más que pensarlo al principio.',
+        },
+        {
+          type: 'texto',
+          text: 'Las categorías admiten **subcategorías**: puedes tener "Bebidas" y dentro "Gaseosas", "Aguas", "Cervezas". Al tocar una categoría raíz en los filtros, la lista se filtra y se despliega su rama.',
+        },
+        {
+          type: 'consejo',
+          text: 'No hagas categorías demasiado finas. Si terminas con 40 categorías de 3 productos cada una, buscar se vuelve más lento que sin categorías. Una regla que funciona: que cada una agrupe algo que alguna vez quieras mirar junto en un reporte.',
+        },
+        {
+          type: 'texto',
+          text: 'Al **eliminar** hay reglas que evitan dejar productos huérfanos, y son las que más sorprenden:',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Una **categoría raíz con productos** no se puede eliminar: primero hay que moverlos a otra.',
+            'Una categoría **con subcategorías** tampoco: primero se eliminan las subcategorías.',
+            'Al eliminar una **subcategoría con productos**, esos productos **suben solos a la categoría padre**. No se quedan sin categoría.',
+            'Una **marca con productos vinculados** no se puede eliminar: hay que reasignarlos antes.',
+          ],
+        },
+        {
+          type: 'consejo',
+          text: 'Para reasignar en lote no hace falta entrar producto por producto: selecciona los que quieras en la lista y usa **Cambiar categoría** de las acciones masivas.',
         },
       ],
     },
