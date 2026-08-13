@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { isPharmaLikeMode } from '@/utils/businessModes'
 import { Plus, Trash2, Save, Loader2, ArrowLeft, UserPlus, X, Search, Tag, Package, Hash, User, FileText, Store, DollarSign, RefreshCw, CheckCircle } from 'lucide-react'
 import { useNavigate, useParams, useSearchParams, useLocation } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
@@ -574,7 +575,7 @@ export default function CreateQuotation() {
 
       // Solo en farmacia: se cargan aparte para no pedir una colección que el
       // resto de los rubros no usa.
-      if (businessMode === 'pharmacy') {
+      if (isPharmaLikeMode(businessMode)) {
         const labsResult = await getLaboratories(getBusinessId())
         if (labsResult.success) setLaboratories(labsResult.data || [])
       }
@@ -1997,7 +1998,7 @@ export default function CreateQuotation() {
                                               <p className="text-xs text-gray-500">{product.code}</p>
                                             )}
                                             {(() => {
-                                              const laboratorio = businessMode === 'pharmacy'
+                                              const laboratorio = isPharmaLikeMode(businessMode)
                                                 ? getProductLaboratoryName(product, laboratories)
                                                 : ''
                                               return laboratorio
@@ -2238,7 +2239,7 @@ export default function CreateQuotation() {
                                         <p className="text-xs text-gray-500">{product.code}</p>
                                       )}
                                       {(() => {
-                                        const laboratorio = businessMode === 'pharmacy'
+                                        const laboratorio = isPharmaLikeMode(businessMode)
                                           ? getProductLaboratoryName(product, laboratories)
                                           : ''
                                         return laboratorio

@@ -46,6 +46,7 @@ import {
   isProductInBranch, getBranchScopeLabel,
 } from '@/utils/branchCatalog'
 import { needsRestock } from '@/utils/stockAlerts'
+import { isPharmaLikeMode } from '@/utils/businessModes'
 import { buildProductIndex, findExistingProduct, indexProduct } from '@/utils/productImportMatch'
 import SunatProductCodeField from '@/components/SunatProductCodeField'
 import { getRateForDate } from '@/services/exchangeRateService'
@@ -588,7 +589,7 @@ export default function Products() {
   // Laboratorios solo en modo farmacia (businessMode se hidrata async; este
   // efecto liviano corre cuando el modo real llega, sin recargar lo demás)
   useEffect(() => {
-    if (user?.uid && businessMode === 'pharmacy') {
+    if (user?.uid && isPharmaLikeMode(businessMode)) {
       loadLaboratories()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1299,7 +1300,7 @@ export default function Products() {
     // solo de los dos, el inventario queda a medias: sin lote no hay FEFO (el
     // recuento lo lista como "sin lote asignado") y sin fecha el lote no sirve
     // para avisar de vencidos. Solo aplica al CREAR con stock inicial > 0.
-    const loteIngresado = String((businessMode === 'pharmacy' ? pharmacyData.batchNumber : data.batchNumber) || '').trim()
+    const loteIngresado = String((isPharmaLikeMode(businessMode) ? pharmacyData.batchNumber : data.batchNumber) || '').trim()
     const vencimientoIngresado = (data.expirationDate || '').trim()
     const stockInicialTotal = Object.values(warehouseInitialStocks)
       .reduce((sum, v) => sum + (parseFloat(v) || 0), 0) || (parseFloat(data.initialStock) || 0)
@@ -1436,7 +1437,7 @@ export default function Products() {
           : { expirationDate: data.expirationDate ? new Date(data.expirationDate) : null }
         ),
         // Lote (acceso rápido). En farmacia lo maneja su propia sección más abajo.
-        ...(hasActiveBatches || businessMode === 'pharmacy'
+        ...(hasActiveBatches || isPharmaLikeMode(businessMode)
           ? {}
           : { batchNumber: data.batchNumber?.trim() || null }
         ),
@@ -1477,7 +1478,7 @@ export default function Products() {
           }
         })()),
         // Product location (works in all modes when enabled)
-        location: businessMode === 'pharmacy' ? (pharmacyData.location || null) : (productLocation || null),
+        location: isPharmaLikeMode(businessMode) ? (pharmacyData.location || null) : (productLocation || null),
         // Add modifiers if in restaurant mode (only include if exists)
         ...(businessMode === 'restaurant' && modifiers ? { modifiers } : {}),
         // Add presentations if enabled (venta por presentaciones)
@@ -1494,7 +1495,7 @@ export default function Products() {
           price4: parseFloat(p.price4) > 0 ? parseFloat(p.price4) : null,
         })) } : {}),
         // Add pharmacy data if in pharmacy mode
-        ...(businessMode === 'pharmacy' ? {
+        ...(isPharmaLikeMode(businessMode) ? {
           genericName: pharmacyData.genericName || null,
           concentration: pharmacyData.concentration || null,
           presentation: pharmacyData.presentation || null,
@@ -2487,8 +2488,8 @@ export default function Products() {
         }
       }
 
-      // Auto-crear laboratorios que no existen (solo modo farmacia)
-      if (businessMode === 'pharmacy') {
+      // Auto-crear laboratorios que no existen (rubros con ficha de medicamento)
+      if (isPharmaLikeMode(businessMode)) {
         const labsRef = collection(db, 'businesses', getBusinessId(), 'laboratories')
         const labsSnapshot = await getDocs(labsRef)
         const existingLabs = labsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }))
@@ -8146,8 +8147,8 @@ export default function Products() {
           </div>
           )}
 
-          {/* Campos específicos de Farmacia */}
-          {businessMode === 'pharmacy' && (
+          {/* Campos de medicamento: farmacia y veterinaria (ver isPharmaLikeMode) */}
+          {isPharmaLikeMode(businessMode) && (
             <div className="border-t border-green-200 pt-4 bg-green-50/50 -mx-6 px-6 pb-4">
               <h3 className="text-sm font-semibold text-green-800 mb-4 flex items-center gap-2">
                 <Package className="w-4 h-4" />
@@ -9225,8 +9226,8 @@ export default function Products() {
               </div>
             )}
 
-            {/* Información Farmacéutica (solo modo farmacia) */}
-            {businessMode === 'pharmacy' && (viewingProduct.genericName || viewingProduct.laboratoryId || viewingProduct.batches?.length > 0) && (
+            {/* Información Farmacéutica (farmacia y veterinaria) */}
+            {isPharmaLikeMode(businessMode) && (viewingProduct.genericName || viewingProduct.laboratoryId || viewingProduct.batches?.length > 0) && (
               <div className="bg-green-50 rounded-lg p-4">
                 <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Pill className="w-4 h-4" />

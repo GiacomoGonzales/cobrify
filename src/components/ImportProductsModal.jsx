@@ -7,6 +7,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { getActiveBranches } from '@/services/branchService'
 import { MAIN_BRANCH_TOKEN, buildHiddenFromSelection } from '@/utils/branchCatalog'
 import { isMultiCurrencyEnabled } from '@/utils/currency'
+import { isPharmaLikeMode } from '@/utils/businessModes'
 import { cleanText } from '@/lib/utils'
 import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
@@ -885,7 +886,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
     // vencimiento, laboratorio y registro sanitario); el resto de modos (retail,
     // restaurante, hotel, transporte, logística) usan la plantilla genérica de
     // productos, ya que su catálogo tiene la misma estructura.
-    const isPharmaLike = businessMode === 'pharmacy' || businessMode === 'veterinary'
+    const isPharmaLike = isPharmaLikeMode(businessMode)
     let template = []
 
     if (isPharmaLike) {

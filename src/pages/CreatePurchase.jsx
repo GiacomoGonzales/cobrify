@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
+import { isPharmaLikeMode } from '@/utils/businessModes'
 import { filterProductsForBranch } from '@/utils/branchCatalog'
 import { Plus, Trash2, Save, ArrowLeft, Loader2, Search, X, PackagePlus, Package, Beaker, Store, RefreshCw, DollarSign, Gift, Tag, Upload } from 'lucide-react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
@@ -229,7 +230,7 @@ export default function CreatePurchase() {
   // Editar precios de venta de un item vía modal (en vez de campos inline que estorban)
   const [salePriceModalIndex, setSalePriceModalIndex] = useState(null)
 
-  // Laboratories for pharmacy mode
+  // Laboratorios: rubros con ficha de medicamento (farmacia y veterinaria)
   const [laboratories, setLaboratories] = useState([])
 
   // Importar compra desde el XML de la factura del proveedor
@@ -442,8 +443,8 @@ export default function CreatePurchase() {
         setBranches(branchesResult.data || [])
       }
 
-      // Load laboratories for pharmacy mode
-      if (businessMode === 'pharmacy') {
+      // Laboratorios: solo en rubros con ficha de medicamento
+      if (isPharmaLikeMode(businessMode)) {
         try {
           const labsRef = collection(db, 'businesses', businessId, 'laboratories')
           const snapshot = await getDocs(labsRef)
@@ -903,7 +904,7 @@ export default function CreatePurchase() {
     if (searchItem.itemType === 'ingredient') {
       return <>Stock: {searchItem.currentStock} {searchItem.purchaseUnit}</>
     }
-    const laboratorio = businessMode === 'pharmacy'
+    const laboratorio = isPharmaLikeMode(businessMode)
       ? getProductLaboratoryName(searchItem, laboratories)
       : ''
     return (
@@ -1016,9 +1017,9 @@ export default function CreatePurchase() {
       newItems[index].salePrice2 = item.price2 || ''
       newItems[index].salePrice3 = item.price3 || ''
       newItems[index].salePrice4 = item.price4 || ''
-      // Farmacia: hidratar registro sanitario para que el usuario lo verifique
+      // Rubros con medicamento: hidratar registro sanitario para que el usuario lo verifique
       // y lo pueda actualizar si cambió. Guardamos el original para detectar cambios al guardar.
-      if (businessMode === 'pharmacy') {
+      if (isPharmaLikeMode(businessMode)) {
         newItems[index].sanitaryRegistry = item.sanitaryRegistry || ''
         newItems[index].originalSanitaryRegistry = item.sanitaryRegistry || ''
       }
@@ -1374,7 +1375,7 @@ export default function CreatePurchase() {
       }
 
       // Include pharmacy fields if present (la marca ya está arriba, no se duplica)
-      if (businessMode === 'pharmacy') {
+      if (isPharmaLikeMode(businessMode)) {
         productData.genericName = data.genericName || null
         productData.concentration = data.concentration || null
         productData.presentation = data.presentation || null
@@ -2034,10 +2035,10 @@ export default function CreatePurchase() {
             })
           }
 
-          // Farmacia: si el usuario modificó el registro sanitario durante la compra,
+          // Rubros con medicamento: si el usuario modificó el registro sanitario en la compra,
           // propagar el nuevo valor al producto master. Tomamos la última modificación
           // (si hay varias líneas del mismo producto, generalmente comparten el registro).
-          if (businessMode === 'pharmacy') {
+          if (isPharmaLikeMode(businessMode)) {
             const modifiedItems = grouped.items.filter(it =>
               it.sanitaryRegistry !== undefined &&
               it.originalSanitaryRegistry !== undefined &&
@@ -3015,9 +3016,9 @@ export default function CreatePurchase() {
             <table className="w-full table-fixed">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  <th className={`text-left text-xs font-medium text-gray-500 uppercase px-4 py-3 ${(businessMode === 'pharmacy' || businessSettings?.posCustomFields?.showBatchExpiryInPurchase) ? 'w-[25%]' : 'w-[34%]'}`}>Producto</th>
+                  <th className={`text-left text-xs font-medium text-gray-500 uppercase px-4 py-3 ${(isPharmaLikeMode(businessMode) || businessSettings?.posCustomFields?.showBatchExpiryInPurchase) ? 'w-[25%]' : 'w-[34%]'}`}>Producto</th>
                   <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[12%]">Cant.</th>
-                  {(businessMode === 'pharmacy' || businessSettings?.posCustomFields?.showBatchExpiryInPurchase) && (
+                  {(isPharmaLikeMode(businessMode) || businessSettings?.posCustomFields?.showBatchExpiryInPurchase) && (
                     <>
                       <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[10%]">Lote</th>
                       <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[12%]">Vence</th>
@@ -3159,7 +3160,7 @@ export default function CreatePurchase() {
                       )}
                     </td>
                     {/* Lote y Vencimiento - Farmacia o si está habilitado en config */}
-                    {(businessMode === 'pharmacy' || businessSettings?.posCustomFields?.showBatchExpiryInPurchase) && (
+                    {(isPharmaLikeMode(businessMode) || businessSettings?.posCustomFields?.showBatchExpiryInPurchase) && (
                       <>
                         <td className="px-2 py-2">
                           <input
@@ -3268,8 +3269,8 @@ export default function CreatePurchase() {
                       </td>
                     </tr>
                   )}
-                  {/* Fila de Registro Sanitario — solo farmacia, con producto seleccionado */}
-                  {businessMode === 'pharmacy' && item.productId && (
+                  {/* Fila de Registro Sanitario — farmacia y veterinaria, con producto seleccionado */}
+                  {isPharmaLikeMode(businessMode) && item.productId && (
                     <tr className="bg-purple-50/40 border-b border-gray-200">
                       <td colSpan={99} className="px-4 py-1.5">
                         <div className="flex items-center flex-wrap gap-2">
@@ -3466,7 +3467,7 @@ export default function CreatePurchase() {
                 )}
 
                 {/* Lote y Vencimiento - Farmacia o si está habilitado en config */}
-                {(businessMode === 'pharmacy' || businessSettings?.posCustomFields?.showBatchExpiryInPurchase) && (
+                {(isPharmaLikeMode(businessMode) || businessSettings?.posCustomFields?.showBatchExpiryInPurchase) && (
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="block text-xs text-gray-500 mb-1">N° Lote</label>
@@ -3494,8 +3495,8 @@ export default function CreatePurchase() {
                   </div>
                 )}
 
-                {/* Registro Sanitario - Solo farmacia (pre-cargado del producto, editable para corregir cambios) */}
-                {businessMode === 'pharmacy' && item.productId && (
+                {/* Registro Sanitario - farmacia y veterinaria (pre-cargado del producto, editable) */}
+                {isPharmaLikeMode(businessMode) && item.productId && (
                   <div>
                     <label className="flex items-center justify-between text-xs text-gray-500 mb-1">
                       <span>Registro Sanitario</span>

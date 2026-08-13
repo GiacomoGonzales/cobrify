@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useDeferredValue } from 'react'
+import { isPharmaLikeMode } from '@/utils/businessModes'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import {
@@ -9032,7 +9033,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     {product.genericName && (
                       <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1 sm:truncate">{product.genericName} {product.concentration}</p>
                     )}
-                    {businessMode === 'pharmacy' && product.laboratoryName && (
+                    {isPharmaLikeMode(businessMode) && product.laboratoryName && (
                       <p className="text-[10px] sm:text-xs text-blue-600 font-medium mt-0.5 truncate">{product.laboratoryName}</p>
                     )}
                     {/* Product description */}

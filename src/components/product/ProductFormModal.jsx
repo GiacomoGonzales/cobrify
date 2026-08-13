@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { isPharmaLikeMode } from '@/utils/businessModes'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Loader2, X, Upload, Camera, ScanBarcode, Package, Plus, Trash2, AlertTriangle, Layers, Boxes, Store } from 'lucide-react'
@@ -597,10 +598,10 @@ const ProductFormModal = ({
     }
 
     // Product location (works in all modes when enabled)
-    productData.location = businessMode === 'pharmacy' ? (pharmacyData.location || null) : (productLocation || null)
+    productData.location = isPharmaLikeMode(businessMode) ? (pharmacyData.location || null) : (productLocation || null)
 
     // Include pharmacy data if in pharmacy mode
-    if (businessMode === 'pharmacy') {
+    if (isPharmaLikeMode(businessMode)) {
       productData.genericName = pharmacyData.genericName || null
       productData.concentration = pharmacyData.concentration || null
       productData.presentation = pharmacyData.presentation || null
@@ -1178,9 +1179,9 @@ const ProductFormModal = ({
         <div className="space-y-5 mt-5">
 
         {/* ═══════════════════════════════════════════════════════════════════
-            SECCIÓN: INFORMACIÓN FARMACÉUTICA (solo modo farmacia)
+            SECCIÓN: INFORMACIÓN FARMACÉUTICA (farmacia y veterinaria)
         ═══════════════════════════════════════════════════════════════════ */}
-        {businessMode === 'pharmacy' && (
+        {isPharmaLikeMode(businessMode) && (
           <div className="space-y-4 bg-green-50/50 border border-green-200 rounded-lg p-4">
             <h3 className="text-sm font-semibold text-green-800 flex items-center gap-2">
               <Package className="w-4 h-4" />
