@@ -2634,6 +2634,16 @@ export default function Products() {
             if (product.price != null && !isNaN(product.price) && product.price >= 0) updates.price = product.price
             // No pisar el costo de un producto con receta (manda la receta)
             if (product.cost != null && !existingProduct.hasRecipe) updates.cost = product.cost
+            // Ancla en dolares. Solo se toca si el Excel TRAIA la columna: asi
+            // reimportar con una plantilla vieja (sin precio_usd) no borra los
+            // anclajes existentes. Si la columna vino vacia, se quita el ancla —
+            // eso es una decision explicita del usuario, no un descuido.
+            //
+            // Faltaba: la creacion guardaba priceUSD (pasa el objeto entero) pero
+            // la ACTUALIZACION no, asi que reimportar precios en dolares sobre
+            // productos ya existentes solo recalculaba el soles y dejaba el
+            // producto sin anclar. Caso real de WAQTA PERU con 219 productos.
+            if (product.priceUSDProvided) updates.priceUSD = product.priceUSD
             if (product.price2 !== undefined) updates.price2 = product.price2
             if (product.price3 !== undefined) updates.price3 = product.price3
             if (product.price4 !== undefined) updates.price4 = product.price4

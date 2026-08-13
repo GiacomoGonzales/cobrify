@@ -416,6 +416,19 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           const n = parseFloat(raw)
           return Number.isFinite(n) && n > 0 ? n : null
         })(),
+        // ¿La fila TRAIA la columna de precio en dolares?
+        //
+        // Hace falta para reimportar sin destruir datos: `priceUSD` arriba vale
+        // null tanto si la columna vino vacia como si el Excel no la tiene. Sin
+        // esta marca, actualizar productos con una plantilla vieja —sin la
+        // columna— borraria el ancla en dolares de todo el catalogo en silencio.
+        // Con la marca: si la columna vino, manda lo que diga (incluso vaciarla
+        // para quitar el ancla); si no vino, no se toca.
+        priceUSDProvided: [
+          row.precio_usd, row.Precio_USD, row.PRECIO_USD,
+          row.precio_dolares, row.Precio_Dolares, row.PRECIO_DOLARES,
+          row.price_usd, row.priceUSD, row.priceUsd,
+        ].some(v => v !== undefined),
         price2: row.precio2 || row.Precio2 || row.PRECIO2 || row.price2 || row.Price2 || row.PRICE2 || null,
         price3: row.precio3 || row.Precio3 || row.PRECIO3 || row.price3 || row.Price3 || row.PRICE3 || null,
         price4: row.precio4 || row.Precio4 || row.PRECIO4 || row.price4 || row.Price4 || row.PRICE4 || null,
