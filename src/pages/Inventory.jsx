@@ -2791,12 +2791,6 @@ export default function Inventory() {
                           </Badge>
                         </div>
 
-                        {/* Equivalencia en presentaciones: "5 × Saco x 49 kg + 5 kg" */}
-                        {isProduct && formatPresentationEquivalence(item, realStock) && (
-                          <p className="text-[11px] text-gray-500 mt-1" style={canExpand ? { paddingLeft: '1.375rem' } : undefined}>
-                            = {formatPresentationEquivalence(item, realStock)}
-                          </p>
-                        )}
                       </div>
 
                       {/* Expandible: Variantes agrupadas por sucursal → almacén */}
@@ -2896,6 +2890,16 @@ export default function Inventory() {
                       {/* Expandible: Stock por almacén/sucursal (productos sin variantes) */}
                       {isExpanded && canExpand && isProduct && !hasVariantsWithStock && (filteredWarehouses.length > 0 || hasBatches) && (
                         <div className="px-4 pb-3 bg-gray-50">
+                          {/* Equivalencia en presentaciones: mismo criterio que la vista de
+                              escritorio — se muestra al expandir, no en la tarjeta. */}
+                          {formatPresentationEquivalence(item, realStock) && (
+                            <p className="text-[11px] text-gray-500 pb-2">
+                              Equivale a{' '}
+                              <span className="font-medium text-gray-700">
+                                {formatPresentationEquivalence(item, realStock)}
+                              </span>
+                            </p>
+                          )}
                           <div className="space-y-2">
                             {(() => {
                               const mainBranchWarehouses = filteredWarehouses.filter(w => !w.branchId)
@@ -3318,12 +3322,6 @@ export default function Inventory() {
                                       {item.isIngredient || !Number.isInteger(realStock) ? Number(realStock).toFixed(2) : realStock}
                                     </span>
                                   )}
-                                  {/* Equivalencia en presentaciones */}
-                                  {isProduct && formatPresentationEquivalence(item, realStock) && (
-                                    <span className="block text-[10px] text-gray-500 font-normal">
-                                      = {formatPresentationEquivalence(item, realStock)}
-                                    </span>
-                                  )}
                                 </div>
                               </div>
                             )
@@ -3488,6 +3486,21 @@ export default function Inventory() {
                                   {filterBranch === 'all' ? 'Stock por Sucursal y Almacén:' : 'Stock por Almacén:'}
                                 </span>
                               </div>
+
+
+                              {/* Equivalencia en presentaciones ("2 x Caja x 100 + 73 und").
+                                  Vive ACA y no en la fila colapsada: ahi competia con el
+                                  numero de stock y ensuciaba cada renglon de la lista. Es un
+                                  detalle que se consulta al abrir el producto, no de un
+                                  vistazo. */}
+                              {formatPresentationEquivalence(item, getRealStock(item)) && (
+                                <p className="text-xs text-gray-500 -mt-1 mb-2">
+                                  Equivale a{' '}
+                                  <span className="font-medium text-gray-700">
+                                    {formatPresentationEquivalence(item, getRealStock(item))}
+                                  </span>
+                                </p>
+                              )}
 
                               {/* Agrupar almacenes por sucursal */}
                               {(() => {

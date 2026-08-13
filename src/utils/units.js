@@ -137,7 +137,14 @@ export function getItemUnitLabel(item, fallback = 'und') {
  * como "5 sacos" que como un número suelto de kilos. Criterio compartido entre
  * Inventario y Productos para que ambos digan lo mismo.
  *
- * - Una línea por presentación con factor > 1, unidas con " · ".
+ * - Se muestra UNA sola presentación: la de mayor factor que entre al menos una
+ *   vez. Antes se listaban todas unidas con " · " y el resultado era ruido: son
+ *   lecturas distintas del MISMO número, así que repetirlas no agrega nada y
+ *   alarga la fila ("3 × 1/2 kg + 1 und · 1 × 1 kg + 3 und" para 7 unidades).
+ *   La de mayor factor es la lectura natural: "2 cajas y sobran 73" dice más que
+ *   "27 blísters y sobran 3".
+ * - Se descartan las presentaciones que no entran ninguna vez. "0 × Caja + 7 und"
+ *   no informa nada —es el mismo 7 que ya está al lado— y ensuciaba la lista.
  * - El sobrante se expresa en la unidad base solo si existe.
  * - Devuelve '' para insumos, productos con variantes (su stock vive en la
  *   variante, no en la base) o sin presentaciones aplicables.
@@ -153,10 +160,17 @@ export function formatPresentationEquivalence(item, stock) {
     .filter(p => Number(p.factor) > 1)
   if (presentaciones.length === 0) return ''
   const base = getUnitShortLabel(item.unit)
-  return presentaciones.map(p => {
-    const factor = Number(p.factor)
-    const enteras = Math.floor(s / factor)
-    const sobra = Number((s - enteras * factor).toFixed(2))
-    return `${enteras} × ${p.name}${sobra > 0 ? ` + ${sobra} ${base}` : ''}`
-  }).join(' · ')
+
+  // De mayor a menor factor: la primera que entre al menos una vez es la que
+  // mejor describe la cantidad.
+  const elegida = [...presentaciones]
+    .sort((a, b) => Number(b.factor) - Number(a.factor))
+    .find(p => Math.floor(s / Number(p.factor)) >= 1)
+
+  if (!elegida) return ''
+
+  const factor = Number(elegida.factor)
+  const enteras = Math.floor(s / factor)
+  const sobra = Number((s - enteras * factor).toFixed(2))
+  return `${enteras} × ${elegida.name}${sobra > 0 ? ` + ${sobra} ${base}` : ''}`
 }
