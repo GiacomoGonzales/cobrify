@@ -12,6 +12,29 @@ export default {
 
   sections: [
     {
+      id: 'leer-pantalla',
+      title: 'Leer la pantalla',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Arriba tienes tres números que resumen tu catálogo: **Total Productos**, **Valor Inventario** (cuánto vale la mercadería que tienes) y **Stock Bajo** (cuántos llegaron a su mínimo y conviene reponer).',
+        },
+        {
+          type: 'texto',
+          text: 'Debajo, los filtros aíslan lo que necesitas mirar: los que están **sin stock**, los de **stock bajo**, los **próximos a vencer**, y los que quedaron **sin categoría** o **sin marca** — útiles para detectar fichas a medio cargar.',
+        },
+        {
+          type: 'consejo',
+          text: 'Con **Columnas visibles** eliges qué datos ver en la tabla. Si trabajas con pocos datos por producto, quitar columnas hace la lista mucho más legible.',
+        },
+        {
+          type: 'ojo',
+          text: 'El **Stock Bajo** no cuenta los productos desactivados. Desactivar es decir "esto ya no se vende", así que seguir alertándolos taparía los que sí hay que reponer.',
+        },
+      ],
+    },
+
+    {
       id: 'crear-producto',
       title: 'Crear un producto',
       blocks: [
@@ -79,6 +102,40 @@ export default {
     },
 
     {
+      id: 'codigo-sunat',
+      title: 'Código de Producto SUNAT',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Aparte de tu código interno, cada producto puede llevar su **Código de Producto SUNAT** (catálogo 25). Es una clasificación oficial: escribes lo que vendes —"helado", "gaseosa", "cemento"— y eliges de la lista que trae el buscador.',
+        },
+        {
+          type: 'ojo',
+          text: 'SUNAT lo va a exigir a partir del **1 de enero de 2027**. La fecha se postergó una vez, así que no hay apuro, pero cargarlo de a poco ahora es mucho más llevadero que hacerlo con todo el catálogo encima a fin de año.',
+        },
+        {
+          type: 'consejo',
+          text: 'La primera vez que abres el buscador tarda un momento: está descargando el catálogo oficial completo. Después responde al instante.',
+        },
+      ],
+    },
+
+    {
+      id: 'imagenes',
+      title: 'Imágenes del producto',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Cada producto admite hasta **5 imágenes**. La primera es la principal: es la que se ve en el punto de venta y en tu catálogo online.',
+        },
+        {
+          type: 'consejo',
+          text: 'Las fotos rinden sobre todo en dos lados: en el POS con vista de cuadrícula, donde el cajero reconoce el producto sin leer, y en el catálogo online, donde son lo que decide la compra.',
+        },
+      ],
+    },
+
+    {
       id: 'unificar-codigos',
       title: 'Unificar códigos (poner todo en un solo sistema)',
       blocks: [
@@ -128,12 +185,46 @@ export default {
     },
 
     {
+      id: 'lotes-series',
+      title: 'Lotes, vencimientos y series',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Son dos controles distintos y cada uno resuelve un problema:',
+        },
+        {
+          type: 'pasos',
+          items: [
+            '**Control de lotes**: la mercadería entra por tandas, cada una con su número de lote y su fecha de vencimiento. Sirve para todo lo que caduca — medicamentos, alimentos, insumos.',
+            '**Control de series**: cada unidad tiene su número único (IMEI, número de serie). Sirve para equipos, celulares, electrodomésticos.',
+          ],
+        },
+        {
+          type: 'ojo',
+          text: 'Con lotes activados, el sistema vende primero el que **vence antes**. No elige el que entró primero ni el más barato: prioriza sacar lo que está por caducar, que es lo que evita pérdidas.',
+        },
+        {
+          type: 'consejo',
+          text: 'El filtro **Próximos a vencer** de esta pantalla te muestra en qué hay que apurarse. Vale la pena mirarlo una vez por semana en vez de descubrirlo cuando ya venció.',
+        },
+      ],
+    },
+
+    {
       id: 'precios',
       title: 'Precios y niveles de precio',
       blocks: [
         {
           type: 'texto',
           text: 'Cada producto tiene su precio de venta. Si tu negocio maneja **niveles de precio** (público, mayorista, VIP), puedes cargarle un precio distinto para cada nivel y elegirlo al vender.',
+        },
+        {
+          type: 'texto',
+          text: 'Con el soporte multi-divisa activo, el precio de cada producto puede cargarse en **soles o en dólares** con el selector que aparece al lado. Un producto en dólares se convierte al cobrar, con el tipo de cambio del día.',
+        },
+        {
+          type: 'texto',
+          text: 'La **Unidad (SUNAT)** de cada producto —unidad, kilogramo, litro, caja— es la que viaja en el comprobante electrónico. Conviene elegirla bien: es un dato que SUNAT lee.',
         },
         {
           type: 'texto',
@@ -217,12 +308,47 @@ export default {
     },
 
     {
+      id: 'catalogo-online',
+      title: 'Qué se ve en tu tienda online',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Si usas el catálogo online, cada producto decide si aparece ahí con **Mostrar en catálogo**, y puedes marcarlo como **Producto destacado** para que salga primero.',
+        },
+        {
+          type: 'consejo',
+          text: 'Destacar sirve mientras sea la excepción. Si destacas la mitad del catálogo, dejas de destacar nada.',
+        },
+      ],
+    },
+
+    {
+      id: 'modificadores',
+      title: 'Modificadores (extras y opciones)',
+      soloModos: ['restaurant'],
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Los **Modificadores** son las opciones que el cliente elige sobre un plato: el término de la carne, sin cebolla, extra queso, el tamaño del vaso. Se configuran en la ficha del producto y aparecen al agregarlo a una orden.',
+        },
+        {
+          type: 'consejo',
+          text: 'Los que suman al precio (extra queso, doble carne) van con su monto: así el mozo no tiene que acordarse de cobrarlos aparte y el ticket sale correcto solo.',
+        },
+      ],
+    },
+
+    {
       id: 'etiquetas',
       title: 'Imprimir etiquetas de código de barras',
       blocks: [
         {
           type: 'texto',
           text: 'Selecciona los productos y usa **Etiquetas**. Eliges el tamaño de etiqueta y cuántas por producto; el sistema arma la hoja lista para imprimir. Con productos que tienen variantes, se imprime una etiqueta por variante.',
+        },
+        {
+          type: 'texto',
+          text: 'Si tienes una **ticketera térmica** conectada al punto de venta, las etiquetas también pueden salir directo por ahí en vez de armar una hoja. En ese caso se configura el **tamaño del papel** y el que tiene puesto el driver de la impresora.',
         },
         {
           type: 'ojo',
