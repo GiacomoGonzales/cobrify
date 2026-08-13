@@ -84,7 +84,7 @@ export const exportProductsForImport = async (products, categories, businessMode
     ? ['nombre_generico', 'concentracion', 'presentacion', 'laboratorio', 'principio_activo', 'accion_terapeutica', 'condicion_venta', 'registro_sanitario']
     : []
   const restHeaders = [
-    'costo', 'precio', 'precio2', 'precio3', 'precio4',
+    'costo', 'precio', 'precio_usd', 'precio2', 'precio3', 'precio4',
     'stock', 'stock_minimo', 'trackStock', 'permitir_decimales',
     'control_vencimiento', 'fecha_vencimiento', 'numero_lote', 'control_series',
     'mostrar_en_catalogo', 'precio_comparacion', 'imagen_url',
@@ -155,6 +155,9 @@ export const exportProductsForImport = async (products, categories, businessMode
             ...emptyPharma,
             isFirst ? safeNum(product.cost) : '',
             isFirst ? safeNum(product.price) : '',
+            // Ancla en dolares, con el MISMO nombre de columna que lee el
+            // importador: exportar -> editar -> reimportar no debe perderlo.
+            isFirst ? safeNum(product.priceUSD) : '',
             isFirst ? safeNum(product.price2) : '',
             isFirst ? safeNum(product.price3) : '',
             isFirst ? safeNum(product.price4) : '',
@@ -198,6 +201,7 @@ export const exportProductsForImport = async (products, categories, businessMode
         ...pharmacyValues,
         safeNum(product.cost),
         safeNum(product.price),
+        safeNum(product.priceUSD),
         safeNum(product.price2),
         safeNum(product.price3),
         safeNum(product.price4),
@@ -294,7 +298,7 @@ export const exportProductsForImport = async (products, categories, businessMode
   const baseWidths = [18, 16, 35, 40, 15, 20, 20, 10]
   const pharmacyWidths = businessMode === 'pharmacy' ? [18, 14, 14, 18, 22, 18, 14, 16] : []
   const restWidths = [
-    10, 10, 10, 10, 10, // costo + precio1..4
+    10, 10, 12, 10, 10, 10, // costo + precio + precio_usd + precio2..4
     10, 12, 12, 18, // stock + stock_minimo + trackStock + permitir_decimales
     18, 16, 14, 14, // control_vencimiento + fecha_vencimiento + numero_lote + control_series
     18, 16, 30, 8, 14, 14, 10, // catálogo + comparación + imagen + peso + ubicación + igv
@@ -309,7 +313,7 @@ export const exportProductsForImport = async (products, categories, businessMode
   // Filas de datos (estilo plano sin colores fuertes — es una plantilla editable)
   // Columnas numéricas: costo (idx según modo), precios, stock, peso, igv, presentaciones, variantes.
   const numericKeyTokens = [
-    'costo', 'precio', 'precio2', 'precio3', 'precio4', 'stock', 'stock_minimo', 'precio_comparacion',
+    'costo', 'precio', 'precio_usd', 'precio2', 'precio3', 'precio4', 'stock', 'stock_minimo', 'precio_comparacion',
     'peso', 'tasa_igv',
     'presentacion1_cantidad', 'presentacion1_precio',
     'presentacion2_cantidad', 'presentacion2_precio',

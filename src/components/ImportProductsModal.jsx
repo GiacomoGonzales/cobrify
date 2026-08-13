@@ -1525,15 +1525,20 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
       ]
     }
 
-    // Multi-divisa: agregar la columna opcional "precio_usd" (precio fijo en dólares).
-    // Solo aparece si el negocio activó multi-divisa; para el resto la plantilla queda igual.
-    if (isMultiCurrencyEnabled(businessSettings)) {
-      template = template.map((row, i) => ({
-        ...row,
-        // Ejemplo solo en la 1ra fila para que se entienda; el resto vacío.
-        precio_usd: i === 0 ? 25 : '',
-      }))
-    }
+    // Columna "precio_usd": precio fijo en dólares.
+    //
+    // Va SIEMPRE, aunque el negocio no tenga multi-divisa activada. Antes solo
+    // aparecía con la opción encendida y eso confundía: el formulario de
+    // producto usa una comprobación laxa y la plantilla una estricta, así que
+    // alguien podía estar cargando precios en dólares producto por producto y
+    // descargar una plantilla donde esa columna no existía, sin ninguna pista de
+    // por qué. Una columna de más es inofensiva —se deja vacía y no pasa nada—;
+    // una columna que falta cuando la necesitas no tiene salida.
+    template = template.map((row, i) => ({
+      ...row,
+      // Ejemplo solo en la 1ra fila para que se entienda; el resto vacío.
+      precio_usd: i === 0 ? 25 : '',
+    }))
 
     const ws = XLSX.utils.json_to_sheet(template)
     const wb = XLSX.utils.book_new()
@@ -1774,12 +1779,16 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           <p className="text-xs text-gray-500 mt-1">
             Columnas básicas: sku, codigo_barras, nombre, descripcion, costo, precio, precio2-4, stock, stock_minimo, trackStock (SI/NO), mostrar_en_catalogo (SI/NO), unidad, categoria, afectacion_igv
           </p>
-          {isMultiCurrencyEnabled(businessSettings) && (
-            <p className="text-xs text-gray-500 mt-1">
-              <strong>Precio en dólares:</strong> usa la columna <code>precio_usd</code> para fijar el precio en USD del producto. En el Punto de Venta, al cobrar en dólares se usará ese precio.
-              Si tu negocio trabaja solo en dólares, puedes dejar <code>precio</code> (soles) <strong>vacío</strong>: se calcula solo con el tipo de cambio del día y se recalcula al vender.
-            </p>
-          )}
+          {/* La explicación acompaña a la columna, que ahora va siempre en la
+              plantilla. Si el negocio todavía no activó multi-divisa se le dice
+              dónde hacerlo, en vez de dejarlo con una columna que no entiende. */}
+          <p className="text-xs text-gray-500 mt-1">
+            <strong>Precio en dólares:</strong> usa la columna <code>precio_usd</code> para fijar el precio en USD del producto. En el Punto de Venta, al cobrar en dólares se usará ese precio.
+            Si tu negocio trabaja solo en dólares, puedes dejar <code>precio</code> (soles) <strong>vacío</strong>: se calcula solo con el tipo de cambio del día y se recalcula al vender.
+            {!isMultiCurrencyEnabled(businessSettings) && (
+              <> Para usarla necesitas activar el soporte multi-divisa en Configuración &gt; Ventas; si no, deja la columna vacía.</>
+            )}
+          </p>
           <p className="text-xs text-gray-500 mt-1">
             <strong>Múltiples códigos de barra para un mismo producto:</strong> en <code>codigo_barras</code> separa los códigos con <code>|</code> (ej: <code>7501|7502|7503</code>).
             El primero queda como código principal y los demás se guardan como alternativos: al escanear cualquiera, se agrega ese mismo producto.
