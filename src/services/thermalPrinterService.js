@@ -9,7 +9,7 @@ import { unitDisplayName } from '@/data/sunatUnits';
 import { getComprobanteBreakdown } from '@/utils/peruUtils';
 import { buildKitchenLines, stationsForOrder } from '@/utils/kitchenComandaFormat';
 import { getSessionMoneyTotals } from '@/utils/cashTotals';
-import { getTicketFooterParts } from '@/utils/ticketFooter';
+import { getTicketFooterParts, justifyTicketText } from '@/utils/ticketFooter';
 
 /**
  * Servicio para manejar impresoras térmicas WiFi/Bluetooth
@@ -1470,10 +1470,15 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
       }
     }
     if (footer.terminos) {
+      // ESC/POS no tiene "justificar": solo izquierda, centro y derecha. Se
+      // reparten los espacios a mano usando el MISMO ancho que los separadores
+      // (format.charsPerLine), que es el que llega justo a los dos bordes en el
+      // papel real. Con un ancho optimista la linea rebalsa, la impresora la
+      // parte, y se ve peor que no justificar.
       printer = printer
         .align('left')
         .text('\n');
-      for (const line of footer.terminos.split(/\r?\n/)) {
+      for (const line of justifyTicketText(footer.terminos, format.charsPerLine)) {
         printer = printer.text(convertSpanishText(line + '\n'));
       }
       printer = printer.align('center');

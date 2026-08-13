@@ -6,6 +6,7 @@
 import { Capacitor } from '@capacitor/core';
 import { getRealPayments } from '@/utils/receivables'
 import { getNotaVentaLegend, wrapLegend } from '@/utils/documentLegends'
+import { justifyTicketText } from '@/utils/ticketFooter'
 import { BleClient, numbersToDataView, numberToUUID } from '@capacitor-community/bluetooth-le';
 import { prepareLogoForPrinting } from './imageProcessingService';
 import { buildKitchenLines } from '@/utils/kitchenComandaFormat';
@@ -1205,10 +1206,13 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
       }
     }
     if (receiptData.ticketTermsText && receiptData.ticketTermsText.trim()) {
+      // Justificado a mano: ESC/POS solo sabe izquierda/centro/derecha. El
+      // ancho es el mismo que usan los separadores de este archivo (58mm: 24,
+      // 80mm: 42), que es el que llega justo a los dos bordes del papel.
       commands.push(ESCPOSCommands.align(0)); // Izquierda
       commands.push(ESCPOSCommands.text('\n'));
-      const termsLines = receiptData.ticketTermsText.trim().split(/\r?\n/);
-      for (const line of termsLines) {
+      const anchoTerminos = paperWidth === 58 ? 24 : 42;
+      for (const line of justifyTicketText(receiptData.ticketTermsText, anchoTerminos)) {
         commands.push(ESCPOSCommands.text(convertSpanishText(line) + '\n'));
       }
       commands.push(ESCPOSCommands.align(1)); // Centro (restaurar)

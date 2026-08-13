@@ -40,3 +40,80 @@ export const getTicketFooterParts = (settings) => {
 
   return { mensaje, terminos }
 }
+
+/**
+ * Justifica un texto para impresión térmica: reparte espacios entre las
+ * palabras para que cada línea llegue al margen derecho.
+ *
+ * POR QUÉ A MANO (caso real, 12-ago-2026): el usuario pidió que sus términos
+ * salgan "ajustados a los extremos". En el ticket HTML basta con
+ * `text-align: justify`, pero la impresión térmica es ESC/POS y ese protocolo
+ * solo conoce izquierda, centro y derecha — no existe un comando de justificar.
+ * La única forma es rellenar con espacios, y se puede porque la impresora usa
+ * ancho de carácter fijo.
+ *
+ * La ÚLTIMA línea de cada párrafo no se justifica: estirarla dejaría palabras
+ * separadas por medio ticket. Es la misma convención de cualquier texto impreso.
+ *
+ * @param {string} texto - Texto a justificar (respeta los saltos de línea)
+ * @param {number} charsPorLinea - Ancho del papel en caracteres (58mm≈32, 80mm≈48)
+ * @returns {string[]} Líneas listas para imprimir
+ */
+export const justifyTicketText = (texto, charsPorLinea = 32) => {
+  const limpio = String(texto || '').trim()
+  if (!limpio) return []
+
+  const ancho = Number(charsPorLinea)
+  if (!Number.isFinite(ancho) || ancho < 8) return limpio.split(/\r?\n/)
+
+  const salida = []
+
+  // Los saltos que escribió el usuario se respetan: cada uno arranca un párrafo.
+  for (const parrafo of limpio.split(/\r?\n/)) {
+    const palabras = parrafo.trim().split(/\s+/).filter(Boolean)
+    if (palabras.length === 0) { salida.push(''); continue }
+
+    // 1) Cortar en líneas por ancho
+    const lineas = []
+    let actual = []
+    for (const palabra of palabras) {
+      const largo = actual.reduce((n, p) => n + p.length, 0) + actual.length + palabra.length
+      if (actual.length === 0) {
+        actual = [palabra]
+      } else if (largo <= ancho) {
+        actual.push(palabra)
+      } else {
+        lineas.push(actual)
+        actual = [palabra]
+      }
+    }
+    if (actual.length) lineas.push(actual)
+
+    // 2) Repartir espacios, salvo en la última línea del párrafo
+    lineas.forEach((linea, i) => {
+      const esUltima = i === lineas.length - 1
+      const textoPlano = linea.join(' ')
+
+      // Una sola palabra no se puede estirar sin partirla por la mitad.
+      if (esUltima || linea.length === 1 || textoPlano.length >= ancho) {
+        salida.push(textoPlano)
+        return
+      }
+
+      const huecos = linea.length - 1
+      const faltan = ancho - linea.reduce((n, p) => n + p.length, 0)
+      const base = Math.floor(faltan / huecos)
+      // El sobrante va a los primeros huecos, como en tipografía.
+      const extra = faltan % huecos
+
+      let out = ''
+      linea.forEach((palabra, j) => {
+        out += palabra
+        if (j < huecos) out += ' '.repeat(base + (j < extra ? 1 : 0))
+      })
+      salida.push(out)
+    })
+  }
+
+  return salida
+}

@@ -1336,8 +1336,11 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
                     lineHeight: '1.3',
                     whiteSpace: 'pre-wrap',
                     padding: '0 2px',
-                    // El contenedor .footer centra todo; acá se vuelve a texto normal
-                    textAlign: 'left',
+                    // El contenedor .footer centra todo; acá se vuelve a texto
+                    // normal y JUSTIFICADO (pedido del usuario: que llegue a
+                    // los dos márgenes). La última línea de cada párrafo no se
+                    // estira: es el comportamiento propio de justify.
+                    textAlign: 'justify',
                   }}
                 >
                   {terminos}
