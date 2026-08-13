@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useDeferredValue } from 'react'
+import { isPurchaseFullyPaid, isPurchasePending } from '@/utils/purchasePayment'
 import { useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import {
@@ -672,7 +673,9 @@ export default function Purchases() {
       }
 
       const paidInstallments = updatedInstallments.filter(i => i.status === 'paid').length
-      const totalPaid = updatedInstallments.reduce((sum, i) => sum + (i.paidAmount || 0), 0)
+      const totalPaid = Math.round(
+        updatedInstallments.reduce((sum, i) => sum + (i.paidAmount || 0), 0) * 100
+      ) / 100
       const allPaid = paidInstallments === updatedInstallments.length
 
       const result = await updatePurchase(getBusinessId(), purchase.id, {
@@ -743,8 +746,13 @@ export default function Purchases() {
       const updatedPayments = [...existingPayments, newPayment]
 
       // Calcular nuevo monto pagado total
-      const newPaidAmount = (registeringPayment.paidAmount || 0) + amount
-      const isPaidInFull = newPaidAmount >= registeringPayment.total
+      // Se redondea a centimos ANTES de comparar y de guardar. Sumar importes
+      // con decimales deja residuos (447.82999999999996 en vez de 447.83) y con
+      // `>=` a secas la compra quedaba grabada como pendiente para siempre,
+      // mostrando 100% pagado. El centimo es la unidad real del dinero.
+      const newPaidAmount = Math.round(((registeringPayment.paidAmount || 0) + amount) * 100) / 100
+      const totalRedondeado = Math.round((registeringPayment.total || 0) * 100) / 100
+      const isPaidInFull = newPaidAmount >= totalRedondeado
 
       const result = await updatePurchase(getBusinessId(), registeringPayment.id, {
         payments: updatedPayments,
@@ -1040,7 +1048,9 @@ export default function Purchases() {
     if (paymentFilter === 'all') return true
     if (paymentFilter === 'contado') return purchase.paymentType === 'contado'
     if (paymentFilter === 'credito') return purchase.paymentType === 'credito'
-    if (paymentFilter === 'pending') return purchase.paymentType === 'credito' && purchase.paymentStatus === 'pending'
+    // Manda el SALDO, no el estado guardado: hay compras saldadas que quedaron
+    // grabadas como 'pending' por el redondeo (ver utils/purchasePayment.js).
+    if (paymentFilter === 'pending') return isPurchasePending(purchase)
     return true
   }
 
@@ -1189,7 +1199,7 @@ export default function Purchases() {
         rows = rows.filter(p => {
           const total = Number(p.total) || 0
           const paid = Number(p.paidAmount) || 0
-          const estado = p.paymentStatus === 'paid'
+          const estado = isPurchaseFullyPaid(p)
             ? 'paid'
             : (paid > 0.01 && paid < total - 0.01 ? 'partial' : 'pending')
           return exportFilters.paymentStatuses.includes(estado)
@@ -1331,7 +1341,10 @@ export default function Purchases() {
   // Si es PEN nativa, getDocumentTotalInBase devuelve el total tal cual.
   const stats = useMemo(() => {
     const filtered = dateFilteredPurchases
-    const pendingPurchases = filtered.filter(p => p.paymentType === 'credito' && p.paymentStatus === 'pending')
+    // Mismo criterio que el filtro: si no queda saldo, no es pendiente. Antes el
+    // contador y el monto se calculaban distinto y una compra saldada aparecia
+    // entre las pendientes sumando cero.
+    const pendingPurchases = filtered.filter(isPurchasePending)
     const pendingAmount = pendingPurchases.reduce((sum, p) => {
       const remainingNative = (p.total || 0) - (p.paidAmount || 0)
       // Convertir el remanente a PEN base usando el TC del documento.
@@ -1684,7 +1697,7 @@ export default function Purchases() {
                     </span>
                     <div>
                       {purchase.paymentType === 'credito' ? (
-                        purchase.paymentStatus === 'paid' ? (
+                        isPurchaseFullyPaid(purchase) ? (
                           <Badge variant="success" className="text-xs">Pagado</Badge>
                         ) : (
                           <Badge variant="warning" className="text-xs">
@@ -1799,7 +1812,7 @@ export default function Purchases() {
                         {purchase.paymentType === 'credito' ? (
                           purchase.creditType === 'cuotas' ? (
                             <div className="flex flex-col items-center">
-                              {purchase.paymentStatus === 'paid' ? (
+                              {isPurchaseFullyPaid(purchase) ? (
                                 <Badge variant="success" className="text-xs">
                                   <CheckCircle className="w-3 h-3 mr-1" />
                                   Pagado
@@ -1813,7 +1826,7 @@ export default function Purchases() {
                             </div>
                           ) : (
                             <div className="flex flex-col items-center">
-                              {purchase.paymentStatus === 'paid' ? (
+                              {isPurchaseFullyPaid(purchase) ? (
                                 <Badge variant="success" className="text-xs">
                                   <CheckCircle className="w-3 h-3 mr-1" />
                                   Pagado
@@ -1934,7 +1947,7 @@ export default function Purchases() {
                       </button>
                     )}
                     {menuPurchase.paymentType === 'credito' &&
-                     menuPurchase.paymentStatus === 'pending' &&
+                     isPurchasePending(menuPurchase) &&
                      menuPurchase.creditType !== 'cuotas' && (
                       <button
                         onClick={() => { openPaymentModal(menuPurchase); setOpenMenuId(null) }}
@@ -2642,7 +2655,7 @@ export default function Purchases() {
             </div>
 
             {/* Botón para agregar pago si aún hay saldo pendiente */}
-            {viewingPayments.paymentStatus === 'pending' && (
+            {isPurchasePending(viewingPayments) && (
               <div className="flex justify-center pt-2">
                 <Button
                   onClick={() => {

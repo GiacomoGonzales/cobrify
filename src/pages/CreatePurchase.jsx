@@ -1871,13 +1871,29 @@ export default function CreatePurchase() {
             purchaseData.paymentStatus = 'paid'
             purchaseData.paidAmount = amounts.total
           }
-          // Preservar pagos parciales existentes si es crédito
-          if (paymentType === 'credito' && originalPurchase?.payments && originalPurchase.payments.length > 0) {
-            purchaseData.payments = originalPurchase.payments
-            purchaseData.paidAmount = originalPurchase.paidAmount || 0
-            // Verificar si ya está pagado completamente
-            if (purchaseData.paidAmount >= amounts.total) {
+          // Preservar lo YA PAGADO cuando sigue siendo crédito.
+          //
+          // El payload nace con paidAmount 0 y estado 'pending' (es lo correcto
+          // para una compra nueva), asi que al editar hay que reponer lo cobrado
+          // o la edicion resucita una deuda ya saldada.
+          //
+          // Antes esto solo corria si la compra tenia ABONOS. Una compra saldada
+          // con "Marcar como pagada" no tiene array de pagos, asi que al editarla
+          // volvia a 0 y reaparecia como pendiente por todo su monto.
+          if (paymentType === 'credito') {
+            if (originalPurchase?.payments?.length > 0) {
+              purchaseData.payments = originalPurchase.payments
+            }
+            purchaseData.paidAmount = originalPurchase?.paidAmount || 0
+            // Redondeo a centimos en AMBOS lados: el total se recalcula desde las
+            // lineas al editar y puede diferir del guardado por milesimas. Sin
+            // esto, una compra saldada quedaba con su monto pagado intacto pero
+            // en estado 'pending' — mostraba 100% y seguia contando como deuda.
+            const pagado = Math.round((purchaseData.paidAmount || 0) * 100) / 100
+            const totalRedondeado = Math.round((amounts.total || 0) * 100) / 100
+            if (pagado >= totalRedondeado && totalRedondeado > 0) {
               purchaseData.paymentStatus = 'paid'
+              purchaseData.paidAt = originalPurchase?.paidAt || new Date()
             }
           }
         }
