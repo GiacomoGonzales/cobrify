@@ -216,6 +216,84 @@ export default {
     },
 
     {
+      id: 'detraccion',
+      title: 'Detracción',
+      blocks: [
+        {
+          type: 'ojo',
+          text: 'La detracción, la retención y los anticipos **solo aparecen cuando el comprobante es Factura**. En boleta y nota de venta no se muestran, porque son regímenes que aplican entre empresas.',
+        },
+        {
+          type: 'texto',
+          text: 'La detracción es el porcentaje que tu cliente **no te paga a ti**, sino que deposita en tu cuenta de detracciones del Banco de la Nación. El total de la factura no cambia: cambia en cuántas partes se cobra.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Marca **Sujeto a Detracción**.',
+            'Elige el **Tipo de Bien/Servicio**. La lista está separada en Bienes y Servicios, y cada tipo ya trae su porcentaje oficial — no lo escribes tú.',
+            'Revisa la **cuenta del Banco de la Nación**. Si la tienes cargada en Configuración como cuenta de tipo Detracciones, se completa sola.',
+            'El resumen te muestra **Total Factura**, **(-) Detracción** y **Neto a Pagar**.',
+          ],
+        },
+        {
+          type: 'consejo',
+          text: 'Cuando el total llega a S/ 700 aparece un aviso al lado de la casilla. Es el monto desde el que SUNAT exige detracción en la mayoría de los casos; sirve de recordatorio, pero el sistema no la marca solo: la decisión es tuya, porque depende del bien o servicio.',
+        },
+        {
+          type: 'texto',
+          text: 'Para transporte de carga y de pasajeros se piden además los datos del viaje, porque esos regímenes los exigen.',
+        },
+      ],
+    },
+
+    {
+      id: 'retencion',
+      title: 'Retención',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Si tu cliente es **agente de retención** designado por SUNAT, al pagarte retiene el **3%** y lo entrega él a SUNAT por tu cuenta. Marca **Operación sujeta a retención** y el sistema muestra cuánto se retiene y el **importe neto a pagar**.',
+        },
+        {
+          type: 'ojo',
+          text: 'El total de la factura **no cambia**: sigue siendo el mismo importe y así viaja a SUNAT. Lo único que cambia es cuánto dinero te entra ahora. Cobrar el neto y anotar el total es lo correcto.',
+        },
+        {
+          type: 'consejo',
+          text: 'No lo marques por costumbre. Solo aplica si ese cliente está designado agente de retención; si no lo es y lo marcas, le estarías descontando un 3% que nadie va a declarar.',
+        },
+      ],
+    },
+
+    {
+      id: 'anticipos',
+      title: 'Facturas de anticipo',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Un anticipo es plata que ya cobraste **antes** de entregar el bien o el servicio. Se factura en dos momentos: primero la factura del anticipo, y después la factura final, donde se descuenta lo ya cobrado para no cobrarlo dos veces.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Al cobrar el adelanto, marca **Factura de anticipo**. La forma de pago pasa sola a Contado: el anticipo es dinero ya recibido, no puede quedar al crédito.',
+            'Cuando entregues y factures el total, marca **Deducir anticipos facturados**.',
+            'El sistema busca las facturas de anticipo **aceptadas** de ese cliente y las lista para que elijas cuáles descontar. También puedes agregarla a mano.',
+          ],
+        },
+        {
+          type: 'ojo',
+          text: 'Las dos casillas son excluyentes: una factura no puede ser un anticipo **y** deducir anticipos al mismo tiempo. Al marcar una, la otra se desmarca sola.',
+        },
+        {
+          type: 'consejo',
+          text: 'Si no aparecen las facturas de anticipo del cliente, revisa que hayas escrito su **RUC** y que esos anticipos ya estén **aceptados por SUNAT**. Los rechazados o pendientes no se ofrecen.',
+        },
+      ],
+    },
+
+    {
       id: 'medios-pago',
       title: 'Medios de pago: contado, crédito y pago dividido',
       blocks: [
