@@ -12,6 +12,54 @@ export default {
 
   sections: [
     {
+      id: 'empieza-aca',
+      title: 'Empieza por acá',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Si es tu primera vez, esta es la puerta de entrada. El sistema se organiza en cuatro cosas, y casi todo lo que vas a hacer cae en una de ellas:',
+        },
+        {
+          type: 'pasos',
+          items: [
+            '**Vender** — el Punto de Venta, donde emites boletas, facturas y notas de venta.',
+            '**Tu mercadería** — Productos e Inventario: qué vendes, a qué precio y cuánto te queda.',
+            '**Tu dinero** — Caja, Gastos y Reportes: qué entró, qué salió y cuánto ganaste.',
+            '**Tus documentos** — Ventas, Compras y todo lo que viaja a SUNAT.',
+          ],
+        },
+        {
+          type: 'consejo',
+          text: 'El orden que menos problemas da al empezar: primero carga tus **productos** con su precio y su stock, después haz una **venta de prueba** en el POS, y recién ahí ajusta la Configuración. Configurar antes de vender lleva a activar cosas que todavía no sabes si necesitas.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/manual/productos',
+          label: '1. Cargar mis productos',
+        },
+        {
+          type: 'enlace',
+          to: '/app/manual/pos',
+          label: '2. Hacer mi primera venta',
+        },
+        {
+          type: 'enlace',
+          to: '/app/manual/caja',
+          label: '3. Abrir y cerrar la caja del día',
+        },
+        {
+          type: 'texto',
+          text: 'Cada pantalla del sistema tiene su propia guía: el botón **?** del encabezado abre la que corresponde a donde estás parado. En **Manual de uso**, en el menú lateral, están todas juntas y con buscador.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/manual',
+          label: 'Ver el manual completo',
+        },
+      ],
+    },
+
+    {
       id: 'tarjetas',
       title: 'Las cuatro tarjetas de arriba',
       blocks: [
@@ -72,7 +120,44 @@ export default {
         },
         {
           type: 'texto',
-          text: 'El ojo junto a **Ventas del Día** oculta los montos en pantalla, útil cuando alguien está mirando. Y en Configuración puedes ocultar los datos del Dashboard a los sub-usuarios, para que un cajero no vea las cifras del negocio.',
+          text: 'El ojo junto a **Ventas del Día** oculta los montos en pantalla, útil cuando alguien está mirando por encima del hombro. Los reemplaza por asteriscos sin tocar ningún dato.',
+        },
+        {
+          type: 'ojo',
+          text: 'Ese ojo **se queda como lo dejaste** en ese equipo, incluso si cierras sesión. Si un día entras y todo aparece en asteriscos, no se rompió nada: quedó oculto de antes. Vuelve a tocarlo.',
+        },
+        {
+          type: 'texto',
+          text: 'Aparte, puedes ocultarle a tus **sub-usuarios** los datos del Dashboard, para que un cajero pueda vender sin ver las cifras del negocio.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=documentos&opcion=hideDashboardDataFromSecondary',
+          label: 'Ocultar el Dashboard a los sub-usuarios',
+        },
+        {
+          type: 'texto',
+          text: 'Y si un usuario está asignado como **vendedor**, el Dashboard le muestra solo sus propias ventas. No es un error ni un permiso mal puesto: es para que cada vendedor mida lo suyo.',
+        },
+      ],
+    },
+
+    {
+      id: 'moneda',
+      title: 'Si vendes en dólares',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Con el soporte multi-divisa activo, las tarjetas pueden mostrar una línea extra: **+ $ X USD (incluido en el total)**. No es un monto aparte que haya que sumar — es cuánto de ese total se cobró en dólares, convertido y ya contado adentro.',
+        },
+        {
+          type: 'texto',
+          text: 'Puedes elegir en qué moneda quieres leer el Dashboard y los reportes. Es solo la moneda en que **se muestran** los números: no cambia nada de lo emitido ni de lo declarado.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=ventas&opcion=reportsCurrency',
+          label: 'Elegir la moneda de mis reportes',
         },
       ],
     },

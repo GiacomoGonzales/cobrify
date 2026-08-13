@@ -5806,7 +5806,10 @@ export default function Settings() {
                       </div>
 
                       <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                        <label
+                          id="opcion-reportsCurrency"
+                          className="block text-xs font-medium text-gray-700 mb-1.5 scroll-mt-24"
+                        >
                           Moneda de reportes y dashboard
                         </label>
                         <div className="flex gap-2">
@@ -6627,6 +6630,7 @@ export default function Settings() {
 
                 <div className="space-y-4">
                   <SettingToggle
+                    id="opcion-hideDashboardDataFromSecondary"
                     checked={hideDashboardDataFromSecondary}
                     onChange={e => setHideDashboardDataFromSecondary(e.target.checked)}
                     title="Ocultar totales y datos sensibles a usuarios secundarios"
