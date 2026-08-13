@@ -163,49 +163,113 @@ export default {
     },
 
     {
-      id: 'variantes-presentaciones',
-      title: 'Variantes y presentaciones',
+      id: 'variantes',
+      title: 'Variantes: el mismo producto en versiones',
       blocks: [
         {
           type: 'texto',
-          text: 'Son dos cosas distintas y conviene no mezclarlas:',
+          text: 'Una variante es el mismo artículo en versiones que se cuentan **por separado**: tallas, colores, medidas. Primero defines los **atributos** que las distinguen (Talla, Color) y después cargas cada combinación.',
         },
         {
           type: 'pasos',
           items: [
-            '**Variantes**: el mismo producto en versiones que se cuentan por separado (talla, color). Cada variante lleva su propio stock y puede tener su propio precio.',
-            '**Presentaciones**: distintas formas de vender la misma mercadería (unidad, caja x24, docena). Comparten el stock, y el sistema descuenta las unidades que corresponden según el factor.',
+            'Cada variante lleva su **precio** y su **stock** propios, independientes de las demás.',
+            'También su **SKU** y su **código de barras**. Si no los escribes, el sistema le asigna un número de 7 dígitos y lo usa para los dos: es lo que imprime la etiqueta y lo que lee el escáner.',
+            'El **precio del producto padre** funciona como referencia; en el POS se cobra el de la variante elegida.',
           ],
         },
         {
+          type: 'ojo',
+          text: 'El código de una variante es **suyo, no derivado del producto padre**. Dos variantes nunca comparten número: si compartieran, el escáner no podría distinguir la talla M de la L y descontaría la que no es.',
+        },
+        {
           type: 'consejo',
-          text: 'Regla práctica: si al vender uno se agota el otro, es **presentación**. Si son artículos que se cuentan aparte, son **variantes**.',
+          text: 'Al vender, tocar el producto abre la ventana para elegir la variante. Si escaneas su código de barras se agrega directo, sin pasar por esa ventana — para tiendas de ropa es la diferencia entre atender rápido o no.',
+        },
+        {
+          type: 'ojo',
+          text: 'El stock del producto es la **suma** del de sus variantes. Si ves un total que no cuadra, revisa variante por variante: el descuadre siempre está en una de ellas, no en el total.',
         },
       ],
     },
 
     {
-      id: 'lotes-series',
-      title: 'Lotes, vencimientos y series',
+      id: 'presentaciones',
+      title: 'Presentaciones: distintas formas de vender lo mismo',
       blocks: [
         {
           type: 'texto',
-          text: 'Son dos controles distintos y cada uno resuelve un problema:',
+          text: 'Una presentación es otra manera de vender **la misma mercadería**: unidad, blíster de 10, caja de 24. Todas comparten un único stock, contado en la unidad base.',
+        },
+        {
+          type: 'texto',
+          text: 'Lo que las define es el **factor**: cuántas unidades base entrega esa presentación. Una caja con factor 24 descuenta 24 del stock cada vez que vendes una.',
         },
         {
           type: 'pasos',
           items: [
-            '**Control de lotes**: la mercadería entra por tandas, cada una con su número de lote y su fecha de vencimiento. Sirve para todo lo que caduca — medicamentos, alimentos, insumos.',
-            '**Control de series**: cada unidad tiene su número único (IMEI, número de serie). Sirve para equipos, celulares, electrodomésticos.',
+            'Cada presentación tiene su **nombre**, su **factor**, su **precio** y su **unidad SUNAT** (la que viaja en el comprobante).',
+            'Al vender eliges la presentación y el precio se ajusta solo.',
+            'El sistema te muestra el stock también en presentaciones: "3 cajas y sobran 5 unidades".',
           ],
         },
         {
+          type: 'consejo',
+          text: 'La regla para no confundirlas con variantes: si al vender una **se agota la otra**, son presentaciones. Si se cuentan aparte, son variantes. Una caja de gaseosas y la gaseosa suelta comparten stock; una polera M y una L, no.',
+        },
+        {
           type: 'ojo',
-          text: 'Con lotes activados, el sistema vende primero el que **vence antes**. No elige el que entró primero ni el más barato: prioriza sacar lo que está por caducar, que es lo que evita pérdidas.',
+          text: 'El precio de la presentación es **independiente**: el sistema no lo calcula multiplicando por el factor. Eso es a propósito —la caja casi siempre sale más barata por unidad— pero significa que si subes el precio unitario, los de las cajas **no se actualizan solos**.',
+        },
+      ],
+    },
+
+    {
+      id: 'lotes-vencimiento',
+      title: 'Lotes y vencimientos',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Con el **control de lotes** la mercadería entra por tandas: cada compra registra su número de lote y su fecha de vencimiento. Un mismo producto convive con varios lotes a la vez, cada uno con su cantidad y su fecha.',
+        },
+        {
+          type: 'ojo',
+          text: 'Al vender, el sistema descuenta del lote que **vence primero** (lo que se conoce como FEFO). No del que entró primero ni del más barato: prioriza sacar lo que está por caducar, que es lo que evita pérdidas. Si eliges un lote a mano, respeta tu elección y solo aplica esa regla al resto.',
+        },
+        {
+          type: 'texto',
+          text: 'El sistema clasifica cada lote según cuánto le falta: **vencido**, **vence hoy**, y avisos a partir de **30, 60 y 90 días**. Los verás en el filtro **Próximos a vencer** de esta pantalla y en las alertas de vencimiento.',
+        },
+        {
+          type: 'ojo',
+          text: 'Un lote **vencido no se puede vender**: el sistema lo bloquea en el punto de venta. No es un aviso que se pueda saltar, así que conviene mirar las alertas antes de que un lote llegue a esa fecha, no después.',
         },
         {
           type: 'consejo',
-          text: 'El filtro **Próximos a vencer** de esta pantalla te muestra en qué hay que apurarse. Vale la pena mirarlo una vez por semana en vez de descubrirlo cuando ya venció.',
+          text: 'Si tienes varios almacenes, cada lote sabe en cuál está. Así el descuento sale del lote que efectivamente está en el almacén desde el que vendes.',
+        },
+      ],
+    },
+
+    {
+      id: 'series',
+      title: 'Números de serie',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'El **control de series** es para productos donde cada unidad es única e identificable: celulares con su IMEI, equipos con su número de serie, herramientas con garantía individual.',
+        },
+        {
+          type: 'texto',
+          text: 'A diferencia del lote —que agrupa muchas unidades iguales—, acá cada unidad tiene su propio número. Al vender eliges cuál sale, y esa serie queda ligada al comprobante.',
+        },
+        {
+          type: 'consejo',
+          text: 'Es lo que te permite responder "¿este equipo lo vendí yo?" con el comprobante en la mano. Para garantías y postventa vale el trabajo extra de cargarlas.',
+        },
+        {
+          type: 'ojo',
+          text: 'Una serie ya vendida no vuelve a ofrecerse, y una que ya está en el carrito tampoco: no se puede vender dos veces la misma unidad. Si una serie "no aparece", casi siempre es porque ya se vendió o está en otra venta abierta.',
         },
       ],
     },
