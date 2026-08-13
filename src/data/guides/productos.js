@@ -369,6 +369,22 @@ export default {
           type: 'ojo',
           text: 'Cuando pegues nombres desde Excel, ojo con los espacios y saltos de línea invisibles que se copian junto al texto: desordenan la lista alfabética. El sistema los limpia al guardar, pero si ves productos ordenados raro, casi siempre es eso.',
         },
+        {
+          type: 'texto',
+          text: 'Si trabajas con **precios fijos en dólares**, la plantilla trae la columna **precio_usd** (aparece solo si tienes el soporte multi-divisa activado). Ahí pones el precio en dólares de cada producto.',
+        },
+        {
+          type: 'consejo',
+          text: 'La columna **precio** (soles) puede quedar **vacía** en esos productos: al vender, el sistema calcula los soles con el tipo de cambio del momento. Si prefieres, llénala igual como respaldo — se usa solo si en ese momento no hay tipo de cambio disponible.',
+        },
+        {
+          type: 'ojo',
+          text: 'Anclar al dólar significa que **el dólar manda**: el producto vale siempre esos dólares, y lo que se mueve es el monto en soles cuando cambia el tipo de cambio. Si lo que quieres es un precio fijo en soles, no uses esa columna.',
+        },
+        {
+          type: 'consejo',
+          text: 'Si tu Excel viene de otro sistema, el importador también reconoce la columna como **precio_dolares** o **price_usd**, en mayúsculas o minúsculas. No hace falta renombrarla a mano.',
+        },
       ],
     },
 
