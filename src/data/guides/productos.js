@@ -34,6 +34,28 @@ export default {
           type: 'consejo',
           text: 'Si vendes servicios (mano de obra, consultas, fletes), marca **Este producto es un servicio**: no se le lleva stock.',
         },
+        {
+          type: 'texto',
+          text: 'Hay dos campos que no vienen activados y que conviene conocer. La **ubicación física en el almacén** (pasillo, estante, góndola) le ahorra vueltas a quien va a buscar la mercadería, y sale en los reportes de inventario.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=preferencias&opcion=enableProductLocation',
+          label: 'Habilitar la ubicación de productos',
+        },
+        {
+          type: 'texto',
+          text: 'Y la **edición manual del stock**, que permite corregir la cantidad escribiéndola directamente en la ficha del producto.',
+        },
+        {
+          type: 'ojo',
+          text: 'Esa segunda viene apagada por algo: al escribir el stock a mano **no queda registrado de dónde salió la diferencia**. Para ajustes reales es mejor usar Inventario, que deja el movimiento con su motivo. Actívala solo si sabes que la vas a necesitar.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=preferencias&opcion=enableManualStockEdit',
+          label: 'Permitir editar el stock manualmente',
+        },
       ],
     },
 
@@ -118,8 +140,52 @@ export default {
           text: 'También defines la **afectación IGV** del producto: Gravado, Exonerado, Inafecto o Gratuito. Eso determina cómo se calcula el impuesto en el comprobante, así que conviene revisarlo con tu contador si tienes dudas.',
         },
         {
+          type: 'enlace',
+          to: '/app/configuracion?tab=ventas&opcion=multiplePricesEnabled',
+          label: 'Configurar mis niveles de precio',
+        },
+        {
           type: 'texto',
-          text: 'Para cambiar precios de muchos productos a la vez está **Actualizar precios**, en el menú **Opciones** de la cabecera: puedes subir o bajar por porcentaje, o editar en lote.',
+          text: 'La afectación con la que **nacen** los productos nuevos también se configura: si vendes mayormente exonerado, ponla por defecto y te ahorras corregirla uno por uno.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=preferencias&opcion=defaultTaxAffectation',
+          label: 'Afectación IGV por defecto',
+        },
+        {
+          type: 'texto',
+          text: 'Para cambiar precios de muchos productos a la vez está **Actualizar precios**, en el menú **Opciones** de la cabecera: se abre una tabla donde ves costo, precio y **margen** de cada producto y los editas de corrido.',
+        },
+      ],
+    },
+
+    {
+      id: 'calculo-precios',
+      title: 'Cómo se calculan tus precios',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Dentro de **Actualizar precios** decides cómo quieres trabajar tus precios, y esa elección se guarda para todo el catálogo. Es la parte que más confusión genera, así que vale entenderla una vez:',
+        },
+        {
+          type: 'pasos',
+          items: [
+            '**Desde el costo**: escribes el costo y un porcentaje, y el precio se calcula solo. Útil si compras y revendes.',
+            '**Desde el precio público**: escribes el precio final y los demás niveles salen como un descuento sobre él.',
+          ],
+        },
+        {
+          type: 'ojo',
+          text: 'Si trabajas desde el costo, elige bien la **fórmula del margen**, porque el mismo porcentaje da precios distintos: **Recargo sobre el costo** calcula Precio = Costo × (1 + %), mientras que **Margen sobre la venta** apunta a que ese % sea tu ganancia sobre el precio final. Un 30% no significa lo mismo en las dos.',
+        },
+        {
+          type: 'consejo',
+          text: 'Los productos **sin costo cargado no calculan nada**. Es el mismo motivo por el que los reportes de utilidad salen en cero: sin costo no hay margen que sacar.',
+        },
+        {
+          type: 'texto',
+          text: 'También puedes definir **precio automático por cantidad**: que a partir de cierta cantidad el producto se cobre más barato, sin que el cajero tenga que acordarse.',
         },
       ],
     },
@@ -176,6 +242,68 @@ export default {
         {
           type: 'ojo',
           text: 'Cuando pegues nombres desde Excel, ojo con los espacios y saltos de línea invisibles que se copian junto al texto: desordenan la lista alfabética. El sistema los limpia al guardar, pero si ves productos ordenados raro, casi siempre es eso.',
+        },
+      ],
+    },
+
+    {
+      id: 'sucursales',
+      title: 'Un catálogo, varias sucursales',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'El catálogo es uno solo, pero puede comportarse distinto en cada local.',
+        },
+        {
+          type: 'texto',
+          text: '**Precios por sucursal**: el mismo producto puede costar distinto en cada sede. Los que no tengan precio propio en esa sucursal usan el precio general, así que no hace falta cargar todo dos veces — solo lo que cambia.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=ventas&opcion=branchPricingEnabled',
+          label: 'Activar precios por sucursal',
+        },
+        {
+          type: 'texto',
+          text: '**Catálogo por sucursal**: puedes ocultar productos en los locales donde no se venden, con la acción masiva **Asignar sucursales**.',
+        },
+        {
+          type: 'ojo',
+          text: 'Ocultar un producto **no mueve ni borra su stock**: solo deja de mostrarse en esa sede. Si ahí tenía mercadería, sigue estando en el inventario y en los reportes. Esconder no es descontar.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=ventas&opcion=branchCatalogEnabled',
+          label: 'Activar catálogo por sucursal',
+        },
+      ],
+    },
+
+    {
+      id: 'farmacia',
+      title: 'Datos de farmacia',
+      soloModos: ['pharmacy'],
+      blocks: [
+        {
+          type: 'texto',
+          text: 'En modo farmacia la ficha del producto suma los campos del rubro: la **Denominación Común Internacional** (el principio activo), la **concentración**, la **presentación**, el **registro sanitario** y el **laboratorio**.',
+        },
+        {
+          type: 'consejo',
+          text: 'El **laboratorio** es el que más rinde en el día a día: es lo que distingue dos productos con el mismo nombre y la misma concentración. Aparece junto al producto en el buscador del punto de venta, y también al registrar compras y cotizaciones.',
+        },
+        {
+          type: 'texto',
+          text: 'Los laboratorios se cargan una vez en la página **Laboratorios** y después se eligen de una lista, así no se escriben distinto cada vez.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/laboratorios',
+          label: 'Administrar mis laboratorios',
+        },
+        {
+          type: 'ojo',
+          text: 'Para el control de vencimientos, lo que manda es el **lote** con su fecha, no el producto. Un mismo medicamento tiene lotes que vencen en fechas distintas y el sistema vende primero el que vence antes.',
         },
       ],
     },

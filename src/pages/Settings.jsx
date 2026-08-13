@@ -3774,6 +3774,7 @@ export default function Settings() {
                 <div className="space-y-3">
                   {/* Ubicación de productos */}
                   <SettingToggle
+                    id="opcion-enableProductLocation"
                     checked={enableProductLocation}
                     onChange={(e) => setEnableProductLocation(e.target.checked)}
                     title="Habilitar ubicación de productos"
@@ -3784,6 +3785,7 @@ export default function Settings() {
 
                   {/* Edición manual de stock desde el modal de productos e insumos */}
                   <SettingToggle
+                    id="opcion-enableManualStockEdit"
                     checked={enableManualStockEdit}
                     onChange={(e) => setEnableManualStockEdit(e.target.checked)}
                     title="Permitir editar stock manualmente (productos e insumos)"
@@ -3803,7 +3805,10 @@ export default function Settings() {
                   )}
 
                   {/* Afectación IGV por defecto al crear productos */}
-                  <div className="flex items-start justify-between gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div
+                    id="opcion-defaultTaxAffectation"
+                    className="flex items-start justify-between gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200 scroll-mt-24"
+                  >
                     <div className="flex-1">
                       <p className="font-medium text-gray-900">Afectación IGV por defecto</p>
                       <p className="text-sm text-gray-600 mt-0.5">
