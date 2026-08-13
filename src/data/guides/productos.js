@@ -187,6 +187,14 @@ export default {
           text: 'Al vender, tocar el producto abre la ventana para elegir la variante. Si escaneas su código de barras se agrega directo, sin pasar por esa ventana — para tiendas de ropa es la diferencia entre atender rápido o no.',
         },
         {
+          type: 'texto',
+          text: '**Ejemplo — tienda de ropa.** Vendes un *Polo Piqué*. Defines dos atributos, **Talla** y **Color**, y cargas las combinaciones que manejas: Talla M Rojo con 12 unidades, Talla M Azul con 8, Talla L Rojo con 5. Cada una con su código.',
+        },
+        {
+          type: 'texto',
+          text: 'Si vendes un Polo M Rojo, baja **solo** ese: quedan 11 M Rojo, y los 8 M Azul siguen intactos. El producto "Polo Piqué" muestra 24 en total, que es la suma de las tres.',
+        },
+        {
           type: 'ojo',
           text: 'El stock del producto es la **suma** del de sus variantes. Si ves un total que no cuadra, revisa variante por variante: el descuadre siempre está en una de ellas, no en el total.',
         },
@@ -218,6 +226,18 @@ export default {
           text: 'La regla para no confundirlas con variantes: si al vender una **se agota la otra**, son presentaciones. Si se cuentan aparte, son variantes. Una caja de gaseosas y la gaseosa suelta comparten stock; una polera M y una L, no.',
         },
         {
+          type: 'texto',
+          text: '**Ejemplo — minimarket.** Una *Gaseosa 500 ml* que compras por caja y vendes suelta. La unidad base es la botella, y cargas tres presentaciones: **Unidad** (factor 1, S/ 2.50), **Six pack** (factor 6, S/ 13.00) y **Caja** (factor 24, S/ 48.00).',
+        },
+        {
+          type: 'texto',
+          text: 'Tienes 100 botellas. Vendes una caja: el stock baja a **76**, y la pantalla te lo muestra como "3 cajas y sobran 4". No hay tres stocks distintos — hay uno solo, contado en botellas.',
+        },
+        {
+          type: 'consejo',
+          text: 'Fíjate en los números del ejemplo: 24 botellas sueltas serían S/ 60, pero la caja cuesta S/ 48. Esa diferencia es justamente el motivo de vender por presentación, y la razón de que el precio no se calcule multiplicando.',
+        },
+        {
           type: 'ojo',
           text: 'El precio de la presentación es **independiente**: el sistema no lo calcula multiplicando por el factor. Eso es a propósito —la caja casi siempre sale más barata por unidad— pero significa que si subes el precio unitario, los de las cajas **no se actualizan solos**.',
         },
@@ -235,6 +255,14 @@ export default {
         {
           type: 'ojo',
           text: 'Al vender, el sistema descuenta del lote que **vence primero** (lo que se conoce como FEFO). No del que entró primero ni del más barato: prioriza sacar lo que está por caducar, que es lo que evita pérdidas. Si eliges un lote a mano, respeta tu elección y solo aplica esa regla al resto.',
+        },
+        {
+          type: 'texto',
+          text: '**Ejemplo — farmacia.** Del *Paracetamol 500 mg* tienes dos lotes: el **A2401** con 40 unidades que vence en marzo de 2027, y el **B2405** con 25 que vence en noviembre de 2026. En total, 65 unidades.',
+        },
+        {
+          type: 'texto',
+          text: 'Vendes 30. El sistema toma primero las **25 del lote B2405** —el que vence antes— y las 5 que faltan del A2401. Te quedan 35: cero del B y 35 del A. Así el lote que estaba por caducar sale del inventario antes de vencerse.',
         },
         {
           type: 'texto',
@@ -264,8 +292,16 @@ export default {
           text: 'A diferencia del lote —que agrupa muchas unidades iguales—, acá cada unidad tiene su propio número. Al vender eliges cuál sale, y esa serie queda ligada al comprobante.',
         },
         {
+          type: 'texto',
+          text: '**Ejemplo — tienda de celulares.** Tienes 3 unidades del mismo modelo, pero no son intercambiables: cada una es un IMEI distinto. Los cargas como series (357…001, 357…002, 357…003) y el stock queda en 3.',
+        },
+        {
+          type: 'texto',
+          text: 'Al vender eliges cuál se lleva el cliente —digamos el 357…002— y esa serie queda grabada en su boleta. El stock baja a 2, y ese IMEI ya no se ofrece nunca más.',
+        },
+        {
           type: 'consejo',
-          text: 'Es lo que te permite responder "¿este equipo lo vendí yo?" con el comprobante en la mano. Para garantías y postventa vale el trabajo extra de cargarlas.',
+          text: 'Meses después el cliente vuelve por garantía con el equipo en la mano: buscas ese IMEI y aparece la venta, con su fecha y su comprobante. Eso es lo que las series compran.',
         },
         {
           type: 'ojo',
