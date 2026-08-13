@@ -372,11 +372,6 @@ export default {
         },
         {
           type: 'consejo',
-          soloModos: ['veterinary'],
-          text: 'Esos campos de medicamento hoy se cargan **solo por importación**: la ficha del producto todavía no los muestra en modo veterinaria. Si los necesitas para todo tu catálogo, la vía es el Excel.',
-        },
-        {
-          type: 'consejo',
           text: 'Exportar y volver a importar es la forma más cómoda de hacer cambios masivos: bajas tu catálogo, lo editas en Excel y lo subes. El archivo exportado usa las mismas columnas que espera la importación, así que el ida y vuelta no pierde datos.',
         },
         {
@@ -437,12 +432,12 @@ export default {
 
     {
       id: 'farmacia',
-      title: 'Datos de farmacia',
-      soloModos: ['pharmacy'],
+      title: 'Datos del medicamento',
+      soloModos: ['pharmacy', 'veterinary'],
       blocks: [
         {
           type: 'texto',
-          text: 'En modo farmacia la ficha del producto suma los campos del rubro: la **Denominación Común Internacional** (el principio activo), la **concentración**, la **presentación**, el **registro sanitario** y el **laboratorio**.',
+          text: 'La ficha del producto suma los campos del rubro: la **Denominación Común Internacional** (el principio activo), la **concentración**, la **presentación**, el **registro sanitario**, la **condición de venta** y el **laboratorio**.',
         },
         {
           type: 'consejo',
