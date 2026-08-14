@@ -24,7 +24,17 @@ import { DEMO_CATALOG_DATA, DEMO_RESTAURANT_DATA } from '@/components/catalog/ca
 import { getCatalogThemeClasses, getCatalogAccent, getCatalogTheme } from '@/themes/catalogThemes'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { collection, query, where, getDocs, doc, getDoc, orderBy, limit, startAfter, documentId } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+// CATALOGO = catalogDb (SIN cache persistente), a proposito (14-ago-2026):
+// la instancia principal `db` usa persistencia multi-pestana en IndexedDB, y
+// cuando esa cache se corrompe Firestore revienta con "INTERNAL ASSERTION
+// FAILED" ASINCRONO (no lo atrapa ningun try/catch) y el catalogo queda en
+// esqueletos para siempre — le paso al dueno con varias pestanas abiertas.
+// Un catalogo es una visita efimera: la cache persistente no le aporta nada.
+// El alias `catalogDb as db` cubre todos los usos del archivo sin renombrar.
+// OJO: las reglas de orders/tables/counters del catalogo son agnosticas al
+// auth (chequean catalogEnabled + campos), asi que leer/escribir con la
+// sesion del COMPRADOR (catalogAuth) o sin sesion funciona igual que antes.
+import { catalogDb as db } from '@/lib/firebase'
 import { getCatalogMinQty, formatCurrency } from '@/lib/utils'
 import { isMultiCurrencyEnabled, convertFromBase, normalizeCurrency, BASE_CURRENCY } from '@/utils/currency'
 import { getRateForDate } from '@/services/exchangeRateService'

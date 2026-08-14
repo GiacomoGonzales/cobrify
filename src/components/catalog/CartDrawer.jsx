@@ -5,7 +5,9 @@
 // lógica; solo se hicieron explícitos los imports.
 import { useState, useEffect } from 'react'
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, setDoc } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+// Ver nota en CatalogoPublico.jsx: el catalogo usa catalogDb (sin cache
+// persistente) para no compartir el IndexedDB multi-pestana de la app.
+import { catalogDb as db } from '@/lib/firebase'
 import { getCatalogAccent } from '@/themes/catalogThemes'
 import { optimizeImageUrl } from '@/utils/cloudinary'
 import { formatCurrency } from '@/lib/utils'
