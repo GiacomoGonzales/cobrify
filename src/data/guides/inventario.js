@@ -39,6 +39,34 @@ export default {
     },
 
     {
+      id: 'donde-vive-el-stock',
+      title: 'Dónde vive el stock',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Antes de mover nada conviene tener claro esto, porque explica casi todas las dudas de esta pantalla: **el stock no vive en la sucursal, vive en el almacén**.',
+        },
+        {
+          type: 'texto',
+          text: 'La **sucursal** es el local: decide con qué serie sale el comprobante y a qué caja entra la plata. El **almacén** es dónde está guardada la mercadería: decide de dónde se descuenta. Una sucursal puede tener varios almacenes —mostrador, depósito, trastienda— y el total de un producto es la **suma** de todos.',
+        },
+        {
+          type: 'ojo',
+          text: 'Por eso el mismo producto puede figurar **con stock en un almacén y sin stock en otro**, y no es un error. Si en el punto de venta dice agotado y vos lo estás viendo en el depósito, el sistema tiene razón: está mirando el almacén desde el que vendés. Se resuelve con una **transferencia**.',
+        },
+        {
+          type: 'consejo',
+          text: 'El selector de **Almacén** de esta pantalla cambia todo lo que ves. Si un número no cuadra, revisá primero en qué almacén estás parado — antes de buscar el problema en otro lado.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/manual/almacenes',
+          label: 'Ver la diferencia con un ejemplo completo',
+        },
+      ],
+    },
+
+    {
       id: 'merma',
       title: 'Registrar una merma o pérdida',
       blocks: [

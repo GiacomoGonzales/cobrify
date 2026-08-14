@@ -12,6 +12,48 @@ export default {
 
   sections: [
     {
+      id: 'sucursal-vs-almacen',
+      title: 'Sucursal y almacén: qué es cada uno',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Es la confusión más común del sistema, y se resuelve con una línea: **la sucursal es el local; el almacén es dónde está guardada la mercadería**.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'La **sucursal** responde *¿desde dónde vendo?* — decide con qué **serie** sale el comprobante y a qué **caja** entra la plata.',
+            'El **almacén** responde *¿de dónde sale la mercadería?* — decide de dónde se **descuenta el stock**.',
+          ],
+        },
+        {
+          type: 'texto',
+          text: 'Una sucursal puede tener **varios almacenes**. Al revés no: un almacén pertenece a una sola sucursal.',
+        },
+        {
+          type: 'ojo',
+          text: 'El stock **nunca vive en la sucursal, vive en el almacén**. Cuando alguien dice "tengo 50 polos", en realidad tiene 30 en un almacén y 20 en otro: el total es la suma, y al vender el sistema descuenta de **uno** en concreto.',
+        },
+        {
+          type: 'texto',
+          text: '**Un ejemplo.** Una tienda de ropa con dos locales: *Sucursal Centro* con los almacenes **Mostrador Centro** y **Depósito Centro**, y *Sucursal Surco* con su **Mostrador Surco**.',
+        },
+        {
+          type: 'texto',
+          text: 'Vendes un polo en Centro, desde el mostrador. Pasan tres cosas, cada una por su lado: el comprobante sale con la **serie de Centro**, la plata entra a la **caja de Centro** —las dos las decide la sucursal— y el stock baja del **Mostrador Centro**, que lo decide el almacén. El Depósito Centro no se toca, aunque esté en el mismo local.',
+        },
+        {
+          type: 'consejo',
+          text: 'La regla para configurarlo sin equivocarse: **sucursal = otra dirección**; **almacén = un lugar donde guardas cosas** (mostrador, depósito, trastienda, la camioneta).',
+        },
+        {
+          type: 'ojo',
+          text: 'De acá sale el reclamo más repetido: *"dice sin stock pero lo tengo, lo estoy viendo"*. Y es verdad: lo tiene, pero **en el depósito**, y está vendiendo desde el mostrador. El sistema no se equivoca — mira el almacén correcto. Se arregla con una **transferencia** desde Inventario.',
+        },
+      ],
+    },
+
+    {
       id: 'cuando-usar',
       title: '¿Necesitas más de un almacén?',
       blocks: [
@@ -68,7 +110,7 @@ export default {
   preguntas: [
     {
       q: '¿Cuál es la diferencia entre almacén y sucursal?',
-      a: 'La **sucursal** es el local de cara al cliente (con su serie de comprobantes y su caja). El **almacén** es dónde está guardada la mercadería. Una sucursal puede tener uno o varios almacenes.',
+      a: 'La **sucursal** decide con qué serie sale el comprobante y a qué caja entra la plata. El **almacén** decide de dónde se descuenta el stock. Una sucursal puede tener varios almacenes, y el stock siempre vive en el almacén. Está explicado con un ejemplo en la primera sección de esta guía.',
     },
     {
       q: 'Creé un almacén nuevo y aparece sin nada.',
