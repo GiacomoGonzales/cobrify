@@ -249,6 +249,10 @@ export default function CreatePurchase() {
   // casilla queda BLOQUEADA con el valor original: cambiarla a posteriori
   // exigiría revertir/aplicar stock retroactivamente (fuente de descuadres).
   const [affectsStock, setAffectsStock] = useState(true)
+  // Compra de activo/equipamiento (mostrador, celular, congeladora): sale en
+  // Flujo de Caja pero NO es Costo de Ventas — Rentabilidad la excluye.
+  // Solo tiene sentido en compras "solo registro" (un activo no es stock).
+  const [isAsset, setIsAsset] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -473,6 +477,7 @@ export default function CreatePurchase() {
           setOriginalPurchase(purchase) // Guardar para revertir stock
           // Compras antiguas sin el campo = sí afectan stock (compatibilidad)
           setAffectsStock(purchase.affectsStock !== false)
+          setIsAsset(purchase.isAsset === true)
 
           // Cargar datos del proveedor
           if (purchase.supplier) {
@@ -1772,6 +1777,8 @@ export default function CreatePurchase() {
         // Solo registro: si es false, esta compra NO tocó el inventario al
         // guardarse (y al eliminarla tampoco se revierte stock).
         affectsStock: affectsStock,
+        // Activo/equipamiento: Rentabilidad lo excluye del Costo de Ventas
+        isAsset: !affectsStock && isAsset,
         // Tipo de pago y estado
         paymentType: paymentType, // 'contado' o 'credito'
         paymentStatus: paymentType === 'contado' ? 'paid' : 'pending', // 'paid' o 'pending'
@@ -2828,6 +2835,25 @@ export default function CreatePurchase() {
                   </span>
                 </span>
               </label>
+
+              {!affectsStock && (
+                <label className={`mt-2 flex items-start gap-2 p-3 border rounded-lg transition-colors cursor-pointer ${
+                  isAsset ? 'border-blue-300 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'
+                }`}>
+                  <input
+                    type="checkbox"
+                    checked={isAsset}
+                    onChange={e => setIsAsset(e.target.checked)}
+                    className="w-4 h-4 mt-0.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-gray-900">Es compra de activo o equipamiento</span>
+                    <span className="block text-xs text-gray-500 mt-0.5">
+                      Mobiliario, equipos, herramientas: sale en tu Flujo de Caja pero no se cuenta como Costo de Ventas en Rentabilidad.
+                    </span>
+                  </span>
+                </label>
+              )}
             </div>
 
             {/* Selector de Almacén (irrelevante si la compra no afecta inventario) */}

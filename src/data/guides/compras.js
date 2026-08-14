@@ -66,6 +66,10 @@ export default {
           text: 'Si necesitas registrar una compra **sin tocar el inventario** (porque la mercadería ya la habías cargado a mano, o es un gasto que solo quieres documentar), marca **No afectar inventario (solo registro)**.',
         },
         {
+          type: 'texto',
+          text: 'Y si lo que compraste es **mobiliario o equipamiento** — un mostrador, un celular para atender, una congeladora — marca además **Es compra de activo o equipamiento**: la compra sale en tu Flujo de Caja (la plata salió de verdad) pero **no** se cuenta como Costo de Ventas en Rentabilidad. Sin esa marca, el reporte trataría el mostrador como mercadería vendida y tu margen del mes saldría hundido sin razón.',
+        },
+        {
           type: 'ojo',
           text: 'Eliminar una compra ya registrada usa **Eliminar y Revertir Stock**: además de borrarla, devuelve el inventario a como estaba. Ojo con hacerlo si esa mercadería ya se vendió.',
         },

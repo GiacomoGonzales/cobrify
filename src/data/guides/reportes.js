@@ -110,6 +110,10 @@ export default {
           text: 'Este reporte depende de dos cosas: que tus productos tengan **costo** cargado y que registres tus **gastos**. Si falta el costo, la utilidad sale inflada; si faltan los gastos, la utilidad neta también.',
         },
         {
+          type: 'texto',
+          text: 'Las compras marcadas como **activo o equipamiento** (mobiliario, equipos) no entran al Costo de Ventas: se muestran aparte, como línea informativa. Comprar una congeladora no hace que tu margen del mes se vea peor.',
+        },
+        {
           type: 'consejo',
           text: 'Vender más no siempre es ganar más. Si tus ventas suben y el margen baja, algo está pasando con los precios o con los costos: aquí es donde se ve.',
         },

@@ -1673,6 +1673,9 @@ export default function Purchases() {
                     {purchase.affectsStock === false && (
                       <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 flex-shrink-0">Sin stock</span>
                     )}
+                    {purchase.isAsset === true && (
+                      <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 flex-shrink-0">Activo</span>
+                    )}
                     <span className="text-gray-300">•</span>
                     <span>
                       {(purchase.invoiceDate || purchase.createdAt)
@@ -1763,6 +1766,11 @@ export default function Purchases() {
                           {purchase.affectsStock === false && (
                             <span className="mt-0.5 self-start px-1.5 py-0.5 text-[10px] rounded bg-amber-50 text-amber-700 border border-amber-200">
                               Sin stock
+                            </span>
+                          )}
+                          {purchase.isAsset === true && (
+                            <span className="mt-0.5 self-start px-1.5 py-0.5 text-[10px] rounded bg-blue-50 text-blue-700 border border-blue-200">
+                              Activo
                             </span>
                           )}
                         </div>

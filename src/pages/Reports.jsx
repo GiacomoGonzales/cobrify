@@ -2078,11 +2078,16 @@ export default function Reports() {
 
   // Estadísticas de compras (costo de ventas) — en PEN base.
   const purchaseStats = useMemo(() => {
-    const totalPurchases = filteredPurchases.reduce((sum, p) => sum + getDocumentTotalInBase(p), 0)
-    const purchaseCount = filteredPurchases.length
+    // Compras de ACTIVOS (isAsset: mobiliario, equipos) fuera del Costo de
+    // Ventas: un mostrador de S/ 3,000 no es mercadería vendida y hundía el
+    // Margen Bruto del mes (reporte 14-ago-2026). Se muestran aparte.
+    const costPurchases = filteredPurchases.filter(p => p.isAsset !== true)
+    const assetPurchases = filteredPurchases.filter(p => p.isAsset === true)
     return {
-      total: totalPurchases,
-      count: purchaseCount
+      total: costPurchases.reduce((sum, p) => sum + getDocumentTotalInBase(p), 0),
+      count: costPurchases.length,
+      assetsTotal: assetPurchases.reduce((sum, p) => sum + getDocumentTotalInBase(p), 0),
+      assetsCount: assetPurchases.length,
     }
   }, [filteredPurchases])
 
@@ -2455,6 +2460,10 @@ export default function Reports() {
     // Ratio costo de ventas
     const ratioCostoVentas = totalVentas > 0 ? (costoVentas / totalVentas) * 100 : 0
 
+    // Compras de activos: informativas, NO restan en ninguna utilidad de este
+    // reporte (el egreso real vive en Flujo de Caja).
+    const comprasActivos = purchaseStats.assetsTotal
+
     return {
       totalVentas,
       totalIngresos: totalVentas, // Mantener compatibilidad
@@ -2466,6 +2475,7 @@ export default function Reports() {
       otrosIngresos,
       otrosEgresos,
       utilidadTotal,
+      comprasActivos,
       margenBruto,
       margenNeto,
       margenOperativo,
@@ -2474,7 +2484,7 @@ export default function Reports() {
       detalleOtrosIngresos: filteredOtherMovements.detalleIngresos,
       detalleOtrosEgresos: filteredOtherMovements.detalleEgresos
     }
-  }, [stats.totalRevenue, purchaseStats.total, expenseStats.total, filteredOtherMovements])
+  }, [stats.totalRevenue, purchaseStats.total, purchaseStats.assetsTotal, expenseStats.total, filteredOtherMovements])
 
   // Determinar nombre de sucursal para los reportes Excel
   const getBranchLabel = () => {
@@ -2495,6 +2505,7 @@ export default function Reports() {
       { 'Concepto': '---', 'Valor': '---' },
       { 'Concepto': 'Total Ventas', 'Valor': profitabilityStats.totalVentas },
       { 'Concepto': 'Costo de Ventas (Compras)', 'Valor': profitabilityStats.costoVentas },
+      ...(profitabilityStats.comprasActivos > 0 ? [{ 'Concepto': 'Compras de Activos (no incluidas en el costo)', 'Valor': profitabilityStats.comprasActivos }] : []),
       { 'Concepto': 'Utilidad Bruta', 'Valor': profitabilityStats.utilidadBruta },
       { 'Concepto': 'Margen Bruto (%)', 'Valor': profitabilityStats.margenBruto.toFixed(2) + '%' },
       { 'Concepto': '---', 'Valor': '---' },
@@ -5797,6 +5808,11 @@ export default function Reports() {
                     <p className="text-sm text-gray-500 mt-1">
                       {purchaseStats.count} compras
                     </p>
+                    {profitabilityStats.comprasActivos > 0 && (
+                      <p className="text-xs text-gray-400 mt-1">
+                        + {formatMoney(profitabilityStats.comprasActivos)} en activos ({purchaseStats.assetsCount}), no incluidos en el costo
+                      </p>
+                    )}
                   </div>
                   <div className="p-3 bg-orange-100 rounded-lg">
                     <ShoppingCart className="w-6 h-6 text-orange-600" />
