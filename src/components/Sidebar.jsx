@@ -1150,6 +1150,13 @@ function Sidebar() {
       pageId: 'reports',
     },
     {
+      path: '/gastos',
+      icon: Receipt,
+      label: 'Gastos',
+      pageId: 'expenses',
+      menuId: 'expenses',
+    },
+    {
       path: '/meta-ads',
       icon: Facebook,
       label: 'Meta Ads',
@@ -1328,13 +1335,13 @@ function Sidebar() {
           label: 'Reportes',
           pageId: 'reports',
         },
-        ...(hasFeature && hasFeature('expenseManagement') ? [{
+        {
           path: '/gastos',
           icon: Receipt,
           label: 'Gastos',
           pageId: 'expenses',
           menuId: 'expenses',
-        }] : []),
+        },
         {
           path: '/contabilidad',
           icon: FileCheck,
@@ -1520,6 +1527,13 @@ function Sidebar() {
       label: 'Reportes',
       pageId: 'reports',
       menuId: 'reports',
+    },
+    {
+      path: '/gastos',
+      icon: Receipt,
+      label: 'Gastos',
+      pageId: 'expenses',
+      menuId: 'expenses',
     },
     {
       path: '/meta-ads',

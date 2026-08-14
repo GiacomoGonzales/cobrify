@@ -377,11 +377,12 @@ export default function Reports() {
       // arriba crece con el tiempo y un numero fijo se desincroniza en silencio
       // (paso: apuntaba a 7 cuando los gastos estaban en 8, asi que el reporte
       // de gastos recibia el resultado de los movimientos y salia en cero).
-      let expensesIndex = -1
-      if (hasFeature && hasFeature('expenseManagement')) {
-        expensesIndex = promises.length
-        promises.push(getExpenses(getBusinessId()))
-      }
+      // Gastos y Rentabilidad son para TODOS desde el 14-ago-2026: antes
+      // dependian del feature de suscripcion 'expenseManagement', que arrancaba
+      // apagado y solo el panel admin podia prender cuenta por cuenta — por eso
+      // a la mayoria (y a todo cliente de reseller) no le salian las pestanas.
+      const expensesIndex = promises.length
+      promises.push(getExpenses(getBusinessId()))
 
       const results = await Promise.all(promises.map(p => p.catch(err => {
         console.error('Error en carga paralela:', err)
@@ -2848,9 +2849,7 @@ export default function Reports() {
           <Users className="w-4 h-4 inline-block mr-2" />
           Vendedores
         </button>
-        {/* Tab de Gastos - solo visible si tiene el feature */}
-        {hasFeature && hasFeature('expenseManagement') && (
-          <button
+        <button
             onClick={() => setSelectedReport('expenses')}
             className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors shadow-sm ${
               selectedReport === 'expenses'
@@ -2861,10 +2860,7 @@ export default function Reports() {
             <Receipt className="w-4 h-4 inline-block mr-2" />
             Gastos
           </button>
-        )}
-        {/* Tab de Rentabilidad - solo visible si tiene el feature de gastos */}
-        {hasFeature && hasFeature('expenseManagement') && (
-          <button
+        <button
             onClick={() => setSelectedReport('profitability')}
             className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors shadow-sm ${
               selectedReport === 'profitability'
@@ -2875,7 +2871,6 @@ export default function Reports() {
             <TrendingUp className="w-4 h-4 inline-block mr-2" />
             Rentabilidad
           </button>
-        )}
         {/* Tab Hotel - solo visible en modo hotel */}
         {businessMode === 'hotel' && (
           <button
