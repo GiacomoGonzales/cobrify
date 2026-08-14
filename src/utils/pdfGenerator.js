@@ -642,19 +642,31 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // (branchLogoUrl/branchTradeName/branchAddress/branchPhone) y cae a lo global.
   const branchInfo = resolveBranchCompanyInfo(companySettings, invoice)
 
+  // Nota de venta "anónima" (pedido de usuaria, 14-ago-2026): ocultar los datos
+  // de la empresa en el PDF — logo, nombre, razón social, RUC, direcciones,
+  // teléfonos, email, web y eslogan. El documento queda solo con "NOTA DE
+  // VENTA", su número, el cliente y los productos. Solo aplica al PDF de notas
+  // de venta; facturas/boletas y el ticket térmico no cambian.
+  const hideCompanyData = invoice.documentType === 'nota_venta' &&
+    companySettings?.hideCompanyDataInNotaVenta === true
+
   // ========== 1. ENCABEZADO - 3 COLUMNAS CON LOGO DINÁMICO ==========
 
-  const headerHeight = 100 * S
+  const headerHeight = (hideCompanyData ? 58 : 100) * S
   const defaultLogoWidth = 100 * S  // Ancho por defecto para logo
-  const docColumnWidth = 145 * S   // Columna derecha para recuadro factura
+  const docColumnWidth = (hideCompanyData ? 175 : 145) * S   // Columna derecha para recuadro factura
 
   // Posiciones X
   const logoX = MARGIN_LEFT
-  const docBoxX = PAGE_WIDTH - MARGIN_RIGHT - docColumnWidth
+  // Centrado cuando es la unica pieza del encabezado; pegado a la derecha
+  // cuando comparte fila con el logo y los datos de la empresa.
+  const docBoxX = hideCompanyData
+    ? MARGIN_LEFT + (CONTENT_WIDTH - docColumnWidth) / 2
+    : PAGE_WIDTH - MARGIN_RIGHT - docColumnWidth
   let actualLogoWidth = defaultLogoWidth // Ancho real del logo (se actualiza dinámicamente)
 
   // ===== COLUMNA 1: LOGO (izquierda) =====
-  if (branchInfo.logoUrl) {
+  if (branchInfo.logoUrl && !hideCompanyData) {
     try {
       const imgData = await loadImageWithRetry(branchInfo.logoUrl)
 
@@ -760,9 +772,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   // ===== COLUMNA 2: DATOS DE LA EMPRESA (centro) =====
   // Recopilar todos los datos disponibles
-  const companyName = (branchInfo.name || 'EMPRESA SAC').toUpperCase()
+  const companyName = hideCompanyData ? '' : (branchInfo.name || 'EMPRESA SAC').toUpperCase()
   const businessName = companySettings?.businessName ? companySettings.businessName.toUpperCase() : ''
-  const showBusinessName = businessName && businessName !== companyName
+  const showBusinessName = !hideCompanyData && businessName && businessName !== companyName
 
   // Preparar lista de sucursales/direcciones para mostrar
   // Cada entrada tiene address y phone por separado (se muestran en líneas independientes)
@@ -826,13 +838,15 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     }
   }
 
-  const email = companySettings?.email || ''
-  const website = companySettings?.website || ''
+  if (hideCompanyData) branchLocations = []
+
+  const email = hideCompanyData ? '' : (companySettings?.email || '')
+  const website = hideCompanyData ? '' : (companySettings?.website || '')
 
   // Calcular contenido y altura para centrar verticalmente
   doc.setFontSize(11)
   doc.setFont('helvetica', 'bold')
-  const nameLines = doc.splitTextToSize(companyName, infoColumnWidth - 10)
+  const nameLines = hideCompanyData ? [] : doc.splitTextToSize(companyName, infoColumnWidth - 10)
 
   // Contar líneas totales para centrar (pre-calcular splits de direcciones)
   const maxWidth = infoColumnWidth - 10
@@ -922,12 +936,25 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // ===== COLUMNA 3: RECUADRO DEL DOCUMENTO (derecha) =====
   const docBoxY = currentY
 
-  // Altura de la sección del RUC (parte superior con fondo de color)
-  const rucSectionHeight = 26
+  // Qué se oculta en notas de venta. Se decide ANTES de dibujar porque de esto
+  // depende la geometría del recuadro, no solo qué texto se escribe.
+  const isNotaVenta = invoice.documentType === 'nota_venta'
+  const hideRucIgvInNotaVenta = companySettings?.hideRucIgvInNotaVenta === true
+  const hideOnlyIgvInNotaVenta = companySettings?.hideOnlyIgvInNotaVenta === true
+  const shouldHideRuc = isNotaVenta && (hideRucIgvInNotaVenta || hideCompanyData)
+  const shouldHideIgv = isNotaVenta && (hideRucIgvInNotaVenta || hideOnlyIgvInNotaVenta)
 
-  // Fondo de color para la sección del RUC
-  doc.setFillColor(...ACCENT_COLOR)
-  doc.rect(docBoxX, docBoxY, docColumnWidth, rucSectionHeight, 'F')
+  // La banda de color de la parte superior existe para alojar el RUC. Si el RUC
+  // no se imprime, pintarla deja un bloque de color vacío arriba del documento
+  // —se veía así con "Ocultar RUC e IGV" y con la nota de venta anónima—, así
+  // que el recuadro queda solo con el tipo de documento y su número.
+  const showRucBand = !shouldHideRuc
+  const rucSectionHeight = showRucBand ? 26 : 0
+
+  if (showRucBand) {
+    doc.setFillColor(...ACCENT_COLOR)
+    doc.rect(docBoxX, docBoxY, docColumnWidth, rucSectionHeight, 'F')
+  }
 
   // Recuadro completo con borde
   doc.setDrawColor(...BORDER_COLOR)
@@ -936,24 +963,19 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   // Línea separadora después del RUC
   const rucLineY = docBoxY + rucSectionHeight
-  doc.setLineWidth(0.5)
-  doc.line(docBoxX, rucLineY, docBoxX + docColumnWidth, rucLineY)
-
-  // Detectar si debe ocultar RUC e IGV en notas de venta
-  const isNotaVenta = invoice.documentType === 'nota_venta'
-  const hideRucIgvInNotaVenta = companySettings?.hideRucIgvInNotaVenta === true
-  const hideOnlyIgvInNotaVenta = companySettings?.hideOnlyIgvInNotaVenta === true
-  const shouldHideRuc = isNotaVenta && hideRucIgvInNotaVenta
-  const shouldHideIgv = isNotaVenta && (hideRucIgvInNotaVenta || hideOnlyIgvInNotaVenta)
-
-  // RUC (texto blanco sobre fondo de color) - Ocultar en notas de venta si está configurado
-  doc.setFontSize(9)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...ON_ACCENT)
-  if (!shouldHideRuc) {
-    doc.text(`R.U.C. ${companySettings?.ruc || ''}`, docBoxX + docColumnWidth / 2, docBoxY + 16, { align: 'center' })
+  if (showRucBand) {
+    doc.setLineWidth(0.5)
+    doc.line(docBoxX, rucLineY, docBoxX + docColumnWidth, rucLineY)
   }
-  doc.setTextColor(...BLACK) // Restaurar color negro para el resto
+
+  // RUC (texto blanco sobre fondo de color)
+  if (showRucBand) {
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...ON_ACCENT)
+    doc.text(`R.U.C. ${companySettings?.ruc || ''}`, docBoxX + docColumnWidth / 2, docBoxY + 16, { align: 'center' })
+    doc.setTextColor(...BLACK) // Restaurar color negro para el resto
+  }
 
   // Tipo de documento
   let documentLine1 = 'BOLETA DE VENTA'
@@ -972,17 +994,34 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     documentLine2 = 'ELECTRÓNICA'
   }
 
-  doc.setFontSize(10)
+  // Medidas del bloque de texto. Con banda, el texto arranca debajo de ella
+  // (medidas de siempre, intactas para facturas y boletas). Sin banda, el
+  // recuadro está vacío y el bloque se centra verticalmente en él: si se
+  // mantuviera el arranque de siempre quedaría pegado arriba con todo el aire
+  // debajo.
+  const titleSize = hideCompanyData ? 12 : 10
+  const numberSize = hideCompanyData ? 15 : 12
+  const titleToNumber = documentLine2 ? 30 : (hideCompanyData ? 20 : 16)
+
+  let titleY
+  if (showRucBand) {
+    titleY = rucLineY + 18
+  } else {
+    const blockHeight = titleToNumber + titleSize
+    titleY = docBoxY + (headerHeight - blockHeight) / 2 + titleSize
+  }
+  const numberY = titleY + titleToNumber
+
+  doc.setFontSize(titleSize)
   doc.setFont('helvetica', 'bold')
-  const titleY = rucLineY + 18
+  doc.setTextColor(...BLACK)
   doc.text(documentLine1, docBoxX + docColumnWidth / 2, titleY, { align: 'center' })
   if (documentLine2) {
     doc.text(documentLine2, docBoxX + docColumnWidth / 2, titleY + 12, { align: 'center' })
   }
 
   // Número de documento
-  doc.setFontSize(12)
-  const numberY = documentLine2 ? titleY + 30 : titleY + 16
+  doc.setFontSize(numberSize)
   doc.text(invoice.number || 'N/A', docBoxX + docColumnWidth / 2, numberY, { align: 'center' })
 
   // Asegurar que currentY esté siempre debajo del recuadro del documento Y
@@ -992,7 +1031,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   currentY = Math.max(currentY + headerHeight + 5, docBoxBottomY, infoY + 8)
 
   // ========== ESLOGAN (centrado debajo del encabezado) ==========
-  if (companySettings?.companySlogan) {
+  if (companySettings?.companySlogan && !hideCompanyData) {
     const slogan = companySettings.companySlogan.toUpperCase()
     doc.setFontSize(12)
     doc.setFont('helvetica', 'bold')

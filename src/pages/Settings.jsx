@@ -463,6 +463,8 @@ export default function Settings() {
   // Estados para configuración de notas de venta
   const [hideRucIgvInNotaVenta, setHideRucIgvInNotaVenta] = useState(false)
   const [hideOnlyIgvInNotaVenta, setHideOnlyIgvInNotaVenta] = useState(false)
+  // Ocultar TODOS los datos de la empresa en el PDF de notas de venta (pedido de usuaria, 14-ago-2026)
+  const [hideCompanyDataInNotaVenta, setHideCompanyDataInNotaVenta] = useState(false)
   const [requireOpenCashRegister, setRequireOpenCashRegister] = useState(false)
   // Comisión por pago con tarjeta (solo notas de venta): activación + porcentaje.
   const [cardCommissionEnabled, setCardCommissionEnabled] = useState(false)
@@ -1305,6 +1307,7 @@ export default function Settings() {
         // Cargar configuración de notas de venta
         setHideRucIgvInNotaVenta(businessData.hideRucIgvInNotaVenta || false)
         setHideOnlyIgvInNotaVenta(businessData.hideOnlyIgvInNotaVenta || false)
+        setHideCompanyDataInNotaVenta(businessData.hideCompanyDataInNotaVenta || false)
         setRequireOpenCashRegister(businessData.requireOpenCashRegister || false)
         setCardCommissionEnabled(businessData.cardCommissionEnabled || false)
         setCardCommissionRate(Number(businessData.cardCommissionRate) || 5)
@@ -5213,6 +5216,7 @@ export default function Settings() {
 
                   {/* Permitir editar notas de venta */}
                   <SettingToggle
+                    id="opcion-allowEditNotaVenta"
                     checked={allowEditNotaVenta}
                     onChange={(e) => setAllowEditNotaVenta(e.target.checked)}
                     title="Permitir editar notas de venta"
@@ -5497,6 +5501,7 @@ export default function Settings() {
                 </p>
                 <div className="space-y-3">
                   <SettingToggle
+                    id="opcion-showStudentField"
                     checked={posCustomFields.showStudentField}
                     onChange={(e) => setPosCustomFields({ ...posCustomFields, showStudentField: e.target.checked })}
                     title={'Campo "Alumno"'}
@@ -5671,6 +5676,16 @@ export default function Settings() {
                     description={hideOnlyIgvInNotaVenta
                       ? '✓ Habilitado: Las notas de venta no mostrarán el desglose de subtotal e IGV, pero sí mostrarán el RUC de la empresa.'
                       : '✗ Deshabilitado: Las notas de venta mostrarán el desglose completo de subtotal e IGV (18%).'}
+                  />
+
+                  <SettingToggle
+                    id="opcion-hideCompanyDataInNotaVenta"
+                    checked={hideCompanyDataInNotaVenta}
+                    onChange={(e) => setHideCompanyDataInNotaVenta(e.target.checked)}
+                    title="Ocultar datos de la empresa en Notas de Venta (PDF)"
+                    description={hideCompanyDataInNotaVenta
+                      ? '✓ Habilitado: El PDF de las notas de venta no mostrará logo, nombre, razón social, RUC, dirección, teléfono, email ni eslogan. Solo saldrá "NOTA DE VENTA" con su número, el cliente y los productos. No afecta a facturas ni boletas, ni al ticket térmico.'
+                      : '✗ Deshabilitado: El PDF de las notas de venta muestra los datos de la empresa como es usual.'}
                   />
 
                   <SettingToggle
@@ -5901,6 +5916,7 @@ export default function Settings() {
                       customPaymentMethods: customPaymentMethods,
                       hideRucIgvInNotaVenta: hideRucIgvInNotaVenta,
                       hideOnlyIgvInNotaVenta: hideOnlyIgvInNotaVenta,
+                      hideCompanyDataInNotaVenta: hideCompanyDataInNotaVenta,
                       requireOpenCashRegister: requireOpenCashRegister,
                       cardCommissionEnabled: cardCommissionEnabled,
                       cardCommissionRate: Number(cardCommissionRate) || 0,
@@ -6457,6 +6473,7 @@ export default function Settings() {
               <div>
                 <h3 className="text-base font-semibold text-gray-900 mb-1">Guías de Remisión</h3>
                 <SettingToggle
+                  id="opcion-dispatchGuidesEnabled"
                   checked={dispatchGuidesEnabled}
                   onChange={(e) => setDispatchGuidesEnabled(e.target.checked)}
                   title="Habilitar Guías de Remisión Electrónicas"
@@ -6470,6 +6487,7 @@ export default function Settings() {
               <div>
                 <h3 className="text-base font-semibold text-gray-900 mb-1">Nota de Salida</h3>
                 <SettingToggle
+                  id="opcion-exitNoteEnabled"
                   checked={exitNoteEnabled}
                   onChange={(e) => setExitNoteEnabled(e.target.checked)}
                   title="Habilitar Nota de Salida (Almacén)"
@@ -6604,6 +6622,7 @@ export default function Settings() {
 
                 <div className="space-y-4">
                   <SettingToggle
+                    id="opcion-allowDeleteInvoices"
                     checked={allowDeleteInvoices}
                     onChange={(e) => setAllowDeleteInvoices(e.target.checked)}
                     title="Permitir eliminar comprobantes"

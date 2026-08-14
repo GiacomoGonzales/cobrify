@@ -73,7 +73,7 @@ export const GUIDES = [
     title: 'Ventas (historial de comprobantes)',
     category: 'Ventas',
     description: 'Buscar comprobantes, cobrar lo pendiente, anular o corregir con nota de crédito, convertir notas de venta y exportar a Excel.',
-    keywords: 'ventas facturas boletas historial comprobantes anular nota de credito nota de debito baja sunat cdr xml pdf convertir nota de venta registrar pago pagos pendientes cuentas por cobrar exportar excel archivados rechazado reenviar guia de remision',
+    keywords: 'ventas facturas boletas historial comprobantes anular nota de credito nota de debito baja sunat cdr xml pdf convertir nota de venta registrar pago pagos pendientes cuentas por cobrar credito cuotas vencida exportar excel archivados rechazado reenviar guia de remision whatsapp duplicar editar eliminar nota de salida alumno placa vuelto lote',
     modos: null,
     load: () => import('./facturas.js'),
   },

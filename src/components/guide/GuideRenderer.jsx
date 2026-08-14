@@ -346,7 +346,10 @@ export default function GuideRenderer({
               // que no da para seccion propia: una plantilla distinta, un campo
               // extra. Sin esto habia que elegir entre inventar una seccion
               // entera o dejar el parrafo visible para todos.
-              .filter(b => !b.soloModos || b.soloModos.includes(businessMode))
+              // En publico sin rubro elegido se muestra todo, igual que las
+              // secciones: ocultar el bloque dejaria al lector sin saber que
+              // ese matiz existe.
+              .filter(b => sinRubroElegido || !b.soloModos || b.soloModos.includes(businessMode))
               .map((block, i) => (
                 <Block key={i} block={block} isDemoMode={isDemoMode} onNavigate={onNavigate} publico={publico} />
               ))}
