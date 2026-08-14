@@ -438,6 +438,7 @@ export const DISTRITOS = {
     { code: '41', name: 'SURQUILLO' },
     { code: '42', name: 'VILLA EL SALVADOR' },
     { code: '43', name: 'VILLA MARÍA DEL TRIUNFO' },
+    { code: '44', name: 'SANTA MARÍA DE HUACHIPA' },
   ],
   // CALLAO - CALLAO (0701)
   '0701': [
@@ -532,14 +533,14 @@ export const DISTRITOS = {
   '1306': [
     { code: '01', name: 'OTUZCO' },
     { code: '02', name: 'AGALLPAMPA' },
-    { code: '03', name: 'CHARAT' },
-    { code: '04', name: 'HUARANCHAL' },
-    { code: '05', name: 'LA CUESTA' },
-    { code: '06', name: 'MACHE' },
-    { code: '07', name: 'PARANDAY' },
-    { code: '08', name: 'SALPO' },
-    { code: '09', name: 'SINSICAP' },
-    { code: '10', name: 'USQUIL' },
+    { code: '04', name: 'CHARAT' },
+    { code: '05', name: 'HUARANCHAL' },
+    { code: '06', name: 'LA CUESTA' },
+    { code: '08', name: 'MACHE' },
+    { code: '10', name: 'PARANDAY' },
+    { code: '11', name: 'SALPO' },
+    { code: '13', name: 'SINSICAP' },
+    { code: '14', name: 'USQUIL' },
   ],
   // LA LIBERTAD - PACASMAYO (1307)
   '1307': [
@@ -675,11 +676,11 @@ export const DISTRITOS = {
     { code: '01', name: 'PIURA' },
     { code: '04', name: 'CASTILLA' },
     { code: '05', name: 'CATACAOS' },
-    { code: '09', name: 'CURA MORI' },
-    { code: '10', name: 'EL TALLÁN' },
-    { code: '11', name: 'LA ARENA' },
-    { code: '12', name: 'LA UNIÓN' },
-    { code: '13', name: 'LAS LOMAS' },
+    { code: '07', name: 'CURA MORI' },
+    { code: '08', name: 'EL TALLÁN' },
+    { code: '09', name: 'LA ARENA' },
+    { code: '10', name: 'LA UNIÓN' },
+    { code: '11', name: 'LAS LOMAS' },
     { code: '14', name: 'TAMBO GRANDE' },
     { code: '15', name: 'VEINTISÉIS DE OCTUBRE' },
   ],
@@ -824,6 +825,10 @@ export const DISTRITOS = {
     { code: '12', name: 'VILLA VIRGEN' },
     { code: '13', name: 'VILLA KINTIARINA' },
     { code: '14', name: 'MEGANTONI' },
+    { code: '15', name: 'KUMPIRUSHIATO' },
+    { code: '16', name: 'CIELO PUNCO' },
+    { code: '17', name: 'MANITEA' },
+    { code: '18', name: 'UNIÓN ASHÁNINKA' },
   ],
   // CUSCO - PARURO (0810)
   '0810': [
@@ -977,17 +982,22 @@ export const DISTRITOS = {
     { code: '05', name: 'COLCABAMBA' },
     { code: '06', name: 'DANIEL HERNÁNDEZ' },
     { code: '07', name: 'HUACHOCOLPA' },
-    { code: '08', name: 'HUARIBAMBA' },
-    { code: '09', name: 'ÑAHUIMPUQUIO' },
-    { code: '10', name: 'PAZOS' },
-    { code: '11', name: 'QUISHUAR' },
-    { code: '12', name: 'SALCABAMBA' },
-    { code: '13', name: 'SALCAHUASI' },
-    { code: '14', name: 'SAN MARCOS DE ROCCHAC' },
-    { code: '15', name: 'SURCUBAMBA' },
-    { code: '16', name: 'TINTAY PUNCU' },
-    { code: '17', name: 'QUICHUAS' },
-    { code: '18', name: 'ANDAYMARCA' },
+    { code: '09', name: 'HUARIBAMBA' },
+    { code: '10', name: 'ÑAHUIMPUQUIO' },
+    { code: '11', name: 'PAZOS' },
+    { code: '13', name: 'QUISHUAR' },
+    { code: '14', name: 'SALCABAMBA' },
+    { code: '15', name: 'SALCAHUASI' },
+    { code: '16', name: 'SAN MARCOS DE ROCCHAC' },
+    { code: '17', name: 'SURCUBAMBA' },
+    { code: '18', name: 'TINTAY PUNCU' },
+    { code: '19', name: 'QUICHUAS' },
+    { code: '20', name: 'ANDAYMARCA' },
+    { code: '21', name: 'ROBLE' },
+    { code: '22', name: 'PICHOS' },
+    { code: '23', name: 'SANTIAGO DE TÚCUMA' },
+    { code: '24', name: 'LAMBRAS' },
+    { code: '25', name: 'COCHABAMBA' },
   ],
   // JUNÍN - HUANCAYO (1201)
   '1201': [
@@ -1470,6 +1480,7 @@ export const DISTRITOS = {
     { code: '09', name: 'ROCCHACC' },
     { code: '10', name: 'EL PORVENIR' },
     { code: '11', name: 'LOS CHANKAS' },
+    { code: '12', name: 'AHUAYRO' },
   ],
   // APURÍMAC - GRAU (0307)
   '0307': [
@@ -1539,7 +1550,7 @@ export const DISTRITOS = {
     { code: '07', name: 'NAPO' },
     { code: '08', name: 'PUNCHANA' },
     { code: '09', name: 'PUTUMAYO' },
-    { code: '11', name: 'TORRES CAUSANA' },
+    { code: '10', name: 'TORRES CAUSANA' },
     { code: '12', name: 'BELÉN' },
     { code: '13', name: 'SAN JUAN BAUTISTA' },
     { code: '14', name: 'TENIENTE MANUEL CLAVERO' },
@@ -1548,10 +1559,10 @@ export const DISTRITOS = {
   '1602': [
     { code: '01', name: 'YURIMAGUAS' },
     { code: '02', name: 'BALSAPUERTO' },
-    { code: '03', name: 'JEBEROS' },
-    { code: '04', name: 'LAGUNAS' },
-    { code: '05', name: 'SANTA CRUZ' },
-    { code: '06', name: 'TENIENTE CÉSAR LÓPEZ ROJAS' },
+    { code: '05', name: 'JEBEROS' },
+    { code: '06', name: 'LAGUNAS' },
+    { code: '10', name: 'SANTA CRUZ' },
+    { code: '11', name: 'TENIENTE CÉSAR LÓPEZ ROJAS' },
   ],
   // LORETO - LORETO (1603)
   '1603': [
@@ -1631,6 +1642,8 @@ export const DISTRITOS = {
     { code: '03', name: 'CURIMANÁ' },
     { code: '04', name: 'NESHUYA' },
     { code: '05', name: 'ALEXANDER VON HUMBOLDT' },
+    { code: '06', name: 'HUIPOCA' },
+    { code: '07', name: 'BOQUERÓN' },
   ],
   // UCAYALI - PURÚS (2504)
   '2504': [
@@ -1891,6 +1904,7 @@ export const DISTRITOS = {
     { code: '03', name: 'PÓLVORA' },
     { code: '04', name: 'SHUNTE' },
     { code: '05', name: 'UCHIZA' },
+    { code: '06', name: 'SANTA LUCÍA' },
   ],
   // CAJAMARCA - CAJAMARCA (0601)
   '0601': [
@@ -2107,6 +2121,7 @@ export const DISTRITOS = {
     { code: '10', name: 'UCHURACCAY' },
     { code: '11', name: 'PUCACOLPA' },
     { code: '12', name: 'CHACA' },
+    { code: '13', name: 'PUTIS' },
   ],
   // AYACUCHO - LA MAR (0505)
   '0505': [
@@ -2121,6 +2136,10 @@ export const DISTRITOS = {
     { code: '09', name: 'SAMUGARI' },
     { code: '10', name: 'ANCHIHUAY' },
     { code: '11', name: 'ORONCCOY' },
+    { code: '12', name: 'UNIÓN PROGRESO' },
+    { code: '13', name: 'RÍO MAGDALENA' },
+    { code: '14', name: 'NINABAMBA' },
+    { code: '15', name: 'PATIBAMBA' },
   ],
   // AYACUCHO - LUCANAS (0506)
   '0506': [
@@ -2240,14 +2259,14 @@ export const DISTRITOS = {
   // HUÁNUCO - DOS DE MAYO (1003)
   '1003': [
     { code: '01', name: 'LA UNIÓN' },
-    { code: '02', name: 'CHUQUIS' },
-    { code: '03', name: 'MARÍAS' },
-    { code: '04', name: 'PACHAS' },
-    { code: '05', name: 'QUIVILLA' },
-    { code: '06', name: 'RIPÁN' },
-    { code: '07', name: 'SHUNQUI' },
-    { code: '08', name: 'SILLAPATA' },
-    { code: '09', name: 'YANAS' },
+    { code: '07', name: 'CHUQUIS' },
+    { code: '11', name: 'MARÍAS' },
+    { code: '13', name: 'PACHAS' },
+    { code: '16', name: 'QUIVILLA' },
+    { code: '17', name: 'RIPÁN' },
+    { code: '21', name: 'SHUNQUI' },
+    { code: '22', name: 'SILLAPATA' },
+    { code: '23', name: 'YANAS' },
   ],
   // HUÁNUCO - HUACAYBAMBA (1004)
   '1004': [
