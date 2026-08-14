@@ -333,26 +333,16 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           await fetchCatalogRate(businessData)
         }
 
-        // Verificar estado de la suscripción del dueño del negocio. Si está
-        // suspendida o bloqueada, mostrar la pantalla "fuera de servicio"
-        // en lugar del catálogo. No es modo demo (esos no tienen subscription).
-        if (!isDemo && businessData?.id) {
-          try {
-            const { doc: docRef, getDoc: getDocFn } = await import('firebase/firestore')
-            const subRef = docRef(db, 'subscriptions', businessData.id)
-            const subSnap = await getDocFn(subRef)
-            if (subSnap.exists()) {
-              const sub = subSnap.data()
-              if (sub.accessBlocked === true || sub.status === 'suspended') {
-                setBusinessSuspended(true)
-                setLoading(false)
-                return
-              }
-            }
-          } catch (e) {
-            // Si falla la lectura de la suscripción no bloqueamos el catálogo.
-            console.warn('No se pudo verificar suscripción:', e)
-          }
+        // Negocio suspendido -> pantalla "fuera de servicio". El flag
+        // catalogSuspended vive en el DOC DEL NEGOCIO (ya cargado): antes se
+        // leia subscriptions/, cuyas reglas exigen sesion del dueno, asi que
+        // para compradores anonimos la verificacion fallaba en silencio y la
+        // pantalla nunca aparecia. Lo espejan suspendUser/reactivateUser/
+        // registerPayment (admin) y el panel de resellers.
+        if (!isDemo && businessData?.catalogSuspended === true) {
+          setBusinessSuspended(true)
+          setLoading(false)
+          return
         }
 
         // Cargar categorías ANTES que los productos (vienen del doc del negocio,

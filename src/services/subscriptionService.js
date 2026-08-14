@@ -669,6 +669,23 @@ export const hasActiveAccess = (subscription) => {
   return true;
 };
 
+// Espejo del bloqueo en el doc PUBLICO del negocio (14-ago-2026): el catalogo
+// no puede leer subscriptions/ (sus reglas exigen sesion del dueno), asi que la
+// pantalla "fuera de servicio" nunca funciono para compradores anonimos. El
+// flag catalogSuspended viaja en businesses/{id}, que el catalogo ya lee.
+// Best-effort: si el espejo falla, la suspension del acceso NO se revierte
+// (catalogo abierto es el mal menor frente a no poder suspender).
+const mirrorCatalogSuspended = async (userId, suspended) => {
+  try {
+    await updateDoc(doc(db, 'businesses', userId), {
+      catalogSuspended: suspended,
+      updatedAt: serverTimestamp()
+    });
+  } catch (error) {
+    console.error('No se pudo espejar catalogSuspended en el negocio:', error);
+  }
+};
+
 // Suspender acceso de un usuario (Admin)
 export const suspendUser = async (userId, reason = 'Falta de pago') => {
   try {
@@ -680,6 +697,7 @@ export const suspendUser = async (userId, reason = 'Falta de pago') => {
       blockedAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
+    await mirrorCatalogSuspended(userId, true);
   } catch (error) {
     console.error('Error al suspender usuario:', error);
     throw error;
@@ -719,6 +737,7 @@ export const reactivateUser = async (userId, extendDays = 30) => {
       nextPaymentDate: Timestamp.fromDate(newPeriodEnd),
       updatedAt: serverTimestamp()
     });
+    await mirrorCatalogSuspended(userId, false);
   } catch (error) {
     console.error('Error al reactivar usuario:', error);
     throw error;
@@ -843,6 +862,7 @@ export const registerPayment = async (userId, amount, method = 'Transferencia', 
       updatedAt: serverTimestamp()
     });
 
+    await mirrorCatalogSuspended(userId, false);
     await notifyPaymentReceived(userId, amount, planConfig?.name || selectedPlan, newPeriodEnd);
   } catch (error) {
     console.error('Error al registrar pago:', error);

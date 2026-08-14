@@ -306,7 +306,7 @@ service cloud.firestore {
                        isReseller(resource.data.resellerId) &&
                        request.resource.data.resellerId == resource.data.resellerId &&
                        request.resource.data.diff(resource.data).affectedKeys()
-                         .hasOnly(['razonSocial', 'tradeName', 'ruc', 'phone', 'address', 'updatedAt']);
+                         .hasOnly(['razonSocial', 'tradeName', 'ruc', 'phone', 'address', 'catalogSuspended', 'updatedAt']);
 
       // Lectura pública para catálogo - permite buscar negocios por catalogSlug
       // Para que funcione en usuarios no autenticados, permitimos lectura pública

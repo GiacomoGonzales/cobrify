@@ -282,6 +282,19 @@ export default function ResellerClients() {
         accessBlocked: block,
         status: block ? 'suspended' : 'active'
       })
+      // Espejo en el doc PUBLICO del negocio: es lo que lee el catalogo para
+      // mostrar "fuera de servicio" a los COMPRADORES (subscriptions/ no es
+      // legible sin sesion del dueno). El campo esta en la lista blanca de
+      // las reglas de resellers. Best-effort: si falla, la suspension del
+      // acceso ya quedo hecha.
+      try {
+        await updateDoc(doc(db, 'businesses', clientId), {
+          catalogSuspended: block,
+          updatedAt: new Date()
+        })
+      } catch (mirrorError) {
+        console.error('No se pudo actualizar el catalogo del cliente:', mirrorError)
+      }
       loadClients()
       setSelectedClient(null)
     } catch (error) {
