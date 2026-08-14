@@ -11,7 +11,7 @@ export default {
   id: 'recetas',
   actualizado: '12/08/2026',
   intro:
-    'Una receta conecta lo que vendes con lo que consumes: dice cuánto insumo lleva cada producto. Es lo que permite que vender un plato descuente automáticamente sus ingredientes y que sepas cuánto te cuesta de verdad. En restaurante se llama **Recetas**; en los demás rubros, **Composición**.',
+    'Una receta conecta lo que vendes con lo que consumes: dice cuánto insumo lleva cada producto. Es lo que permite que venderlo descuente automáticamente sus insumos y que sepas cuánto te cuesta de verdad. En restaurante se llama **Recetas**; en los demás rubros, **Composición**.',
 
   sections: [
     {
@@ -29,7 +29,7 @@ export default {
         },
         {
           type: 'consejo',
-          text: 'Carga la cantidad para **una** unidad del producto, no para la olla entera. Si preparas 20 porciones con 2 kg de arroz, la receta lleva 100 g.',
+          text: 'Carga la cantidad para **una** unidad del producto, no para la olla entera. Si preparas 20 porciones con 2 kg de arroz, la composición lleva 100 g.',
         },
       ],
     },
@@ -51,15 +51,15 @@ export default {
 
     {
       id: 'costo',
-      title: 'Saber cuánto te cuesta cada plato',
+      title: 'Saber cuánto te cuesta cada producto',
       blocks: [
         {
           type: 'texto',
-          text: 'El **Costo Total** de la receta es el costo real del producto, y es el que usan los reportes de rentabilidad. Cuando sube el precio de un insumo, el costo de todos los platos que lo llevan se actualiza solo.',
+          text: 'El **Costo Total** de la receta es el costo real del producto, y es el que usan los reportes de rentabilidad. Cuando sube el precio de un insumo, el costo de todo lo que lo lleva se actualiza solo.',
         },
         {
           type: 'consejo',
-          text: 'Es la herramienta más honesta para revisar precios: te dice qué platos te dejan poco margen. Muchas veces el más vendido resulta ser el que menos deja.',
+          text: 'Es la herramienta más honesta para revisar precios: te dice qué productos te dejan poco margen. Muchas veces el más vendido resulta ser el que menos deja.',
         },
       ],
     },
@@ -67,20 +67,20 @@ export default {
 
   preguntas: [
     {
-      q: 'Vendo el plato pero los insumos no bajan.',
+      q: 'Vendo el producto pero los insumos no bajan.',
       a: 'Revisa que la receta tenga la opción **Descontar insumos al vender** activada, y que los insumos tengan control de stock (los marcados como "solo para costos" no se descuentan a propósito).',
     },
     {
-      q: '¿Tengo que hacer receta de todo?',
-      a: 'No. Hazla de lo que más vendes y de lo que más te cuesta: ahí está el 80% del valor. Un producto que compras y revendes tal cual no necesita receta.',
+      q: '¿Tengo que definirla para todo?',
+      a: 'No. Hazlo con lo que más vendes y lo que más te cuesta: ahí está el 80% del valor. Un producto que compras y revendes tal cual no necesita composición.',
     },
     {
-      q: 'Cambié la receta, ¿afecta a lo ya vendido?',
-      a: 'No. Las ventas anteriores conservan el costo que tenían. La receta nueva aplica de ahí en adelante.',
+      q: 'Cambié la composición, ¿afecta a lo ya vendido?',
+      a: 'No. Las ventas anteriores conservan el costo que tenían. La nueva aplica de ahí en adelante.',
     },
     {
-      q: 'Un plato tiene variantes con distinta cantidad de ingredientes.',
-      a: 'Lo habitual es crear la receta sobre la versión estándar. Si las diferencias son grandes (una pizza familiar contra una personal), conviene tratarlas como productos separados con su propia receta.',
+      q: 'Un producto tiene variantes que llevan distinta cantidad.',
+      a: 'Lo habitual es definirla sobre la versión estándar. Si las diferencias son grandes (una pizza familiar contra una personal, un baño de perro chico contra uno grande), conviene tratarlas como productos separados con su propia composición.',
     },
   ],
 }

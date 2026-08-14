@@ -20,10 +20,12 @@ export default {
           text: 'Es la confusión más común del sistema, y se resuelve con una línea: **la sucursal es el local; el almacén es dónde está guardada la mercadería**.',
         },
         {
-          type: 'pasos',
-          items: [
-            'La **sucursal** responde *¿desde dónde vendo?* — decide con qué **serie** sale el comprobante y a qué **caja** entra la plata.',
-            'El **almacén** responde *¿de dónde sale la mercadería?* — decide de dónde se **descuenta el stock**.',
+          type: 'tabla',
+          encabezados: ['', 'Sucursal', 'Almacén'],
+          filas: [
+            ['Responde', '¿Desde dónde vendo?', '¿De dónde sale la mercadería?'],
+            ['Afecta', 'El comprobante y la caja', 'El stock'],
+            ['Tiene', 'Su serie y su caja del día', 'Cantidades de cada producto'],
           ],
         },
         {
@@ -32,23 +34,47 @@ export default {
         },
         {
           type: 'ojo',
-          text: 'El stock **nunca vive en la sucursal, vive en el almacén**. Cuando alguien dice "tengo 50 polos", en realidad tiene 30 en un almacén y 20 en otro: el total es la suma, y al vender el sistema descuenta de **uno** en concreto.',
+          text: 'El punto clave: **el stock nunca vive en la sucursal, vive en el almacén**. Cuando alguien dice "tengo 50 polos", en realidad tiene 30 en un almacén y 20 en otro. El total es la suma, y al vender el sistema descuenta de **uno** en concreto.',
         },
         {
           type: 'texto',
-          text: '**Un ejemplo.** Una tienda de ropa con dos locales: *Sucursal Centro* con los almacenes **Mostrador Centro** y **Depósito Centro**, y *Sucursal Surco* con su **Mostrador Surco**.',
+          text: '**Un ejemplo.** Una tienda de ropa con dos locales:',
+        },
+        {
+          type: 'tabla',
+          encabezados: ['Sucursal', 'Sus almacenes'],
+          filas: [
+            ['Centro', 'Mostrador Centro · Depósito Centro'],
+            ['Surco', 'Mostrador Surco'],
+          ],
         },
         {
           type: 'texto',
-          text: 'Vendes un polo en Centro, desde el mostrador. Pasan tres cosas, cada una por su lado: el comprobante sale con la **serie de Centro**, la plata entra a la **caja de Centro** —las dos las decide la sucursal— y el stock baja del **Mostrador Centro**, que lo decide el almacén. El Depósito Centro no se toca, aunque esté en el mismo local.',
+          text: 'Vendes un polo en Centro, desde el mostrador. Pasan tres cosas, y cada una la decide algo distinto:',
         },
         {
-          type: 'consejo',
-          text: 'La regla para configurarlo sin equivocarse: **sucursal = otra dirección**; **almacén = un lugar donde guardas cosas** (mostrador, depósito, trastienda, la camioneta).',
+          type: 'pasos',
+          items: [
+            'El comprobante sale con la **serie de Centro** — lo decide la sucursal.',
+            'La plata entra a la **caja de Centro** — lo decide la sucursal.',
+            'El stock baja del **Mostrador Centro** — lo decide el almacén.',
+          ],
+        },
+        {
+          type: 'texto',
+          text: 'El **Depósito Centro no se toca**, aunque esté en el mismo local. Para el sistema son dos lugares distintos.',
         },
         {
           type: 'ojo',
-          text: 'De acá sale el reclamo más repetido: *"dice sin stock pero lo tengo, lo estoy viendo"*. Y es verdad: lo tiene, pero **en el depósito**, y está vendiendo desde el mostrador. El sistema no se equivoca — mira el almacén correcto. Se arregla con una **transferencia** desde Inventario.',
+          text: 'De ahí sale el reclamo más repetido: *"dice sin stock pero lo tengo, lo estoy viendo"*. Y es verdad que lo tiene — pero **en el depósito**, y está vendiendo desde el mostrador. El sistema no se equivoca: está mirando el almacén correcto. Se arregla con una **transferencia** desde Inventario.',
+        },
+        {
+          type: 'consejo',
+          text: 'La regla para configurarlo sin equivocarse: **sucursal = otra dirección**. Si es otro local, es una sucursal. **Almacén = un lugar donde guardas cosas**: mostrador, depósito, trastienda, la camioneta.',
+        },
+        {
+          type: 'texto',
+          text: 'Y si vendes todo desde un solo lugar, **no necesitas nada de esto**: con el almacén Principal alcanza y no hay que configurar sucursales.',
         },
       ],
     },

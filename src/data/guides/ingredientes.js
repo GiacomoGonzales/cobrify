@@ -20,7 +20,7 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'Van los insumos: la harina, el aceite, el pollo, los envases. No van los productos terminados que vendes en el POS: esos viven en **Productos**.',
+          text: 'Van los insumos: la harina, el aceite, los envases, el shampoo, las etiquetas. No van los productos terminados que vendes en el POS: esos viven en **Productos**.',
         },
         {
           type: 'consejo',
@@ -39,7 +39,7 @@ export default {
         },
         {
           type: 'texto',
-          text: 'Puedes marcar un insumo como **Solo para costos**: sirve para calcular cuánto te cuesta un plato sin llevarle inventario (útil con la sal, las especias, cosas que no vale la pena contar).',
+          text: 'Puedes marcar un insumo como **Solo para costos**: sirve para que sume al costo de lo que produces sin llevarle inventario (útil con la sal, el gas, cosas que no vale la pena contar).',
         },
       ],
     },
@@ -50,7 +50,7 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'Los estados **Stock OK**, **Stock Bajo** y **Sin stock** te dicen de un vistazo qué hay que reponer. El stock baja solo cuando vendes un producto que tiene receta.',
+          text: 'Los estados **Stock OK**, **Stock Bajo** y **Sin stock** te dicen de un vistazo qué hay que reponer. El stock baja solo cuando vendes un producto que tiene su composición definida.',
         },
         {
           type: 'texto',
@@ -58,7 +58,7 @@ export default {
         },
         {
           type: 'ojo',
-          text: 'Para que el descuento automático funcione, el producto que vendes tiene que tener su **receta** definida. Sin receta, vender el plato no toca los insumos.',
+          text: 'Para que el descuento automático funcione, el producto que vendes tiene que tener definida su **Composición** (**Receta** en restaurante). Sin eso, venderlo no toca los insumos.',
         },
       ],
     },
@@ -66,6 +66,7 @@ export default {
     {
       id: 'modificadores',
       title: 'Modificadores',
+      soloModos: ['restaurant'],
       blocks: [
         {
           type: 'texto',
@@ -77,8 +78,8 @@ export default {
 
   preguntas: [
     {
-      q: 'Vendí platos todo el día y los insumos no bajaron.',
-      a: 'Los productos vendidos no tienen receta definida. Revisa en **Recetas** (o **Composición**) que el plato tenga sus insumos cargados y que esté activo el descuento al vender.',
+      q: 'Vendí todo el día y los insumos no bajaron.',
+      a: 'Los productos vendidos no tienen su composición definida. Revisa en **Composición** (**Recetas** en restaurante) que el producto tenga sus insumos cargados y que esté activo el descuento al vender.',
     },
     {
       q: '¿Registro las compras de insumos en Compras o acá?',

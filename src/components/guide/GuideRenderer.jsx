@@ -18,6 +18,7 @@ import { getVisibleSections } from '@/data/guides/registry'
  *   { type: 'pasos',   items: ['...'] }                 lista numerada
  *   { type: 'consejo', text }                           recuadro de consejo
  *   { type: 'ojo',     text }                           recuadro de advertencia
+ *   { type: 'tabla',   encabezados?: [], filas: [[]] }  tabla comparativa
  *   { type: 'ui',      kind, label, nota? }             maqueta de un control real
  *       kind: 'boton' | 'botonSecundario' | 'campo' | 'toggle' | 'menu'
  *       'menu' dibuja los tres puntitos de acciones de una fila.
@@ -52,6 +53,23 @@ const renderInline = (text = '') =>
         part
       )
     )
+
+/**
+ * Nombre visible de cada rubro. Solo se usa en el manual PUBLICO, donde no hay
+ * sesión y por lo tanto no se sabe el rubro del que lee: en vez de ocultar las
+ * secciones de otros rubros —que dejaría a un restaurante sin encontrar las
+ * comandas— se muestran todas, con una etiqueta que dice a quién le aplica.
+ */
+const NOMBRE_MODO = {
+  retail: 'General',
+  restaurant: 'Restaurante',
+  pharmacy: 'Farmacia',
+  veterinary: 'Veterinaria',
+  hotel: 'Hotelería',
+  transport: 'Transporte',
+  logistics: 'Logística',
+  real_estate: 'Inmobiliaria',
+}
 
 /** ¿La opción de configuración de esta sección está apagada? */
 const optionIsOff = (requiereOpcion, businessSettings) => {
@@ -115,7 +133,7 @@ const UiMock = ({ kind, label, nota }) => {
   )
 }
 
-const Block = ({ block, isDemoMode, onNavigate }) => {
+const Block = ({ block, isDemoMode, onNavigate, publico = false }) => {
   switch (block.type) {
     case 'texto':
       return <p className="text-sm text-gray-700 leading-relaxed">{renderInline(block.text)}</p>
@@ -153,7 +171,54 @@ const Block = ({ block, isDemoMode, onNavigate }) => {
     case 'ui':
       return <UiMock kind={block.kind} label={block.label} nota={block.nota} />
 
+    case 'tabla':
+      // Comparaciones lado a lado. Sin esto habia que escribirlas en prosa, que
+      // es exactamente donde una comparacion deja de entenderse.
+      return (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
+            {block.encabezados && (
+              <thead>
+                <tr className="bg-gray-50">
+                  {block.encabezados.map((h, i) => (
+                    <th
+                      key={i}
+                      className="px-3 py-2 text-left text-xs font-semibold text-gray-700 border-b border-gray-200"
+                    >
+                      {renderInline(h)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+            )}
+            <tbody className="divide-y divide-gray-100">
+              {(block.filas || []).map((fila, i) => (
+                <tr key={i} className="align-top">
+                  {fila.map((celda, j) => (
+                    <td
+                      key={j}
+                      className={`px-3 py-2 leading-relaxed ${j === 0 ? 'text-gray-900 font-medium' : 'text-gray-700'}`}
+                    >
+                      {renderInline(celda)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+
     case 'enlace':
+      // MANUAL PUBLICO: la ruta /app existe pero exige sesion, y quien lee sin
+      // cuenta no puede seguirla. Se muestra como TEXTO en vez de ocultarla: el
+      // "donde esta" es informacion util aunque no se pueda hacer clic, y
+      // esconderla dejaria la guia diciendo "activa X" sin decir donde.
+      if (publico) {
+        return (
+          <p className="text-sm text-gray-500 italic">{renderInline(block.label)}</p>
+        )
+      }
       // En demo las rutas /app no existen: se omite el enlace.
       if (isDemoMode) return null
       // El <div> importa: el boton es inline-flex (para no estirarse a todo el
@@ -185,10 +250,20 @@ export default function GuideRenderer({
   anchorPrefix = 'sec',
   isDemoMode = false,
   onNavigate,
+  // Manual PUBLICO (sin sesion): muestra TODAS las secciones, etiquetando las
+  // que son de un rubro, y convierte los enlaces a la app en texto.
+  publico = false,
 }) {
   if (!content) return null
 
-  const sections = getVisibleSections(content, businessMode)
+  // En el manual publico el lector puede elegir su rubro. Si lo eligio, las
+  // secciones se filtran igual que dentro de la app; si no eligio ninguno, se
+  // muestran TODAS con su etiqueta (ocultarlas dejaria a un restaurante sin
+  // encontrar las comandas).
+  const sinRubroElegido = publico && !businessMode
+  const sections = sinRubroElegido
+    ? (content.sections || [])
+    : getVisibleSections(content, businessMode)
 
   return (
     <div className="space-y-8">
@@ -197,8 +272,25 @@ export default function GuideRenderer({
       )}
 
       {sections.map(section => (
-        <section key={section.id} id={`${anchorPrefix}-${section.id}`} className="scroll-mt-4">
-          <h3 className="text-base font-bold text-gray-900 mb-3">{section.title}</h3>
+        <section
+          key={section.id}
+          id={`${anchorPrefix}-${section.id}`}
+          // Al saltar a un ancla, el navegador deja el titulo pegado al borde de
+          // arriba — y en el manual publico ahi vive el encabezado FIJO, que lo
+          // tapa. `scroll-mt` reserva ese alto (el encabezado mide ~64px, mas
+          // aire) para que el titulo aterrice DEBAJO. Adentro de la app el panel
+          // y la pagina no tienen encabezado fijo propio, asi que alcanza con el
+          // margen chico de siempre.
+          className={publico ? 'scroll-mt-20' : 'scroll-mt-4'}
+        >
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <h3 className="text-base font-bold text-gray-900">{section.title}</h3>
+            {sinRubroElegido && section.soloModos?.length > 0 && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                Solo en {section.soloModos.map(m => NOMBRE_MODO[m] || m).join(' y ')}
+              </span>
+            )}
+          </div>
 
           {optionIsOff(section.requiereOpcion, businessSettings) && (
             <div className="flex gap-2 items-start p-2.5 mb-3 bg-gray-50 border border-gray-200 rounded-lg">
@@ -256,7 +348,7 @@ export default function GuideRenderer({
               // entera o dejar el parrafo visible para todos.
               .filter(b => !b.soloModos || b.soloModos.includes(businessMode))
               .map((block, i) => (
-                <Block key={i} block={block} isDemoMode={isDemoMode} onNavigate={onNavigate} />
+                <Block key={i} block={block} isDemoMode={isDemoMode} onNavigate={onNavigate} publico={publico} />
               ))}
           </div>
         </section>

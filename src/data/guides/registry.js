@@ -25,6 +25,10 @@
 /** Orden fijo de las categorías en el índice del manual. */
 export const GUIDE_CATEGORIES = [
   'Primeros pasos',
+  // Recorridos que cruzan varias pantallas. Las demas categorias agrupan guias
+  // POR PANTALLA; estas responden a un TRABAJO ("como manejo el stock de mis
+  // insumos"), que es como pregunta el usuario y no como esta partido el sistema.
+  'Cómo hacer',
   'Ventas',
   'Inventario',
   'Operación',
@@ -33,6 +37,16 @@ export const GUIDE_CATEGORIES = [
 ]
 
 export const GUIDES = [
+  {
+    id: 'flujo-insumos',
+    route: null, // recorrido: no pertenece a una pantalla
+    title: 'Manejar el stock de tus insumos',
+    category: 'Cómo hacer',
+    description: 'De punta a punta: crear el insumo, comprarlo, definir la composición, vender o producir, y revisar qué falta.',
+    keywords: 'insumo ingrediente materia prima stock minimo receta composicion costo promedio compra producir produccion merma unidad kilo litro recuento cuadrar descuento automatico plato pack combo',
+    modos: ['restaurant', 'retail', 'transport', 'veterinary'],
+    load: () => import('./flujo-insumos.js'),
+  },
   {
     id: 'dashboard',
     route: '/app/dashboard',
@@ -230,7 +244,7 @@ export const GUIDES = [
     category: 'Inventario',
     description: 'La materia prima: registrar insumos, controlar su stock y costo promedio, compras de insumos y modificadores.',
     keywords: 'insumos ingredientes materia prima stock bajo costo promedio valor total solo para costos compras de insumos modificadores extras receta descuento',
-    modos: null,
+    modos: ['restaurant', 'retail', 'transport', 'veterinary'],
     load: () => import('./ingredientes.js'),
   },
   {
@@ -240,7 +254,7 @@ export const GUIDES = [
     category: 'Inventario',
     description: 'Cuánto insumo lleva cada producto: descuento automático al vender y costo real de cada plato.',
     keywords: 'recetas composicion producto compuesto ingredientes insumos cantidad costo total descontar insumos al vender rentabilidad plato margen',
-    modos: null,
+    modos: ['restaurant', 'retail', 'transport', 'veterinary'],
     load: () => import('./recetas.js'),
   },
   {
