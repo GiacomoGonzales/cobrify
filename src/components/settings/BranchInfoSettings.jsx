@@ -20,7 +20,11 @@ import Input from '@/components/ui/Input'
  * Crear/eliminar sucursales sigue siendo del panel admin (va ligado a series y plan).
  */
 export default function BranchInfoSettings({ businessId, mainBranchName = 'Sucursal Principal' }) {
-  const { toast } = useToast()
+  // useToast() devuelve el objeto DIRECTO (toast.success/error), no { toast }.
+  // El destructuring dejaba toast=undefined: al guardar, updateBranch escribía
+  // bien pero toast.success reventaba con TypeError y ni el modal se cerraba ni
+  // la lista se refrescaba — parecía que "no guardaba" (reporte 14-ago-2026).
+  const toast = useToast()
   const [branches, setBranches] = useState([])
   const [loading, setLoading] = useState(true)
 
