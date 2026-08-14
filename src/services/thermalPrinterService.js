@@ -2,7 +2,7 @@ import { CapacitorThermalPrinter } from 'capacitor-thermal-printer';
 import { getRealPayments } from '@/utils/receivables'
 import { getNotaVentaLegend, wrapLegend } from '@/utils/documentLegends'
 import { Capacitor, registerPlugin } from '@capacitor/core';
-import { prepareLogoForPrinting } from './imageProcessingService';
+import { prepareLogoForPrinting, prepareLogoRasterForEscPos } from './imageProcessingService';
 import * as BLEPrinter from './blePrinterService';
 import { getPricedModifiers } from '@/utils/modifierHelpers';
 import { unitDisplayName } from '@/data/sunatUnits';
@@ -2433,6 +2433,22 @@ class EscPosBuilder {
   }
 
   // Obtener bytes para enviar
+  // Imagen raster (GS v 0, modo normal). data = filas de bits empaquetados,
+  // widthBytes por fila, MSB primero, bit 1 = punto negro. Es lo que permite
+  // que la ruta WiFi/TCP imprima el logo: el plugin TCP solo manda bytes.
+  rasterImage(widthBytes, height, data) {
+    if (!widthBytes || !height || !data) return this;
+    this.commands.push(
+      EscPosBuilder.GS, 0x76, 0x30, 0x00,
+      widthBytes & 0xFF, (widthBytes >> 8) & 0xFF,
+      height & 0xFF, (height >> 8) & 0xFF,
+    );
+    // push(...data) con ~10KB de bytes puede reventar el límite de argumentos:
+    // se agrega en bucle.
+    for (let i = 0; i < data.length; i++) this.commands.push(data[i]);
+    return this;
+  }
+
   build() {
     return new Uint8Array(this.commands);
   }
@@ -2467,10 +2483,29 @@ const buildTicketEscPos = async (invoice, business, paperWidth = 58) => {
     const tipoComprobante = isNotaVenta ? 'NOTA DE VENTA' : (isInvoice ? 'FACTURA ELECTRONICA' : 'BOLETA DE VENTA ELECTRONICA');
 
     // Construir ticket
-    builder.init()
-      .alignCenter()
+    builder.init().alignCenter();
+
+    // Logo, misma prioridad que la ruta Bluetooth: sucursal emisora > global.
+    // Si falla se sigue sin logo — el ticket nunca se cae por la imagen.
+    const headerLogoUrl = invoice.branchLogoUrl || business.logoUrl;
+    if (headerLogoUrl) {
+      try {
+        const raster = await prepareLogoRasterForEscPos(headerLogoUrl, paperWidth, business.logoPrintScale);
+        if (raster.ready) {
+          builder.rasterImage(raster.widthBytes, raster.height, raster.data).newLine();
+        } else {
+          console.warn('⚠️ Logo no rasterizable, ticket WiFi sin logo');
+        }
+      } catch (logoError) {
+        console.error('❌ Error al preparar logo para WiFi:', logoError.message);
+      }
+    }
+
+    // Nombre comercial: mismo criterio que Bluetooth (snapshot de la sucursal
+    // emisora primero; antes esta ruta ignoraba branchTradeName).
+    builder.alignCenter()
       .bold(true)
-      .text(business.tradeName || business.name || 'MI EMPRESA')
+      .text(invoice.branchTradeName || invoice.branchName || business.tradeName || business.name || 'MI EMPRESA')
       .newLine()
       .bold(false);
 

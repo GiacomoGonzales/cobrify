@@ -320,6 +320,72 @@ export async function prepareLogoForPrinting(logoUrl, paperWidth = 58, scale = 1
 }
 
 /**
+ * Preparar el logo como RASTER crudo para ESC/POS (GS v 0).
+ *
+ * La ruta Bluetooth Clásico imprime el logo con .image() del plugin, pero la
+ * ruta WiFi/TCP manda bytes ESC/POS puros y el plugin TCP no sabe de imágenes:
+ * hay que empaquetar el bitmap a mano, 1 bit por píxel, MSB primero.
+ * (Reporte 14-ago-2026: el logo no salía en impresión WiFi — solo existía en
+ * las rutas Bluetooth/BLE.)
+ *
+ * Reusa prepareLogoForPrinting (mismo caché, mismo dithering, misma escala) y
+ * convierte su PNG a filas de bits. Si solo hay URL sin base64 (fallback CORS)
+ * no se puede rasterizar: devuelve ready:false y el ticket sale sin logo.
+ *
+ * @returns {Promise<Object>} { ready, width, height, widthBytes, data: Uint8Array }
+ */
+export async function prepareLogoRasterForEscPos(logoUrl, paperWidth = 58, scale = 100) {
+  const noLogo = { ready: false, width: 0, height: 0, widthBytes: 0, data: null };
+  if (!logoUrl) return noLogo;
+
+  const prepared = await prepareLogoForPrinting(logoUrl, paperWidth, scale);
+  if (!prepared.ready || !prepared.base64) return noLogo;
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const w = img.width;
+        const h = img.height;
+        // Un logo desproporcionadamente alto atascaría el ticket; mismo espíritu
+        // que el tope de ancho por papel.
+        if (!w || !h || h > 800) return resolve(noLogo);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        // Fondo blanco: los PNG con transparencia deben imprimir blanco, no negro.
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0);
+        const { data } = ctx.getImageData(0, 0, w, h);
+
+        const widthBytes = Math.ceil(w / 8);
+        const bits = new Uint8Array(widthBytes * h);
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const i = (y * w + x) * 4;
+            const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+            // El PNG ya viene dithered a blanco/negro puros; el umbral solo
+            // decide los bordes re-muestreados. Bit 1 = punto NEGRO.
+            if (data[i + 3] > 127 && gray < 128) {
+              bits[y * widthBytes + (x >> 3)] |= (0x80 >> (x & 7));
+            }
+          }
+        }
+        resolve({ ready: true, width: w, height: h, widthBytes, data: bits });
+      } catch (e) {
+        console.error('Error rasterizando logo para ESC/POS:', e);
+        resolve(noLogo);
+      }
+    };
+    img.onerror = () => resolve(noLogo);
+    img.src = `data:image/png;base64,${prepared.base64}`;
+  });
+}
+
+/**
  * Validar que una URL de imagen sea accesible
  * @param {string} url - URL a validar
  * @param {number} timeout - Timeout en ms
