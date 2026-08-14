@@ -100,6 +100,10 @@ export default {
           text: 'A medida que abonas, registras los pagos y el saldo baja; el **Detalle de Abonos** guarda cada uno.',
         },
         {
+          type: 'texto',
+          text: 'Si el crédito se pactó **en cuotas**, al registrar la compra elige "En cuotas": defines cuántas son, cuándo vence la primera y cada cuántos días, y el sistema arma el **cronograma** (puedes ajustar monto y fecha de cada cuota antes de guardar). Cada cuota se paga desde la lista de compras, y el **Flujo de Caja** proyecta sus vencimientos — así sabes cuándo va a salir la plata, no solo cuánto debes.',
+        },
+        {
           type: 'consejo',
           text: 'Es el espejo de "Pagos Pendientes" de la página Ventas: uno es lo que te deben, este es lo que debes.',
         },

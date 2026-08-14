@@ -176,9 +176,16 @@ export default function CreatePurchase() {
   // Tipo de pago
   const [paymentType, setPaymentType] = useState('contado') // 'contado' o 'credito'
   const [dueDate, setDueDate] = useState('') // Fecha de vencimiento (opcional)
-  // Legacy: mantener para compatibilidad con compras antiguas en modo edición
+  // Crédito: 'unico' (vencimiento opcional + abonos libres) o 'cuotas'
+  // (cronograma). Las cuotas EXISTÍAN, se quitaron al pasar a abonos libres, y
+  // vuelven el 14-ago-2026 por pedido de un usuario: sin cronograma el Flujo de
+  // Caja no puede proyectar CUÁNDO sale la plata. Compras y CashFlow nunca
+  // dejaron de soportarlas (handlePayInstallment / cuotas pagadas como egreso).
   const [creditType, setCreditType] = useState('unico')
-  const [installments, setInstallments] = useState([]) // Solo para compras antiguas con cuotas
+  const [installments, setInstallments] = useState([])
+  const [numInstallments, setNumInstallments] = useState(2)
+  const [firstDueDate, setFirstDueDate] = useState('')
+  const [installmentIntervalDays, setInstallmentIntervalDays] = useState(30)
   const [purchaseItems, setPurchaseItems] = useState([
     { productId: '', productName: '', quantity: '', unitPrice: 0, cost: 0, costWithoutIGV: 0, batchNumber: '', expirationDate: '', sanitaryRegistry: '', originalSanitaryRegistry: '', itemType: 'product', unit: 'NIU', salePrice: '', salePrice2: '', salePrice3: '', salePrice4: '', trackSerials: false, serialNumbers: [] },
   ])
@@ -1140,8 +1147,44 @@ export default function CreatePurchase() {
     }
   }
 
-  // NOTA: El sistema de cuotas fijas ha sido reemplazado por pagos parciales flexibles
-  // Las funciones de generación de cuotas fueron removidas
+  // Generar el cronograma de cuotas: montos iguales redondeados a céntimos,
+  // con el ajuste del redondeo en la ÚLTIMA cuota para que la suma sea exacta.
+  // Cada fila queda editable (monto y fecha) después de generar.
+  const generateInstallments = () => {
+    const n = Math.max(2, Math.min(36, Number(numInstallments) || 2))
+    const total = Math.round((amounts.total || 0) * 100) / 100
+    if (total <= 0) {
+      toast.error('Agrega productos antes de generar las cuotas')
+      return
+    }
+    if (!firstDueDate) {
+      toast.error('Elige la fecha de la primera cuota')
+      return
+    }
+    const interval = Math.max(1, Number(installmentIntervalDays) || 30)
+    const base = Math.floor((total / n) * 100) / 100
+    const rows = []
+    for (let i = 0; i < n; i++) {
+      const [y, m, d] = firstDueDate.split('-').map(Number)
+      const date = new Date(y, m - 1, d + i * interval)
+      rows.push({
+        number: i + 1,
+        amount: i === n - 1 ? Math.round((total - base * (n - 1)) * 100) / 100 : base,
+        dueDate: getLocalDateString(date),
+        status: 'pending',
+      })
+    }
+    setInstallments(rows)
+  }
+
+  const updateInstallmentRow = (idx, field, value) => {
+    setInstallments(prev => prev.map((row, i) => (i === idx ? { ...row, [field]: value } : row)))
+  }
+
+  // Suma del cronograma vs total, para avisar el descuadre antes de guardar
+  const installmentsSum = Math.round(installments.reduce((sum, r) => sum + (Number(r.amount) || 0), 0) * 100) / 100
+  const installmentsMismatch = creditType === 'cuotas' && installments.length > 0 &&
+    Math.abs(installmentsSum - Math.round((amounts.total || 0) * 100) / 100) > 0.01
 
   const openCreateProductModal = (itemIndex) => {
     setCurrentItemIndex(itemIndex)
@@ -1651,6 +1694,22 @@ export default function CreatePurchase() {
     // Validar usando los items normalizados (no el estado que puede estar desactualizado)
     if (!validateForm(normalizedItems)) return
 
+    // Cronograma de cuotas: tiene que existir y cuadrar con el total
+    if (!isEditMode && paymentType === 'credito' && creditType === 'cuotas') {
+      if (installments.length === 0) {
+        toast.error('Genera el cronograma de cuotas antes de guardar')
+        return
+      }
+      if (installmentsMismatch) {
+        toast.error(`La suma de las cuotas (${installmentsSum.toFixed(2)}) no cuadra con el total (${(amounts.total || 0).toFixed(2)})`)
+        return
+      }
+      if (installments.some(i => !i.dueDate || !(Number(i.amount) > 0))) {
+        toast.error('Cada cuota necesita monto mayor a cero y fecha')
+        return
+      }
+    }
+
     savingRef.current = true
     setIsSaving(true)
     setMessage(null)
@@ -1717,10 +1776,24 @@ export default function CreatePurchase() {
         paymentType: paymentType, // 'contado' o 'credito'
         paymentStatus: paymentType === 'contado' ? 'paid' : 'pending', // 'paid' o 'pending'
         paidAmount: paymentType === 'contado' ? amounts.total : 0, // Monto pagado
-        // Campos para crédito - Sistema de pagos parciales (abonos)
+        // Campos para crédito - abonos libres (pago único) o cronograma (cuotas)
         ...(paymentType === 'credito' && {
-          ...(dueDate && { dueDate: parseLocalDate(dueDate) }), // Fecha de vencimiento opcional
-          payments: [], // Array de abonos parciales - se agregan desde Purchases.jsx
+          ...(dueDate && creditType === 'unico' && { dueDate: parseLocalDate(dueDate) }),
+          payments: [], // Abonos parciales - se agregan desde Purchases.jsx
+          ...(!isEditMode && creditType === 'cuotas' && installments.length > 0 && {
+            creditType: 'cuotas',
+            installments: installments.map(inst => ({
+              number: inst.number,
+              amount: Math.round((Number(inst.amount) || 0) * 100) / 100,
+              dueDate: parseLocalDate(inst.dueDate),
+              status: 'pending',
+            })),
+            totalInstallments: installments.length,
+            paidInstallments: 0,
+            // La primera cuota es el primer vencimiento visible en listas que
+            // solo miran dueDate.
+            dueDate: parseLocalDate(installments[0].dueDate),
+          }),
         }),
       }
 
@@ -2946,19 +3019,125 @@ export default function CreatePurchase() {
 
             {paymentType === 'credito' && (
               <div className="mt-4 space-y-4">
-                {/* Fecha de vencimiento opcional */}
-                <div className="max-w-xs">
-                  <Input
-                    label="Fecha de Vencimiento (opcional)"
-                    type="date"
-                    value={dueDate}
-                    onChange={e => setDueDate(e.target.value)}
-                    min={getLocalDateString()}
-                  />
-                </div>
-                <p className="text-sm text-gray-500">
-                  Podrás registrar pagos parciales (abonos) desde la lista de compras hasta cancelar la deuda.
-                </p>
+                {/* Único pago (abonos libres) o cronograma de cuotas. En edición
+                    con cuotas YA PAGADAS el cronograma no se regenera desde acá:
+                    se gestiona desde la lista de Compras. */}
+                {isEditMode && installments.some(i => i.status === 'paid') ? (
+                  <p className="text-sm text-gray-500">
+                    Esta compra tiene un cronograma con cuotas pagadas. El cronograma se
+                    conserva tal cual; los pagos se gestionan desde la lista de Compras.
+                  </p>
+                ) : (
+                  <>
+                    <div className="flex gap-4">
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          name="creditType"
+                          value="unico"
+                          checked={creditType === 'unico'}
+                          onChange={() => { setCreditType('unico'); setInstallments([]) }}
+                          className="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">Pago único</span>
+                      </label>
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          name="creditType"
+                          value="cuotas"
+                          checked={creditType === 'cuotas'}
+                          onChange={() => setCreditType('cuotas')}
+                          className="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">En cuotas</span>
+                      </label>
+                    </div>
+
+                    {creditType === 'unico' && (
+                      <>
+                        <div className="max-w-xs">
+                          <Input
+                            label="Fecha de Vencimiento (opcional)"
+                            type="date"
+                            value={dueDate}
+                            onChange={e => setDueDate(e.target.value)}
+                            min={getLocalDateString()}
+                          />
+                        </div>
+                        <p className="text-sm text-gray-500">
+                          Podrás registrar pagos parciales (abonos) desde la lista de compras hasta cancelar la deuda.
+                        </p>
+                      </>
+                    )}
+
+                    {creditType === 'cuotas' && (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl">
+                          <Input
+                            label="Número de cuotas"
+                            type="number"
+                            min="2"
+                            max="36"
+                            value={numInstallments}
+                            onChange={e => setNumInstallments(e.target.value)}
+                          />
+                          <Input
+                            label="Primera cuota vence"
+                            type="date"
+                            value={firstDueDate}
+                            onChange={e => setFirstDueDate(e.target.value)}
+                            min={getLocalDateString()}
+                          />
+                          <Input
+                            label="Cada cuántos días"
+                            type="number"
+                            min="1"
+                            value={installmentIntervalDays}
+                            onChange={e => setInstallmentIntervalDays(e.target.value)}
+                          />
+                        </div>
+                        <Button type="button" variant="outline" onClick={generateInstallments}>
+                          Generar cronograma
+                        </Button>
+
+                        {installments.length > 0 && (
+                          <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-w-2xl">
+                            {installments.map((inst, idx) => (
+                              <div key={idx} className="flex items-center gap-3 p-2.5">
+                                <span className="w-16 text-sm text-gray-500 flex-shrink-0">Cuota {inst.number}</span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={inst.amount}
+                                  onChange={e => updateInstallmentRow(idx, 'amount', e.target.value)}
+                                  className="w-28 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                />
+                                <input
+                                  type="date"
+                                  value={inst.dueDate}
+                                  onChange={e => updateInstallmentRow(idx, 'dueDate', e.target.value)}
+                                  className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                />
+                              </div>
+                            ))}
+                            <div className={`flex justify-between px-3 py-2 text-sm font-medium ${installmentsMismatch ? 'text-red-600 bg-red-50' : 'text-gray-700 bg-gray-50'}`}>
+                              <span>Suma del cronograma</span>
+                              <span>
+                                {installmentsSum.toFixed(2)} / {(amounts.total || 0).toFixed(2)}
+                                {installmentsMismatch && ' — no cuadra con el total'}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                        <p className="text-sm text-gray-500">
+                          Cada cuota se paga desde la lista de compras, y el Flujo de Caja proyecta sus vencimientos.
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
           </div>

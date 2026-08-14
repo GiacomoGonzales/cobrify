@@ -706,6 +706,23 @@ export default function CashFlow() {
       return sum + convertToBase(remainingNative, p.currency, p.exchangeRate)
     }, 0)
 
+    // Cuotas de COMPRAS pendientes (cronograma nuevo o legacy): son las fechas
+    // en las que va a salir plata — lo que el usuario pidió proyectar (14-ago).
+    const pendingPurchaseInstallments = []
+    pendingPurchases.forEach(p => {
+      (Array.isArray(p.installments) ? p.installments : []).forEach(inst => {
+        if (inst.status !== 'pending') return
+        pendingPurchaseInstallments.push({
+          purchaseId: p.id,
+          supplierName: p.supplier?.businessName || p.supplier?.name || 'Proveedor',
+          number: inst.number,
+          amountBase: convertToBase(inst.amount || 0, p.currency, p.exchangeRate),
+          dueDate: toDate(inst.dueDate),
+        })
+      })
+    })
+    pendingPurchaseInstallments.sort((a, b) => (a.dueDate?.getTime?.() || 0) - (b.dueDate?.getTime?.() || 0))
+
     // Cuotas de préstamos pendientes (filtradas por sucursal)
     const pendingLoanInstallments = []
     loans.filter(loan => filterByBranch(loan, 'loan')).forEach(loan => {
@@ -765,6 +782,7 @@ export default function CashFlow() {
       loansPayable,
       pendingInvoices,
       pendingPurchases,
+      pendingPurchaseInstallments,
       pendingLoanInstallments,
       projectedBalance
     }
@@ -1670,6 +1688,16 @@ export default function CashFlow() {
                             <span className="font-medium text-red-700">{formatCurrency(cashFlowData.loansPayable)}</span>
                           </div>
                         )}
+                        {/* Próximas cuotas de compras (cronograma), ordenadas por vencimiento */}
+                        {cashFlowData.pendingPurchaseInstallments.slice(0, 3).map((inst, idx) => (
+                          <div key={`purchase-inst-${idx}`} className="flex justify-between text-xs py-1 border-b border-red-100 pl-4">
+                            <span className="text-gray-500">
+                              {inst.supplierName} - Cuota {inst.number}
+                              {inst.dueDate ? ` (vence ${inst.dueDate.toLocaleDateString('es-PE')})` : ''}
+                            </span>
+                            <span className="font-medium text-red-600">{formatCurrency(inst.amountBase)}</span>
+                          </div>
+                        ))}
                         {/* Detalle de cuotas próximas */}
                         {cashFlowData.pendingLoanInstallments.slice(0, 3).map((inst, idx) => (
                           <div key={`loan-inst-${idx}`} className="flex justify-between text-xs py-1 border-b border-red-100 pl-4">
