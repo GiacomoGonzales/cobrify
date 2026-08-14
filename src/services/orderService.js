@@ -243,6 +243,13 @@ export const createOrder = async (businessId, orderData) => {
       paidAt: orderData.paid ? serverTimestamp() : null,
       ...(orderData.paymentMethod && { paymentMethod: orderData.paymentMethod }),
 
+      // Facturación: una orden nacida de una venta del POS ya tiene su
+      // comprobante emitido. Sin esto, Órdenes ofrecería "Cobrar" sobre una
+      // venta ya cobrada.
+      ...(orderData.invoiced && { invoiced: true }),
+      ...(orderData.invoiceId && { invoiceId: orderData.invoiceId }),
+      ...(orderData.invoiceNumber && { invoiceNumber: orderData.invoiceNumber }),
+
       // Cálculos
       subtotal: orderData.subtotal || 0,
       tax: orderData.tax || 0,

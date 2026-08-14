@@ -36,6 +36,7 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible: web
   const getOrderTypeLabel = (orderType) => {
     if (orderType === 'delivery') return 'DELIVERY'
     if (orderType === 'takeaway') return 'PARA LLEVAR'
+    if (orderType === 'counter') return 'EN LOCAL'
     return 'EN MESA'
   }
 

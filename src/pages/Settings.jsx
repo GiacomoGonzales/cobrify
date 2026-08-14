@@ -653,6 +653,7 @@ export default function Settings() {
     brands: [], // Lista de marcas (para dark kitchens / multi-marca)
     autoPrintByStation: false, // Impresión automática por estación al enviar a cocina
     autoPrintKitchenComanda: true, // Imprimir la comanda sola al tomar el pedido
+    posCreatesKitchenOrder: false, // La venta directa del POS crea la orden en Cocina e imprime comanda (patio de comidas / dark kitchen)
     // Recargo al Consumo (Decreto Ley N° 25988)
     recargoConsumoEnabled: false, // Habilitar recargo al consumo
     recargoConsumoRate: 10, // Porcentaje del recargo (1-13%)
@@ -4655,6 +4656,17 @@ export default function Settings() {
                         description={restaurantConfig.autoPrintKitchenComanda !== false
                           ? '✓ Habilitado: Al tomar un pedido (desde Mesas u Órdenes) la comanda se envía sola a la cocina.'
                           : '✗ Deshabilitado: La comanda no se imprime sola. El mozo la envía con el botón "Imprimir Comanda" cuando lo necesite.'}
+                      />
+
+                      {/* Venta directa del POS -> orden + comanda (patio de comidas, dark kitchen) */}
+                      <SettingToggle
+                        id="opcion-posCreatesKitchenOrder"
+                        checked={restaurantConfig.posCreatesKitchenOrder === true}
+                        onChange={(e) => setRestaurantConfig({...restaurantConfig, posCreatesKitchenOrder: e.target.checked})}
+                        title="La venta del POS genera la orden en Cocina"
+                        description={restaurantConfig.posCreatesKitchenOrder === true
+                          ? '✓ Habilitado: Al cobrar una venta directa en el POS se crea la orden en Cocina (ya pagada) y se imprime la comanda junto con el comprobante. Ideal para patio de comidas o mostrador: un solo paso. Las ventas que vienen de una mesa o de una orden existente no se duplican.'
+                          : '✗ Deshabilitado: La venta directa del POS no pasa por Cocina. Los pedidos a cocina se toman desde Mesas u Órdenes.'}
                       />
 
                       {/* Modo Multi-Estación de Cocina */}

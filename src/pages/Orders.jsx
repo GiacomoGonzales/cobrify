@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
-import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, ChevronDown, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer, X, ShoppingCart, Truck, PackageCheck, Edit2, MoreVertical, FileText, Split, UserMinus, Wine } from 'lucide-react'
+import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, ChevronDown, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer, X, ShoppingCart, Truck, PackageCheck, Edit2, MoreVertical, FileText, Split, UserMinus, Wine, UtensilsCrossed } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
@@ -491,6 +491,11 @@ export default function Orders() {
     // Los datos se actualizan automáticamente vía onSnapshot
   }
 
+  // Etiqueta del tipo de pedido sin mesa. Antes era un binario delivery/llevar
+  // repetido en 4 sitios, y una orden "En Local" (counter) salia como Para Llevar.
+  const ORDER_TYPE_LABEL = { delivery: 'Delivery', takeaway: 'Para Llevar', counter: 'En Local' }
+  const orderTypeLabel = (t) => ORDER_TYPE_LABEL[t] || 'Para Llevar'
+
   const handleCreateOrderClick = () => {
     setShowCreateOrderModal(true)
   }
@@ -718,7 +723,7 @@ export default function Orders() {
         waiter: order.waiterName || 'N/A',
       }
     }
-    const typeLabel = order.orderType === 'delivery' ? 'DELIVERY' : 'PARA LLEVAR'
+    const typeLabel = orderTypeLabel(order.orderType).toUpperCase()
     return {
       id: null,
       number: typeLabel,
@@ -1511,11 +1516,13 @@ export default function Orders() {
                       <div className="flex items-center gap-2">
                         {order.orderType === 'delivery' ? (
                           <Bike className="w-4 h-4 text-blue-600" />
+                        ) : order.orderType === 'counter' ? (
+                          <UtensilsCrossed className="w-4 h-4 text-amber-600" />
                         ) : (
                           <ShoppingBag className="w-4 h-4 text-green-600" />
                         )}
                         <span className="text-gray-600">
-                          {order.orderType === 'delivery' ? 'Delivery' : 'Para Llevar'}
+                          {orderTypeLabel(order.orderType)}
                         </span>
                       </div>
                     )}
@@ -1897,7 +1904,7 @@ export default function Orders() {
             setShowOrderItemsModal(false)
             setNewOrderData(null)
           }}
-          table={{ number: newOrderData.orderType === 'delivery' ? 'Delivery' : 'Para Llevar' }}
+          table={{ number: orderTypeLabel(newOrderData.orderType) }}
           order={{ id: 'temp', items: [] }}
           branchId={selectedBranchId || null}
           onSuccess={() => {
@@ -1917,7 +1924,7 @@ export default function Orders() {
           setShowEditOrderModal(false)
           setOrderToEdit(null)
         }}
-        table={orderToEdit?.tableNumber ? { number: orderToEdit.tableNumber } : { number: orderToEdit?.orderType === 'delivery' ? 'Delivery' : 'Para Llevar' }}
+        table={orderToEdit?.tableNumber ? { number: orderToEdit.tableNumber } : { number: orderTypeLabel(orderToEdit?.orderType) }}
         order={orderToEdit}
         onSuccess={() => {
           setShowEditOrderModal(false)
@@ -2039,7 +2046,7 @@ export default function Orders() {
               <div className="text-sm text-gray-600 space-y-1">
                 <div className="flex justify-between">
                   <span>Tipo de orden:</span>
-                  <span className="capitalize">{orderToClose.orderType === 'delivery' ? 'Delivery' : orderToClose.orderType === 'takeout' ? 'Para llevar' : orderToClose.orderType}</span>
+                  <span className="capitalize">{orderTypeLabel(orderToClose.orderType)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Items:</span>

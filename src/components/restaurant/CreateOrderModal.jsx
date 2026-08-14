@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { X, ShoppingBag, Bike, Smartphone, User, Phone, AlertTriangle, Clock, Tag, MapPin, Wallet, Search, Loader2, CreditCard } from 'lucide-react'
+import { X, ShoppingBag, Bike, Smartphone, User, Phone, AlertTriangle, Clock, Tag, MapPin, Wallet, Search, Loader2, CreditCard, UtensilsCrossed } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
@@ -29,7 +29,7 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
   // negocio cobra después por el POS (el flujo normal), así que preguntarlo
   // acá era pedir un dato que no se usa en ningún lado.
   const cobroEnComanda = businessSettings?.showCustomerDataOnKitchenTicket === true
-  const [orderType, setOrderType] = useState('takeaway') // 'takeaway' or 'delivery'
+  const [orderType, setOrderType] = useState('takeaway') // 'takeaway' | 'delivery' | 'counter'
   const [source, setSource] = useState('counter')
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
@@ -270,6 +270,29 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
                 Entrega a domicilio
               </p>
             </button>
+
+            {/* En Local: come ahí pero SIN mesa (patio de comidas, barra de
+                mostrador). No es Para Llevar: no lleva táper ni envío. */}
+            <button
+              onClick={() => setOrderType('counter')}
+              className={`p-4 rounded-xl border-2 transition-all col-span-2 ${
+                orderType === 'counter'
+                  ? 'border-amber-500 bg-amber-50'
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <UtensilsCrossed className={`w-8 h-8 mx-auto mb-2 ${
+                orderType === 'counter' ? 'text-amber-600' : 'text-gray-400'
+              }`} />
+              <p className={`font-semibold ${
+                orderType === 'counter' ? 'text-amber-700' : 'text-gray-700'
+              }`}>
+                En Local
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Come aquí, sin mesa (patio de comidas, mostrador)
+              </p>
+            </button>
           </div>
         </div>
 
@@ -504,7 +527,7 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
                 Por cobrar
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                {orderType === 'delivery' ? 'El repartidor cobra al entregar' : 'Cobrar al recoger'}
+                {orderType === 'delivery' ? 'El repartidor cobra al entregar' : orderType === 'counter' ? 'Cobrar en el mostrador' : 'Cobrar al recoger'}
               </p>
             </button>
             <button
@@ -593,7 +616,7 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
           <ul className="text-sm text-primary-800 space-y-1">
             <li>
               • <span className="font-medium">Tipo:</span>{' '}
-              {orderType === 'takeaway' ? 'Para Llevar' : 'Delivery'}
+              {orderType === 'takeaway' ? 'Para Llevar' : orderType === 'counter' ? 'En Local' : 'Delivery'}
             </li>
             <li>
               • <span className="font-medium">Fuente:</span>{' '}

@@ -600,7 +600,28 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'En restaurantes, lo habitual es atender desde la página **Mesas**: cada mesa acumula su pedido y se cobra al cerrar. El POS sirve para ventas directas sin mesa, como pedidos para llevar.',
+          text: 'En restaurantes, lo habitual es atender desde la página **Mesas**: cada mesa acumula su pedido y se cobra al cerrar. El POS sirve para ventas directas sin mesa: para llevar, delivery o consumo **En Local** sin mesa asignada (patio de comidas, mostrador).',
+        },
+        {
+          type: 'texto',
+          text: 'El selector de **tipo de pedido** del carrito guarda cómo se atendió la venta: En Mesa, Para Llevar, Delivery o En Local. Ese dato aparece en el detalle del comprobante y en el reporte de ventas por tipo.',
+        },
+        {
+          type: 'texto',
+          text: 'Si tu operación es de mostrador (patio de comidas, dark kitchen), activa **"La venta del POS genera la orden en Cocina"**: al cobrar una venta directa se emite el comprobante, se crea la orden en Cocina ya pagada, y se imprime la comanda junto con el ticket. Un solo paso, sin pasar por Órdenes.',
+        },
+        {
+          type: 'texto',
+          text: 'Con esa opción activa, el tipo de pedido aparece como **botones** arriba del carrito — **En Local**, **Para Llevar**, **Delivery** — porque es lo que la comanda le grita a cocina: elígelo antes de cobrar. Y si una venta no va a cocina (una gaseosa, un producto envasado), desmarca **"Enviar comanda a cocina"**: la boleta sale igual, sin orden ni comanda.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=ventas&opcion=posCreatesKitchenOrder',
+          label: 'La venta del POS genera la orden en Cocina',
+        },
+        {
+          type: 'ojo',
+          text: 'Con esa opción activa, las ventas que vienen de una **mesa** o de una **orden existente** no crean otra orden: esa orden ya está en Cocina, y duplicarla haría que preparen el pedido dos veces. Solo la venta directa la genera.',
         },
       ],
     },

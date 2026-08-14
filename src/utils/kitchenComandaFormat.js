@@ -62,7 +62,7 @@ const wrapHanging = (prefix, text, width) => {
 const line = (t, opts = {}) => ({ t, a: opts.a || 'L', b: !!opts.b, big: !!opts.big });
 const SEP = { sep: true };
 
-const TYPE_LABELS = { delivery: 'DELIVERY', takeaway: 'PARA LLEVAR' };
+const TYPE_LABELS = { delivery: 'DELIVERY', takeaway: 'PARA LLEVAR', counter: 'EN LOCAL' };
 const PAY_LABELS = {
   efectivo: 'Efectivo', cash: 'Efectivo', yape: 'Yape', plin: 'Plin',
   tarjeta: 'Tarjeta', card: 'Tarjeta', transferencia: 'Transferencia', transfer: 'Transferencia',

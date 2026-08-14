@@ -593,7 +593,7 @@ export default function MainLayout() {
                       }
                       {alert.tableNumber ? ` · Mesa ${alert.tableNumber}` : ''}
                       {businessMode === 'restaurant' && alert.orderType === 'delivery' ? ' · Delivery' : ''}
-                      {businessMode === 'restaurant' && alert.orderType === 'takeaway' ? ' · Para llevar' : ''}
+                      {businessMode === 'restaurant' && alert.orderType === 'takeaway' ? ' · Para llevar' : businessMode === 'restaurant' && alert.orderType === 'counter' ? ' · En Local' : ''}
                     </p>
                     {alert.customerName && (
                       <p className="text-xs text-gray-600">{alert.customerName}</p>

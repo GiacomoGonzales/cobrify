@@ -89,7 +89,7 @@ const ORDER_TYPE_LABELS = {
   'dine-in': 'En mesa',
   takeaway: 'Para llevar',
   delivery: 'Delivery',
-  counter: 'Mostrador',
+  counter: 'En Local',
 }
 
 export default function InvoiceList() {

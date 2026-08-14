@@ -115,6 +115,8 @@ import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { savePendingSale } from '@/services/offlineQueueService'
 import * as CustomerDisplay from '@/services/customerDisplayService'
 import InvoiceTicket from '@/components/InvoiceTicket'
+import KitchenTicket from '@/components/KitchenTicket'
+import { useReactToPrint } from 'react-to-print'
 import { getPrimaryPet } from '@/utils/petUtils'
 import { getVisiblePaymentMethods, getPaymentLabel, getPaymentKeyByLabel } from '@/utils/paymentMethods'
 
@@ -148,6 +150,9 @@ const ORDER_TYPES = {
   'dine-in': 'En Mesa',
   'takeaway': 'Para Llevar',
   'delivery': 'Delivery',
+  // Come ahí pero sin mesa (patio de comidas, mostrador). Distinto de Para
+  // Llevar: no carga táper ni envío. InvoiceList ya lo etiqueta "Mostrador".
+  'counter': 'En Local',
 }
 
 // Unidades de medida SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
@@ -568,6 +573,24 @@ export default function POS() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [sendingWhatsApp, setSendingWhatsApp] = useState(false)
   const [isPrintingTicket, setIsPrintingTicket] = useState(false)
+
+  // Comanda WEB de la venta directa (posCreatesKitchenOrder). En la app la
+  // comanda sale por la ticketera; en el navegador se imprime igual que en
+  // Mesas/Órdenes: KitchenTicket oculto + react-to-print, en su propio diálogo
+  // DESPUÉS del de la boleta (window.print bloquea, así que se encadenan solos).
+  const posComandaRef = useRef(null)
+  const [posComandaToPrint, setPosComandaToPrint] = useState(null)
+  const handlePrintPosComanda = useReactToPrint({
+    contentRef: posComandaRef,
+    onAfterPrint: () => setPosComandaToPrint(null),
+  })
+  useEffect(() => {
+    if (!posComandaToPrint) return
+    // Un tick para que el ticket oculto se renderice antes de abrir el diálogo.
+    const t = setTimeout(() => handlePrintPosComanda(), 350)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [posComandaToPrint])
   const [isLoadingPreview, setIsLoadingPreview] = useState(false)
 
   // Estado para datos de mesa
@@ -798,6 +821,9 @@ export default function POS() {
 
   // Tipo de pedido (para reportes)
   const [orderType, setOrderType] = useState('takeaway')
+  // Comanda de ESTA venta (feature posCreatesKitchenOrder). Default true; la
+  // cajera lo apaga para ventas que no van a cocina (una gaseosa, un extra).
+  const [sendToKitchen, setSendToKitchen] = useState(true)
 
   // Modal de selección de precio (para productos con múltiples precios)
   const [showPriceModal, setShowPriceModal] = useState(false)
@@ -1824,7 +1850,7 @@ export default function POS() {
         }))
         setCart(cartItems)
 
-        const orderLabel = orderInfo.orderType === 'delivery' ? 'Delivery' : 'Para Llevar'
+        const orderLabel = ORDER_TYPES[orderInfo.orderType] || 'Para Llevar'
         toast.success(`Orden ${orderInfo.orderNumber} cargada (${orderLabel}) - ${cartItems.length} items`)
       }
 
@@ -4883,6 +4909,7 @@ export default function POS() {
       setDocumentType(resolveDocumentType(def, docTypeOpts))
     }
     setOrderType('takeaway')
+    setSendToKitchen(true)
     setCustomerData({
       documentType: ID_TYPES.DNI,
       documentNumber: '',
@@ -7087,6 +7114,9 @@ export default function POS() {
         const bgUserEmail = user.email
         const bgUserDisplayName = user.displayName
         const bgInvoiceId = invoiceId
+        const bgOrderType = orderType
+        const bgSendToKitchen = sendToKitchen
+        const bgSelectedBranchId = selectedBranch?.id || null
 
         // ========================================
         // BACKGROUND: Operaciones adicionales de Firestore
@@ -7101,6 +7131,104 @@ export default function POS() {
 
             // Incrementar contador de ventas para review prompt
             try { const { incrementSalesCount } = await import('@/components/ReviewPrompt'); incrementSalesCount() } catch (e) { /* ignore */ }
+
+            // 3.0.0. Venta directa -> orden en Cocina + comanda (patio de comidas /
+            // dark kitchen; Configuración > Ventas > "La venta del POS genera la
+            // orden en Cocina"). SOLO ventas directas: si la venta viene de una
+            // mesa, de una orden existente, de una conversión de nota de venta o
+            // es una edición, la orden ya existe (o la comida ya salió) y crear
+            // otra la duplicaría en Cocina.
+            if (
+              businessMode === 'restaurant' &&
+              companySettings?.restaurantConfig?.posCreatesKitchenOrder === true &&
+              !_tableData && !_pendingOrderId && !_pendingNotaVentaIds && !editingInvoiceId &&
+              bgSendToKitchen &&
+              bgCart.length > 0
+            ) {
+              try {
+                const { createOrder } = await import('@/services/orderService')
+                const orderPayload = {
+                  orderType: bgOrderType || 'counter',
+                  source: 'pos',
+                  branchId: bgSelectedBranchId,
+                  customerName: bgCustomerData?.name || null,
+                  items: bgCart.map(item => ({
+                    productId: item.id,
+                    name: item.name || item.description || 'Producto',
+                    quantity: item.quantity,
+                    price: item.price,
+                    total: (item.price || 0) * (item.quantity || 0),
+                    ...(item.notes && { notes: item.notes }),
+                    ...(item.modifiers && { modifiers: item.modifiers }),
+                  })),
+                  total: bgAmounts.total,
+                  status: 'pending',
+                  tableId: null,
+                  tableNumber: null,
+                  // Nace pagada y facturada: el POS ya cobró y emitió. Órdenes no
+                  // debe volver a pedir el cobro (paid sin close: cocina la sigue
+                  // trabajando con su flujo normal).
+                  paid: true,
+                  ...(invoiceData.payments?.[0]?.method && { paymentMethod: invoiceData.payments[0].method }),
+                  invoiced: true,
+                  invoiceId: bgInvoiceId || null,
+                  invoiceNumber: invoiceData.number || null,
+                }
+                const orderResult = await createOrder(businessId, orderPayload)
+                if (orderResult.success) {
+                  console.log('✅ Orden de cocina creada desde el POS:', orderResult.orderNumber)
+                  // Comanda automática. En la app sale por la ticketera (misma
+                  // política que Órdenes); en el navegador se imprime con su
+                  // propio diálogo, que aparece al cerrar el de la boleta
+                  // (pedido del 14-ago: "boleta y comanda", también en web).
+                  const autoComanda = companySettings?.restaurantConfig?.autoPrintKitchenComanda !== false
+                  if (autoComanda && !Capacitor.isNativePlatform()) {
+                    setPosComandaToPrint({
+                      ...orderPayload,
+                      id: orderResult.id,
+                      orderNumber: orderResult.orderNumber,
+                      _showCustomerData: companySettings?.showCustomerDataOnKitchenTicket === true,
+                    })
+                  }
+                  if (autoComanda && Capacitor.isNativePlatform()) {
+                    try {
+                      const { getPrinterConfig, printKitchenOrder, printToAllStations } = await import('@/services/thermalPrinterService')
+                      const printerConfigResult = await getPrinterConfig(businessId)
+                      if (printerConfigResult.success && printerConfigResult.config?.enabled && printerConfigResult.config?.address) {
+                        const orderForPrint = {
+                          ...orderPayload,
+                          id: orderResult.id,
+                          orderNumber: orderResult.orderNumber,
+                          _showCustomerData: companySettings?.showCustomerDataOnKitchenTicket === true,
+                        }
+                        const rc = companySettings.restaurantConfig
+                        const stationsWithPrinter = rc.enableKitchenStations && (rc.kitchenStations || []).filter(st => st.printerIp)
+                        let printed = false
+                        if (stationsWithPrinter && stationsWithPrinter.length > 0) {
+                          const results = await printToAllStations(orderForPrint, rc.kitchenStations, printerConfigResult.config.paperWidth || 58)
+                          printed = results.every(r => r.success)
+                        } else {
+                          const pr = await printKitchenOrder(orderForPrint, null, printerConfigResult.config.paperWidth || 58)
+                          printed = pr.success
+                        }
+                        if (printed) {
+                          const { updateOrder } = await import('@/services/orderService')
+                          updateOrder(businessId, orderResult.id, { kitchenPrinted: true }).catch(() => {})
+                        }
+                      }
+                    } catch (printError) {
+                      // La comanda es secundaria: la orden ya está en Cocina.
+                      console.error('No se pudo auto-imprimir la comanda desde el POS:', printError)
+                    }
+                  }
+                } else {
+                  console.error('No se pudo crear la orden de cocina desde el POS:', orderResult.error)
+                }
+              } catch (kitchenOrderError) {
+                // Nunca frenar el resto del background por la orden de cocina.
+                console.error('Error creando la orden de cocina desde el POS:', kitchenOrderError)
+              }
+            }
 
             // 3.0.1. Si es cargo a habitación (hotel), agregar al folio del huésped
             if (selectedRoom?.reservation && invoiceData.payments?.some(p => p.methodKey === 'ROOM')) {
@@ -10561,18 +10689,53 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 )}
               </div>
 
-              {/* Tipo de pedido para restaurante */}
+              {/* Tipo de pedido para restaurante. Con "la venta del POS genera
+                  la orden en Cocina" activo, el tipo decide lo que grita la
+                  comanda (EN LOCAL / PARA LLEVAR), así que deja de ser un
+                  select discreto y pasa a chips que se ven y se tocan de una.
+                  Reporte del 14-ago: la venta salía PARA LLEVAR porque nadie
+                  veía el select. */}
               {businessMode === 'restaurant' && (
-                <select
-                  value={orderType}
-                  onChange={e => setOrderType(e.target.value)}
-                  disabled={tableData?.fromTable}
-                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
-                >
-                  {Object.entries(ORDER_TYPES).map(([key, label]) => (
-                    <option key={key} value={key}>{label}</option>
-                  ))}
-                </select>
+                companySettings?.restaurantConfig?.posCreatesKitchenOrder === true && !tableData?.fromTable ? (
+                  <div className="space-y-1.5">
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {[['counter', 'En Local'], ['takeaway', 'Para Llevar'], ['delivery', 'Delivery']].map(([key, label]) => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => setOrderType(key)}
+                          className={`px-1 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                            orderType === key
+                              ? 'border-primary-500 bg-primary-50 text-primary-700'
+                              : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={sendToKitchen}
+                        onChange={e => setSendToKitchen(e.target.checked)}
+                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      />
+                      Enviar comanda a cocina
+                    </label>
+                  </div>
+                ) : (
+                  <select
+                    value={orderType}
+                    onChange={e => setOrderType(e.target.value)}
+                    disabled={tableData?.fromTable}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  >
+                    {Object.entries(ORDER_TYPES).map(([key, label]) => (
+                      <option key={key} value={key}>{label}</option>
+                    ))}
+                  </select>
+                )
               )}
             </CardContent>
 
@@ -12621,6 +12784,19 @@ ${companySettings?.businessName || 'Tu Empresa'}`
           </div>
         )}
       </Modal>
+
+      {/* Comanda de la venta directa (web): oculta fuera de pantalla; la
+          imprime react-to-print en su propio diálogo, separada de la boleta. */}
+      {posComandaToPrint && (
+        <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
+          <div ref={posComandaRef}>
+            <KitchenTicket
+              order={posComandaToPrint}
+              companySettings={companySettings}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Ticket Oculto para Impresión */}
       {lastInvoiceData && (

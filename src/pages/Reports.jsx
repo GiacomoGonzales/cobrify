@@ -1830,12 +1830,14 @@ export default function Reports() {
     const dineIn = filteredInvoices.filter(inv => inv.orderType === 'dine-in').length
     const takeaway = filteredInvoices.filter(inv => inv.orderType === 'takeaway').length
     const delivery = filteredInvoices.filter(inv => inv.orderType === 'delivery').length
+    const counter = filteredInvoices.filter(inv => inv.orderType === 'counter').length
     const unspecified = filteredInvoices.filter(inv => !inv.orderType).length
 
     return [
       { name: 'En Mesa', value: dineIn, color: COLORS[0] },
       { name: 'Para Llevar', value: takeaway, color: COLORS[1] },
       { name: 'Delivery', value: delivery, color: COLORS[2] },
+      { name: 'En Local', value: counter, color: COLORS[3] },
       { name: 'Sin especificar', value: unspecified, color: COLORS[6] },
     ].filter(item => item.value > 0)
   }, [filteredInvoices])

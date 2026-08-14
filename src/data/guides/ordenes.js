@@ -6,7 +6,7 @@
  */
 export default {
   id: 'ordenes',
-  actualizado: '12/08/2026',
+  actualizado: '14/08/2026',
   intro:
     'Órdenes es la lista de todo lo que está en curso: lo que se está preparando en salón, lo que sale para llevar y los deliveries. Es la vista del encargado, no la del mozo.',
 
@@ -21,7 +21,7 @@ export default {
         },
         {
           type: 'texto',
-          text: 'El **Tipo de orden** distingue lo que pasa en mesa de lo que se va: para llevar y delivery. En los deliveries puedes asignar el **Repartidor**.',
+          text: 'El **Tipo de orden** distingue cómo se atiende: en mesa, **Para Llevar**, **Delivery** o **En Local** (come ahí pero sin mesa: patio de comidas, mostrador). En los deliveries puedes asignar el **Repartidor**.',
         },
       ],
     },
@@ -51,11 +51,24 @@ export default {
 
     {
       id: 'delivery',
-      title: 'Delivery y para llevar',
+      title: 'Pedidos sin mesa: llevar, delivery y en local',
       blocks: [
         {
           type: 'texto',
+          text: 'Con **Nueva Orden** tomas un pedido sin mesa eligiendo su tipo: **Para Llevar**, **Delivery** o **En Local**. La diferencia importa para el cobro: al que come en el local no le cargas táper ni envío.',
+        },
+        {
+          type: 'texto',
           text: 'Los pedidos que llegan del menú digital aparecen acá automáticamente y suenan como alerta en la parte superior del sistema. Desde la alerta puedes imprimir la comanda de una vez.',
+        },
+        {
+          type: 'texto',
+          text: 'Si activaste **"La venta del POS genera la orden en Cocina"**, acá también aparecen las ventas directas del POS: llegan ya **pagadas y facturadas** (con su etiqueta), así que no ofrecen cobrar de nuevo — solo siguen su camino en Cocina.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=ventas&opcion=posCreatesKitchenOrder',
+          label: 'La venta del POS genera la orden en Cocina',
         },
         {
           type: 'consejo',
