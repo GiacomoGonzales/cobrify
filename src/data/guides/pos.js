@@ -622,6 +622,14 @@ export default {
           type: 'texto',
           text: 'Al canjear, se descuenta la meta de sellos (si tenía 12 y la meta es 10, le quedan 2) y queda registrado quién lo canjeó. El producto gratis o el descuento lo aplicas tú en la venta.',
         },
+        {
+          type: 'texto',
+          text: 'Debajo del contador aparece **Enviar su tarjeta por WhatsApp**: le llega al cliente un enlace para guardar su tarjeta en **Google Wallet**, con sus sellos y su código QR. A partir de ahí, **cada sello nuevo se actualiza solo en su celular** — no tiene que volver a agregarla ni abrir nada.',
+        },
+        {
+          type: 'consejo',
+          text: 'Esa tarjeta en el celular es la que hace que el cliente vuelva: la ve cada vez que abre su billetera y sabe cuánto le falta. Ofrécesela apenas gane su primer sello.',
+        },
       ],
     },
 

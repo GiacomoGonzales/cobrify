@@ -930,6 +930,7 @@ export default function POS() {
   // cobrar y pueda canjear el premio si ya llegó a la meta.
   const [loyaltyCard, setLoyaltyCard] = useState(null)
   const [isRedeeming, setIsRedeeming] = useState(false)
+  const [sendingWalletCard, setSendingWalletCard] = useState(false)
 
   const [customerData, setCustomerData] = useState({
     documentType: ID_TYPES.DNI,
@@ -8019,6 +8020,31 @@ export default function POS() {
     }
   }
 
+  // Manda al cliente su tarjeta de sellos para Google Wallet por WhatsApp.
+  // El link lo firma el servidor y ademas asegura que la tarjeta exista en
+  // Wallet antes de entregarlo.
+  const handleSendWalletCard = async () => {
+    const tel = customerData?.phone
+    if (!tel) { toast.error('El cliente no tiene telefono'); return }
+    setSendingWalletCard(true)
+    try {
+      const { getWalletPassLink } = await import('@/services/loyaltyService')
+      const { getAuth } = await import('firebase/auth')
+      const idToken = await getAuth().currentUser?.getIdToken()
+      const res = await getWalletPassLink(getBusinessId(), tel, idToken)
+      if (!res.success) { toast.error(res.error || 'No se pudo generar la tarjeta'); return }
+
+      const negocio = companySettings?.tradeName || companySettings?.name || 'nuestro negocio'
+      const texto = `Hola! Esta es tu tarjeta de sellos de ${negocio}. ` +
+        `Ya tienes ${res.stamps} de ${res.goal}. Agregala a tu celular: ${res.url}`
+      const soloDigitos = String(tel).replace(/\D/g, '')
+      const numero = soloDigitos.length === 9 ? `51${soloDigitos}` : soloDigitos
+      window.open(`https://wa.me/${numero}?text=${encodeURIComponent(texto)}`, '_blank')
+    } finally {
+      setSendingWalletCard(false)
+    }
+  }
+
   const handlePrintTicket = async (invoiceDataParam) => {
     const isNative = Capacitor.isNativePlatform()
     setIsPrintingTicket(true)
@@ -10784,6 +10810,18 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       </div>
                       {listo && companySettings.loyaltyConfig.reward && (
                         <p className="text-amber-700 mt-0.5">{companySettings.loyaltyConfig.reward}</p>
+                      )}
+                      {/* Mandarle su tarjeta al celular. Solo si ya tiene
+                          sellos: una tarjeta en cero no se le ofrece a nadie. */}
+                      {sellos > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleSendWalletCard}
+                          disabled={sendingWalletCard}
+                          className="mt-1.5 text-[11px] text-primary-700 hover:underline disabled:opacity-50"
+                        >
+                          {sendingWalletCard ? 'Generando...' : 'Enviar su tarjeta por WhatsApp'}
+                        </button>
                       )}
                     </div>
                   )

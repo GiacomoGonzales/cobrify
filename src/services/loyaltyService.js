@@ -190,6 +190,28 @@ export const redeemReward = async (businessId, phone, { userName = '', note = ''
   }
 }
 
+/**
+ * Link "Agregar a Google Wallet" de la tarjeta de un cliente.
+ *
+ * El servidor se asegura de que la tarjeta exista en Wallet antes de firmar el
+ * link (si el objeto no existe, Google muestra un error al abrirlo). Devuelve
+ * una URL normal: se puede mandar por WhatsApp.
+ */
+export const getWalletPassLink = async (businessId, phone, idToken) => {
+  try {
+    const res = await fetch('https://us-central1-cobrify-395fe.cloudfunctions.net/getWalletPassLink', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify({ businessId, phone: phoneKey(phone) }),
+    })
+    const data = await res.json()
+    if (!res.ok) return { success: false, error: data.error || 'No se pudo generar la tarjeta' }
+    return { success: true, ...data }
+  } catch (error) {
+    return { success: false, error: error.message || 'Error de red' }
+  }
+}
+
 export const getCardMovements = async (businessId, phone) => {
   const key = phoneKey(phone)
   if (!key) return { success: false, error: 'Sin teléfono válido' }
