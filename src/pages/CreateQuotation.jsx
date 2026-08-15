@@ -11,7 +11,7 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
-import { calculateInvoiceAmounts, ID_TYPES } from '@/utils/peruUtils'
+import { calculateMixedInvoiceAmounts, ID_TYPES } from '@/utils/peruUtils'
 import { formatCurrency, matchesSearchQuery, matchesPrebuilt } from '@/lib/utils'
 import { buildProductHaystack } from '@/utils/productSearch'
 import {
@@ -1073,13 +1073,28 @@ export default function CreateQuotation() {
     return sum + (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0)
   }, 0)
 
-  // Calcular subtotal base (asumiendo que precios incluyen IGV)
-  const baseAmounts = calculateInvoiceAmounts(
-    quotationItems.map(item => ({
-      price: parseFloat(item.unitPrice) || 0,
-      quantity: parseFloat(item.quantity) || 0,
-    }))
+  // Cálculo por AFECTACIÓN del producto (gravado/exonerado/inafecto), igual
+  // que el POS. Antes se usaba calculateInvoiceAmounts, que trata TODO como
+  // gravado 18%: un producto exonerado cotizaba con IGV adentro (reporte de
+  // COCISEL, 15-ago-2026 — pajillas exoneradas salían con IGV 1,754.24).
+  // Si el negocio entero es exonerado (ley de la selva), manda eso.
+  const igvRateCfg = businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18
+  const mixedAmounts = calculateMixedInvoiceAmounts(
+    quotationItems.map(item => {
+      const prod = products.find(p => p.id === item.productId)
+      return {
+        price: parseFloat(item.unitPrice) || 0,
+        quantity: parseFloat(item.quantity) || 0,
+        taxAffectation: isIgvExempt ? '20' : (prod?.taxAffectation || '10'),
+      }
+    }),
+    igvRateCfg
   )
+  // Misma forma que el cálculo anterior: subtotal = base sin IGV del documento
+  // (gravado sin IGV + exonerado + inafecto). El IGV final sigue saliendo por
+  // diferencia (discountedTotal - discountedSubtotal), que con esta base ya es
+  // solo el IGV de lo gravado.
+  const baseAmounts = { subtotal: mixedAmounts.subtotal, igv: mixedAmounts.igv, total: mixedAmounts.total }
 
   // Calcular descuento (aplicado al total con IGV, igual que el POS)
   const discountValue = parseFloat(discount) || 0
@@ -1097,6 +1112,12 @@ export default function CreateQuotation() {
 
   // Calcular IGV como diferencia (igual que factura) para evitar diferencia de centavos por redondeo
   const finalIgv = hideIgv ? 0 : Number((discountedTotal - discountedSubtotal).toFixed(2))
+
+  // Desglose por afectación POST-descuento (mismos campos que una factura,
+  // para que el PDF use el MISMO getComprobanteBreakdown que los comprobantes)
+  const opGravadas = Number((mixedAmounts.gravado.subtotal * discountRatio).toFixed(2))
+  const opExoneradas = Number((mixedAmounts.exonerado.total * discountRatio).toFixed(2))
+  const opInafectas = Number((mixedAmounts.inafecto.total * discountRatio).toFixed(2))
   const finalTotal = hideIgv
     ? discountedTotal
     : discountedTotal
@@ -1343,6 +1364,9 @@ export default function CreateQuotation() {
             basePrice: Number(item.basePrice),
           }),
           unit: item.unit,
+          // Afectación IGV del producto al momento de cotizar. El POS la lee
+          // al convertir la cotización en comprobante.
+          taxAffectation: isIgvExempt ? '20' : (productCatalog?.taxAffectation || '10'),
           subtotal: calculateItemTotal(item),
           imageUrl: item.imageUrl || productCatalog?.imageUrl || productCatalog?.image || '',
           laboratoryName: item.laboratoryName || '',
@@ -1407,6 +1431,10 @@ export default function CreateQuotation() {
           discountedSubtotal: discountedSubtotal,
           igv: finalIgv,
           total: finalTotal,
+          // Desglose por afectación (post-descuento), mismos campos que factura
+          opGravadas,
+          opExoneradas,
+          opInafectas,
           // Multi-divisa: moneda + TC congelado + equivalentes PEN base
           currency: normalizeCurrency(currency),
           exchangeRate: currency === 'USD' ? (Number(exchangeRate) || 1) : 1,
@@ -1462,6 +1490,10 @@ export default function CreateQuotation() {
           discountedSubtotal: discountedSubtotal,
           igv: finalIgv,
           total: finalTotal,
+          // Desglose por afectación (post-descuento), mismos campos que factura
+          opGravadas,
+          opExoneradas,
+          opInafectas,
           // Multi-divisa: moneda + TC congelado + equivalentes PEN base
           currency: normalizeCurrency(currency),
           exchangeRate: currency === 'USD' ? (Number(exchangeRate) || 1) : 1,

@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf'
+import { getComprobanteBreakdown } from './peruUtils'
 import { contrastTextColor } from '@/utils/pdfColors'
 import { storage } from '@/lib/firebase'
 import { ref, getBlob, getDownloadURL } from 'firebase/storage'
@@ -780,16 +781,20 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   const customerNameMaxWidth = colWidth - maxLeftLabel - 10
   const customerNameLines = doc.splitTextToSize(customerName, customerNameMaxWidth)
 
+  // TODAS las lineas del nombre (tope 4). Antes se dibujaban maximo 2 y el
+  // resto se PERDIA en silencio: "ASOCIACION DE MUJERES CRIADORAS DE GANADO
+  // LECHERO FONDO KILLARUMIYOC" salia sin el "KILLARUMIYOC" (reporte de
+  // COCISEL, 15-ago-2026). En un documento comercial el nombre legal completo
+  // no es opcional.
   if (customerNameLines.length === 1) {
     doc.text(customerNameLines[0], leftValueX, leftY)
     leftY += dataLineHeight
   } else {
-    doc.text(customerNameLines[0], leftValueX, leftY)
-    leftY += 10
-    if (customerNameLines[1]) {
-      doc.text(customerNameLines[1], leftValueX, leftY)
-      leftY += dataLineHeight - 2
-    }
+    const lineasNombre = customerNameLines.slice(0, 4)
+    lineasNombre.forEach((linea, i) => {
+      doc.text(linea, leftValueX, leftY)
+      leftY += (i === lineasNombre.length - 1) ? dataLineHeight - 2 : 10
+    })
   }
 
   doc.setFont('helvetica', 'bold')
@@ -1320,8 +1325,14 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   const totalsX = MARGIN_LEFT + CONTENT_WIDTH - totalsWidth
   const bankSectionWidth = totalsX - MARGIN_LEFT - 10
 
-  const igvExempt = companySettings?.emissionConfig?.taxConfig?.igvExempt || companySettings?.taxConfig?.igvExempt || false
-  const labelGravada = igvExempt ? 'OP. EXONERADA' : 'OP. GRAVADA'
+  // Desglose por afectación con el MISMO criterio que los comprobantes
+  // (getComprobanteBreakdown). Las cotizaciones nuevas guardan opGravadas/
+  // opExoneradas/opInafectas; las viejas caen en el comportamiento anterior
+  // (100% gravada, o exonerada si el negocio entero lo es).
+  const breakdown = getComprobanteBreakdown(
+    { ...quotation, subtotal: quotation.discountedSubtotal ?? quotation.subtotal ?? 0 },
+    companySettings
+  )
   const hideIgv = quotation.hideIgv || false
 
   // --- TOTALES (derecha) ---
@@ -1371,24 +1382,36 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     doc.setFontSize(11)
     doc.text(currencySymbol + ' ' + (quotation.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 14, { align: 'right' })
   } else {
-    // Mostrar desglose completo: Subtotal, Descuento (si hay), IGV, TOTAL
+    // Desglose: OP. GRAVADA / OP. EXONERADA / OP. INAFECTA (las que apliquen),
+    // Descuento (si hay), IGV, TOTAL — mismas filas que el PDF de comprobantes.
     const igvRate = companySettings?.emissionConfig?.taxConfig?.igvRate ?? companySettings?.taxConfig?.igvRate ?? 18
     const hasDiscount = (quotation.discount || 0) > 0
     const discountRowCount = hasDiscount ? 1 : 0
-    const totalRows = 2 + discountRowCount // Subtotal + (descuento) + IGV + Total
+    // Filas de afectación: gravada se muestra siempre que exista (o cuando no
+    // hay ninguna otra, para no dejar la caja sin base). Exonerada/inafecta
+    // solo cuando tienen monto.
+    const filasAfectacion = []
+    if (breakdown.hasGravada || !breakdown.hasExoOrIna) {
+      filasAfectacion.push(['OP. GRAVADA', breakdown.gravada])
+    }
+    if (breakdown.exonerada > 0) filasAfectacion.push(['OP. EXONERADA', breakdown.exonerada])
+    if (breakdown.inafecta > 0) filasAfectacion.push(['OP. INAFECTA', breakdown.inafecta])
+
+    const totalRows = filasAfectacion.length + 1 + discountRowCount // afectaciones + IGV + (descuento)
     doc.rect(totalsX, totalsStartY, totalsWidth, totalsRowHeight * totalRows + totalsRowHeight + 6)
 
-    // Fila 1: Subtotal
-    doc.setFillColor(250, 250, 250)
-    doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
-    doc.setDrawColor(200, 200, 200)
-    doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
     doc.setFontSize(9)
     doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...BLACK)
-    doc.text(labelGravada, totalsX + 5, footerY + 10)
-    doc.text(currencySymbol + ' ' + (quotation.discountedSubtotal || quotation.subtotal || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
-    footerY += totalsRowHeight
+    filasAfectacion.forEach(([etiqueta, monto]) => {
+      doc.setFillColor(250, 250, 250)
+      doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
+      doc.setDrawColor(200, 200, 200)
+      doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
+      doc.setTextColor(...BLACK)
+      doc.text(etiqueta, totalsX + 5, footerY + 10)
+      doc.text(currencySymbol + ' ' + (monto || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+      footerY += totalsRowHeight
+    })
 
     // Fila de descuento (si hay)
     if (hasDiscount) {

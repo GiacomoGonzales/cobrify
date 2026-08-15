@@ -1138,15 +1138,18 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const customerNameMaxWidth = colRightX - leftValueX - 15
   const customerNameLines = doc.splitTextToSize(customerName, customerNameMaxWidth)
 
-  // Mostrar hasta 2 líneas de la razón social
-  doc.text(customerNameLines[0], leftValueX, leftY)
-  leftY += 10
-  if (customerNameLines.length > 1 && customerNameLines[1]) {
-    // Segunda línea debajo, alineada con el valor
-    doc.text(customerNameLines[1], leftValueX, leftY)
-    leftY += dataLineHeight - 2
+  // TODAS las líneas de la razón social (tope 4). Antes se dibujaban máximo 2
+  // y el resto se perdía en silencio (nombres largos de asociaciones/consorcios
+  // salían cortados — reporte de COCISEL en cotizaciones, mismo patrón acá).
+  if (customerNameLines.length === 1) {
+    doc.text(customerNameLines[0], leftValueX, leftY)
+    leftY += 12
   } else {
-    leftY += 2
+    const lineasNombre = customerNameLines.slice(0, 4)
+    lineasNombre.forEach((linea, i) => {
+      doc.text(linea, leftValueX, leftY)
+      leftY += (i === lineasNombre.length - 1) ? dataLineHeight - 2 : 10
+    })
   }
 
   // RUC/DNI

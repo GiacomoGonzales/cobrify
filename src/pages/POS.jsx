@@ -1889,6 +1889,10 @@ export default function POS() {
           // convertida quedaba con el código de BARRAS, mientras que la misma venta
           // hecha a mano quedaba con el SKU: el mismo producto con dos códigos
           // distintos según el camino, tanto en el PDF como en el XML de SUNAT.
+          // Afectación IGV cotizada: sin esto, un producto exonerado cotizado
+          // volvía a gravado al convertir (el resolve del POS cae al default '10'
+          // si el item no la trae y el producto no se re-resuelve).
+          ...(item.taxAffectation && { taxAffectation: item.taxAffectation }),
           sku: item.sku || '',
           code: item.code || '',
           observations: item.observations || '',
