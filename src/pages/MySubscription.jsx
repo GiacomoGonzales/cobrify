@@ -316,20 +316,31 @@ export default function MySubscription() {
           solo la marca y los últimos dígitos que Flow devuelve. El cobro lo
           dispara nuestro programador diario con el precio PACTADO de cada
           cliente (renewalPrice congelado), no con el de catálogo. */}
-      {isDirectClient && ONLINE_PAYMENTS_ENABLED && (
+      {isDirectClient && (
         <div className="rounded-2xl border border-gray-200 bg-white p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-lg font-bold text-gray-900">Renovación automática</h3>
-                {subscription.autoRenew && (
+                {!ONLINE_PAYMENTS_ENABLED && (
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800">
+                    PRÓXIMAMENTE
+                  </span>
+                )}
+                {ONLINE_PAYMENTS_ENABLED && subscription.autoRenew && (
                   <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-700">
                     ACTIVA
                   </span>
                 )}
               </div>
 
-              {subscription.autoRenew ? (
+              {!ONLINE_PAYMENTS_ENABLED ? (
+                <p className="text-gray-500 text-sm mt-1">
+                  Pronto podrás registrar tu tarjeta una vez y tu plan se renovará solo cada
+                  período, sin que tengas que hacer nada. Por ahora la renovación sigue siendo
+                  manual.
+                </p>
+              ) : subscription.autoRenew ? (
                 <>
                   <p className="text-gray-500 text-sm mt-1">
                     Tu plan se renueva solo el día que vence. No tienes que hacer nada.
@@ -358,7 +369,15 @@ export default function MySubscription() {
             </div>
 
             <div className="flex-shrink-0">
-              {subscription.autoRenew ? (
+              {!ONLINE_PAYMENTS_ENABLED ? (
+                <button
+                  disabled
+                  className="px-5 py-2.5 rounded-xl bg-gray-100 text-gray-400 text-sm font-semibold cursor-not-allowed inline-flex items-center gap-2"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  Activar renovación automática
+                </button>
+              ) : subscription.autoRenew ? (
                 <button
                   onClick={handleCancelAutoRenew}
                   disabled={cancelingAutoRenew}
@@ -379,7 +398,7 @@ export default function MySubscription() {
             </div>
           </div>
 
-          {subscription.autoRenewDisabledReason && !subscription.autoRenew && (
+          {ONLINE_PAYMENTS_ENABLED && subscription.autoRenewDisabledReason && !subscription.autoRenew && (
             <div className="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-900">
               Desactivamos la renovación automática: {subscription.autoRenewDisabledReason.toLowerCase()}.
               Puedes volver a activarla con otra tarjeta.
