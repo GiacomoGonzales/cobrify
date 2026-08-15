@@ -95,7 +95,7 @@ export default {
           items: [
             'Activa **Programa activado** y define la meta de sellos y el premio.',
             'Elige un **tema** para la tarjeta: la ves pintada con tu logo antes de decidir. Puedes ajustar el color exacto.',
-            'Elige la **portada**: la **Cuadrícula** dibuja los sellos del cliente como casilleros (llenos con check, vacíos punteados y el último con el regalo) y se redibuja sola en cada compra; los motivos (comida, moda, salud, puntos) ponen un patrón sutil con tu logo al centro; y **Color plano** la deja sobria. La vista previa te muestra la tarjeta tal como queda.',
+            'Elige la **portada**: la **Cuadrícula de sellos** dibuja los sellos del cliente como casilleros (llenos con check, vacíos punteados y el último con el regalo) y se redibuja sola en cada compra — con ella el contador sale en número, porque el progreso ya está dibujado. **Tu logo** pone tu logo como franja, y **Color plano** la deja sobria. La vista previa te muestra la tarjeta tal como queda.',
             'Si quieres, escribe un **mensaje** ("Gracias por tu preferencia..."): sale como una fila más en la tarjeta, con el nombre de tu negocio de título.',
             'Deja marcado **Aparecer cuando el cliente esté cerca** si quieres que la tarjeta asome sola en el celular del cliente al pasar por tu local.',
             'Guarda. Desde ese momento cada venta con teléfono suma su sello.',

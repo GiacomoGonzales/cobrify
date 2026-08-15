@@ -176,6 +176,9 @@ export async function upsertLoyaltyObject({
 }) {
   const id = objectIdDe(businessId, phone)
   const faltan = Math.max(0, meta - sellos)
+  // Con la cuadrícula de portada, el progreso YA está dibujado: el contador
+  // baja a número simple. Puntos ●●●○○ + cuadrícula sería lo mismo dos veces.
+  const conCuadricula = !!heroUrl
 
   const cuerpo = {
     id,
@@ -186,7 +189,7 @@ export async function upsertLoyaltyObject({
     // El contador grande de la tarjeta.
     loyaltyPoints: {
       label: 'Tus sellos',
-      balance: { string: textoDeSellos(sellos, meta, tema) },
+      balance: { string: conCuadricula ? `${sellos} de ${meta}` : textoDeSellos(sellos, meta, tema) },
     },
     // El QR que escanea el cajero para identificar al cliente.
     barcode: {
@@ -204,8 +207,9 @@ export async function upsertLoyaltyObject({
         ? { id: 'faltan', header: 'Te faltan', body: `${faltan} ${faltan === 1 ? 'sello' : 'sellos'} para tu premio` }
         : { id: 'faltan', header: 'Premio disponible', body: premio || 'Ya puedes canjear tu premio' },
       // Con el contador en puntos, el número exacto deja de estar a la vista.
-      // Va acá para el que quiera confirmarlo.
-      ...(tema.sellosComoPuntos ? [{ id: 'progreso', header: 'Tu progreso', body: `${sellos} de ${meta} sellos` }] : []),
+      // Va acá para el que quiera confirmarlo. (Con cuadrícula el contador ya
+      // es numérico: esta fila sería la tercera vez que se dice lo mismo.)
+      ...(!conCuadricula && tema.sellosComoPuntos ? [{ id: 'progreso', header: 'Tu progreso', body: `${sellos} de ${meta} sellos` }] : []),
       ...(premio ? [{ id: 'premio', header: 'Tu premio', body: premio }] : []),
       // Mensaje libre del comercio ("Gracias por tu preferencia...").
       ...(mensaje ? [{ id: 'mensaje', header: nombreNegocio || 'Mensaje', body: mensaje }] : []),

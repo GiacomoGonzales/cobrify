@@ -60,75 +60,26 @@ export const WALLET_THEMES = [
 export const TEMA_POR_DEFECTO = 'oscuro'
 
 /**
- * MOTIVOS DE LA PORTADA. El cuerpo de la tarjeta de Wallet solo admite color
- * plano; el diseño va en la franja de portada, que el SERVIDOR dibuja como
- * patrón de iconos del rubro con el logo compuesto al centro.
+ * PORTADAS. El cuerpo de la tarjeta de Wallet solo admite color plano; el
+ * diseño va en la franja de portada (heroImage). Tres opciones honestas:
  *
- * Los trazos de acá son el ESPEJO de los de
- * `functions/src/services/walletAssetsService.js` (los dos paquetes no pueden
- * importarse entre sí): estos pintan la vista previa, aquellos la portada
- * real. Si se toca un icono, se toca en los dos lados.
+ *  - cuadricula: la cartulina dibujada con los sellos del CLIENTE, redibujada
+ *    en cada compra. Con esta portada el contador pasa a número ("3 de 10"):
+ *    la cuadrícula ES el marcador, mostrarlo también en puntos sería decirlo
+ *    dos veces.
+ *  - logo: el logo del negocio como franja (solo si es apaisado).
+ *  - none: color plano, sin portada.
+ *
+ * Hubo patrones de iconos por rubro; se ELIMINARON — a la opacidad que exige
+ * un fondo se veían como manchas, no como diseño.
  */
 export const MOTIVOS_PORTADA = [
-  { id: 'cuadricula', nombre: 'Cuadrícula' },
-  { id: 'comida', nombre: 'Comida' },
-  { id: 'moda', nombre: 'Moda' },
-  { id: 'salud', nombre: 'Salud' },
-  { id: 'puntos', nombre: 'Puntos' },
+  { id: 'cuadricula', nombre: 'Cuadrícula de sellos' },
+  { id: 'logo', nombre: 'Tu logo' },
   { id: 'none', nombre: 'Color plano' },
 ]
 
-export const ICONOS_MOTIVO = {
-  comida: [
-    '<path d="M16 26 h24 v10 a12 12 0 0 1 -24 0 z"/><path d="M40 28 h5 a6 6 0 0 1 0 12 h-4"/><path d="M23 12 q3 4 0 9 M31 12 q3 4 0 9"/>',
-    '<path d="M14 18 L50 18 L32 52 Z"/><circle cx="27" cy="26" r="3"/><circle cx="38" cy="25" r="3"/><circle cx="32" cy="35" r="3"/>',
-    '<path d="M20 12 v14 M26 12 v14 M23 26 v26 M20 26 a3 4 0 0 0 6 0"/><path d="M42 12 v40 M42 12 q9 12 1 22"/>',
-  ],
-  moda: [
-    '<path d="M32 17 a5 5 0 1 1 5 -5 q0 3 -5 5 l0 4"/><path d="M32 21 L54 42 H10 Z"/>',
-    '<path d="M24 13 l-11 8 5 8 5 -3 v26 h18 V26 l5 3 5 -8 -11 -8 a8 5 0 0 1 -16 0 z"/>',
-    '<path d="M13 32 L33 12 h17 v17 L30 49 Z"/><circle cx="44" cy="18" r="3.5"/>',
-  ],
-  salud: [
-    '<path d="M26 13 h12 v13 h13 v12 H38 v13 H26 V38 H13 V26 h13 Z"/>',
-    '<path d="M16 48 Q14 16 48 15 Q50 46 16 48 Z"/><path d="M21 43 Q30 30 44 20"/>',
-    '<path d="M32 49 C10 34 15 13 32 23 C49 13 54 34 32 49 Z"/>',
-  ],
-  puntos: [
-    '<circle cx="32" cy="32" r="11"/>',
-    '<circle cx="32" cy="32" r="4.5"/>',
-    '<rect x="24" y="24" width="16" height="16" rx="2" transform="rotate(45 32 32)"/>',
-  ],
-}
-
-/** El motivo que le toca a cada rubro cuando el comercio no eligió uno. */
-export const motivoPorDefecto = (businessMode) => ({
-  restaurant: 'comida', hotel: 'comida',
-  pharmacy: 'salud', veterinary: 'salud',
-}[businessMode] || 'puntos')
-
-/**
- * Las celdas del patrón (misma grilla a tresbolillo que dibuja el servidor).
- * Devuelve el interior de un <g> listo para inyectar en un SVG 1032x336.
- */
-export const celdasDeMotivo = (motivo) => {
-  const iconos = ICONOS_MOTIVO[motivo]
-  if (!iconos) return ''
-  const celdas = []
-  const paso = 118
-  let n = 0
-  for (let fila = -1; fila * paso < 336 + paso; fila++) {
-    const corrimiento = (fila % 2) ? paso / 2 : 0
-    for (let col = -1; col * paso < 1032 + paso; col++) {
-      const icono = iconos[n % iconos.length]
-      const giro = (n % 2 ? -1 : 1) * (8 + (n % 3) * 4)
-      const escala = 0.85 + ((n * 7) % 10) / 30
-      celdas.push(`<g transform="translate(${col * paso + corrimiento} ${fila * paso}) rotate(${giro} 32 32) scale(${escala.toFixed(2)})">${icono}</g>`)
-      n++
-    }
-  }
-  return celdas.join('')
-}
+export const esPortadaValida = (id) => MOTIVOS_PORTADA.some(p => p.id === id)
 
 export const getTheme = (id) =>
   WALLET_THEMES.find(t => t.id === id) || WALLET_THEMES.find(t => t.id === TEMA_POR_DEFECTO)
@@ -143,9 +94,9 @@ export const resolveTheme = ({ temaId, colorFondo, motivo } = {}) => {
   return {
     id: tema.id,
     colorFondo: colorFondo || tema.colorFondo,
-    // null (no undefined: Firestore lo rechaza) = que el backend decida por
-    // el rubro. 'none' = portada sin patrón, color plano.
-    motivo: motivo || null,
+    // La cuadrícula es el defecto: es la que hace visible el progreso. Un
+    // valor viejo de los patrones eliminados también cae acá.
+    motivo: esPortadaValida(motivo) ? motivo : 'cuadricula',
     sellosComoPuntos: tema.sellosComoPuntos,
     // Los símbolos y el tope viajan CON el tema, no como constantes del
     // backend. Así `functions/` pinta la tarjeta sin conocer esta tabla: si
@@ -188,15 +139,16 @@ export const celdasDeCuadricula = (sellos, meta, colorFondo) => {
   const s = Math.max(0, Math.min(Number(sellos) || 0, m))
   const filas = m <= 5 ? 1 : 2
   const cols = Math.ceil(m / filas)
-  const gap = 24
-  const lado = Math.min(120,
-    Math.floor((W - 90 - (cols - 1) * gap) / cols),
-    Math.floor((H - 70 - (filas - 1) * gap) / filas))
+  const gap = 26
+  const lado = Math.min(108,
+    Math.floor((W - 160 - (cols - 1) * gap) / cols),
+    Math.floor((H - 100 - (filas - 1) * gap) / filas))
+  const radio = Math.round(lado * 0.22)
   const gh = filas * lado + (filas - 1) * gap
   const y0 = (H - gh) / 2
-  const esc = (lado / 64) * 0.62
+  const esc = (lado / 64) * 0.6
   const off = (lado - 64 * esc) / 2
-  const CHECK = '<path d="M18 34 l10 10 L46 22"/>'
+  const CHECK = '<path d="M19 33 l9 9 L45 23"/>'
   const REGALO = '<rect x="14" y="28" width="36" height="22" rx="4"/><rect x="11" y="18" width="42" height="10" rx="3"/><path d="M32 18 v32 M32 18 q-5 -10 -12 -6 q-4 5 12 6 M32 18 q5 -10 12 -6 q4 5 -12 6"/>'
 
   let celdas = ''
@@ -209,12 +161,13 @@ export const celdasDeCuadricula = (sellos, meta, colorFondo) => {
       const x = x0 + c * (lado + gap)
       const y = y0 + f * (lado + gap)
       if (i < s) {
-        celdas += `<rect x="${x}" y="${y}" width="${lado}" height="${lado}" rx="${lado * 0.17}" fill="${tinta}" fill-opacity="0.92"/>`
-        celdas += `<g transform="translate(${x + off} ${y + off}) scale(${esc.toFixed(3)})" fill="none" stroke="${colorFondo}" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">${CHECK}</g>`
+        celdas += `<rect x="${x}" y="${y}" width="${lado}" height="${lado}" rx="${radio}" fill="${tinta}" fill-opacity="0.95"/>`
+        celdas += `<g transform="translate(${x + off} ${y + off}) scale(${esc.toFixed(3)})" fill="none" stroke="${colorFondo}" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round">${CHECK}</g>`
       } else {
-        celdas += `<rect x="${x}" y="${y}" width="${lado}" height="${lado}" rx="${lado * 0.17}" fill="none" stroke="${tinta}" stroke-opacity="0.75" stroke-width="3" stroke-dasharray="10 8"/>`
+        celdas += `<rect x="${x}" y="${y}" width="${lado}" height="${lado}" rx="${radio}" fill="${tinta}" fill-opacity="0.07"/>`
+        celdas += `<rect x="${x}" y="${y}" width="${lado}" height="${lado}" rx="${radio}" fill="none" stroke="${tinta}" stroke-opacity="0.5" stroke-width="2.5" stroke-dasharray="8 7"/>`
         if (i === m - 1) {
-          celdas += `<g transform="translate(${x + off} ${y + off}) scale(${esc.toFixed(3)})" fill="none" stroke="${tinta}" stroke-opacity="0.75" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">${REGALO}</g>`
+          celdas += `<g transform="translate(${x + off} ${y + off}) scale(${esc.toFixed(3)})" fill="none" stroke="${tinta}" stroke-opacity="0.6" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">${REGALO}</g>`
         }
       }
     }

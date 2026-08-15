@@ -11,7 +11,7 @@ import Input from '@/components/ui/Input'
 import Badge from '@/components/ui/Badge'
 import {
   WALLET_THEMES, resolveTheme, textoDeSellos, esColorClaro,
-  MOTIVOS_PORTADA, celdasDeMotivo, celdasDeCuadricula, motivoPorDefecto,
+  MOTIVOS_PORTADA, celdasDeCuadricula,
 } from '@/data/walletThemes'
 import {
   DEFAULT_LOYALTY_CONFIG, getLoyaltyCards, redeemReward, getWalletPassLink,
@@ -36,32 +36,25 @@ import {
  * pastilla blanca, igual que en la portada generada.
  */
 function PortadaPreview({ colorFondo, motivo, logoUrl, sellos = 3, meta = 10, className = '' }) {
-  const tinta = esColorClaro(colorFondo) ? '#1f2937' : '#ffffff'
-  const esCuadricula = motivo === 'cuadricula'
+  if (motivo === 'logo') {
+    // La portada de logo es el logo apaisado tal cual, sobre blanco (así lo
+    // sirve el servidor). Sin logo no hay franja que mostrar.
+    return (
+      <div className={`flex items-center justify-center bg-white ${className}`}>
+        {logoUrl
+          ? <img src={logoUrl} alt="" className="max-h-[70%] max-w-[70%] object-contain" />
+          : <span className="text-[10px] text-gray-400">Sube tu logo en Configuración</span>}
+      </div>
+    )
+  }
   return (
     <div className={`relative overflow-hidden ${className}`} style={{ backgroundColor: colorFondo }}>
-      {esCuadricula ? (
+      {motivo === 'cuadricula' && (
         // La cuadrícula trae sus colores por elemento; el aspecto se preserva
         // (meet) para que los casilleros nunca salgan recortados.
         <svg viewBox="0 0 1032 336" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
           <g dangerouslySetInnerHTML={{ __html: celdasDeCuadricula(sellos, meta, colorFondo) }} />
         </svg>
-      ) : motivo && motivo !== 'none' && (
-        <svg viewBox="0 0 1032 336" className="w-full h-full" preserveAspectRatio="xMidYMid slice">
-          <g
-            fill="none" stroke={tinta} strokeWidth="2.6"
-            strokeLinecap="round" strokeLinejoin="round" opacity="0.16"
-            dangerouslySetInnerHTML={{ __html: celdasDeMotivo(motivo) }}
-          />
-        </svg>
-      )}
-      {/* En la cuadrícula el logo sobraría: los sellos SON la portada. */}
-      {logoUrl && !esCuadricula && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="bg-white/95 rounded-lg px-3 py-1 max-w-[65%]">
-            <img src={logoUrl} alt="" className="max-h-7 w-auto object-contain" />
-          </div>
-        </div>
       )}
     </div>
   )
@@ -77,7 +70,11 @@ function TarjetaPreview({ colorFondo, sellosComoPuntos, negocio, logoUrl, meta, 
   const claro = esColorClaro(colorFondo)
   const texto = claro ? 'text-gray-900' : 'text-white'
   const tenue = claro ? 'text-gray-500' : 'text-white/70'
-  const demo = textoDeSellos(3, Math.min(meta || 10, 10), sellosComoPuntos)
+  // Con la cuadrícula de portada el contador es numérico: el progreso ya está
+  // dibujado abajo, repetirlo en puntos sería decirlo dos veces.
+  const demo = motivo === 'cuadricula'
+    ? `3 de ${Math.max(2, Number(meta) || 10)}`
+    : textoDeSellos(3, Math.min(meta || 10, 10), sellosComoPuntos)
   return (
     <div
       className="rounded-2xl shadow-sm border border-black/10 w-full overflow-hidden"
@@ -107,14 +104,14 @@ function TarjetaPreview({ colorFondo, sellosComoPuntos, negocio, logoUrl, meta, 
       </div>
       {/* La franja de portada solo en la vista grande: en las muestras de la
           galería competiría con lo que ahí se compara, que es el color. */}
-      {grande && motivo && (
+      {grande && motivo && motivo !== 'none' && (
         <PortadaPreview
           colorFondo={colorFondo}
           motivo={motivo}
           logoUrl={logoUrl}
           sellos={3}
           meta={Math.max(2, Number(meta) || 10)}
-          className={`${motivo === 'cuadricula' ? 'h-20' : 'h-16'} border-t ${esColorClaro(colorFondo) ? 'border-black/10' : 'border-white/15'}`}
+          className={`${motivo === 'cuadricula' ? 'h-24' : 'h-14'} border-t ${esColorClaro(colorFondo) ? 'border-black/10' : 'border-white/15'}`}
         />
       )}
     </div>
@@ -124,7 +121,7 @@ function TarjetaPreview({ colorFondo, sellosComoPuntos, negocio, logoUrl, meta, 
 export default function LoyaltyManager({ isOpen, onClose }) {
   // TODOS los hooks antes de cualquier return condicional (React #310: un
   // hook bajo `if (!isOpen) return null` compila bien y revienta en runtime).
-  const { getBusinessId, isDemoMode, businessSettings, businessMode } = useAppContext()
+  const { getBusinessId, isDemoMode, businessSettings } = useAppContext()
   const toast = useToast()
 
   const [cargando, setCargando] = useState(true)
@@ -158,9 +155,9 @@ export default function LoyaltyManager({ isOpen, onClose }) {
           walletTheme: resolveTheme({
             temaId: data.loyaltyConfig?.walletTheme?.id,
             colorFondo: data.loyaltyConfig?.walletTheme?.colorFondo,
-            // Sin motivo guardado, se preselecciona el del rubro — el mismo
-            // que el backend usaría solo.
-            motivo: data.loyaltyConfig?.walletTheme?.motivo || motivoPorDefecto(businessMode),
+            // resolveTheme normaliza: sin guardar (o con un valor de los
+            // patrones eliminados) cae a la cuadrícula.
+            motivo: data.loyaltyConfig?.walletTheme?.motivo,
           }),
         })
         setTarjetas(res.success ? res.data : [])
@@ -170,7 +167,7 @@ export default function LoyaltyManager({ isOpen, onClose }) {
     }
     cargar()
     return () => { cancelado = true }
-  }, [isOpen, getBusinessId, businessMode])
+  }, [isOpen, getBusinessId])
 
   const tarjetasFiltradas = useMemo(() => {
     const q = busqueda.trim().toLowerCase()
@@ -366,14 +363,15 @@ export default function LoyaltyManager({ isOpen, onClose }) {
                 </label>
               </div>
 
-              {/* Motivo de la portada: la franja de arriba de la tarjeta. Se
-                  dibuja en vivo con los mismos trazos que la imagen real. */}
+              {/* Portada: la franja de la tarjeta. La cuadrícula es la opción
+                  fuerte — dibuja los sellos del cliente y se actualiza en cada
+                  compra; con ella el contador pasa a número. */}
               <div className="mt-5">
                 <p className="text-sm font-medium text-gray-900">Portada de la tarjeta</p>
                 <p className="text-xs text-gray-500 mb-2">
-                  Un patrón sutil con tu logo al centro, o el color plano si lo prefieres sobrio.
+                  La cuadrícula muestra los sellos del cliente como casilleros y se actualiza sola en cada compra.
                 </p>
-                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   {MOTIVOS_PORTADA.map((m) => (
                     <button
                       key={m.id}
@@ -384,8 +382,10 @@ export default function LoyaltyManager({ isOpen, onClose }) {
                       <PortadaPreview
                         colorFondo={tema.colorFondo}
                         motivo={m.id}
-                        logoUrl={null}
-                        className="h-10 rounded-xl"
+                        logoUrl={logoUrl}
+                        sellos={3}
+                        meta={Math.max(2, Number(config.goal) || 10)}
+                        className="h-14 rounded-xl border border-gray-200"
                       />
                       <p className="text-[11px] text-center text-gray-600 mt-1">{m.nombre}</p>
                     </button>
