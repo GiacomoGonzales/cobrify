@@ -80,9 +80,49 @@ export const buildFixedSchedule = ({ capital, interestRate, installmentsCount, s
   return { installments: rows, totalInterest, total }
 }
 
-/** Interés del período sobre el capital vivo (modalidad Solo Interés). */
+/**
+ * DEVENGO DE INTERÉS (modalidad Solo Interés).
+ *
+ * El interés se genera POR TIEMPO, no por pago: cada vez que se cumple un
+ * período desde el último devengo, se suma capital_vivo × tasa. De ahí salen
+ * las dos reglas que el usuario espera:
+ *  - Dos pagos en el mismo período: el primero cubre el interés, el segundo va
+ *    ÍNTEGRO a capital (no hay interés nuevo hasta el próximo vencimiento).
+ *  - Tres meses de atraso: se acumulan tres períodos de interés.
+ * Al amortizar capital, los devengos SIGUIENTES son menores — el interés ya
+ * devengado no se toca.
+ *
+ * Es una función PURA: calcula al vuelo lo que corresponde a `asOf` sin
+ * escribir. El pago persiste el resultado.
+ *
+ * @returns {{ accrued:number, lastAccrualDate:Date, periodsAdded:number }}
+ */
+export const accrueInterest = (loan, asOf = new Date()) => {
+  const rate = (loan.interestRate || 0) / 100
+  let accrued = r2(loan.interestAccrued || 0)
+  let last = loan.lastAccrualDate?.toDate
+    ? loan.lastAccrualDate.toDate()
+    : new Date(loan.lastAccrualDate || (loan.startDate?.toDate ? loan.startDate.toDate() : loan.startDate))
+  let periodsAdded = 0
+  // Tope de 600 vueltas: un préstamo diario abandonado 2 años no debe colgar
+  // el bucle si la fecha viene corrupta.
+  while (periodsAdded < 600) {
+    const next = dueDateFor(last, loan.modality, 1)
+    if (next > asOf) break
+    accrued = r2(accrued + (loan.capitalBalance || 0) * rate)
+    last = next
+    periodsAdded++
+  }
+  return { accrued, lastAccrualDate: last, periodsAdded }
+}
+
+/** Interés de un período completo al capital vivo de hoy (referencia visual). */
 export const periodInterest = (loan) =>
   r2((loan.capitalBalance || 0) * ((loan.interestRate || 0) / 100))
+
+/** Interés devengado y NO pagado a la fecha — lo que toca cobrar. */
+export const pendingPeriodInterest = (loan, asOf = new Date()) =>
+  accrueInterest(loan, asOf).accrued
 
 /**
  * Mora acumulada de un préstamo a una fecha. Configurable por préstamo:
@@ -99,7 +139,7 @@ export const computeMora = (loan, asOf = new Date()) => {
   const overdueAmount = loan.amortizationType === 'fixed'
     ? (loan.installments || []).filter(c => c.status === 'pending' && (c.dueDate?.toDate ? c.dueDate.toDate() : new Date(c.dueDate)) <= asOf)
         .reduce((s, c) => s + (c.amount - (c.paidAmount || 0)), 0)
-    : periodInterest(loan)
+    : pendingPeriodInterest(loan)
   const perPeriod = loan.mora.type === 'percent'
     ? overdueAmount * (loan.mora.value / 100)
     : Number(loan.mora.value)
@@ -114,7 +154,7 @@ export const loanBalance = (loan, asOf = new Date()) => {
       .reduce((s, c) => s + (c.amount - (c.paidAmount || 0)), 0)
     return r2(restante + computeMora(loan, asOf))
   }
-  return r2((loan.capitalBalance || 0) + periodInterest(loan) + computeMora(loan, asOf))
+  return r2((loan.capitalBalance || 0) + pendingPeriodInterest(loan) + computeMora(loan, asOf))
 }
 
 export const createLendingLoan = async (businessId, data) => {
@@ -134,6 +174,11 @@ export const createLendingLoan = async (businessId, data) => {
       moraAccrued: 0,
       moraPaid: 0,
       interestPaid: 0,
+      // Devengo de interés: se acumula al cumplirse cada período desde
+      // lastAccrualDate. Al crear no hay interés devengado — el primero vence
+      // en la primera fecha de pago.
+      interestAccrued: 0,
+      lastAccrualDate: data.startDate,
       startDate: data.startDate,
       nextDueDate: dueDateFor(data.startDate, data.modality, 1),
       status: 'active',                      // active | paid | cancelled
@@ -221,20 +266,19 @@ export const registerLendingPayment = async (businessId, loanId, { amount, metho
       if (pendientes.length === 0) updates.status = 'paid'
       remaining = porAplicar // sobrante (pagó de más): queda reportado, no se aplica
     } else {
-      // Solo Interés: primero el interés del período sobre capital vivo, el
-      // resto amortiza capital. Si amortiza, el próximo interés baja solo
-      // (se calcula siempre sobre capitalBalance).
-      const interesVencido = periodInterest(loan)
-      interestPart = r2(Math.min(remaining, interesVencido))
+      // Solo Interés: primero el interés YA DEVENGADO (por tiempo transcurrido),
+      // el resto amortiza capital. Un segundo pago en el mismo período no
+      // devenga interés nuevo, así que va íntegro a capital.
+      const devengo = accrueInterest(loan, date)
+      interestPart = r2(Math.min(remaining, devengo.accrued))
       remaining = r2(remaining - interestPart)
       capitalPart = r2(Math.min(remaining, loan.capitalBalance || 0))
       remaining = r2(remaining - capitalPart)
       updates.capitalBalance = r2((loan.capitalBalance || 0) - capitalPart)
-      // Si cubrió el interés del período, el siguiente vencimiento corre un período.
-      if (interestPart >= interesVencido - 0.009) {
-        const desde = loan.nextDueDate?.toDate ? loan.nextDueDate.toDate() : new Date(loan.nextDueDate)
-        updates.nextDueDate = dueDateFor(desde, loan.modality, 1)
-      }
+      updates.interestAccrued = r2(devengo.accrued - interestPart)
+      updates.lastAccrualDate = devengo.lastAccrualDate
+      // El próximo vencimiento es un período después del último devengo.
+      updates.nextDueDate = dueDateFor(devengo.lastAccrualDate, loan.modality, 1)
       if (updates.capitalBalance <= 0.009) { updates.status = 'paid'; updates.capitalBalance = 0 }
     }
 

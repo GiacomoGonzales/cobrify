@@ -39,6 +39,10 @@ export default {
         },
         {
           type: 'ojo',
+          text: 'En **Solo Interés** el interés se genera **por tiempo**, no por pago: se suma uno cada vez que se cumple el período. Si el cliente abona dos veces el mismo mes, el primer pago cubre el interés y el **segundo va íntegro a capital**. Y si se atrasa tres meses, se acumulan los tres intereses.',
+        },
+        {
+          type: 'ojo',
           text: 'El interés es **flat sobre el capital**, como se maneja en este rubro — no es el interés bancario sobre saldo decreciente. En Solo Interés, cuando el cliente amortiza capital, el interés del período siguiente **baja solo** (siempre se calcula sobre lo que queda vivo).',
         },
       ],
@@ -88,7 +92,7 @@ export default {
     },
     {
       q: '¿Y si paga de más?',
-      a: 'En Solo Interés el excedente amortiza capital directamente (y el interés siguiente baja). En Cuota Fija va llenando las cuotas siguientes en orden.',
+      a: 'En Solo Interés, una vez cubierto el interés ya devengado, todo lo demás amortiza capital — y como el interés se calcula sobre el capital vivo, el del próximo período baja solo. En Cuota Fija va llenando las cuotas siguientes en orden.',
     },
     {
       q: '¿Cómo se calcula la mora?',

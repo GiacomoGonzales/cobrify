@@ -26,7 +26,7 @@ import { getCustomers, getCashRegisterSession, addCashMovement, getCompanySettin
 import {
   LENDING_MODALITIES, AMORTIZATION_TYPES,
   createLendingLoan, getLendingLoans, registerLendingPayment, cancelLendingLoan,
-  computeMora, loanBalance, periodInterest, buildFixedSchedule,
+  computeMora, loanBalance, periodInterest, pendingPeriodInterest, buildFixedSchedule,
 } from '@/services/lendingService'
 import { printHtmlIframe } from '@/utils/printHtmlIframe'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
@@ -450,7 +450,7 @@ export default function LendingPortfolio() {
                         const sugerido = loan.amortizationType === 'fixed'
                           ? (loan.installments || []).find(c => c.status === 'pending')
                           : null
-                        const base = sugerido ? (sugerido.amount - (sugerido.paidAmount || 0)) : periodInterest(loan)
+                        const base = sugerido ? (sugerido.amount - (sugerido.paidAmount || 0)) : pendingPeriodInterest(loan)
                         setPayAmount(String(Math.round((base + mora) * 100) / 100))
                       }}
                     >
@@ -614,7 +614,15 @@ export default function LendingPortfolio() {
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm space-y-1">
               <div className="flex justify-between"><span>Capital pendiente</span><b>{formatCurrency(payingLoan.capitalBalance || 0)}</b></div>
               {payingLoan.amortizationType === 'interest_only' && (
-                <div className="flex justify-between"><span>Interés del período</span><b>{formatCurrency(periodInterest(payingLoan))}</b></div>
+                <div className="flex justify-between">
+                  <span>
+                    Interés del período
+                    {pendingPeriodInterest(payingLoan) <= 0.009 && (
+                      <span className="text-xs text-green-600 ml-1">(ya cobrado — este pago va a capital)</span>
+                    )}
+                  </span>
+                  <b>{formatCurrency(pendingPeriodInterest(payingLoan))}</b>
+                </div>
               )}
               {computeMora(payingLoan) > 0 && (
                 <div className="flex justify-between text-red-600"><span>Mora acumulada</span><b>{formatCurrency(computeMora(payingLoan))}</b></div>
