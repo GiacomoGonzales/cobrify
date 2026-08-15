@@ -24,6 +24,7 @@ import {
   collection, doc, getDoc, getDocs, setDoc, runTransaction,
   query, orderBy, limit, serverTimestamp,
 } from 'firebase/firestore'
+import { resolveTheme } from '@/data/walletThemes'
 
 /** Config por defecto: el programa nace APAGADO. */
 export const DEFAULT_LOYALTY_CONFIG = {
@@ -32,6 +33,12 @@ export const DEFAULT_LOYALTY_CONFIG = {
   reward: '',          // qué se gana (texto libre: "1 pizza mediana gratis")
   minAmount: 0,        // compra mínima para sellar (0 = cualquier compra)
   stampOnlineOrders: true, // sellar también los pedidos del catálogo online
+  // Diseño de la tarjeta de Google Wallet. Se guarda RESUELTO (ver
+  // src/data/walletThemes.js): el backend lee estos valores, no la tabla.
+  walletTheme: resolveTheme(),
+  // Que la tarjeta aparezca sola en la pantalla de bloqueo al pasar cerca del
+  // local. Requiere que la dirección del negocio se pueda ubicar con precisión.
+  walletNearby: true,
 }
 
 export const getLoyaltyConfig = (companySettings) => ({

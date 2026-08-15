@@ -79,6 +79,46 @@ export default {
     },
 
     {
+      id: 'fidelizacion',
+      title: 'Fidelización: tarjeta de sellos y Google Wallet',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'El botón **Fidelización** de arriba concentra todo el programa de sellos: el clásico "compra 10 y el siguiente va gratis". Activas el programa, defines cuántos sellos valen el premio, cuál es el premio y si los pedidos online también sellan.',
+        },
+        {
+          type: 'texto',
+          text: 'La tarjeta se identifica por el **teléfono del cliente**: el mismo cliente acumula compre en el mostrador o por tu catálogo online. Sin teléfono no hay tarjeta.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Activa **Programa activado** y define la meta de sellos y el premio.',
+            'Elige un **tema** para la tarjeta: la ves pintada con tu logo antes de decidir. Puedes ajustar el color exacto.',
+            'Deja marcado **Aparecer cuando el cliente esté cerca** si quieres que la tarjeta asome sola en el celular del cliente al pasar por tu local.',
+            'Guarda. Desde ese momento cada venta con teléfono suma su sello.',
+          ],
+        },
+        {
+          type: 'texto',
+          text: 'La tarjeta vive en **Google Wallet**, en el celular del cliente, y se actualiza sola con cada compra: ve sus sellos como puntos llenos y vacíos, cuántos le faltan y cuál es su premio. Se la envías por WhatsApp con el botón de la lista de tarjetas, o desde el POS.',
+        },
+        {
+          type: 'texto',
+          text: 'En la misma ventana ves las **tarjetas de todos tus clientes** con sus sellos y canjes. Cuando alguien llega a la meta, aparece el botón **Canjear**: descuenta la meta de sellos (si tenía 12 y la meta es 10, le quedan 2) y deja el registro.',
+        },
+        {
+          type: 'consejo',
+          text: 'El diseño usa lo que tu negocio ya tiene: el logo se acomoda solo para el círculo de la tarjeta y tu dirección se usa para el aviso de cercanía. No necesitas preparar imágenes especiales.',
+        },
+        {
+          type: 'ojo',
+          text: 'El aviso de cercanía depende de que tu dirección se pueda ubicar con precisión en el mapa. Si tu dirección es imprecisa (sin número, o con abreviaturas raras), la tarjeta funciona igual pero sin ese aviso.',
+        },
+      ],
+    },
+
+    {
       id: 'quien-debe',
       title: 'Ver quién te debe',
       blocks: [

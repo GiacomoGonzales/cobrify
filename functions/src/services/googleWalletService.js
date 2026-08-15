@@ -77,12 +77,18 @@ async function upsert(tipo, id, cuerpo) {
 
 /**
  * Clase del negocio (su plantilla de tarjeta).
- * @param {Object} negocio - { businessId, nombre, logoUrl, colorFondo, programa }
+ * @param {Object} negocio - { businessId, nombre, logoUrl, portadaUrl,
+ *   colorFondo, programa, enlaces, ubicaciones }
  */
-export async function upsertLoyaltyClass({ businessId, nombre, logoUrl, colorFondo, programa }) {
+export async function upsertLoyaltyClass({
+  businessId, nombre, logoUrl, portadaUrl, colorFondo, programa,
+  enlaces = [], ubicaciones = [],
+}) {
   const id = classIdDe(businessId)
   const conLogo = async (logo) => {
-    const cuerpo = construirClase(id, nombre, programa, colorFondo, logo)
+    const cuerpo = construirClase(id, nombre, programa, colorFondo, logo, {
+      portadaUrl, enlaces, ubicaciones,
+    })
     return upsert('loyaltyClass', id, cuerpo)
   }
   try {
@@ -104,19 +110,60 @@ export async function upsertLoyaltyClass({ businessId, nombre, logoUrl, colorFon
   }
 }
 
-function construirClase(id, nombre, programa, colorFondo, logoUrl) {
+function construirClase(id, nombre, programa, colorFondo, logoUrl, extras = {}) {
+  const { portadaUrl, enlaces = [], ubicaciones = [] } = extras
   return {
     id,
     issuerName: nombre || 'Comercio',
     programName: programa || 'Tarjeta de sellos',
     // UNDER_REVIEW es lo correcto mientras el emisor está en modo demostración;
     // Google lo pasa a APPROVED al conceder el acceso de publicación.
+    //
+    // OJO, COMPROBADO: al ACTUALIZAR una clase que Google ya aprobó hay que
+    // mandar igual UNDER_REVIEW. Devolverle el APPROVED que él mismo puso da
+    // 400: 'Invalid review status "APPROVED"'. Por eso la clase se arma
+    // siempre desde cero y nunca se reenvía la que se acaba de leer.
     reviewStatus: 'UNDER_REVIEW',
     hexBackgroundColor: colorFondo || '#1e3a8a',
     ...(logoUrl ? {
       programLogo: { sourceUri: { uri: logoUrl }, contentDescription: { defaultValue: { language: 'es', value: nombre || 'Logo' } } },
     } : {}),
+    // Franja ancha de portada. Solo llega si el logo del negocio es apaisado
+    // (ver portadaDe): estirar uno cuadrado se vería peor que no poner nada.
+    ...(portadaUrl ? {
+      heroImage: { sourceUri: { uri: portadaUrl }, contentDescription: { defaultValue: { language: 'es', value: nombre || 'Portada' } } },
+    } : {}),
+    accountNameLabel: 'Cliente',
+    accountIdLabel: 'Teléfono',
+    ...(enlaces.length ? { linksModuleData: { uris: enlaces } } : {}),
+    // Con esto la tarjeta asoma sola en la pantalla de bloqueo cuando el
+    // cliente pasa cerca del local. Solo se manda con coordenadas PRECISAS
+    // (ver geocodeService): un geocerco de distrito entero sería una molestia.
+    ...(ubicaciones.length ? { locations: ubicaciones } : {}),
   }
+}
+
+/**
+ * Contador grande de la tarjeta.
+ *
+ * Los símbolos y el tope NO son constantes de acá: llegan dentro de `tema`,
+ * que el front guarda resuelto en `loyaltyConfig.walletTheme`. La tabla de
+ * temas vive en `src/data/walletThemes.js` y es la única fuente de verdad;
+ * esto solo la pinta.
+ *
+ * Los puntos (●●●○○○○○○○) son la cartulina de toda la vida: el cliente ve
+ * cuánto le falta sin leer un número. Con metas altas dejan de distinguirse,
+ * y ahí el propio tema manda usar el número.
+ */
+function textoDeSellos(sellos, meta, tema = {}) {
+  const lleno = tema.selloLleno || '●'
+  const vacio = tema.selloVacio || '○'
+  const tope = tema.maxSellosEnPuntos || 20
+  if (!tema.sellosComoPuntos || meta > tope) return `${sellos} de ${meta}`
+  const llenos = Math.min(sellos, meta)
+  const puntos = lleno.repeat(llenos) + vacio.repeat(Math.max(0, meta - llenos))
+  // Pasada la meta (12 con meta 10) no se inventan puntos de más.
+  return sellos > meta ? `${puntos}  +${sellos - meta}` : puntos
 }
 
 /**
@@ -124,7 +171,7 @@ function construirClase(id, nombre, programa, colorFondo, logoUrl) {
  * de lo que gana. El QR lleva el teléfono: es lo que el cajero escanea.
  */
 export async function upsertLoyaltyObject({
-  businessId, phone, nombreCliente, sellos = 0, meta = 10, premio = '',
+  businessId, phone, nombreCliente, sellos = 0, meta = 10, premio = '', tema = {},
 }) {
   const id = objectIdDe(businessId, phone)
   const faltan = Math.max(0, meta - sellos)
@@ -137,8 +184,8 @@ export async function upsertLoyaltyObject({
     accountName: nombreCliente || 'Cliente',
     // El contador grande de la tarjeta.
     loyaltyPoints: {
-      label: 'Sellos',
-      balance: { string: `${sellos} de ${meta}` },
+      label: 'Tus sellos',
+      balance: { string: textoDeSellos(sellos, meta, tema) },
     },
     // El QR que escanea el cajero para identificar al cliente.
     barcode: {
@@ -150,6 +197,9 @@ export async function upsertLoyaltyObject({
       faltan > 0
         ? { id: 'faltan', header: 'Te faltan', body: `${faltan} ${faltan === 1 ? 'sello' : 'sellos'} para tu premio` }
         : { id: 'faltan', header: 'Premio disponible', body: premio || 'Ya puedes canjear tu premio' },
+      // Con el contador en puntos, el número exacto deja de estar a la vista.
+      // Va acá para el que quiera confirmarlo.
+      ...(tema.sellosComoPuntos ? [{ id: 'progreso', header: 'Tu progreso', body: `${sellos} de ${meta} sellos` }] : []),
       ...(premio ? [{ id: 'premio', header: 'Tu premio', body: premio }] : []),
     ],
   }

@@ -599,12 +599,12 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'El clásico "compra 10 y el siguiente va gratis". Se activa en Configuración, defines cuántos sellos valen el premio y cuál es el premio, y a partir de ahí **cada venta suma un sello sola**.',
+          text: 'El clásico "compra 10 y el siguiente va gratis". Se activa en **Clientes → Fidelización**, defines cuántos sellos valen el premio y cuál es el premio, y a partir de ahí **cada venta suma un sello sola**. Ahí mismo eliges el diseño de la tarjeta que el cliente guarda en Google Wallet.',
         },
         {
           type: 'enlace',
-          to: '/app/configuracion?tab=ventas&opcion=loyaltyEnabled',
-          label: 'Activar el programa de fidelización',
+          to: '/app/clientes',
+          label: 'Ir a Clientes para activar la fidelización',
         },
         {
           type: 'texto',

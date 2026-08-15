@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useDeferredValue } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet, FileText, Printer, Upload, CalendarClock, Cake, Columns3, PawPrint, ClipboardList, Eye, EyeOff, X, ChevronDown } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet, FileText, Printer, Upload, CalendarClock, Cake, Columns3, PawPrint, ClipboardList, Eye, EyeOff, X, ChevronDown, Stamp } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useHidePrivateData } from '@/hooks/useHidePrivateData'
 import { useToast } from '@/contexts/ToastContext'
@@ -28,6 +28,7 @@ import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import MedicalHistoryModal from '@/components/veterinary/MedicalHistoryModal'
 import { normalizePets, createEmptyPet } from '@/utils/petUtils'
 import DeliveryAddressesEditor, { limpiarDireccionesParaGuardar } from '@/components/customer/DeliveryAddressesEditor'
+import LoyaltyManager from '@/components/loyalty/LoyaltyManager'
 
 // Etiquetas cortas por tipo de comprobante (para el modal de pedidos)
 const DOC_TYPE_LABELS = {
@@ -710,6 +711,7 @@ export default function Customers() {
   const hiddenAmount = '••••••'
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isImportOpen, setIsImportOpen] = useState(false)
+  const [isLoyaltyOpen, setIsLoyaltyOpen] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState(null)
   const [deletingCustomer, setDeletingCustomer] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -1199,6 +1201,14 @@ export default function Customers() {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <Button
+            variant="outline"
+            onClick={() => setIsLoyaltyOpen(true)}
+            className="w-full sm:w-auto"
+          >
+            <Stamp className="w-4 h-4 mr-2" />
+            Fidelización
+          </Button>
           {!hidePrivateData && (
             <Button
               variant="outline"
@@ -1814,6 +1824,12 @@ export default function Customers() {
         onClose={() => setIsImportOpen(false)}
         onImported={loadCustomers}
         existingCustomers={customers}
+      />
+
+      {/* Fidelización: programa de sellos + diseño de la tarjeta de Wallet */}
+      <LoyaltyManager
+        isOpen={isLoyaltyOpen}
+        onClose={() => setIsLoyaltyOpen(false)}
       />
 
       <Modal
