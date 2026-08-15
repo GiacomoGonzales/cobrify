@@ -18,7 +18,7 @@ export default {
         {
           type: 'pasos',
           items: [
-            'Presiona **Nuevo Préstamo** y elige el cliente (busca en tus clientes o escribe un nombre nuevo).',
+            'Presiona **Nuevo Préstamo** y elige el cliente: busca en tus clientes registrados, o escribe el **DNI/RUC** y toca la **lupa** para traer sus datos de RENIEC/SUNAT.',
             'Indica el **capital**, el **interés % por período** y la **modalidad**: Diario, Semanal, Quincenal o Mensual.',
             'Elige la amortización: **Cuota Fija** o **Solo Interés**.',
             'Si cobras **mora** por atraso, configúrala: % sobre lo vencido o monto fijo por período.',
@@ -32,6 +32,10 @@ export default {
             ['Cuota Fija', 'Capital + interés total repartidos en cuotas iguales, con cronograma cerrado', 'En 4 cuotas: total S/ 320, cuotas de S/ 80'],
             ['Solo Interés', 'Cada período vence el interés del capital vivo; el capital se abona cuando se pueda', 'Paga S/ 30 al mes; si un mes abona S/ 230, cancela todo'],
           ],
+        },
+        {
+          type: 'consejo',
+          text: 'La **lupa** junto al documento consulta RENIEC con 8 dígitos y SUNAT con 11, y llena el nombre (y la dirección, en el caso del RUC). El teléfono y el correo no vienen de ahí: esos se escriben a mano.',
         },
         {
           type: 'ojo',

@@ -124,6 +124,7 @@ export const createLendingLoan = async (businessId, data) => {
       customerName: data.customerName,
       customerDocument: data.customerDocument || '',
       customerPhone: data.customerPhone || '',
+      customerAddress: data.customerAddress || '',
       capital: r2(data.capital),
       capitalBalance: r2(data.capital),
       interestRate: Number(data.interestRate),

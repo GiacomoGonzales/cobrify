@@ -29,6 +29,7 @@ import {
   computeMora, loanBalance, periodInterest, buildFixedSchedule,
 } from '@/services/lendingService'
 import { printHtmlIframe } from '@/utils/printHtmlIframe'
+import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 
 const toJsDate = (v) => (v?.toDate ? v.toDate() : v ? new Date(v) : null)
 
@@ -61,12 +62,13 @@ export default function LendingPortfolio() {
   const [showCreate, setShowCreate] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [form, setForm] = useState({
-    customerSearch: '', customerId: null, customerName: '', customerDocument: '', customerPhone: '',
+    customerSearch: '', customerId: null, customerName: '', customerDocument: '', customerPhone: '', customerAddress: '',
     capital: '', interestRate: '', modality: 'monthly', amortizationType: 'fixed',
     installmentsCount: '4', startDate: getLocalDateString(),
     moraType: 'none', moraValue: '',
   })
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
+  const [isLookingUp, setIsLookingUp] = useState(false)
 
   // Pago
   const [payingLoan, setPayingLoan] = useState(null)
@@ -154,6 +156,50 @@ export default function LendingPortfolio() {
     return { interesPorPeriodo: Math.round(capital * rate) / 100 }
   }, [form.capital, form.interestRate, form.amortizationType, form.installmentsCount, form.startDate, form.modality])
 
+  // Lupa RENIEC/SUNAT sobre el campo Documento: 8 dígitos = DNI, 11 = RUC.
+  // Mismo servicio que POS/Órdenes/Compras. En RUC además llega la dirección.
+  const handleDocumentLookup = async () => {
+    const docNum = form.customerDocument.trim()
+    if (docNum.length !== 8 && docNum.length !== 11) {
+      toast.error('Ingresa un DNI (8 dígitos) o RUC (11 dígitos)')
+      return
+    }
+    setIsLookingUp(true)
+    try {
+      if (docNum.length === 8) {
+        const res = await consultarDNI(docNum)
+        if (res.success) {
+          setForm(f => ({ ...f, customerName: res.data.nombreCompleto || f.customerName, customerSearch: '' }))
+          setShowCustomerDropdown(false)
+          toast.success('Datos encontrados en RENIEC')
+        } else {
+          toast.error(res.error || 'No se encontró el DNI')
+        }
+      } else {
+        const res = await consultarRUC(docNum)
+        if (res.success) {
+          setForm(f => ({
+            ...f,
+            customerName: res.data.razonSocial || f.customerName,
+            // RENIEC/SUNAT NO devuelven teléfono ni email: eso se escribe a
+            // mano. De SUNAT sí llega la dirección.
+            customerAddress: res.data.direccion || f.customerAddress,
+            customerSearch: '',
+          }))
+          setShowCustomerDropdown(false)
+          toast.success('Datos encontrados en SUNAT')
+        } else {
+          toast.error(res.error || 'No se encontró el RUC')
+        }
+      }
+    } catch (e) {
+      console.error('Error consultando documento:', e)
+      toast.error('No se pudo consultar el documento')
+    } finally {
+      setIsLookingUp(false)
+    }
+  }
+
   const handleCreate = async () => {
     if (isDemoMode) { toast.info('No disponible en modo demo'); return }
     const capital = parseFloat(form.capital)
@@ -171,6 +217,7 @@ export default function LendingPortfolio() {
         customerName: form.customerName.trim(),
         customerDocument: form.customerDocument.trim(),
         customerPhone: form.customerPhone.trim(),
+        customerAddress: form.customerAddress.trim(),
         capital,
         interestRate: rate,
         modality: form.modality,
@@ -183,7 +230,7 @@ export default function LendingPortfolio() {
         toast.success('Préstamo registrado')
         setShowCreate(false)
         setForm({
-          customerSearch: '', customerId: null, customerName: '', customerDocument: '', customerPhone: '',
+          customerSearch: '', customerId: null, customerName: '', customerDocument: '', customerPhone: '', customerAddress: '',
           capital: '', interestRate: '', modality: 'monthly', amortizationType: 'fixed',
           installmentsCount: '4', startDate: getLocalDateString(), moraType: 'none', moraValue: '',
         })
@@ -443,6 +490,7 @@ export default function LendingPortfolio() {
                         customerName: c.name || c.businessName || '',
                         customerDocument: c.documentNumber || '',
                         customerPhone: c.phone || '',
+                        customerAddress: c.address || '',
                         customerSearch: '',
                       }))
                       setShowCustomerDropdown(false)
@@ -459,9 +507,38 @@ export default function LendingPortfolio() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Input label="Documento (opcional)" value={form.customerDocument} onChange={e => setForm(f => ({ ...f, customerDocument: e.target.value }))} />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Documento (opcional)</label>
+              <div className="flex gap-1.5">
+                <input
+                  type="text"
+                  value={form.customerDocument}
+                  onChange={e => setForm(f => ({ ...f, customerDocument: e.target.value.replace(/\D/g, '') }))}
+                  placeholder="DNI o RUC"
+                  maxLength={11}
+                  className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleDocumentLookup}
+                  disabled={isLookingUp}
+                  title="Buscar en RENIEC / SUNAT"
+                  className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {isLookingUp ? <Loader2 className="w-4 h-4 animate-spin text-gray-500" /> : <Search className="w-4 h-4 text-gray-500" />}
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">8 dígitos busca en RENIEC, 11 en SUNAT.</p>
+            </div>
             <Input label="Teléfono (opcional)" value={form.customerPhone} onChange={e => setForm(f => ({ ...f, customerPhone: e.target.value }))} />
           </div>
+
+          <Input
+            label="Dirección (opcional)"
+            placeholder="Se llena sola al buscar un RUC"
+            value={form.customerAddress}
+            onChange={e => setForm(f => ({ ...f, customerAddress: e.target.value }))}
+          />
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Input label="Capital (S/)" type="number" min="0" step="0.01" value={form.capital} onChange={e => setForm(f => ({ ...f, capital: e.target.value }))} />
