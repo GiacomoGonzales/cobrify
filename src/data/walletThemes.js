@@ -70,6 +70,7 @@ export const TEMA_POR_DEFECTO = 'oscuro'
  * real. Si se toca un icono, se toca en los dos lados.
  */
 export const MOTIVOS_PORTADA = [
+  { id: 'cuadricula', nombre: 'Cuadrícula' },
   { id: 'comida', nombre: 'Comida' },
   { id: 'moda', nombre: 'Moda' },
   { id: 'salud', nombre: 'Salud' },
@@ -170,6 +171,55 @@ export const textoDeSellos = (sellos, meta, sellosComoPuntos) => {
   const llenos = Math.min(s, m)
   const puntos = SELLO_LLENO.repeat(llenos) + SELLO_VACIO.repeat(m - llenos)
   return s > m ? `${puntos}  +${s - m}` : puntos
+}
+
+/**
+ * La CUADRÍCULA de sellos (estilo cartulina dibujada): casilleros llenos con
+ * check, vacíos punteados y el último con el regalo. Espejo de la geometría
+ * del servidor (`svgDeCuadricula` en walletAssetsService.js); esta pinta la
+ * vista previa, aquella la portada real de cada cliente.
+ *
+ * Devuelve el interior de un SVG 1032x336, con colores propios por elemento.
+ */
+export const celdasDeCuadricula = (sellos, meta, colorFondo) => {
+  const W = 1032, H = 336
+  const tinta = esColorClaro(colorFondo) ? '#1f2937' : '#ffffff'
+  const m = Math.max(1, Number(meta) || 10)
+  const s = Math.max(0, Math.min(Number(sellos) || 0, m))
+  const filas = m <= 5 ? 1 : 2
+  const cols = Math.ceil(m / filas)
+  const gap = 24
+  const lado = Math.min(120,
+    Math.floor((W - 90 - (cols - 1) * gap) / cols),
+    Math.floor((H - 70 - (filas - 1) * gap) / filas))
+  const gh = filas * lado + (filas - 1) * gap
+  const y0 = (H - gh) / 2
+  const esc = (lado / 64) * 0.62
+  const off = (lado - 64 * esc) / 2
+  const CHECK = '<path d="M18 34 l10 10 L46 22"/>'
+  const REGALO = '<rect x="14" y="28" width="36" height="22" rx="4"/><rect x="11" y="18" width="42" height="10" rx="3"/><path d="M32 18 v32 M32 18 q-5 -10 -12 -6 q-4 5 12 6 M32 18 q5 -10 12 -6 q4 5 -12 6"/>'
+
+  let celdas = ''
+  for (let f = 0; f < filas; f++) {
+    const enFila = f === filas - 1 ? m - cols * f : cols
+    const gw = enFila * lado + (enFila - 1) * gap
+    const x0 = (W - gw) / 2
+    for (let c = 0; c < enFila; c++) {
+      const i = f * cols + c
+      const x = x0 + c * (lado + gap)
+      const y = y0 + f * (lado + gap)
+      if (i < s) {
+        celdas += `<rect x="${x}" y="${y}" width="${lado}" height="${lado}" rx="${lado * 0.17}" fill="${tinta}" fill-opacity="0.92"/>`
+        celdas += `<g transform="translate(${x + off} ${y + off}) scale(${esc.toFixed(3)})" fill="none" stroke="${colorFondo}" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">${CHECK}</g>`
+      } else {
+        celdas += `<rect x="${x}" y="${y}" width="${lado}" height="${lado}" rx="${lado * 0.17}" fill="none" stroke="${tinta}" stroke-opacity="0.75" stroke-width="3" stroke-dasharray="10 8"/>`
+        if (i === m - 1) {
+          celdas += `<g transform="translate(${x + off} ${y + off}) scale(${esc.toFixed(3)})" fill="none" stroke="${tinta}" stroke-opacity="0.75" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">${REGALO}</g>`
+        }
+      }
+    }
+  }
+  return celdas
 }
 
 /** ¿El color de fondo es claro? Decide si la vista previa usa texto oscuro. */

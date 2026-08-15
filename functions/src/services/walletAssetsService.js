@@ -285,6 +285,113 @@ export async function portadaConMotivo(businessId, { color, motivo, logoUrl }) {
   }
 }
 
+// ============================================================================
+// CUADRÍCULA DE SELLOS — 15-ago-2026
+//
+// La cartulina dibujada, estilo LiSTO: casilleros llenos con check, vacíos
+// punteados y el último con el regalo. Es una portada POR TARJETA (comprobado:
+// el objeto de Wallet acepta su propio heroImage y pisa el de la clase), y se
+// redibuja en cada sello.
+//
+// DETALLE QUE IMPORTA: Google cachea las imágenes por URL, así que cada
+// cantidad de sellos es un ARCHIVO distinto (grid-{tel}-{n}.png). Reusar la
+// misma URL dejaría la tarjeta mostrando la cuadrícula vieja quién sabe hasta
+// cuándo. El archivo del conteo anterior se borra al pasar al siguiente.
+// ============================================================================
+
+// check para el casillero lleno y regalo para el del premio (caja de 64x64)
+const ICONO_CHECK = '<path d="M18 34 l10 10 L46 22"/>'
+const ICONO_REGALO = '<rect x="14" y="28" width="36" height="22" rx="4"/><rect x="11" y="18" width="42" height="10" rx="3"/><path d="M32 18 v32 M32 18 q-5 -10 -12 -6 q-4 5 12 6 M32 18 q5 -10 12 -6 q4 5 -12 6"/>'
+
+/**
+ * El SVG de la cuadrícula. Exportado aparte para poder previsualizarlo sin
+ * Storage; el front dibuja su vista previa con esta MISMA geometría (espejo
+ * en src/data/walletThemes.js).
+ */
+export function svgDeCuadricula({ color = '#1e3a8a', sellos = 0, meta = 10 } = {}) {
+  const tinta = esClaro(color) ? '#1f2937' : '#ffffff'
+  const filas = meta <= 5 ? 1 : 2
+  const cols = Math.ceil(meta / filas)
+  const gap = 24
+  // La celda se achica sola con metas altas para que la fila siempre entre.
+  const lado = Math.min(120,
+    Math.floor((PORTADA_W - 90 - (cols - 1) * gap) / cols),
+    Math.floor((PORTADA_H - 70 - (filas - 1) * gap) / filas))
+  const gh = filas * lado + (filas - 1) * gap
+  const y0 = (PORTADA_H - gh) / 2
+  const esc = (lado / 64) * 0.62
+  const off = (lado - 64 * esc) / 2
+
+  let celdas = ''
+  for (let f = 0; f < filas; f++) {
+    const enFila = f === filas - 1 ? meta - cols * f : cols
+    const gw = enFila * lado + (enFila - 1) * gap
+    const x0 = (PORTADA_W - gw) / 2 // cada fila centrada (la última puede ser más corta)
+    for (let c = 0; c < enFila; c++) {
+      const i = f * cols + c
+      const x = x0 + c * (lado + gap)
+      const y = y0 + f * (lado + gap)
+      if (i < sellos) {
+        celdas += `<rect x="${x}" y="${y}" width="${lado}" height="${lado}" rx="${lado * 0.17}" fill="${tinta}" fill-opacity="0.92"/>`
+        celdas += `<g transform="translate(${x + off} ${y + off}) scale(${esc.toFixed(3)})" fill="none" stroke="${color}" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">${ICONO_CHECK}</g>`
+      } else {
+        celdas += `<rect x="${x}" y="${y}" width="${lado}" height="${lado}" rx="${lado * 0.17}" fill="none" stroke="${tinta}" stroke-opacity="0.75" stroke-width="3" stroke-dasharray="10 8"/>`
+        if (i === meta - 1) {
+          celdas += `<g transform="translate(${x + off} ${y + off}) scale(${esc.toFixed(3)})" fill="none" stroke="${tinta}" stroke-opacity="0.75" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">${ICONO_REGALO}</g>`
+        }
+      }
+    }
+  }
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${PORTADA_W}" height="${PORTADA_H}" viewBox="0 0 ${PORTADA_W} ${PORTADA_H}"><rect width="100%" height="100%" fill="${color}"/>${celdas}</svg>`
+}
+
+/**
+ * Cuadrícula de un cliente, subida a Storage. Devuelve la URL (o null si algo
+ * falla — la tarjeta sale sin portada propia y muestra la de la clase).
+ */
+export async function cuadriculaDeSellos(businessId, { phone, color, sellos = 0, meta = 10, sellosAntes = null }) {
+  try {
+    const bucket = getStorage().bucket()
+    const tel = String(phone || '').replace(/[^A-Za-z0-9._-]/g, '')
+    const ruta = `businesses/${businessId}/wallet/grid-${tel}-${sellos}.png`
+    const archivo = bucket.file(ruta)
+    const origen = huella(`${color}|${sellos}|${meta}`)
+
+    try {
+      const [meta2] = await archivo.getMetadata()
+      const guardado = meta2.metadata || {}
+      if (guardado.origen === origen && guardado.firebaseStorageDownloadTokens) {
+        return urlDescarga(bucket.name, ruta, guardado.firebaseStorageDownloadTokens.split(',')[0])
+      }
+    } catch (error) {
+      if (error.code !== 404) throw error
+    }
+
+    const png = await sharp(Buffer.from(svgDeCuadricula({ color, sellos, meta }))).png().toBuffer()
+    const token = crypto.randomUUID()
+    await archivo.save(png, {
+      resumable: false,
+      metadata: {
+        contentType: 'image/png',
+        cacheControl: 'public,max-age=31536000',
+        metadata: { firebaseStorageDownloadTokens: token, origen },
+      },
+    })
+
+    // Limpieza de la cuadrícula del conteo anterior, mejor-esfuerzo: si falla
+    // solo queda un PNG huérfano de 10KB, no vale la pena más que esto.
+    if (sellosAntes !== null && sellosAntes !== sellos) {
+      bucket.file(`businesses/${businessId}/wallet/grid-${tel}-${sellosAntes}.png`)
+        .delete().catch(() => {})
+    }
+    return urlDescarga(bucket.name, ruta, token)
+  } catch (error) {
+    console.warn(`[Wallet] No se pudo dibujar la cuadrícula de ${businessId}/${phone}:`, error.message)
+    return null
+  }
+}
+
 /**
  * Imagen de portada (la franja ancha de arriba). Se usa el logo ORIGINAL solo
  * si es claramente apaisado: uno cuadrado estirado a lo ancho se vería peor que

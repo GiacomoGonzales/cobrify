@@ -172,6 +172,7 @@ function textoDeSellos(sellos, meta, tema = {}) {
  */
 export async function upsertLoyaltyObject({
   businessId, phone, nombreCliente, sellos = 0, meta = 10, premio = '', tema = {},
+  heroUrl = null, mensaje = '', nombreNegocio = '',
 }) {
   const id = objectIdDe(businessId, phone)
   const faltan = Math.max(0, meta - sellos)
@@ -193,6 +194,11 @@ export async function upsertLoyaltyObject({
       value: phone,
       alternateText: phone,
     },
+    // Portada propia de ESTA tarjeta (la cuadrícula de sellos). Pisa la de la
+    // clase — comprobado contra la API.
+    ...(heroUrl ? {
+      heroImage: { sourceUri: { uri: heroUrl }, contentDescription: { defaultValue: { language: 'es', value: 'Tus sellos' } } },
+    } : {}),
     textModulesData: [
       faltan > 0
         ? { id: 'faltan', header: 'Te faltan', body: `${faltan} ${faltan === 1 ? 'sello' : 'sellos'} para tu premio` }
@@ -201,6 +207,8 @@ export async function upsertLoyaltyObject({
       // Va acá para el que quiera confirmarlo.
       ...(tema.sellosComoPuntos ? [{ id: 'progreso', header: 'Tu progreso', body: `${sellos} de ${meta} sellos` }] : []),
       ...(premio ? [{ id: 'premio', header: 'Tu premio', body: premio }] : []),
+      // Mensaje libre del comercio ("Gracias por tu preferencia...").
+      ...(mensaje ? [{ id: 'mensaje', header: nombreNegocio || 'Mensaje', body: mensaje }] : []),
     ],
   }
   return upsert('loyaltyObject', id, cuerpo)

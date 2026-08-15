@@ -36,6 +36,9 @@ export const DEFAULT_LOYALTY_CONFIG = {
   // Diseño de la tarjeta de Google Wallet. Se guarda RESUELTO (ver
   // src/data/walletThemes.js): el backend lee estos valores, no la tabla.
   walletTheme: resolveTheme(),
+  // Mensaje libre que sale como fila en la tarjeta ("Gracias por tu
+  // preferencia..."). Vacío = sin fila.
+  walletMessage: '',
   // Que la tarjeta aparezca sola en la pantalla de bloqueo al pasar cerca del
   // local. Requiere que la dirección del negocio se pueda ubicar con precisión.
   walletNearby: true,

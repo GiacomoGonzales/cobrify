@@ -11,7 +11,7 @@ import Input from '@/components/ui/Input'
 import Badge from '@/components/ui/Badge'
 import {
   WALLET_THEMES, resolveTheme, textoDeSellos, esColorClaro,
-  MOTIVOS_PORTADA, celdasDeMotivo, motivoPorDefecto,
+  MOTIVOS_PORTADA, celdasDeMotivo, celdasDeCuadricula, motivoPorDefecto,
 } from '@/data/walletThemes'
 import {
   DEFAULT_LOYALTY_CONFIG, getLoyaltyCards, redeemReward, getWalletPassLink,
@@ -35,11 +35,18 @@ import {
  * servidor para la imagen real (ver walletThemes.js). El logo va sobre una
  * pastilla blanca, igual que en la portada generada.
  */
-function PortadaPreview({ colorFondo, motivo, logoUrl, className = '' }) {
+function PortadaPreview({ colorFondo, motivo, logoUrl, sellos = 3, meta = 10, className = '' }) {
   const tinta = esColorClaro(colorFondo) ? '#1f2937' : '#ffffff'
+  const esCuadricula = motivo === 'cuadricula'
   return (
     <div className={`relative overflow-hidden ${className}`} style={{ backgroundColor: colorFondo }}>
-      {motivo && motivo !== 'none' && (
+      {esCuadricula ? (
+        // La cuadrícula trae sus colores por elemento; el aspecto se preserva
+        // (meet) para que los casilleros nunca salgan recortados.
+        <svg viewBox="0 0 1032 336" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
+          <g dangerouslySetInnerHTML={{ __html: celdasDeCuadricula(sellos, meta, colorFondo) }} />
+        </svg>
+      ) : motivo && motivo !== 'none' && (
         <svg viewBox="0 0 1032 336" className="w-full h-full" preserveAspectRatio="xMidYMid slice">
           <g
             fill="none" stroke={tinta} strokeWidth="2.6"
@@ -48,7 +55,8 @@ function PortadaPreview({ colorFondo, motivo, logoUrl, className = '' }) {
           />
         </svg>
       )}
-      {logoUrl && (
+      {/* En la cuadrícula el logo sobraría: los sellos SON la portada. */}
+      {logoUrl && !esCuadricula && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="bg-white/95 rounded-lg px-3 py-1 max-w-[65%]">
             <img src={logoUrl} alt="" className="max-h-7 w-auto object-contain" />
@@ -104,7 +112,9 @@ function TarjetaPreview({ colorFondo, sellosComoPuntos, negocio, logoUrl, meta, 
           colorFondo={colorFondo}
           motivo={motivo}
           logoUrl={logoUrl}
-          className={`h-16 border-t ${esColorClaro(colorFondo) ? 'border-black/10' : 'border-white/15'}`}
+          sellos={3}
+          meta={Math.max(2, Number(meta) || 10)}
+          className={`${motivo === 'cuadricula' ? 'h-20' : 'h-16'} border-t ${esColorClaro(colorFondo) ? 'border-black/10' : 'border-white/15'}`}
         />
       )}
     </div>
@@ -201,6 +211,7 @@ export default function LoyaltyManager({ isOpen, onClose }) {
           stampOnlineOrders: config.stampOnlineOrders !== false,
           walletTheme: resolveTheme({ temaId: tema.id, colorFondo: tema.colorFondo, motivo: tema.motivo }),
           walletNearby: config.walletNearby !== false,
+          walletMessage: (config.walletMessage || '').trim(),
         },
       }, { merge: true })
       toast.success('Programa de fidelización guardado')
@@ -380,6 +391,19 @@ export default function LoyaltyManager({ isOpen, onClose }) {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              <div className="mt-4">
+                <Input
+                  label="Mensaje en la tarjeta (opcional)"
+                  value={config.walletMessage || ''}
+                  onChange={(e) => setConfig({ ...config, walletMessage: e.target.value })}
+                  placeholder="Ej: Gracias por tu preferencia. Presenta este QR al pagar."
+                  maxLength={120}
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Sale como una fila más en la tarjeta, con el nombre de tu negocio de título.
+                </p>
               </div>
 
               {/* Vista previa completa: cuerpo + portada, como queda en el celular */}
