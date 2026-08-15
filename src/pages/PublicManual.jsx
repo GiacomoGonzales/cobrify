@@ -46,6 +46,7 @@ const NOMBRE_MODO = {
   transport: 'Transporte',
   logistics: 'Logística',
   real_estate: 'Inmobiliaria',
+  lending: 'Préstamos',
 }
 
 const MODOS = Object.keys(NOMBRE_MODO)

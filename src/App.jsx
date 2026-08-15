@@ -93,6 +93,7 @@ import PublicManual from './pages/PublicManual'
 import MigratePurchases from './pages/MigratePurchases'
 import Expenses from './pages/Expenses'
 import Loans from './pages/Loans'
+import LendingPortfolio from './pages/LendingPortfolio'
 import Certificates from './pages/Certificates'
 import CashFlow from './pages/CashFlow'
 import Accounting from './pages/Accounting'
@@ -299,6 +300,7 @@ function App() {
               <Route path="reportes" element={<Reports />} />
               <Route path="gastos" element={<Expenses />} />
               <Route path="prestamos" element={<Loans />} />
+              <Route path="prestamos-cartera" element={<LendingPortfolio />} />
               <Route path="certificados" element={<Certificates />} />
               <Route path="flujo-caja" element={<CashFlow />} />
               <Route path="configuracion" element={<Settings />} />
@@ -489,6 +491,7 @@ function App() {
               <Route path="meta-ads" element={<MetaAdsExport />} />
               <Route path="gastos" element={<Expenses />} />
               <Route path="prestamos" element={<Loans />} />
+              <Route path="prestamos-cartera" element={<LendingPortfolio />} />
               <Route path="certificados" element={<Certificates />} />
               <Route path="flujo-caja" element={<CashFlow />} />
               <Route path="contabilidad" element={<Accounting />} />

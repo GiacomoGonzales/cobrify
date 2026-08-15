@@ -69,6 +69,7 @@ const NOMBRE_MODO = {
   transport: 'Transporte',
   logistics: 'Logística',
   real_estate: 'Inmobiliaria',
+  lending: 'Préstamos',
 }
 
 /** ¿La opción de configuración de esta sección está apagada? */

@@ -2562,7 +2562,6 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                       <Input
                         label="Placa"
                         placeholder="ABC123"
-                        maxLength={6}
                         value={v.plate || ''}
                         maxLength={PLATE_MAX_LENGTH}
                         onChange={(e) => setAdditionalVehicles(prev => prev.map((x, i) => i === idx ? { ...x, plate: normalizePlate(e.target.value) } : x))}

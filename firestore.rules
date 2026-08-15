@@ -648,6 +648,14 @@ service cloud.firestore {
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
+      // Subcollection: Préstamos OTORGADOS a clientes (modo Préstamos).
+      // Colección propia — `loans` son préstamos que el negocio RECIBE y
+      // CashFlow los suma como egresos; mezclar direcciones los contaría mal.
+      match /lendingLoans/{loanId} {
+        allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
       // Subcollection: Financial Movements (Movimientos Financieros - Flujo de Caja)
       match /financialMovements/{movementId} {
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);

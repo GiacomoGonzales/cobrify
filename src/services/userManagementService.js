@@ -251,6 +251,11 @@ export const AVAILABLE_PAGES = [
  * @param {string} businessMode - 'retail', 'restaurant', 'pharmacy', 'real_estate' o 'transport'
  * @returns {array} - Array de páginas disponibles
  */
+// Modo Préstamos: la cartera + lo común (clientes, caja, configuración)
+export const LENDING_PAGES = [
+  { id: 'lending', name: 'Préstamos (Cartera)', path: '/prestamos-cartera', category: 'principal' },
+]
+
 export const getAvailablePagesByMode = (businessMode) => {
   if (businessMode === 'restaurant') {
     return [...COMMON_PAGES, ...RESTAURANT_PAGES]
@@ -266,6 +271,8 @@ export const getAvailablePagesByMode = (businessMode) => {
     return [...COMMON_PAGES, ...LOGISTICS_PAGES]
   } else if (businessMode === 'veterinary') {
     return [...COMMON_PAGES, ...VETERINARY_PAGES]
+  } else if (businessMode === 'lending') {
+    return [...COMMON_PAGES, ...LENDING_PAGES]
   } else {
     // Modo retail o por defecto
     return [...COMMON_PAGES, ...RETAIL_PAGES]

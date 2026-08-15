@@ -73,6 +73,7 @@ import {
   Bell,
   Facebook,
   HelpCircle,
+  HandCoins,
 } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -1868,6 +1869,39 @@ function Sidebar() {
     },
   ]
 
+  // === MODO PRÉSTAMOS (lending): menú mínimo a propósito ===
+  // El negocio PRESTA dinero: sin POS, sin productos, sin inventario. La
+  // cartera es la página central; clientes y caja se reutilizan tal cual.
+  const lendingMenuItems = [
+    {
+      path: '/prestamos-cartera',
+      icon: HandCoins,
+      label: 'Préstamos',
+      pageId: 'lending',
+      menuId: 'lending',
+    },
+    {
+      path: '/clientes',
+      icon: Users,
+      label: 'Clientes',
+      pageId: 'customers',
+      menuId: 'customers',
+    },
+    {
+      path: '/caja',
+      icon: Wallet,
+      label: 'Control de Caja',
+      pageId: 'cash-register',
+      menuId: 'cash-register',
+    },
+    {
+      path: '/configuracion',
+      icon: Settings,
+      label: 'Configuración',
+      pageId: 'settings',
+    },
+  ]
+
   // Seleccionar menú según el modo de negocio
   // Si businessMode es null (cargando), no mostrar nada aún
   const menuItems = businessMode === 'restaurant'
@@ -1882,6 +1916,8 @@ function Sidebar() {
             ? logisticsMenuItems
             : businessMode === 'veterinary'
               ? veterinaryMenuItems
+              : businessMode === 'lending'
+                ? lendingMenuItems
               : (businessMode === 'retail' || businessMode === 'transport')
                 ? retailMenuItems
                 : [] // Si es null, array vacío mientras carga

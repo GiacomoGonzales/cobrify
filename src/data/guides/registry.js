@@ -48,6 +48,16 @@ export const GUIDES = [
     load: () => import('./flujo-insumos.js'),
   },
   {
+    id: 'prestamos-cartera',
+    route: '/app/prestamos-cartera',
+    title: 'Préstamos (Cartera)',
+    category: 'Finanzas',
+    description: 'Registrar préstamos, cobrar cuotas con desglose mora/interés/capital y entregar constancias.',
+    keywords: 'prestamos cartera prestar capital interes cuota fija solo interes mora modalidad diario semanal quincenal mensual constancia pago amortizar',
+    modos: ['lending'],
+    load: () => import('./prestamos-cartera.js'),
+  },
+  {
     id: 'dashboard',
     route: '/app/dashboard',
     title: 'Dashboard',

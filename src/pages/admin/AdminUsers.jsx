@@ -4134,6 +4134,7 @@ export default function AdminUsers() {
                       <option value="pharmacy">Farmacia</option>
                       <option value="hotel">Hotel</option>
                       <option value="veterinary">Veterinaria</option>
+                      <option value="lending">Préstamos</option>
                       <option value="transport">Transporte</option>
                       <option value="logistics">Logística / Construcción</option>
                       <option value="real_estate">Inmobiliaria</option>
