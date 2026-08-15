@@ -11,6 +11,7 @@ import Input from '@/components/ui/Input'
 import Badge from '@/components/ui/Badge'
 import {
   WALLET_THEMES, resolveTheme, textoDeSellos, esColorClaro,
+  MOTIVOS_PORTADA, celdasDeMotivo, motivoPorDefecto,
 } from '@/data/walletThemes'
 import {
   DEFAULT_LOYALTY_CONFIG, getLoyaltyCards, redeemReward, getWalletPassLink,
@@ -30,39 +31,81 @@ import {
  */
 
 /**
- * Vista previa de la tarjeta, imitando la composición real de Google Wallet:
- * logo redondo + nombre arriba, el contador de sellos como protagonista.
- * Sirve tanto de muestra de la galería (chica) como de vista previa grande.
+ * La franja de portada, dibujada en vivo con los MISMOS trazos que usa el
+ * servidor para la imagen real (ver walletThemes.js). El logo va sobre una
+ * pastilla blanca, igual que en la portada generada.
  */
-function TarjetaPreview({ colorFondo, sellosComoPuntos, negocio, logoUrl, meta, premio, grande = false }) {
+function PortadaPreview({ colorFondo, motivo, logoUrl, className = '' }) {
+  const tinta = esColorClaro(colorFondo) ? '#1f2937' : '#ffffff'
+  return (
+    <div className={`relative overflow-hidden ${className}`} style={{ backgroundColor: colorFondo }}>
+      {motivo && motivo !== 'none' && (
+        <svg viewBox="0 0 1032 336" className="w-full h-full" preserveAspectRatio="xMidYMid slice">
+          <g
+            fill="none" stroke={tinta} strokeWidth="2.6"
+            strokeLinecap="round" strokeLinejoin="round" opacity="0.16"
+            dangerouslySetInnerHTML={{ __html: celdasDeMotivo(motivo) }}
+          />
+        </svg>
+      )}
+      {logoUrl && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="bg-white/95 rounded-lg px-3 py-1 max-w-[65%]">
+            <img src={logoUrl} alt="" className="max-h-7 w-auto object-contain" />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Vista previa de la tarjeta, imitando la composición real de Google Wallet:
+ * logo redondo + nombre arriba, el contador de sellos como protagonista y la
+ * franja de portada. Sirve tanto de muestra de la galería (chica) como de
+ * vista previa grande.
+ */
+function TarjetaPreview({ colorFondo, sellosComoPuntos, negocio, logoUrl, meta, premio, motivo, grande = false }) {
   const claro = esColorClaro(colorFondo)
   const texto = claro ? 'text-gray-900' : 'text-white'
   const tenue = claro ? 'text-gray-500' : 'text-white/70'
   const demo = textoDeSellos(3, Math.min(meta || 10, 10), sellosComoPuntos)
   return (
     <div
-      className={`rounded-2xl shadow-sm border border-black/10 ${grande ? 'p-4' : 'p-3'} w-full`}
+      className="rounded-2xl shadow-sm border border-black/10 w-full overflow-hidden"
       style={{ backgroundColor: colorFondo }}
     >
-      <div className="flex items-center gap-2 min-w-0">
-        <div className={`${grande ? 'w-9 h-9' : 'w-7 h-7'} rounded-full bg-white flex items-center justify-center overflow-hidden shrink-0 border border-black/10`}>
-          {logoUrl
-            ? <img src={logoUrl} alt="" className="w-full h-full object-contain" />
-            : <span className="text-[10px] font-bold text-gray-600">{(negocio || 'N')[0]}</span>}
+      <div className={grande ? 'p-4' : 'p-3'}>
+        <div className="flex items-center gap-2 min-w-0">
+          <div className={`${grande ? 'w-9 h-9' : 'w-7 h-7'} rounded-full bg-white flex items-center justify-center overflow-hidden shrink-0 border border-black/10`}>
+            {logoUrl
+              ? <img src={logoUrl} alt="" className="w-full h-full object-contain" />
+              : <span className="text-[10px] font-bold text-gray-600">{(negocio || 'N')[0]}</span>}
+          </div>
+          <div className="min-w-0">
+            <p className={`${texto} ${grande ? 'text-sm' : 'text-xs'} font-semibold truncate`}>{negocio || 'Tu negocio'}</p>
+            <p className={`${tenue} ${grande ? 'text-xs' : 'text-[10px]'} truncate`}>Tarjeta de sellos</p>
+          </div>
         </div>
-        <div className="min-w-0">
-          <p className={`${texto} ${grande ? 'text-sm' : 'text-xs'} font-semibold truncate`}>{negocio || 'Tu negocio'}</p>
-          <p className={`${tenue} ${grande ? 'text-xs' : 'text-[10px]'} truncate`}>Tarjeta de sellos</p>
+        <div className={grande ? 'mt-4' : 'mt-3'}>
+          <p className={`${tenue} ${grande ? 'text-xs' : 'text-[10px]'}`}>Tus sellos</p>
+          <p className={`${texto} ${grande ? 'text-xl' : 'text-sm'} font-semibold tracking-wide whitespace-nowrap overflow-hidden`}>
+            {demo}
+          </p>
         </div>
+        {grande && premio && (
+          <p className={`${tenue} text-xs mt-2 truncate`}>Premio: {premio}</p>
+        )}
       </div>
-      <div className={grande ? 'mt-4' : 'mt-3'}>
-        <p className={`${tenue} ${grande ? 'text-xs' : 'text-[10px]'}`}>Tus sellos</p>
-        <p className={`${texto} ${grande ? 'text-xl' : 'text-sm'} font-semibold tracking-wide whitespace-nowrap overflow-hidden`}>
-          {demo}
-        </p>
-      </div>
-      {grande && premio && (
-        <p className={`${tenue} text-xs mt-2 truncate`}>Premio: {premio}</p>
+      {/* La franja de portada solo en la vista grande: en las muestras de la
+          galería competiría con lo que ahí se compara, que es el color. */}
+      {grande && motivo && (
+        <PortadaPreview
+          colorFondo={colorFondo}
+          motivo={motivo}
+          logoUrl={logoUrl}
+          className={`h-16 border-t ${esColorClaro(colorFondo) ? 'border-black/10' : 'border-white/15'}`}
+        />
       )}
     </div>
   )
@@ -71,7 +114,7 @@ function TarjetaPreview({ colorFondo, sellosComoPuntos, negocio, logoUrl, meta, 
 export default function LoyaltyManager({ isOpen, onClose }) {
   // TODOS los hooks antes de cualquier return condicional (React #310: un
   // hook bajo `if (!isOpen) return null` compila bien y revienta en runtime).
-  const { getBusinessId, isDemoMode, businessSettings } = useAppContext()
+  const { getBusinessId, isDemoMode, businessSettings, businessMode } = useAppContext()
   const toast = useToast()
 
   const [cargando, setCargando] = useState(true)
@@ -82,7 +125,9 @@ export default function LoyaltyManager({ isOpen, onClose }) {
   const [accionandoId, setAccionandoId] = useState(null)
 
   const logoUrl = businessSettings?.logoUrl || null
-  const nombreNegocio = businessSettings?.tradeName || businessSettings?.businessName || businessSettings?.name || ''
+  // El nombre comercial vive en `name` (Settings guarda name = tradeName ||
+  // businessName); `businessName` es la razon social y va al final.
+  const nombreNegocio = businessSettings?.name || businessSettings?.tradeName || businessSettings?.businessName || ''
 
   useEffect(() => {
     if (!isOpen) return
@@ -103,6 +148,9 @@ export default function LoyaltyManager({ isOpen, onClose }) {
           walletTheme: resolveTheme({
             temaId: data.loyaltyConfig?.walletTheme?.id,
             colorFondo: data.loyaltyConfig?.walletTheme?.colorFondo,
+            // Sin motivo guardado, se preselecciona el del rubro — el mismo
+            // que el backend usaría solo.
+            motivo: data.loyaltyConfig?.walletTheme?.motivo || motivoPorDefecto(businessMode),
           }),
         })
         setTarjetas(res.success ? res.data : [])
@@ -112,7 +160,7 @@ export default function LoyaltyManager({ isOpen, onClose }) {
     }
     cargar()
     return () => { cancelado = true }
-  }, [isOpen, getBusinessId])
+  }, [isOpen, getBusinessId, businessMode])
 
   const tarjetasFiltradas = useMemo(() => {
     const q = busqueda.trim().toLowerCase()
@@ -127,12 +175,17 @@ export default function LoyaltyManager({ isOpen, onClose }) {
 
   const elegirTema = (temaId) => {
     // Al cambiar de tema se toma SU color; el color personalizado es un ajuste
-    // sobre el tema elegido, no un valor que sobrevive de tema en tema.
-    setConfig({ ...config, walletTheme: resolveTheme({ temaId }) })
+    // sobre el tema elegido, no un valor que sobrevive de tema en tema. El
+    // motivo sí sobrevive: es una elección aparte del color.
+    setConfig({ ...config, walletTheme: resolveTheme({ temaId, motivo: tema.motivo }) })
   }
 
   const cambiarColor = (colorFondo) => {
-    setConfig({ ...config, walletTheme: resolveTheme({ temaId: tema.id, colorFondo }) })
+    setConfig({ ...config, walletTheme: resolveTheme({ temaId: tema.id, colorFondo, motivo: tema.motivo }) })
+  }
+
+  const elegirMotivo = (motivo) => {
+    setConfig({ ...config, walletTheme: resolveTheme({ temaId: tema.id, colorFondo: tema.colorFondo, motivo }) })
   }
 
   const guardar = async () => {
@@ -146,7 +199,7 @@ export default function LoyaltyManager({ isOpen, onClose }) {
           reward: (config.reward || '').trim(),
           minAmount: Number(config.minAmount) || 0,
           stampOnlineOrders: config.stampOnlineOrders !== false,
-          walletTheme: resolveTheme({ temaId: tema.id, colorFondo: tema.colorFondo }),
+          walletTheme: resolveTheme({ temaId: tema.id, colorFondo: tema.colorFondo, motivo: tema.motivo }),
           walletNearby: config.walletNearby !== false,
         },
       }, { merge: true })
@@ -300,6 +353,50 @@ export default function LoyaltyManager({ isOpen, onClose }) {
                   />
                   <span className="text-xs text-gray-400 font-mono">{tema.colorFondo}</span>
                 </label>
+              </div>
+
+              {/* Motivo de la portada: la franja de arriba de la tarjeta. Se
+                  dibuja en vivo con los mismos trazos que la imagen real. */}
+              <div className="mt-5">
+                <p className="text-sm font-medium text-gray-900">Portada de la tarjeta</p>
+                <p className="text-xs text-gray-500 mb-2">
+                  Un patrón sutil con tu logo al centro, o el color plano si lo prefieres sobrio.
+                </p>
+                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                  {MOTIVOS_PORTADA.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => elegirMotivo(m.id)}
+                      className={`rounded-xl overflow-hidden text-left transition ring-offset-1 ${tema.motivo === m.id ? 'ring-2 ring-primary-500' : 'hover:ring-2 hover:ring-gray-200'}`}
+                    >
+                      <PortadaPreview
+                        colorFondo={tema.colorFondo}
+                        motivo={m.id}
+                        logoUrl={null}
+                        className="h-10 rounded-xl"
+                      />
+                      <p className="text-[11px] text-center text-gray-600 mt-1">{m.nombre}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Vista previa completa: cuerpo + portada, como queda en el celular */}
+              <div className="mt-5">
+                <p className="text-sm font-medium text-gray-900 mb-2">Así queda tu tarjeta</p>
+                <div className="max-w-xs">
+                  <TarjetaPreview
+                    colorFondo={tema.colorFondo}
+                    sellosComoPuntos={tema.sellosComoPuntos}
+                    negocio={nombreNegocio}
+                    logoUrl={logoUrl}
+                    meta={config.goal}
+                    premio={config.reward}
+                    motivo={tema.motivo}
+                    grande
+                  />
+                </div>
               </div>
 
               <label className="mt-4 flex items-start gap-3 cursor-pointer">

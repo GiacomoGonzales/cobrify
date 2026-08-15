@@ -95,6 +95,7 @@ export default {
           items: [
             'Activa **Programa activado** y define la meta de sellos y el premio.',
             'Elige un **tema** para la tarjeta: la ves pintada con tu logo antes de decidir. Puedes ajustar el color exacto.',
+            'Elige la **portada**: un patrón sutil del rubro (comida, moda, salud o puntos) con tu logo al centro, o el color plano si la prefieres sobria. La vista previa te muestra la tarjeta tal como queda.',
             'Deja marcado **Aparecer cuando el cliente esté cerca** si quieres que la tarjeta asome sola en el celular del cliente al pasar por tu local.',
             'Guarda. Desde ese momento cada venta con teléfono suma su sello.',
           ],
