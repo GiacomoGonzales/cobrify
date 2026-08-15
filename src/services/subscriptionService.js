@@ -1161,6 +1161,44 @@ export const deleteUser = async (userId) => {
  * @param {string} returnUrl - origin al que Flow devuelve tras pagar (window.location.origin)
  * @returns {Promise<{success:boolean, url?:string, error?:string}>}
  */
+const FN_BASE = 'https://us-central1-cobrify-395fe.cloudfunctions.net'
+
+/** Helper común de los endpoints de renovación automática. */
+const postAutoRenew = async (fnName, idToken, body) => {
+  try {
+    const res = await fetch(`${FN_BASE}/${fnName}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify(body),
+    })
+    const data = await res.json()
+    if (!res.ok) return { success: false, error: data.error || 'No se pudo completar la operación' }
+    return { success: true, ...data }
+  } catch (error) {
+    return { success: false, error: error.message || 'Error de red' }
+  }
+}
+
+/**
+ * RENOVACIÓN AUTOMÁTICA (Flow, 15-ago-2026).
+ *
+ * Paso 1: devuelve la URL de Flow donde el cliente registra su tarjeta. Se abre
+ * en el mismo modal con iframe que ya usa el pago único.
+ */
+export const createCardRegistration = async (businessId, idToken, returnUrl) =>
+  postAutoRenew('createCardRegistration', idToken, { businessId, returnUrl })
+
+/**
+ * Paso 2: confirma el registro CONTRA FLOW (el retorno del navegador no es
+ * fuente de verdad) y activa la renovación automática.
+ */
+export const confirmCardRegistration = async (businessId, idToken) =>
+  postAutoRenew('confirmCardRegistration', idToken, { businessId })
+
+/** Apaga la renovación automática y borra la tarjeta guardada en Flow. */
+export const cancelAutoRenew = async (businessId, idToken) =>
+  postAutoRenew('cancelAutoRenew', idToken, { businessId })
+
 export const createFlowRenewalPayment = async (businessId, idToken, returnUrl, targetPlan = null) => {
   try {
     const url = import.meta.env.VITE_CREATE_FLOW_PAYMENT_URL

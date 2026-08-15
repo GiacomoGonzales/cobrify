@@ -7,6 +7,9 @@ import { DEFAULT_BRANDING } from '@/services/brandingService';
 import {
   PLANS,
   createFlowRenewalPayment,
+  createCardRegistration,
+  confirmCardRegistration,
+  cancelAutoRenew,
   PLAN_TIERS,
   resolvePlanTier,
   getTierPrice,
@@ -53,18 +56,27 @@ export default function MySubscription() {
   // no envía X-Frame-Options ni frame-ancestors, así que permite iframe).
   const [flowUrl, setFlowUrl] = useState(null);
 
+  // Renovación automática: el modal de Flow se reusa para el REGISTRO de la
+  // tarjeta, así que hay que distinguir a qué volvió el cliente (?flow=1 es un
+  // pago; ?flowcard=1 es un registro de tarjeta).
+  const [registeringCard, setRegisteringCard] = useState(false);
+  const [cancelingAutoRenew, setCancelingAutoRenew] = useState(false);
+
   // Si esta vista se cargó DENTRO del iframe/popup de retorno de Flow
   // (urlReturn=...?flow=1), avisar a la ventana principal y no renderizar de más:
   // el pago ya quedó registrado por el webhook y la vista principal se actualiza
   // en tiempo real (onSnapshot de la suscripción).
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('flow') !== '1') return;
+    const esPago = params.get('flow') === '1';
+    const esTarjeta = params.get('flowcard') === '1';
+    if (!esPago && !esTarjeta) return;
+    const mensaje = { type: esTarjeta ? 'flow-card-return' : 'flow-return' };
     if (window.opener) {
-      try { window.opener.postMessage({ type: 'flow-return' }, window.location.origin); } catch { /* noop */ }
+      try { window.opener.postMessage(mensaje, window.location.origin); } catch { /* noop */ }
       window.close();
     } else if (window.parent && window.parent !== window) {
-      try { window.parent.postMessage({ type: 'flow-return' }, window.location.origin); } catch { /* noop */ }
+      try { window.parent.postMessage(mensaje, window.location.origin); } catch { /* noop */ }
     }
   }, []);
 
@@ -78,11 +90,33 @@ export default function MySubscription() {
 
   // La ventana principal escucha el aviso de retorno y cierra el modal
   useEffect(() => {
-    const onMsg = (e) => {
-      if (e.origin === window.location.origin && e.data?.type === 'flow-return') {
+    const onMsg = async (e) => {
+      if (e.origin !== window.location.origin) return;
+      if (e.data?.type === 'flow-return') {
         setFlowUrl(null);
         setPayingPlan(null);
         toast.success('Pago procesado. Tu suscripción se actualizará en unos segundos.');
+        return;
+      }
+      // Registro de tarjeta: se CONFIRMA contra Flow antes de dar nada por
+      // hecho — el retorno del navegador se puede falsificar.
+      if (e.data?.type === 'flow-card-return') {
+        setFlowUrl(null);
+        try {
+          const businessId = getBusinessId();
+          const { getAuth } = await import('firebase/auth');
+          const idToken = await getAuth().currentUser?.getIdToken();
+          const res = await confirmCardRegistration(businessId, idToken);
+          if (res.success && res.registered) {
+            toast.success(`Tarjeta registrada. Tu plan se renovará solo.`);
+          } else {
+            toast.error(res.error || 'No se pudo confirmar el registro de la tarjeta');
+          }
+        } catch (err) {
+          toast.error('No se pudo confirmar el registro de la tarjeta');
+        } finally {
+          setRegisteringCard(false);
+        }
       }
     };
     window.addEventListener('message', onMsg);
@@ -112,6 +146,45 @@ export default function MySubscription() {
     } catch (e) {
       toast.error(e.message || 'Error al iniciar el pago');
       setPayingPlan(null);
+    }
+  };
+
+  // Activar renovación automática: abre el registro de tarjeta de Flow en el
+  // mismo modal embebido del pago. Cobrify nunca ve el número de tarjeta.
+  const handleRegisterCard = async () => {
+    if (registeringCard) return;
+    setRegisteringCard(true);
+    try {
+      const businessId = getBusinessId();
+      const { getAuth } = await import('firebase/auth');
+      const idToken = await getAuth().currentUser?.getIdToken();
+      if (!idToken) throw new Error('No se pudo obtener el token de autenticación');
+      const result = await createCardRegistration(businessId, idToken, window.location.origin);
+      if (!result.success || !result.url) {
+        toast.error(result.error || 'No se pudo iniciar el registro');
+        setRegisteringCard(false);
+        return;
+      }
+      setFlowUrl(result.url);
+    } catch (e) {
+      toast.error(e.message || 'Error al iniciar el registro');
+      setRegisteringCard(false);
+    }
+  };
+
+  const handleCancelAutoRenew = async () => {
+    if (cancelingAutoRenew) return;
+    if (!window.confirm('¿Desactivar la renovación automática? Tendrás que renovar manualmente antes de que venza tu plan.')) return;
+    setCancelingAutoRenew(true);
+    try {
+      const businessId = getBusinessId();
+      const { getAuth } = await import('firebase/auth');
+      const idToken = await getAuth().currentUser?.getIdToken();
+      const res = await cancelAutoRenew(businessId, idToken);
+      if (res.success) toast.success('Renovación automática desactivada');
+      else toast.error(res.error || 'No se pudo desactivar');
+    } finally {
+      setCancelingAutoRenew(false);
     }
   };
 
@@ -237,6 +310,83 @@ export default function MySubscription() {
           )}
         </div>
       </div>
+
+      {/* RENOVACIÓN AUTOMÁTICA — solo clientes directos y con el cobro en línea
+          activo. La tarjeta se registra en Flow: Cobrify nunca ve el número,
+          solo la marca y los últimos dígitos que Flow devuelve. El cobro lo
+          dispara nuestro programador diario con el precio PACTADO de cada
+          cliente (renewalPrice congelado), no con el de catálogo. */}
+      {isDirectClient && ONLINE_PAYMENTS_ENABLED && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-lg font-bold text-gray-900">Renovación automática</h3>
+                {subscription.autoRenew && (
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-700">
+                    ACTIVA
+                  </span>
+                )}
+              </div>
+
+              {subscription.autoRenew ? (
+                <>
+                  <p className="text-gray-500 text-sm mt-1">
+                    Tu plan se renueva solo el día que vence. No tienes que hacer nada.
+                  </p>
+                  {subscription.flowCard?.last4 && (
+                    <div className="flex items-center gap-2 mt-3 text-sm text-gray-700">
+                      <CreditCard className="w-4 h-4 text-gray-400" />
+                      <span>
+                        {subscription.flowCard.brand || 'Tarjeta'} terminada en{' '}
+                        <strong>{subscription.flowCard.last4}</strong>
+                      </span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className="text-gray-500 text-sm mt-1">
+                    Registra tu tarjeta una vez y tu plan se renovará solo cada período.
+                    Puedes desactivarla cuando quieras.
+                  </p>
+                  <p className="text-xs text-gray-400 mt-2">
+                    Los datos de tu tarjeta los guarda Flow, nuestra pasarela de pago. Cobrify no los almacena.
+                  </p>
+                </>
+              )}
+            </div>
+
+            <div className="flex-shrink-0">
+              {subscription.autoRenew ? (
+                <button
+                  onClick={handleCancelAutoRenew}
+                  disabled={cancelingAutoRenew}
+                  className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {cancelingAutoRenew ? 'Desactivando…' : 'Desactivar'}
+                </button>
+              ) : (
+                <button
+                  onClick={handleRegisterCard}
+                  disabled={registeringCard}
+                  className="px-5 py-2.5 rounded-xl bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700 disabled:opacity-50 inline-flex items-center gap-2"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  {registeringCard ? 'Abriendo…' : 'Activar renovación automática'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {subscription.autoRenewDisabledReason && !subscription.autoRenew && (
+            <div className="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-900">
+              Desactivamos la renovación automática: {subscription.autoRenewDisabledReason.toLowerCase()}.
+              Puedes volver a activarla con otra tarjeta.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Renovar o cambiar de plan — solo clientes directos.
           Grilla nivel × ciclo: 3 planes y un interruptor mensual/anual. El plan que

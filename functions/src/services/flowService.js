@@ -6,8 +6,16 @@ import { createHmac } from 'crypto'
  *
  * Flow opera en Perú en PEN e incluye QR interoperable, tarjetas y PagoEfectivo
  * (todos comparten el mismo endpoint payment/create; el pagador elige el medio
- * en el checkout de Flow). El cobro recurrente (Yape recurrente / suscripción de
- * tarjeta) usa OTROS endpoints (customer/subscription) y se agrega después.
+ * en el checkout de Flow).
+ *
+ * COBRO RECURRENTE (15-ago-2026): se usa la API de CLIENTES (customer/*), NO la
+ * de planes/suscripciones de Flow. Motivo: cada suscripción de Cobrify tiene su
+ * `renewalPrice` CONGELADO (principio de grandfathering — tras la migración de
+ * julio conviven 19.90, 29.90, 149.90, 199.90, 235.88, 353.90...). Los planes de
+ * Flow son de monto fijo: haría falta uno por cada precio distinto y se rompería
+ * al pactar un precio especial. Registrando la tarjeta y cobrando NOSOTROS, el
+ * monto sale del renewalPrice de cada cliente y el calendario del
+ * currentPeriodEnd.
  *
  * Firma: Flow exige firmar cada request. Se concatenan los parámetros ordenados
  * alfabéticamente por nombre como `nombrevalor` (sin separadores) y se calcula
@@ -90,5 +98,102 @@ export async function getFlowPaymentStatus({ apiKey, secretKey, sandbox = true, 
   params.s = flowSign(params, secretKey)
 
   const res = await axios.get(`${baseUrl(sandbox)}/payment/getStatus`, { params })
+  return res.data
+}
+
+// ============================================================================
+// COBRO RECURRENTE — API de clientes de Flow ("Cargo Automático")
+// ============================================================================
+
+/**
+ * Crea un cliente en Flow. Se hace UNA vez por negocio; el customerId
+ * resultante se guarda en la suscripción y se reusa en cada cobro.
+ * @returns {Promise<{customerId:string}>}
+ */
+export async function createFlowCustomer({
+  apiKey, secretKey, sandbox = true, name, email, externalId,
+}) {
+  const params = { apiKey, name, email, externalId }
+  params.s = flowSign(params, secretKey)
+
+  const res = await axios.post(
+    `${baseUrl(sandbox)}/customer/create`,
+    new URLSearchParams(params).toString(),
+    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+  )
+  const { customerId } = res.data || {}
+  if (!customerId) throw new Error(`Flow no devolvió customerId: ${JSON.stringify(res.data)}`)
+  return { customerId, raw: res.data }
+}
+
+/**
+ * Inicia el registro de una tarjeta: devuelve la URL donde el cliente ingresa
+ * sus datos en Flow. Nosotros NUNCA vemos ni guardamos el número de tarjeta —
+ * Flow devuelve solo los últimos dígitos y la marca.
+ * @returns {Promise<{url:string, token:string}>}
+ */
+export async function registerFlowCard({
+  apiKey, secretKey, sandbox = true, customerId, urlReturn,
+}) {
+  const params = { apiKey, customerId, url_return: urlReturn }
+  params.s = flowSign(params, secretKey)
+
+  const res = await axios.post(
+    `${baseUrl(sandbox)}/customer/register`,
+    new URLSearchParams(params).toString(),
+    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+  )
+  const { url, token } = res.data || {}
+  if (!url || !token) throw new Error(`Flow no devolvió url/token de registro: ${JSON.stringify(res.data)}`)
+  return { token, url: `${url}?token=${token}` }
+}
+
+/**
+ * Estado del registro de tarjeta. Es la FUENTE DE VERDAD: el retorno del
+ * navegador puede falsificarse, esto no.
+ * status: 0 pendiente, 1 registrada. Trae creditCardType y last4CardDigits.
+ */
+export async function getFlowCardRegisterStatus({ apiKey, secretKey, sandbox = true, token }) {
+  const params = { apiKey, token }
+  params.s = flowSign(params, secretKey)
+  const res = await axios.get(`${baseUrl(sandbox)}/customer/getRegisterStatus`, { params })
+  return res.data
+}
+
+/**
+ * Cobra a la tarjeta registrada de un cliente. Es el cobro recurrente en sí.
+ * Flow además notifica a urlConfirmation, así que el CUMPLIMIENTO (extender el
+ * período) ocurre en el webhook — un solo camino, ya idempotente.
+ */
+export async function chargeFlowCustomer({
+  apiKey, secretKey, sandbox = true,
+  customerId, commerceOrder, subject, amount, currency = 'PEN', urlConfirmation,
+}) {
+  const params = {
+    apiKey, customerId, commerceOrder, subject, amount, currency,
+    urlConfirmation,
+    // 1 = si falla el cobro, Flow NO reintenta por su cuenta: el reintento lo
+    // maneja nuestro programador, que sabe cuándo vence cada suscripción.
+    byEmail: 0,
+  }
+  params.s = flowSign(params, secretKey)
+
+  const res = await axios.post(
+    `${baseUrl(sandbox)}/customer/charge`,
+    new URLSearchParams(params).toString(),
+    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+  )
+  return res.data // { status, commerceOrder, flowOrder, amount, ... }
+}
+
+/** Elimina la tarjeta registrada (al cancelar la renovación automática). */
+export async function unregisterFlowCard({ apiKey, secretKey, sandbox = true, customerId }) {
+  const params = { apiKey, customerId }
+  params.s = flowSign(params, secretKey)
+  const res = await axios.post(
+    `${baseUrl(sandbox)}/customer/unRegister`,
+    new URLSearchParams(params).toString(),
+    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+  )
   return res.data
 }
