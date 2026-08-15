@@ -599,22 +599,6 @@ export default function POS() {
   const [lastInvoiceData, setLastInvoiceData] = useState(null)
   const [saleCompleted, setSaleCompleted] = useState(false) // Bloquea el carrito después de una venta exitosa
 
-  // Cargar la tarjeta de sellos del cliente en pantalla. Sin programa activo o
-  // sin teléfono no hay tarjeta que mostrar.
-  useEffect(() => {
-    const tel = customerData?.phone
-    if (!companySettings?.loyaltyConfig?.enabled || !tel) { setLoyaltyCard(null); return }
-    let alive = true
-    ;(async () => {
-      try {
-        const { getLoyaltyCard } = await import('@/services/loyaltyService')
-        const res = await getLoyaltyCard(getBusinessId(), tel)
-        if (alive && res.success) setLoyaltyCard(res.data)
-      } catch { /* la tarjeta es informativa: nunca frena el POS */ }
-    })()
-    return () => { alive = false }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customerData?.phone, companySettings?.loyaltyConfig?.enabled, saleCompleted])
   const [changeReminder, setChangeReminder] = useState(null) // Recordatorio de vuelto en efectivo (opcional)
   // Recordatorio de vuelto que queda PENDIENTE de mostrar: cuando hay auto-impresión,
   // el aviso se difiere hasta que el ticket haya salido (se dispara desde handlePrintTicket).
@@ -941,7 +925,6 @@ export default function POS() {
   const [showCustomerPanel, setShowCustomerPanel] = useState(false)
 
   // Datos del cliente para captura inline
-  // (efecto de carga más abajo, tras declarar customerData)
   // Tarjeta de fidelidad del cliente en pantalla (Configuración > Ventas).
   // Se consulta al elegir cliente para que el cajero vea los sellos ANTES de
   // cobrar y pueda canjear el premio si ya llegó a la meta.
@@ -974,6 +957,25 @@ export default function POS() {
     detractionAmount: '', // Monto de detracción
     goodsServiceCode: '', // Código de bien o servicio SUNAT
   })
+
+  // Tarjeta de sellos del cliente en pantalla: el cajero la ve ANTES de cobrar.
+  // OJO: igual que el effect de abajo, va DESPUES de declarar customerData —
+  // leerlo antes lanza "Cannot access 'customerData' before initialization"
+  // (TDZ) y tumba el POS entero. vite build NO lo detecta.
+  useEffect(() => {
+    const tel = customerData?.phone
+    if (!companySettings?.loyaltyConfig?.enabled || !tel) { setLoyaltyCard(null); return }
+    let alive = true
+    ;(async () => {
+      try {
+        const { getLoyaltyCard } = await import('@/services/loyaltyService')
+        const res = await getLoyaltyCard(getBusinessId(), tel)
+        if (alive && res.success) setLoyaltyCard(res.data)
+      } catch { /* la tarjeta es informativa: nunca frena el POS */ }
+    })()
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerData?.phone, companySettings?.loyaltyConfig?.enabled, saleCompleted])
 
   // Saldo a favor del cliente: se recarga cuando cambia el documento del cliente.
   // Solo para documentos válidos (DNI 8 / RUC 11) y fuera del modo demo.
