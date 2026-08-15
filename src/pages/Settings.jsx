@@ -465,6 +465,10 @@ export default function Settings() {
   const [hideOnlyIgvInNotaVenta, setHideOnlyIgvInNotaVenta] = useState(false)
   // Ocultar TODOS los datos de la empresa en el PDF de notas de venta (pedido de usuaria, 14-ago-2026)
   const [hideCompanyDataInNotaVenta, setHideCompanyDataInNotaVenta] = useState(false)
+  // Programa de fidelización — tarjeta de sellos (15-ago-2026)
+  const [loyaltyConfig, setLoyaltyConfig] = useState({
+    enabled: false, goal: 10, reward: '', minAmount: 0, stampOnlineOrders: true,
+  })
   const [requireOpenCashRegister, setRequireOpenCashRegister] = useState(false)
   // Comisión por pago con tarjeta (solo notas de venta): activación + porcentaje.
   const [cardCommissionEnabled, setCardCommissionEnabled] = useState(false)
@@ -1309,6 +1313,13 @@ export default function Settings() {
         setHideRucIgvInNotaVenta(businessData.hideRucIgvInNotaVenta || false)
         setHideOnlyIgvInNotaVenta(businessData.hideOnlyIgvInNotaVenta || false)
         setHideCompanyDataInNotaVenta(businessData.hideCompanyDataInNotaVenta || false)
+        setLoyaltyConfig({
+          enabled: businessData.loyaltyConfig?.enabled || false,
+          goal: businessData.loyaltyConfig?.goal ?? 10,
+          reward: businessData.loyaltyConfig?.reward || '',
+          minAmount: businessData.loyaltyConfig?.minAmount ?? 0,
+          stampOnlineOrders: businessData.loyaltyConfig?.stampOnlineOrders !== false,
+        })
         setRequireOpenCashRegister(businessData.requireOpenCashRegister || false)
         setCardCommissionEnabled(businessData.cardCommissionEnabled || false)
         setCardCommissionRate(Number(businessData.cardCommissionRate) || 5)
@@ -5217,6 +5228,59 @@ export default function Settings() {
                       : '✗ Deshabilitado: No se mostrará ningún aviso de vuelto al completar la venta.'}
                   />
 
+                  {/* Programa de fidelización: tarjeta de sellos */}
+                  <SettingToggle
+                    id="opcion-loyaltyEnabled"
+                    checked={loyaltyConfig.enabled}
+                    onChange={(e) => setLoyaltyConfig({ ...loyaltyConfig, enabled: e.target.checked })}
+                    title="Programa de fidelización (tarjeta de sellos)"
+                    description={loyaltyConfig.enabled
+                      ? '✓ Habilitado: Cada compra suma un sello a la tarjeta del cliente (se identifica por su teléfono). Al llegar a la meta, gana el premio que definas.'
+                      : '✗ Deshabilitado: No se acumulan sellos en las ventas.'}
+                  />
+
+                  {loyaltyConfig.enabled && (
+                    <div className="ml-2 pl-4 border-l-2 border-primary-100 space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <Input
+                          label="Sellos para el premio"
+                          type="number"
+                          min="2"
+                          max="50"
+                          value={loyaltyConfig.goal}
+                          onChange={(e) => setLoyaltyConfig({ ...loyaltyConfig, goal: e.target.value })}
+                        />
+                        <Input
+                          label="Compra mínima (S/)"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={loyaltyConfig.minAmount}
+                          onChange={(e) => setLoyaltyConfig({ ...loyaltyConfig, minAmount: e.target.value })}
+                          placeholder="0 = cualquier compra"
+                        />
+                        <Input
+                          label="Premio"
+                          value={loyaltyConfig.reward}
+                          onChange={(e) => setLoyaltyConfig({ ...loyaltyConfig, reward: e.target.value })}
+                          placeholder="Ej: 1 pizza mediana gratis"
+                        />
+                      </div>
+                      <SettingToggle
+                        checked={loyaltyConfig.stampOnlineOrders !== false}
+                        onChange={(e) => setLoyaltyConfig({ ...loyaltyConfig, stampOnlineOrders: e.target.checked })}
+                        title="Sellar también los pedidos del catálogo online"
+                        description={loyaltyConfig.stampOnlineOrders !== false
+                          ? '✓ Habilitado: Al completar un pedido online, el cliente suma su sello automáticamente (se identifica por el teléfono del pedido).'
+                          : '✗ Deshabilitado: Solo se sella en las ventas del punto de venta.'}
+                      />
+                      <p className="text-xs text-gray-500">
+                        La tarjeta se identifica por el <strong>teléfono</strong> del cliente, así que el
+                        mismo cliente acumula compre en el local o por el catálogo. Sin teléfono no se puede sellar.
+                      </p>
+                    </div>
+                  )}
+
                   {/* Bloquear edición del cuadre de caja en el historial */}
                   <SettingToggle
                     checked={lockCashRegisterHistory}
@@ -5930,6 +5994,13 @@ export default function Settings() {
                       hideRucIgvInNotaVenta: hideRucIgvInNotaVenta,
                       hideOnlyIgvInNotaVenta: hideOnlyIgvInNotaVenta,
                       hideCompanyDataInNotaVenta: hideCompanyDataInNotaVenta,
+                      loyaltyConfig: {
+                        enabled: loyaltyConfig.enabled,
+                        goal: Number(loyaltyConfig.goal) || 10,
+                        reward: (loyaltyConfig.reward || '').trim(),
+                        minAmount: Number(loyaltyConfig.minAmount) || 0,
+                        stampOnlineOrders: loyaltyConfig.stampOnlineOrders !== false,
+                      },
                       requireOpenCashRegister: requireOpenCashRegister,
                       cardCommissionEnabled: cardCommissionEnabled,
                       cardCommissionRate: Number(cardCommissionRate) || 0,

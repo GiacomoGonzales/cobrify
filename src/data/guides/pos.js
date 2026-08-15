@@ -594,6 +594,38 @@ export default {
     },
 
     {
+      id: 'fidelizacion',
+      title: 'Tarjeta de sellos (fidelización)',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'El clásico "compra 10 y el siguiente va gratis". Se activa en Configuración, defines cuántos sellos valen el premio y cuál es el premio, y a partir de ahí **cada venta suma un sello sola**.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=ventas&opcion=loyaltyEnabled',
+          label: 'Activar el programa de fidelización',
+        },
+        {
+          type: 'texto',
+          text: 'La tarjeta se identifica por el **teléfono del cliente**. Por eso, al elegir un cliente con teléfono, arriba del carrito ves cuántos sellos lleva: *"Sellos: 7 de 10"*. Cuando completa la meta, ese recuadro se pone ámbar con el botón **Canjear**.',
+        },
+        {
+          type: 'ojo',
+          text: 'Sin teléfono no hay tarjeta: una venta a "Cliente General" no suma sellos, porque no hay a quién sumárselos. Si el cliente quiere acumular, hay que registrarle el teléfono.',
+        },
+        {
+          type: 'consejo',
+          text: 'El teléfono como identificador es lo que hace que el **mismo cliente acumule compre donde compre**: en el mostrador o por tu catálogo online. Los pedidos online suman su sello al marcarlos como completados.',
+        },
+        {
+          type: 'texto',
+          text: 'Al canjear, se descuenta la meta de sellos (si tenía 12 y la meta es 10, le quedan 2) y queda registrado quién lo canjeó. El producto gratis o el descuento lo aplicas tú en la venta.',
+        },
+      ],
+    },
+
+    {
       id: 'restaurante',
       title: 'En modo restaurante',
       soloModos: ['restaurant'],

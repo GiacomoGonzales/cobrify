@@ -434,6 +434,35 @@ export default function OnlineOrders() {
       const result = await updateOrderStatus(getBusinessId(), order.id, newStatus)
       if (result.success) {
         toast.success(successMessage || 'Pedido actualizado')
+
+        // Sello de fidelización al COMPLETAR el pedido (no al crearlo: los
+        // pedidos se cancelan). Misma tarjeta que el POS porque la llave es el
+        // teléfono, e idempotente por el ID del pedido: volver a marcarlo
+        // completado no vuelve a sellar.
+        if (newStatus === 'completed' && companySettings?.loyaltyConfig?.enabled
+            && companySettings.loyaltyConfig.stampOnlineOrders !== false
+            && order.customerPhone) {
+          try {
+            const { earnStamp } = await import('@/services/loyaltyService')
+            const res = await earnStamp(getBusinessId(), {
+              phone: order.customerPhone,
+              customerName: order.customerName || '',
+              customerId: order.catalogCustomerId || null,
+              refId: `order_${order.id}`,
+              source: 'online',
+              amount: order.total || 0,
+              config: companySettings.loyaltyConfig,
+            })
+            if (res.success && !res.alreadyStamped) {
+              toast.success(res.rewardReady
+                ? `🎁 ${order.customerName || 'El cliente'} completó su tarjeta (${res.stamps}/${res.goal})`
+                : `Sello registrado: ${res.stamps}/${res.goal}`)
+            }
+          } catch (loyaltyError) {
+            // El sello nunca frena el cambio de estado del pedido.
+            console.error('No se pudo registrar el sello de fidelidad:', loyaltyError)
+          }
+        }
       } else {
         toast.error(result.error || 'Error al actualizar')
       }

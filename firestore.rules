@@ -656,6 +656,20 @@ service cloud.firestore {
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
+      // Subcollection: Tarjetas de fidelidad (sellos por cliente).
+      // El ID del documento es el teléfono normalizado del cliente.
+      match /loyaltyCards/{cardId} {
+        allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+
+        // Movimientos: el ID es la referencia de la venta que lo originó, y
+        // eso es lo que impide sellar dos veces la misma venta.
+        match /movements/{movementId} {
+          allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+          allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        }
+      }
+
       // Subcollection: Financial Movements (Movimientos Financieros - Flujo de Caja)
       match /financialMovements/{movementId} {
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);

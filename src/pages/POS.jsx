@@ -598,6 +598,23 @@ export default function POS() {
   const [lastInvoiceNumber, setLastInvoiceNumber] = useState('')
   const [lastInvoiceData, setLastInvoiceData] = useState(null)
   const [saleCompleted, setSaleCompleted] = useState(false) // Bloquea el carrito después de una venta exitosa
+
+  // Cargar la tarjeta de sellos del cliente en pantalla. Sin programa activo o
+  // sin teléfono no hay tarjeta que mostrar.
+  useEffect(() => {
+    const tel = customerData?.phone
+    if (!companySettings?.loyaltyConfig?.enabled || !tel) { setLoyaltyCard(null); return }
+    let alive = true
+    ;(async () => {
+      try {
+        const { getLoyaltyCard } = await import('@/services/loyaltyService')
+        const res = await getLoyaltyCard(getBusinessId(), tel)
+        if (alive && res.success) setLoyaltyCard(res.data)
+      } catch { /* la tarjeta es informativa: nunca frena el POS */ }
+    })()
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerData?.phone, companySettings?.loyaltyConfig?.enabled, saleCompleted])
   const [changeReminder, setChangeReminder] = useState(null) // Recordatorio de vuelto en efectivo (opcional)
   // Recordatorio de vuelto que queda PENDIENTE de mostrar: cuando hay auto-impresión,
   // el aviso se difiere hasta que el ticket haya salido (se dispara desde handlePrintTicket).
@@ -924,6 +941,13 @@ export default function POS() {
   const [showCustomerPanel, setShowCustomerPanel] = useState(false)
 
   // Datos del cliente para captura inline
+  // (efecto de carga más abajo, tras declarar customerData)
+  // Tarjeta de fidelidad del cliente en pantalla (Configuración > Ventas).
+  // Se consulta al elegir cliente para que el cajero vea los sellos ANTES de
+  // cobrar y pueda canjear el premio si ya llegó a la meta.
+  const [loyaltyCard, setLoyaltyCard] = useState(null)
+  const [isRedeeming, setIsRedeeming] = useState(false)
+
   const [customerData, setCustomerData] = useState({
     documentType: ID_TYPES.DNI,
     documentNumber: '',
@@ -7136,6 +7160,31 @@ export default function POS() {
             // Incrementar contador de ventas para review prompt
             try { const { incrementSalesCount } = await import('@/components/ReviewPrompt'); incrementSalesCount() } catch (e) { /* ignore */ }
 
+            // 3.0.-1. Sello de fidelización (Configuración > Ventas > "Programa
+            // de fidelización"). La tarjeta se identifica por el TELÉFONO, así
+            // que el mismo cliente acumula compre acá o por el catálogo online.
+            // Idempotente por el ID de la factura: reprocesar no vuelve a sellar.
+            if (companySettings?.loyaltyConfig?.enabled && bgCustomerData?.phone) {
+              try {
+                const { earnStamp } = await import('@/services/loyaltyService')
+                const res = await earnStamp(businessId, {
+                  phone: bgCustomerData.phone,
+                  customerName: bgCustomerData.name || bgCustomerData.businessName || '',
+                  customerId: bgCustomerData.customerId || null,
+                  refId: `invoice_${bgInvoiceId}`,
+                  source: 'pos',
+                  amount: bgAmounts.total,
+                  config: companySettings.loyaltyConfig,
+                })
+                if (res.success && !res.alreadyStamped) {
+                  console.log(`🎟️ Sello registrado: ${res.stamps}/${res.goal}`)
+                }
+              } catch (loyaltyError) {
+                // La fidelización nunca frena la venta: ya está cobrada.
+                console.error('No se pudo registrar el sello de fidelidad:', loyaltyError)
+              }
+            }
+
             // 3.0.0. Venta directa -> orden en Cocina + comanda (patio de comidas /
             // dark kitchen; Configuración > Ventas > "La venta del POS genera la
             // orden en Cocina"). SOLO ventas directas: si la venta viene de una
@@ -10691,6 +10740,52 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     <span className="text-green-800">Cliente: {selectedCustomer.name || selectedCustomer.businessName}</span>
                   </div>
                 )}
+
+                {/* Tarjeta de sellos del cliente: el cajero la ve ANTES de cobrar */}
+                {companySettings?.loyaltyConfig?.enabled && customerData?.phone && (() => {
+                  const meta = companySettings.loyaltyConfig.goal || 10
+                  const sellos = loyaltyCard?.stamps || 0
+                  const listo = sellos >= meta
+                  return (
+                    <div className={`mt-1.5 p-2 rounded border text-xs ${listo ? 'bg-amber-50 border-amber-300' : 'bg-gray-50 border-gray-200'}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={listo ? 'text-amber-800 font-medium' : 'text-gray-600'}>
+                          {listo ? '🎁 Premio disponible' : `Sellos: ${sellos} de ${meta}`}
+                        </span>
+                        {listo && (
+                          <button
+                            type="button"
+                            disabled={isRedeeming}
+                            onClick={async () => {
+                              setIsRedeeming(true)
+                              try {
+                                const { redeemReward } = await import('@/services/loyaltyService')
+                                const res = await redeemReward(getBusinessId(), customerData.phone, {
+                                  userName: user?.displayName || user?.email || '',
+                                  note: companySettings.loyaltyConfig.reward || '',
+                                })
+                                if (res.success) {
+                                  toast.success(`Premio canjeado. Le quedan ${res.stamps} sellos.`)
+                                  setLoyaltyCard(prev => (prev ? { ...prev, stamps: res.stamps } : prev))
+                                } else {
+                                  toast.error(res.error || 'No se pudo canjear')
+                                }
+                              } finally {
+                                setIsRedeeming(false)
+                              }
+                            }}
+                            className="px-2 py-0.5 rounded bg-amber-500 text-white font-medium hover:bg-amber-600 disabled:opacity-50"
+                          >
+                            {isRedeeming ? 'Canjeando…' : 'Canjear'}
+                          </button>
+                        )}
+                      </div>
+                      {listo && companySettings.loyaltyConfig.reward && (
+                        <p className="text-amber-700 mt-0.5">{companySettings.loyaltyConfig.reward}</p>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
 
               {/* Tipo de pedido para restaurante. Con "la venta del POS genera
