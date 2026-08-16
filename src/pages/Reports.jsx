@@ -3874,9 +3874,39 @@ export default function Reports() {
             </CardHeader>
             <CardContent>
               {!productChartName ? (
-                <div className="h-[300px] flex flex-col items-center justify-center text-center text-sm text-gray-500 gap-2">
-                  <Search className="w-6 h-6 text-gray-300" />
-                  Buscá y elegí un producto arriba para ver su evolución por mes.
+                /* Sin producto elegido, nada de un recuadro vacío: se ofrecen
+                   los más vendidos del período como accesos de UN clic, con su
+                   venta y sus unidades a la vista (pedido del dueño, 16-ago).
+                   El buscador de arriba sigue sirviendo para cualquier otro. */
+                <div className="min-h-[300px]">
+                  <p className="text-sm text-gray-600 mb-3">
+                    Elige un producto para ver su evolución. Estos son los más vendidos del período:
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {topProducts.slice(0, 9).map((p, i) => (
+                      <button
+                        key={p.name}
+                        type="button"
+                        onClick={() => { setProductChartName(p.name); setProductChartSearch(p.name); setProductChartOpen(false) }}
+                        className="flex items-center gap-3 p-3 bg-gray-50 hover:bg-primary-50 border border-gray-200 hover:border-primary-300 rounded-lg text-left transition-colors"
+                      >
+                        <span className="w-6 h-6 rounded-full bg-white border border-gray-200 text-xs font-semibold text-gray-500 flex items-center justify-center shrink-0">
+                          {i + 1}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-medium text-gray-900 truncate">{p.name}</span>
+                          <span className="block text-xs text-gray-500">
+                            {formatMoney(p.revenue)} · {p.quantity} und
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  {topProducts.length === 0 && (
+                    <div className="h-[220px] flex items-center justify-center text-sm text-gray-500">
+                      No hay ventas en el período seleccionado.
+                    </div>
+                  )}
                 </div>
               ) : productPeriodData.length === 0 ? (
                 <div className="h-[300px] flex items-center justify-center text-sm text-gray-500">
