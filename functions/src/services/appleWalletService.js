@@ -130,7 +130,6 @@ export async function construirPkpass({ businessId, phone, marca, sellos, meta, 
   const claro = fondoEsClaro(marca.colorFondo)
   const tinta = claro ? 'rgb(31,41,55)' : 'rgb(255,255,255)'
   const tintaLabel = claro ? 'rgb(75,85,99)' : 'rgb(219,234,254)'
-  const lineasCliente = nombreEnDosLineas(nombreCliente)
 
   const passJson = {
     formatVersion: 1,
@@ -145,17 +144,16 @@ export async function construirPkpass({ businessId, phone, marca, sellos, meta, 
     labelColor: tintaLabel,
     storeCard: {
       headerFields: [{ key: 'sellos', label: 'SELLOS', value: `${sellos}/${meta}` }],
-      // El nombre puede venir largo (RENIEC: apellidos + nombres). Va partido
-      // en dos filas: la primera línea junto al PREMIO y la segunda debajo.
+      // El nombre va completo en una línea. Se intentó partirlo en dos filas
+      // (secondary + auxiliary), pero en las storeCard PassKit FUSIONA ambas
+      // en una sola fila — no se apilan (visto en iPhone real). Si el nombre
+      // es muy largo, iOS lo corta con "…"; decisión de Giacomo: así está bien.
       secondaryFields: [
-        ...(lineasCliente[0] ? [{ key: 'cliente', label: 'CLIENTE', value: lineasCliente[0] }] : []),
+        ...(nombreCliente ? [{ key: 'cliente', label: 'CLIENTE', value: nombreCliente }] : []),
         ...(marca.premio
           ? [{ key: 'premio', label: 'PREMIO', value: marca.premio, textAlignment: 'PKTextAlignmentRight' }]
           : []),
       ],
-      ...(lineasCliente[1]
-        ? { auxiliaryFields: [{ key: 'cliente2', label: '', value: lineasCliente[1] }] }
-        : {}),
       backFields: [
         ...(marca.mensaje ? [{ key: 'mensaje', label: marca.nombre, value: marca.mensaje }] : []),
         ...(marca.enlaces || []).map((e) => ({
@@ -227,28 +225,6 @@ export async function construirPkpass({ businessId, phone, marca, sellos, meta, 
   zip.file('manifest.json', manifestBuf)
   zip.file('signature', Buffer.from(forge.asn1.toDer(p7.toAsn1()).getBytes(), 'binary'))
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' })
-}
-
-/**
- * Parte el nombre completo en dos líneas lo más parejas posible, cortando
- * entre palabras. Los campos del frente de la tarjeta NO ajustan texto: un
- * nombre RENIEC ("Gonzales Garcia Giacomo Jesus") en una sola línea saldría
- * truncado con "…". En dos filas (secondary + auxiliary) entra completo.
- * Nombres cortos quedan en una línea y la segunda fila ni se dibuja.
- */
-export function nombreEnDosLineas(nombre) {
-  const limpio = String(nombre || '').trim()
-  const palabras = limpio.split(/\s+/).filter(Boolean)
-  if (palabras.length < 2 || limpio.length <= 16) return [limpio, '']
-  let corte = 1
-  let mejor = Infinity
-  for (let i = 1; i < palabras.length; i++) {
-    const a = palabras.slice(0, i).join(' ').length
-    const b = palabras.slice(i).join(' ').length
-    const d = Math.abs(a - b)
-    if (d < mejor) { mejor = d; corte = i }
-  }
-  return [palabras.slice(0, corte).join(' '), palabras.slice(corte).join(' ')]
 }
 
 /** ¿El navegador que pide el link es un iPhone/iPad? (para el desvío de cbrfy.link) */
