@@ -133,7 +133,7 @@ export const GUIDES = [
     title: 'Control de Caja',
     category: 'Finanzas',
     description: 'Abrir y cerrar caja, registrar ingresos y egresos, arqueo, diferencias, cierre a ciegas e historial de sesiones.',
-    keywords: 'caja apertura cierre arqueo monto inicial efectivo contado esperado diferencia faltante sobrante ingreso egreso movimientos constancia historial yape plin tarjeta dolares turno cajero a ciegas',
+    keywords: 'caja apertura cierre arqueo monto inicial efectivo contado esperado diferencia faltante sobrante descuadre no cuadra ingreso egreso movimientos sesion constancia reporte pdf excel historial yape plin tarjeta transferencia rappi pedidosya didifood delivery metodos personalizados dolares usd turno cajero a ciegas requerir caja abierta selector mi caja todos sucursal',
     modos: null,
     load: () => import('./caja.js'),
   },
