@@ -49,6 +49,7 @@ import { getPurchases, deletePurchase, updatePurchase, getProducts, updateProduc
 import { getPurchases as getIngredientPurchases, deleteIngredientPurchase, deleteIngredientPurchasesByRelated } from '@/services/ingredientService'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import { generatePurchasesExcel, getPurchaseDate } from '@/services/purchaseExportService'
+import GuideLink from '@/components/guide/GuideLink'
 
 /**
  * Parsea fecha YYYY-MM-DD a Date en hora LOCAL (evita problema de timezone)
@@ -1397,7 +1398,10 @@ export default function Purchases() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Compras</h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Compras</h1>
+            <GuideLink />
+          </div>
           <p className="text-sm sm:text-base text-gray-600 mt-1">
             Gestiona tus órdenes de compra y entrada de mercadería
           </p>

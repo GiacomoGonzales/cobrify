@@ -55,6 +55,7 @@ import { validateShopifreeApiKey, connectShopifree, disconnectShopifree, pingSho
 import RenumberInvoicesModal from '@/components/RenumberInvoicesModal'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 import { getBuiltinPaymentMethodsForMode, getVisiblePaymentMethods } from '@/utils/paymentMethods'
+import GuideLink from '@/components/guide/GuideLink'
 import {
   deleteAllProducts,
   deleteAllCustomers,
@@ -2945,7 +2946,10 @@ export default function Settings() {
           </>
         ) : (
           <>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Configuración</h1>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Configuración</h1>
+              <GuideLink />
+            </div>
             <p className="text-sm sm:text-base text-gray-600 mt-1">
               Configura la información de tu empresa
             </p>

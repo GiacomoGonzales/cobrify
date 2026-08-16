@@ -73,6 +73,7 @@ import { getSaleSeller } from '@/utils/saleSeller'
 import MonthSelect from '@/components/MonthSelect'
 import { getInvoiceCommission, buildSellerIndex } from '@/utils/commissions'
 import { getSellers } from '@/services/sellerService'
+import GuideLink from '@/components/guide/GuideLink'
 
 // Paleta y asignación estable por entidad: ver src/utils/chartColors.js.
 // `COLORS` se mantiene como alias para los usos por slot FIJO (COLORS[0], etc.),
@@ -2720,7 +2721,10 @@ export default function Reports() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Reportes</h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Reportes</h1>
+            <GuideLink />
+          </div>
           <p className="text-sm sm:text-base text-gray-600 mt-1">
             Análisis detallado de tu negocio
           </p>

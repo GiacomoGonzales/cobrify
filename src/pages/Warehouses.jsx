@@ -46,6 +46,7 @@ import { getProducts, getAllBranchSeriesFS, getCompanySettings, updateProduct } 
 import { getActiveBranches } from '@/services/branchService'
 import { FileText } from 'lucide-react'
 import { matchesSearchQuery } from '@/lib/utils'
+import GuideLink from '@/components/guide/GuideLink'
 
 // Schema de validación
 const warehouseSchema = z.object({
@@ -949,10 +950,13 @@ export default function Warehouses() {
       {/* Header */}
       <div className="space-y-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Warehouse className="w-7 h-7" />
-            Almacenes
-          </h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <Warehouse className="w-7 h-7" />
+              Almacenes
+            </h1>
+            <GuideLink />
+          </div>
           <p className="text-gray-600 mt-1">Gestiona tus almacenes y puntos de inventario</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2">

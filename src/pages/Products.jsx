@@ -57,6 +57,7 @@ import PriceUpdateTable from '@/components/product/PriceUpdateTable'
 import { collection, getDocs, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { printProductBarcodes, isPrinterReady } from '@/services/thermalPrinterService'
+import GuideLink from '@/components/guide/GuideLink'
 
 // Unidades de medida SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
 // UNITS y getUnitLabel viven ahora en '@/utils/units' (reusados por Inventario,
@@ -4986,7 +4987,10 @@ export default function Products() {
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Productos y Servicios</h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Productos y Servicios</h1>
+            <GuideLink />
+          </div>
           <p className="text-sm sm:text-base text-gray-600 mt-1">
             Gestiona tu catálogo de productos y servicios
           </p>

@@ -561,11 +561,11 @@ export default function Promotions() {
       {/* ── COMBOS ── */}
       {tab === 'combos' && (
         <div className="space-y-4">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
             <p className="text-sm text-gray-600">
               Agrupa productos a un precio especial. El stock se descuenta de cada parte al vender.
             </p>
-            <Button onClick={() => setIsComboOpen(true)}>
+            <Button onClick={() => setIsComboOpen(true)} className="w-full sm:w-auto shrink-0 whitespace-nowrap">
               <Plus className="w-4 h-4 mr-2" />
               Crear combo
             </Button>
@@ -616,11 +616,11 @@ export default function Promotions() {
       {/* ── CUPONES ── */}
       {tab === 'cupones' && (
         <div className="space-y-4">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
             <p className="text-sm text-gray-600">
               Códigos de descuento que el cajero aplica en el POS. Se descuentan del total de la venta.
             </p>
-            <Button onClick={() => setIsCuponOpen(true)}>
+            <Button onClick={() => setIsCuponOpen(true)} className="w-full sm:w-auto shrink-0 whitespace-nowrap">
               <Plus className="w-4 h-4 mr-2" />
               Crear cupón
             </Button>
@@ -693,11 +693,11 @@ export default function Promotions() {
       {/* ── DESCUENTOS PROGRAMADOS ── */}
       {tab === 'descuentos' && (
         <div className="space-y-4">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
             <p className="text-sm text-gray-600">
               Ofertas por horario y día — el POS las aplica solo al agregar el producto. Ej: 20% en bebidas de 5 a 7pm.
             </p>
-            <Button onClick={() => setIsPromoOpen(true)}>
+            <Button onClick={() => setIsPromoOpen(true)} className="w-full sm:w-auto shrink-0 whitespace-nowrap">
               <Plus className="w-4 h-4 mr-2" />
               Crear promoción
             </Button>

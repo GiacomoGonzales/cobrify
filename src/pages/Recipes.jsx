@@ -14,6 +14,7 @@ import { formatCurrency, matchesSearchQuery } from '@/lib/utils'
 import { getRecipes, createRecipe, updateRecipe, deleteRecipe, recalculateAllRecipeCosts } from '@/services/recipeService'
 import { getIngredients } from '@/services/ingredientService'
 import { getProducts } from '@/services/firestoreService'
+import GuideLink from '@/components/guide/GuideLink'
 
 // Migración/sincronización 1 vez por sesión: al entrar a Recetas, recostear las recetas
 // desde los costos actuales de insumos y propagar el costo a cada producto con receta.
@@ -538,7 +539,10 @@ export default function Recipes() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{texts.pageTitle}</h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{texts.pageTitle}</h1>
+            <GuideLink />
+          </div>
           <p className="text-sm sm:text-base text-gray-600 mt-1">
             {texts.pageDescription}
           </p>

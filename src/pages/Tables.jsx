@@ -49,6 +49,7 @@ import { useLocationAccess } from '@/utils/locationAccess'
 import { collection, onSnapshot, query, orderBy, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { stationsForOrder } from '@/utils/kitchenComandaFormat'
+import GuideLink from '@/components/guide/GuideLink'
 
 export default function Tables() {
   const { user, getBusinessId, isDemoMode, demoData, userPermissions, filterBranchesByAccess, allowedBranches, hasMainBranchAccess } = useAppContext()
@@ -1650,10 +1651,13 @@ export default function Tables() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Grid3x3 className="w-7 h-7" />
-            Gestión de Mesas
-          </h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <Grid3x3 className="w-7 h-7" />
+              Gestión de Mesas
+            </h1>
+            <GuideLink />
+          </div>
           <p className="text-gray-600 mt-1">Administra las mesas de tu restaurante</p>
         </div>
         <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">

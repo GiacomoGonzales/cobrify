@@ -12,6 +12,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { collection, query, where, onSnapshot, orderBy as firestoreOrderBy, doc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import GuideLink from '@/components/guide/GuideLink'
 
 export default function Kitchen() {
   const { user, getBusinessId, isDemoMode, demoData, filterBranchesByAccess, allowedBranches, hasMainBranchAccess, businessSettings } = useAppContext()
@@ -632,10 +633,13 @@ export default function Kitchen() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <ChefHat className="w-7 h-7" />
-            Vista de Cocina
-          </h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <ChefHat className="w-7 h-7" />
+              Vista de Cocina
+            </h1>
+            <GuideLink />
+          </div>
           <p className="text-gray-600 mt-1">Sistema de display para la cocina (KDS)</p>
         </div>
         <div className="flex items-center gap-3">

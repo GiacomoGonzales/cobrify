@@ -54,6 +54,7 @@ import { preloadLogo } from '@/utils/pdfGenerator'
 import { getActiveBranches } from '@/services/branchService'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import { useLocationAccess } from '@/utils/locationAccess'
+import GuideLink from '@/components/guide/GuideLink'
 
 export default function Quotations() {
   const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess, hasMainBranchAccess, allowedBranches, allowedWarehouses , branchScope } = useAppContext()
@@ -640,7 +641,10 @@ export default function Quotations() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Cotizaciones</h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Cotizaciones</h1>
+            <GuideLink />
+          </div>
           <p className="text-sm sm:text-base text-gray-600 mt-1">
             Gestiona tus cotizaciones y conviértelas en facturas
           </p>

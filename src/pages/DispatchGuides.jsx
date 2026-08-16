@@ -17,6 +17,7 @@ import { getActiveBranches } from '@/services/branchService'
 import { canVoidDispatchGuide } from '@/services/sunatService'
 import { updateDispatchGuide, deleteDispatchGuide } from '@/services/firestoreService'
 import { Capacitor } from '@capacitor/core'
+import GuideLink from '@/components/guide/GuideLink'
 
 const TRANSFER_REASONS = {
   '01': 'Venta',
@@ -654,10 +655,13 @@ export default function DispatchGuides() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center gap-2">
-            <Truck className="w-8 h-8 text-primary-600" />
-            Guías de Remisión Electrónicas
-          </h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center gap-2">
+              <Truck className="w-8 h-8 text-primary-600" />
+              Guías de Remisión Electrónicas
+            </h1>
+            <GuideLink />
+          </div>
           <p className="text-sm sm:text-base text-gray-600 mt-1">
             Gestiona las guías de remisión para el transporte de mercancías
           </p>

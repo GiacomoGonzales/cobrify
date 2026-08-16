@@ -34,6 +34,7 @@ import { useBranding } from '@/contexts/BrandingContext'
 import { getTables } from '@/services/tableService'
 import { useLocationAccess, useSellerScope } from '@/utils/locationAccess'
 import HotelDashboard from '@/components/hotel/HotelDashboard'
+import GuideLink from '@/components/guide/GuideLink'
 
 // Placeholder mientras llega el segundo tramo de facturas del mes.
 function PendingBlock({ className = 'h-[300px]' }) {
@@ -941,7 +942,10 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h1>
+            <GuideLink />
+          </div>
           <p className="text-sm sm:text-base text-gray-600 mt-1">
             Bienvenido{branding?.companyName ? ` a ${branding.companyName}` : ''} - Resumen de tu negocio
           </p>

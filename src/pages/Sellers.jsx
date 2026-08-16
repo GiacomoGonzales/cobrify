@@ -15,6 +15,7 @@ import SellerFormModal from '@/components/SellerFormModal'
 import { formatCurrency, formatDate, matchesSearchQuery } from '@/lib/utils'
 import Modal from '@/components/ui/Modal'
 import { getActiveBranches } from '@/services/branchService'
+import GuideLink from '@/components/guide/GuideLink'
 
 // Datos de ejemplo para modo demo
 const DEMO_SELLERS = [
@@ -433,7 +434,10 @@ export default function Sellers() {
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Vendedores</h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Vendedores</h1>
+            <GuideLink />
+          </div>
           <p className="text-sm sm:text-base text-gray-600 mt-1">
             Gestiona tu equipo de vendedores y sus métricas de ventas
           </p>

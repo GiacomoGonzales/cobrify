@@ -214,17 +214,10 @@ function Navbar() {
           </button>
         )}
 
-        {/* Ayuda: guía de uso de la página actual (panel lateral). Con texto
-            para que se descubra — el ícono pelado pasaba desapercibido. En
-            pantallas chicas queda solo el ícono. */}
-        <button
-          onClick={() => setShowGuide(true)}
-          className="flex items-center gap-1.5 px-2 lg:px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
-          title="Guía de uso de esta página"
-        >
-          <HelpCircle className="w-5 h-5 text-primary-600" />
-          <span className="hidden lg:inline text-sm font-medium text-gray-700">¿Cómo funciona esta página?</span>
-        </button>
+        {/* La ayuda ya NO vive en el header: cada página lleva su enlace
+            "¿Cómo funciona esta página?" junto al título (GuideLink), que es
+            donde el usuario lo encuentra sin buscarlo. El panel se abre desde
+            ahí por evento (ver el useEffect de ABRIR_GUIA_EVENT arriba). */}
 
         {/* Notifications */}
         <div className="relative" ref={notificationRef}>

@@ -30,6 +30,7 @@ import {
 } from '@/services/lendingService'
 import { printHtmlIframe } from '@/utils/printHtmlIframe'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
+import GuideLink from '@/components/guide/GuideLink'
 
 const toJsDate = (v) => (v?.toDate ? v.toDate() : v ? new Date(v) : null)
 
@@ -341,7 +342,10 @@ export default function LendingPortfolio() {
       {/* Cabecera + stats */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Préstamos</h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl font-bold text-gray-900">Préstamos</h1>
+            <GuideLink />
+          </div>
           <p className="text-sm text-gray-500">Tu cartera de préstamos a clientes</p>
         </div>
         <Button onClick={() => setShowCreate(true)}>

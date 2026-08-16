@@ -53,6 +53,7 @@ import { createPortal } from 'react-dom'
 import * as XLSX from 'xlsx'
 import ExpenseCategoriesManager from '@/components/ExpenseCategoriesManager'
 import { Tag } from 'lucide-react'
+import GuideLink from '@/components/guide/GuideLink'
 
 // Mapeo nombre lucide → componente. Se usa al renderizar el icono que el negocio
 // asoció a su categoría custom (la categoría guarda solo el nombre del icono).
@@ -708,7 +709,10 @@ export default function Expenses() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Gastos</h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl font-bold text-gray-900">Gastos</h1>
+            <GuideLink />
+          </div>
           <p className="text-gray-500">Registro y control de gastos del negocio</p>
         </div>
         <div className="flex gap-2 w-full sm:w-auto">

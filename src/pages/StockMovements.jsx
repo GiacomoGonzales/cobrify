@@ -33,6 +33,7 @@ import { getActiveBranches } from '@/services/branchService'
 import { getMassTransfers } from '@/services/massTransferService'
 import { downloadLogisticsMovementPDF } from '@/utils/logisticsPdfGenerator'
 import { useLocationAccess } from '@/utils/locationAccess'
+import GuideLink from '@/components/guide/GuideLink'
 
 export default function StockMovements() {
   const { user, isDemoMode, demoData, getBusinessId, hasMainBranchAccess, businessMode, filterWarehousesByAccess, allowedBranches, allowedWarehouses, businessSettings , branchScope } = useAppContext()
@@ -688,7 +689,10 @@ export default function StockMovements() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Movimientos de Inventario</h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Movimientos de Inventario</h1>
+            <GuideLink />
+          </div>
           <p className="text-sm text-gray-600 mt-1">
             Historial de entradas, salidas, transferencias y ajustes
           </p>

@@ -29,6 +29,7 @@ import { printKitchenOrder, connectPrinter, getPrinterConfig, printToAllStations
 import { printPreBill, printAllSplitPreBills } from '@/utils/printPreBill'
 import { getActiveMotoristas, createDeliveryRecord, updateOperationalStatus } from '@/services/motoristaService'
 import { stationsForOrder } from '@/utils/kitchenComandaFormat'
+import GuideLink from '@/components/guide/GuideLink'
 
 export default function Orders() {
   const { user, getBusinessId, isDemoMode, demoData, filterBranchesByAccess, allowedBranches, hasMainBranchAccess, userPermissions } = useAppContext()
@@ -1261,10 +1262,13 @@ export default function Orders() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <ListOrdered className="w-7 h-7" />
-            Órdenes Activas
-          </h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <ListOrdered className="w-7 h-7" />
+              Órdenes Activas
+            </h1>
+            <GuideLink />
+          </div>
           <p className="text-gray-600 mt-1">Monitorea las órdenes en tiempo real</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">

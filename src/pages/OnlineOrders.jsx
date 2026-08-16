@@ -20,6 +20,7 @@ import Card, { CardContent } from '@/components/ui/Card'
 import Input from '@/components/ui/Input'
 import Modal from '@/components/ui/Modal'
 import { matchesSearchQuery } from '@/lib/utils'
+import GuideLink from '@/components/guide/GuideLink'
 
 const STATUS_CONFIG = {
   pending: {
@@ -524,10 +525,13 @@ export default function OnlineOrders() {
       {/* Header + toggle de modo */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center gap-2">
-            <ShoppingBag className="w-7 h-7 text-primary-600" />
-            Pedidos Online
-          </h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center gap-2">
+              <ShoppingBag className="w-7 h-7 text-primary-600" />
+              Pedidos Online
+            </h1>
+            <GuideLink />
+          </div>
           <p className="text-sm text-gray-600 mt-1">
             {viewMode === 'active'
               ? 'Pedidos por gestionar'

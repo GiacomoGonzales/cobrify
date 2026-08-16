@@ -27,6 +27,7 @@ import { getWarehouses } from '@/services/warehouseService'
 import { generateIngredientsExcel } from '@/services/ingredientExportService'
 import { getIngredientCategories, saveIngredientCategories } from '@/services/firestoreService'
 import ImportIngredientsModal from '@/components/ImportIngredientsModal'
+import GuideLink from '@/components/guide/GuideLink'
 
 // Categorías por defecto cuando un negocio usa el módulo por primera vez.
 // Se auto-siembra una sola vez; luego el dueño puede editarlas/eliminarlas.
@@ -998,7 +999,10 @@ export default function Ingredients() {
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{texts.pageTitle}</h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{texts.pageTitle}</h1>
+            <GuideLink />
+          </div>
           <p className="text-sm sm:text-base text-gray-600 mt-1">
             {texts.pageDescription}
           </p>

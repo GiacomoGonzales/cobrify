@@ -80,6 +80,7 @@ import { getVisiblePaymentMethods } from '@/utils/paymentMethods'
 import { getSaleSeller, matchesSaleSeller, listSaleSellers } from '@/utils/saleSeller'
 import { getNoteReasonLabel, getReferencedDocTypeLabel } from '@/data/noteReasons'
 import MonthSelect from '@/components/MonthSelect'
+import GuideLink from '@/components/guide/GuideLink'
 
 /**
  * Tipo de pedido guardado en el comprobante. Solo aplica a restaurante/delivery;
@@ -2712,7 +2713,10 @@ Gracias por tu preferencia.`
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Ventas</h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Ventas</h1>
+            <GuideLink />
+          </div>
           <p className="text-sm sm:text-base text-gray-600 mt-1">
             Visualiza y gestiona todas tus facturas y boletas emitidas
           </p>

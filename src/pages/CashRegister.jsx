@@ -33,6 +33,7 @@ import CashClosureTicket from '@/components/CashClosureTicket'
 import { getSessionMoneyTotals } from '@/utils/cashTotals'
 import { Capacitor } from '@capacitor/core'
 import { getPaymentBucketLabel, getCustomMethodByLabel, isCashLikePayment } from '@/utils/paymentMethods'
+import GuideLink from '@/components/guide/GuideLink'
 
 /**
  * Fila de conteo del arqueo de cierre. MISMA estructura para todos los métodos.
@@ -2200,7 +2201,10 @@ export default function CashRegister() {
         {/* Fila 1: Título + acciones principales */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Control de Caja</h1>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Control de Caja</h1>
+              <GuideLink />
+            </div>
             <p className="text-sm sm:text-base text-gray-600 mt-1">Gestiona los movimientos de efectivo del día</p>
           </div>
 

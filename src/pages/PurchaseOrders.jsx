@@ -41,6 +41,7 @@ import { generatePurchaseOrderPDF, previewPurchaseOrderPDF } from '@/utils/purch
 import { preloadLogo } from '@/utils/pdfGenerator'
 import CreatePurchaseOrderModal from '@/components/CreatePurchaseOrderModal'
 import RestockTable from '@/components/purchase/RestockTable'
+import GuideLink from '@/components/guide/GuideLink'
 
 export default function PurchaseOrders() {
   const { user, isDemoMode, demoData, getBusinessId, businessSettings, branchScope } = useAppContext()
@@ -285,7 +286,10 @@ export default function PurchaseOrders() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Órdenes de Compra</h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl font-bold text-gray-900">Órdenes de Compra</h1>
+            <GuideLink />
+          </div>
           <p className="text-gray-600 text-sm mt-1">
             Gestiona tus pedidos a proveedores
           </p>
