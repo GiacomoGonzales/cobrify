@@ -60,20 +60,52 @@ async function iconoDesdeLogo(logoUrl, lado, colorFondo) {
 }
 
 /**
- * El nombre del comercio como IMAGEN (logo.png), no como logoText: el texto
- * comparte fila con el contador de sellos y con nombres largos se encimaban
- * (visto en la tarjeta de prueba). Como imagen, Apple le reserva su espacio.
+ * La esquina superior izquierda de la tarjeta como IMAGEN (logo.png): el logo
+ * del comercio (redondeado) + su nombre al lado. Va como imagen y no como
+ * logoText porque el texto comparte fila con el contador de sellos y con
+ * nombres largos se encimaban (visto en la tarjeta de prueba en iPhone).
  */
-async function logoConNombre(nombre, tinta, escala) {
+async function logoConNombre(nombre, tinta, escala, logoUrl) {
   const W = 160 * escala
   const H = 50 * escala
-  const fs = 17 * escala
+
+  // Logo del comercio, cuadrado con esquinas redondeadas. Si no hay o falla,
+  // la esquina queda solo con el nombre — la tarjeta sale igual.
+  let logo = null
+  if (logoUrl) {
+    try {
+      const res = await fetch(logoUrl)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const lado = H
+      const radio = Math.round(lado * 0.22) // mismo radio que la cuadrícula de sellos
+      const mascara = Buffer.from(
+        `<svg width="${lado}" height="${lado}"><rect width="${lado}" height="${lado}" rx="${radio}" fill="#fff"/></svg>`
+      )
+      logo = await sharp(Buffer.from(await res.arrayBuffer()))
+        .resize(lado, lado, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
+        .flatten({ background: '#ffffff' })
+        .composite([{ input: mascara, blend: 'dest-in' }])
+        .png()
+        .toBuffer()
+    } catch {
+      logo = null
+    }
+  }
+
+  const textX = logo ? H + 6 * escala : 0
+  const fs = (logo ? 15 : 17) * escala
   const texto = String(nombre).slice(0, 24).replace(/&/g, '&amp;').replace(/</g, '&lt;')
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
-    <text x="0" y="${H / 2}" dominant-baseline="central" font-family="Helvetica, Arial, sans-serif"
+  const svgTexto = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
+    <text x="${textX}" y="${H / 2}" dominant-baseline="central" font-family="Helvetica, Arial, sans-serif"
       font-size="${fs}" font-weight="bold" fill="${tinta}">${texto}</text>
-  </svg>`
-  return sharp(Buffer.from(svg)).png().toBuffer()
+  </svg>`)
+
+  const capas = [{ input: svgTexto, left: 0, top: 0 }]
+  if (logo) capas.unshift({ input: logo, left: 0, top: 0 })
+  return sharp({ create: { width: W, height: H, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+    .composite(capas)
+    .png()
+    .toBuffer()
 }
 
 /** La cuadrícula de sellos (el MISMO dibujo que Google Wallet) como strip. */
@@ -145,9 +177,9 @@ export async function construirPkpass({ businessId, phone, marca, sellos, meta, 
     iconoDesdeLogo(marca.logoUrl, 29, marca.colorFondo),
     iconoDesdeLogo(marca.logoUrl, 58, marca.colorFondo),
     iconoDesdeLogo(marca.logoUrl, 87, marca.colorFondo),
-    logoConNombre(marca.nombre, tintaLogo, 1),
-    logoConNombre(marca.nombre, tintaLogo, 2),
-    logoConNombre(marca.nombre, tintaLogo, 3),
+    logoConNombre(marca.nombre, tintaLogo, 1, marca.logoUrl),
+    logoConNombre(marca.nombre, tintaLogo, 2, marca.logoUrl),
+    logoConNombre(marca.nombre, tintaLogo, 3, marca.logoUrl),
     stripDeSellos({ colorFondo: marca.colorFondo, sellos, meta, sello }, 1),
     stripDeSellos({ colorFondo: marca.colorFondo, sellos, meta, sello }, 2),
     stripDeSellos({ colorFondo: marca.colorFondo, sellos, meta, sello }, 3),

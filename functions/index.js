@@ -12004,6 +12004,16 @@ const walletSecrets = ['GOOGLE_WALLET_SA_KEY']
  * catalogo. El comercio elige un tema y nada mas — no se le pide subir otra
  * imagen ni marcar un punto en un mapa.
  */
+/**
+ * Solo el primer nombre del cliente, en Mayúscula inicial. El nombre completo
+ * ("María Del Carmen Pérez Quispe") se veía recargado en la tarjeta del
+ * Wallet — pedido de Giacomo. Vale para Apple y Google por igual.
+ */
+function primerNombre(completo) {
+  const palabra = String(completo || '').trim().split(/\s+/)[0] || ''
+  return palabra ? palabra[0].toUpperCase() + palabra.slice(1).toLowerCase() : ''
+}
+
 async function marcaDelNegocio(businessId) {
   const snap = await db.collection('businesses').doc(businessId).get()
   const b = snap.exists ? snap.data() : {}
@@ -12128,7 +12138,7 @@ export const syncWalletPass = onDocumentWritten(
       await walletUpsertObject({
         businessId,
         phone: cardId, // el id del doc ES el telefono normalizado
-        nombreCliente: after.customerName || '',
+        nombreCliente: primerNombre(after.customerName),
         sellos: after.stamps || 0,
         meta: after.goal || marca.meta,
         premio: marca.premio,
@@ -12192,7 +12202,7 @@ export const getWalletPassLink = onRequest(
       await walletUpsertClass(claseDesdeMarca(businessId, marca))
       await walletUpsertObject({
         businessId, phone: String(phone),
-        nombreCliente: card.customerName || '',
+        nombreCliente: primerNombre(card.customerName),
         sellos: card.stamps || 0,
         meta: card.goal || marca.meta,
         premio: marca.premio,
@@ -12290,7 +12300,7 @@ export const appleWalletPass = onRequest(
         marca,
         sellos: card.stamps || 0,
         meta: card.goal || marca.meta,
-        nombreCliente: card.customerName || '',
+        nombreCliente: primerNombre(card.customerName),
       })
 
       res.set('Content-Type', 'application/vnd.apple.pkpass')
