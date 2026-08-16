@@ -33,7 +33,10 @@ import {
   linkAgregarAWallet as walletSaveLink, notificarTarjeta as walletNotify,
 } from './src/services/googleWalletService.js'
 import { logoCuadradoDe, portadaDe, cuadriculaDeSellos } from './src/services/walletAssetsService.js'
-import { construirPkpass, esDispositivoApple } from './src/services/appleWalletService.js'
+import {
+  construirPkpass, esDispositivoApple, serialDe, parsearSerial,
+  tokenDeAutenticacion, notificarDispositivosApple,
+} from './src/services/appleWalletService.js'
 import { ubicacionDeNegocio } from './src/services/geocodeService.js'
 import {
   createFlowPayment as flowCreatePayment, getFlowPaymentStatus,
@@ -11996,6 +11999,7 @@ export const cancelAutoRenew = onRequest(
 // ============================================================================
 
 const walletSecrets = ['GOOGLE_WALLET_SA_KEY']
+const appleWalletSecrets = ['APPLE_PASS_CERT', 'APPLE_PASS_KEY']
 
 /**
  * Datos de marca del negocio para la clase de Wallet.
@@ -12114,7 +12118,9 @@ export const syncWalletPass = onDocumentWritten(
   {
     document: 'businesses/{businessId}/loyaltyCards/{cardId}',
     region: 'us-central1',
-    secrets: walletSecrets,
+    // Google (actualizar el objeto + push) y Apple (push APNs a los iPhone
+    // registrados por el web service de PassKit).
+    secrets: [...walletSecrets, ...appleWalletSecrets],
   },
   async (event) => {
     const { businessId, cardId } = event.params
@@ -12189,6 +12195,27 @@ export const syncWalletPass = onDocumentWritten(
       } catch (notifyError) {
         console.error(`[Wallet] No se pudo notificar ${businessId}/${cardId}:`,
           (notifyError.response && JSON.stringify(notifyError.response.data).slice(0, 300)) || notifyError.message)
+      }
+
+      // Apple: push (vacío, como manda PassKit) a cada iPhone registrado para
+      // esta tarjeta. El iPhone re-descarga el pase del web service y muestra
+      // el changeMessage ("Sellos: 7/10") en la pantalla bloqueada. Los tokens
+      // muertos (pase eliminado del celular) se limpian aquí mismo.
+      try {
+        const serial = serialDe(businessId, cardId)
+        const regs = await db.collection('appleWalletRegistrations')
+          .where('serial', '==', serial).get()
+        if (!regs.empty) {
+          const { enviados, muertos } = await notificarDispositivosApple(
+            regs.docs.map((d) => d.data().pushToken).filter(Boolean)
+          )
+          for (const reg of regs.docs) {
+            if (muertos.includes(reg.data().pushToken)) await reg.ref.delete()
+          }
+          console.log(`[Wallet] Push Apple ${serial}: ${enviados} enviados, ${muertos.length} limpiados`)
+        }
+      } catch (appleError) {
+        console.error(`[Wallet] Push Apple falló ${businessId}/${cardId}:`, appleError.message)
       }
     } catch (error) {
       // La tarjeta de Wallet es secundaria: el saldo real ya quedo guardado.
@@ -12302,7 +12329,6 @@ export const getWalletPassLink = onRequest(
  * volver a tocar el link para ver los sellos al día (mismo serialNumber =
  * el Wallet reemplaza la tarjeta, no la duplica).
  */
-const appleWalletSecrets = ['APPLE_PASS_CERT', 'APPLE_PASS_KEY']
 export const appleWalletPass = onRequest(
   {
     region: 'us-central1', timeoutSeconds: 60, memory: '512MiB',
@@ -12352,6 +12378,135 @@ export const appleWalletPass = onRequest(
     } catch (error) {
       console.error('[Wallet] appleWalletPass:', error.message)
       res.status(500).send('No se pudo generar la tarjeta')
+    }
+  }
+)
+
+/**
+ * Web service de PassKit: el protocolo con el que el iPhone mantiene la
+ * tarjeta actualizada SOLA. Los paths y códigos de respuesta los fija Apple:
+ *
+ *  POST   /v1/devices/{device}/registrations/{passType}/{serial}  registrar
+ *  DELETE /v1/devices/{device}/registrations/{passType}/{serial}  des-registrar
+ *  GET    /v1/devices/{device}/registrations/{passType}?passesUpdatedSince=T
+ *  GET    /v1/passes/{passType}/{serial}                          pase fresco
+ *  POST   /v1/log                                                 logs de Apple
+ *
+ * La autenticación es el header `Authorization: ApplePass <token>`, donde el
+ * token es el HMAC del serial (tokenDeAutenticacion) que viaja dentro del
+ * propio pase. Los registros viven en appleWalletRegistrations/{device}_{serial}
+ * — solo los toca el Admin SDK, las reglas de cliente no aplican.
+ */
+export const appleWalletPassWeb = onRequest(
+  {
+    region: 'us-central1', timeoutSeconds: 60, memory: '512MiB',
+    invoker: 'public', secrets: appleWalletSecrets,
+  },
+  async (req, res) => {
+    try {
+      const partes = (req.path || '').split('/').filter(Boolean) // ['v1', ...]
+      const autorizado = (serial) =>
+        (req.headers.authorization || '') === `ApplePass ${tokenDeAutenticacion(serial)}`
+
+      // ── POST/DELETE /v1/devices/{device}/registrations/{passType}/{serial} ──
+      if (partes[0] === 'v1' && partes[1] === 'devices' && partes[3] === 'registrations' && partes[5]) {
+        const [, , device, , , serial] = partes
+        if (!autorizado(serial)) { res.status(401).send(''); return }
+        const regRef = db.collection('appleWalletRegistrations').doc(`${device}_${serial}`)
+
+        if (req.method === 'POST') {
+          const pushToken = req.body?.pushToken
+          if (!pushToken) { res.status(400).send(''); return }
+          const existia = (await regRef.get()).exists
+          const datos = parsearSerial(serial) || {}
+          await regRef.set({
+            device, serial, pushToken,
+            businessId: datos.businessId || null,
+            phone: datos.phone || null,
+            updatedAt: FieldValue.serverTimestamp(),
+            ...(existia ? {} : { createdAt: FieldValue.serverTimestamp() }),
+          }, { merge: true })
+          res.status(existia ? 200 : 201).send('') // 201 = registro nuevo (lo pide el protocolo)
+          return
+        }
+        if (req.method === 'DELETE') {
+          await regRef.delete()
+          res.status(200).send('')
+          return
+        }
+      }
+
+      // ── GET /v1/devices/{device}/registrations/{passType}?passesUpdatedSince=T ──
+      if (req.method === 'GET' && partes[0] === 'v1' && partes[1] === 'devices' && partes[3] === 'registrations' && !partes[5]) {
+        const device = partes[2]
+        // Sin auth por serial (el protocolo no la manda aquí): solo devuelve
+        // seriales que ESTE dispositivo ya registró — nada que no sepa ya.
+        const regs = await db.collection('appleWalletRegistrations').where('device', '==', device).get()
+        if (regs.empty) { res.status(404).send(''); return }
+
+        const desde = Number(req.query.passesUpdatedSince || 0)
+        const actualizados = []
+        let ultimo = desde
+        for (const reg of regs.docs) {
+          const { businessId, phone, serial } = reg.data()
+          if (!businessId || !phone) continue
+          const card = await db.collection('businesses').doc(businessId)
+            .collection('loyaltyCards').doc(String(phone)).get()
+          if (!card.exists) continue
+          const t = card.data().updatedAt?.toMillis?.() || 0
+          if (t > desde) { actualizados.push(serial); if (t > ultimo) ultimo = t }
+        }
+        if (!actualizados.length) { res.status(204).send(''); return }
+        res.status(200).json({ serialNumbers: actualizados, lastUpdated: String(ultimo) })
+        return
+      }
+
+      // ── GET /v1/passes/{passType}/{serial}: el pase recién horneado ──
+      if (req.method === 'GET' && partes[0] === 'v1' && partes[1] === 'passes' && partes[3]) {
+        const serial = partes[3]
+        if (!autorizado(serial)) { res.status(401).send(''); return }
+        const datos = parsearSerial(serial)
+        if (!datos) { res.status(404).send(''); return }
+
+        const cardSnap = await db.collection('businesses').doc(datos.businessId)
+          .collection('loyaltyCards').doc(String(datos.phone)).get()
+        if (!cardSnap.exists) { res.status(404).send(''); return }
+        const card = cardSnap.data()
+
+        // Sin cambios desde la copia del iPhone -> 304 (evita bucles de refresh).
+        const modificado = card.updatedAt?.toDate?.() || new Date()
+        const desdeCliente = req.headers['if-modified-since']
+        if (desdeCliente && new Date(desdeCliente) >= new Date(modificado.toUTCString())) {
+          res.status(304).send('')
+          return
+        }
+
+        const marca = await marcaDelNegocio(datos.businessId)
+        const pkpass = await construirPkpass({
+          businessId: datos.businessId,
+          phone: String(datos.phone),
+          marca,
+          sellos: card.stamps || 0,
+          meta: card.goal || marca.meta,
+          nombreCliente: nombreTarjeta(card.customerName),
+        })
+        res.set('Content-Type', 'application/vnd.apple.pkpass')
+        res.set('Last-Modified', modificado.toUTCString())
+        res.status(200).send(pkpass)
+        return
+      }
+
+      // ── POST /v1/log: Apple reporta problemas del pase por aquí ──
+      if (req.method === 'POST' && partes[0] === 'v1' && partes[1] === 'log') {
+        for (const l of req.body?.logs || []) console.warn('[Wallet][ApplePassLog]', l)
+        res.status(200).send('')
+        return
+      }
+
+      res.status(404).send('')
+    } catch (error) {
+      console.error('[Wallet] appleWalletPassWeb:', error.message)
+      res.status(500).send('')
     }
   }
 )

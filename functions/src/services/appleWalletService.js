@@ -13,9 +13,10 @@
  * El intermedio WWDR G4 de Apple es público y va empaquetado en src/assets.
  */
 import { readFileSync } from 'node:fs'
-import { createHash } from 'node:crypto'
+import { createHash, createHmac } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import http2 from 'node:http2'
 import forge from 'node-forge'
 import JSZip from 'jszip'
 import sharp from 'sharp'
@@ -26,6 +27,32 @@ const WWDR_PEM = readFileSync(path.join(__dirname, '../assets/wwdr-g4.pem'), 'ut
 
 const PASS_TYPE_ID = 'pass.com.cobrify.loyalty'
 const TEAM_ID = 'WAUWHRT3D6'
+// El "web service" de PassKit: el iPhone se registra aquí al añadir la
+// tarjeta, y aquí vuelve a pedir la versión nueva cuando le llega un push.
+const WEB_SERVICE_URL = 'https://us-central1-cobrify-395fe.cloudfunctions.net/appleWalletPassWeb'
+
+/** Serial estable de una tarjeta. El teléfono va al final y es solo dígitos. */
+export const serialDe = (businessId, phone) => `${businessId}-${phone}`
+
+/** Deshace serialDe. El uid puede traer guiones; el teléfono nunca. */
+export function parsearSerial(serial) {
+  const corte = String(serial || '').lastIndexOf('-')
+  if (corte <= 0) return null
+  return { businessId: serial.slice(0, corte), phone: serial.slice(corte + 1) }
+}
+
+/**
+ * Token de autenticación del pase (lo exige PassKit, mínimo 16 chars). Es un
+ * HMAC del serial con la llave privada del certificado como secreto: no hay
+ * nada que guardar ni rotar por tarjeta, y solo el servidor puede derivarlo.
+ */
+export function tokenDeAutenticacion(serial) {
+  const secreto = process.env.APPLE_PASS_KEY
+  if (!secreto) throw new Error('Falta el secreto APPLE_PASS_KEY')
+  // trim(): el PEM con o sin salto de línea final debe derivar el MISMO token
+  // (Secret Manager conserva el byte final; una shell con $(cat) lo recorta).
+  return createHmac('sha256', secreto.trim()).update(`pass-auth:${serial}`).digest('hex')
+}
 
 /** '#1e3a8a' -> 'rgb(30,58,138)'. Apple no acepta hex en pass.json. */
 function rgbDe(hex) {
@@ -131,19 +158,26 @@ export async function construirPkpass({ businessId, phone, marca, sellos, meta, 
   const tinta = claro ? 'rgb(31,41,55)' : 'rgb(255,255,255)'
   const tintaLabel = claro ? 'rgb(75,85,99)' : 'rgb(219,234,254)'
 
+  const serial = serialDe(businessId, phone)
   const passJson = {
     formatVersion: 1,
     passTypeIdentifier: PASS_TYPE_ID,
     teamIdentifier: TEAM_ID,
     // Estable por tarjeta: re-agregar con el mismo serial reemplaza la vieja.
-    serialNumber: `${businessId}-${phone}`,
+    serialNumber: serial,
+    // Actualización automática: con esto el iPhone se registra al añadir la
+    // tarjeta y la refresca solo cuando le avisamos por push (syncWalletPass).
+    webServiceURL: WEB_SERVICE_URL,
+    authenticationToken: tokenDeAutenticacion(serial),
     organizationName: marca.nombre,
     description: `Tarjeta de fidelidad de ${marca.nombre}`,
     foregroundColor: tinta,
     backgroundColor: rgbDe(marca.colorFondo),
     labelColor: tintaLabel,
     storeCard: {
-      headerFields: [{ key: 'sellos', label: 'SELLOS', value: `${sellos}/${meta}` }],
+      // changeMessage: cuando el pase se actualiza por push, el iPhone muestra
+      // este texto en la pantalla bloqueada con el valor nuevo en %@.
+      headerFields: [{ key: 'sellos', label: 'SELLOS', value: `${sellos}/${meta}`, changeMessage: 'Sellos: %@' }],
       // El nombre va completo en una línea. Se intentó partirlo en dos filas
       // (secondary + auxiliary), pero en las storeCard PassKit FUSIONA ambas
       // en una sola fila — no se apilan (visto en iPhone real). Si el nombre
@@ -225,6 +259,59 @@ export async function construirPkpass({ businessId, phone, marca, sellos, meta, 
   zip.file('manifest.json', manifestBuf)
   zip.file('signature', Buffer.from(forge.asn1.toDer(p7.toAsn1()).getBytes(), 'binary'))
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' })
+}
+
+/**
+ * Push de actualización a los iPhone registrados para una tarjeta. El payload
+ * de PassKit va VACÍO a propósito: el push solo dice "hay novedades" y es el
+ * iPhone quien vuelve a pedir el pase al web service (ahí ve los sellos
+ * nuevos y muestra el changeMessage en pantalla bloqueada).
+ *
+ * La autenticación con APNs es por certificado TLS de cliente: el MISMO
+ * certificado del Pass Type ID que firma los pases. Sin librerías: http2
+ * nativo de Node.
+ *
+ * Devuelve los tokens muertos (410/400 BadDeviceToken) para que el caller
+ * limpie sus registros.
+ */
+export async function notificarDispositivosApple(pushTokens) {
+  const cert = process.env.APPLE_PASS_CERT
+  const key = process.env.APPLE_PASS_KEY
+  if (!cert || !key) throw new Error('Faltan los secretos APPLE_PASS_CERT / APPLE_PASS_KEY')
+  if (!pushTokens.length) return { enviados: 0, muertos: [] }
+
+  const session = http2.connect('https://api.push.apple.com', { cert, key })
+  try {
+    const resultados = await Promise.allSettled(pushTokens.map((token) => new Promise((resolve, reject) => {
+      const req = session.request({
+        ':method': 'POST',
+        ':path': `/3/device/${token}`,
+        'apns-topic': PASS_TYPE_ID,
+        'apns-push-type': 'background',
+        'content-type': 'application/json',
+      })
+      let status = 0
+      let body = ''
+      req.on('response', (headers) => { status = headers[':status'] })
+      req.on('data', (c) => { body += c })
+      req.on('end', () => resolve({ token, status, body }))
+      req.on('error', reject)
+      req.setTimeout(10000, () => { req.close(); reject(new Error('APNs timeout')) })
+      req.end('{}')
+    })))
+
+    const muertos = []
+    let enviados = 0
+    for (const r of resultados) {
+      if (r.status !== 'fulfilled') continue
+      if (r.value.status === 200) { enviados++; continue }
+      // 410 = el pase fue eliminado del iPhone; 400 BadDeviceToken = token inválido.
+      if (r.value.status === 410 || /BadDeviceToken/.test(r.value.body)) muertos.push(r.value.token)
+    }
+    return { enviados, muertos }
+  } finally {
+    session.close()
+  }
 }
 
 /** ¿El navegador que pide el link es un iPhone/iPad? (para el desvío de cbrfy.link) */
