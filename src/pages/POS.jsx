@@ -605,6 +605,7 @@ export default function POS() {
   const pendingChangeReminderRef = useRef(null)
   const [postSaleModalOpen, setPostSaleModalOpen] = useState(false) // Modal de opciones post-venta
   const postSaleHandledRef = useRef(false) // Para abrir el modal una sola vez por venta
+  const [sendingLoyaltyCard, setSendingLoyaltyCard] = useState(false) // Enviando la tarjeta de sellos por WhatsApp
   const [isLookingUp, setIsLookingUp] = useState(false)
   // Establecimientos (anexos) de un RUC con varios locales: lista + modal para elegir.
   const [establishments, setEstablishments] = useState([])
@@ -12307,6 +12308,47 @@ ${companySettings?.businessName || 'Tu Empresa'}`
         isLoadingPreview={isLoadingPreview}
         sendingWhatsApp={sendingWhatsApp}
         defaultPhone={lastInvoiceData?.customer?.phone || customerData?.phone || ''}
+        // Tarjeta de sellos: solo si el programa está activo y la venta tuvo
+        // cliente con teléfono. loyaltyCard se recarga al completar la venta
+        // (su efecto depende de saleCompleted), así que los sellos ya incluyen
+        // el de esta compra.
+        loyalty={
+          companySettings?.loyaltyConfig?.enabled &&
+          (lastInvoiceData?.customer?.phone || customerData?.phone) &&
+          loyaltyCard
+            ? {
+                stamps: loyaltyCard.stamps || 0,
+                goal: loyaltyCard.goal || companySettings?.loyaltyConfig?.goal || 10,
+              }
+            : null
+        }
+        sendingLoyaltyCard={sendingLoyaltyCard}
+        onSendLoyaltyCard={async () => {
+          if (isDemoMode) { toast.error('No disponible en modo demo'); return }
+          const telCliente = lastInvoiceData?.customer?.phone || customerData?.phone
+          if (!telCliente) return
+          setSendingLoyaltyCard(true)
+          try {
+            const { getAuth } = await import('firebase/auth')
+            const { getWalletPassLink } = await import('@/services/loyaltyService')
+            const idToken = await getAuth().currentUser?.getIdToken()
+            const res = await getWalletPassLink(getBusinessId(), telCliente, idToken)
+            if (!res.success) { toast.error(res.error || 'No se pudo generar la tarjeta'); return }
+            const nombreNegocio = companySettings?.name || companySettings?.tradeName || companySettings?.businessName || 'nuestro negocio'
+            // El mismo mensaje que usa el gestor de Promociones: un solo link
+            // (cbrfy.link) que sirve para Apple y Google Wallet.
+            const texto = `Hola! Esta es tu tarjeta de sellos de ${nombreNegocio}. ` +
+              `Ya tienes ${res.stamps} de ${res.goal}. Agregala a tu celular: ${res.shortUrl || res.url}`
+            const digitos = String(telCliente).replace(/\D/g, '')
+            const numero = digitos.length === 9 ? `51${digitos}` : digitos
+            window.open(`https://wa.me/${numero}?text=${encodeURIComponent(texto)}`, '_blank')
+          } catch (error) {
+            console.error('No se pudo enviar la tarjeta de sellos:', error)
+            toast.error('No se pudo enviar la tarjeta')
+          } finally {
+            setSendingLoyaltyCard(false)
+          }
+        }}
         onPrintTicket={() => handlePrintTicket()}
         onPreview={async () => {
           setIsLoadingPreview(true)

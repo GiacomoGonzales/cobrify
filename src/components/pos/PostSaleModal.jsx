@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
-import { CheckCircle, Printer, Eye, Share2, Plus, Loader2 } from 'lucide-react'
+import { CheckCircle, Printer, Eye, Share2, Plus, Loader2, Stamp } from 'lucide-react'
 
 /**
  * Modal de confirmación post-venta. Muestra las opciones de comprobante (Ticket, Vista
@@ -27,6 +27,11 @@ export default function PostSaleModal({
   isLoadingPreview = false,
   sendingWhatsApp = false,
   defaultPhone = '',
+  // Tarjeta de sellos del cliente de ESTA venta ({ stamps, goal }), o null si
+  // el programa está apagado / la venta fue sin cliente con teléfono.
+  loyalty = null,
+  onSendLoyaltyCard,
+  sendingLoyaltyCard = false,
 }) {
   const [showPhone, setShowPhone] = useState(false)
   const [phone, setPhone] = useState('')
@@ -121,6 +126,34 @@ export default function PostSaleModal({
             )}
           </Button>
         </div>
+
+        {/* Tarjeta de sellos: el momento natural de ofrecerla es con el cliente
+            adelante, recién cobrado. El sello ya se dio solo al emitir; este
+            botón manda la tarjeta (Apple/Google Wallet) por WhatsApp. */}
+        {loyalty && (
+          <div className="flex items-center gap-3 bg-primary-50 border border-primary-200 rounded-lg p-3">
+            <Stamp className="w-5 h-5 text-primary-600 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-primary-900">
+                Sellos: {loyalty.stamps}/{loyalty.goal}
+              </p>
+              <p className="text-xs text-primary-700 truncate">
+                {loyalty.stamps >= loyalty.goal ? '¡Llegó a la meta! Puede canjear su premio' : 'Tarjeta de fidelidad'}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 border-primary-500 text-primary-700 hover:bg-primary-100"
+              onClick={onSendLoyaltyCard}
+              disabled={sendingLoyaltyCard}
+            >
+              {sendingLoyaltyCard
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <><Share2 className="w-4 h-4 mr-1" />Enviar tarjeta</>}
+            </Button>
+          </div>
+        )}
 
         {/* Nueva venta */}
         <Button

@@ -10,6 +10,8 @@ import {
   Stamp,
   Trophy,
   ChevronRight,
+  Send,
+  Settings,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -19,7 +21,7 @@ import Modal from '@/components/ui/Modal'
 import LoyaltyManager from '@/components/loyalty/LoyaltyManager'
 import { getProducts, createProduct } from '@/services/firestoreService'
 import { createRecipe } from '@/services/recipeService'
-import { getLoyaltyCards } from '@/services/loyaltyService'
+import { getLoyaltyCards, getWalletPassLink, redeemReward } from '@/services/loyaltyService'
 
 /**
  * Promociones: el escaparate de marketing del negocio en un solo lugar.
@@ -37,14 +39,20 @@ import { getLoyaltyCards } from '@/services/loyaltyService'
  * programados. Puntos NO por ahora: los sellos ya cumplen ese rol.
  */
 export default function Promotions() {
-  const { getBusinessId, isDemoMode } = useAppContext()
+  const { getBusinessId, isDemoMode, businessSettings } = useAppContext()
   const toast = useToast()
 
   const [tab, setTab] = useState('fidelidad') // 'fidelidad' | 'combos'
 
   // ── Fidelización ──
   const [isLoyaltyOpen, setIsLoyaltyOpen] = useState(false)
-  const [cardStats, setCardStats] = useState({ tarjetas: 0, sellos: 0, canjes: 0, cargando: true })
+  const [tarjetas, setTarjetas] = useState([])
+  const [cargandoTarjetas, setCargandoTarjetas] = useState(true)
+  const [buscarTarjeta, setBuscarTarjeta] = useState('')
+  const [accionandoId, setAccionandoId] = useState(null)
+
+  const nombreNegocio = businessSettings?.name || businessSettings?.tradeName || businessSettings?.businessName || ''
+  const metaDefault = businessSettings?.loyaltyConfig?.goal || 10
 
   // ── Combos ──
   const [products, setProducts] = useState([])
@@ -60,22 +68,66 @@ export default function Promotions() {
 
   useEffect(() => {
     if (!businessId) return
-    // Las estadísticas y el catálogo cargan por separado: si una falla, la otra vive.
+    // Las tarjetas y el catálogo cargan por separado: si una falla, la otra vive.
     getLoyaltyCards(businessId)
-      .then((cards) => {
-        setCardStats({
-          tarjetas: cards.length,
-          sellos: cards.reduce((s, c) => s + (c.stamps || 0), 0),
-          canjes: cards.reduce((s, c) => s + (c.rewardsRedeemed || 0), 0),
-          cargando: false,
-        })
-      })
-      .catch(() => setCardStats((p) => ({ ...p, cargando: false })))
+      .then((res) => setTarjetas(res?.success ? res.data : []))
+      .catch(() => {})
+      .finally(() => setCargandoTarjetas(false))
     getProducts(businessId)
       .then((r) => setProducts(r?.data || []))
       .catch(() => {})
       .finally(() => setLoadingProducts(false))
   }, [businessId])
+
+  // Las estadísticas se derivan de la misma lista que se muestra abajo.
+  const cardStats = useMemo(() => ({
+    tarjetas: tarjetas.length,
+    sellos: tarjetas.reduce((s, c) => s + (c.stamps || 0), 0),
+    canjes: tarjetas.reduce((s, c) => s + (c.rewardsRedeemed || 0), 0),
+    cargando: cargandoTarjetas,
+  }), [tarjetas, cargandoTarjetas])
+
+  const tarjetasFiltradas = useMemo(() => {
+    const q = buscarTarjeta.trim().toLowerCase()
+    if (!q) return tarjetas
+    return tarjetas.filter((t) =>
+      (t.customerName || '').toLowerCase().includes(q) || String(t.phone || t.id).includes(q))
+  }, [tarjetas, buscarTarjeta])
+
+  // Mismos flujos que el gestor (LoyaltyManager): un solo link cbrfy.link
+  // que sirve para Apple y Google Wallet según el celular del cliente.
+  const enviarTarjeta = async (tarjeta) => {
+    if (isDemoMode) { toast.error('No disponible en modo demo'); return }
+    setAccionandoId(`wa_${tarjeta.id}`)
+    try {
+      const { getAuth } = await import('firebase/auth')
+      const idToken = await getAuth().currentUser?.getIdToken()
+      const res = await getWalletPassLink(businessId, tarjeta.phone || tarjeta.id, idToken)
+      if (!res.success) { toast.error(res.error || 'No se pudo generar la tarjeta'); return }
+      const texto = `Hola! Esta es tu tarjeta de sellos de ${nombreNegocio || 'nuestro negocio'}. ` +
+        `Ya tienes ${res.stamps} de ${res.goal}. Agregala a tu celular: ${res.shortUrl || res.url}`
+      const digitos = String(tarjeta.phone || tarjeta.id).replace(/\D/g, '')
+      const numero = digitos.length === 9 ? `51${digitos}` : digitos
+      window.open(`https://wa.me/${numero}?text=${encodeURIComponent(texto)}`, '_blank')
+    } finally {
+      setAccionandoId(null)
+    }
+  }
+
+  const canjear = async (tarjeta) => {
+    if (isDemoMode) { toast.error('No disponible en modo demo'); return }
+    setAccionandoId(`canje_${tarjeta.id}`)
+    try {
+      const res = await redeemReward(businessId, tarjeta.phone || tarjeta.id)
+      if (!res.success) { toast.error(res.error || 'No se pudo canjear'); return }
+      toast.success(`Premio canjeado. Le quedan ${res.stamps} sellos`)
+      setTarjetas((prev) => prev.map((t) => t.id === tarjeta.id
+        ? { ...t, stamps: res.stamps, rewardsRedeemed: (t.rewardsRedeemed || 0) + 1 }
+        : t))
+    } finally {
+      setAccionandoId(null)
+    }
+  }
 
   const combos = useMemo(() => products.filter((p) => p.isCombo), [products])
 
@@ -210,22 +262,90 @@ export default function Promotions() {
             ))}
           </div>
 
+          {/* Clientes con tarjeta: la lista vive AQUÍ, a la vista — no dentro
+              del configurador (pedido de Giacomo). Configurar queda para el
+              diseño y las reglas del programa. */}
           <Card>
-            <CardContent className="py-6 flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
-              <div>
-                <h3 className="font-semibold text-gray-900">
-                  Tarjeta digital para Apple y Google Wallet
-                </h3>
-                <p className="text-sm text-gray-600 mt-1 max-w-xl">
-                  Diseña la tarjeta con tu logo y colores. Se comparte por WhatsApp con un solo
-                  link que funciona en iPhone y Android; los sellos se dan desde la ficha del
-                  cliente o al cobrar en el POS.
-                </p>
+            <CardContent className="py-5 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+                <h3 className="font-semibold text-gray-900">Clientes con tarjeta</h3>
+                <div className="flex gap-2">
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-3 top-2.5 text-gray-400" />
+                    <input
+                      type="text"
+                      value={buscarTarjeta}
+                      onChange={(e) => setBuscarTarjeta(e.target.value)}
+                      placeholder="Buscar por nombre o teléfono..."
+                      className="pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-primary-500 focus:border-transparent w-full sm:w-64"
+                    />
+                  </div>
+                  <Button variant="outline" onClick={() => setIsLoyaltyOpen(true)} className="shrink-0">
+                    <Settings className="w-4 h-4 mr-2" />
+                    Configurar
+                  </Button>
+                </div>
               </div>
-              <Button onClick={() => setIsLoyaltyOpen(true)} className="shrink-0">
-                <Gift className="w-4 h-4 mr-2" />
-                Configurar tarjeta
-              </Button>
+
+              {cargandoTarjetas ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                </div>
+              ) : tarjetasFiltradas.length === 0 ? (
+                <div className="text-center py-8">
+                  <CreditCard className="w-10 h-10 mx-auto text-gray-300 mb-3" />
+                  <p className="text-gray-600">
+                    {tarjetas.length === 0 ? 'Todavía no hay tarjetas' : 'Sin resultados para esa búsqueda'}
+                  </p>
+                  {tarjetas.length === 0 && (
+                    <p className="text-sm text-gray-400 mt-1">
+                      Se crean solas: activa el programa y vende con cliente seleccionado en el POS
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <ul className="divide-y divide-gray-100">
+                  {tarjetasFiltradas.map((t) => {
+                    const meta = t.goal || metaDefault
+                    const sellos = t.stamps || 0
+                    const completa = sellos >= meta
+                    return (
+                      <li key={t.id} className="flex items-center gap-3 py-2.5">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {t.customerName || 'Sin nombre'}
+                          </p>
+                          <p className="text-xs text-gray-500">{t.phone || t.id}</p>
+                        </div>
+                        <span className={`text-sm font-semibold whitespace-nowrap ${completa ? 'text-green-600' : 'text-gray-700'}`}>
+                          {sellos}/{meta}
+                        </span>
+                        {completa && (
+                          <Button
+                            size="sm" variant="outline"
+                            disabled={accionandoId === `canje_${t.id}`}
+                            onClick={() => canjear(t)}
+                          >
+                            {accionandoId === `canje_${t.id}`
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <><Gift className="w-3.5 h-3.5 mr-1" />Canjear</>}
+                          </Button>
+                        )}
+                        <Button
+                          size="sm" variant="ghost"
+                          title="Enviar su tarjeta por WhatsApp"
+                          disabled={accionandoId === `wa_${t.id}`}
+                          onClick={() => enviarTarjeta(t)}
+                        >
+                          {accionandoId === `wa_${t.id}`
+                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            : <Send className="w-3.5 h-3.5" />}
+                        </Button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
             </CardContent>
           </Card>
         </div>
