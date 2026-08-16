@@ -88,6 +88,16 @@ export const GUIDES = [
     load: () => import('./facturas.js'),
   },
   {
+    id: 'promociones',
+    route: '/app/promociones',
+    title: 'Promociones',
+    category: 'Ventas',
+    description: 'Fidelizar y vender más: tarjeta de sellos digital, combos a precio especial y cupones de descuento.',
+    keywords: 'promociones marketing fidelizacion tarjeta de sellos sello premio canjear meta wallet apple google combo precio especial ahorro cupon codigo descuento porcentaje monto vencimiento limite de usos VERANO10 campaña redes whatsapp',
+    modos: ['retail', 'restaurant', 'pharmacy', 'veterinary'],
+    load: () => import('./promociones.js'),
+  },
+  {
     id: 'clientes',
     route: '/app/clientes',
     title: 'Clientes',
