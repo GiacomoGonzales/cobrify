@@ -12005,13 +12005,15 @@ const walletSecrets = ['GOOGLE_WALLET_SA_KEY']
  * imagen ni marcar un punto en un mapa.
  */
 /**
- * Solo el primer nombre del cliente, en Mayúscula inicial. El nombre completo
- * ("María Del Carmen Pérez Quispe") se veía recargado en la tarjeta del
- * Wallet — pedido de Giacomo. Vale para Apple y Google por igual.
+ * El nombre del cliente COMPLETO, en Mayúsculas Iniciales. Se intentó mostrar
+ * solo el primer nombre, pero los clientes creados via RENIEC vienen con los
+ * APELLIDOS primero ("GONZALES GARCIA GIACOMO...") y salía el apellido solo —
+ * no hay forma confiable de saber cuál palabra es el nombre. Completo y en
+ * dos líneas (eso lo parte cada tarjeta). Vale para Apple y Google por igual.
  */
-function primerNombre(completo) {
-  const palabra = String(completo || '').trim().split(/\s+/)[0] || ''
-  return palabra ? palabra[0].toUpperCase() + palabra.slice(1).toLowerCase() : ''
+function nombreTarjeta(completo) {
+  return String(completo || '').trim().split(/\s+/).filter(Boolean)
+    .map((p) => p[0].toUpperCase() + p.slice(1).toLowerCase()).join(' ')
 }
 
 async function marcaDelNegocio(businessId) {
@@ -12138,7 +12140,7 @@ export const syncWalletPass = onDocumentWritten(
       await walletUpsertObject({
         businessId,
         phone: cardId, // el id del doc ES el telefono normalizado
-        nombreCliente: primerNombre(after.customerName),
+        nombreCliente: nombreTarjeta(after.customerName),
         sellos: after.stamps || 0,
         meta: after.goal || marca.meta,
         premio: marca.premio,
@@ -12202,7 +12204,7 @@ export const getWalletPassLink = onRequest(
       await walletUpsertClass(claseDesdeMarca(businessId, marca))
       await walletUpsertObject({
         businessId, phone: String(phone),
-        nombreCliente: primerNombre(card.customerName),
+        nombreCliente: nombreTarjeta(card.customerName),
         sellos: card.stamps || 0,
         meta: card.goal || marca.meta,
         premio: marca.premio,
@@ -12300,7 +12302,7 @@ export const appleWalletPass = onRequest(
         marca,
         sellos: card.stamps || 0,
         meta: card.goal || marca.meta,
-        nombreCliente: primerNombre(card.customerName),
+        nombreCliente: nombreTarjeta(card.customerName),
       })
 
       res.set('Content-Type', 'application/vnd.apple.pkpass')
