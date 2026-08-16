@@ -179,6 +179,7 @@ function Sidebar() {
       icon: Gift,
       label: 'Promociones',
       pageId: 'promotions',
+      menuId: 'promotions',
     },
     {
       path: '/productos',
@@ -557,6 +558,7 @@ function Sidebar() {
       icon: Gift,
       label: 'Promociones',
       pageId: 'promotions',
+      menuId: 'promotions',
     },
     {
       path: '/productos',
@@ -849,6 +851,7 @@ function Sidebar() {
       icon: Gift,
       label: 'Promociones',
       pageId: 'promotions',
+      menuId: 'promotions',
     },
     {
       path: '/productos',
@@ -1633,6 +1636,7 @@ function Sidebar() {
       icon: Gift,
       label: 'Promociones',
       pageId: 'promotions',
+      menuId: 'promotions',
     },
     {
       path: '/productos',
