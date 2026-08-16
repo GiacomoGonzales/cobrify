@@ -672,8 +672,12 @@ service cloud.firestore {
 
       // Subcollection: Cupones de descuento (Promociones). El ID del documento
       // es el código normalizado (VERANO10); el POS lo lee con un get directo.
+      // `get` es público a propósito: el catálogo online (comprador sin sesión)
+      // valida el código que el cliente escribe. Solo con el código EXACTO se
+      // llega al documento — `list` sigue cerrado, no se pueden enumerar.
       match /coupons/{couponId} {
-        allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+        allow get: if true;
+        allow list: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 

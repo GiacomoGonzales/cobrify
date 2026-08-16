@@ -17,6 +17,7 @@ import {
   formatQty,
   isBusinessOpen,
 } from '@/components/catalog/catalogHelpers'
+import { validateCoupon, normalizeCouponCode } from '@/services/couponService'
 import {
   X,
   Plus,
@@ -187,6 +188,53 @@ export default function CartDrawer({
     (sum, item) => sum + itemUnitInCatalogCcy(item) * item.quantity,
     0
   )
+
+  // ── Cupón (Promociones > Cupones) ──
+  // El comprador escribe el código y ve el total con descuento. El cupón
+  // viaja con el pedido / mensaje de WhatsApp; el descuento REAL sobre el
+  // comprobante lo aplica el comercio al cobrar en el POS con el mismo
+  // código (ahí se valida de nuevo y se cuenta el uso).
+  const [couponInput, setCouponInput] = useState('')
+  const [appliedCoupon, setAppliedCoupon] = useState(null)
+  const [validatingCoupon, setValidatingCoupon] = useState(false)
+  const [couponError, setCouponError] = useState('')
+
+  // Descuento en la moneda del catálogo. Los cupones de monto fijo están en
+  // PEN; en catálogos USD se convierten con el mismo TC que los precios.
+  const couponDiscountInCcy = (() => {
+    if (!appliedCoupon) return 0
+    const bruto = appliedCoupon.type === 'percent'
+      ? totalInCatalogCcy * (appliedCoupon.value / 100)
+      : (catalogCurrency === 'USD'
+          ? convertFromBase(appliedCoupon.value, 'USD', catalogExchangeRate || 1)
+          : appliedCoupon.value)
+    // Nunca más que el total: el pedido no puede quedar negativo.
+    return Math.min(Math.round(bruto * 100) / 100, totalInCatalogCcy)
+  })()
+  const totalConCupon = Math.max(0, totalInCatalogCcy - couponDiscountInCcy)
+
+  const aplicarCupon = async () => {
+    const codigo = couponInput.trim()
+    if (!codigo || !business?.id) return
+    setValidatingCoupon(true)
+    setCouponError('')
+    try {
+      const res = await validateCoupon(business.id, codigo, { database: db })
+      if (!res.success) { setCouponError(res.error); return }
+      setAppliedCoupon(res.coupon)
+      setCouponInput('')
+    } catch {
+      setCouponError('No se pudo validar el cupón')
+    } finally {
+      setValidatingCoupon(false)
+    }
+  }
+
+  // El cupón vale para UN pedido: al vaciarse el carrito (pedido enviado o
+  // abandonado) se limpia solo.
+  useEffect(() => {
+    if (cart.length === 0) { setAppliedCoupon(null); setCouponInput(''); setCouponError('') }
+  }, [cart.length])
   // Estados para modo restaurante / tienda virtual retail
   // Retail: siempre 'delivery' (siempre pide dirección, no hay toggle)
   const defaultOrderType = isRestaurantMenu
@@ -207,6 +255,9 @@ export default function CartDrawer({
   const [orderNumber, setOrderNumber] = useState('')
   const [orderError, setOrderError] = useState('')
   const [orderConfirmItems, setOrderConfirmItems] = useState([])
+  // Foto del cupón al confirmar: el carrito (y con él appliedCoupon) se vacía
+  // tras crear el pedido, pero el mensaje de WhatsApp se arma después.
+  const [orderConfirmCoupon, setOrderConfirmCoupon] = useState(null)
 
   useEffect(() => {
     if (isOpen) {
@@ -262,6 +313,7 @@ export default function CartDrawer({
         setOrderSuccess(false)
         setOrderNumber('')
         setOrderConfirmItems([])
+        setOrderConfirmCoupon(null)
         setOrderType(defaultOrderType)
         setTableNumber(initialTableNumber)
         setCustomerName('')
@@ -339,6 +391,7 @@ export default function CartDrawer({
         await new Promise(resolve => setTimeout(resolve, 1500)) // Simular delay
         setOrderNumber('#DEMO')
         setOrderConfirmItems([...cart])
+        setOrderConfirmCoupon(appliedCoupon ? { ...appliedCoupon } : null)
         setOrderSuccess(true)
         cart.forEach(item => onRemove(item.cartItemId || item.id))
         return
@@ -410,10 +463,20 @@ export default function CartDrawer({
       //   orderTotalInBase = suma de items.totalInBase (PEN equivalente).
       // En PEN: ambos son iguales (suma de unitPrice * quantity).
       // IMPORTANTE: la configuración fiscal vive en business.emissionConfig.taxConfig.
-      const orderTotalDisplay = items.reduce((sum, it) => sum + it.total, 0)
-      const orderTotalInBase = isCatalogUSD
+      const orderGrossDisplay = items.reduce((sum, it) => sum + it.total, 0)
+      const orderGrossInBase = isCatalogUSD
         ? items.reduce((sum, it) => sum + (it.totalInBase || 0), 0)
-        : orderTotalDisplay
+        : orderGrossDisplay
+      // Cupón: el total del pedido queda NETO (es lo que el cliente vio y va
+      // a pagar). El descuento en PEN base se guarda aparte para el POS.
+      const couponDiscDisplay = appliedCoupon ? Math.min(couponDiscountInCcy, orderGrossDisplay) : 0
+      const couponDiscInBase = appliedCoupon
+        ? (appliedCoupon.type === 'percent'
+            ? Math.round(orderGrossInBase * (appliedCoupon.value / 100) * 100) / 100
+            : Math.min(appliedCoupon.value, orderGrossInBase))
+        : 0
+      const orderTotalDisplay = Math.max(0, orderGrossDisplay - couponDiscDisplay)
+      const orderTotalInBase = Math.max(0, orderGrossInBase - couponDiscInBase)
       const taxCfg = business.emissionConfig?.taxConfig || business.taxConfig || {}
       const igvRate = taxCfg.igvRate || 18
       const igvExempt = taxCfg.igvExempt === true
@@ -444,6 +507,15 @@ export default function CartDrawer({
         orderNumber: orderNum,
         orderType: orderType,
         source: 'menu_digital', // Identificar que viene de la carta digital
+
+        // Cupón del comprador: el total del pedido ya va neto. Al cobrar en el
+        // POS, el cajero escribe este mismo código y el descuento se aplica al
+        // comprobante (con validación y conteo de usos reales).
+        ...(appliedCoupon ? {
+          couponCode: appliedCoupon.id,
+          couponDiscount: Math.round(couponDiscDisplay * 100) / 100,
+          couponDiscountInBase: Math.round(couponDiscInBase * 100) / 100,
+        } : {}),
 
         // Mesa (solo si aplica)
         ...(orderType === 'dine_in' && tableNumber && { tableNumber: tableNumber.trim() }),
@@ -543,6 +615,7 @@ export default function CartDrawer({
 
           setOrderNumber(activeTableOrder.orderNumber || orderNum)
           setOrderConfirmItems([...cart])
+        setOrderConfirmCoupon(appliedCoupon ? { ...appliedCoupon } : null)
           setOrderSuccess(true)
 
           // Limpiar carrito y recargar orden
@@ -623,6 +696,7 @@ export default function CartDrawer({
 
       setOrderNumber(orderNum)
       setOrderConfirmItems([...cart])
+        setOrderConfirmCoupon(appliedCoupon ? { ...appliedCoupon } : null)
       setOrderSuccess(true)
 
       // Limpiar carrito y recargar orden activa
@@ -707,9 +781,22 @@ export default function CartDrawer({
                     (sum, item) => sum + itemUnitInCatalogCcy(item) * item.quantity,
                     0
                   )
+                  // Cupón: mismo cálculo que el pedido guardado (total neto).
+                  const cuponDesc = orderConfirmCoupon
+                    ? Math.min(
+                        orderConfirmCoupon.type === 'percent'
+                          ? totalDisplay * (orderConfirmCoupon.value / 100)
+                          : (catalogCurrency === 'USD'
+                              ? convertFromBase(orderConfirmCoupon.value, 'USD', catalogExchangeRate || 1)
+                              : orderConfirmCoupon.value),
+                        totalDisplay)
+                    : 0
                   let msg = `🛒 *¡Hola! He hecho un pedido ${orderType === 'delivery' ? 'DELIVERY' : 'PARA RECOGER'}*\n\n`
                   msg += `📋 *Pedido ${orderNumber}*\n${orderItems}\n\n`
-                  if (showTotal) {
+                  if (showTotal && orderConfirmCoupon) {
+                    msg += `🎟️ *Cupón ${orderConfirmCoupon.id}:* − ${formatCurrency(cuponDesc, catalogCurrency)}\n`
+                    msg += `💰 *Total: ${formatCurrency(Math.max(0, totalDisplay - cuponDesc), catalogCurrency)}*\n\n`
+                  } else if (showTotal) {
                     msg += `💰 *Total: ${formatCurrency(totalDisplay, catalogCurrency)}*\n\n`
                   } else {
                     msg += `💰 *Total: A consultar*\n\n`
@@ -874,10 +961,63 @@ export default function CartDrawer({
             <div className="border-t flex flex-col max-h-[60vh]">
             <div className="flex-1 overflow-y-auto catalog-scrollbar p-6 pb-2 space-y-4">
               {showPrices && (
-                <div className="flex items-center justify-between text-lg">
-                  <span className="text-gray-600">Total</span>
-                  <span className="text-2xl font-bold">{formatCurrency(totalInCatalogCcy, catalogCurrency)}</span>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-lg">
+                    <span className="text-gray-600">Total</span>
+                    <span className={appliedCoupon ? 'text-base text-gray-400 line-through' : 'text-2xl font-bold'}>
+                      {formatCurrency(totalInCatalogCcy, catalogCurrency)}
+                    </span>
+                  </div>
+                  {appliedCoupon && (
+                    <>
+                      <div className="flex items-center justify-between text-sm text-green-600">
+                        <span>Cupón {appliedCoupon.id}</span>
+                        <span>− {formatCurrency(couponDiscountInCcy, catalogCurrency)}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-lg">
+                        <span className="text-gray-900 font-semibold">A pagar</span>
+                        <span className="text-2xl font-bold">{formatCurrency(totalConCupon, catalogCurrency)}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
+              )}
+
+              {/* Cupón de descuento */}
+              {showPrices && (
+                appliedCoupon ? (
+                  <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-4 py-2.5">
+                    <span className="text-sm font-mono font-semibold text-green-800">{appliedCoupon.id}</span>
+                    <button
+                      onClick={() => setAppliedCoupon(null)}
+                      className="text-xs font-medium text-red-500 hover:text-red-700"
+                    >
+                      Quitar cupón
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={couponInput}
+                        onChange={(e) => { setCouponInput(normalizeCouponCode(e.target.value)); setCouponError('') }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') aplicarCupon() }}
+                        placeholder="¿Tienes un cupón?"
+                        className="flex-1 min-w-0 px-4 py-2.5 rounded-xl border border-gray-300 focus:ring-2 focus:ring-gray-400 focus:border-gray-400 font-mono text-sm"
+                      />
+                      <button
+                        onClick={aplicarCupon}
+                        disabled={!couponInput.trim() || validatingCoupon}
+                        className="shrink-0 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-opacity hover:opacity-80 disabled:opacity-40"
+                        style={{ backgroundColor: getCatalogAccent(business) }}
+                      >
+                        {validatingCoupon ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Aplicar'}
+                      </button>
+                    </div>
+                    {couponError && <p className="text-xs text-red-500 mt-1.5">{couponError}</p>}
+                  </div>
+                )
               )}
 
               {/* Opciones de pedido (restaurante o tienda virtual retail) */}
@@ -1125,7 +1265,7 @@ export default function CartDrawer({
                 </button>
               ) : (
                 <button
-                  onClick={onCheckout}
+                  onClick={() => onCheckout(appliedCoupon ? { ...appliedCoupon, discount: couponDiscountInCcy } : null)}
                   className="w-full py-4 text-white rounded-2xl font-semibold text-lg transition-opacity hover:opacity-80 flex items-center justify-center gap-2"
                   style={{ backgroundColor: getCatalogAccent(business) }}
                 >

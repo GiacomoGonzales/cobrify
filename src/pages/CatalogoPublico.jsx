@@ -886,8 +886,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     return cart.filter(i => i.id === productId).reduce((sum, item) => sum + item.quantity, 0)
   }
 
-  // Checkout por WhatsApp
-  const handleCheckout = () => {
+  // Checkout por WhatsApp. `cupon` llega del CartDrawer si el comprador
+  // aplicó uno ({ id, type, value, discount } — discount ya en la moneda del
+  // catálogo): se muestra en el mensaje y el total va neto.
+  const handleCheckout = (cupon = null) => {
     // Verificar horario de atención
     const hoursStatus = isBusinessOpen(business?.businessHours)
     if (!hoursStatus.open) {
@@ -950,8 +952,12 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     if (showTotal) {
       // Total ya en moneda del catálogo, respeta priceUSD por item.
       const totalDisplay = cart.reduce((sum, item) => sum + itemDisplay(item) * item.quantity, 0)
+      const lineaCupon = cupon
+        ? `\n🎟️ *Cupón ${cupon.id}:* − ${formatCurrency(cupon.discount, catalogCurrency)}`
+        : ''
+      const totalFinal = cupon ? Math.max(0, totalDisplay - cupon.discount) : totalDisplay
       message = encodeURIComponent(
-        `¡Hola! Me gustaría hacer un pedido:\n\n${items}\n\n*Total: ${formatCurrency(totalDisplay, catalogCurrency)}*\n\nGracias!`
+        `¡Hola! Me gustaría hacer un pedido:\n\n${items}${lineaCupon}\n\n*Total: ${formatCurrency(totalFinal, catalogCurrency)}*\n\nGracias!`
       )
     } else {
       message = encodeURIComponent(

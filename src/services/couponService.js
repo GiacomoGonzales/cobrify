@@ -88,11 +88,13 @@ export const deleteCoupon = async (businessId, code) => {
  * (dos cajas podrían colarse en el último uso); el conteo real lo hace
  * redeemCoupon al emitir.
  */
-export const validateCoupon = async (businessId, code) => {
+export const validateCoupon = async (businessId, code, { database } = {}) => {
   try {
     const id = normalizeCouponCode(code)
     if (!id) return { success: false, error: 'Escribe el código del cupón' }
-    const snap = await getDoc(doc(couponsRef(businessId), id))
+    // El catálogo público valida con catalogDb (sin sesión); el POS con la
+    // instancia normal. Mismo criterio en ambos mundos.
+    const snap = await getDoc(doc(database || db, 'businesses', businessId, 'coupons', id))
     if (!snap.exists()) return { success: false, error: 'Ese cupón no existe' }
     const c = snap.data()
     if (!c.active) return { success: false, error: 'Ese cupón está desactivado' }
