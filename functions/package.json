@@ -30,8 +30,5 @@
     "xml-crypto": "^6.1.2",
     "xmlbuilder2": "^4.0.3"
   },
-  "devDependencies": {
-    "firebase-functions-test": "^3.1.0"
-  },
   "private": true
 }
