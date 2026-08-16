@@ -48,6 +48,46 @@ export const GUIDES = [
     load: () => import('./flujo-insumos.js'),
   },
   {
+    id: 'vender-al-credito',
+    route: null, // recorrido: cruza POS, Ventas, Clientes y Reportes
+    title: 'Vender al crédito y cobrar después',
+    category: 'Cómo hacer',
+    description: 'El circuito completo: emitir con vencimiento y cuotas, registrar cada cobro y vigilar quién te debe.',
+    keywords: 'credito fiado deuda deber vencimiento cuotas cronograma registrar pago abono parcial saldo pendiente por cobrar vencidas cliente debe estados de pago cobranza',
+    modos: null,
+    load: () => import('./vender-al-credito.js'),
+  },
+  {
+    id: 'corregir-comprobante',
+    route: null, // recorrido: la tabla de decision vive tambien en la guia de Ventas
+    title: 'Corregir o anular un comprobante emitido',
+    category: 'Cómo hacer',
+    description: 'Qué corresponde según qué pasó: nota de crédito, comunicación de baja, editar y reenviar, o anular la nota de venta.',
+    keywords: 'corregir anular equivocacion error borrar eliminar comprobante factura boleta nota de credito debito motivo devolucion comunicacion de baja 7 dias rechazado sunat reenviar reemitir stock devolver dinero egreso',
+    modos: null,
+    load: () => import('./corregir-comprobante.js'),
+  },
+  {
+    id: 'varias-sucursales',
+    route: null, // recorrido: selector del header, series, precios, usuarios y stock
+    title: 'Trabajar con varias sucursales',
+    category: 'Cómo hacer',
+    description: 'Sucursal vs almacén, el selector del encabezado, series por local, precios y catálogo por sede, personal y transferencias.',
+    keywords: 'sucursal sucursales sede local multi tienda almacen selector encabezado series por sucursal precios por sucursal catalogo por sucursal usuarios acceso transferencia stock entre locales consolidado mesas por sede',
+    modos: null,
+    load: () => import('./varias-sucursales.js'),
+  },
+  {
+    id: 'cuanto-gano',
+    route: null, // recorrido: costos + gastos -> Ganancia Final
+    title: 'Saber cuánto ganas de verdad',
+    category: 'Cómo hacer',
+    description: 'Cargar costos, registrar gastos y leer la Ganancia Final — y por qué Rentabilidad no es tu margen.',
+    keywords: 'ganancia utilidad margen cuanto gane gano rentabilidad costo de productos cargar costos gastos registrar ganancia final resumen general excel contador stock inicial compras del periodo activo equipamiento margen inflado 100',
+    modos: null,
+    load: () => import('./cuanto-gano.js'),
+  },
+  {
     id: 'prestamos-cartera',
     route: '/app/prestamos-cartera',
     title: 'Préstamos (Cartera)',
