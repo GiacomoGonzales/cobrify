@@ -2735,6 +2735,41 @@ export default function Reports() {
     )
   }
 
+  /**
+   * Descarga del reporte ACTIVO — un solo botón junto a las pestañas.
+   *
+   * Antes cada reporte tenía su botón en una fila propia que quedaba casi
+   * toda vacía (reporte del dueño, 16-ago). Zonas y Hotel no tienen
+   * exportador, y el detalle de una marca conserva el suyo (exporta ESA
+   * marca, no la lista).
+   */
+  const exportarReporteActual = async () => {
+    switch (selectedReport) {
+      case 'overview':
+        return exportGeneralReport({ stats, salesByMonth: salesByPeriod, topProducts, topCustomers, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })
+      case 'sales':
+        return exportSalesReport({ stats, salesByMonth: salesByPeriod, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })
+      case 'products':
+        return exportProductsReport({ topProducts, salesByCategory, salesByBrand, products, productCategories, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })
+      case 'brands':
+        return exportBrandsReport({ salesByBrand, salesByVariant, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })
+      case 'customers':
+        return exportCustomersReport({ topCustomers, customers, filteredInvoices, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })
+      case 'sellers':
+        return exportSellersReport()
+      case 'expenses':
+        return exportExpensesReport()
+      case 'profitability':
+        return exportProfitabilityReport()
+      default:
+        return null
+    }
+  }
+  const reportesExportables = ['overview', 'sales', 'products', 'brands', 'customers', 'sellers', 'expenses', 'profitability']
+  const puedeExportar = !hidePrivateData
+    && reportesExportables.includes(selectedReport)
+    && !(selectedReport === 'brands' && selectedBrandName)
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -2749,74 +2784,84 @@ export default function Reports() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Reportes</h1>
-            <GuideLink />
-          </div>
-          <p className="text-sm sm:text-base text-gray-600 mt-1">
-            Análisis detallado de tu negocio
-          </p>
+      {/* Cabecera: el titulo en su propia fila. Antes compartia fila con los
+          filtros de periodo y, al no caber, las fechas del rango personalizado
+          se desparramaban alrededor del titulo (reporte del dueno, 16-ago). */}
+      <div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Reportes</h1>
+          <GuideLink />
         </div>
-        <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
-          <div className="flex flex-wrap items-center gap-2">
-            {[
-              { value: 'today', label: 'Hoy' },
-              { value: 'week', label: 'Semana' },
-              { value: 'month', label: 'Este mes' },
-              { value: 'quarter', label: 'Trimestre' },
-              { value: 'year', label: 'Este año' },
-              { value: 'all', label: 'Todo' },
-              { value: 'custom', label: 'Personalizado' },
-            ].map(option => (
-              <button
-                key={option.value}
-                onClick={() => { setDateRange(option.value); setSelectedMonth('') }}
-                className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                  dateRange === option.value
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-            {/* Elegir un mes concreto sin tener que tipear el rango a mano ni
-                acordarse de en que dia termina cada mes. */}
-            <MonthSelect
-              value={selectedMonth}
-              onSelect={(m) => {
-                if (!m) { setSelectedMonth(''); return }
-                setSelectedMonth(m.value)
-                setDateRange('custom')
-                setCustomStartDate(m.start)
-                setCustomEndDate(m.end)
-              }}
-            />
-            {dateRange === 'custom' && (
-              <>
-                <input
-                  type="date"
-                  value={customStartDate}
-                  onChange={e => { setCustomStartDate(e.target.value); setSelectedMonth('') }}
-                  className="px-2 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm w-[130px]"
-                />
-                <span className="text-gray-400 text-sm">—</span>
-                <input
-                  type="date"
-                  value={customEndDate}
-                  onChange={e => { setCustomEndDate(e.target.value); setSelectedMonth('') }}
-                  className="px-2 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm w-[130px]"
-                />
-              </>
-            )}
-          </div>
+        <p className="text-sm sm:text-base text-gray-600 mt-1">
+          Análisis detallado de tu negocio
+        </p>
+      </div>
+
+      {/* Barra de periodo: chips, mes y rango JUNTOS en una barra propia.
+          Si no cabe, envuelve dentro de la barra y en orden — las fechas
+          nunca se separan entre si. */}
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm px-3 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {[
+            { value: 'today', label: 'Hoy' },
+            { value: 'week', label: 'Semana' },
+            { value: 'month', label: 'Este mes' },
+            { value: 'quarter', label: 'Trimestre' },
+            { value: 'year', label: 'Este año' },
+            { value: 'all', label: 'Todo' },
+            { value: 'custom', label: 'Personalizado' },
+          ].map(option => (
+            <button
+              key={option.value}
+              onClick={() => { setDateRange(option.value); setSelectedMonth('') }}
+              className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                dateRange === option.value
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <div className="hidden sm:block h-6 w-px bg-gray-200" />
+        <div className="flex flex-wrap items-center gap-1.5">
+          {/* Elegir un mes concreto sin tener que tipear el rango a mano ni
+              acordarse de en que dia termina cada mes. */}
+          <MonthSelect
+            value={selectedMonth}
+            onSelect={(m) => {
+              if (!m) { setSelectedMonth(''); return }
+              setSelectedMonth(m.value)
+              setDateRange('custom')
+              setCustomStartDate(m.start)
+              setCustomEndDate(m.end)
+            }}
+          />
+          {dateRange === 'custom' && (
+            <>
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={e => { setCustomStartDate(e.target.value); setSelectedMonth('') }}
+                className="px-2 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm w-[130px]"
+              />
+              <span className="text-gray-400 text-sm">—</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={e => { setCustomEndDate(e.target.value); setSelectedMonth('') }}
+                className="px-2 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm w-[130px]"
+              />
+            </>
+          )}
         </div>
       </div>
 
-      {/* Tabs de reportes */}
-      <div className="flex gap-2 overflow-x-auto pb-2">
+      {/* Tabs de reportes + el boton de descarga del reporte activo. Antes
+          cada reporte tenia su boton en una fila propia casi vacia. */}
+      <div className="flex items-start gap-2">
+        <div className="flex gap-2 overflow-x-auto pb-2 flex-1 min-w-0">
         <button
           onClick={() => setSelectedReport('overview')}
           className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors shadow-sm ${
@@ -2930,24 +2975,23 @@ export default function Reports() {
             Hotel
           </button>
         )}
+        </div>
+        {puedeExportar && (
+          <button
+            onClick={exportarReporteActual}
+            className="shrink-0 flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm font-medium"
+            title="Descargar este reporte en Excel"
+          >
+            <Download className="w-4 h-4" />
+            <span className="hidden md:inline">Descargar</span>
+            Excel
+          </button>
+        )}
       </div>
 
       {/* Resumen General */}
       {selectedReport === 'overview' && (
         <>
-          {/* Botón de exportación */}
-          <div className="flex justify-end">
-            {!hidePrivateData && (
-            <button
-              onClick={async () => await exportGeneralReport({ stats, salesByMonth: salesByPeriod, topProducts, topCustomers, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              Descargar Reporte General (Excel)
-            </button>
-            )}
-          </div>
-
           {/* KPIs principales */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 lg:gap-3">
             <Card>
@@ -3175,19 +3219,6 @@ export default function Reports() {
       {/* Reporte de Ventas */}
       {selectedReport === 'sales' && (
         <>
-          {/* Botón de exportación */}
-          <div className="flex justify-end">
-            {!hidePrivateData && (
-            <button
-              onClick={async () => await exportSalesReport({ stats, salesByMonth: salesByPeriod, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              Descargar Reporte de Ventas (Excel)
-            </button>
-            )}
-          </div>
-
           {/* Resumen de Ventas */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <Card>
@@ -3784,19 +3815,6 @@ export default function Reports() {
       {/* Reporte de Productos */}
       {selectedReport === 'products' && (
         <>
-          {/* Botón de exportación */}
-          <div className="flex justify-end">
-            {!hidePrivateData && (
-            <button
-              onClick={async () => await exportProductsReport({ topProducts, salesByCategory, salesByBrand, products, productCategories, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              Descargar Reporte de Productos (Excel)
-            </button>
-            )}
-          </div>
-
           {/* Gráficos de Top 5 Productos y Categorías */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Gráfico de Top 5 Productos */}
@@ -4612,20 +4630,6 @@ export default function Reports() {
       {/* Reporte de Marcas — LISTA (vista por defecto, sin marca seleccionada) */}
       {selectedReport === 'brands' && !selectedBrandName && (
         <>
-          {/* Botón de exportación */}
-          <div className="flex justify-end">
-            {!hidePrivateData && (
-            <button
-              onClick={async () => await exportBrandsReport({ salesByBrand, salesByVariant, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })}
-              disabled={salesByBrand.length === 0}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Download className="w-4 h-4" />
-              Descargar Reporte de Marcas (Excel)
-            </button>
-            )}
-          </div>
-
           {/* KPI cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <Card>
@@ -4927,19 +4931,6 @@ export default function Reports() {
       {/* Reporte de Clientes */}
       {selectedReport === 'customers' && (
         <>
-          {/* Botón de exportación */}
-          <div className="flex justify-end">
-            {!hidePrivateData && (
-            <button
-              onClick={async () => await exportCustomersReport({ topCustomers, customers, filteredInvoices, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              Descargar Reporte de Clientes (Excel)
-            </button>
-            )}
-          </div>
-
           {/* Gráfico de Top 10 Clientes */}
           <Card>
             <CardHeader>
@@ -5194,17 +5185,6 @@ export default function Reports() {
       {/* Reporte por Vendedores */}
       {selectedReport === 'sellers' && (
         <>
-          {/* Botón de exportación */}
-          <div className="flex justify-end">
-            <button
-              onClick={exportSellersReport}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              Descargar Reporte de Vendedores (Excel)
-            </button>
-          </div>
-
           {/* Resumen de ventas por vendedor */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card>
@@ -5492,19 +5472,6 @@ export default function Reports() {
       {/* Reporte de Gastos */}
       {selectedReport === 'expenses' && (
         <>
-          {/* Botón de exportación */}
-          <div className="flex justify-end">
-            {!hidePrivateData && (
-            <button
-              onClick={exportExpensesReport}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              Descargar Reporte de Gastos (Excel)
-            </button>
-            )}
-          </div>
-
           {/* KPIs de Gastos */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card>
@@ -5796,19 +5763,6 @@ export default function Reports() {
       {/* Reporte de Rentabilidad */}
       {selectedReport === 'profitability' && (
         <>
-          {/* Botón de exportación */}
-          <div className="flex justify-end">
-            {!hidePrivateData && (
-            <button
-              onClick={exportProfitabilityReport}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              Descargar Reporte de Rentabilidad (Excel)
-            </button>
-            )}
-          </div>
-
           {/* AVISO cuando se vendió sin comprar en el período.
               Este reporte compara lo que ENTRÓ contra lo que se GASTÓ ese mes;
               no mira el costo de la mercadería vendida. Un negocio que vende
