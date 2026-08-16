@@ -48,6 +48,7 @@ export const COMMON_PAGES = [
 
 // ============ PÁGINAS MODO RETAIL ============
 export const RETAIL_PAGES = [
+  { id: 'promotions', name: 'Promociones', path: '/promociones', category: 'ventas' },
   // Operaciones
   { id: 'online-orders', name: 'Pedidos Online', path: '/pedidos-online', category: 'ventas' },
   // Documentos
@@ -79,6 +80,7 @@ export const RETAIL_PAGES = [
 
 // ============ PÁGINAS MODO RESTAURANTE ============
 export const RESTAURANT_PAGES = [
+  { id: 'promotions', name: 'Promociones', path: '/promociones', category: 'ventas' },
   // Operaciones
   { id: 'tables', name: 'Mesas', path: '/mesas', category: 'operaciones' },
   { id: 'orders', name: 'Órdenes', path: '/ordenes', category: 'operaciones' },
@@ -104,6 +106,7 @@ export const RESTAURANT_PAGES = [
 
 // ============ PÁGINAS MODO FARMACIA ============
 export const PHARMACY_PAGES = [
+  { id: 'promotions', name: 'Promociones', path: '/promociones', category: 'ventas' },
   // Inventario
   { id: 'inventory', name: 'Inventario', path: '/inventario', category: 'inventario' },
   { id: 'warehouses', name: 'Almacenes', path: '/almacenes', category: 'inventario' },
@@ -138,6 +141,7 @@ export const REAL_ESTATE_PAGES = [
 
 // ============ PÁGINAS MODO VETERINARIA ============
 export const VETERINARY_PAGES = [
+  { id: 'promotions', name: 'Promociones', path: '/promociones', category: 'ventas' },
   { id: 'vet-agenda', name: 'Agenda de Citas', path: '/agenda-veterinaria', category: 'veterinaria' },
   { id: 'vet-alerts', name: 'Recordatorios Veterinarios', path: '/alertas-veterinaria', category: 'veterinaria' },
   // Mismo gap que farmacia: el sidebar veterinario tiene Pedidos Online pero

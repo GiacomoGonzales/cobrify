@@ -74,6 +74,7 @@ import {
   Facebook,
   HelpCircle,
   HandCoins,
+  Gift,
 } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -172,6 +173,12 @@ function Sidebar() {
       icon: Users,
       label: 'Clientes',
       pageId: 'customers',
+    },
+    {
+      path: '/promociones',
+      icon: Gift,
+      label: 'Promociones',
+      pageId: 'promotions',
     },
     {
       path: '/productos',
@@ -546,6 +553,12 @@ function Sidebar() {
       pageId: 'customers',
     },
     {
+      path: '/promociones',
+      icon: Gift,
+      label: 'Promociones',
+      pageId: 'promotions',
+    },
+    {
       path: '/productos',
       icon: UtensilsCrossed,
       // Transición hacia "Productos" a secas: el resto del sistema (la página,
@@ -830,6 +843,12 @@ function Sidebar() {
       icon: Users,
       label: 'Clientes',
       pageId: 'customers',
+    },
+    {
+      path: '/promociones',
+      icon: Gift,
+      label: 'Promociones',
+      pageId: 'promotions',
     },
     {
       path: '/productos',
@@ -1608,6 +1627,12 @@ function Sidebar() {
       icon: PawPrint,
       label: 'Pacientes',
       pageId: 'customers',
+    },
+    {
+      path: '/promociones',
+      icon: Gift,
+      label: 'Promociones',
+      pageId: 'promotions',
     },
     {
       path: '/productos',

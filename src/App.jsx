@@ -13,6 +13,7 @@ import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import InvoiceList from './pages/InvoiceList'
 import Customers from './pages/Customers'
+import Promotions from './pages/Promotions'
 import Products from './pages/Products'
 import Settings from './pages/Settings'
 import POS from './pages/POS'
@@ -239,6 +240,7 @@ function App() {
               <Route path="cotizaciones/editar/:id" element={<CreateQuotation />} />
               <Route path="guias-remision" element={<DispatchGuides />} />
               <Route path="clientes" element={<Customers />} />
+              <Route path="promociones" element={<Promotions />} />
               <Route path="vendedores" element={<Sellers />} />
               <Route path="productos" element={<Products />} />
               <Route path="inventario" element={<Inventory />} />
@@ -288,6 +290,7 @@ function App() {
               <Route path="cotizaciones/nueva" element={<CreateQuotation />} />
               <Route path="cotizaciones/editar/:id" element={<CreateQuotation />} />
               <Route path="clientes" element={<Customers />} />
+              <Route path="promociones" element={<Promotions />} />
               <Route path="control-pagos-alumnos" element={<StudentPaymentControl />} />
               <Route path="vendedores" element={<Sellers />} />
               <Route path="productos" element={<Products />} />
@@ -328,6 +331,7 @@ function App() {
               <Route path="cotizaciones/editar/:id" element={<CreateQuotation />} />
               <Route path="guias-remision" element={<DispatchGuides />} />
               <Route path="clientes" element={<Customers />} />
+              <Route path="promociones" element={<Promotions />} />
               <Route path="productos" element={<Products />} />
               <Route path="inventario" element={<Inventory />} />
               <Route path="almacenes" element={<Warehouses />} />
@@ -365,6 +369,7 @@ function App() {
               <Route path="pos" element={<POS />} />
               <Route path="facturas" element={<InvoiceList />} />
               <Route path="clientes" element={<Customers />} />
+              <Route path="promociones" element={<Promotions />} />
               <Route path="productos" element={<Products />} />
               <Route path="inventario" element={<Inventory />} />
               <Route path="almacenes" element={<Warehouses />} />
@@ -390,6 +395,7 @@ function App() {
               <Route path="pos" element={<POS />} />
               <Route path="facturas" element={<InvoiceList />} />
               <Route path="clientes" element={<Customers />} />
+              <Route path="promociones" element={<Promotions />} />
               <Route path="productos" element={<Products />} />
               <Route path="inventario" element={<Inventory />} />
               <Route path="almacenes" element={<Warehouses />} />
@@ -427,6 +433,7 @@ function App() {
               <Route path="caja" element={<CashRegister />} />
               <Route path="facturas" element={<InvoiceList />} />
               <Route path="clientes" element={<Customers />} />
+              <Route path="promociones" element={<Promotions />} />
               <Route path="productos" element={<Products />} />
               <Route path="proyectos" element={<Projects />} />
               <Route path="salidas-almacen" element={<WarehouseExits />} />
@@ -472,6 +479,7 @@ function App() {
               <Route path="guias-remision" element={<DispatchGuides />} />
               <Route path="guias-transportista" element={<CarrierDispatchGuides />} />
               <Route path="clientes" element={<Customers />} />
+              <Route path="promociones" element={<Promotions />} />
               <Route path="control-pagos-alumnos" element={<StudentPaymentControl />} />
               <Route path="vendedores" element={<Sellers />} />
               <Route path="asistencia" element={<Attendance />} />
