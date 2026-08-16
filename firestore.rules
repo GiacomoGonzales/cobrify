@@ -681,6 +681,13 @@ service cloud.firestore {
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
+      // Subcollection: Descuentos programados (Promociones). Solo los lee el
+      // POS con sesión — no hay acceso público.
+      match /scheduledDiscounts/{promoId} {
+        allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
       // Subcollection: Financial Movements (Movimientos Financieros - Flujo de Caja)
       match /financialMovements/{movementId} {
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);

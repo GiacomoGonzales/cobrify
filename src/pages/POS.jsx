@@ -53,6 +53,7 @@ import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
 import PostSaleModal from '@/components/pos/PostSaleModal'
 import { WALLET_EN_APROBACION } from '@/services/loyaltyService'
+import { promoParaProducto } from '@/services/scheduledDiscountService'
 import { formatCurrency, formatUnitPrice, formatLineAmount, formatProductPrice, applyMarginToCost, matchesSearchQuery, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import { buildProductHaystack } from '@/utils/productSearch'
 import {
@@ -611,6 +612,8 @@ export default function POS() {
   const [appliedCoupon, setAppliedCoupon] = useState(null)
   const [couponInput, setCouponInput] = useState('')
   const [validatingCoupon, setValidatingCoupon] = useState(false)
+  // Descuentos programados activos del negocio (se evalúan al agregar al carrito)
+  const [scheduledPromos, setScheduledPromos] = useState([])
   const [isLookingUp, setIsLookingUp] = useState(false)
   // Establecimientos (anexos) de un RUC con varios locales: lista + modal para elegir.
   const [establishments, setEstablishments] = useState([])
@@ -983,6 +986,27 @@ export default function POS() {
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerData?.phone, companySettings?.loyaltyConfig?.enabled, saleCompleted])
+
+  // Descuentos programados: se cargan una vez al abrir el POS. Solo los que
+  // podrían llegar a correr (activos y no vencidos); el día/horario exacto se
+  // evalúa al agregar cada producto, con la hora de ese momento.
+  useEffect(() => {
+    if (isDemoMode) return
+    let alive = true
+    ;(async () => {
+      try {
+        const { getScheduledDiscounts } = await import('@/services/scheduledDiscountService')
+        const res = await getScheduledDiscounts(getBusinessId())
+        if (alive && res.success) {
+          const ahora = new Date()
+          setScheduledPromos(res.data.filter(p =>
+            p.active && (!p.endsAt || p.endsAt.toDate() >= ahora)))
+        }
+      } catch { /* sin promos no pasa nada: el POS vende igual */ }
+    })()
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Saldo a favor del cliente: se recarga cuando cambia el documento del cliente.
   // Solo para documentos válidos (DNI 8 / RUC 11) y fuera del modo demo.
@@ -4888,11 +4912,52 @@ export default function POS() {
         // El descuento no puede ser mayor al total de la línea
         const maxDiscount = item.price * item.quantity
         const validDiscount = Math.min(Math.max(0, discount), maxDiscount)
-        return { ...item, itemDiscount: validDiscount }
+        // Si tenía una promo programada, el número del cajero manda: la promo
+        // se suelta y deja de recalcular esta línea.
+        return { ...item, itemDiscount: validDiscount, promoPercent: null, promoName: null }
       }
       return item
     }))
   }
+
+  // ── Descuentos programados (Promociones > Descuentos) ──
+  // Un solo efecto central: evalúa cada línea UNA vez al entrar al carrito
+  // (promoEvaluated) y, para las que ganaron promo, mantiene el monto al día
+  // cuando cambia la cantidad. No toca addToCart: cualquier camino por el que
+  // entre un producto (búsqueda, escáner, variantes, presentaciones) pasa por
+  // aquí. El descuento manual del cajero (updateItemDiscount) suelta la promo.
+  useEffect(() => {
+    if (!scheduledPromos.length || cart.length === 0 || saleCompleted) return
+    let cambio = false
+    const ahora = new Date()
+    const nuevo = cart.map(item => {
+      // Evaluación inicial: solo líneas nuevas, sin descuento previo (si el
+      // producto ya vino con descuento de otra pantalla, se respeta).
+      if (!item.promoEvaluated) {
+        const promo = (item.itemDiscount || 0) > 0 ? null : promoParaProducto(item, scheduledPromos, ahora)
+        cambio = true
+        if (!promo) return { ...item, promoEvaluated: true }
+        const monto = Math.min(
+          Math.round(item.price * item.quantity * (promo.percent / 100) * 100) / 100,
+          item.price * item.quantity
+        )
+        return { ...item, promoEvaluated: true, promoPercent: promo.percent, promoName: promo.name, itemDiscount: monto }
+      }
+      // Mantenimiento: la cantidad cambió y la línea sigue en promo.
+      if (item.promoPercent) {
+        const esperado = Math.min(
+          Math.round(item.price * item.quantity * (item.promoPercent / 100) * 100) / 100,
+          item.price * item.quantity
+        )
+        if (Math.abs((item.itemDiscount || 0) - esperado) > 0.005) {
+          cambio = true
+          return { ...item, itemDiscount: esperado }
+        }
+      }
+      return item
+    })
+    if (cambio) setCart(nuevo)
+  }, [cart, scheduledPromos, saleCompleted])
 
   // Avisar de los faltantes en cuanto se pueda, para que el vendedor no se entere
   // recién al cobrar. Corre una sola vez por carga: el catálogo llega después que
@@ -11362,6 +11427,16 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             onChange={(e) => updateItemObservations(itemId, e.target.value)}
                             className="flex-1 min-w-0 text-xs px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                           />
+                          {/* Promo programada aplicada: el cajero ve POR QUÉ hay
+                              descuento. Editar el Dcto a mano la suelta. */}
+                          {item.promoName && (
+                            <span
+                              className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 truncate max-w-[90px]"
+                              title={`Promoción: ${item.promoName} (−${item.promoPercent}%)`}
+                            >
+                              ⚡ −{item.promoPercent}%
+                            </span>
+                          )}
                           {!hideDiscountInPOS && (
                             <div className="flex items-center gap-1 shrink-0">
                               <Tag className="w-3 h-3 text-orange-500 flex-shrink-0" />

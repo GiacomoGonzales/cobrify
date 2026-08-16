@@ -93,7 +93,7 @@ export const GUIDES = [
     title: 'Promociones',
     category: 'Ventas',
     description: 'Fidelizar y vender más: tarjeta de sellos digital, combos a precio especial y cupones de descuento.',
-    keywords: 'promociones marketing fidelizacion tarjeta de sellos sello premio canjear meta wallet apple google combo precio especial ahorro cupon codigo descuento porcentaje monto vencimiento limite de usos VERANO10 campaña redes whatsapp',
+    keywords: 'promociones marketing fidelizacion tarjeta de sellos sello premio canjear meta wallet apple google combo precio especial ahorro cupon codigo descuento porcentaje monto vencimiento limite de usos VERANO10 campaña redes whatsapp hora feliz happy hour descuento programado por horario dia oferta 2x1',
     modos: ['retail', 'restaurant', 'pharmacy', 'veterinary'],
     load: () => import('./promociones.js'),
   },

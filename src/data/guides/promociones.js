@@ -136,6 +136,34 @@ export default {
       ],
     },
     {
+      id: 'descuentos-programados',
+      title: 'Descuentos programados: ofertas por día y horario',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Una promoción programada es una regla tipo "20% en bebidas de 17:00 a 19:00, de martes a jueves". El POS la aplica y la quita solo, según el reloj: el cajero no tiene que acordarse de nada.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'En la pestaña **Descuentos**, presiona **Crear promoción**.',
+            'Ponle **Nombre** (ej: Hora feliz) y el **Descuento (%)**.',
+            'En **Se aplica a**, elige: **Todos los productos**, **Una categoría** o **Productos específicos**.',
+            'Marca los **Días** y define el horario **Desde** / **Hasta**. Opcional: una fecha en **Termina el** para campañas con final.',
+            'Presiona **Crear promoción**.',
+          ],
+        },
+        {
+          type: 'texto',
+          text: 'En el POS, cuando un producto en promoción entra al carrito, su descuento se aplica solo y la línea muestra una etiqueta ámbar con el porcentaje. Si el cajero escribe otro descuento a mano en esa línea, su número manda y la promoción se suelta.',
+        },
+        {
+          type: 'ojo',
+          text: 'La promoción se evalúa EN EL MOMENTO de agregar el producto al carrito. Si dos promociones alcanzan al mismo producto, no se suman: se aplica solo la más generosa. La lista muestra el estado de cada regla: Activa ahora, Programada, Vencida o Desactivada.',
+        },
+      ],
+    },
+    {
       id: 'cupones-usar',
       title: 'Cupones: cómo se usan al cobrar y en el catálogo',
       blocks: [

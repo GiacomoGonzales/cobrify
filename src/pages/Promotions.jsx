@@ -14,6 +14,7 @@ import {
   Settings,
   Ticket,
   Power,
+  Clock,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -27,6 +28,10 @@ import { uploadProductImage, createImagePreview, revokeImagePreview } from '@/se
 import ProductModifiersSection from '@/components/ProductModifiersSection'
 import { getLoyaltyCards, getWalletPassLink, redeemReward, WALLET_EN_APROBACION } from '@/services/loyaltyService'
 import { getCoupons, createCoupon, setCouponActive, deleteCoupon, normalizeCouponCode } from '@/services/couponService'
+import {
+  getScheduledDiscounts, createScheduledDiscount, setScheduledDiscountActive,
+  deleteScheduledDiscount, promoVigente, DIAS,
+} from '@/services/scheduledDiscountService'
 
 /**
  * Promociones: el escaparate de marketing del negocio en un solo lugar.
@@ -67,6 +72,19 @@ export default function Promotions() {
   const [savingCupon, setSavingCupon] = useState(false)
   const [accionandoCupon, setAccionandoCupon] = useState(null)
 
+  // ── Descuentos programados ──
+  const FORM_PROMO_VACIO = {
+    name: '', percent: '', scope: 'all', category: '', productIds: [],
+    days: [1, 2, 3, 4, 5, 6, 0], startTime: '00:00', endTime: '23:59', endsAt: '',
+  }
+  const [promos, setPromos] = useState([])
+  const [cargandoPromos, setCargandoPromos] = useState(true)
+  const [isPromoOpen, setIsPromoOpen] = useState(false)
+  const [promoForm, setPromoForm] = useState(FORM_PROMO_VACIO)
+  const [promoProductSearch, setPromoProductSearch] = useState('')
+  const [savingPromo, setSavingPromo] = useState(false)
+  const [accionandoPromo, setAccionandoPromo] = useState(null)
+
   // ── Combos ──
   const [products, setProducts] = useState([])
   const [loadingProducts, setLoadingProducts] = useState(true)
@@ -97,7 +115,73 @@ export default function Promotions() {
       .then((res) => setCupones(res?.success ? res.data : []))
       .catch(() => {})
       .finally(() => setCargandoCupones(false))
+    getScheduledDiscounts(businessId)
+      .then((res) => setPromos(res?.success ? res.data : []))
+      .catch(() => {})
+      .finally(() => setCargandoPromos(false))
   }, [businessId])
+
+  const categorias = useMemo(
+    () => [...new Set(products.map((p) => p.category).filter(Boolean))].sort(),
+    [products]
+  )
+
+  const guardarPromo = async () => {
+    if (isDemoMode) { toast.error('No disponible en modo demo'); return }
+    setSavingPromo(true)
+    try {
+      const res = await createScheduledDiscount(businessId, {
+        ...promoForm,
+        endsAt: promoForm.endsAt ? new Date(`${promoForm.endsAt}T23:59:59`) : null,
+      })
+      if (!res.success) { toast.error(res.error); return }
+      toast.success(`Promoción "${promoForm.name.trim()}" creada`)
+      setPromos((prev) => [{
+        id: res.id, ...promoForm, name: promoForm.name.trim(), percent: Number(promoForm.percent),
+        endsAt: promoForm.endsAt ? { toDate: () => new Date(`${promoForm.endsAt}T23:59:59`) } : null,
+        active: true,
+      }, ...prev])
+      setIsPromoOpen(false)
+      setPromoForm(FORM_PROMO_VACIO)
+      setPromoProductSearch('')
+    } finally {
+      setSavingPromo(false)
+    }
+  }
+
+  const alternarPromo = async (promo) => {
+    if (isDemoMode) { toast.error('No disponible en modo demo'); return }
+    setAccionandoPromo(promo.id)
+    try {
+      const res = await setScheduledDiscountActive(businessId, promo.id, !promo.active)
+      if (!res.success) { toast.error('No se pudo cambiar la promoción'); return }
+      setPromos((prev) => prev.map((p) => p.id === promo.id ? { ...p, active: !promo.active } : p))
+    } finally {
+      setAccionandoPromo(null)
+    }
+  }
+
+  const eliminarPromo = async (promo) => {
+    if (isDemoMode) { toast.error('No disponible en modo demo'); return }
+    setAccionandoPromo(promo.id)
+    try {
+      const res = await deleteScheduledDiscount(businessId, promo.id)
+      if (!res.success) { toast.error('No se pudo eliminar'); return }
+      setPromos((prev) => prev.filter((p) => p.id !== promo.id))
+      toast.success(`Promoción "${promo.name}" eliminada`)
+    } finally {
+      setAccionandoPromo(null)
+    }
+  }
+
+  const candidatosPromo = useMemo(() => {
+    const q = promoProductSearch.trim().toLowerCase()
+    if (!q) return []
+    return products
+      .filter((p) => !promoForm.productIds.includes(p.id))
+      .filter((p) => (p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q))
+      .slice(0, 8)
+  }, [promoProductSearch, products, promoForm.productIds])
 
   const guardarCupon = async () => {
     if (isDemoMode) { toast.error('No disponible en modo demo'); return }
@@ -325,6 +409,7 @@ export default function Promotions() {
           { id: 'fidelidad', label: 'Tarjeta de sellos', icon: CreditCard },
           { id: 'combos', label: 'Combos', icon: Package },
           { id: 'cupones', label: 'Cupones', icon: Ticket },
+          { id: 'descuentos', label: 'Descuentos', icon: Clock },
         ].map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -598,6 +683,254 @@ export default function Promotions() {
           )}
         </div>
       )}
+
+      {/* ── DESCUENTOS PROGRAMADOS ── */}
+      {tab === 'descuentos' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <p className="text-sm text-gray-600">
+              Ofertas por horario y día — el POS las aplica solo al agregar el producto. Ej: 20% en bebidas de 5 a 7pm.
+            </p>
+            <Button onClick={() => setIsPromoOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Crear promoción
+            </Button>
+          </div>
+
+          {cargandoPromos ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+            </div>
+          ) : promos.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <Clock className="w-10 h-10 mx-auto text-gray-300 mb-3" />
+                <p className="text-gray-600">Todavía no tienes promociones programadas</p>
+                <p className="text-sm text-gray-400 mt-1">
+                  Crea una "hora feliz" o una oferta por día — el POS la aplica y la quita solo, según el reloj
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="py-2">
+                <ul className="divide-y divide-gray-100">
+                  {promos.map((p) => {
+                    const vencida = p.endsAt && p.endsAt.toDate() < new Date()
+                    const estado = !p.active ? 'Desactivada' : vencida ? 'Vencida' : promoVigente(p) ? 'Activa ahora' : 'Programada'
+                    const estadoCls = estado === 'Activa ahora'
+                      ? 'bg-green-100 text-green-700'
+                      : estado === 'Programada' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'
+                    const alcance = p.scope === 'all' ? 'todos los productos'
+                      : p.scope === 'category' ? `categoría ${p.category}`
+                      : `${p.productIds?.length || 0} producto${(p.productIds?.length || 0) === 1 ? '' : 's'}`
+                    const dias = (p.days || []).length === 7 ? 'todos los días'
+                      : (p.days || []).map((d) => DIAS[d]).join(' ')
+                    return (
+                      <li key={p.id} className="flex items-center gap-3 py-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-gray-900 truncate">{p.name}</p>
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${estadoCls}`}>{estado}</span>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            −{p.percent}% en {alcance} · {dias} · {p.startTime}–{p.endTime}
+                            {p.endsAt ? ` · hasta ${p.endsAt.toDate().toLocaleDateString('es-PE')}` : ''}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm" variant="ghost"
+                          title={p.active ? 'Desactivar' : 'Activar'}
+                          disabled={accionandoPromo === p.id}
+                          onClick={() => alternarPromo(p)}
+                        >
+                          <Power className={`w-4 h-4 ${p.active ? 'text-green-600' : 'text-gray-400'}`} />
+                        </Button>
+                        <Button
+                          size="sm" variant="ghost"
+                          title="Eliminar"
+                          disabled={accionandoPromo === p.id}
+                          onClick={() => eliminarPromo(p)}
+                        >
+                          <Trash2 className="w-4 h-4 text-gray-400 hover:text-red-500" />
+                        </Button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Crear promoción programada */}
+      <Modal isOpen={isPromoOpen} onClose={() => setIsPromoOpen(false)} title="Crear promoción" size="lg">
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
+              <input
+                type="text"
+                value={promoForm.name}
+                onChange={(e) => setPromoForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="Ej: Hora feliz"
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Descuento (%)</label>
+              <input
+                type="number" min="1" max="99"
+                value={promoForm.percent}
+                onChange={(e) => setPromoForm((f) => ({ ...f, percent: e.target.value }))}
+                placeholder="20"
+                className={inputCls}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Se aplica a</label>
+            <select
+              value={promoForm.scope}
+              onChange={(e) => setPromoForm((f) => ({ ...f, scope: e.target.value }))}
+              className={inputCls}
+            >
+              <option value="all">Todos los productos</option>
+              <option value="category">Una categoría</option>
+              <option value="products">Productos específicos</option>
+            </select>
+          </div>
+
+          {promoForm.scope === 'category' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
+              <select
+                value={promoForm.category}
+                onChange={(e) => setPromoForm((f) => ({ ...f, category: e.target.value }))}
+                className={inputCls}
+              >
+                <option value="">Elige una categoría...</option>
+                {categorias.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          )}
+
+          {promoForm.scope === 'products' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Productos</label>
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
+                <input
+                  type="text"
+                  value={promoProductSearch}
+                  onChange={(e) => setPromoProductSearch(e.target.value)}
+                  placeholder="Buscar producto..."
+                  className={`${inputCls} pl-9`}
+                />
+                {candidatosPromo.length > 0 && (
+                  <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-auto">
+                    {candidatosPromo.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => {
+                          setPromoForm((f) => ({ ...f, productIds: [...f.productIds, p.id] }))
+                          setPromoProductSearch('')
+                        }}
+                        className="w-full flex justify-between items-center px-3 py-2 text-left text-sm hover:bg-gray-50"
+                      >
+                        <span className="truncate text-gray-900">{p.name}</span>
+                        <span className="text-gray-500 shrink-0 ml-2">S/ {(Number(p.price) || 0).toFixed(2)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {promoForm.productIds.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {promoForm.productIds.map((id) => {
+                    const prod = products.find((x) => x.id === id)
+                    return (
+                      <span key={id} className="inline-flex items-center gap-1 text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full">
+                        {prod?.name || id}
+                        <button
+                          onClick={() => setPromoForm((f) => ({ ...f, productIds: f.productIds.filter((x) => x !== id) }))}
+                          className="text-gray-400 hover:text-red-500"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Días</label>
+            <div className="flex gap-1.5">
+              {[1, 2, 3, 4, 5, 6, 0].map((d) => (
+                <button
+                  key={d}
+                  onClick={() => setPromoForm((f) => ({
+                    ...f,
+                    days: f.days.includes(d) ? f.days.filter((x) => x !== d) : [...f.days, d],
+                  }))}
+                  className={`w-9 h-9 rounded-full text-sm font-semibold transition-colors ${
+                    promoForm.days.includes(d)
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}
+                >
+                  {DIAS[d]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Desde</label>
+              <input
+                type="time"
+                value={promoForm.startTime}
+                onChange={(e) => setPromoForm((f) => ({ ...f, startTime: e.target.value }))}
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Hasta</label>
+              <input
+                type="time"
+                value={promoForm.endTime}
+                onChange={(e) => setPromoForm((f) => ({ ...f, endTime: e.target.value }))}
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Termina el (opcional)</label>
+              <input
+                type="date"
+                value={promoForm.endsAt}
+                onChange={(e) => setPromoForm((f) => ({ ...f, endsAt: e.target.value }))}
+                className={inputCls}
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <Button variant="outline" onClick={() => setIsPromoOpen(false)} className="flex-1">
+              Cancelar
+            </Button>
+            <Button onClick={guardarPromo} disabled={savingPromo} className="flex-1">
+              {savingPromo ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Clock className="w-4 h-4 mr-2" />}
+              Crear promoción
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Crear cupón */}
       <Modal isOpen={isCuponOpen} onClose={() => setIsCuponOpen(false)} title="Crear cupón">
