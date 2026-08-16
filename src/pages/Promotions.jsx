@@ -407,8 +407,10 @@ export default function Promotions() {
         </p>
       </div>
 
-      {/* Pestañas */}
-      <div className="flex gap-2 border-b border-gray-200">
+      {/* Pestañas. En móvil son un CARRUSEL: la fila se desliza dentro de sí
+          misma (overflow-x-auto) en vez de empujar el ancho de la página —
+          sin esto, las 4 pestañas provocaban scroll horizontal en celulares. */}
+      <div className="flex gap-2 border-b border-gray-200 overflow-x-auto scrollbar-hide">
         {[
           { id: 'fidelidad', label: 'Tarjeta de sellos', icon: CreditCard },
           { id: 'combos', label: 'Combos', icon: Package },
@@ -418,7 +420,7 @@ export default function Promotions() {
           <button
             key={id}
             onClick={() => setTab(id)}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors shrink-0 whitespace-nowrap ${
               tab === id
                 ? 'border-primary-600 text-primary-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
