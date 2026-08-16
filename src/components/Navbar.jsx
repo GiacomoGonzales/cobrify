@@ -8,6 +8,7 @@ import { usePWAInstall } from '@/hooks/usePWAInstall'
 import { getUnreadNotifications, checkAndCreateSubscriptionNotifications } from '@/services/notificationService'
 import NotificationPanel from './NotificationPanel'
 import GuidePanel from './guide/GuidePanel'
+import { ABRIR_GUIA_EVENT } from './guide/GuideLink'
 
 // Modo de negocio → etiqueta + ícono (para el selector de local del Navbar)
 const MODE_META = {
@@ -33,6 +34,14 @@ function Navbar() {
   const [unreadCount, setUnreadCount] = useState(0)
   const [showBranchMenu, setShowBranchMenu] = useState(false)
   const [showGuide, setShowGuide] = useState(false)
+
+  // El enlace "¿Cómo funciona esta página?" junto al título de las páginas
+  // (GuideLink) abre este mismo panel vía evento global.
+  useEffect(() => {
+    const abrir = () => setShowGuide(true)
+    window.addEventListener(ABRIR_GUIA_EVENT, abrir)
+    return () => window.removeEventListener(ABRIR_GUIA_EVENT, abrir)
+  }, [])
 
   const notificationRef = useRef(null)
   const branchMenuRef = useRef(null)
@@ -205,13 +214,16 @@ function Navbar() {
           </button>
         )}
 
-        {/* Ayuda: guía de uso de la página actual (panel lateral) */}
+        {/* Ayuda: guía de uso de la página actual (panel lateral). Con texto
+            para que se descubra — el ícono pelado pasaba desapercibido. En
+            pantallas chicas queda solo el ícono. */}
         <button
           onClick={() => setShowGuide(true)}
-          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+          className="flex items-center gap-1.5 px-2 lg:px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
           title="Guía de uso de esta página"
         >
-          <HelpCircle className="w-5 h-5 text-gray-600" />
+          <HelpCircle className="w-5 h-5 text-primary-600" />
+          <span className="hidden lg:inline text-sm font-medium text-gray-700">¿Cómo funciona esta página?</span>
         </button>
 
         {/* Notifications */}

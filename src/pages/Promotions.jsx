@@ -22,6 +22,7 @@ import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import LoyaltyManager from '@/components/loyalty/LoyaltyManager'
+import GuideLink from '@/components/guide/GuideLink'
 import { getProducts, createProduct, updateProduct } from '@/services/firestoreService'
 import { createRecipe } from '@/services/recipeService'
 import { uploadProductImage, createImagePreview, revokeImagePreview } from '@/services/productImageService'
@@ -397,7 +398,10 @@ export default function Promotions() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Promociones</h1>
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="text-2xl font-bold text-gray-900">Promociones</h1>
+          <GuideLink />
+        </div>
         <p className="text-gray-600">
           Fideliza a tus clientes y arma ofertas — todo desde un solo lugar
         </p>
