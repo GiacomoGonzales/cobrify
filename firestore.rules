@@ -670,6 +670,13 @@ service cloud.firestore {
         }
       }
 
+      // Subcollection: Cupones de descuento (Promociones). El ID del documento
+      // es el código normalizado (VERANO10); el POS lo lee con un get directo.
+      match /coupons/{couponId} {
+        allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
       // Subcollection: Financial Movements (Movimientos Financieros - Flujo de Caja)
       match /financialMovements/{movementId} {
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);

@@ -12,6 +12,8 @@ import {
   ChevronRight,
   Send,
   Settings,
+  Ticket,
+  Power,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -22,6 +24,7 @@ import LoyaltyManager from '@/components/loyalty/LoyaltyManager'
 import { getProducts, createProduct } from '@/services/firestoreService'
 import { createRecipe } from '@/services/recipeService'
 import { getLoyaltyCards, getWalletPassLink, redeemReward, WALLET_EN_APROBACION } from '@/services/loyaltyService'
+import { getCoupons, createCoupon, setCouponActive, deleteCoupon, normalizeCouponCode } from '@/services/couponService'
 
 /**
  * Promociones: el escaparate de marketing del negocio en un solo lugar.
@@ -54,6 +57,14 @@ export default function Promotions() {
   const nombreNegocio = businessSettings?.name || businessSettings?.tradeName || businessSettings?.businessName || ''
   const metaDefault = businessSettings?.loyaltyConfig?.goal || 10
 
+  // ── Cupones ──
+  const [cupones, setCupones] = useState([])
+  const [cargandoCupones, setCargandoCupones] = useState(true)
+  const [isCuponOpen, setIsCuponOpen] = useState(false)
+  const [cuponForm, setCuponForm] = useState({ code: '', type: 'percent', value: '', expiresAt: '', maxUses: '' })
+  const [savingCupon, setSavingCupon] = useState(false)
+  const [accionandoCupon, setAccionandoCupon] = useState(null)
+
   // ── Combos ──
   const [products, setProducts] = useState([])
   const [loadingProducts, setLoadingProducts] = useState(true)
@@ -77,7 +88,62 @@ export default function Promotions() {
       .then((r) => setProducts(r?.data || []))
       .catch(() => {})
       .finally(() => setLoadingProducts(false))
+    getCoupons(businessId)
+      .then((res) => setCupones(res?.success ? res.data : []))
+      .catch(() => {})
+      .finally(() => setCargandoCupones(false))
   }, [businessId])
+
+  const guardarCupon = async () => {
+    if (isDemoMode) { toast.error('No disponible en modo demo'); return }
+    setSavingCupon(true)
+    try {
+      const res = await createCoupon(businessId, {
+        code: cuponForm.code,
+        type: cuponForm.type,
+        value: cuponForm.value,
+        // La fecha del input es local; el cupón vence al FINAL de ese día.
+        expiresAt: cuponForm.expiresAt ? new Date(`${cuponForm.expiresAt}T23:59:59`) : null,
+        maxUses: cuponForm.maxUses || null,
+      })
+      if (!res.success) { toast.error(res.error); return }
+      toast.success(`Cupón ${res.id} creado`)
+      setCupones((prev) => [{
+        id: res.id, type: cuponForm.type, value: Number(cuponForm.value),
+        expiresAt: cuponForm.expiresAt ? { toDate: () => new Date(`${cuponForm.expiresAt}T23:59:59`) } : null,
+        maxUses: cuponForm.maxUses ? Number(cuponForm.maxUses) : null, uses: 0, active: true,
+      }, ...prev])
+      setIsCuponOpen(false)
+      setCuponForm({ code: '', type: 'percent', value: '', expiresAt: '', maxUses: '' })
+    } finally {
+      setSavingCupon(false)
+    }
+  }
+
+  const alternarCupon = async (cupon) => {
+    if (isDemoMode) { toast.error('No disponible en modo demo'); return }
+    setAccionandoCupon(cupon.id)
+    try {
+      const res = await setCouponActive(businessId, cupon.id, !cupon.active)
+      if (!res.success) { toast.error('No se pudo cambiar el cupón'); return }
+      setCupones((prev) => prev.map((c) => c.id === cupon.id ? { ...c, active: !cupon.active } : c))
+    } finally {
+      setAccionandoCupon(null)
+    }
+  }
+
+  const eliminarCupon = async (cupon) => {
+    if (isDemoMode) { toast.error('No disponible en modo demo'); return }
+    setAccionandoCupon(cupon.id)
+    try {
+      const res = await deleteCoupon(businessId, cupon.id)
+      if (!res.success) { toast.error('No se pudo eliminar'); return }
+      setCupones((prev) => prev.filter((c) => c.id !== cupon.id))
+      toast.success(`Cupón ${cupon.id} eliminado`)
+    } finally {
+      setAccionandoCupon(null)
+    }
+  }
 
   // Las estadísticas se derivan de la misma lista que se muestra abajo.
   const cardStats = useMemo(() => ({
@@ -221,6 +287,7 @@ export default function Promotions() {
         {[
           { id: 'fidelidad', label: 'Tarjeta de sellos', icon: CreditCard },
           { id: 'combos', label: 'Combos', icon: Package },
+          { id: 'cupones', label: 'Cupones', icon: Ticket },
         ].map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -413,6 +480,161 @@ export default function Promotions() {
           )}
         </div>
       )}
+
+      {/* ── CUPONES ── */}
+      {tab === 'cupones' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <p className="text-sm text-gray-600">
+              Códigos de descuento que el cajero aplica en el POS. Se descuentan del total de la venta.
+            </p>
+            <Button onClick={() => setIsCuponOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Crear cupón
+            </Button>
+          </div>
+
+          {cargandoCupones ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+            </div>
+          ) : cupones.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <Ticket className="w-10 h-10 mx-auto text-gray-300 mb-3" />
+                <p className="text-gray-600">Todavía no tienes cupones</p>
+                <p className="text-sm text-gray-400 mt-1">
+                  Crea uno (ej: VERANO10) y compártelo en redes o WhatsApp — el cajero lo escribe al cobrar
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="py-2">
+                <ul className="divide-y divide-gray-100">
+                  {cupones.map((c) => {
+                    const vencido = c.expiresAt && c.expiresAt.toDate() < new Date()
+                    const agotado = c.maxUses && (c.uses || 0) >= c.maxUses
+                    const estado = !c.active ? 'Desactivado' : vencido ? 'Vencido' : agotado ? 'Agotado' : 'Activo'
+                    const estadoCls = estado === 'Activo'
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-gray-100 text-gray-500'
+                    return (
+                      <li key={c.id} className="flex items-center gap-3 py-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-mono font-semibold text-gray-900">{c.id}</p>
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${estadoCls}`}>{estado}</span>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {c.type === 'percent' ? `${c.value}% de descuento` : `S/ ${Number(c.value).toFixed(2)} de descuento`}
+                            {' · '}{c.uses || 0}{c.maxUses ? `/${c.maxUses}` : ''} usos
+                            {c.expiresAt ? ` · vence ${c.expiresAt.toDate().toLocaleDateString('es-PE')}` : ''}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm" variant="ghost"
+                          title={c.active ? 'Desactivar' : 'Activar'}
+                          disabled={accionandoCupon === c.id}
+                          onClick={() => alternarCupon(c)}
+                        >
+                          <Power className={`w-4 h-4 ${c.active ? 'text-green-600' : 'text-gray-400'}`} />
+                        </Button>
+                        <Button
+                          size="sm" variant="ghost"
+                          title="Eliminar"
+                          disabled={accionandoCupon === c.id}
+                          onClick={() => eliminarCupon(c)}
+                        >
+                          <Trash2 className="w-4 h-4 text-gray-400 hover:text-red-500" />
+                        </Button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Crear cupón */}
+      <Modal isOpen={isCuponOpen} onClose={() => setIsCuponOpen(false)} title="Crear cupón">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Código</label>
+            <input
+              type="text"
+              value={cuponForm.code}
+              onChange={(e) => setCuponForm((f) => ({ ...f, code: normalizeCouponCode(e.target.value) }))}
+              placeholder="Ej: VERANO10"
+              className={`${inputCls} font-mono uppercase`}
+            />
+            <p className="text-xs text-gray-400 mt-1">Solo letras y números; el cajero lo escribirá al cobrar</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+              <select
+                value={cuponForm.type}
+                onChange={(e) => setCuponForm((f) => ({ ...f, type: e.target.value }))}
+                className={inputCls}
+              >
+                <option value="percent">Porcentaje (%)</option>
+                <option value="amount">Monto fijo (S/)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {cuponForm.type === 'percent' ? 'Descuento (%)' : 'Descuento (S/)'}
+              </label>
+              <input
+                type="number"
+                min="0"
+                step={cuponForm.type === 'percent' ? '1' : '0.10'}
+                value={cuponForm.value}
+                onChange={(e) => setCuponForm((f) => ({ ...f, value: e.target.value }))}
+                placeholder={cuponForm.type === 'percent' ? '10' : '5.00'}
+                className={inputCls}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Vence el (opcional)</label>
+              <input
+                type="date"
+                value={cuponForm.expiresAt}
+                onChange={(e) => setCuponForm((f) => ({ ...f, expiresAt: e.target.value }))}
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Límite de usos (opcional)</label>
+              <input
+                type="number"
+                min="1"
+                value={cuponForm.maxUses}
+                onChange={(e) => setCuponForm((f) => ({ ...f, maxUses: e.target.value }))}
+                placeholder="Sin límite"
+                className={inputCls}
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <Button variant="outline" onClick={() => setIsCuponOpen(false)} className="flex-1">
+              Cancelar
+            </Button>
+            <Button onClick={guardarCupon} disabled={savingCupon} className="flex-1">
+              {savingCupon ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Ticket className="w-4 h-4 mr-2" />}
+              Crear cupón
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Configuración de la tarjeta (el mismo gestor que vivía en Clientes) */}
       <LoyaltyManager isOpen={isLoyaltyOpen} onClose={() => setIsLoyaltyOpen(false)} />

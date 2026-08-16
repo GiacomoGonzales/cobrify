@@ -607,6 +607,10 @@ export default function POS() {
   const [postSaleModalOpen, setPostSaleModalOpen] = useState(false) // Modal de opciones post-venta
   const postSaleHandledRef = useRef(false) // Para abrir el modal una sola vez por venta
   const [sendingLoyaltyCard, setSendingLoyaltyCard] = useState(false) // Enviando la tarjeta de sellos por WhatsApp
+  // Cupón aplicado a la venta actual ({id, type, value} o null) + su input
+  const [appliedCoupon, setAppliedCoupon] = useState(null)
+  const [couponInput, setCouponInput] = useState('')
+  const [validatingCoupon, setValidatingCoupon] = useState(false)
   const [isLookingUp, setIsLookingUp] = useState(false)
   // Establecimientos (anexos) de un RUC con varios locales: lista + modal para elegir.
   const [establishments, setEstablishments] = useState([])
@@ -4918,6 +4922,9 @@ export default function POS() {
   const clearCart = () => {
     setCart([])
     setSelectedCustomer(null)
+    // El cupón vale para UNA venta: la siguiente arranca sin él.
+    setAppliedCoupon(null)
+    setCouponInput('')
     // La afectación elegida vale SOLO para esa venta. Si quedara pegada, la
     // siguiente saldría gravada (o exonerada) sin que nadie lo pidiera, que es
     // justo el error que esta opción existe para evitar.
@@ -5291,6 +5298,41 @@ export default function POS() {
   }
 
   const handleClearDiscount = () => {
+    setDiscountAmount('')
+    setDiscountPercentage('')
+    setAppliedCoupon(null)
+  }
+
+  // ── Cupones (Promociones > Cupones) ──
+  // Un cupón NO es un descuento nuevo: solo llena el descuento global con su
+  // valor. Toda la matemática (subtotal, IGV, XML de SUNAT) es la misma que la
+  // del descuento manual, que ya está probada. Con cupón puesto los campos
+  // manuales se bloquean: el descuento "pertenece" al cupón hasta quitarlo.
+  const aplicarCupon = async () => {
+    const codigo = couponInput.trim()
+    if (!codigo) return
+    setValidatingCoupon(true)
+    try {
+      const { validateCoupon } = await import('@/services/couponService')
+      const res = await validateCoupon(getBusinessId(), codigo)
+      if (!res.success) { toast.error(res.error); return }
+      const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+      if (res.coupon.type === 'percent') {
+        handleDiscountPercentageChange(String(res.coupon.value))
+      } else {
+        // Un monto fijo mayor que la venta se recorta: el total nunca baja de 0.
+        handleDiscountAmountChange(String(Math.min(res.coupon.value, subtotal).toFixed(2)))
+      }
+      setAppliedCoupon(res.coupon)
+      setCouponInput('')
+      toast.success(`Cupón ${res.coupon.id} aplicado`)
+    } finally {
+      setValidatingCoupon(false)
+    }
+  }
+
+  const quitarCupon = () => {
+    setAppliedCoupon(null)
     setDiscountAmount('')
     setDiscountPercentage('')
   }
@@ -6212,6 +6254,7 @@ export default function POS() {
           subtotalBeforeDiscount: amounts.subtotal, // Subtotal original (antes del descuento)
           discount: amounts.discount || 0,
           globalDiscount: amounts.globalDiscount || 0, // Solo descuento global (sin item discounts) para XML
+          ...(appliedCoupon ? { couponCode: appliedCoupon.id } : {}), // Cupón aplicado (Promociones), para reportes
           discountPercentage: parseFloat(discountPercentage) || 0,
           igv: amounts.igv,
           igvByRate: amounts.igvByRate || {},
@@ -6485,6 +6528,7 @@ export default function POS() {
         subtotalBeforeDiscount: amounts.subtotal, // Subtotal original (antes del descuento)
         discount: amounts.discount || 0,
         globalDiscount: amounts.globalDiscount || 0, // Solo descuento global (sin item discounts) para XML
+          ...(appliedCoupon ? { couponCode: appliedCoupon.id } : {}), // Cupón aplicado (Promociones), para reportes
         discountPercentage: parseFloat(discountPercentage) || 0,
         igv: amounts.igv,
         igvByRate: amounts.igvByRate || {},
@@ -7187,6 +7231,18 @@ export default function POS() {
               } catch (loyaltyError) {
                 // La fidelización nunca frena la venta: ya está cobrada.
                 console.error('No se pudo registrar el sello de fidelidad:', loyaltyError)
+              }
+            }
+
+            // 3.0.-0.5. Contar el uso del cupón (Promociones > Cupones). Igual
+            // que el sello: la venta ya está cobrada, un contador desfasado no
+            // puede frenar la caja — fire and forget.
+            if (appliedCoupon) {
+              try {
+                const { redeemCoupon } = await import('@/services/couponService')
+                await redeemCoupon(businessId, appliedCoupon.id, bgInvoiceId)
+              } catch (couponError) {
+                console.error('No se pudo contar el uso del cupón:', couponError)
               }
             }
 
@@ -11355,7 +11411,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           max={amounts.subtotal}
                           step="0.01"
                           className="flex-1 min-w-0 px-2 xl:px-3 py-1.5 xl:py-2 text-sm xl:text-base border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                          disabled={lastInvoiceData !== null}
+                          disabled={lastInvoiceData !== null || !!appliedCoupon}
                         />
                       </div>
                       <span className="text-xs xl:text-sm text-green-600 font-medium shrink-0">ó</span>
@@ -11369,7 +11425,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           max="100"
                           step="0.01"
                           className="flex-1 min-w-0 px-2 xl:px-3 py-1.5 xl:py-2 text-sm xl:text-base border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                          disabled={lastInvoiceData !== null}
+                          disabled={lastInvoiceData !== null || !!appliedCoupon}
                         />
                         <span className="text-xs xl:text-sm text-green-700 font-medium shrink-0">%</span>
                       </div>
@@ -11384,6 +11440,46 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         </button>
                       )}
                     </div>
+
+                    {/* Cupón: el código llena el descuento de arriba y bloquea
+                        los campos manuales hasta quitarlo. */}
+                    {appliedCoupon ? (
+                      <div className="flex items-center gap-2 bg-white border border-green-300 rounded-lg px-3 py-1.5">
+                        <Tag className="w-4 h-4 text-green-600 shrink-0" />
+                        <span className="text-sm font-mono font-semibold text-green-800 flex-1 truncate">
+                          {appliedCoupon.id}
+                          <span className="font-sans font-normal text-green-600 ml-2">
+                            {appliedCoupon.type === 'percent' ? `-${appliedCoupon.value}%` : `-S/ ${Number(appliedCoupon.value).toFixed(2)}`}
+                          </span>
+                        </span>
+                        <button
+                          onClick={quitarCupon}
+                          className="text-red-500 hover:text-red-700 text-xs font-medium shrink-0"
+                          disabled={lastInvoiceData !== null}
+                        >
+                          Quitar
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          value={couponInput}
+                          onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                          onKeyDown={(e) => { if (e.key === 'Enter') aplicarCupon() }}
+                          placeholder="Código de cupón"
+                          className="flex-1 min-w-0 px-2 xl:px-3 py-1.5 text-sm border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent font-mono"
+                          disabled={lastInvoiceData !== null}
+                        />
+                        <button
+                          onClick={aplicarCupon}
+                          disabled={!couponInput.trim() || validatingCoupon || lastInvoiceData !== null}
+                          className="shrink-0 px-3 py-1.5 text-sm font-medium text-green-700 bg-white border border-green-300 rounded-lg hover:bg-green-100 disabled:opacity-50 transition-colors"
+                        >
+                          {validatingCoupon ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Aplicar'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
 
