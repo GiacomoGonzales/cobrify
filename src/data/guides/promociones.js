@@ -61,7 +61,7 @@ export default {
         },
         {
           type: 'texto',
-          text: 'El botón con el avión de papel envía la tarjeta digital por WhatsApp: un solo link que funciona en iPhone (Apple Wallet) y Android (Google Wallet) — el sistema detecta el celular del cliente solo. La tarjeta se guarda en su billetera del celular con tu logo y colores, y se actualiza al volver a tocar el link.',
+          text: 'El botón con el avión de papel envía la tarjeta digital por WhatsApp: un solo link que funciona en iPhone (Apple Wallet) y Android (Google Wallet) — el sistema detecta el celular del cliente solo. La tarjeta se guarda en su billetera del celular con tu logo y colores, y se mantiene actualizada sola: con cada sello el celular del cliente recibe una notificación y la tarjeta refleja el avance sin que nadie haga nada.',
         },
         {
           type: 'ojo',
