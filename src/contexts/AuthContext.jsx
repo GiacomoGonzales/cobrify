@@ -5,7 +5,7 @@ import { db, auth } from '@/lib/firebase'
 import { updateProfile } from 'firebase/auth'
 import { loginWithEmail, logout as logoutService, onAuthChange } from '@/services/authService'
 import { isUserAdmin, isBusinessAdmin, setAsBusinessOwner } from '@/services/adminService'
-import { getSubscription, hasActiveAccess, createSubscription } from '@/services/subscriptionService'
+import { getSubscription, hasActiveAccess } from '@/services/subscriptionService'
 import { getUserData } from '@/services/userManagementService'
 import { getActiveBranches } from '@/services/branchService'
 import { initializePushNotifications, cleanupPushNotifications } from '@/services/notificationService'
@@ -262,30 +262,42 @@ export const AuthProvider = ({ children }) => {
             ])
             let userSubscription = await subscriptionPromise
 
-            // Si no tiene suscripción, crear una de prueba SOLO si es usuario principal (no sub-usuario)
+            // Sin suscripción: SOLO se intenta el rescate de sub-usuario (usar
+            // la del dueño si el doc trae ownerId). NUNCA se crea un trial.
+            //
+            // Acá vivía un createSubscription(..., 'trial') heredado del
+            // auto-registro, y era una fábrica de fantasmas en el admin
+            // (auditoría 16-ago-2026): cualquier cuenta de Firebase Auth SIN
+            // doc en `users` que iniciara sesión recibía un trial. Caían dos
+            // embudos reales:
+            //  1. COMPRADORES del catálogo entrando por /login: comparten el
+            //     pozo de Auth, no tienen doc en users, y el trial se acuñaba
+            //     ANTES de que Login los detectara y expulsara.
+            //  2. SUB-USUARIOS con creación a medias: createManagedUser crea
+            //     la cuenta de Auth y DESPUÉS escribe users/{uid}; si esa
+            //     segunda escritura falla (dueño sin internet) o el empleado
+            //     entra en esa ventana, no hay doc y caía acá.
+            //
+            // Hoy TODA suscripción nace con plan asignado (registro de admin o
+            // de reseller). Quien no tenga una debe ver la pantalla de "sin
+            // acceso" — visible y corregible — no recibir un trial silencioso.
+            // Los dueños legacy sin doc de suscripción no se ven afectados:
+            // isBusinessOwner ya les da acceso más abajo.
             if (!userSubscription && !superAdminStatus && !isSubUser) {
               try {
-                // Verificación extra: re-leer el doc de usuario para confirmar que NO es sub-usuario
-                // (protección contra fallo de getUserData por red/timeout)
+                // Re-leer el doc de usuario: getUserData pudo fallar por red y
+                // este puede ser un sub-usuario cuyo owner sí tiene suscripción.
                 const userDocSnap = await getDoc(doc(db, 'users', firebaseUser.uid))
                 const userDocData = userDocSnap.exists() ? userDocSnap.data() : null
 
                 if (userDocData?.ownerId) {
-                  // Es un sub-usuario, usar la suscripción del owner
                   console.log('🔒 Sub-usuario detectado en verificación extra, usando suscripción del owner')
                   userSubscription = await getSubscription(userDocData.ownerId)
                 } else {
-                  await createSubscription(
-                    firebaseUser.uid,
-                    firebaseUser.email,
-                    firebaseUser.displayName || 'Mi Negocio',
-                    'trial'
-                  )
-                  // Obtener la suscripción recién creada
-                  userSubscription = await getSubscription(firebaseUser.uid)
+                  console.warn('⚠️ Usuario autenticado sin suscripción y sin doc de sub-usuario: NO se crea trial (flujo de alta es solo por registro con plan)')
                 }
-              } catch (createError) {
-                console.error('Error al crear suscripción de prueba:', createError)
+              } catch (lookupError) {
+                console.error('Error al verificar sub-usuario sin suscripción:', lookupError)
               }
             }
 
