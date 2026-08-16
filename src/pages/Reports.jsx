@@ -171,6 +171,27 @@ const getSaleTimestamp = (invoice) => {
   return isNaN(d.getTime()) ? null : d
 }
 
+/**
+ * Fecha con la que una COMPRA cae en un período.
+ *
+ * Manda `invoiceDate` (la fecha de la factura del proveedor) y solo se cae a
+ * `createdAt` si no la hay — EXACTAMENTE el mismo criterio que usa la página
+ * de Compras para su filtro de período.
+ *
+ * Antes acá se miraba solo `createdAt`, o sea el día en que alguien tecleó la
+ * compra en el sistema. Como casi nadie registra sus compras el mismo día que
+ * las recibe, la misma compra caía en un mes en Compras y en otro en Reportes,
+ * y la Rentabilidad salía descuadrada todos los meses (reportado 16-ago-2026:
+ * una compra con factura del 30/07 registrada en agosto no aparecía en el
+ * período de julio).
+ */
+const getPurchaseDate = (purchase) => {
+  const raw = purchase?.invoiceDate || purchase?.createdAt
+  if (!raw) return null
+  const d = raw.toDate ? raw.toDate() : new Date(raw)
+  return isNaN(d.getTime()) ? null : d
+}
+
 // Helper: usar emissionDate (fecha de emisión del POS) en vez de createdAt
 const getInvoiceDate = (invoice) => {
   if (invoice?.emissionDate) {
@@ -2035,9 +2056,8 @@ export default function Reports() {
       endDate.setHours(23, 59, 59, 999)
 
       return accessiblePurchases.filter(purchase => {
-        if (!purchase.createdAt) return false
-        const purchaseDate = purchase.createdAt.toDate ? purchase.createdAt.toDate() : new Date(purchase.createdAt)
-        return purchaseDate >= startDate && purchaseDate <= endDate
+        const purchaseDate = getPurchaseDate(purchase)
+        return purchaseDate && purchaseDate >= startDate && purchaseDate <= endDate
       })
     }
 
@@ -2071,9 +2091,8 @@ export default function Reports() {
     }
 
     return accessiblePurchases.filter(purchase => {
-      if (!purchase.createdAt) return false
-      const purchaseDate = purchase.createdAt.toDate ? purchase.createdAt.toDate() : new Date(purchase.createdAt)
-      return purchaseDate >= filterDate && purchaseDate <= filterEndDate
+      const purchaseDate = getPurchaseDate(purchase)
+      return purchaseDate && purchaseDate >= filterDate && purchaseDate <= filterEndDate
     })
   }, [purchases, dateRange, customStartDate, customEndDate, hasPurchaseAccess])
 
@@ -2427,13 +2446,24 @@ export default function Reports() {
     }
   }, [financialMovements, cashMovements, dateRange, customStartDate, customEndDate, filterBranch, canAccess])
 
-  // Estadísticas de rentabilidad
+  /**
+   * Estadísticas de rentabilidad — mirada de CAJA del período.
+   *
+   * OJO, es la confusión clásica: `costoVentas` NO es el costo de la
+   * mercadería vendida, son las COMPRAS registradas en el período. Este
+   * reporte responde "cuánto entró contra cuánto gasté este mes", no "cuánto
+   * gané sobre lo que vendí".
+   *
+   * El costo real de lo vendido (item por item, con `calculateItemCost`) vive
+   * en `stats.totalCost` y se muestra en Resumen General. Para un negocio que
+   * vende stock comprado antes, los dos números no se parecen en nada.
+   */
   const profitabilityStats = useMemo(() => {
     const totalVentas = stats.totalRevenue
-    const costoVentas = purchaseStats.total // Costo de los productos (compras)
+    const costoVentas = purchaseStats.total // COMPRAS del período (no es COGS)
     const totalGastos = expenseStats.total // Gastos operativos
 
-    // Utilidad Bruta = Ventas - Costo de Ventas
+    // Ventas - Compras del período
     const utilidadBruta = totalVentas - costoVentas
 
     // Utilidad Operativa (Neta) = Utilidad Bruta - Gastos Operativos
@@ -2505,10 +2535,10 @@ export default function Reports() {
       { 'Concepto': 'Sucursal', 'Valor': branchLabel || 'Todas' },
       { 'Concepto': '---', 'Valor': '---' },
       { 'Concepto': 'Total Ventas', 'Valor': profitabilityStats.totalVentas },
-      { 'Concepto': 'Costo de Ventas (Compras)', 'Valor': profitabilityStats.costoVentas },
-      ...(profitabilityStats.comprasActivos > 0 ? [{ 'Concepto': 'Compras de Activos (no incluidas en el costo)', 'Valor': profitabilityStats.comprasActivos }] : []),
-      { 'Concepto': 'Utilidad Bruta', 'Valor': profitabilityStats.utilidadBruta },
-      { 'Concepto': 'Margen Bruto (%)', 'Valor': profitabilityStats.margenBruto.toFixed(2) + '%' },
+      { 'Concepto': 'Compras del período', 'Valor': profitabilityStats.costoVentas },
+      ...(profitabilityStats.comprasActivos > 0 ? [{ 'Concepto': 'Compras de Activos (no incluidas)', 'Valor': profitabilityStats.comprasActivos }] : []),
+      { 'Concepto': 'Ventas - Compras', 'Valor': profitabilityStats.utilidadBruta },
+      { 'Concepto': '% sobre ventas', 'Valor': profitabilityStats.margenBruto.toFixed(2) + '%' },
       { 'Concepto': '---', 'Valor': '---' },
       { 'Concepto': 'Total Gastos Operativos', 'Valor': profitabilityStats.totalGastos },
       { 'Concepto': '---', 'Valor': '---' },
@@ -5779,9 +5809,41 @@ export default function Reports() {
             )}
           </div>
 
-          {/* KPIs de Rentabilidad - Fórmula: Ventas - Costo de Ventas - Gastos = Utilidad Neta */}
+          {/* AVISO cuando se vendió sin comprar en el período.
+              Este reporte compara lo que ENTRÓ contra lo que se GASTÓ ese mes;
+              no mira el costo de la mercadería vendida. Un negocio que vende
+              stock comprado antes ve compras 0 y un margen del 100%, y cree
+              que ganó el total de sus ventas. Se le manda al número correcto,
+              que ya está calculado en Resumen General. */}
+          {stats.totalRevenue > 0 && purchaseStats.count === 0 && (
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-sm font-medium text-amber-900">
+                No registraste compras en este período
+              </p>
+              <p className="text-sm text-amber-800 mt-1">
+                Este reporte compara lo que entró contra lo que gastaste en el período, así que
+                sin compras el margen sale al 100%. Si lo que quieres saber es cuánto ganaste sobre
+                lo que vendiste —usando el costo de cada producto— ese número está en Resumen General.
+              </p>
+              {!hidePrivateData && stats.totalCost > 0 && (
+                <p className="text-sm text-amber-900 mt-2">
+                  Utilidad sobre lo vendido: <strong>{formatMoney(stats.totalProfit)}</strong>
+                  {' '}({stats.profitMargin.toFixed(1)}%), y descontando gastos:{' '}
+                  <strong>{formatMoney(stats.totalProfit - expenseStats.total)}</strong>.
+                </p>
+              )}
+              <button
+                onClick={() => setSelectedReport('overview')}
+                className="mt-2 text-sm font-medium text-amber-900 underline hover:no-underline"
+              >
+                Ver Resumen General
+              </button>
+            </div>
+          )}
+
+          {/* KPIs: Ventas - Compras - Gastos = Utilidad Operativa */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* Fila 1: Ventas, Costo de Ventas, Utilidad Bruta */}
+            {/* Fila 1: Ventas, Compras del período, Ventas - Compras */}
             <Card>
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
@@ -5805,12 +5867,17 @@ export default function Reports() {
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-600">Costo de Ventas</p>
+                    {/* "Costo de Ventas" era un nombre equivocado: esto suma
+                        las COMPRAS del periodo, no el costo de lo vendido. Con
+                        el nombre viejo, un negocio que vende stock comprado
+                        antes veia costo 0 y un margen del 100%, y creia que
+                        habia ganado el total de sus ventas. */}
+                    <p className="text-sm font-medium text-gray-600">Compras del período</p>
                     <p className="text-2xl font-bold text-orange-600 mt-2">
                       {formatMoney(profitabilityStats.costoVentas)}
                     </p>
                     <p className="text-sm text-gray-500 mt-1">
-                      {purchaseStats.count} compras
+                      {purchaseStats.count} {purchaseStats.count === 1 ? 'compra registrada' : 'compras registradas'}
                     </p>
                     {profitabilityStats.comprasActivos > 0 && (
                       <p className="text-xs text-gray-400 mt-1">
@@ -5829,12 +5896,12 @@ export default function Reports() {
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-600">Utilidad Bruta</p>
+                    <p className="text-sm font-medium text-gray-600">Ventas - Compras</p>
                     <p className={`text-2xl font-bold mt-2 ${profitabilityStats.utilidadBruta >= 0 ? 'text-teal-600' : 'text-red-600'}`}>
                       {formatMoney(profitabilityStats.utilidadBruta)}
                     </p>
                     <p className="text-sm text-gray-500 mt-1">
-                      Ventas - Costo ({profitabilityStats.margenBruto.toFixed(1)}%)
+                      {profitabilityStats.margenBruto.toFixed(1)}% de las ventas
                     </p>
                   </div>
                   <div className={`p-3 rounded-lg ${profitabilityStats.utilidadBruta >= 0 ? 'bg-teal-100' : 'bg-red-100'}`}>

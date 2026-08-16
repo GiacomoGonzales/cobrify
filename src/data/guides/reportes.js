@@ -200,21 +200,34 @@ export default {
       title: 'Rentabilidad: lo que de verdad ganas',
       blocks: [
         {
+          type: 'ojo',
+          text: 'Antes que nada, lo que más confunde: **Rentabilidad NO calcula el costo de lo que vendiste**. Compara lo que entró contra lo que gastaste ESE MES. Si vendes mercadería que compraste antes, verás compras en cero y un margen del 100% — y no significa que ganaste todo.',
+        },
+        {
           type: 'texto',
-          text: 'Es el reporte más importante y el que casi nadie mira. Arriba tiene seis cifras encadenadas, y vale la pena entender el orden porque cada una responde algo distinto:',
+          text: 'Con eso claro, las seis cifras de arriba:',
         },
         {
           type: 'tabla',
           encabezados: ['Cifra', 'Qué es'],
           filas: [
             ['Total Ventas', 'Todo lo que facturaste en el período'],
-            ['Costo de Ventas', 'Lo que te costó la mercadería que vendiste'],
-            ['Utilidad Bruta', 'Ventas menos costo. Lo que deja el producto en sí'],
+            ['Compras del período', 'Lo que GASTASTE comprando mercadería este mes'],
+            ['Ventas - Compras', 'La diferencia entre lo uno y lo otro'],
             ['Total Gastos', 'Alquiler, sueldos, servicios: todo lo que registraste'],
-            ['Utilidad Operativa', 'Utilidad Bruta menos Gastos. Lo que de verdad queda'],
+            ['Utilidad Operativa', 'Lo anterior menos los gastos'],
             ['Margen Operativo', 'Esa utilidad como porcentaje de la venta'],
           ],
         },
+        {
+          type: 'texto',
+          text: 'Este reporte sirve bien cuando compras y vendes al mismo ritmo, como un restaurante que se abastece cada semana: ahí "lo que gasté este mes" y "lo que costó lo que vendí" se parecen bastante.',
+        },
+        {
+          type: 'consejo',
+          text: 'Para saber **cuánto ganaste sobre lo que vendiste** —con el costo real de cada producto, sin importar cuándo lo compraste— el número está en **Resumen General**: es la **Utilidad Total**. Acuérdate de restarle después tus gastos, porque esa cifra todavía no los descuenta.',
+        },
+        { type: 'enlace', to: '/app/reportes', label: 'Ver Resumen General' },
         {
           type: 'texto',
           text: 'Debajo están **Ingresos vs Gastos**, la **Evolución de la Utilidad Neta**, la **Distribución del Ingreso** (a dónde se va cada sol que entra) y el **Detalle por Período**.',
@@ -326,8 +339,16 @@ export default {
       a: 'No, una venta anulada sale de los totales. Distinto es una **rechazada por SUNAT**: esa sigue contando como venta hasta que la anules, porque el rechazo es un problema de envío, no de si la venta ocurrió.',
     },
     {
-      q: '¿Cuál es la diferencia entre Utilidad Bruta y Operativa?',
-      a: 'La **bruta** es lo que queda después de pagar la mercadería que vendiste. La **operativa** es lo que queda después de restar además tus gastos (alquiler, sueldos, servicios). La operativa es la que te dice si el negocio gana dinero; la bruta solo te dice si el producto está bien preciado.',
+      q: 'Rentabilidad me dice 100% de margen y Resumen General 23%. ¿Cuál creo?',
+      a: 'Los dos están bien, pero miden cosas distintas. **Rentabilidad** compara ventas contra las **compras que hiciste ese mes**: si vendiste stock que compraste antes, no hay compras que restar y el margen sale al 100%. **Resumen General** usa el **costo de cada producto vendido**, sin importar cuándo lo compraste. Para saber cuánto ganaste, hazle caso a Resumen General, y réstale tus gastos.',
+    },
+    {
+      q: '¿Cuánto gané este mes, entonces?',
+      a: 'Toma la **Utilidad Total** de Resumen General y réstale el **Total Gastos** del reporte de Gastos. Ejemplo real: S/ 40,361 de ventas con S/ 31,127 de costo dan S/ 9,234 de utilidad; menos S/ 2,860 de gastos, ganaste S/ 6,374 ese mes.',
+    },
+    {
+      q: 'Registré una compra pero no aparece en el período.',
+      a: 'Los reportes ubican la compra por la **fecha de la factura del proveedor**, no por el día en que la registraste. Una factura del 30 de julio cargada en agosto cuenta en julio, que es lo correcto. Si la fecha de factura está vacía, se usa la de registro.',
     },
     {
       q: '¿Puedo ver un mes cerrado del año pasado?',
