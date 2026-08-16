@@ -951,10 +951,7 @@ export default function Warehouses() {
       <div className="space-y-4">
         <div>
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <Warehouse className="w-7 h-7" />
-              Almacenes
-            </h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Almacenes</h1>
             <GuideLink />
           </div>
           <p className="text-gray-600 mt-1">Gestiona tus almacenes y puntos de inventario</p>

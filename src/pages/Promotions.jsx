@@ -399,7 +399,7 @@ export default function Promotions() {
     <div className="space-y-6">
       <div>
         <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="text-2xl font-bold text-gray-900">Promociones</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Promociones</h1>
           <GuideLink />
         </div>
         <p className="text-gray-600">

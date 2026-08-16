@@ -343,7 +343,7 @@ export default function LendingPortfolio() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold text-gray-900">Préstamos</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Préstamos</h1>
             <GuideLink />
           </div>
           <p className="text-sm text-gray-500">Tu cartera de préstamos a clientes</p>

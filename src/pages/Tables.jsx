@@ -1652,10 +1652,7 @@ export default function Tables() {
       <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
         <div>
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <Grid3x3 className="w-7 h-7" />
-              Gestión de Mesas
-            </h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Gestión de Mesas</h1>
             <GuideLink />
           </div>
           <p className="text-gray-600 mt-1">Administra las mesas de tu restaurante</p>

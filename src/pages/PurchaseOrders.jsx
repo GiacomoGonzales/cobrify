@@ -287,7 +287,7 @@ export default function PurchaseOrders() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold text-gray-900">Órdenes de Compra</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Órdenes de Compra</h1>
             <GuideLink />
           </div>
           <p className="text-gray-600 text-sm mt-1">

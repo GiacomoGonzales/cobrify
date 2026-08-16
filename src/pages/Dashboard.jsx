@@ -930,15 +930,11 @@ export default function Dashboard() {
 
   return (
     <div className="relative space-y-6 animate-fade-in">
-      {/* Degradado tenue de fondo (mismo lenguaje visual que login/landing), solo decorativo */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -top-4 inset-x-0 h-72 -z-10"
-        style={{
-          background:
-            'radial-gradient(46% 90% at 12% 0%, rgba(37, 99, 235, 0.07), transparent 70%), radial-gradient(40% 80% at 60% 0%, rgba(6, 182, 212, 0.06), transparent 70%), radial-gradient(36% 70% at 95% 0%, rgba(59, 130, 246, 0.05), transparent 70%)',
-        }}
-      />
+      {/* Degradado tenue de fondo (mismo lenguaje visual que login/landing), solo
+          decorativo. Va AL FINAL a proposito: como primer hijo, el space-y-6 del
+          contenedor le metia 24px de margen a la cabecera y el titulo quedaba mas
+          abajo que en el resto de paginas. Es absolute con -z-10, asi que el orden
+          en el DOM no cambia como se ve. */}
       {/* Header */}
       <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
         <div>
@@ -1264,6 +1260,14 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -top-4 inset-x-0 h-72 -z-10"
+        style={{
+          background:
+            'radial-gradient(46% 90% at 12% 0%, rgba(37, 99, 235, 0.07), transparent 70%), radial-gradient(40% 80% at 60% 0%, rgba(6, 182, 212, 0.06), transparent 70%), radial-gradient(36% 70% at 95% 0%, rgba(59, 130, 246, 0.05), transparent 70%)',
+        }}
+      />
     </div>
   )
 }

@@ -11,7 +11,7 @@ import OrderTicketPrint from '@/components/OrderTicketPrint'
 import { useReactToPrint } from 'react-to-print'
 import { useNewOrderAlert } from '@/hooks/useNewOrderAlert'
 import {
-  ShoppingBag, MessageCircle, CheckCircle, XCircle, Clock, MapPin, Phone,
+  MessageCircle, CheckCircle, XCircle, Clock, MapPin, Phone,
   User, ChevronDown, ChevronUp, Package, Search, Loader2,
   AlertCircle, Smartphone, Mail, Printer, FileText, ShoppingCart,
   PackageCheck, ThumbsUp, Ban, DollarSign, Calendar, Inbox, Archive, Sparkles
@@ -526,10 +526,7 @@ export default function OnlineOrders() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center gap-2">
-              <ShoppingBag className="w-7 h-7 text-primary-600" />
-              Pedidos Online
-            </h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Pedidos Online</h1>
             <GuideLink />
           </div>
           <p className="text-sm text-gray-600 mt-1">

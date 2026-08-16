@@ -1263,10 +1263,7 @@ export default function Orders() {
       <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
         <div>
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <ListOrdered className="w-7 h-7" />
-              Órdenes Activas
-            </h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Órdenes Activas</h1>
             <GuideLink />
           </div>
           <p className="text-gray-600 mt-1">Monitorea las órdenes en tiempo real</p>
