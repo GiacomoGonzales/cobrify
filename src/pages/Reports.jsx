@@ -2782,6 +2782,11 @@ export default function Reports() {
     profitability: 'de Rentabilidad',
   }[selectedReport]
 
+  // Lo que el dueño llama "cuánto gané": la utilidad de lo vendido MENOS los
+  // gastos del período. Antes había que restarlo a mano (la Utilidad Total no
+  // descuenta gastos) y era la pregunta más repetida de los usuarios.
+  const gananciaFinal = stats.totalProfit - expenseStats.total
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -2921,9 +2926,13 @@ export default function Reports() {
       {/* Resumen General */}
       {selectedReport === 'overview' && (
         <>
-          {/* KPIs principales */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 lg:gap-3">
-            <Card>
+          {/* KPIs principales. Cada tarjeta lleva su explicación en el
+              `title` (aparece al dejar el mouse encima): qué es el dato y de
+              dónde sale — pedido del dueño, 16-ago. La sexta, Ganancia Final,
+              es LA respuesta a "cuánto gané": antes había que restar los
+              gastos a mano. */}
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 lg:gap-3">
+            <Card className="cursor-help" title="Todo lo que vendiste en el período. No incluye comprobantes anulados.">
               <CardContent className="p-3 xl:p-4">
                 <p className="text-xs font-medium text-gray-500">Ingresos Totales</p>
                 <p className="text-base lg:text-lg xl:text-2xl font-bold text-gray-900 mt-1">
@@ -2944,28 +2953,43 @@ export default function Reports() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="cursor-help" title="Lo que te costó la mercadería que vendiste, producto por producto. Usa el costo guardado el día de cada venta, sin importar cuándo la compraste.">
               <CardContent className="p-3 xl:p-4">
                 <p className="text-xs font-medium text-gray-500">Costo Total</p>
                 <p className="text-base lg:text-lg xl:text-2xl font-bold text-red-600 mt-1">
                   {formatMoney(stats.totalCost)}
                 </p>
+                <p className="text-xs text-gray-500 mt-0.5">de lo vendido</p>
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="cursor-help" title="Ingresos menos Costo Total: lo que dejó la venta de tus productos. OJO: todavía no descuenta tus gastos (alquiler, sueldos, servicios).">
               <CardContent className="p-3 xl:p-4">
                 <p className="text-xs font-medium text-gray-500">Utilidad Total</p>
                 <p className="text-base lg:text-lg xl:text-2xl font-bold text-green-600 mt-1">
                   {formatMoney(stats.totalProfit)}
                 </p>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Margen: {stats.profitMargin.toFixed(1)}%
+                  Margen: {stats.profitMargin.toFixed(1)}% · sin gastos
                 </p>
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="cursor-help" title={`Utilidad Total menos los gastos del período (${formatMoney(expenseStats.total)}). Esto es lo que te queda al final: la respuesta a "cuánto gané".`}>
+              <CardContent className="p-3 xl:p-4">
+                <p className="text-xs font-medium text-gray-500">Ganancia Final</p>
+                <p className={`text-base lg:text-lg xl:text-2xl font-bold mt-1 ${gananciaFinal >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {formatMoney(gananciaFinal)}
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {expenseStats.total > 0
+                    ? `Utilidad − ${formatMoney(expenseStats.total)} de gastos`
+                    : 'Sin gastos registrados'}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="cursor-help" title="Cuántos documentos emitiste: F facturas, B boletas, NV notas de venta.">
               <CardContent className="p-3 xl:p-4">
                 <p className="text-xs font-medium text-gray-500">Comprobantes</p>
                 <p className="text-base lg:text-lg xl:text-2xl font-bold text-gray-900 mt-1">{stats.totalInvoices}</p>
@@ -2977,7 +3001,7 @@ export default function Reports() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="cursor-help" title="Cuánto gasta en promedio cada cliente por compra: Ingresos entre Comprobantes.">
               <CardContent className="p-3 xl:p-4">
                 <p className="text-xs font-medium text-gray-500">Ticket Promedio</p>
                 <p className="text-base lg:text-lg xl:text-2xl font-bold text-gray-900 mt-1">
@@ -5711,8 +5735,8 @@ export default function Reports() {
               {!hidePrivateData && stats.totalCost > 0 && (
                 <p className="text-sm text-amber-900 mt-2">
                   Utilidad sobre lo vendido: <strong>{formatMoney(stats.totalProfit)}</strong>
-                  {' '}({stats.profitMargin.toFixed(1)}%), y descontando gastos:{' '}
-                  <strong>{formatMoney(stats.totalProfit - expenseStats.total)}</strong>.
+                  {' '}({stats.profitMargin.toFixed(1)}%), y tu <strong>Ganancia Final</strong> descontando
+                  gastos: <strong>{formatMoney(gananciaFinal)}</strong>.
                 </p>
               )}
               <button

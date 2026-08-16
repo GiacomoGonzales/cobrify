@@ -75,16 +75,37 @@ export default {
     // ─────────────────────────────────────────────────────────────────────
     {
       id: 'resumen-general',
-      title: 'Resumen General',
+      title: 'Resumen General: las seis cifras de arriba',
       blocks: [
         {
           type: 'texto',
-          text: 'La foto del período en cuatro bloques: la **Tendencia de Ventas**, la **Distribución de Comprobantes** (cuánto emites de cada tipo), los **Estados de Pago** y los **Tipos de Pedido**.',
+          text: 'Las seis tarjetas del encabezado cuentan la historia completa del período, en orden. Si dejas el mouse encima de cualquiera, te explica qué es y de dónde sale:',
+        },
+        {
+          type: 'tabla',
+          encabezados: ['Tarjeta', 'Qué es'],
+          filas: [
+            ['Ingresos Totales', 'Todo lo que vendiste (sin anulados)'],
+            ['Costo Total', 'Lo que te costó la mercadería que vendiste, producto por producto'],
+            ['Utilidad Total', 'Ingresos − Costo. Lo que dejó la venta, ANTES de gastos'],
+            ['Ganancia Final', 'Utilidad − Gastos. Lo que te queda al final: "cuánto gané"'],
+            ['Comprobantes', 'Cuántos documentos emitiste (facturas, boletas, notas de venta)'],
+            ['Ticket Promedio', 'Cuánto gasta en promedio cada cliente por compra'],
+          ],
+        },
+        {
+          type: 'consejo',
+          text: '**Ganancia Final** es el número que buscas cuando preguntas cuánto ganaste: ya tiene descontado el costo de la mercadería Y tus gastos. La tarjeta misma te muestra la resta. Eso sí: solo es tan cierta como tu registro de gastos — si no los anotas, la ganancia sale inflada.',
+        },
+        {
+          type: 'texto',
+          text: 'Debajo de las tarjetas están la **Tendencia de Ventas**, la **Distribución de Comprobantes** (cuánto emites de cada tipo), los **Estados de Pago** y los **Tipos de Pedido**.',
         },
         {
           type: 'texto',
           text: '**Estados de Pago** es el que más se pasa por alto y el que más rápido te avisa de un problema: te dice cuánto de lo que vendiste está cobrado y cuánto sigue pendiente. Vender mucho a crédito y no cobrarlo se ve acá antes que en la cuenta bancaria.',
         },
+        { type: 'enlace', to: '/app/gastos', label: 'Registrar gastos' },
         { type: 'enlace', to: '/app/clientes', label: 'Ver quién te debe (Clientes)' },
       ],
     },
@@ -225,7 +246,7 @@ export default {
         },
         {
           type: 'consejo',
-          text: 'Para saber **cuánto ganaste sobre lo que vendiste** —con el costo real de cada producto, sin importar cuándo lo compraste— el número está en **Resumen General**: es la **Utilidad Total**. Acuérdate de restarle después tus gastos, porque esa cifra todavía no los descuenta.',
+          text: 'Para saber **cuánto ganaste sobre lo que vendiste** —con el costo real de cada producto, sin importar cuándo lo compraste— ve a **Resumen General**: la tarjeta **Ganancia Final** ya trae la utilidad de lo vendido con los gastos descontados.',
         },
         { type: 'enlace', to: '/app/reportes', label: 'Ver Resumen General' },
         {
@@ -344,7 +365,7 @@ export default {
     },
     {
       q: '¿Cuánto gané este mes, entonces?',
-      a: 'Toma la **Utilidad Total** de Resumen General y réstale el **Total Gastos** del reporte de Gastos. Ejemplo real: S/ 40,361 de ventas con S/ 31,127 de costo dan S/ 9,234 de utilidad; menos S/ 2,860 de gastos, ganaste S/ 6,374 ese mes.',
+      a: 'Mira la tarjeta **Ganancia Final** del Resumen General: es tus ventas menos el costo de la mercadería vendida menos tus gastos, todo ya restado. Ejemplo: S/ 40,361 de ventas con S/ 31,127 de costo dan S/ 9,234 de utilidad; menos S/ 2,860 de gastos, la Ganancia Final marca S/ 6,374. Requisito para que sea real: productos con costo cargado y gastos registrados.',
     },
     {
       q: 'Registré una compra pero no aparece en el período.',
