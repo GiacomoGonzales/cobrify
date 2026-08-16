@@ -9359,15 +9359,34 @@ export const checkSubscriptionExpirations = onSchedule(
         const periodEnd = sub.currentPeriodEnd?.toDate?.()
         if (!periodEnd) continue
 
-        const diffMs = periodEnd.getTime() - now.getTime()
-        const daysUntilExpiry = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+        // DOS RELOJES DISTINTOS, a proposito (16-ago-2026):
+        //
+        //  - SUSPENDER usa el instante exacto. Es una decision de negocio: no
+        //    se puede cortar el servicio ni un minuto antes de lo pagado.
+        //  - AVISAR usa dias de CALENDARIO en Lima. Es un mensaje para una
+        //    persona: algo que vence hoy a las 23:00 tiene que decir "vence
+        //    hoy", no "vence manana".
+        //
+        // Antes ambos salian de un unico Math.ceil sobre horas, y como el cron
+        // corre a la 01:00 el mensaje se iba un dia entero: una cuenta que
+        // vencia HOY a las 10:00 recibia un push diciendo "vence manana".
+        // Ademas contradecia al banner del sistema, que si cuenta por
+        // calendario (ver src/utils/subscriptionWarning.js — misma escalera de
+        // 4 dias; si se cambia alla, cambiar aca).
+        const diaLima = (d) => {
+          const ymd = d.toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
+          return new Date(`${ymd}T00:00:00Z`).getTime()
+        }
+        const daysUntilExpiry = Math.round((diaLima(periodEnd) - diaLima(now)) / 86400000)
 
-        // Cuentas de reseller: suspender inmediatamente al vencer (sin período de gracia)
+        // Cuentas de reseller: suspender al vencer, sin periodo de gracia.
         const isResellerAccount = !!sub.resellerId
-        const suspendThreshold = isResellerAccount ? 0 : -1
+        const graciaMs = isResellerAccount ? 0 : 24 * 60 * 60 * 1000
+        const msDesdeVencimiento = now.getTime() - periodEnd.getTime()
+        const debeSuspender = msDesdeVencimiento >= graciaMs
 
         // Suspender cuando corresponda según tipo de cuenta
-        if (daysUntilExpiry <= suspendThreshold) {
+        if (debeSuspender) {
           await db.collection('subscriptions').doc(userId).update({
             status: 'suspended',
             accessBlocked: true,
@@ -9406,18 +9425,31 @@ export const checkSubscriptionExpirations = onSchedule(
         let notifMessage = null
         let notifType = 'subscription_expiring_soon'
 
-        if (daysUntilExpiry === 7) {
-          notifTitle = 'Tu suscripción vence en 7 días'
-          notifMessage = `Tu plan ${sub.plan} vence el ${periodEnd.toLocaleDateString('es-PE')}. Renueva para no perder acceso.`
-        } else if (daysUntilExpiry === 3) {
-          notifTitle = 'Tu suscripción vence en 3 días'
-          notifMessage = `¡Atención! Tu plan vence el ${periodEnd.toLocaleDateString('es-PE')}. Renueva ahora para evitar la suspensión.`
+        // Escalera de 4 dias, la misma del banner del sistema. Antes eran 7, 3
+        // y 1: los dias 4 y 2 no recibian NADA, y con un solo dia de margen
+        // casi nadie alcanza a pagar.
+        const fechaTexto = periodEnd.toLocaleDateString('es-PE', {
+          day: 'numeric', month: 'long', timeZone: 'America/Lima',
+        })
+        // A quien no tiene gracia (reseller) hay que decirle que el corte es
+        // inmediato: es justo el que no puede darse el lujo de pagar al dia
+        // siguiente.
+        const avisoCorte = isResellerAccount
+          ? 'Al vencer, el servicio se suspende de inmediato.'
+          : 'Renueva para no interrumpir tus ventas.'
+
+        if (daysUntilExpiry >= 2 && daysUntilExpiry <= 4) {
+          notifTitle = `Tu suscripción vence en ${daysUntilExpiry} días`
+          notifMessage = `Tu plan vence el ${fechaTexto}. ${avisoCorte}`
         } else if (daysUntilExpiry === 1) {
           notifTitle = 'Tu suscripción vence mañana'
-          notifMessage = `¡Último día! Tu plan vence mañana ${periodEnd.toLocaleDateString('es-PE')}. Renueva hoy para no perder acceso.`
-        } else if (daysUntilExpiry === 0 && !isResellerAccount) {
+          notifMessage = `¡Último día! Tu plan vence mañana ${fechaTexto}. ${avisoCorte}`
+        } else if (daysUntilExpiry === 0) {
           notifTitle = 'Tu suscripción vence hoy'
-          notifMessage = `Tu plan vence hoy. Tienes 24 horas de gracia para renovar antes de que tu cuenta sea suspendida.`
+          notifMessage = isResellerAccount
+            // Sin gracia: al vencer hoy, el corte es hoy mismo.
+            ? `Tu plan vence HOY. Al vencer, el servicio se suspende de inmediato: renueva antes para no quedarte sin sistema.`
+            : `Tu plan vence hoy. Tienes 24 horas de gracia para renovar antes de que tu cuenta sea suspendida.`
           notifType = 'subscription_expired'
         }
 
