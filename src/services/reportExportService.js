@@ -1124,6 +1124,11 @@ export const exportGeneralReport = async (data) => {
     stats, salesByMonth, topProducts, topCustomers, filteredInvoices,
     dateRange, paymentMethodStats, customStartDate, customEndDate, branchLabel,
     businessData,
+    // Gastos del período y ganancia final (Utilidad Total - Gastos): el mismo
+    // dato que la tarjeta "Ganancia Final" del Resumen General en pantalla.
+    // Pedido del usuario que reportó (16-ago): que el Excel descargado diga lo
+    // mismo que la pantalla.
+    totalGastos, gananciaFinal,
   } = data
 
   const wb = XLSX.utils.book_new()
@@ -1153,8 +1158,14 @@ export const exportGeneralReport = async (data) => {
       header: ['Indicador', 'Valor'],
       rows: [
         ['Ingresos Totales', Number((stats.totalRevenue || 0).toFixed(2))],
-        ['Costo Total', Number((stats.totalCost || 0).toFixed(2))],
-        ['Utilidad Total', Number((stats.totalProfit || 0).toFixed(2))],
+        ['Costo Total (de lo vendido)', Number((stats.totalCost || 0).toFixed(2))],
+        ['Utilidad Total (sin gastos)', Number((stats.totalProfit || 0).toFixed(2))],
+        // La ganancia final solo si el llamador la manda (compatibilidad con
+        // llamadas viejas que no traen gastos).
+        ...(typeof totalGastos === 'number' ? [
+          ['Total Gastos del Período', Number(totalGastos.toFixed(2))],
+          ['GANANCIA FINAL (Utilidad - Gastos)', Number((gananciaFinal ?? (stats.totalProfit - totalGastos)).toFixed(2))],
+        ] : []),
         ['Margen de Utilidad %', Number((stats.profitMargin || 0).toFixed(2))],
         ['Crecimiento vs Período Anterior %', Number((stats.revenueGrowth || 0).toFixed(2))],
       ],

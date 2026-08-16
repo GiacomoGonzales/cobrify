@@ -2746,7 +2746,7 @@ export default function Reports() {
   const exportarReporteActual = async () => {
     switch (selectedReport) {
       case 'overview':
-        return exportGeneralReport({ stats, salesByMonth: salesByPeriod, topProducts, topCustomers, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })
+        return exportGeneralReport({ stats, salesByMonth: salesByPeriod, topProducts, topCustomers, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings, totalGastos: expenseStats.total, gananciaFinal })
       case 'sales':
         return exportSalesReport({ stats, salesByMonth: salesByPeriod, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })
       case 'products':
