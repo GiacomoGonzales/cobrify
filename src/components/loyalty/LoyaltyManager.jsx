@@ -11,7 +11,7 @@ import Input from '@/components/ui/Input'
 import Badge from '@/components/ui/Badge'
 import {
   WALLET_THEMES, resolveTheme, textoDeSellos, esColorClaro,
-  MOTIVOS_PORTADA, celdasDeCuadricula,
+  MOTIVOS_PORTADA, celdasDeCuadricula, SELLOS_TARJETA,
 } from '@/data/walletThemes'
 import {
   DEFAULT_LOYALTY_CONFIG, getLoyaltyCards, redeemReward, getWalletPassLink,
@@ -35,7 +35,7 @@ import {
  * servidor para la imagen real (ver walletThemes.js). El logo va sobre una
  * pastilla blanca, igual que en la portada generada.
  */
-function PortadaPreview({ colorFondo, motivo, logoUrl, sellos = 3, meta = 10, className = '' }) {
+function PortadaPreview({ colorFondo, motivo, logoUrl, sellos = 3, meta = 10, sello = 'check', className = '' }) {
   if (motivo === 'logo') {
     // La portada de logo es el logo apaisado tal cual, sobre blanco (así lo
     // sirve el servidor). Sin logo no hay franja que mostrar.
@@ -53,7 +53,7 @@ function PortadaPreview({ colorFondo, motivo, logoUrl, sellos = 3, meta = 10, cl
         // La cuadrícula trae sus colores por elemento; el aspecto se preserva
         // (meet) para que los casilleros nunca salgan recortados.
         <svg viewBox="0 0 1032 336" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
-          <g dangerouslySetInnerHTML={{ __html: celdasDeCuadricula(sellos, meta, colorFondo) }} />
+          <g dangerouslySetInnerHTML={{ __html: celdasDeCuadricula(sellos, meta, colorFondo, sello) }} />
         </svg>
       )}
     </div>
@@ -66,7 +66,7 @@ function PortadaPreview({ colorFondo, motivo, logoUrl, sellos = 3, meta = 10, cl
  * franja de portada. Sirve tanto de muestra de la galería (chica) como de
  * vista previa grande.
  */
-function TarjetaPreview({ colorFondo, sellosComoPuntos, negocio, logoUrl, meta, premio, motivo, grande = false }) {
+function TarjetaPreview({ colorFondo, sellosComoPuntos, negocio, logoUrl, meta, premio, motivo, sello, grande = false }) {
   const claro = esColorClaro(colorFondo)
   const texto = claro ? 'text-gray-900' : 'text-white'
   const tenue = claro ? 'text-gray-500' : 'text-white/70'
@@ -111,6 +111,7 @@ function TarjetaPreview({ colorFondo, sellosComoPuntos, negocio, logoUrl, meta, 
           logoUrl={logoUrl}
           sellos={3}
           meta={Math.max(2, Number(meta) || 10)}
+          sello={sello}
           className={`${motivo === 'cuadricula' ? 'h-24' : 'h-14'} border-t ${esColorClaro(colorFondo) ? 'border-black/10' : 'border-white/15'}`}
         />
       )}
@@ -158,6 +159,7 @@ export default function LoyaltyManager({ isOpen, onClose }) {
             // resolveTheme normaliza: sin guardar (o con un valor de los
             // patrones eliminados) cae a la cuadrícula.
             motivo: data.loyaltyConfig?.walletTheme?.motivo,
+            sello: data.loyaltyConfig?.walletTheme?.sello,
           }),
         })
         setTarjetas(res.success ? res.data : [])
@@ -184,15 +186,19 @@ export default function LoyaltyManager({ isOpen, onClose }) {
     // Al cambiar de tema se toma SU color; el color personalizado es un ajuste
     // sobre el tema elegido, no un valor que sobrevive de tema en tema. El
     // motivo sí sobrevive: es una elección aparte del color.
-    setConfig({ ...config, walletTheme: resolveTheme({ temaId, motivo: tema.motivo }) })
+    setConfig({ ...config, walletTheme: resolveTheme({ temaId, motivo: tema.motivo, sello: tema.sello }) })
   }
 
   const cambiarColor = (colorFondo) => {
-    setConfig({ ...config, walletTheme: resolveTheme({ temaId: tema.id, colorFondo, motivo: tema.motivo }) })
+    setConfig({ ...config, walletTheme: resolveTheme({ temaId: tema.id, colorFondo, motivo: tema.motivo, sello: tema.sello }) })
   }
 
   const elegirMotivo = (motivo) => {
-    setConfig({ ...config, walletTheme: resolveTheme({ temaId: tema.id, colorFondo: tema.colorFondo, motivo }) })
+    setConfig({ ...config, walletTheme: resolveTheme({ temaId: tema.id, colorFondo: tema.colorFondo, motivo, sello: tema.sello }) })
+  }
+
+  const elegirSello = (sello) => {
+    setConfig({ ...config, walletTheme: resolveTheme({ temaId: tema.id, colorFondo: tema.colorFondo, motivo: tema.motivo, sello }) })
   }
 
   const guardar = async () => {
@@ -206,7 +212,7 @@ export default function LoyaltyManager({ isOpen, onClose }) {
           reward: (config.reward || '').trim(),
           minAmount: Number(config.minAmount) || 0,
           stampOnlineOrders: config.stampOnlineOrders !== false,
-          walletTheme: resolveTheme({ temaId: tema.id, colorFondo: tema.colorFondo, motivo: tema.motivo }),
+          walletTheme: resolveTheme({ temaId: tema.id, colorFondo: tema.colorFondo, motivo: tema.motivo, sello: tema.sello }),
           walletNearby: config.walletNearby !== false,
           walletMessage: (config.walletMessage || '').trim(),
         },
@@ -385,6 +391,7 @@ export default function LoyaltyManager({ isOpen, onClose }) {
                         logoUrl={logoUrl}
                         sellos={3}
                         meta={Math.max(2, Number(config.goal) || 10)}
+                        sello={tema.sello}
                         className="h-14 rounded-xl border border-gray-200"
                       />
                       <p className="text-[11px] text-center text-gray-600 mt-1">{m.nombre}</p>
@@ -392,6 +399,38 @@ export default function LoyaltyManager({ isOpen, onClose }) {
                   ))}
                 </div>
               </div>
+
+              {/* El icono del sello, solo con cuadrícula: es lo que se estampa
+                  en los casilleros llenos. */}
+              {tema.motivo === 'cuadricula' && (
+                <div className="mt-4">
+                  <p className="text-sm font-medium text-gray-900 mb-2">Tu sello</p>
+                  <div className="flex flex-wrap gap-2">
+                    {SELLOS_TARJETA.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        title={s.nombre}
+                        onClick={() => elegirSello(s.id)}
+                        className={`w-11 h-11 rounded-xl flex items-center justify-center transition border ${tema.sello === s.id
+                          ? 'border-primary-500 ring-2 ring-primary-200'
+                          : 'border-gray-200 hover:border-gray-300'}`}
+                        style={{ backgroundColor: tema.colorFondo }}
+                      >
+                        <svg viewBox="0 0 64 64" className="w-7 h-7">
+                          <g
+                            fill="none"
+                            stroke={esColorClaro(tema.colorFondo) ? '#1f2937' : '#ffffff'}
+                            strokeWidth={s.grosor}
+                            strokeLinecap="round" strokeLinejoin="round"
+                            dangerouslySetInnerHTML={{ __html: s.trazo }}
+                          />
+                        </svg>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="mt-4">
                 <Input
@@ -418,6 +457,7 @@ export default function LoyaltyManager({ isOpen, onClose }) {
                     meta={config.goal}
                     premio={config.reward}
                     motivo={tema.motivo}
+                    sello={tema.sello}
                     grande
                   />
                 </div>

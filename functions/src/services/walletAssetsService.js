@@ -127,8 +127,26 @@ export async function logoCuadradoDe(businessId, logoUrl) {
 // cuándo. El archivo del conteo anterior se borra al pasar al siguiente.
 // ============================================================================
 
-// check para el casillero lleno y regalo para el del premio (caja de 64x64)
-const ICONO_CHECK = '<path d="M19 33 l9 9 L45 23"/>'
+/**
+ * Iconos de sello para los casilleros llenos (caja de 64x64, solo trazo).
+ * ESPEJO de SELLOS_TARJETA en src/data/walletThemes.js — el front guarda y
+ * manda solo el ID (nunca el trazo), para que un documento de Firestore jamás
+ * inyecte SVG arbitrario acá. Si se toca un icono, se toca en los dos lados.
+ */
+const SELLOS = {
+  check: { grosor: 6.5, trazo: '<path d="M19 33 l9 9 L45 23"/>' },
+  estrella: { grosor: 4.5, trazo: '<path d="M32 13 l6.2 12.6 13.8 2 -10 9.8 2.4 13.8 -12.4 -6.5 -12.4 6.5 2.4 -13.8 -10 -9.8 13.8 -2 Z"/>' },
+  corazon: { grosor: 4.5, trazo: '<path d="M32 49 C10 34 15 13 32 23 C49 13 54 34 32 49 Z"/>' },
+  taza: { grosor: 4.5, trazo: '<path d="M16 26 h24 v10 a12 12 0 0 1 -24 0 z"/><path d="M40 28 h5 a6 6 0 0 1 0 12 h-4"/><path d="M23 12 q3 4 0 9 M31 12 q3 4 0 9"/>' },
+  pizza: { grosor: 4.5, trazo: '<path d="M14 18 L50 18 L32 52 Z"/><circle cx="27" cy="26" r="3"/><circle cx="38" cy="25" r="3"/><circle cx="32" cy="35" r="3"/>' },
+  hamburguesa: { grosor: 4.5, trazo: '<path d="M15 27 a17 13 0 0 1 34 0 v1 H15 Z"/><path d="M14 34 h36"/><path d="M16 40 h32 v3 a5 5 0 0 1 -5 5 H21 a5 5 0 0 1 -5 -5 Z"/>' },
+  huella: { grosor: 4.5, trazo: '<ellipse cx="32" cy="41" rx="10" ry="8"/><circle cx="18" cy="29" r="4.5"/><circle cx="27" cy="21" r="4.5"/><circle cx="37" cy="21" r="4.5"/><circle cx="46" cy="29" r="4.5"/>' },
+  tijeras: { grosor: 4.5, trazo: '<circle cx="20" cy="42" r="6"/><circle cx="20" cy="22" r="6"/><path d="M25 25 L48 44 M25 39 L48 20"/>' },
+  cruz: { grosor: 4.5, trazo: '<path d="M26 14 h12 v12 h12 v12 H38 v12 H26 V38 H14 V26 h12 Z"/>' },
+  polo: { grosor: 4, trazo: '<path d="M24 13 l-11 8 5 8 5 -3 v26 h18 V26 l5 3 5 -8 -11 -8 a8 5 0 0 1 -16 0 z"/>' },
+}
+
+// regalo para el casillero del premio
 const ICONO_REGALO = '<rect x="14" y="28" width="36" height="22" rx="4"/><rect x="11" y="18" width="42" height="10" rx="3"/><path d="M32 18 v32 M32 18 q-5 -10 -12 -6 q-4 5 12 6 M32 18 q5 -10 12 -6 q4 5 -12 6"/>'
 
 /**
@@ -140,8 +158,9 @@ const ICONO_REGALO = '<rect x="14" y="28" width="36" height="22" rx="4"/><rect x
  * funde con el cuerpo, sin costura), casilleros llenos en blanco con el check
  * del color de fondo, vacíos con línea punteada suave. Nada más.
  */
-export function svgDeCuadricula({ color = '#1e3a8a', sellos = 0, meta = 10 } = {}) {
+export function svgDeCuadricula({ color = '#1e3a8a', sellos = 0, meta = 10, sello = 'check' } = {}) {
   const tinta = esClaro(color) ? '#1f2937' : '#ffffff'
+  const icono = SELLOS[sello] || SELLOS.check
   const m = Math.max(1, meta)
   const s = Math.max(0, sellos)
   const filas = m <= 5 ? 1 : 2
@@ -168,7 +187,7 @@ export function svgDeCuadricula({ color = '#1e3a8a', sellos = 0, meta = 10 } = {
       const y = y0 + f * (lado + gap)
       if (i < s) {
         celdas += `<rect x="${x}" y="${y}" width="${lado}" height="${lado}" rx="${radio}" fill="${tinta}" fill-opacity="0.95"/>`
-        celdas += `<g transform="translate(${x + off} ${y + off}) scale(${esc.toFixed(3)})" fill="none" stroke="${color}" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round">${ICONO_CHECK}</g>`
+        celdas += `<g transform="translate(${x + off} ${y + off}) scale(${esc.toFixed(3)})" fill="none" stroke="${color}" stroke-width="${icono.grosor}" stroke-linecap="round" stroke-linejoin="round">${icono.trazo}</g>`
       } else {
         // Relleno apenas visible + punteado suave: presencia sin ruido.
         celdas += `<rect x="${x}" y="${y}" width="${lado}" height="${lado}" rx="${radio}" fill="${tinta}" fill-opacity="0.07"/>`
@@ -187,39 +206,43 @@ export function svgDeCuadricula({ color = '#1e3a8a', sellos = 0, meta = 10 } = {
  * Cuadrícula de un cliente, subida a Storage. Devuelve la URL (o null si algo
  * falla — la tarjeta sale sin portada propia y muestra la de la clase).
  */
-export async function cuadriculaDeSellos(businessId, { phone, color, sellos = 0, meta = 10, sellosAntes = null }) {
+export async function cuadriculaDeSellos(businessId, { phone, color, sellos = 0, meta = 10, sello = 'check', sellosAntes = null }) {
   try {
     const bucket = getStorage().bucket()
     const tel = String(phone || '').replace(/[^A-Za-z0-9._-]/g, '')
-    const ruta = `businesses/${businessId}/wallet/grid-${tel}-${sellos}.png`
+    // El nombre lleva la huella del DISEÑO (color, meta, icono): cambiar el
+    // sello o el color con el mismo conteo también debe ser una URL nueva —
+    // Google cachea por URL y con la misma serviría la imagen vieja.
+    const diseno = huella(`${color}|${meta}|${sello}`).slice(0, 8)
+    const ruta = `businesses/${businessId}/wallet/grid-${tel}-${sellos}-${diseno}.png`
     const archivo = bucket.file(ruta)
-    const origen = huella(`${color}|${sellos}|${meta}`)
 
     try {
       const [meta2] = await archivo.getMetadata()
       const guardado = meta2.metadata || {}
-      if (guardado.origen === origen && guardado.firebaseStorageDownloadTokens) {
+      if (guardado.firebaseStorageDownloadTokens) {
         return urlDescarga(bucket.name, ruta, guardado.firebaseStorageDownloadTokens.split(',')[0])
       }
     } catch (error) {
       if (error.code !== 404) throw error
     }
 
-    const png = await sharp(Buffer.from(svgDeCuadricula({ color, sellos, meta }))).png().toBuffer()
+    const png = await sharp(Buffer.from(svgDeCuadricula({ color, sellos, meta, sello }))).png().toBuffer()
     const token = crypto.randomUUID()
     await archivo.save(png, {
       resumable: false,
       metadata: {
         contentType: 'image/png',
         cacheControl: 'public,max-age=31536000',
-        metadata: { firebaseStorageDownloadTokens: token, origen },
+        metadata: { firebaseStorageDownloadTokens: token },
       },
     })
 
-    // Limpieza de la cuadrícula del conteo anterior, mejor-esfuerzo: si falla
-    // solo queda un PNG huérfano de 10KB, no vale la pena más que esto.
+    // Limpieza de la cuadrícula del conteo anterior CON este mismo diseño,
+    // mejor-esfuerzo: si falla (o si el diseño cambió y el nombre viejo no
+    // coincide) solo queda un PNG huérfano de 10KB. No vale más que esto.
     if (sellosAntes !== null && sellosAntes !== sellos) {
-      bucket.file(`businesses/${businessId}/wallet/grid-${tel}-${sellosAntes}.png`)
+      bucket.file(`businesses/${businessId}/wallet/grid-${tel}-${sellosAntes}-${diseno}.png`)
         .delete().catch(() => {})
     }
     return urlDescarga(bucket.name, ruta, token)
