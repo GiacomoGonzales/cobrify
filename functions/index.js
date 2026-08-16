@@ -33,6 +33,7 @@ import {
   linkAgregarAWallet as walletSaveLink,
 } from './src/services/googleWalletService.js'
 import { logoCuadradoDe, portadaDe, cuadriculaDeSellos } from './src/services/walletAssetsService.js'
+import { construirPkpass, esDispositivoApple } from './src/services/appleWalletService.js'
 import { ubicacionDeNegocio } from './src/services/geocodeService.js'
 import {
   createFlowPayment as flowCreatePayment, getFlowPaymentStatus,
@@ -8238,6 +8239,18 @@ export const redirectShortUrl = onRequest(
       const data = doc.data()
       const originalUrl = data.originalUrl
 
+      // Tarjeta de fidelización: el MISMO link cbrfy.link sirve para los dos
+      // mundos. Android sigue al JWT de Google Wallet (originalUrl); un
+      // iPhone se desvía a la función que arma y firma el .pkpass de Apple.
+      if (data.type === 'walletCard' && esDispositivoApple(req.headers['user-agent'])) {
+        docRef.update({
+          hits: FieldValue.increment(1),
+          lastAccessedAt: FieldValue.serverTimestamp()
+        }).catch(err => console.error('Error actualizando hits:', err))
+        res.redirect(302, `https://us-central1-cobrify-395fe.cloudfunctions.net/appleWalletPass?code=${encodeURIComponent(code)}`)
+        return
+      }
+
       console.log(`✅ [Redirect] Redirigiendo ${code} -> ${originalUrl.substring(0, 50)}...`)
 
       // Incrementar contador de hits (sin esperar)
@@ -12207,6 +12220,7 @@ export const getWalletPassLink = onRequest(
       await db.collection('shortUrls').doc(code).set({
         originalUrl: urlLarga,
         businessId,
+        phone: String(phone), // lo usa appleWalletPass para ubicar la tarjeta
         type: 'walletCard',
         createdAt: FieldValue.serverTimestamp(),
       }, { merge: true })
@@ -12221,6 +12235,71 @@ export const getWalletPassLink = onRequest(
       console.error('[Wallet] getWalletPassLink:',
         (error.response && JSON.stringify(error.response.data).slice(0, 300)) || error.message)
       res.status(500).json({ error: 'No se pudo generar la tarjeta' })
+    }
+  }
+)
+
+/**
+ * Sirve la tarjeta de Apple Wallet (.pkpass) de un cliente. Llega aquí el
+ * iPhone que tocó un link cbrfy.link de tarjeta (redirectShortUrl lo desvía).
+ *
+ * Es pública a propósito, igual que redirectShortUrl: el cliente final no
+ * tiene cuenta en Cobrify. La "llave" es el código corto — impredecible y
+ * atado a UNA tarjeta — el mismo criterio con el que ya se sirven los PDFs
+ * de comprobantes. El pass se arma fresco en cada descarga, así que basta
+ * volver a tocar el link para ver los sellos al día (mismo serialNumber =
+ * el Wallet reemplaza la tarjeta, no la duplica).
+ */
+const appleWalletSecrets = ['APPLE_PASS_CERT', 'APPLE_PASS_KEY']
+export const appleWalletPass = onRequest(
+  {
+    region: 'us-central1', timeoutSeconds: 60, memory: '512MiB',
+    invoker: 'public', secrets: appleWalletSecrets,
+  },
+  async (req, res) => {
+    try {
+      const code = String(req.query.code || '').trim()
+      if (!code) { res.status(400).send('Falta el código de la tarjeta'); return }
+
+      const linkSnap = await db.collection('shortUrls').doc(code).get()
+      const link = linkSnap.exists ? linkSnap.data() : null
+      if (!link || link.type !== 'walletCard' || !link.businessId) {
+        res.status(404).send('Tarjeta no encontrada'); return
+      }
+
+      // Los links creados antes de Apple Wallet no guardaban el teléfono en el
+      // doc: se recupera buscando la tarjeta por su código corto.
+      let phone = link.phone
+      if (!phone) {
+        const q = await db.collection('businesses').doc(link.businessId)
+          .collection('loyaltyCards').where('walletShortCode', '==', code).limit(1).get()
+        if (q.empty) { res.status(404).send('Tarjeta no encontrada'); return }
+        phone = q.docs[0].id
+        await linkSnap.ref.set({ phone }, { merge: true })
+      }
+
+      const cardSnap = await db.collection('businesses').doc(link.businessId)
+        .collection('loyaltyCards').doc(String(phone)).get()
+      if (!cardSnap.exists) { res.status(404).send('Tarjeta no encontrada'); return }
+      const card = cardSnap.data()
+      const marca = await marcaDelNegocio(link.businessId)
+
+      const pkpass = await construirPkpass({
+        businessId: link.businessId,
+        phone: String(phone),
+        marca,
+        sellos: card.stamps || 0,
+        meta: card.goal || marca.meta,
+        nombreCliente: card.customerName || '',
+      })
+
+      res.set('Content-Type', 'application/vnd.apple.pkpass')
+      res.set('Content-Disposition', 'attachment; filename="tarjeta.pkpass"')
+      res.set('Cache-Control', 'no-store') // los sellos cambian: nunca cachear
+      res.status(200).send(pkpass)
+    } catch (error) {
+      console.error('[Wallet] appleWalletPass:', error.message)
+      res.status(500).send('No se pudo generar la tarjeta')
     }
   }
 )
