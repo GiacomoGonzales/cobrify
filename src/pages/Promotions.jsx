@@ -21,8 +21,10 @@ import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import LoyaltyManager from '@/components/loyalty/LoyaltyManager'
-import { getProducts, createProduct } from '@/services/firestoreService'
+import { getProducts, createProduct, updateProduct } from '@/services/firestoreService'
 import { createRecipe } from '@/services/recipeService'
+import { uploadProductImage, createImagePreview, revokeImagePreview } from '@/services/productImageService'
+import ProductModifiersSection from '@/components/ProductModifiersSection'
 import { getLoyaltyCards, getWalletPassLink, redeemReward, WALLET_EN_APROBACION } from '@/services/loyaltyService'
 import { getCoupons, createCoupon, setCouponActive, deleteCoupon, normalizeCouponCode } from '@/services/couponService'
 
@@ -42,7 +44,7 @@ import { getCoupons, createCoupon, setCouponActive, deleteCoupon, normalizeCoupo
  * programados. Puntos NO por ahora: los sellos ya cumplen ese rol.
  */
 export default function Promotions() {
-  const { getBusinessId, isDemoMode, businessSettings } = useAppContext()
+  const { getBusinessId, isDemoMode, businessSettings, businessMode } = useAppContext()
   const toast = useToast()
 
   const [tab, setTab] = useState('fidelidad') // 'fidelidad' | 'combos'
@@ -71,6 +73,9 @@ export default function Promotions() {
   const [isComboOpen, setIsComboOpen] = useState(false)
   const [comboName, setComboName] = useState('')
   const [comboPrice, setComboPrice] = useState('')
+  const [comboCode, setComboCode] = useState('')
+  const [comboImage, setComboImage] = useState(null) // { file, preview }
+  const [comboModifiers, setComboModifiers] = useState([]) // solo restaurante
   const [parts, setParts] = useState([]) // [{ product, quantity }]
   const [partSearch, setPartSearch] = useState('')
   const [saving, setSaving] = useState(false)
@@ -217,8 +222,20 @@ export default function Promotions() {
     setIsComboOpen(false)
     setComboName('')
     setComboPrice('')
+    setComboCode('')
+    if (comboImage?.preview) revokeImagePreview(comboImage.preview)
+    setComboImage(null)
+    setComboModifiers([])
     setParts([])
     setPartSearch('')
+  }
+
+  const elegirImagenCombo = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (comboImage?.preview) revokeImagePreview(comboImage.preview)
+    setComboImage({ file, preview: createImagePreview(file) })
+    e.target.value = '' // permite volver a elegir el mismo archivo
   }
 
   const guardarCombo = async () => {
@@ -237,10 +254,27 @@ export default function Promotions() {
         cost: 0, // lo sincroniza la receta (syncProductCostFromRecipe)
         unit: 'NIU',
         category: 'Combos',
+        code: comboCode.trim(),
         isCombo: true,
         trackStock: false, // el stock vive en las partes, no en el combo
+        // Modificadores (solo restaurante): mismos que un producto normal —
+        // el POS y la carta digital los ofrecen al elegir el combo.
+        ...(businessMode === 'restaurant' && comboModifiers.length > 0 ? { modifiers: comboModifiers } : {}),
       })
       if (!prod.success) throw new Error(prod.error)
+
+      // 1b. Imagen (opcional). Se sube con el ID real del producto y se
+      // completa el doc. Si falla, el combo queda sin foto — no se frena.
+      let imageUrl = null
+      if (comboImage?.file) {
+        try {
+          imageUrl = await uploadProductImage(businessId, prod.id, comboImage.file)
+          if (imageUrl) await updateProduct(businessId, prod.id, { imageUrl, imageUrls: [imageUrl] })
+        } catch (imgError) {
+          console.error('No se pudo subir la imagen del combo:', imgError)
+          toast.error('El combo se creó, pero la imagen no se pudo subir')
+        }
+      }
 
       // 2. Su composición: cada parte es un producto-componente. deductOnSale
       //    hace que vender el combo descuente el stock de las partes.
@@ -261,7 +295,10 @@ export default function Promotions() {
       if (!receta.success) throw new Error(receta.error)
 
       toast.success(`Combo "${comboName.trim()}" creado. Ya puedes venderlo desde el POS.`)
-      setProducts((prev) => [...prev, { id: prod.id, name: comboName.trim(), price: precioCombo, isCombo: true, category: 'Combos' }])
+      setProducts((prev) => [...prev, {
+        id: prod.id, name: comboName.trim(), price: precioCombo, isCombo: true,
+        category: 'Combos', code: comboCode.trim(), imageUrl,
+      }])
       cerrarCombo()
     } catch (error) {
       console.error('Error al crear combo:', error)
@@ -462,9 +499,13 @@ export default function Promotions() {
               {combos.map((c) => (
                 <Card key={c.id}>
                   <CardContent className="py-4">
-                    <div className="flex justify-between items-start gap-2">
-                      <div className="min-w-0">
+                    <div className="flex justify-between items-start gap-3">
+                      {c.imageUrl && (
+                        <img src={c.imageUrl} alt="" className="w-12 h-12 rounded-lg object-cover border border-gray-100 shrink-0" />
+                      )}
+                      <div className="min-w-0 flex-1">
                         <p className="font-semibold text-gray-900 truncate">{c.name}</p>
+                        {c.code && <p className="text-xs text-gray-400 font-mono">{c.code}</p>}
                         {c.description && (
                           <p className="text-xs text-gray-500 mt-1 line-clamp-2">{c.description}</p>
                         )}
@@ -640,7 +681,7 @@ export default function Promotions() {
       <LoyaltyManager isOpen={isLoyaltyOpen} onClose={() => setIsLoyaltyOpen(false)} />
 
       {/* Creador de combos */}
-      <Modal isOpen={isComboOpen} onClose={cerrarCombo} title="Crear combo">
+      <Modal isOpen={isComboOpen} onClose={cerrarCombo} title="Crear combo" size="lg">
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -717,20 +758,66 @@ export default function Promotions() {
             )}
           </div>
 
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Precio del combo (S/)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.10"
+                value={comboPrice}
+                onChange={(e) => setComboPrice(e.target.value)}
+                placeholder="0.00"
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Código (opcional)
+              </label>
+              <input
+                type="text"
+                value={comboCode}
+                onChange={(e) => setComboCode(e.target.value)}
+                placeholder="Ej: COMBO01"
+                className={inputCls}
+              />
+            </div>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Precio del combo (S/)
+              Imagen (opcional)
             </label>
-            <input
-              type="number"
-              min="0"
-              step="0.10"
-              value={comboPrice}
-              onChange={(e) => setComboPrice(e.target.value)}
-              placeholder="0.00"
-              className={inputCls}
-            />
+            {comboImage ? (
+              <div className="flex items-center gap-3">
+                <img src={comboImage.preview} alt="" className="w-16 h-16 rounded-lg object-cover border border-gray-200" />
+                <button
+                  onClick={() => { revokeImagePreview(comboImage.preview); setComboImage(null) }}
+                  className="text-sm text-red-500 hover:text-red-700 font-medium"
+                >
+                  Quitar imagen
+                </button>
+              </div>
+            ) : (
+              <label className="flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 cursor-pointer hover:border-gray-400 hover:text-gray-600">
+                <Plus className="w-4 h-4" />
+                Subir foto del combo
+                <input type="file" accept="image/*" onChange={elegirImagenCombo} className="hidden" />
+              </label>
+            )}
           </div>
+
+          {/* Modificadores: solo restaurante. El mismo editor que usa Productos
+              — el POS y la carta digital los ofrecen al elegir el combo. */}
+          {businessMode === 'restaurant' && (
+            <ProductModifiersSection
+              modifiers={comboModifiers}
+              onChange={setComboModifiers}
+            />
+          )}
 
           {/* El vendedor ve al instante si el combo tiene sentido comercial */}
           {parts.length > 0 && (

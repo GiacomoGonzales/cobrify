@@ -87,10 +87,15 @@ export default {
             'En la pestaña **Combos**, presiona **Crear combo**.',
             'Ponle nombre en **Nombre del combo** (ej: Combo familiar).',
             'En **Productos que lo componen**, busca y agrega cada producto con su cantidad.',
-            'Escribe el **Precio del combo (S/)**.',
+            'Escribe el **Precio del combo (S/)**. Opcional: un **Código** para buscarlo rápido en el POS y una foto en **Subir foto del combo**.',
             'Revisa el resumen: te muestra cuánto suman **Las partes por separado** y cuánto ahorra el cliente.',
             'Presiona **Crear combo**. Ya puedes venderlo desde el POS.',
           ],
+        },
+        {
+          type: 'texto',
+          soloModos: ['restaurant'],
+          text: 'En modo restaurante el combo también acepta **Modificadores**: las opciones personalizables del pedido (término de la carne, tipo de pan, extras). Se agregan al crearlo con **Agregar Modificador** — el mismo editor de la página Productos — y la cocina los recibe igual que en cualquier plato.',
         },
         {
           type: 'consejo',
