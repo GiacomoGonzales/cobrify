@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Outlet, Navigate, useLocation } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import { useAuth } from '@/contexts/AuthContext'
@@ -26,9 +26,10 @@ import { useToast } from '@/contexts/ToastContext'
 // verdad, compartida con la redirección post-login de AuthContext). Registrar
 // páginas nuevas AHÍ, no en mapas locales.
 import { routeToPageId, getFirstAllowedRoute } from '@/utils/pageRoutes'
+import { getSubscriptionWarning, ESTILO_AVISO } from '@/utils/subscriptionWarning'
 
 export default function MainLayout() {
-  const { user, isAuthenticated, isLoading, hasAccess, isAdmin, subscription, isBusinessOwner, isReseller, userPermissions, rolesResolved, hasPageAccess, allowedPages, getBusinessId, isInGracePeriod, businessMode } = useAuth()
+  const { user, isAuthenticated, isLoading, hasAccess, isAdmin, subscription, isBusinessOwner, isReseller, userPermissions, rolesResolved, hasPageAccess, allowedPages, getBusinessId, businessMode } = useAuth()
   const toast = useToast()
   const [hasBusiness, setHasBusiness] = useState(null)
   const [checkingBusiness, setCheckingBusiness] = useState(false)
@@ -334,9 +335,16 @@ export default function MainLayout() {
   const overInvoiceLimit = !isAdmin && typeof _invMonthlyLimit === 'number' && _invMonthlyLimit !== -1 &&
     (subscription?.usage?.invoicesThisMonth || 0) >= (_invMonthlyLimit + (subscription?.bonusInvoices || 0))
 
+  // Aviso de vencimiento (4 días antes, escalando). Solo al DUEÑO: el cajero
+  // no tiene por qué recibir avisos de cobranza.
+  const avisoVencimiento = useMemo(
+    () => (isBusinessOwner && !isAdmin ? getSubscriptionWarning(subscription) : null),
+    [subscription, isBusinessOwner, isAdmin]
+  )
+
   // Cargar WhatsApp del vendedor si tiene uno asignado (para banners de gracia / límite)
   useEffect(() => {
-    if (subscription?.vendedorId && (isInGracePeriod || overInvoiceLimit)) {
+    if (subscription?.vendedorId && (avisoVencimiento || overInvoiceLimit)) {
       getVendedor(subscription.vendedorId).then(result => {
         if (result.success && result.data?.phone) {
           setVendedorWhatsApp(result.data.phone)
@@ -345,7 +353,7 @@ export default function MainLayout() {
     } else {
       setVendedorWhatsApp(null)
     }
-  }, [subscription?.vendedorId, isInGracePeriod, overInvoiceLimit])
+  }, [subscription?.vendedorId, avisoVencimiento, overInvoiceLimit])
 
   // Forzar reflow cuando el layout se monta para evitar conflictos de estilos después de Login
   useEffect(() => {
@@ -507,21 +515,26 @@ export default function MainLayout() {
         <div className="bg-primary-800 flex-shrink-0" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }} />
       )}
 
-      {/* Banner de período de gracia */}
-      {isInGracePeriod && (
-        <div className={`bg-amber-500 text-white px-4 py-2 flex items-center justify-center gap-2 flex-shrink-0 text-sm ${sidebarCollapsed ? 'md:pl-16' : 'md:pl-64'}`}>
+      {/* Banner de vencimiento: desde 4 dias antes, escalando.
+          Antes solo aparecia DESPUES de vencer (isInGracePeriod), asi que
+          nadie tenia aviso previo — y los clientes de reseller, que no tienen
+          periodo de gracia, no veian NADA nunca. Ver subscriptionWarning.js. */}
+      {avisoVencimiento && (
+        <div className={`${ESTILO_AVISO[avisoVencimiento.nivel]} text-white px-4 py-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 flex-shrink-0 text-sm ${sidebarCollapsed ? 'md:pl-16' : 'md:pl-64'}`}>
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-            <span className="font-medium">Tu suscripción venció. Tienes hasta mañana para renovar.</span>
+            <span className={avisoVencimiento.nivel === 'info' ? 'font-medium' : 'font-semibold'}>
+              {avisoVencimiento.mensaje}
+            </span>
           </div>
           <a
             href={`https://wa.me/${vendedorWhatsApp || '51900434988'}?text=${encodeURIComponent(`Hola, quiero renovar mi suscripción de ${branding?.companyName || 'Cobrify'}. Mi email es ${user?.email || ''}.`)}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1 px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-white whitespace-nowrap transition-colors"
+            className="flex items-center gap-1 px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-white whitespace-nowrap transition-colors font-medium"
           >
             <MessageCircle className="w-3.5 h-3.5" />
-            Renovar
+            Renovar ahora
           </a>
         </div>
       )}

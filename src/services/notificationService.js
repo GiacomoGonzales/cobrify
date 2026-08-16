@@ -18,6 +18,7 @@ import { PushNotifications } from '@capacitor/push-notifications';
 import { FCM } from '@capacitor-community/fcm';
 import { Capacitor } from '@capacitor/core';
 import { playOrderAlertBeep, vibrateOrderAlert } from '../utils/orderAlertSound';
+import { getSubscriptionWarning } from '../utils/subscriptionWarning';
 
 // Tipos de notificaciones
 export const NOTIFICATION_TYPES = {
@@ -386,22 +387,32 @@ export const checkAndCreateSubscriptionNotifications = async (userId, subscripti
       );
     }
   }
-  // Notificar próximo vencimiento (solo suscripciones de pago; ya no existe
-  // el concepto de "prueba gratuita"). Avisar con 1 día o menos.
-  else if (daysUntilExpiry >= 0 && daysUntilExpiry <= 1) {
-    // Verificar si ya existe notificación de próximo vencimiento
-    const hasExpiringNotification = existingNotifications.some(
-      n => n.type === NOTIFICATION_TYPES.SUBSCRIPTION_EXPIRING_SOON && !n.read
-    );
-
-    if (!hasExpiringNotification) {
-      await createNotification(
-        userId,
-        NOTIFICATION_TYPES.SUBSCRIPTION_EXPIRING_SOON,
-        'Suscripción por Vencer',
-        `Tu suscripción vence ${daysUntilExpiry === 0 ? 'hoy' : 'mañana'}. Renueva ahora para evitar interrupciones.`,
-        { periodEnd, daysUntilExpiry }
+  // Próximo vencimiento: se avisa desde DIAS_DE_AVISO (4) días antes, no desde
+  // 1 — con un día de margen casi nadie alcanzaba a pagar, y era la causa del
+  // "no me avisaron". El texto y la urgencia salen de subscriptionWarning.js,
+  // el mismo módulo que pinta el banner del layout, para que la campanita y el
+  // banner nunca digan cosas distintas.
+  else {
+    const aviso = getSubscriptionWarning(subscription, { ahora: now });
+    if (aviso && aviso.nivel !== 'vencido') {
+      // Una notificación POR DÍA: el aviso de "faltan 4 días" no sirve de
+      // recordatorio el día del corte. Se deduplica por día de vencimiento
+      // restante, no por tipo, que era lo que dejaba un solo aviso para toda
+      // la semana.
+      const marca = `venc_${aviso.diasRestantes}`;
+      const yaAvisadoHoy = existingNotifications.some(
+        n => n.type === NOTIFICATION_TYPES.SUBSCRIPTION_EXPIRING_SOON && n.data?.marca === marca
       );
+
+      if (!yaAvisadoHoy) {
+        await createNotification(
+          userId,
+          NOTIFICATION_TYPES.SUBSCRIPTION_EXPIRING_SOON,
+          aviso.titulo,
+          aviso.mensaje,
+          { periodEnd, daysUntilExpiry: aviso.diasRestantes, marca, nivel: aviso.nivel }
+        );
+      }
     }
   }
 };
