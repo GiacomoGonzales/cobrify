@@ -26,6 +26,19 @@ import {
 } from 'firebase/firestore'
 import { resolveTheme } from '@/data/walletThemes'
 
+/**
+ * INTERRUPTOR TEMPORAL: la cuenta de emisor de Google Wallet está en "modo
+ * demo" esperando la aprobación de publicación de Google (solicitada agosto
+ * 2026). Hasta entonces un cliente Android normal NO puede añadir la tarjeta
+ * (solo cuentas de prueba), así que se bloquea el ENVÍO en toda la app con un
+ * aviso. Los sellos se siguen acumulando normal — eso no depende de Google.
+ * Apple Wallet ya está operativo, pero como el comercio no sabe qué celular
+ * tiene su cliente, se pausa el envío completo (decisión de Giacomo).
+ *
+ * Cuando Google apruebe: cambiar a false y desplegar el frontend. Nada más.
+ */
+export const WALLET_EN_APROBACION = true
+
 /** Config por defecto: el programa nace APAGADO. */
 export const DEFAULT_LOYALTY_CONFIG = {
   enabled: false,

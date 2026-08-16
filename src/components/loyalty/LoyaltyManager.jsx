@@ -15,6 +15,7 @@ import {
 } from '@/data/walletThemes'
 import {
   DEFAULT_LOYALTY_CONFIG, getLoyaltyCards, redeemReward, getWalletPassLink,
+  WALLET_EN_APROBACION,
 } from '@/services/loyaltyService'
 
 /**
@@ -543,8 +544,10 @@ export default function LoyaltyManager({ isOpen, onClose }) {
                       )}
                       <Button
                         size="sm" variant="ghost"
-                        title="Enviar su tarjeta por WhatsApp"
-                        disabled={accionandoId === `wa_${t.id}`}
+                        title={WALLET_EN_APROBACION
+                          ? 'Disponible próximamente'
+                          : 'Enviar su tarjeta por WhatsApp'}
+                        disabled={WALLET_EN_APROBACION || accionandoId === `wa_${t.id}`}
                         onClick={() => enviarTarjeta(t)}
                       >
                         {accionandoId === `wa_${t.id}`

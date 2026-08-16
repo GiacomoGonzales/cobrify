@@ -141,17 +141,21 @@ export default function PostSaleModal({
                 {loyalty.stamps >= loyalty.goal ? '¡Llegó a la meta! Puede canjear su premio' : 'Tarjeta de fidelidad'}
               </p>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0 border-primary-500 text-primary-700 hover:bg-primary-100"
-              onClick={onSendLoyaltyCard}
-              disabled={sendingLoyaltyCard}
-            >
-              {sendingLoyaltyCard
-                ? <Loader2 className="w-4 h-4 animate-spin" />
-                : <><Share2 className="w-4 h-4 mr-1" />Enviar tarjeta</>}
-            </Button>
+            {/* Sin handler (p.ej. Wallet esperando aprobación de Google) el
+                modal informa los sellos pero no ofrece enviar. */}
+            {onSendLoyaltyCard && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0 border-primary-500 text-primary-700 hover:bg-primary-100"
+                onClick={onSendLoyaltyCard}
+                disabled={sendingLoyaltyCard}
+              >
+                {sendingLoyaltyCard
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <><Share2 className="w-4 h-4 mr-1" />Enviar tarjeta</>}
+              </Button>
+            )}
           </div>
         )}
 

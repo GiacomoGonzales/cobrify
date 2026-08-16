@@ -52,6 +52,7 @@ import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
 import PostSaleModal from '@/components/pos/PostSaleModal'
+import { WALLET_EN_APROBACION } from '@/services/loyaltyService'
 import { formatCurrency, formatUnitPrice, formatLineAmount, formatProductPrice, applyMarginToCost, matchesSearchQuery, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import { buildProductHaystack } from '@/utils/productSearch'
 import {
@@ -12323,7 +12324,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             : null
         }
         sendingLoyaltyCard={sendingLoyaltyCard}
-        onSendLoyaltyCard={async () => {
+        // Sin handler mientras Google aprueba la publicación de Wallet: el
+        // modal muestra los sellos pero esconde el botón de enviar.
+        onSendLoyaltyCard={WALLET_EN_APROBACION ? null : async () => {
           if (isDemoMode) { toast.error('No disponible en modo demo'); return }
           const telCliente = lastInvoiceData?.customer?.phone || customerData?.phone
           if (!telCliente) return

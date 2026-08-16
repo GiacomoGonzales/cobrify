@@ -21,7 +21,7 @@ import Modal from '@/components/ui/Modal'
 import LoyaltyManager from '@/components/loyalty/LoyaltyManager'
 import { getProducts, createProduct } from '@/services/firestoreService'
 import { createRecipe } from '@/services/recipeService'
-import { getLoyaltyCards, getWalletPassLink, redeemReward } from '@/services/loyaltyService'
+import { getLoyaltyCards, getWalletPassLink, redeemReward, WALLET_EN_APROBACION } from '@/services/loyaltyService'
 
 /**
  * Promociones: el escaparate de marketing del negocio en un solo lugar.
@@ -240,6 +240,16 @@ export default function Promotions() {
       {/* ── TARJETA DE SELLOS ── */}
       {tab === 'fidelidad' && (
         <div className="space-y-6">
+          {/* El motivo real (aprobación de Google pendiente) es interno: hacia
+              los comercios solo "próximamente", sin más detalle. */}
+          {WALLET_EN_APROBACION && (
+            <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+              <Stamp className="w-5 h-5 text-amber-600 flex-shrink-0" />
+              <p className="text-sm font-medium text-amber-900">
+                El envío de la tarjeta digital estará disponible próximamente
+              </p>
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
               { label: 'Tarjetas emitidas', value: cardStats.tarjetas, icon: CreditCard },
@@ -333,8 +343,10 @@ export default function Promotions() {
                         )}
                         <Button
                           size="sm" variant="ghost"
-                          title="Enviar su tarjeta por WhatsApp"
-                          disabled={accionandoId === `wa_${t.id}`}
+                          title={WALLET_EN_APROBACION
+                            ? 'Disponible próximamente'
+                            : 'Enviar su tarjeta por WhatsApp'}
+                          disabled={WALLET_EN_APROBACION || accionandoId === `wa_${t.id}`}
                           onClick={() => enviarTarjeta(t)}
                         >
                           {accionandoId === `wa_${t.id}`
