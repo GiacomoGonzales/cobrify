@@ -2769,6 +2769,18 @@ export default function Reports() {
   const puedeExportar = !hidePrivateData
     && reportesExportables.includes(selectedReport)
     && !(selectedReport === 'brands' && selectedBrandName)
+  // Etiqueta del boton segun la pestaña activa: "Descargar Excel de Ventas",
+  // "de Marcas"... (pedido del dueño: que diga QUE va a descargar).
+  const nombreExcel = {
+    overview: 'del Resumen General',
+    sales: 'de Ventas',
+    products: 'de Productos',
+    brands: 'de Marcas',
+    customers: 'de Clientes',
+    sellers: 'de Vendedores',
+    expenses: 'de Gastos',
+    profitability: 'de Rentabilidad',
+  }[selectedReport]
 
   if (isLoading) {
     return (
@@ -2856,137 +2868,52 @@ export default function Reports() {
             </>
           )}
         </div>
-      </div>
-
-      {/* Tabs de reportes + el boton de descarga del reporte activo. Antes
-          cada reporte tenia su boton en una fila propia casi vacia. */}
-      <div className="flex items-start gap-2">
-        <div className="flex gap-2 overflow-x-auto pb-2 flex-1 min-w-0">
-        <button
-          onClick={() => setSelectedReport('overview')}
-          className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors shadow-sm ${
-            selectedReport === 'overview'
-              ? 'bg-primary-600 text-white border border-primary-700'
-              : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
-          }`}
-        >
-          <BarChart3 className="w-4 h-4 inline-block mr-2" />
-          Resumen General
-        </button>
-        <button
-          onClick={() => setSelectedReport('sales')}
-          className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors shadow-sm ${
-            selectedReport === 'sales'
-              ? 'bg-primary-600 text-white border border-primary-700'
-              : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
-          }`}
-        >
-          <TrendingUp className="w-4 h-4 inline-block mr-2" />
-          Ventas
-        </button>
-        <button
-          onClick={() => setSelectedReport('products')}
-          className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors shadow-sm ${
-            selectedReport === 'products'
-              ? 'bg-primary-600 text-white border border-primary-700'
-              : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
-          }`}
-        >
-          <Package className="w-4 h-4 inline-block mr-2" />
-          Productos
-        </button>
-        <button
-          onClick={() => setSelectedReport('brands')}
-          className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors shadow-sm ${
-            selectedReport === 'brands'
-              ? 'bg-primary-600 text-white border border-primary-700'
-              : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
-          }`}
-        >
-          <Tag className="w-4 h-4 inline-block mr-2" />
-          Marcas
-        </button>
-        <button
-          onClick={() => setSelectedReport('customers')}
-          className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors shadow-sm ${
-            selectedReport === 'customers'
-              ? 'bg-primary-600 text-white border border-primary-700'
-              : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
-          }`}
-        >
-          <Users className="w-4 h-4 inline-block mr-2" />
-          Clientes
-        </button>
-        <button
-          onClick={() => setSelectedReport('zones')}
-          className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors shadow-sm ${
-            selectedReport === 'zones'
-              ? 'bg-primary-600 text-white border border-primary-700'
-              : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
-          }`}
-        >
-          <MapPin className="w-4 h-4 inline-block mr-2" />
-          Zonas
-        </button>
-        <button
-          onClick={() => setSelectedReport('sellers')}
-          className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors shadow-sm ${
-            selectedReport === 'sellers'
-              ? 'bg-primary-600 text-white border border-primary-700'
-              : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
-          }`}
-        >
-          <Users className="w-4 h-4 inline-block mr-2" />
-          Vendedores
-        </button>
-        <button
-            onClick={() => setSelectedReport('expenses')}
-            className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors shadow-sm ${
-              selectedReport === 'expenses'
-                ? 'bg-red-600 text-white border border-red-700'
-                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
-            }`}
-          >
-            <Receipt className="w-4 h-4 inline-block mr-2" />
-            Gastos
-          </button>
-        <button
-            onClick={() => setSelectedReport('profitability')}
-            className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors shadow-sm ${
-              selectedReport === 'profitability'
-                ? 'bg-emerald-600 text-white border border-emerald-700'
-                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
-            }`}
-          >
-            <TrendingUp className="w-4 h-4 inline-block mr-2" />
-            Rentabilidad
-          </button>
-        {/* Tab Hotel - solo visible en modo hotel */}
-        {businessMode === 'hotel' && (
-          <button
-            onClick={() => setSelectedReport('hotel')}
-            className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors shadow-sm ${
-              selectedReport === 'hotel'
-                ? 'bg-cyan-600 text-white border border-cyan-700'
-                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
-            }`}
-          >
-            <BedDouble className="w-4 h-4 inline-block mr-2" />
-            Hotel
-          </button>
-        )}
-        </div>
+        {/* La descarga del reporte activo, aprovechando el espacio libre de
+            la barra. La etiqueta dice QUE descarga (Excel de Ventas, de
+            Marcas...) segun la pestaña. */}
         {puedeExportar && (
           <button
             onClick={exportarReporteActual}
-            className="shrink-0 flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm font-medium"
-            title="Descargar este reporte en Excel"
+            className="ml-auto shrink-0 flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
           >
             <Download className="w-4 h-4" />
-            <span className="hidden md:inline">Descargar</span>
-            Excel
+            <span className="hidden sm:inline">{`Descargar Excel ${nombreExcel}`}</span>
+            <span className="sm:hidden">Excel</span>
           </button>
         )}
+      </div>
+
+      {/* Pestañas de reporte: subrayadas, mismo lenguaje visual que las
+          pestañas de Configuración. Antes eran diez botones con sombra que
+          pesaban más que el propio contenido. */}
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex space-x-6 overflow-x-auto">
+          {[
+            { id: 'overview', label: 'Resumen General', icon: BarChart3 },
+            { id: 'sales', label: 'Ventas', icon: TrendingUp },
+            { id: 'products', label: 'Productos', icon: Package },
+            { id: 'brands', label: 'Marcas', icon: Tag },
+            { id: 'customers', label: 'Clientes', icon: Users },
+            { id: 'zones', label: 'Zonas', icon: MapPin },
+            { id: 'sellers', label: 'Vendedores', icon: Users },
+            { id: 'expenses', label: 'Gastos', icon: Receipt },
+            { id: 'profitability', label: 'Rentabilidad', icon: TrendingUp },
+            ...(businessMode === 'hotel' ? [{ id: 'hotel', label: 'Hotel', icon: BedDouble }] : []),
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setSelectedReport(tab.id)}
+              className={`inline-flex items-center gap-2 py-3 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-colors ${
+                selectedReport === tab.id
+                  ? 'border-primary-500 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <tab.icon className="w-4 h-4" />
+              {tab.label}
+            </button>
+          ))}
+        </nav>
       </div>
 
       {/* Resumen General */}
