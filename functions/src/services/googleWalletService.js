@@ -235,3 +235,32 @@ export function linkAgregarAWallet({ businessId, phone }) {
   const token = jwt.sign(payload, creds.private_key, { algorithm: 'RS256' })
   return `https://pay.google.com/gp/v/save/${token}`
 }
+
+/**
+ * Notificación push a la tarjeta: agrega un mensaje al objeto con
+ * TEXT_AND_NOTIFY, que hace vibrar el celular del cliente con el aviso
+ * ("Sumaste un sello: 5/10" / "¡Tu premio está listo!"). El mensaje además
+ * queda visible en el detalle de la tarjeta.
+ *
+ * Google limita ~3 notificaciones por tarjeta cada 24h: las que exceden
+ * llegan como mensaje silencioso, sin vibración. Para sellos alcanza.
+ *
+ * `idMensaje` debe ser único por evento (se usa el ID del trigger): si la
+ * función reintenta, Google no duplica el mensaje.
+ */
+export async function notificarTarjeta({ businessId, phone, titulo, cuerpo, idMensaje }) {
+  const client = await apiClient()
+  const url = `${BASE}/loyaltyObject/${objectIdDe(businessId, phone)}/addMessage`
+  await client.request({
+    url,
+    method: 'POST',
+    data: {
+      message: {
+        id: idMensaje,
+        header: titulo,
+        body: cuerpo,
+        messageType: 'TEXT_AND_NOTIFY',
+      },
+    },
+  })
+}

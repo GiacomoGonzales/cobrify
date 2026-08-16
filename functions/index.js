@@ -30,7 +30,7 @@ import { migrateUrlToR2, isR2Url, isFirebaseStorageUrl, putObjectToR2 } from './
 import { processSaleStock as runProcessSaleStock } from './src/services/saleStockService.js'
 import {
   upsertLoyaltyClass as walletUpsertClass, upsertLoyaltyObject as walletUpsertObject,
-  linkAgregarAWallet as walletSaveLink,
+  linkAgregarAWallet as walletSaveLink, notificarTarjeta as walletNotify,
 } from './src/services/googleWalletService.js'
 import { logoCuadradoDe, portadaDe, cuadriculaDeSellos } from './src/services/walletAssetsService.js'
 import { construirPkpass, esDispositivoApple } from './src/services/appleWalletService.js'
@@ -12150,6 +12150,46 @@ export const syncWalletPass = onDocumentWritten(
         nombreNegocio: marca.nombre,
       })
       console.log(`[Wallet] Tarjeta sincronizada ${businessId}/${cardId}: ${after.stamps} sellos`)
+
+      // Notificación push en el celular del cliente (Google Wallet). Tres
+      // momentos, un solo mensaje por cambio:
+      //  - llegó a la meta -> "premio listo" (el aviso que vende)
+      //  - sello sumado    -> progreso
+      //  - canje           -> confirmación y saldo restante
+      // Nunca puede frenar la sincronización: la tarjeta ya quedó al día.
+      try {
+        const sellos = after.stamps || 0
+        const antes = before ? (before.stamps || 0) : 0
+        const meta = after.goal || marca.meta
+        let titulo = null, cuerpo = null
+        if (sellos > antes && antes < meta && sellos >= meta) {
+          // El aviso que vende: SOLO al cruzar la meta, no en cada compra de más.
+          titulo = '¡Tu premio está listo!'
+          cuerpo = `Completaste ${meta} sellos en ${marca.nombre}.` +
+            (marca.premio ? ` Pasa a canjear: ${marca.premio}.` : ' Pasa a canjear tu premio.')
+        } else if (sellos > antes && antes >= meta) {
+          titulo = `Sumaste un sello en ${marca.nombre}`
+          cuerpo = `Vas ${sellos}. Recuerda que tienes un premio pendiente de canje.`
+        } else if (sellos > antes) {
+          titulo = `Sumaste un sello en ${marca.nombre}`
+          cuerpo = `Vas ${sellos} de ${meta}.` + (marca.premio ? ` Premio: ${marca.premio}.` : '')
+        } else if (before && sellos < antes && (after.rewardsRedeemed || 0) > (before.rewardsRedeemed || 0)) {
+          titulo = `Premio canjeado en ${marca.nombre}`
+          cuerpo = `¡Disfrútalo! Te quedan ${sellos} sellos para el siguiente.`
+        }
+        if (titulo) {
+          // El ID del evento del trigger es único y estable ante reintentos:
+          // si la función corre dos veces, Google no duplica el aviso.
+          await walletNotify({
+            businessId, phone: cardId, titulo, cuerpo,
+            idMensaje: `evt_${(event.id || Date.now()).toString().replace(/[^a-zA-Z0-9._-]/g, '_')}`,
+          })
+          console.log(`[Wallet] Notificación enviada ${businessId}/${cardId}: ${titulo}`)
+        }
+      } catch (notifyError) {
+        console.error(`[Wallet] No se pudo notificar ${businessId}/${cardId}:`,
+          (notifyError.response && JSON.stringify(notifyError.response.data).slice(0, 300)) || notifyError.message)
+      }
     } catch (error) {
       // La tarjeta de Wallet es secundaria: el saldo real ya quedo guardado.
       console.error(`[Wallet] No se pudo sincronizar ${businessId}/${cardId}:`,
