@@ -233,8 +233,10 @@ export default function LoyaltyManager({ isOpen, onClose }) {
       const idToken = await getAuth().currentUser?.getIdToken()
       const res = await getWalletPassLink(getBusinessId(), tarjeta.phone, idToken)
       if (!res.success) { toast.error(res.error || 'No se pudo generar la tarjeta'); return }
+      // El link corto (cbrfy.link, el mismo acortador de los PDFs); el largo
+      // es un JWT de ~800 caracteres.
       const texto = `Hola! Esta es tu tarjeta de sellos de ${nombreNegocio || 'nuestro negocio'}. ` +
-        `Ya tienes ${res.stamps} de ${res.goal}. Agregala a tu celular: ${res.url}`
+        `Ya tienes ${res.stamps} de ${res.goal}. Agregala a tu celular: ${res.shortUrl || res.url}`
       const digitos = String(tarjeta.phone).replace(/\D/g, '')
       const numero = digitos.length === 9 ? `51${digitos}` : digitos
       window.open(`https://wa.me/${numero}?text=${encodeURIComponent(texto)}`, '_blank')

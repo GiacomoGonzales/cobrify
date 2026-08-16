@@ -8035,8 +8035,11 @@ export default function POS() {
       if (!res.success) { toast.error(res.error || 'No se pudo generar la tarjeta'); return }
 
       const negocio = companySettings?.tradeName || companySettings?.name || 'nuestro negocio'
+      // El link corto (cbrfy.link, el mismo acortador de los PDFs): el link
+      // real de Google es un JWT de ~800 caracteres que en WhatsApp ocupa
+      // media pantalla.
       const texto = `Hola! Esta es tu tarjeta de sellos de ${negocio}. ` +
-        `Ya tienes ${res.stamps} de ${res.goal}. Agregala a tu celular: ${res.url}`
+        `Ya tienes ${res.stamps} de ${res.goal}. Agregala a tu celular: ${res.shortUrl || res.url}`
       const soloDigitos = String(tel).replace(/\D/g, '')
       const numero = soloDigitos.length === 9 ? `51${soloDigitos}` : soloDigitos
       window.open(`https://wa.me/${numero}?text=${encodeURIComponent(texto)}`, '_blank')
