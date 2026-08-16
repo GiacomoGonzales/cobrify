@@ -2837,7 +2837,9 @@ export default function Reports() {
           ))}
         </div>
         <div className="hidden sm:block h-6 w-px bg-gray-200" />
-        <div className="flex flex-wrap items-center gap-1.5">
+        {/* En movil cada control ocupa el ancho completo: el selector de mes
+            de lado a lado y las dos fechas al 50% en una sola fila. */}
+        <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
           {/* Elegir un mes concreto sin tener que tipear el rango a mano ni
               acordarse de en que dia termina cada mes. */}
           <MonthSelect
@@ -2849,36 +2851,36 @@ export default function Reports() {
               setCustomStartDate(m.start)
               setCustomEndDate(m.end)
             }}
+            className="w-full sm:w-auto px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
           {dateRange === 'custom' && (
-            <>
+            <div className="flex items-center gap-1.5 w-full sm:w-auto">
               <input
                 type="date"
                 value={customStartDate}
                 onChange={e => { setCustomStartDate(e.target.value); setSelectedMonth('') }}
-                className="px-2 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm w-[130px]"
+                className="flex-1 sm:flex-none sm:w-[130px] px-2 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm min-w-0"
               />
-              <span className="text-gray-400 text-sm">—</span>
+              <span className="text-gray-400 text-sm hidden sm:inline">—</span>
               <input
                 type="date"
                 value={customEndDate}
                 onChange={e => { setCustomEndDate(e.target.value); setSelectedMonth('') }}
-                className="px-2 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm w-[130px]"
+                className="flex-1 sm:flex-none sm:w-[130px] px-2 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm min-w-0"
               />
-            </>
+            </div>
           )}
         </div>
         {/* La descarga del reporte activo, aprovechando el espacio libre de
             la barra. La etiqueta dice QUE descarga (Excel de Ventas, de
-            Marcas...) segun la pestaña. */}
+            Marcas...) segun la pestaña. En movil, de lado a lado. */}
         {puedeExportar && (
           <button
             onClick={exportarReporteActual}
-            className="ml-auto shrink-0 flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+            className="w-full sm:w-auto sm:ml-auto shrink-0 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
           >
             <Download className="w-4 h-4" />
-            <span className="hidden sm:inline">{`Descargar Excel ${nombreExcel}`}</span>
-            <span className="sm:hidden">Excel</span>
+            {`Descargar Excel ${nombreExcel}`}
           </button>
         )}
       </div>
