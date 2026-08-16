@@ -28,6 +28,18 @@ import {
 } from './src/services/cloudinaryAdmin.js'
 import { migrateUrlToR2, isR2Url, isFirebaseStorageUrl, putObjectToR2 } from './src/services/r2Admin.js'
 import { processSaleStock as runProcessSaleStock } from './src/services/saleStockService.js'
+import {
+  upsertLoyaltyClass as walletUpsertClass, upsertLoyaltyObject as walletUpsertObject,
+  linkAgregarAWallet as walletSaveLink,
+} from './src/services/googleWalletService.js'
+import { logoCuadradoDe, portadaDe, cuadriculaDeSellos } from './src/services/walletAssetsService.js'
+import { ubicacionDeNegocio } from './src/services/geocodeService.js'
+import {
+  createFlowPayment as flowCreatePayment, getFlowPaymentStatus,
+  createFlowCustomer, registerFlowCard, getFlowCardRegisterStatus,
+  chargeFlowCustomer, unregisterFlowCard,
+} from './src/services/flowService.js'
+import { resolveAudience } from './src/services/audienceService.js'
 
 // Initialize Firebase Admin
 initializeApp()
@@ -826,8 +838,11 @@ export const sendInvoiceToSunat = onRequest(
         // Esto pasa en reintentos cuando el primer envío sí llegó a SUNAT
         // El código puede venir como "1033" o "soap-env:Client.1033"
         const errorMsgLower = (errorMessage || '').toLowerCase()
-        // "con otros datos" también indica que SUNAT ya tiene el documento (reintento con diferencias menores)
-        const isAlreadyRegisteredError = (
+        // "CON OTROS DATOS" = el correlativo esta tomado en SUNAT por OTRO
+        // documento; el nuestro no llego. No se puede dar por aceptado.
+        const isErrDataConflict = errorMsgLower.includes('con otros datos') &&
+          await hasCorrelativeConflict(userId, invoiceId, invoiceData.number)
+        const isAlreadyRegisteredError = !isErrDataConflict && (
           errorCode === '1033' || errorCode.includes('1033') ||
           errorMsgLower.includes('registrado previamente') ||
           errorMsgLower.includes('ha sido aceptada') ||
@@ -960,15 +975,35 @@ export const sendInvoiceToSunat = onRequest(
       // Si SUNAT dice que el documento ya existe, significa que ya fue aceptado antes
       // Esto puede pasar en reintentos o cuando SUNAT tuvo problemas temporales
       const descLower = (emissionResult.description || '').toLowerCase()
-      // "con otros datos" también indica que SUNAT ya tiene el documento
-      const isAlreadyRegistered = (
+      // "CON OTROS DATOS" es un CONFLICTO, no una aceptacion.
+      //
+      // SUNAT responde 1033 en dos situaciones muy distintas:
+      //   a) "registrado previamente"              -> es NUESTRO documento, ya llego. Aceptado.
+      //   b) "registrado previamente CON OTROS DATOS" -> ese correlativo ya esta
+      //      tomado en SUNAT por un documento DISTINTO. El nuestro NO existe alla.
+      //
+      // Tratar (b) como aceptado deja en pantalla un comprobante "Aceptado" que
+      // SUNAT nunca recibio (caso real: una NC de S/54 marcada aceptada cuando
+      // SUNAT tenia ese numero con S/450.80). Es la peor mentira posible en un
+      // sistema de facturacion: el usuario cree que emitio y no emitio.
+      // "con otros datos" SOLO es conflicto si el correlativo esta repetido en
+      // nuestros propios datos. Ver hasCorrelativeConflict.
+      const isDataConflict = descLower.includes('con otros datos') &&
+        await hasCorrelativeConflict(userId, invoiceId, invoiceData.number)
+      const isAlreadyRegistered = !isDataConflict && (
         emissionResult.responseCode === '1033' ||
         (emissionResult.responseCode || '').includes('1033') ||
         descLower.includes('registrado previamente') ||
         descLower.includes('ha sido aceptada') ||
         descLower.includes('ha sido aceptado'))
 
-      if (isAlreadyRegistered) {
+      if (isDataConflict) {
+        console.log('🛑 Codigo 1033 CON OTROS DATOS: el correlativo ya esta tomado en SUNAT por otro documento')
+        emissionResult.accepted = false
+        emissionResult.description =
+          'SUNAT ya tiene ese numero registrado con datos distintos. Este comprobante NO fue aceptado: ' +
+          'el correlativo quedo inutilizable y hay que emitirlo de nuevo con el numero siguiente.'
+      } else if (isAlreadyRegistered) {
         // Verificar si este documento tiene historial de envío desde nuestro sistema
         // sunatSentAt existe si alguna vez se intentó enviar (incluyendo reintentos)
         // sunatResponse existe si hubo alguna respuesta previa
@@ -1596,8 +1631,11 @@ export const sendCreditNoteToSunat = onRequest(
         // Verificar si SUNAT dice que ya fue registrada o aceptada (puede venir como SOAP Fault en reintentos)
         // IMPORTANTE: "con otros datos" = conflicto de datos, NO es aceptación
         const ncMsgLower = (ncErrorMessage || '').toLowerCase()
-        // "con otros datos" también indica que SUNAT ya tiene el documento
-        const ncAlreadyRegistered = (
+        // "CON OTROS DATOS" = correlativo tomado por otro documento. Ver la nota
+        // del bloque equivalente de facturas.
+        const ncErrDataConflict = ncMsgLower.includes('con otros datos') &&
+          await hasCorrelativeConflict(userId, creditNoteId, creditNoteData.number)
+        const ncAlreadyRegistered = !ncErrDataConflict && (
           ncErrorCode === '1033' || (ncErrorCode || '').includes('1033') ||
           ncMsgLower.includes('registrado previamente') ||
           ncMsgLower.includes('ha sido aceptada') ||
@@ -1688,15 +1726,25 @@ export const sendCreditNoteToSunat = onRequest(
       // Código 1033 = "El comprobante fue registrado previamente" o "ha sido aceptada"
       // IMPORTANTE: "con otros datos" = conflicto de datos, NO es aceptación
       const ncDescLower = (emissionResult.description || '').toLowerCase()
-      // "con otros datos" también indica que SUNAT ya tiene el documento
-      const isAlreadyRegistered = (
+      // "CON OTROS DATOS" = ese correlativo ya esta tomado en SUNAT por un
+      // documento DISTINTO, asi que el nuestro NO llego. Ver la nota extensa en
+      // el bloque equivalente de facturas/boletas.
+      const isNcDataConflict = ncDescLower.includes('con otros datos') &&
+        await hasCorrelativeConflict(userId, creditNoteId, creditNoteData.number)
+      const isAlreadyRegistered = !isNcDataConflict && (
         emissionResult.responseCode === '1033' ||
         (emissionResult.responseCode || '').includes('1033') ||
         ncDescLower.includes('registrado previamente') ||
         ncDescLower.includes('ha sido aceptada') ||
         ncDescLower.includes('ha sido aceptado'))
 
-      if (isAlreadyRegistered) {
+      if (isNcDataConflict) {
+        console.log('🛑 Codigo 1033 CON OTROS DATOS en NC: correlativo tomado por otro documento')
+        emissionResult.accepted = false
+        emissionResult.description =
+          'SUNAT ya tiene ese numero de nota de credito registrado con datos distintos. ' +
+          'Esta NC NO fue aceptada: hay que emitirla de nuevo con el numero siguiente.'
+      } else if (isAlreadyRegistered) {
         // Si el documento está en estado pending, signed, rejected o sending,
         // significa que lo estamos reenviando desde nuestra app
         const allowedStatuses = ['pending', 'not_sent', 'signed', 'rejected', 'sending']
@@ -3534,7 +3582,8 @@ export const sendDispatchGuideToSunatFn = onRequest(
             firmasUsadas: config.qpse?.firmasUsadas || 0
           }
           businessData.sunat = { enabled: false }
-          console.log('✅ [GRE] QPse configurado desde emissionConfig:', JSON.stringify(businessData.qpse))
+          // No volcar el objeto qpse: trae usuario y contraseña en texto plano.
+          console.log('✅ [GRE] QPse configurado desde emissionConfig: enabled=', businessData.qpse?.enabled, ', tieneCredenciales=', !!(businessData.qpse?.usuario && businessData.qpse?.password))
         } else if (config.method === 'sunat_direct') {
           businessData.sunat = {
             enabled: config.sunat?.enabled !== false,
@@ -3865,7 +3914,8 @@ export const sendCarrierDispatchGuideToSunatFn = onRequest(
             firmasUsadas: config.qpse?.firmasUsadas || 0
           }
           businessData.sunat = { enabled: false }
-          console.log('✅ [GRE-T] QPse configurado desde emissionConfig:', JSON.stringify(businessData.qpse))
+          // No volcar el objeto qpse: trae usuario y contraseña en texto plano.
+          console.log('✅ [GRE-T] QPse configurado desde emissionConfig: enabled=', businessData.qpse?.enabled, ', tieneCredenciales=', !!(businessData.qpse?.usuario && businessData.qpse?.password))
         } else if (config.method === 'sunat_direct') {
           businessData.sunat = {
             enabled: config.sunat?.enabled !== false,
@@ -5402,29 +5452,11 @@ export const voidInvoice = onRequest(
 
               console.log(`✅ Factura ${invoiceData.referencedDocumentId} restaurada a estado: ${newStatus}`)
 
-              // Descontar stock (reversar la devolución que hizo la NC)
-              if (invoiceData.items && invoiceData.items.length > 0) {
-                console.log('📦 Revirtiendo devolución de stock de la NC...')
-                for (const item of invoiceData.items) {
-                  if (item.productId && !item.productId.startsWith('custom-')) {
-                    try {
-                      const productRef = db.collection('businesses').doc(userId).collection('products').doc(item.productId)
-                      const productDoc = await productRef.get()
-                      if (productDoc.exists) {
-                        const currentStock = productDoc.data().stock || 0
-                        const newStock = Math.max(0, currentStock - (item.quantity || 0))
-                        await productRef.update({
-                          stock: newStock,
-                          updatedAt: FieldValue.serverTimestamp()
-                        })
-                        console.log(`  ✅ Stock descontado (reversión NC): ${item.name} -${item.quantity}`)
-                      }
-                    } catch (stockError) {
-                      console.error(`  ❌ Error descontando stock de ${item.name}:`, stockError.message)
-                    }
-                  }
-                }
-              }
+              // NOTA: la reversión del stock que devolvió la NC se hace en el FRONTEND
+              // (revertCreditNoteStockReturn) con transacción atómica que ajusta
+              // almacenes, lotes, variantes y series — no solo el total. Antes acá se
+              // descontaba product.stock a secas, desincronizando warehouseStocks, y
+              // duplicaría el descuento ahora que el frontend lo hace bien.
             } else {
               console.log(`⚠️ No se encontró el documento original: ${invoiceData.referencedDocumentId}`)
             }
@@ -5638,24 +5670,40 @@ export const checkVoidStatus = onRequest(
         const nombreArchivo = `${businessData.ruc}-${voidedData.voidedDocId}`
         const estadoQPse = await consultarEstado(nombreArchivo, token, qpseConfig.environment || 'demo')
 
-        const codigo = estadoQPse?.codigo || estadoQPse?.code || estadoQPse?.estado || ''
+        const codigo = String(estadoQPse?.codigo || estadoQPse?.code || estadoQPse?.estado || '')
         const accepted = codigo === '0' || codigo === '0000' || estadoQPse?.sunat_success === true
 
-        if (accepted) {
+        // ¿SUNAT dice que el documento YA está de baja (2323/1033)? Tratarlo como
+        // ANULADO, no como rechazo: antes esta rama caía en "rejected" y devolvía la
+        // factura a sunatStatus='accepted' aunque en SUNAT SÍ estaba anulada → el
+        // sistema quedaba desincronizado y cada reintento fallaba con "ya está de
+        // baja" (patrón real: Induhealth F001-61/64, Serviceglobalcar FPP4-64).
+        const alreadyVoided = isAlreadyVoidedResponse({
+          responseCode: codigo,
+          description: estadoQPse?.descripcion || estadoQPse?.description || '',
+          notes: Array.isArray(estadoQPse?.errores) ? estadoQPse.errores.join(' | ') : (estadoQPse?.errores || '')
+        })
+
+        if (accepted || alreadyVoided) {
           await voidedDocRef.update({
             status: 'accepted',
             responseCode: codigo,
-            responseDescription: estadoQPse?.descripcion || 'Anulación aceptada',
+            responseDescription: estadoQPse?.descripcion || (alreadyVoided ? 'Documento ya dado de baja en SUNAT' : 'Anulación aceptada'),
             cdrUrl: estadoQPse?.url_cdr || null,
             processedAt: FieldValue.serverTimestamp()
           })
           await invoiceRef.update({
             sunatStatus: 'voided',
             status: 'voided',
+            voidingTicket: null,
             voidedAt: FieldValue.serverTimestamp()
           })
           res.status(200).json({ status: 'voided', message: 'Documento anulado exitosamente' })
-        } else if (codigo === '98' || codigo === '99' || codigo === 'PROCESANDO') {
+        } else if (codigo === '98' || codigo === 'PROCESANDO' || codigo === '') {
+          // OJO: 99 NO es "procesando" — en SUNAT 99 = el proceso terminó CON ERRORES.
+          // El flujo anterior trataba el 99 como pendiente y la factura quedaba en
+          // 'voiding' PARA SIEMPRE (mismo bug ya corregido en voidInvoiceQPse).
+          // Código vacío = respuesta ambigua de QPse: mantener pendiente sin tocar estados.
           res.status(200).json({ status: 'pending', message: 'Aún en proceso en SUNAT' })
         } else {
           const errorMsg = estadoQPse?.descripcion || estadoQPse?.errores?.join(' | ') || 'Error desconocido'
@@ -7050,29 +7098,11 @@ export const voidInvoiceQPse = onRequest(
 
               console.log(`✅ [QPse] Factura ${invoiceData.referencedDocumentId} restaurada a estado: ${newStatus}`)
 
-              // Descontar stock (reversar la devolución que hizo la NC)
-              if (invoiceData.items && invoiceData.items.length > 0) {
-                console.log('📦 [QPse] Revirtiendo devolución de stock de la NC...')
-                for (const item of invoiceData.items) {
-                  if (item.productId && !item.productId.startsWith('custom-')) {
-                    try {
-                      const productRef = db.collection('businesses').doc(userId).collection('products').doc(item.productId)
-                      const productDoc = await productRef.get()
-                      if (productDoc.exists) {
-                        const currentStock = productDoc.data().stock || 0
-                        const newStock = Math.max(0, currentStock - (item.quantity || 0))
-                        await productRef.update({
-                          stock: newStock,
-                          updatedAt: FieldValue.serverTimestamp()
-                        })
-                        console.log(`  ✅ Stock descontado (reversión NC): ${item.name} -${item.quantity}`)
-                      }
-                    } catch (stockError) {
-                      console.error(`  ❌ Error descontando stock de ${item.name}:`, stockError.message)
-                    }
-                  }
-                }
-              }
+              // NOTA: la reversión del stock que devolvió la NC se hace en el FRONTEND
+              // (revertCreditNoteStockReturn) con transacción atómica que ajusta
+              // almacenes, lotes, variantes y series — no solo el total. Antes acá se
+              // descontaba product.stock a secas, desincronizando warehouseStocks, y
+              // duplicaría el descuento ahora que el frontend lo hace bien.
             } else {
               console.log(`⚠️ [QPse] No se encontró el documento original: ${invoiceData.referencedDocumentId}`)
             }
@@ -9116,6 +9146,156 @@ export const resellerAddInvoices = onCall(
  * - Salta usuarios enterprise y super admins
  * - Salta sub-usuarios (usan suscripción del owner)
  */
+/**
+ * COBRO AUTOMATICO DIARIO de las suscripciones con renovacion automatica.
+ *
+ * Corre ANTES de checkSubscriptionExpirations (que suspende a los vencidos):
+ * primero se intenta cobrar, y solo si el cobro no prospera el otro proceso
+ * hace su trabajo. Por eso 00:30 y no 01:00.
+ *
+ * Estrategia de reintentos: se intenta el dia del vencimiento y hasta 3 dias
+ * despues (un dia si y otro no lo deja al azar; asi el cliente tiene margen si
+ * su tarjeta no tenia fondos ese dia). A la 3a falla se apaga autoRenew y el
+ * flujo vuelve al manual, con aviso al cliente.
+ *
+ * El CUMPLIMIENTO (extender el periodo) NO ocurre aca: se escribe el intento en
+ * flowPayments y Flow notifica a flowConfirmation, que ya es transaccional e
+ * idempotente. Un solo camino de cumplimiento para pago unico y recurrente.
+ */
+export const chargeAutoRenewals = onSchedule(
+  {
+    schedule: '30 0 * * *', // 00:30 Lima, antes de checkSubscriptionExpirations
+    timeZone: 'America/Lima',
+    region: 'us-central1',
+    memory: '512MiB',
+    timeoutSeconds: 540,
+    secrets: ['FLOW_API_KEY', 'FLOW_SECRET_KEY'],
+  },
+  async () => {
+    if (process.env.FLOW_PAYMENTS_ENABLED !== 'true') {
+      console.log('[AutoRenew] Cobro en linea desactivado, no se hace nada')
+      return
+    }
+
+    const MAX_FALLAS = 3
+    const sandbox = process.env.FLOW_ENV !== 'production'
+    const creds = { apiKey: process.env.FLOW_API_KEY, secretKey: process.env.FLOW_SECRET_KEY, sandbox }
+
+    const ahora = new Date()
+    // Ventana: vencen hoy o vencieron hasta hace 3 dias (los reintentos).
+    const limiteSuperior = new Date(ahora.getTime() + 24 * 60 * 60 * 1000)
+    const limiteInferior = new Date(ahora.getTime() - MAX_FALLAS * 24 * 60 * 60 * 1000)
+
+    const snap = await db.collection('subscriptions')
+      .where('autoRenew', '==', true)
+      .where('currentPeriodEnd', '<=', limiteSuperior)
+      .get()
+
+    console.log(`[AutoRenew] ${snap.size} suscripciones con renovacion automatica por vencer`)
+
+    let cobrados = 0, saltados = 0, fallidos = 0
+
+    for (const docSnap of snap.docs) {
+      const businessId = docSnap.id
+      const sub = docSnap.data()
+
+      try {
+        const fin = sub.currentPeriodEnd && sub.currentPeriodEnd.toDate
+          ? sub.currentPeriodEnd.toDate()
+          : new Date(sub.currentPeriodEnd)
+
+        // Fuera de la ventana de reintentos: ya no se insiste.
+        if (fin < limiteInferior) { saltados++; continue }
+        if (!sub.flowCustomerId) { saltados++; continue }
+        if (!puedeAutoRenovar(sub)) { saltados++; continue }
+
+        // Un solo intento por dia y por suscripcion.
+        const ultimoIntento = sub.lastAutoRenewAttemptAt && sub.lastAutoRenewAttemptAt.toDate
+          ? sub.lastAutoRenewAttemptAt.toDate() : null
+        if (ultimoIntento && (ahora - ultimoIntento) < 20 * 60 * 60 * 1000) { saltados++; continue }
+
+        const monto = sub.renewalPrice != null ? Number(sub.renewalPrice) : (SUB_PLAN_PRICE[sub.plan] || 0)
+        if (!(monto > 0)) {
+          console.warn(`[AutoRenew] ${businessId} sin precio de renovacion, se salta`)
+          saltados++
+          continue
+        }
+
+        const meses = SUB_PLAN_MONTHS[sub.plan] || 1
+        const commerceOrder = `AR-${businessId.slice(0, 10)}-${Date.now()}`
+
+        // Se registra el intento ANTES de cobrar: si Flow responde y el webhook
+        // llega primero, el doc ya existe y el cumplimiento encuentra su base.
+        await db.collection('flowPayments').doc(commerceOrder).set({
+          businessId,
+          plan: sub.plan,
+          amount: monto,
+          months: meses,
+          isUpgrade: false,
+          status: 'pending',
+          source: 'auto_renew',
+          createdAt: FieldValue.serverTimestamp(),
+        })
+
+        await docSnap.ref.update({ lastAutoRenewAttemptAt: FieldValue.serverTimestamp() })
+
+        const resultado = await chargeFlowCustomer({
+          ...creds,
+          customerId: sub.flowCustomerId,
+          commerceOrder,
+          subject: `Renovacion ${sub.planName || sub.plan} - Cobrify`,
+          amount: monto,
+          urlConfirmation: FLOW_CONFIRMATION_URL,
+        })
+
+        // status 2 = pagado. El webhook hace el cumplimiento; aca solo se
+        // contabiliza y se limpia el contador de fallas.
+        if (Number(resultado && resultado.status) === 2) {
+          cobrados++
+          await docSnap.ref.update({ autoRenewFailures: 0 })
+          console.log(`[AutoRenew] Cobrado ${businessId}: ${monto}`)
+        } else {
+          throw new Error(`Flow devolvio status ${resultado && resultado.status}`)
+        }
+      } catch (error) {
+        fallidos++
+        const fallas = (sub.autoRenewFailures || 0) + 1
+        const updates = { autoRenewFailures: fallas, lastAutoRenewError: String(error.message || error).slice(0, 300) }
+
+        // Agotados los reintentos: se apaga la renovacion automatica y el
+        // cliente vuelve al camino manual (checkSubscriptionExpirations lo
+        // suspendera si no paga).
+        if (fallas >= MAX_FALLAS) {
+          updates.autoRenew = false
+          updates.autoRenewDisabledAt = FieldValue.serverTimestamp()
+          updates.autoRenewDisabledReason = 'Cobro rechazado 3 veces'
+          try {
+            const t = 'No pudimos cobrar tu renovacion'
+            const m = 'Tu tarjeta fue rechazada. Renueva manualmente o registra otra tarjeta en Mi Suscripcion.'
+            await db.collection('notifications').add({
+              userId: businessId,
+              type: 'subscription',
+              title: t,
+              message: m,
+              metadata: { autoRenewFailed: true, attempts: fallas },
+              read: false,
+              createdAt: FieldValue.serverTimestamp(),
+              updatedAt: FieldValue.serverTimestamp(),
+            })
+            await sendPushNotification(businessId, t, m, { type: 'subscription' })
+          } catch (e) { /* la notificacion no debe frenar el proceso */ }
+        }
+
+        await docSnap.ref.update(updates)
+        console.error(`[AutoRenew] Fallo ${businessId} (intento ${fallas}):`,
+          (error.response && error.response.data) || error.message)
+      }
+    }
+
+    console.log(`[AutoRenew] Fin: ${cobrados} cobrados, ${saltados} saltados, ${fallidos} fallidos`)
+  }
+)
+
 export const checkSubscriptionExpirations = onSchedule(
   {
     schedule: '0 1 * * *', // 01:00 AM Lima
@@ -9393,49 +9573,14 @@ export const sendBulkPushNotifications = onCall(
         sentAt: FieldValue.serverTimestamp()
       })
 
-      // 3. Resolver usuarios destino
-      let targetUserIds = []
+      // 3. Resolver usuarios destino (ver src/services/audienceService.js).
+      // Antes esto recorría `users` leyendo plan/estado/modo de campos que NO
+      // existen ahí, así que los filtros no filtraban (plan → siempre 0 destinos).
+      // Ahora cada dato se cruza con su colección real y se resuelve en bloque.
+      const audience = await resolveAudience(db, campaign)
+      const targetUserIds = audience.userIds
 
-      if (campaign.targetMode === 'manual') {
-        targetUserIds = campaign.manualUserIds || []
-      } else {
-        // Obtener todos los usuarios o filtrados
-        const usersSnapshot = await db.collection('users').get()
-
-        for (const userDoc of usersSnapshot.docs) {
-          const userData = userDoc.data()
-
-          if (campaign.targetMode === 'filter') {
-            const filters = campaign.filters || {}
-
-            // Filtrar por plan
-            if (filters.plans && filters.plans.length > 0) {
-              const userPlan = userData.subscription?.plan || userData.plan || 'free'
-              if (!filters.plans.includes(userPlan)) continue
-            }
-
-            // Filtrar por status de suscripción
-            if (filters.statuses && filters.statuses.length > 0) {
-              const userStatus = userData.subscription?.status || userData.subscriptionStatus || 'active'
-              if (!filters.statuses.includes(userStatus)) continue
-            }
-
-            // Filtrar por modo de negocio
-            if (filters.businessModes && filters.businessModes.length > 0) {
-              const userMode = userData.businessMode || 'retail'
-              if (!filters.businessModes.includes(userMode)) continue
-            }
-          }
-
-          // Verificar que tiene tokens FCM
-          const tokensSnap = await db.collection('users').doc(userDoc.id).collection('fcmTokens').limit(1).get()
-          if (!tokensSnap.empty) {
-            targetUserIds.push(userDoc.id)
-          }
-        }
-      }
-
-      console.log(`📢 [BulkPush] Usuarios destino: ${targetUserIds.length}`)
+      console.log(`📢 [BulkPush] Usuarios destino: ${targetUserIds.length}`, JSON.stringify(audience.breakdown))
 
       if (targetUserIds.length === 0) {
         await campaignRef.update({
@@ -9449,20 +9594,11 @@ export const sendBulkPushNotifications = onCall(
         return { success: true, totalRecipients: 0, successCount: 0 }
       }
 
-      // 4. Recopilar todos los tokens
-      const allTokens = []
-      const tokenUserMap = {} // token -> userId
-
-      for (const userId of targetUserIds) {
-        const tokensSnap = await db.collection('users').doc(userId).collection('fcmTokens').get()
-        for (const tokenDoc of tokensSnap.docs) {
-          const token = tokenDoc.data().token
-          if (token) {
-            allTokens.push(token)
-            tokenUserMap[token] = userId
-          }
-        }
-      }
+      // 4. Tokens de la audiencia (ya vienen resueltos, sin una consulta por usuario).
+      // Si la campaña filtró por plataforma, solo trae los tokens de esa plataforma:
+      // así "califica la app en Play Store" no le llega al iPhone del mismo usuario.
+      const allTokens = audience.tokens
+      const tokenUserMap = audience.tokenUserMap
 
       console.log(`📢 [BulkPush] Total tokens: ${allTokens.length}`)
 
@@ -9483,7 +9619,13 @@ export const sendBulkPushNotifications = onCall(
           data: {
             type: 'admin_broadcast',
             campaignId: campaignId,
-            click_action: 'FLUTTER_NOTIFICATION_CLICK'
+            click_action: 'FLUTTER_NOTIFICATION_CLICK',
+            // Qué hace la app al TOCAR la notificación (ver AppLifecycleManager):
+            //   'review' → diálogo nativo de calificación · 'url' → enlace externo
+            // FCM exige que todo `data` sea string, por eso los `|| ''`.
+            ...(campaign.action ? { action: campaign.action } : {}),
+            ...(campaign.actionUrl ? { actionUrl: campaign.actionUrl } : {}),
+            ...(campaign.redirectPath ? { redirectPath: campaign.redirectPath } : {})
           },
           android: {
             priority: 'high',
@@ -9611,6 +9753,44 @@ export const sendBulkPushNotifications = onCall(
         })
       } catch (_) {}
 
+      throw new HttpsError('internal', error.message)
+    }
+  }
+)
+
+/**
+ * Vista previa de la audiencia de una campaña, ANTES de enviarla.
+ *
+ * Devuelve a cuántos usuarios y dispositivos llegaría con los filtros elegidos,
+ * desglosado por plataforma. Sin esto la campaña se manda a ciegas, y con
+ * filtros combinables es fácil equivocarse (o mandarle a 0 personas).
+ * No escribe nada: es solo lectura.
+ */
+export const previewCampaignAudience = onCall(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 120,
+    memory: '512MiB',
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Debe estar autenticado')
+    }
+    const adminDoc = await db.collection('admins').doc(request.auth.uid).get()
+    if (!adminDoc.exists) {
+      throw new HttpsError('permission-denied', 'Solo los administradores')
+    }
+
+    const { targetMode, filters, manualUserIds } = request.data || {}
+    try {
+      const audience = await resolveAudience(db, {
+        targetMode: targetMode || 'all',
+        filters: filters || {},
+        manualUserIds: manualUserIds || [],
+      })
+      return { success: true, ...audience.breakdown }
+    } catch (error) {
+      console.error('📢 [PreviewAudience] Error:', error)
       throw new HttpsError('internal', error.message)
     }
   }
@@ -11164,6 +11344,47 @@ export const pollShopifreeOrdersNow = onCall(
  * Entrada: { targetUid: string, newPassword: string }
  * Salida:  { success: true }
  */
+/**
+ * ¿El 1033 "con otros datos" es un CONFLICTO real o solo un reenvio nuestro?
+ *
+ * SUNAT usa el MISMO mensaje para dos situaciones opuestas y no dice cual dato
+ * difiere:
+ *   a) Reenviamos el mismo comprobante y solo cambio la marca de tiempo del
+ *      envio  ->  el documento SI esta en SUNAT. Es aceptado.
+ *   b) Dos comprobantes DISTINTOS quedaron con el mismo correlativo (bug de
+ *      numeracion no atomica, arreglado en ago-2026)  ->  el nuestro NO esta
+ *      en SUNAT, el numero lo tomo el otro.
+ *
+ * Leer el texto de SUNAT no alcanza para distinguirlos. El discriminador esta
+ * en NUESTROS datos: si existe OTRO documento con el mismo numero, fuimos
+ * nosotros los que pisamos el correlativo (caso b). Si el numero es unico, es
+ * nuestro documento reenviado (caso a).
+ *
+ * Ante cualquier duda (error de consulta) devuelve false = no hay conflicto, y
+ * se mantiene el comportamiento historico de aceptar. Marcar como rechazado un
+ * comprobante que SI llego a SUNAT es peor: obliga a reemitir algo que ya
+ * existe y quema un correlativo.
+ */
+async function hasCorrelativeConflict(businessId, docId, documentNumber) {
+  if (!businessId || !documentNumber) return false
+  try {
+    const snap = await db.collection('businesses').doc(businessId)
+      .collection('invoices')
+      .where('number', '==', documentNumber)
+      .limit(5)
+      .get()
+    const otros = snap.docs.filter(d => d.id !== docId)
+    if (otros.length > 0) {
+      console.log(`\u26a0\ufe0f 1033: ${documentNumber} existe ${otros.length + 1} veces en el negocio -> correlativo pisado`)
+      return true
+    }
+    return false
+  } catch (err) {
+    console.warn('No se pudo verificar duplicidad de correlativo:', err.message)
+    return false
+  }
+}
+
 export const resetSubUserPassword = onCall(
   {
     region: 'us-central1',
@@ -11259,6 +11480,912 @@ export const processSaleStock = onCall(
     } catch (err) {
       console.error('❌ Error en processSaleStock:', err)
       throw new HttpsError('internal', err.message || 'Error al descontar stock')
+    }
+  }
+)
+
+// === TEMPORAL: prueba de conexión SIRE (NO commitear — eliminar tras validar) ===
+// Reutiliza las credenciales sunat_direct del negocio (clientId/clientSecret/solUser/
+// solPassword) para pedir un token con scope=api-sire y hacer UNA lectura mínima:
+// consultar los periodos del RCE (GET, sin tickets). Gateado por token de ADMIN
+// (mismo helper que las demás funciones admin), no por clave pública.
+export const testSireConnection = onRequest(
+  { region: 'us-central1', timeoutSeconds: 60, memory: '256MiB' },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    // Autenticar al que llama (obtener su uid + si es admin)
+    const authHeader = req.headers.authorization || req.headers.Authorization || ''
+    if (!authHeader.startsWith('Bearer ')) { res.status(401).json({ error: 'falta token' }); return }
+    let callerUid = null, isAdminCaller = false
+    try {
+      const decoded = await auth.verifyIdToken(authHeader.split('Bearer ')[1])
+      callerUid = decoded.uid
+      isAdminCaller = (await db.collection('admins').doc(callerUid).get()).exists
+    } catch (e) { res.status(401).json({ error: 'token inválido' }); return }
+    const ruc = String((req.query.ruc || (req.body && req.body.ruc)) || '')
+    const codLibro = String((req.query.codLibro || (req.body && req.body.codLibro)) || '080000') // 080000 = RCE
+    if (!ruc) { res.status(400).json({ error: 'falta ruc' }); return }
+    try {
+      // 1. Encontrar el negocio por RUC
+      const snap = await db.collection('businesses').where('ruc', '==', ruc).limit(1).get()
+      if (snap.empty) { res.status(404).json({ error: `No hay negocio con RUC ${ruc}` }); return }
+      const bizDoc = snap.docs[0]
+      const businessId = bizDoc.id
+      // Authz: admin, dueño del negocio, o sub-usuario activo de ese negocio
+      let authorized = isAdminCaller || callerUid === businessId
+      if (!authorized) {
+        const cu = await db.collection('users').doc(callerUid).get()
+        authorized = cu.exists && cu.data().ownerId === businessId && cu.data().isActive === true
+      }
+      if (!authorized) { res.status(403).json({ error: 'No autorizado para este negocio' }); return }
+      // 2. Cargar credenciales SUNAT desde secrets/emission
+      const businessData = { ...bizDoc.data() }
+      await attachEmissionSecrets(businessId, businessData)
+      const s = businessData.sunat || {}
+      const { clientId, clientSecret, solUser, solPassword } = s
+      // DIAGNÓSTICO: confirmar QUÉ credencial está leyendo realmente la función (enmascarada).
+      const mask = (v) => (v ? `${String(v).slice(0, 8)}…${String(v).slice(-4)} (len ${String(v).length})` : null)
+      const diag = {
+        businessId,
+        emissionMethod: businessData.emissionMethod || null,
+        clientId: mask(clientId),
+        clientSecretLen: clientSecret ? String(clientSecret).length : 0,
+        solUser: solUser || null,
+        usernameSent: `${ruc}${solUser || ''}`,
+      }
+      const have = { clientId: !!clientId, clientSecret: !!clientSecret, solUser: !!solUser, solPassword: !!solPassword }
+      if (!clientId || !clientSecret || !solUser || !solPassword) {
+        res.status(200).json({ step: 'credentials', ok: false, have, diag })
+        return
+      }
+      // helper: decodificar el payload del JWT (sin verificar firma) para ver aud/scope reales del token
+      const decodeJwt = (t) => {
+        try {
+          const part = String(t).split('.')[1]
+          if (!part) return { note: 'access_token no es JWT (sin segmento)' }
+          return JSON.parse(Buffer.from(part.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'))
+        } catch (err) { return { decodeError: err.message } }
+      }
+      // 3. Token SIRE (mismo endpoint que GRE, solo cambia el scope)
+      let token, tokenMeta
+      try {
+        const tokenRes = await axios.post(
+          `https://api-seguridad.sunat.gob.pe/v1/clientessol/${clientId}/oauth2/token/`,
+          new URLSearchParams({
+            grant_type: 'password',
+            scope: 'https://api-sire.sunat.gob.pe',
+            client_id: clientId,
+            client_secret: clientSecret,
+            username: `${ruc}${solUser}`,
+            password: solPassword,
+          }),
+          { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 30000 }
+        )
+        token = tokenRes.data.access_token
+        const claims = decodeJwt(token)
+        tokenMeta = {
+          scopeReturned: tokenRes.data.scope ?? null,
+          tokenType: tokenRes.data.token_type ?? null,
+          expiresIn: tokenRes.data.expires_in ?? null,
+          jwtAud: claims?.aud ?? null,
+          jwtScope: claims?.scope ?? null,
+          jwtClaims: claims,
+        }
+      } catch (e) {
+        res.status(200).json({ step: 'token', ok: false, diag, error: e.response?.data || e.message })
+        return
+      }
+      // 4. Lectura SIRE: consultar periodos del RCE
+      try {
+        const sireRes = await axios.get(
+          `https://api-sire.sunat.gob.pe/v1/contribuyente/migeigv/libros/rvierce/padron/web/omisos/${codLibro}/periodos`,
+          { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', 'Content-Type': 'application/json' }, timeout: 30000 }
+        )
+        res.status(200).json({ step: 'sire', ok: true, diag, tokenObtained: true, tokenMeta, periods: sireRes.data })
+      } catch (e) {
+        const raw = e.response?.data
+        res.status(200).json({ step: 'sire', ok: false, diag, tokenObtained: true, tokenMeta, status: e.response?.status, error: (typeof raw === 'string' ? raw.slice(0, 200) : raw) || e.message })
+      }
+    } catch (e) {
+      res.status(500).json({ error: e.message })
+    }
+  }
+)
+
+// ========================================
+// PASARELA DE PAGO — FLOW (pago único: QR interoperable / tarjeta / PagoEfectivo)
+// ========================================
+// Etapa 1: renovación de suscripción con pago único. El cobro recurrente
+// (Yape recurrente / suscripción de tarjeta) se agrega en una etapa posterior
+// con los endpoints customer/subscription de Flow.
+//
+// Credenciales (secretos de Functions, los carga el dueño, no viven en el repo):
+//   firebase functions:secrets:set FLOW_API_KEY
+//   firebase functions:secrets:set FLOW_SECRET_KEY
+// Ambiente: FLOW_ENV = 'production' para producción; cualquier otro valor = sandbox.
+
+// Catálogo por NIVEL × CICLO: los ids ya codifican ambos (ver PLAN_TIERS en
+// src/services/subscriptionService.js). `semestral` es legacy: se respeta a quien
+// lo tiene (puede renovar su plan) pero no se ofrece como destino de cambio.
+const SUB_PLAN_MONTHS = { basico_mensual: 1, mensual: 1, semestral: 6, anual: 12, ilimitado_mensual: 1, ilimitado_anual: 12 }
+const SUB_PLAN_PRICE = { basico_mensual: 19.90, mensual: 29.90, semestral: 149.90, anual: 199.90, ilimitado_mensual: 39.90, ilimitado_anual: 299.90 }
+const SUB_PLAN_NAME = {
+  basico_mensual: 'Plan Básico - 1 Mes', mensual: 'Plan Mensual - 1 Mes',
+  semestral: 'Plan Semestral - 6 Meses', anual: 'Plan Anual - 12 Meses',
+  ilimitado_mensual: 'Plan Ilimitado - 1 Mes', ilimitado_anual: 'Plan Ilimitado - 12 Meses',
+}
+// Límites por plan (para CAMBIO de plan / upgrade). En renovación normal no se tocan.
+const SUB_PLAN_LIMITS = {
+  // Básico = 100 comprobantes desde el 24-jul-2026. Solo aplica a CAMBIOS de plan
+  // (isUpgrade); la renovación del propio plan no toca limits, así que los clientes
+  // antiguos con 500 los conservan.
+  basico_mensual: { maxInvoicesPerMonth: 100, maxBranches: 1 },
+  mensual: { maxInvoicesPerMonth: 1000, maxBranches: -1 },
+  semestral: { maxInvoicesPerMonth: 1000, maxBranches: -1 },
+  anual: { maxInvoicesPerMonth: 1000, maxBranches: -1 },
+  ilimitado_mensual: { maxInvoicesPerMonth: -1, maxBranches: -1 },
+  ilimitado_anual: { maxInvoicesPerMonth: -1, maxBranches: -1 },
+}
+
+const FLOW_CONFIRMATION_URL = 'https://us-central1-cobrify-395fe.cloudfunctions.net/flowConfirmation'
+
+/**
+ * Crea un pago único en Flow para renovar la suscripción del cliente directo.
+ * Devuelve la URL de checkout de Flow (donde el usuario elige QR, tarjeta, etc.).
+ * El cumplimiento real (extender el vencimiento) ocurre en el webhook flowConfirmation.
+ */
+export const createFlowPayment = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 60,
+    memory: '256MiB',
+    cors: true,
+    secrets: ['FLOW_API_KEY', 'FLOW_SECRET_KEY'],
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return }
+
+    try {
+      const authHeader = req.headers.authorization
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'No autorizado' }); return
+      }
+      const decoded = await auth.verifyIdToken(authHeader.split('Bearer ')[1])
+
+      // Interruptor del cobro en línea (FLOW_PAYMENTS_ENABLED en functions/.env).
+      // Apagado = modo "Próximamente": la UI ya no ofrece pagar, y acá se rechaza
+      // también por si alguien llama al endpoint directamente.
+      if (process.env.FLOW_PAYMENTS_ENABLED !== 'true') {
+        res.status(503).json({ error: 'El pago en línea estará disponible próximamente.' })
+        return
+      }
+
+      const { businessId, returnUrl, targetPlan } = req.body || {}
+      if (!businessId) { res.status(400).json({ error: 'businessId es requerido' }); return }
+      if (!(await userCanAccessBusiness(decoded.uid, businessId))) {
+        res.status(403).json({ error: 'No autorizado para este negocio' }); return
+      }
+
+      const subRef = db.collection('subscriptions').doc(businessId)
+      const subSnap = await subRef.get()
+      if (!subSnap.exists) { res.status(404).json({ error: 'Suscripción no encontrada' }); return }
+      const sub = subSnap.data()
+
+      // Solo clientes DIRECTOS (los de reseller/vendedor pagan por su intermediario),
+      // salvo que se habilite explícitamente allowSelfCheckout.
+      const isDirect = !sub.resellerId && !sub.vendedorId
+      if (!isDirect && sub.allowSelfCheckout !== true) {
+        res.status(403).json({ error: 'Tu suscripción se renueva a través de tu proveedor.' }); return
+      }
+
+      // ¿Es un CAMBIO de plan (upgrade) o una renovación del plan actual?
+      // Upgrade: targetPlan válido y distinto → se cobra el precio de CATÁLOGO del
+      // nuevo plan (el renewalPrice congelado es del plan viejo) y el webhook cambia
+      // el plan + sus límites. Renovación: precio pactado congelado del plan actual.
+      const isUpgrade = !!targetPlan && targetPlan !== sub.plan && SUB_PLAN_PRICE[targetPlan] != null
+      const plan = isUpgrade ? targetPlan : sub.plan
+      const months = SUB_PLAN_MONTHS[plan] || 1
+      const amount = isUpgrade
+        ? SUB_PLAN_PRICE[targetPlan]
+        : (sub.renewalPrice != null ? Number(sub.renewalPrice) : (SUB_PLAN_PRICE[plan] || 0))
+      if (!(amount > 0)) {
+        res.status(400).json({ error: 'No se pudo determinar el monto de esta cuenta.' }); return
+      }
+
+      const email = sub.email || decoded.email || 'pagos@cobrify.pe'
+      // Flow limita commerceOrder a 45 caracteres. El businessId (uid, ~28) + prefijo
+      // + timestamp se pasaba de largo (error 1622). Acortamos: el businessId COMPLETO
+      // igual queda guardado en el doc flowPayments (el webhook lo lee de ahí, no de acá).
+      const commerceOrder = `SUB-${businessId.slice(0, 10)}-${Date.now()}`
+      const sandbox = process.env.FLOW_ENV !== 'production'
+
+      // Registro pendiente (idempotencia + auditoría)
+      await db.collection('flowPayments').doc(commerceOrder).set({
+        businessId, plan, months, amount, status: 'pending', method: 'flow',
+        isUpgrade, previousPlan: isUpgrade ? sub.plan : null,
+        sandbox, email, createdAt: FieldValue.serverTimestamp(),
+      })
+
+      // urlReturn: adónde vuelve el checkout tras pagar. Aceptar https:// y también
+      // http://localhost (desarrollo). OJO: el fallback debe ser el dominio REAL de
+      // la app (cobrifyperu.com) — antes apuntaba a app.cobrify.pe, que no existe,
+      // y tras pagar el iframe quedaba colgado en gris sin confirmación.
+      const isValidReturn = typeof returnUrl === 'string' &&
+        (/^https:\/\//.test(returnUrl) || /^http:\/\/localhost(:\d+)?$/.test(returnUrl))
+      const origin = isValidReturn ? returnUrl : 'https://cobrifyperu.com'
+      const flowRes = await flowCreatePayment({
+        apiKey: process.env.FLOW_API_KEY,
+        secretKey: process.env.FLOW_SECRET_KEY,
+        sandbox,
+        commerceOrder,
+        subject: `${isUpgrade ? 'Cambio a' : 'Renovacion'} ${plan} - Cobrify`,
+        amount,
+        email,
+        currency: 'PEN',
+        urlConfirmation: FLOW_CONFIRMATION_URL,
+        urlReturn: `${origin}/app/subscription?flow=1`,
+      })
+
+      await db.collection('flowPayments').doc(commerceOrder).update({
+        token: flowRes.token, flowOrder: flowRes.flowOrder || null,
+      })
+
+      res.status(200).json({ success: true, url: flowRes.url, commerceOrder })
+    } catch (error) {
+      console.error('[Flow] createFlowPayment:', error.response?.data || error.message)
+      res.status(500).json({ error: error.message || 'Error al crear el pago' })
+    }
+  }
+)
+
+/**
+ * Webhook que Flow invoca al confirmar un pago. Flow envia `token`; la fuente de
+ * verdad es getStatus (requiere nuestro secretKey), NO el body. Si el pago esta
+ * pagado (status 2), extiende el vencimiento de la suscripcion. Idempotente.
+ */
+// ============================================================================
+// RENOVACION AUTOMATICA (Flow "Cargo Automatico") — 15-ago-2026
+//
+// Se registra la tarjeta del cliente en Flow y NOSOTROS cobramos cuando vence
+// su periodo, con SU precio congelado (renewalPrice). No se usan los planes de
+// Flow porque son de monto fijo y aca cada suscripcion tiene su precio pactado
+// (tras la migracion de julio conviven 19.90, 29.90, 149.90, 199.90, 235.88...).
+// Cobrify nunca ve ni guarda el numero de tarjeta: Flow devuelve solo marca y
+// ultimos digitos.
+// ============================================================================
+
+/** Guard compartido: solo clientes DIRECTOS pueden auto-renovar. */
+function puedeAutoRenovar(sub) {
+  const isDirect = !sub.resellerId && !sub.vendedorId
+  return isDirect || sub.allowSelfCheckout === true
+}
+
+/**
+ * Paso 1: devuelve la URL de Flow donde el cliente registra su tarjeta.
+ * Crea el cliente en Flow la primera vez y guarda su customerId.
+ */
+export const createCardRegistration = onRequest(
+  {
+    region: 'us-central1', timeoutSeconds: 60, memory: '256MiB', cors: true,
+    secrets: ['FLOW_API_KEY', 'FLOW_SECRET_KEY'],
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return }
+
+    try {
+      const authHeader = req.headers.authorization
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'No autorizado' }); return
+      }
+      const decoded = await auth.verifyIdToken(authHeader.split('Bearer ')[1])
+
+      if (process.env.FLOW_PAYMENTS_ENABLED !== 'true') {
+        res.status(503).json({ error: 'El pago en linea estara disponible proximamente.' }); return
+      }
+
+      const { businessId, returnUrl } = req.body || {}
+      if (!businessId) { res.status(400).json({ error: 'businessId es requerido' }); return }
+      if (!(await userCanAccessBusiness(decoded.uid, businessId))) {
+        res.status(403).json({ error: 'No autorizado para este negocio' }); return
+      }
+
+      const subRef = db.collection('subscriptions').doc(businessId)
+      const subSnap = await subRef.get()
+      if (!subSnap.exists) { res.status(404).json({ error: 'Suscripcion no encontrada' }); return }
+      const sub = subSnap.data()
+
+      if (!puedeAutoRenovar(sub)) {
+        res.status(403).json({ error: 'Tu suscripcion se renueva a traves de tu proveedor.' }); return
+      }
+
+      const sandbox = process.env.FLOW_ENV !== 'production'
+      const creds = { apiKey: process.env.FLOW_API_KEY, secretKey: process.env.FLOW_SECRET_KEY, sandbox }
+
+      // Cliente de Flow: se crea una sola vez por negocio.
+      let customerId = sub.flowCustomerId
+      if (!customerId) {
+        const email = sub.email || decoded.email
+        if (!email) { res.status(400).json({ error: 'La suscripcion no tiene correo' }); return }
+        const created = await createFlowCustomer({
+          ...creds,
+          name: sub.businessName || sub.planName || 'Cliente Cobrify',
+          email,
+          externalId: businessId,
+        })
+        customerId = created.customerId
+        await subRef.update({ flowCustomerId: customerId, updatedAt: FieldValue.serverTimestamp() })
+      }
+
+      const base = (returnUrl && returnUrl.startsWith('http'))
+        ? returnUrl
+        : 'https://cobrifyperu.com/app/subscription'
+      const sep = base.indexOf('?') === -1 ? '?' : '&'
+      const { url, token } = await registerFlowCard({
+        ...creds, customerId, urlReturn: base + sep + 'flowcard=1',
+      })
+
+      // El token se guarda para verificar el registro contra Flow al volver
+      // (el retorno del navegador no es fuente de verdad).
+      await subRef.update({
+        flowCardRegisterToken: token,
+        flowCardRegisterStartedAt: FieldValue.serverTimestamp(),
+      })
+
+      res.status(200).json({ url, token })
+    } catch (error) {
+      console.error('[Flow] createCardRegistration:', error.response?.data || error.message)
+      res.status(500).json({ error: 'No se pudo iniciar el registro de la tarjeta' })
+    }
+  }
+)
+
+/**
+ * Paso 2: confirma el registro consultando a Flow (fuente de verdad) y activa
+ * la renovacion automatica.
+ */
+export const confirmCardRegistration = onRequest(
+  {
+    region: 'us-central1', timeoutSeconds: 60, memory: '256MiB', cors: true,
+    secrets: ['FLOW_API_KEY', 'FLOW_SECRET_KEY'],
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return }
+
+    try {
+      const authHeader = req.headers.authorization
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'No autorizado' }); return
+      }
+      const decoded = await auth.verifyIdToken(authHeader.split('Bearer ')[1])
+
+      const { businessId } = req.body || {}
+      if (!businessId) { res.status(400).json({ error: 'businessId es requerido' }); return }
+      if (!(await userCanAccessBusiness(decoded.uid, businessId))) {
+        res.status(403).json({ error: 'No autorizado para este negocio' }); return
+      }
+
+      const subRef = db.collection('subscriptions').doc(businessId)
+      const subSnap = await subRef.get()
+      if (!subSnap.exists) { res.status(404).json({ error: 'Suscripcion no encontrada' }); return }
+      const sub = subSnap.data()
+      const token = sub.flowCardRegisterToken
+      if (!token) { res.status(400).json({ error: 'No hay un registro de tarjeta en curso' }); return }
+
+      const sandbox = process.env.FLOW_ENV !== 'production'
+      const status = await getFlowCardRegisterStatus({
+        apiKey: process.env.FLOW_API_KEY, secretKey: process.env.FLOW_SECRET_KEY, sandbox, token,
+      })
+
+      // status 1 = tarjeta registrada
+      if (Number(status && status.status) !== 1) {
+        res.status(200).json({ registered: false })
+        return
+      }
+
+      await subRef.update({
+        autoRenew: true,
+        flowCard: {
+          brand: status.creditCardType || '',
+          last4: status.last4CardDigits || '',
+        },
+        cardRegisteredAt: FieldValue.serverTimestamp(),
+        autoRenewFailures: 0,
+        flowCardRegisterToken: FieldValue.delete(),
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+
+      res.status(200).json({
+        registered: true,
+        card: { brand: status.creditCardType || '', last4: status.last4CardDigits || '' },
+      })
+    } catch (error) {
+      console.error('[Flow] confirmCardRegistration:', error.response?.data || error.message)
+      res.status(500).json({ error: 'No se pudo confirmar el registro' })
+    }
+  }
+)
+
+/** Cancela la renovacion automatica y elimina la tarjeta en Flow. */
+export const cancelAutoRenew = onRequest(
+  {
+    region: 'us-central1', timeoutSeconds: 60, memory: '256MiB', cors: true,
+    secrets: ['FLOW_API_KEY', 'FLOW_SECRET_KEY'],
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return }
+
+    try {
+      const authHeader = req.headers.authorization
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'No autorizado' }); return
+      }
+      const decoded = await auth.verifyIdToken(authHeader.split('Bearer ')[1])
+
+      const { businessId } = req.body || {}
+      if (!businessId) { res.status(400).json({ error: 'businessId es requerido' }); return }
+      if (!(await userCanAccessBusiness(decoded.uid, businessId))) {
+        res.status(403).json({ error: 'No autorizado para este negocio' }); return
+      }
+
+      const subRef = db.collection('subscriptions').doc(businessId)
+      const subSnap = await subRef.get()
+      const sub = subSnap.exists ? subSnap.data() : {}
+
+      if (sub.flowCustomerId) {
+        try {
+          await unregisterFlowCard({
+            apiKey: process.env.FLOW_API_KEY,
+            secretKey: process.env.FLOW_SECRET_KEY,
+            sandbox: process.env.FLOW_ENV !== 'production',
+            customerId: sub.flowCustomerId,
+          })
+        } catch (e) {
+          // Si Flow falla, igual se apaga de nuestro lado: lo que manda para
+          // cobrar es `autoRenew`, y sin el el programador no cobra.
+          console.error('[Flow] unRegister:', (e.response && e.response.data) || e.message)
+        }
+      }
+
+      await subRef.update({
+        autoRenew: false,
+        flowCard: FieldValue.delete(),
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+
+      res.status(200).json({ ok: true })
+    } catch (error) {
+      console.error('[Flow] cancelAutoRenew:', error.response?.data || error.message)
+      res.status(500).json({ error: 'No se pudo cancelar la renovacion automatica' })
+    }
+  }
+)
+
+// ============================================================================
+// TARJETAS DE FIDELIDAD EN GOOGLE WALLET — 15-ago-2026
+//
+// El saldo real vive en Firestore (businesses/{id}/loyaltyCards). Wallet es
+// solo la CARA. Este trigger es lo que las mantiene sincronizadas: cualquier
+// sello — venga del POS, de un pedido online o de un canje — escribe en
+// Firestore, y de ahi se refleja solo en el telefono del cliente.
+//
+// Que sea un trigger y no una llamada desde cada pantalla es a proposito: si
+// manana se agrega otro camino que sume sellos, la tarjeta lo sigue sin que
+// nadie se acuerde de avisarle.
+// ============================================================================
+
+const walletSecrets = ['GOOGLE_WALLET_SA_KEY']
+
+/**
+ * Datos de marca del negocio para la clase de Wallet.
+ *
+ * Todo sale de lo que el negocio YA tiene cargado: su logo, su direccion, su
+ * catalogo. El comercio elige un tema y nada mas — no se le pide subir otra
+ * imagen ni marcar un punto en un mapa.
+ */
+async function marcaDelNegocio(businessId) {
+  const snap = await db.collection('businesses').doc(businessId).get()
+  const b = snap.exists ? snap.data() : {}
+  const cfg = b.loyaltyConfig || {}
+  // El tema llega RESUELTO desde el front (src/data/walletThemes.js). Aca no
+  // hay tabla de temas: solo se consume lo que quedo guardado. Si el negocio
+  // nunca eligio uno, los sellos van como puntos igual — es el default del
+  // front y lo que hace que la tarjeta se entienda de un vistazo.
+  const tema = cfg.walletTheme || { sellosComoPuntos: true }
+  const logoOriginal = b.logoUrl || null
+  const colorFondo = tema.colorFondo || b.pdfAccentColor || '#1e3a8a'
+
+  // Portada: cuadricula (los sellos dibujados, por tarjeta), logo (el logo
+  // apaisado como franja) o none (color plano). Los patrones de iconos por
+  // rubro se ELIMINARON: se veian como manchas. Cualquier valor viejo
+  // guardado con ellos cae a la cuadricula.
+  const PORTADAS_VALIDAS = new Set(['cuadricula', 'logo', 'none'])
+  const motivo = PORTADAS_VALIDAS.has(tema.motivo) ? tema.motivo : 'cuadricula'
+
+  // Las tres son lentas (bajan imagenes / consultan Nominatim) y ninguna
+  // depende de las otras. Ademas ninguna puede tumbar la sincronizacion: si
+  // alguna falla, la tarjeta sale igual, solo que mas sobria.
+  const [logoUrl, portadaUrl, ubicacion] = await Promise.all([
+    logoCuadradoDe(businessId, logoOriginal).catch(() => null),
+    // 'cuadricula' no lleva portada de clase: la portada es POR TARJETA (la
+    // cuadricula de sellos de cada cliente) y pisa a la de la clase.
+    (motivo === 'logo' ? portadaDe(logoOriginal) : Promise.resolve(null)).catch(() => null),
+    cfg.walletNearby === false ? Promise.resolve(null) : ubicacionDeNegocio(b).catch(() => null),
+  ])
+
+  const enlaces = []
+  const slug = b.catalogSlug
+  if (b.catalogEnabled && (b.customDomain || slug)) {
+    // Restaurantes publican en /menu, el resto en /catalogo.
+    const ruta = b.businessMode === 'restaurant' ? 'menu' : 'catalogo'
+    enlaces.push({
+      id: 'catalogo',
+      uri: b.customDomain
+        ? `https://${String(b.customDomain).replace(/^https?:\/\//, '')}`
+        : `https://www.cobrifyperu.com/${ruta}/${slug}`,
+      description: b.businessMode === 'restaurant' ? 'Ver la carta' : 'Ver el catalogo',
+    })
+  }
+  const tel = String(b.phone || '').replace(/[^\d+]/g, '')
+  if (tel.length >= 6) enlaces.push({ id: 'telefono', uri: `tel:${tel}`, description: 'Llamar' })
+
+  return {
+    // OJO con el esquema: el formulario de Configuracion dice "tradeName",
+    // pero Firestore guarda el nombre comercial en `name` (Settings hace
+    // name = tradeName || businessName al guardar). `businessName` es la
+    // RAZON SOCIAL — si se consulta antes que `name`, la tarjeta sale como
+    // "QUANTIO SOLUTIONS EIRL" en vez de "Cobrify Peru".
+    nombre: b.name || b.tradeName || b.businessName || 'Comercio',
+    // Si no se pudo cuadrar, va el original: mejor un logo algo apretado que
+    // el generico de Cobrify en la tarjeta de otro comercio.
+    logoUrl: logoUrl || logoOriginal,
+    portadaUrl,
+    colorFondo,
+    programa: cfg.reward ? `Junta ${cfg.goal || 10} y gana` : 'Tarjeta de sellos',
+    meta: cfg.goal || 10,
+    premio: cfg.reward || '',
+    mensaje: (cfg.walletMessage || '').trim(),
+    tema,
+    motivo,
+    colorFondo,
+    enlaces,
+    ubicaciones: ubicacion ? [{ latitude: ubicacion.lat, longitude: ubicacion.lng }] : [],
+  }
+}
+
+/**
+ * Portada propia de UNA tarjeta: la cuadricula de sellos del cliente, solo
+ * cuando el negocio eligio ese estilo. null = la tarjeta usa la de la clase.
+ */
+async function heroDeTarjeta(businessId, marca, { phone, sellos, meta, sellosAntes = null }) {
+  if (marca.motivo !== 'cuadricula') return null
+  return cuadriculaDeSellos(businessId, {
+    phone, color: marca.colorFondo, sellos, meta, sellosAntes,
+    sello: marca.tema?.sello || 'check',
+  }).catch(() => null)
+}
+
+/** Lo que necesita walletUpsertClass, para no repetirlo en cada sitio que la crea. */
+const claseDesdeMarca = (businessId, marca) => ({
+  businessId,
+  nombre: marca.nombre,
+  logoUrl: marca.logoUrl,
+  portadaUrl: marca.portadaUrl,
+  colorFondo: marca.colorFondo,
+  programa: marca.programa,
+  enlaces: marca.enlaces,
+  ubicaciones: marca.ubicaciones,
+})
+
+export const syncWalletPass = onDocumentWritten(
+  {
+    document: 'businesses/{businessId}/loyaltyCards/{cardId}',
+    region: 'us-central1',
+    secrets: walletSecrets,
+  },
+  async (event) => {
+    const { businessId, cardId } = event.params
+    const after = event.data.after?.exists ? event.data.after.data() : null
+    if (!after) return // tarjeta borrada: no hay nada que actualizar
+
+    const before = event.data.before?.exists ? event.data.before.data() : null
+    // Solo interesa cuando cambian los sellos (o al crearse). Sin esto, cada
+    // escritura del doc — aunque sea solo updatedAt — golpearia la API.
+    if (before && before.stamps === after.stamps) return
+
+    try {
+      const marca = await marcaDelNegocio(businessId)
+      // La clase se re-asegura en cada sincronizacion: es idempotente y evita
+      // depender de que alguien la haya creado antes.
+      const heroUrl = await heroDeTarjeta(businessId, marca, {
+        phone: cardId,
+        sellos: after.stamps || 0,
+        meta: after.goal || marca.meta,
+        sellosAntes: before ? (before.stamps || 0) : null,
+      })
+      await walletUpsertClass(claseDesdeMarca(businessId, marca))
+      await walletUpsertObject({
+        businessId,
+        phone: cardId, // el id del doc ES el telefono normalizado
+        nombreCliente: after.customerName || '',
+        sellos: after.stamps || 0,
+        meta: after.goal || marca.meta,
+        premio: marca.premio,
+        tema: marca.tema,
+        heroUrl,
+        mensaje: marca.mensaje,
+        nombreNegocio: marca.nombre,
+      })
+      console.log(`[Wallet] Tarjeta sincronizada ${businessId}/${cardId}: ${after.stamps} sellos`)
+    } catch (error) {
+      // La tarjeta de Wallet es secundaria: el saldo real ya quedo guardado.
+      console.error(`[Wallet] No se pudo sincronizar ${businessId}/${cardId}:`,
+        (error.response && JSON.stringify(error.response.data).slice(0, 300)) || error.message)
+    }
+  }
+)
+
+/**
+ * Devuelve el link "Agregar a Google Wallet" de la tarjeta de un cliente.
+ * Se asegura de que la clase y el objeto existan ANTES de firmar el link: si
+ * el objeto no existe, Google muestra un error al abrirlo.
+ */
+export const getWalletPassLink = onRequest(
+  {
+    region: 'us-central1', timeoutSeconds: 60, memory: '256MiB', cors: true,
+    secrets: walletSecrets,
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return }
+
+    try {
+      const authHeader = req.headers.authorization
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'No autorizado' }); return
+      }
+      const decoded = await auth.verifyIdToken(authHeader.split('Bearer ')[1])
+
+      const { businessId, phone } = req.body || {}
+      if (!businessId || !phone) {
+        res.status(400).json({ error: 'businessId y phone son requeridos' }); return
+      }
+      if (!(await userCanAccessBusiness(decoded.uid, businessId))) {
+        res.status(403).json({ error: 'No autorizado para este negocio' }); return
+      }
+
+      const cardSnap = await db.collection('businesses').doc(businessId)
+        .collection('loyaltyCards').doc(String(phone)).get()
+      if (!cardSnap.exists) {
+        res.status(404).json({ error: 'Este cliente todavia no tiene tarjeta' }); return
+      }
+      const card = cardSnap.data()
+      const marca = await marcaDelNegocio(businessId)
+
+      const heroUrl = await heroDeTarjeta(businessId, marca, {
+        phone: String(phone),
+        sellos: card.stamps || 0,
+        meta: card.goal || marca.meta,
+      })
+      await walletUpsertClass(claseDesdeMarca(businessId, marca))
+      await walletUpsertObject({
+        businessId, phone: String(phone),
+        nombreCliente: card.customerName || '',
+        sellos: card.stamps || 0,
+        meta: card.goal || marca.meta,
+        premio: marca.premio,
+        tema: marca.tema,
+        heroUrl,
+        mensaje: marca.mensaje,
+        nombreNegocio: marca.nombre,
+      })
+
+      // LINK CORTO: el link real de Google es un JWT de ~800 caracteres que
+      // en WhatsApp ocupa media pantalla. Se reusa el acortador cbrfy.link
+      // que ya sirve los PDFs de comprobantes (coleccion shortUrls +
+      // redirectShortUrl): un codigo ESTABLE por tarjeta, guardado en ella.
+      // En cada reenvio se refresca el destino con un JWT recien firmado —
+      // mismo codigo, firma nueva (aguanta hasta una rotacion de la llave).
+      const urlLarga = walletSaveLink({ businessId, phone: String(phone) })
+      let code = card.walletShortCode
+      if (!code) {
+        code = generateShortCode()
+        for (let i = 0; i < 10 && (await db.collection('shortUrls').doc(code).get()).exists; i++) {
+          code = generateShortCode()
+        }
+        await cardSnap.ref.set({ walletShortCode: code }, { merge: true })
+      }
+      await db.collection('shortUrls').doc(code).set({
+        originalUrl: urlLarga,
+        businessId,
+        type: 'walletCard',
+        createdAt: FieldValue.serverTimestamp(),
+      }, { merge: true })
+
+      res.status(200).json({
+        url: urlLarga,
+        shortUrl: `https://cbrfy.link/${code}`,
+        stamps: card.stamps || 0,
+        goal: card.goal || marca.meta,
+      })
+    } catch (error) {
+      console.error('[Wallet] getWalletPassLink:',
+        (error.response && JSON.stringify(error.response.data).slice(0, 300)) || error.message)
+      res.status(500).json({ error: 'No se pudo generar la tarjeta' })
+    }
+  }
+)
+
+export const flowConfirmation = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 60,
+    memory: '256MiB',
+    secrets: ['FLOW_API_KEY', 'FLOW_SECRET_KEY'],
+  },
+  async (req, res) => {
+    try {
+      const token = req.body?.token || req.query?.token
+      if (!token) { res.status(400).send('Falta token'); return }
+
+      const sandbox = process.env.FLOW_ENV !== 'production'
+      const status = await getFlowPaymentStatus({
+        apiKey: process.env.FLOW_API_KEY,
+        secretKey: process.env.FLOW_SECRET_KEY,
+        sandbox, token,
+      })
+
+      const commerceOrder = status?.commerceOrder
+      if (!commerceOrder) { res.status(200).send('OK'); return }
+      const payRef = db.collection('flowPayments').doc(commerceOrder)
+
+      // status Flow: 1 pendiente, 2 pagado, 3 rechazado, 4 anulado
+      if (status.status !== 2) {
+        await payRef.set({
+          status: status.status === 3 ? 'rejected' : (status.status === 4 ? 'canceled' : 'pending'),
+          flowStatus: status.status, updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true })
+        res.status(200).send('OK'); return
+      }
+
+      // Pagado -> extender suscripcion de forma transaccional e idempotente
+      await db.runTransaction(async (tx) => {
+        const paySnap = await tx.get(payRef)
+        if (!paySnap.exists) return
+        const pay = paySnap.data()
+        if (pay.status === 'paid') return // ya procesado
+
+        const subRef = db.collection('subscriptions').doc(pay.businessId)
+        const subSnap = await tx.get(subRef)
+        if (!subSnap.exists) return
+        const sub = subSnap.data()
+
+        const now = new Date()
+        const currentEnd = sub.currentPeriodEnd?.toDate?.()
+        const startFrom = currentEnd && currentEnd > now ? currentEnd : now
+        const newPeriodEnd = new Date(startFrom)
+        newPeriodEnd.setMonth(newPeriodEnd.getMonth() + (pay.months || 1))
+
+        const updates = {
+          status: 'active',
+          accessBlocked: false,
+          blockReason: null,
+          blockedAt: null,
+          currentPeriodEnd: newPeriodEnd,
+          lastRenewalAt: FieldValue.serverTimestamp(),
+          lastRenewalBy: 'flow',
+          paymentHistory: FieldValue.arrayUnion({
+            // `status` es obligatorio: la UI de Mi Suscripción pinta el badge del
+            // historial con este campo y, si falta, lo mostraba como "Fallido"
+            // aunque el cobro hubiera sido exitoso.
+            status: 'completed',
+            amount: pay.amount, method: 'flow', plan: pay.plan,
+            flowOrder: pay.flowOrder || null, commerceOrder,
+            date: now.toISOString(),
+          }),
+          updatedAt: FieldValue.serverTimestamp(),
+        }
+
+        // Si fue un CAMBIO de plan (upgrade), aplicar el nuevo plan: nombre,
+        // límites y precio de renovación congelado (para futuras renovaciones).
+        if (pay.isUpgrade && SUB_PLAN_PRICE[pay.plan] != null) {
+          updates.plan = pay.plan
+          updates.planName = SUB_PLAN_NAME[pay.plan] || pay.plan
+          updates.renewalPrice = SUB_PLAN_PRICE[pay.plan]
+          updates.pricingFrozenAt = FieldValue.serverTimestamp()
+          const lim = SUB_PLAN_LIMITS[pay.plan] || {}
+          if (lim.maxInvoicesPerMonth !== undefined) updates['limits.maxInvoicesPerMonth'] = lim.maxInvoicesPerMonth
+          if (lim.maxBranches !== undefined) updates['limits.maxBranches'] = lim.maxBranches
+        }
+
+        tx.update(subRef, updates)
+
+        tx.update(payRef, {
+          status: 'paid', flowStatus: 2, paidAt: FieldValue.serverTimestamp(),
+          newPeriodEnd: newPeriodEnd.toISOString(),
+        })
+      })
+
+      res.status(200).send('OK')
+    } catch (error) {
+      console.error('[Flow] flowConfirmation:', error.response?.data || error.message)
+      // Responder 200 igual para que Flow no reintente en bucle por un error nuestro;
+      // el pago queda consultable por getStatus y se puede reprocesar manualmente.
+      res.status(200).send('OK')
+    }
+  }
+)
+
+// ========================================
+// ATRIBUCIÓN DE TRÁFICO DE LA LANDING
+// ========================================
+/**
+ * Registra una visita a la landing agrupada por origen.
+ *
+ * No se guarda un documento por visita (sería carísimo y sin valor): se
+ * incrementan contadores en `landingStats/{YYYY-MM-DD}`, así el reporte se lee
+ * de unos pocos documentos. Es un endpoint público — lo llama la landing sin
+ * sesión — por eso solo incrementa contadores acotados y nunca crea documentos
+ * arbitrarios; lo peor que puede hacer un abusador es inflar un número.
+ */
+export const trackLandingVisit = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 15,
+    memory: '256MiB',
+    cors: true,
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return }
+
+    try {
+      const { source, medium, campaign } = req.body || {}
+
+      // Normalizar: los nombres se usan como CLAVE de mapa en Firestore, así que
+      // no pueden llevar puntos (romperían la ruta del campo) ni ser infinitos.
+      const clean = (v, fallback) => {
+        const s = String(v || '').toLowerCase().replace(/[^a-z0-9_-]/g, '_').slice(0, 40)
+        return s || fallback
+      }
+      const src = clean(source, 'directo')
+      const med = clean(medium, 'directo')
+      const cmp = clean(campaign, '')
+
+      // Día en hora de Perú (UTC-5), para que el corte diario coincida con el negocio
+      const now = new Date()
+      const peru = new Date(now.getTime() - 5 * 60 * 60 * 1000)
+      const dateStr = peru.toISOString().slice(0, 10)
+
+      // OJO: con set({merge:true}) las claves con PUNTO se guardan como nombres
+      // literales ("bySource.google"), no como ruta anidada — eso solo lo hace
+      // update(). Por eso los contadores van como objetos anidados.
+      const updates = {
+        date: dateStr,
+        total: FieldValue.increment(1),
+        bySource: { [src]: FieldValue.increment(1) },
+        byMedium: { [med]: FieldValue.increment(1) },
+        updatedAt: FieldValue.serverTimestamp(),
+      }
+      if (cmp) updates.byCampaign = { [cmp]: FieldValue.increment(1) }
+
+      await db.collection('landingStats').doc(dateStr).set(updates, { merge: true })
+
+      res.status(200).json({ success: true })
+    } catch (error) {
+      // Nunca romper la landing por un fallo de medición
+      console.error('[trackLandingVisit]', error.message)
+      res.status(200).json({ success: false })
     }
   }
 )
