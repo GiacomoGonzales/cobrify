@@ -3,8 +3,12 @@
  * Verifica que los XMLs generados cumplan las fórmulas de validación de SUNAT:
  * - 4287: AlternativeConditionPrice = (LineExtensionAmount + IGV) / Quantity
  * - 4288: LineExtensionAmount = (Quantity × PriceAmount) - AllowanceCharge.Amount
- * - 4309: Suma de LineExtensionAmount de líneas = LineExtensionAmount global
- * - 4310: Suma de IGV de líneas = IGV global
+ * - 4309 (hoy ERR-3508): Suma de LineExtensionAmount de líneas MENOS los
+ *   descuentos globales que afectan la base (AllowanceCharge código 02 a nivel
+ *   documento) = LineExtensionAmount global. Referencia: Greenter
+ *   factura-descuento-global.php (líneas 70, descuento 3, total 67).
+ * - 4310: Suma de IGV de líneas MENOS el IGV del descuento global = IGV global
+ *   (el IGV total se recalcula sobre la base ya reducida).
  *
  * Ejecutar: node --experimental-vm-modules test-xml-validation.mjs
  */
@@ -81,7 +85,17 @@ function extractGlobalValues(xml) {
   const lineExtTotal = parseFloat(beforeItems.match(/<cbc:LineExtensionAmount[^>]*>([\d.]+)/)?.[1] || 0)
   const payableAmount = parseFloat(xml.match(/<cbc:PayableAmount[^>]*>([\d.]+)/)?.[1] || 0)
 
-  return { totalIgv, lineExtTotal, payableAmount }
+  // Descuento global a nivel documento: AllowanceCharge con ChargeIndicator=false
+  // y código 02 (afecta la base). Se excluyen anticipos (código 04) y cargos.
+  let globalDiscount = 0
+  const acBlocks = beforeItems.match(/<cac:AllowanceCharge>[\s\S]*?<\/cac:AllowanceCharge>/g) || []
+  for (const block of acBlocks) {
+    if (!/>\s*false\s*</.test(block)) continue
+    if (!/<cbc:AllowanceChargeReasonCode[^>]*>0?2</.test(block)) continue
+    globalDiscount += parseFloat(block.match(/<cbc:Amount[^>]*>([\d.]+)/)?.[1] || 0)
+  }
+
+  return { totalIgv, lineExtTotal, payableAmount, globalDiscount }
 }
 
 function validate(testName, xml) {
@@ -111,19 +125,27 @@ function validate(testName, xml) {
     }
   })
 
-  // 4309: Sum of line LineExtensionAmounts = global LineExtensionAmount
+  // 4309 (hoy ERR-3508): Σ LineExtensionAmount de líneas − descuento global
+  // (código 02) = LineExtensionAmount global. El descuento vive como
+  // AllowanceCharge a nivel documento; las líneas NO se encogen por él.
   const sumLineExt = lines.reduce((s, l) => s + l.lineExtension, 0)
-  const diff4309 = Math.abs(sumLineExt - global.lineExtTotal)
+  const expected4309 = sumLineExt - global.globalDiscount
+  const diff4309 = Math.abs(expected4309 - global.lineExtTotal)
   if (diff4309 > 0.02) {
-    errors.push(`  4309 FAIL: Sum LineExt=${sumLineExt.toFixed(2)}, Global=${global.lineExtTotal} (diff=${diff4309.toFixed(4)})`)
+    errors.push(`  4309 FAIL: Sum LineExt=${sumLineExt.toFixed(2)} - Desc=${global.globalDiscount.toFixed(2)} = ${expected4309.toFixed(2)}, Global=${global.lineExtTotal} (diff=${diff4309.toFixed(4)})`)
     allPass = false
   }
 
-  // 4310: Sum of line IGVs = global IGV
+  // 4310: Σ IGV de líneas − IGV del descuento global = IGV global.
+  // El IGV del descuento se calcula a la tasa de las líneas gravadas (aff. 10);
+  // si el documento es exonerado/inafecto no hay IGV que descontar.
   const sumIgv = lines.reduce((s, l) => s + l.lineIgv, 0)
-  const diff4310 = Math.abs(sumIgv - global.totalIgv)
+  const gravadaRate = (lines.find(l => l.taxAffectation === '10' && l.percent > 0)?.percent || 0) / 100
+  const discountIgv = global.globalDiscount > 0 ? Math.round(global.globalDiscount * gravadaRate * 100) / 100 : 0
+  const expected4310 = sumIgv - discountIgv
+  const diff4310 = Math.abs(expected4310 - global.totalIgv)
   if (diff4310 > 0.02) {
-    errors.push(`  4310 FAIL: Sum IGV=${sumIgv.toFixed(2)}, Global=${global.totalIgv} (diff=${diff4310.toFixed(4)})`)
+    errors.push(`  4310 FAIL: Sum IGV=${sumIgv.toFixed(2)} - DescIGV=${discountIgv.toFixed(2)} = ${expected4310.toFixed(2)}, Global=${global.totalIgv} (diff=${diff4310.toFixed(4)})`)
     allPass = false
   }
 
