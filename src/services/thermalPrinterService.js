@@ -3293,6 +3293,17 @@ export const printSplitPreBillThermal = async (order, table, business, taxConfig
  * @param {number} paperWidth - Ancho de papel (58 o 80mm)
  * @param {string} branchName - Nombre de la sucursal (opcional)
  */
+/**
+ * Ticket de CIERRE DE CAJA. `hideExpected` es el cierre "a ciegas": oculta
+ * CALCULO, Diferencia, Yape Esperado y TOTAL DINERO para que el cajero cuente
+ * sin ver cuanto deberia haber.
+ *
+ * OJO AL AGREGAR RUTAS DE IMPRESION: hay que PASARLE hideExpected a la funcion
+ * interna. Las de WiFi y BLE lo usaban sin recibirlo, y como leer una variable
+ * no declarada lanza ReferenceError, el ticket de cierre reventaba entero en
+ * esas dos rutas — el try/catch lo convertia en un "Error al imprimir" que
+ * parecia problema de impresora (detectado con ESLint el 17-ago-2026).
+ */
 export const printCashClosureTicket = async (sessionData, movements = [], business, paperWidth = 58, branchName = null, deferredPayments = [], hideExpected = false) => {
   const isNative = Capacitor.isNativePlatform();
 
@@ -3303,13 +3314,13 @@ export const printCashClosureTicket = async (sessionData, movements = [], busine
   // Si es conexión WiFi o interna, usar la función específica con ESC/POS builder
   if (connectionType === 'wifi' || connectionType === 'internal') {
     console.log(`📶 Usando impresión ${connectionType} para cierre de caja...`);
-    return await printWifiCashClosure(sessionData, movements, business, paperWidth, branchName, deferredPayments);
+    return await printWifiCashClosure(sessionData, movements, business, paperWidth, branchName, deferredPayments, hideExpected);
   }
 
   // Si usa el servicio BLE alternativo (iOS), usar printBLECashClosure
   if (useAlternativeBLE) {
     console.log('🔵 iOS: Usando impresión BLE alternativa para cierre de caja...');
-    return await printBLECashClosure(sessionData, movements, business, paperWidth, branchName, deferredPayments);
+    return await printBLECashClosure(sessionData, movements, business, paperWidth, branchName, deferredPayments, hideExpected);
   }
 
   // Bluetooth Android - comportamiento original
@@ -3631,7 +3642,7 @@ export const printCashClosureTicket = async (sessionData, movements = [], busine
 /**
  * Imprimir cierre de caja vía WiFi
  */
-const printWifiCashClosure = async (sessionData, movements, business, paperWidth, branchName, deferredPayments = []) => {
+const printWifiCashClosure = async (sessionData, movements, business, paperWidth, branchName, deferredPayments = [], hideExpected = false) => {
   try {
     const format = getFormat(paperWidth);
     const lineWidth = format.charsPerLine;
@@ -3861,7 +3872,7 @@ const printWifiCashClosure = async (sessionData, movements, business, paperWidth
 /**
  * Imprimir cierre de caja vía BLE (iOS)
  */
-const printBLECashClosure = async (sessionData, movements, business, paperWidth, branchName, deferredPayments = []) => {
+const printBLECashClosure = async (sessionData, movements, business, paperWidth, branchName, deferredPayments = [], hideExpected = false) => {
   try {
     const format = getFormat(paperWidth);
     const lineWidth = format.charsPerLine;
