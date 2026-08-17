@@ -71,6 +71,13 @@ import { filterProductsForBranch, isProductInBranch } from '@/utils/branchCatalo
 import { getAvailableDocumentTypes, resolveDocumentType } from '@/utils/documentTypes'
 import { calculateInvoiceAmounts, calculateMixedInvoiceAmounts, calculateRecargoConsumo, ID_TYPES, DETRACTION_TYPES, DETRACTION_MIN_AMOUNT } from '@/utils/peruUtils'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
+// El import de Capacitor tiene que ser EXPLÍCITO: este archivo lo usa en 6
+// lugares (escáner, comanda automática, impresión térmica) pero funcionaba
+// solo porque importar '@capacitor/share' asigna window.Capacitor como efecto
+// secundario — y esa asignación está marcada /*#__PURE__*/, o sea que el
+// bundler tiene permiso de eliminarla si nadie importa Capacitor de verdad
+// (detectado por ESLint no-undef, auditoría 17-ago-2026).
+import { Capacitor } from '@capacitor/core'
 import { Share } from '@capacitor/share'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
@@ -484,9 +491,7 @@ export default function POS() {
   // Detecta si estamos en la app nativa (móvil/tablet vía Capacitor). En web/desktop
   // no se muestran botones que solo funcionan en la app — como el escáner de
   // código de barras que usa la cámara nativa.
-  const isNativeApp = React.useMemo(() => {
-    try { return Capacitor?.isNativePlatform?.() === true } catch (_) { return false }
-  }, [])
+  const isNativeApp = React.useMemo(() => Capacitor.isNativePlatform(), [])
   // Modo de visualización del catálogo: 'grid' (cards con foto) o 'list' (filas densas).
   // Persistido en localStorage para que la preferencia sobreviva entre sesiones.
   const [productViewMode, setProductViewMode] = useState(() => {
@@ -8459,7 +8464,6 @@ Gracias por tu preferencia.`
     }
 
     try {
-      const { Capacitor } = await import('@capacitor/core')
       const isNative = Capacitor.isNativePlatform()
 
       if (!isNative) {
