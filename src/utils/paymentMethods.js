@@ -150,6 +150,13 @@ export const getPaymentBucketLabel = (methodLabel, companySettings) => {
   const label = String(methodLabel || '').trim()
   if (!label) return ''
 
+  // "Saldo a favor" (pagar con una nota de crédito) NO es dinero que entra:
+  // es deuda del negocio que se cancela. Su propio balde, para que NINGÚN
+  // fondo del arqueo lo espere. Antes caía en el default 'Transferencia' y
+  // cada venta pagada con saldo inflaba las transferencias esperadas del
+  // cierre con plata que nunca llegó (auditoría 16-ago-2026).
+  if (label === 'Saldo a favor') return 'Saldo a favor'
+
   const builtin = BUILTIN_PAYMENT_METHODS.find(m => m.label === label)
   if (builtin) return label
 

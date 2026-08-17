@@ -1043,6 +1043,7 @@ export default function CashRegister() {
         salesRappi: totalsClose.usd.salesRappi,
         salesPedidosYa: totalsClose.usd.salesPedidosYa,
         salesDiDiFood: totalsClose.usd.salesDiDiFood,
+        salesStoreCredit: totalsClose.usd.salesStoreCredit || 0,
         salesByCustomMethod: totalsClose.usd.salesByCustomMethod || {},
         totalIncome: totalsClose.usd.income,
         totalExpense: totalsClose.usd.expense,
@@ -1089,6 +1090,7 @@ export default function CashRegister() {
         salesRappi: totalsClose.salesRappi,
         salesPedidosYa: totalsClose.salesPedidosYa,
         salesDiDiFood: totalsClose.salesDiDiFood,
+        salesStoreCredit: totalsClose.salesStoreCredit || 0,
         salesByCustomMethod: totalsClose.salesByCustomMethod || {},
         totalIncome: totalsClose.income,
         totalExpense: totalsClose.expense,
@@ -1136,6 +1138,7 @@ export default function CashRegister() {
         salesRappi: totalsClose.salesRappi,
         salesPedidosYa: totalsClose.salesPedidosYa,
         salesDiDiFood: totalsClose.salesDiDiFood,
+        salesStoreCredit: totalsClose.salesStoreCredit || 0,
         // Desglose de métodos propios (etiqueta → monto). Persistirlo permite
         // que el historial y las impresiones lo muestren sin recalcular.
         salesByCustomMethod: totalsClose.salesByCustomMethod || {},
@@ -1783,6 +1786,9 @@ export default function CashRegister() {
     let salesRappi = 0
     let salesPedidosYa = 0
     let salesDiDiFood = 0
+    // "Saldo a favor": ventas pagadas con nota de credito. NO es dinero que
+    // entra — se muestra informativo y NINGUN fondo del arqueo lo espera.
+    let salesStoreCredit = 0
 
     // Multi-divisa: acumuladores paralelos en USD.
     let salesCashUSD = 0
@@ -1793,6 +1799,7 @@ export default function CashRegister() {
     let salesRappiUSD = 0
     let salesPedidosYaUSD = 0
     let salesDiDiFoodUSD = 0
+    let salesStoreCreditUSD = 0
     let pendingTotalUSD = 0
     let pendingCountUSD = 0
 
@@ -1856,6 +1863,7 @@ export default function CashRegister() {
       const method = getPaymentBucketLabel(rawMethod, businessSettings)
       if (currencyCode === 'USD') {
         switch (method) {
+          case 'Saldo a favor': salesStoreCreditUSD += amount; break
           case 'Efectivo': salesCashUSD += amount; break
           case 'Tarjeta': salesCardUSD += amount; break
           case 'Transferencia': salesTransferUSD += amount; break
@@ -1868,6 +1876,7 @@ export default function CashRegister() {
         return
       }
       switch (method) {
+        case 'Saldo a favor': salesStoreCredit += amount; break
         case 'Efectivo': salesCash += amount; break
         case 'Tarjeta': salesCard += amount; break
         case 'Transferencia': salesTransfer += amount; break
@@ -2076,6 +2085,7 @@ export default function CashRegister() {
       salesRappi: salesRappiUSD,
       salesPedidosYa: salesPedidosYaUSD,
       salesDiDiFood: salesDiDiFoodUSD,
+      salesStoreCredit: salesStoreCreditUSD,
       income: incomeUSD,
       expense: expenseUSD,
       expected: expectedUSD,
@@ -2128,6 +2138,7 @@ export default function CashRegister() {
       salesRappi,
       salesPedidosYa,
       salesDiDiFood,
+      salesStoreCredit,
       income,
       expense,
       incomeYape,
@@ -2532,6 +2543,14 @@ export default function CashRegister() {
                           </span>
                         </div>
                       ))}
+                      {/* Ventas pagadas con nota de credito: informativo. No es
+                          dinero que entro, asi que ningun fondo lo espera. */}
+                      {totals.salesStoreCredit > 0 && (
+                        <div className="flex justify-between text-gray-500">
+                          <span>• Saldo a favor (no ingresa dinero):</span>
+                          <span className="font-medium">{formatCurrency(totals.salesStoreCredit)}</span>
+                        </div>
+                      )}
                     </div>
                     {/* Trazabilidad: cuánto de este total NO son ventas nuevas sino
                         cobros de comprobantes emitidos en sesiones anteriores. */}
