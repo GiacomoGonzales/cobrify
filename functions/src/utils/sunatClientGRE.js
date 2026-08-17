@@ -93,8 +93,17 @@ export async function sendDispatchGuideToSunat(signedXML, config) {
 
       if (error.response.data) {
         const errorResult = parseSunatErrorGRE(error.response.data)
-        throw new Error(errorResult.description || 'Error al enviar GRE a SUNAT')
+        // Mismo criterio que sunatClient.js: si la respuesta no era SOAP
+        // parseable (página HTML del proxy en un 504/502), el mensaje debe
+        // llevar el status HTTP para que isTransientSunatError lo reconozca
+        // como temporal y el documento quede en reintento, no rechazado.
+        const esGenerico = !errorResult.description || errorResult.description === 'Error al comunicarse con SUNAT GRE'
+        throw new Error(esGenerico
+          ? `Error al comunicarse con SUNAT GRE (HTTP ${error.response.status})`
+          : errorResult.description)
       }
+
+      throw new Error(`Error al comunicarse con SUNAT GRE (HTTP ${error.response.status})`)
     }
 
     throw new Error(`Error de conexión con SUNAT GRE: ${error.message}`)

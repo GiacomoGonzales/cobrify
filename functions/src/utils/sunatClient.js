@@ -98,8 +98,21 @@ export async function sendToSunat(signedXML, config) {
           return errorResult
         }
 
-        throw new Error(errorResult.description || 'Error al enviar a SUNAT')
+        // El status HTTP tiene que viajar en el mensaje: cuando SUNAT responde
+        // con la página HTML de su proxy (504, 502...), parseSunatError no
+        // encuentra SOAP y devuelve el genérico "Error al comunicarse con
+        // SUNAT" — e isTransientSunatError decide por el TEXTO del mensaje.
+        // Sin el número, un 504 (temporal por definición) se marcaba
+        // 'rejected' para siempre en vez de quedar 'pending' para el
+        // reintento automático (caso LA PATOTA, 17-ago-2026: 24 boletas).
+        const esGenerico = errorResult.code === 'ERROR' || errorResult.code === 'PARSE_ERROR'
+        throw new Error(esGenerico
+          ? `Error al comunicarse con SUNAT (HTTP ${error.response.status})`
+          : (errorResult.description || 'Error al enviar a SUNAT'))
       }
+
+      // Respuesta HTTP de error sin cuerpo: propagar igual el status
+      throw new Error(`Error al comunicarse con SUNAT (HTTP ${error.response.status})`)
     }
 
     throw new Error(`Error de conexión con SUNAT: ${error.message}`)
