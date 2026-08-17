@@ -688,6 +688,14 @@ service cloud.firestore {
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
+      // Subcollection: Certificados de regalo. A diferencia de los cupones,
+      // acá NO hay lectura pública: el certificado es dinero al portador y
+      // solo lo toca el personal del negocio con sesión (vender en
+      // Promociones, canjear en el POS).
+      match /giftCertificates/{certId} {
+        allow read, write: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+      }
+
       // Subcollection: Financial Movements (Movimientos Financieros - Flujo de Caja)
       match /financialMovements/{movementId} {
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);

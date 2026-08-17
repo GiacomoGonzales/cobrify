@@ -140,6 +140,33 @@ export default {
       ],
     },
     {
+      id: 'certificados',
+      title: 'Certificados de regalo',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Un certificado de regalo es **saldo prepagado**: alguien paga hoy S/ 100 y otra persona los consume después. En la pestaña **Certificados** los vendes y ves el saldo de cada uno.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Presiona **Vender certificado** (necesitas tu **caja abierta**: el dinero entra al arqueo).',
+            'Pon el **Valor**, con qué pagaron (**Efectivo, Yape o Plin**), y si quieres el nombre del beneficiario y un vencimiento.',
+            'Al vender, aparece el **código** (GC seguido de 6 caracteres) en grande: entrégaselo al cliente. Es al portador — quien tiene el código, tiene el saldo.',
+            'Para canjearlo: en el POS, el campo **Certificado de regalo (GC...)** valida el código y habilita pagar con él, hasta su saldo. Lo que no alcance se paga con otro método.',
+          ],
+        },
+        {
+          type: 'ojo',
+          text: 'El comprobante sale **al canje, no al vender**: vender el certificado registra un ingreso de caja (entró dinero, aún no hay venta), y la boleta o factura se emite cuando el cliente consume. El certificado puede usarse en varias compras hasta agotar su saldo.',
+        },
+        {
+          type: 'consejo',
+          text: 'Si anulas un certificado ya cobrado, devuelve el dinero y registra el **egreso** en caja — el sistema te lo recuerda al anular. Así el arqueo del día sigue contando la verdad.',
+        },
+      ],
+    },
+    {
       id: 'descuentos-programados',
       title: 'Descuentos programados: ofertas por día y horario',
       blocks: [

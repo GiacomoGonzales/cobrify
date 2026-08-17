@@ -29,6 +29,8 @@ import { uploadProductImage, createImagePreview, revokeImagePreview } from '@/se
 import ProductModifiersSection from '@/components/ProductModifiersSection'
 import { getLoyaltyCards, getWalletPassLink, redeemReward, WALLET_EN_APROBACION } from '@/services/loyaltyService'
 import { getCoupons, createCoupon, setCouponActive, deleteCoupon, normalizeCouponCode } from '@/services/couponService'
+import { getGiftCertificates, createGiftCertificate, cancelGiftCertificate } from '@/services/giftCertificateService'
+import { getOpenCashSessions } from '@/services/firestoreService'
 import {
   getScheduledDiscounts, createScheduledDiscount, setScheduledDiscountActive,
   deleteScheduledDiscount, promoVigente, DIAS,
@@ -50,10 +52,18 @@ import {
  * programados. Puntos NO por ahora: los sellos ya cumplen ese rol.
  */
 export default function Promotions() {
-  const { getBusinessId, isDemoMode, businessSettings, businessMode } = useAppContext()
+  const { getBusinessId, isDemoMode, businessSettings, businessMode, user, branchScope } = useAppContext()
   const toast = useToast()
 
   const [tab, setTab] = useState('fidelidad') // 'fidelidad' | 'combos'
+  // ── Certificados de regalo ──
+  const [certificados, setCertificados] = useState([])
+  const [cargandoCerts, setCargandoCerts] = useState(true)
+  const [isCertOpen, setIsCertOpen] = useState(false)
+  const [savingCert, setSavingCert] = useState(false)
+  const [accionandoCert, setAccionandoCert] = useState(null)
+  const [certForm, setCertForm] = useState({ amount: '', beneficiary: '', expiresAt: '', paymentMethod: 'cash' })
+  const [ultimoCertVendido, setUltimoCertVendido] = useState(null)
 
   // ── Fidelización ──
   const [isLoyaltyOpen, setIsLoyaltyOpen] = useState(false)
@@ -116,6 +126,10 @@ export default function Promotions() {
       .then((res) => setCupones(res?.success ? res.data : []))
       .catch(() => {})
       .finally(() => setCargandoCupones(false))
+    getGiftCertificates(businessId)
+      .then((res) => setCertificados(res?.success ? res.data : []))
+      .catch(() => {})
+      .finally(() => setCargandoCerts(false))
     getScheduledDiscounts(businessId)
       .then((res) => setPromos(res?.success ? res.data : []))
       .catch(() => {})
@@ -126,6 +140,63 @@ export default function Promotions() {
     () => [...new Set(products.map((p) => p.category).filter(Boolean))].sort(),
     [products]
   )
+
+  // ── Certificados de regalo: vender, listar, anular ──
+  // La decision tributaria (Giacomo, 16-ago): el comprobante se emite AL
+  // CANJE. Vender el certificado registra un INGRESO DE CAJA por el medio
+  // real de pago — por eso exige una caja abierta.
+  const venderCertificado = async () => {
+    if (isDemoMode) { toast.error('No disponible en modo demo'); return }
+    const monto = parseFloat(certForm.amount)
+    if (!(monto > 0)) { toast.error('Pon el valor del certificado'); return }
+    setSavingCert(true)
+    try {
+      // Sesion de caja abierta: la del usuario actual si tiene, o la primera
+      // de la sucursal. Sin caja no se vende (el dinero debe entrar al arqueo).
+      const sesiones = await getOpenCashSessions(businessId, branchScope || null)
+      const abiertas = sesiones?.data || sesiones || []
+      const sesion = abiertas.find?.(x => x.openedByUserId === user?.uid) || abiertas[0]
+      if (!sesion?.id) {
+        toast.error('Abre tu caja antes de vender un certificado: el dinero entra al arqueo del dia')
+        return
+      }
+      const res = await createGiftCertificate(businessId, {
+        amount: monto,
+        beneficiary: certForm.beneficiary,
+        expiresAt: certForm.expiresAt ? new Date(`${certForm.expiresAt}T23:59:59`) : null,
+        paymentMethod: certForm.paymentMethod,
+        sessionId: sesion.id,
+        soldBy: user?.email || '',
+      })
+      if (!res.success) { toast.error(res.error); return }
+      if (res.warning) toast.error(res.warning, 9000)
+      setCertificados((prev) => [{
+        id: res.code, amount: monto, balance: monto, status: 'active',
+        beneficiary: certForm.beneficiary.trim(),
+        expiresAt: certForm.expiresAt ? { toDate: () => new Date(`${certForm.expiresAt}T23:59:59`) } : null,
+        createdAt: { toDate: () => new Date() },
+      }, ...prev])
+      setUltimoCertVendido({ code: res.code, amount: monto })
+      setIsCertOpen(false)
+      setCertForm({ amount: '', beneficiary: '', expiresAt: '', paymentMethod: 'cash' })
+      toast.success(`Certificado ${res.code} vendido: entrego el codigo al cliente`)
+    } finally {
+      setSavingCert(false)
+    }
+  }
+
+  const anularCertificado = async (cert) => {
+    if (isDemoMode) { toast.error('No disponible en modo demo'); return }
+    if (!window.confirm(`Anular el certificado ${cert.id}? Si ya cobraste el dinero, recuerda devolverlo y registrar el egreso en caja.`)) return
+    setAccionandoCert(cert.id)
+    try {
+      const res = await cancelGiftCertificate(businessId, cert.id)
+      if (!res.success) { toast.error('No se pudo anular'); return }
+      setCertificados((prev) => prev.map((c) => c.id === cert.id ? { ...c, status: 'cancelled' } : c))
+    } finally {
+      setAccionandoCert(null)
+    }
+  }
 
   const guardarPromo = async () => {
     if (isDemoMode) { toast.error('No disponible en modo demo'); return }
@@ -437,6 +508,7 @@ export default function Promotions() {
           { id: 'fidelidad', label: 'Tarjeta de sellos', icon: CreditCard },
           { id: 'combos', label: 'Combos', icon: Package },
           { id: 'cupones', label: 'Cupones', icon: Ticket },
+          { id: 'certificados', label: 'Certificados', icon: Gift },
           { id: 'descuentos', label: 'Descuentos', icon: Clock },
         ].map(({ id, label, icon: Icon }) => (
           <button
@@ -727,6 +799,88 @@ export default function Promotions() {
       )}
 
       {/* ── DESCUENTOS PROGRAMADOS ── */}
+      {/* ── CERTIFICADOS DE REGALO ── */}
+      {tab === 'certificados' && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+            <p className="text-sm text-gray-600">
+              Saldo prepagado que el cliente regala. El comprobante sale al CANJE, no al venderlo:
+              la venta del certificado entra como ingreso de caja.
+            </p>
+            <Button onClick={() => setIsCertOpen(true)} className="w-full sm:w-auto shrink-0 whitespace-nowrap">
+              <Plus className="w-4 h-4 mr-2" />
+              Vender certificado
+            </Button>
+          </div>
+
+          {/* El codigo recien vendido, en grande: es lo que se entrega al cliente */}
+          {ultimoCertVendido && (
+            <div className="p-4 bg-violet-50 border border-violet-200 rounded-lg flex flex-wrap items-center gap-3">
+              <Gift className="w-5 h-5 text-violet-600 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-violet-900">
+                  Certificado vendido por <strong>S/ {ultimoCertVendido.amount.toFixed(2)}</strong>.
+                  Entrega este codigo al cliente (lo escribe el cajero al canjear):
+                </p>
+                <p className="font-mono text-2xl font-bold text-violet-800 tracking-wider mt-1">{ultimoCertVendido.code}</p>
+              </div>
+              <button onClick={() => setUltimoCertVendido(null)} className="text-violet-400 hover:text-violet-600 text-sm shrink-0">
+                Cerrar
+              </button>
+            </div>
+          )}
+
+          {cargandoCerts ? (
+            <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
+          ) : certificados.length === 0 ? (
+            <Card>
+              <CardContent className="py-10 text-center text-sm text-gray-500">
+                Todavia no vendes certificados. El primero se vende con el boton de arriba — necesitas tu caja abierta.
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="py-2">
+                <ul className="divide-y divide-gray-100">
+                  {certificados.map((c) => {
+                    const vencido = c.expiresAt && c.expiresAt.toDate() < new Date()
+                    const estado = c.status === 'cancelled' ? 'Anulado'
+                      : c.status === 'exhausted' || !(c.balance > 0) ? 'Agotado'
+                      : vencido ? 'Vencido' : 'Activo'
+                    const estadoCls = estado === 'Activo' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                    return (
+                      <li key={c.id} className="flex items-center gap-3 py-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-mono font-semibold text-gray-900">{c.id}</p>
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${estadoCls}`}>{estado}</span>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            Saldo S/ {Number(c.balance).toFixed(2)} de S/ {Number(c.amount).toFixed(2)}
+                            {c.beneficiary ? ` · para ${c.beneficiary}` : ''}
+                            {c.expiresAt ? ` · vence ${c.expiresAt.toDate().toLocaleDateString('es-PE')}` : ''}
+                          </p>
+                        </div>
+                        {estado === 'Activo' && (
+                          <Button
+                            size="sm" variant="ghost"
+                            title="Anular certificado"
+                            disabled={accionandoCert === c.id}
+                            onClick={() => anularCertificado(c)}
+                          >
+                            <Trash2 className="w-4 h-4 text-gray-400 hover:text-red-500" />
+                          </Button>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
       {tab === 'descuentos' && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
@@ -975,6 +1129,74 @@ export default function Promotions() {
       </Modal>
 
       {/* Crear cupón */}
+      {/* Vender certificado de regalo. Exige caja abierta: el dinero entra
+          como ingreso de caja (el comprobante saldra recien al canje). */}
+      <Modal isOpen={isCertOpen} onClose={() => setIsCertOpen(false)} title="Vender certificado de regalo">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Valor (S/)</label>
+            <input
+              type="number"
+              value={certForm.amount}
+              onChange={(e) => setCertForm((f) => ({ ...f, amount: e.target.value }))}
+              placeholder="Ej: 100.00"
+              min="1"
+              step="0.01"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Con que pagaron</label>
+            <div className="grid grid-cols-3 gap-2">
+              {[['cash', 'Efectivo'], ['yape', 'Yape'], ['plin', 'Plin']].map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setCertForm((f) => ({ ...f, paymentMethod: id }))}
+                  className={`py-2 px-2 text-sm rounded-lg border-2 transition-colors ${
+                    certForm.paymentMethod === id
+                      ? 'border-primary-500 bg-primary-50 text-primary-700 font-semibold'
+                      : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              El dinero entra al arqueo de tu caja abierta por este medio.
+            </p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Para quien es (opcional)</label>
+            <input
+              type="text"
+              value={certForm.beneficiary}
+              onChange={(e) => setCertForm((f) => ({ ...f, beneficiary: e.target.value }))}
+              placeholder="Ej: Maria Torres"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Vence el (opcional)</label>
+            <input
+              type="date"
+              value={certForm.expiresAt}
+              onChange={(e) => setCertForm((f) => ({ ...f, expiresAt: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button variant="outline" onClick={() => setIsCertOpen(false)} className="flex-1">
+              Cancelar
+            </Button>
+            <Button onClick={venderCertificado} disabled={savingCert} className="flex-1">
+              {savingCert ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Vender'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
       <Modal isOpen={isCuponOpen} onClose={() => setIsCuponOpen(false)} title="Crear cupón">
         <div className="space-y-4">
           <div>

@@ -134,6 +134,7 @@ const PAYMENT_METHODS = {
   DIDIFOOD: 'DiDiFood',
   ROOM: 'Cargo a Habitación',
   CREDIT_NOTE: 'Saldo a favor',
+  GIFT_CERT: 'Certificado de regalo',
 }
 
 // Mapeo de IDs de restricción (lowercase) a keys del POS (uppercase)
@@ -612,6 +613,11 @@ export default function POS() {
   // Cupón aplicado a la venta actual ({id, type, value} o null) + su input
   const [appliedCoupon, setAppliedCoupon] = useState(null)
   const [couponInput, setCouponInput] = useState('')
+  // Certificado de regalo aplicado como pago: { id, balance }. Al portador —
+  // se valida por codigo, no por cliente. La redencion corre tras guardar.
+  const [appliedGiftCert, setAppliedGiftCert] = useState(null)
+  const [giftCertInput, setGiftCertInput] = useState('')
+  const [validatingGiftCert, setValidatingGiftCert] = useState(false)
   const [validatingCoupon, setValidatingCoupon] = useState(false)
   // Descuentos programados activos del negocio (se evalúan al agregar al carrito)
   const [scheduledPromos, setScheduledPromos] = useState([])
@@ -4991,6 +4997,10 @@ export default function POS() {
     // El cupón vale para UNA venta: la siguiente arranca sin él.
     setAppliedCoupon(null)
     setCouponInput('')
+    // El certificado validado tambien se suelta: si quedo saldo, se vuelve a
+    // validar en la proxima venta (el saldo vive en su doc, no aca).
+    setAppliedGiftCert(null)
+    setGiftCertInput('')
     // La afectación elegida vale SOLO para esa venta. Si quedara pegada, la
     // siguiente saldría gravada (o exonerada) sin que nadie lo pidiera, que es
     // justo el error que esta opción existe para evitar.
@@ -5403,6 +5413,36 @@ export default function POS() {
     setDiscountPercentage('')
   }
 
+  // ── Certificados de regalo (Promociones > Certificados) ──
+  // A diferencia del cupon (que es un DESCUENTO), el certificado es un MEDIO
+  // DE PAGO: no toca el total, paga parte de el. Validar el codigo habilita
+  // el metodo "Certificado de regalo" en los botones de pago.
+  const aplicarCertificado = async () => {
+    const codigo = giftCertInput.trim()
+    if (!codigo) return
+    setValidatingGiftCert(true)
+    try {
+      const { validateGiftCertificate } = await import('@/services/giftCertificateService')
+      const res = await validateGiftCertificate(getBusinessId(), codigo)
+      if (!res.success) { toast.error(res.error); return }
+      setAppliedGiftCert(res.data)
+      setGiftCertInput('')
+      toast.success(`Certificado ${res.data.id}: S/ ${Number(res.data.balance).toFixed(2)} disponibles`)
+    } finally {
+      setValidatingGiftCert(false)
+    }
+  }
+
+  const quitarCertificado = () => {
+    setAppliedGiftCert(null)
+    // Si estaba elegido como metodo de pago, soltar esas filas para no dejar
+    // un pago apuntando a un certificado que ya no esta.
+    setPayments(prev => {
+      const rest = prev.filter(pg => pg.method !== 'GIFT_CERT')
+      return rest.length > 0 ? rest : [{ method: '', amount: '' }]
+    })
+  }
+
   // Recargo por pago con tarjeta: cuando el pago es 100% con tarjeta y el feature
   // está activo (Configuración > Ventas), se SUBE el precio de cada ítem por el %.
   // No es una línea aparte: el comprobante (incluida boleta/factura a SUNAT) sale
@@ -5718,15 +5758,17 @@ export default function POS() {
     const newPayments = [...payments]
     newPayments[index].method = method
 
-    // Saldo a favor: el monto no puede exceder lo disponible del cliente.
-    const creditCap = method === 'CREDIT_NOTE' ? customerStoreCredit.total : Infinity
+    // Saldo a favor / certificado: el monto no puede exceder lo disponible.
+    const creditCap = method === 'CREDIT_NOTE' ? customerStoreCredit.total
+      : method === 'GIFT_CERT' ? (appliedGiftCert?.balance || 0)
+      : Infinity
 
     // Auto-fill del monto. Para UN solo pago NO tocamos el monto acá (evita el
     // parpadeo del botón): solo marcamos para que un layout-effect lo complete con
     // el total YA recalculado (incluye el recargo por tarjeta), antes del paint.
     // Para pagos múltiples mantenemos el autocompletado con el saldo.
     // Excepción: saldo a favor se autocompleta acá con el tope (no por el effect).
-    if (method === 'CREDIT_NOTE') {
+    if (method === 'CREDIT_NOTE' || method === 'GIFT_CERT') {
       const base = newPayments.length === 1 ? amounts.total : remaining
       newPayments[index].amount = Math.max(0, Math.min(base, creditCap)).toString()
     } else if (newPayments.length === 1) {
@@ -5774,11 +5816,18 @@ export default function POS() {
   // Actualizar monto de pago
   const handlePaymentAmountChange = (index, amount) => {
     const newPayments = [...payments]
-    // Saldo a favor: clamp al disponible del cliente.
+    // Saldo a favor / certificado: clamp al disponible.
     if (newPayments[index].method === 'CREDIT_NOTE') {
       const num = parseFloat(amount)
       if (!Number.isNaN(num) && num > customerStoreCredit.total) {
         amount = customerStoreCredit.total.toString()
+      }
+    }
+    if (newPayments[index].method === 'GIFT_CERT') {
+      const num = parseFloat(amount)
+      const cap = appliedGiftCert?.balance || 0
+      if (!Number.isNaN(num) && num > cap) {
+        amount = cap.toString()
       }
     }
     newPayments[index].amount = amount
@@ -5813,12 +5862,14 @@ export default function POS() {
       // Saldo a favor: capear al disponible (no llenar con el total completo).
       const cap = prev[0].method === 'CREDIT_NOTE'
         ? Math.min(netTotal, customerStoreCredit.total)
+        : prev[0].method === 'GIFT_CERT'
+        ? Math.min(netTotal, appliedGiftCert?.balance || 0)
         : netTotal
       const newAmount = cap > 0 ? cap.toString() : ''
       if (prev[0].amount === newAmount) return prev
       return [{ ...prev[0], amount: newAmount }]
     })
-  }, [amounts.total, saleCompleted, customerStoreCredit.total, advancesApplied])
+  }, [amounts.total, saleCompleted, customerStoreCredit.total, appliedGiftCert, advancesApplied])
 
   // Eliminar un método de pago
   const handleRemovePaymentMethod = (index) => {
@@ -6209,6 +6260,21 @@ export default function POS() {
       return
     }
 
+    // Certificado de regalo: mismo criterio. La transaccion de redencion
+    // re-verifica el saldo en servidor, pero acortar aca evita emitir un
+    // comprobante que despues no se puede cobrar.
+    const giftApplied = allPayments
+      .filter(p => p.methodKey === 'GIFT_CERT')
+      .reduce((s2, p) => s2 + (parseFloat(p.amount) || 0), 0)
+    if (giftApplied > 0 && !appliedGiftCert) {
+      abortCheckout('Valida el codigo del certificado antes de cobrar con el.')
+      return
+    }
+    if (appliedGiftCert && giftApplied > appliedGiftCert.balance + PAYMENT_EPSILON) {
+      abortCheckout(`El certificado aplicado (${formatCurrency(giftApplied)}) supera su saldo (${formatCurrency(appliedGiftCert.balance)}).`)
+      return
+    }
+
     try {
       // MODO DEMO: Simular venta sin guardar en Firebase
       if (isDemoMode) {
@@ -6321,6 +6387,7 @@ export default function POS() {
           discount: amounts.discount || 0,
           globalDiscount: amounts.globalDiscount || 0, // Solo descuento global (sin item discounts) para XML
           ...(appliedCoupon ? { couponCode: appliedCoupon.id } : {}), // Cupón aplicado (Promociones), para reportes
+          ...(appliedGiftCert ? { giftCertCode: appliedGiftCert.id } : {}), // Certificado canjeado, para rastrear el canje
           discountPercentage: parseFloat(discountPercentage) || 0,
           igv: amounts.igv,
           igvByRate: amounts.igvByRate || {},
@@ -6595,6 +6662,7 @@ export default function POS() {
         discount: amounts.discount || 0,
         globalDiscount: amounts.globalDiscount || 0, // Solo descuento global (sin item discounts) para XML
           ...(appliedCoupon ? { couponCode: appliedCoupon.id } : {}), // Cupón aplicado (Promociones), para reportes
+          ...(appliedGiftCert ? { giftCertCode: appliedGiftCert.id } : {}), // Certificado canjeado, para rastrear el canje
         discountPercentage: parseFloat(discountPercentage) || 0,
         igv: amounts.igv,
         igvByRate: amounts.igvByRate || {},
@@ -7131,6 +7199,26 @@ export default function POS() {
           } catch (err) {
             console.error('❌ Excepción al redimir saldo a favor:', err)
             toast.error('Venta guardada, pero falló el descuento del saldo a favor: ' + (err.message || ''), 6000)
+          }
+        }
+
+        // Redimir certificado de regalo: descontar del saldo lo aplicado como
+        // pago. Transaccion en el servicio (dos cajeros no gastan el mismo
+        // sol dos veces). No bloquea la venta: si falla, ya esta guardada y
+        // se avisa fuerte para resolverlo a mano.
+        if (giftApplied > 0 && appliedGiftCert) {
+          try {
+            const { redeemGiftCertificate } = await import('@/services/giftCertificateService')
+            const giftRes = await redeemGiftCertificate(businessId, appliedGiftCert.id, giftApplied, invoiceId)
+            if (giftRes.success) {
+              console.log('✅ Certificado canjeado, saldo restante:', giftRes.balance)
+            } else {
+              console.error('❌ Error al canjear certificado:', giftRes.error)
+              toast.error('Venta guardada, pero no se pudo descontar el certificado: ' + (giftRes.error || ''), 8000)
+            }
+          } catch (err) {
+            console.error('❌ Excepción al canjear certificado:', err)
+            toast.error('Venta guardada, pero falló el descuento del certificado: ' + (err.message || ''), 8000)
           }
         }
 
@@ -11559,6 +11647,48 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         </button>
                       </div>
                     )}
+
+                    {/* Certificado de regalo: a diferencia del cupon (que es
+                        un DESCUENTO), esto es un MEDIO DE PAGO — validar el
+                        codigo habilita "Certificado de regalo" en los botones
+                        de pago, capeado a su saldo. */}
+                    {appliedGiftCert ? (
+                      <div className="flex items-center gap-2 bg-white border border-violet-300 rounded-lg px-3 py-1.5">
+                        <Gift className="w-4 h-4 text-violet-600 shrink-0" />
+                        <span className="text-sm font-mono font-semibold text-violet-800 flex-1 truncate">
+                          {appliedGiftCert.id}
+                          <span className="font-sans font-normal text-violet-600 ml-2">
+                            S/ {Number(appliedGiftCert.balance).toFixed(2)} disponibles
+                          </span>
+                        </span>
+                        <button
+                          onClick={quitarCertificado}
+                          className="text-red-500 hover:text-red-700 text-xs font-medium shrink-0"
+                          disabled={lastInvoiceData !== null}
+                        >
+                          Quitar
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          value={giftCertInput}
+                          onChange={(e) => setGiftCertInput(e.target.value.toUpperCase())}
+                          onKeyDown={(e) => { if (e.key === 'Enter') aplicarCertificado() }}
+                          placeholder="Certificado de regalo (GC...)"
+                          className="flex-1 min-w-0 px-2 xl:px-3 py-1.5 text-sm border border-violet-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent font-mono"
+                          disabled={lastInvoiceData !== null}
+                        />
+                        <button
+                          onClick={aplicarCertificado}
+                          disabled={!giftCertInput.trim() || validatingGiftCert || lastInvoiceData !== null}
+                          className="shrink-0 px-3 py-1.5 text-sm font-medium text-violet-700 bg-white border border-violet-300 rounded-lg hover:bg-violet-100 disabled:opacity-50 transition-colors"
+                        >
+                          {validatingGiftCert ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Validar'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -11993,6 +12123,12 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     // filtro de permisos (no es un medio de pago configurable).
                     if (customerStoreCredit.total > 0) {
                       methodDefs.push(['CREDIT_NOTE', 'Saldo a favor'])
+                    }
+
+                    // Certificado de regalo: se ofrece solo tras validar un
+                    // codigo (al portador, no depende del cliente).
+                    if (appliedGiftCert) {
+                      methodDefs.push(['GIFT_CERT', 'Certificado de regalo'])
                     }
 
                     return (

@@ -1044,6 +1044,7 @@ export default function CashRegister() {
         salesPedidosYa: totalsClose.usd.salesPedidosYa,
         salesDiDiFood: totalsClose.usd.salesDiDiFood,
         salesStoreCredit: totalsClose.usd.salesStoreCredit || 0,
+        salesGiftCert: totalsClose.usd.salesGiftCert || 0,
         salesByCustomMethod: totalsClose.usd.salesByCustomMethod || {},
         totalIncome: totalsClose.usd.income,
         totalExpense: totalsClose.usd.expense,
@@ -1091,6 +1092,7 @@ export default function CashRegister() {
         salesPedidosYa: totalsClose.salesPedidosYa,
         salesDiDiFood: totalsClose.salesDiDiFood,
         salesStoreCredit: totalsClose.salesStoreCredit || 0,
+        salesGiftCert: totalsClose.salesGiftCert || 0,
         salesByCustomMethod: totalsClose.salesByCustomMethod || {},
         totalIncome: totalsClose.income,
         totalExpense: totalsClose.expense,
@@ -1139,6 +1141,7 @@ export default function CashRegister() {
         salesPedidosYa: totalsClose.salesPedidosYa,
         salesDiDiFood: totalsClose.salesDiDiFood,
         salesStoreCredit: totalsClose.salesStoreCredit || 0,
+        salesGiftCert: totalsClose.salesGiftCert || 0,
         // Desglose de métodos propios (etiqueta → monto). Persistirlo permite
         // que el historial y las impresiones lo muestren sin recalcular.
         salesByCustomMethod: totalsClose.salesByCustomMethod || {},
@@ -1789,6 +1792,7 @@ export default function CashRegister() {
     // "Saldo a favor": ventas pagadas con nota de credito. NO es dinero que
     // entra — se muestra informativo y NINGUN fondo del arqueo lo espera.
     let salesStoreCredit = 0
+    let salesGiftCert = 0
 
     // Multi-divisa: acumuladores paralelos en USD.
     let salesCashUSD = 0
@@ -1800,6 +1804,7 @@ export default function CashRegister() {
     let salesPedidosYaUSD = 0
     let salesDiDiFoodUSD = 0
     let salesStoreCreditUSD = 0
+    let salesGiftCertUSD = 0
     let pendingTotalUSD = 0
     let pendingCountUSD = 0
 
@@ -1864,6 +1869,7 @@ export default function CashRegister() {
       if (currencyCode === 'USD') {
         switch (method) {
           case 'Saldo a favor': salesStoreCreditUSD += amount; break
+          case 'Certificado de regalo': salesGiftCertUSD += amount; break
           case 'Efectivo': salesCashUSD += amount; break
           case 'Tarjeta': salesCardUSD += amount; break
           case 'Transferencia': salesTransferUSD += amount; break
@@ -1877,6 +1883,7 @@ export default function CashRegister() {
       }
       switch (method) {
         case 'Saldo a favor': salesStoreCredit += amount; break
+        case 'Certificado de regalo': salesGiftCert += amount; break
         case 'Efectivo': salesCash += amount; break
         case 'Tarjeta': salesCard += amount; break
         case 'Transferencia': salesTransfer += amount; break
@@ -2086,6 +2093,7 @@ export default function CashRegister() {
       salesPedidosYa: salesPedidosYaUSD,
       salesDiDiFood: salesDiDiFoodUSD,
       salesStoreCredit: salesStoreCreditUSD,
+      salesGiftCert: salesGiftCertUSD,
       income: incomeUSD,
       expense: expenseUSD,
       expected: expectedUSD,
@@ -2139,6 +2147,7 @@ export default function CashRegister() {
       salesPedidosYa,
       salesDiDiFood,
       salesStoreCredit,
+      salesGiftCert,
       income,
       expense,
       incomeYape,
@@ -2549,6 +2558,12 @@ export default function CashRegister() {
                         <div className="flex justify-between text-gray-500">
                           <span>• Saldo a favor (no ingresa dinero):</span>
                           <span className="font-medium">{formatCurrency(totals.salesStoreCredit)}</span>
+                        </div>
+                      )}
+                      {totals.salesGiftCert > 0 && (
+                        <div className="flex justify-between text-gray-500">
+                          <span>• Certificado de regalo (no ingresa dinero):</span>
+                          <span className="font-medium">{formatCurrency(totals.salesGiftCert)}</span>
                         </div>
                       )}
                     </div>

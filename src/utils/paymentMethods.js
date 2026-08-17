@@ -89,9 +89,23 @@ export const getVisiblePaymentMethods = (companySettings, businessMode) => {
   return [...base, ...getCustomPaymentMethods(companySettings)]
 }
 
+/**
+ * Métodos ESPECIALES del POS que no son medios de pago configurables: pagar
+ * con una nota de crédito o con un certificado de regalo. No están en
+ * BUILTIN_PAYMENT_METHODS a propósito (no se activan/desactivan), pero SÍ
+ * necesitan su etiqueta — sin esto, una venta pagada con saldo a favor se
+ * guardaba con method '' y caja no podía clasificarla (bug latente detectado
+ * 16-ago-2026 al agregar certificados).
+ */
+const SPECIAL_PAYMENT_LABELS = {
+  CREDIT_NOTE: 'Saldo a favor',
+  GIFT_CERT: 'Certificado de regalo',
+}
+
 /** Etiqueta que se guarda en el comprobante para una key dada. */
 export const getPaymentLabel = (key, companySettings) => {
   if (!key) return ''
+  if (SPECIAL_PAYMENT_LABELS[key]) return SPECIAL_PAYMENT_LABELS[key]
   if (isCustomPaymentKey(key)) {
     return getCustomPaymentMethods(companySettings).find(m => m.key === key)?.label || ''
   }
@@ -106,6 +120,8 @@ export const getPaymentLabel = (key, companySettings) => {
 export const getPaymentKeyByLabel = (label, companySettings) => {
   const l = String(label || '').trim()
   if (!l) return ''
+  const especial = Object.entries(SPECIAL_PAYMENT_LABELS).find(([, lbl]) => lbl === l)
+  if (especial) return especial[0]
   const builtin = BUILTIN_PAYMENT_METHODS.find(m => m.label === l)
   if (builtin) return builtin.key
   return getCustomPaymentMethods(companySettings).find(m => m.label === l)?.key || ''
@@ -150,12 +166,14 @@ export const getPaymentBucketLabel = (methodLabel, companySettings) => {
   const label = String(methodLabel || '').trim()
   if (!label) return ''
 
-  // "Saldo a favor" (pagar con una nota de crédito) NO es dinero que entra:
-  // es deuda del negocio que se cancela. Su propio balde, para que NINGÚN
-  // fondo del arqueo lo espere. Antes caía en el default 'Transferencia' y
-  // cada venta pagada con saldo inflaba las transferencias esperadas del
+  // "Saldo a favor" (pagar con una nota de crédito) y "Certificado de regalo"
+  // NO son dinero que entra: son deuda del negocio que se cancela — el dinero
+  // del certificado entró el día que se VENDIÓ, como ingreso de caja. Baldes
+  // propios, para que NINGÚN fondo del arqueo los espere. Antes caían en el
+  // default 'Transferencia' e inflaban las transferencias esperadas del
   // cierre con plata que nunca llegó (auditoría 16-ago-2026).
   if (label === 'Saldo a favor') return 'Saldo a favor'
+  if (label === 'Certificado de regalo') return 'Certificado de regalo'
 
   const builtin = BUILTIN_PAYMENT_METHODS.find(m => m.label === label)
   if (builtin) return label
