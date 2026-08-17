@@ -218,6 +218,85 @@ export async function upsertLoyaltyObject({
   return upsert('loyaltyObject', id, cuerpo)
 }
 
+// ============================================================================
+// CUPONES (Offer) — 16-ago-2026
+//
+// Mismo modelo que la tarjeta de sellos pero con el tipo correcto de Google
+// para descuentos: OfferClass/OfferObject. Una clase y UN objeto por cupón —
+// compartido: el cupón es un código del negocio, no algo por cliente, así que
+// todos los que lo agregan guardan el mismo objeto. El QR lleva el CÓDIGO,
+// que es lo que valida el POS.
+// ============================================================================
+
+export const offerClassIdDe = (businessId, code) =>
+  `${issuerId()}.cup_${sufijoSeguro(businessId)}_${sufijoSeguro(code)}`
+export const offerObjectIdDe = (businessId, code) =>
+  `${issuerId()}.cupobj_${sufijoSeguro(businessId)}_${sufijoSeguro(code)}`
+
+/**
+ * Clase del cupón. `titulo` es lo que se ve en grande ("10% de descuento").
+ */
+export async function upsertOfferClass({ businessId, code, nombre, logoUrl, colorFondo, titulo }) {
+  const id = offerClassIdDe(businessId, code)
+  const cuerpo = {
+    id,
+    issuerName: nombre || 'Comercio',
+    provider: nombre || 'Comercio',
+    title: titulo,
+    redemptionChannel: 'INSTORE',
+    // Mismo hallazgo que en LoyaltyClass: al ACTUALIZAR hay que mandar
+    // UNDER_REVIEW aunque Google ya la haya aprobado.
+    reviewStatus: 'UNDER_REVIEW',
+    hexBackgroundColor: colorFondo || '#1e3a8a',
+    ...(logoUrl ? {
+      titleImage: { sourceUri: { uri: logoUrl }, contentDescription: { defaultValue: { language: 'es', value: nombre || 'Logo' } } },
+    } : {}),
+  }
+  try {
+    return await upsert('offerClass', id, cuerpo)
+  } catch (error) {
+    // Si Google rechaza la imagen (mismo problema conocido del logo), el cupón
+    // sale sin imagen: a diferencia de LoyaltyClass, acá NO es obligatoria.
+    const msg = JSON.stringify(error.response?.data || '')
+    if (msg.includes('image') && logoUrl) {
+      console.warn(`[Wallet] titleImage rechazada para cupon ${code}, va sin imagen:`, msg.slice(0, 160))
+      delete cuerpo.titleImage
+      return upsert('offerClass', id, cuerpo)
+    }
+    throw error
+  }
+}
+
+/**
+ * Objeto del cupón (compartido por todos los que lo agregan).
+ * `expiraISO` (string ISO o null): con fecha, Google lo marca vencido solo.
+ */
+export async function upsertOfferObject({ businessId, code, expiraISO = null }) {
+  const id = offerObjectIdDe(businessId, code)
+  const cuerpo = {
+    id,
+    classId: offerClassIdDe(businessId, code),
+    state: 'ACTIVE',
+    barcode: { type: 'QR_CODE', value: String(code), alternateText: String(code) },
+    ...(expiraISO ? { validTimeInterval: { end: { date: expiraISO } } } : {}),
+  }
+  return upsert('offerObject', id, cuerpo)
+}
+
+/** Link "Agregar a Google Wallet" del cupón: JWT igual al de la tarjeta. */
+export function linkCuponAWallet({ businessId, code }) {
+  const creds = credenciales()
+  const payload = {
+    iss: creds.client_email,
+    aud: 'google',
+    typ: 'savetowallet',
+    iat: Math.floor(Date.now() / 1000),
+    payload: { offerObjects: [{ id: offerObjectIdDe(businessId, code) }] },
+  }
+  const token = jwt.sign(payload, creds.private_key, { algorithm: 'RS256' })
+  return `https://pay.google.com/gp/v/save/${token}`
+}
+
 /**
  * Link del botón "Agregar a Google Wallet": un JWT firmado con la llave de la
  * cuenta de servicio. No requiere app ni SDK — es una URL que se puede mandar

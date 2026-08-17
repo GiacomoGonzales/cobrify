@@ -228,6 +228,15 @@ export async function construirPkpass({ businessId, phone, marca, sellos, meta, 
     'strip.png': s1, 'strip@2x.png': s2, 'strip@3x.png': s3,
   })
 
+  return firmarYEmpaquetar(archivos, certPem, keyPem)
+}
+
+/**
+ * Manifest + firma PKCS#7 + zip: la parte del formato .pkpass que es idéntica
+ * para cualquier tipo de pase. Extraída para que la tarjeta de sellos y el
+ * cupón no dupliquen la criptografía.
+ */
+async function firmarYEmpaquetar(archivos, certPem, keyPem) {
   // manifest.json: SHA-1 de cada archivo (lo exige el formato).
   const manifest = {}
   for (const [nombre, buf] of Object.entries(archivos)) {
@@ -259,6 +268,87 @@ export async function construirPkpass({ businessId, phone, marca, sellos, meta, 
   zip.file('manifest.json', manifestBuf)
   zip.file('signature', Buffer.from(forge.asn1.toDer(p7.toAsn1()).getBytes(), 'binary'))
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' })
+}
+
+/**
+ * El .pkpass de un CUPÓN (estilo `coupon` de PassKit): el descuento en grande,
+ * el código y el vencimiento, con el QR del código — lo que el cajero escanea
+ * o tipea en el POS.
+ *
+ * A diferencia de la tarjeta de sellos, el cupón es ESTÁTICO: sin
+ * webServiceURL ni authenticationToken, porque no hay nada que actualizar por
+ * push. Un cupón agotado o vencido simplemente no pasa la validación del POS.
+ *
+ * @param {Object} cupon - { code, type: 'percent'|'amount', value, expiresAt }
+ */
+export async function construirPkpassCupon({ businessId, marca, cupon }) {
+  const certPem = process.env.APPLE_PASS_CERT
+  const keyPem = process.env.APPLE_PASS_KEY
+  if (!certPem || !keyPem) throw new Error('Faltan los secretos APPLE_PASS_CERT / APPLE_PASS_KEY')
+
+  const claro = fondoEsClaro(marca.colorFondo)
+  const tinta = claro ? 'rgb(31,41,55)' : 'rgb(255,255,255)'
+  const tintaLabel = claro ? 'rgb(75,85,99)' : 'rgb(219,234,254)'
+
+  const descuento = cupon.type === 'percent' ? `${cupon.value}%` : `S/ ${cupon.value}`
+  const vence = cupon.expiresAt
+    ? new Date(cupon.expiresAt).toLocaleDateString('es-PE', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Lima' })
+    : null
+
+  const passJson = {
+    formatVersion: 1,
+    passTypeIdentifier: PASS_TYPE_ID,
+    teamIdentifier: TEAM_ID,
+    // Serial propio del cupón, con prefijo para no chocar jamás con el de una
+    // tarjeta de sellos (businessId-telefono).
+    serialNumber: `cupon-${businessId}-${cupon.code}`,
+    organizationName: marca.nombre,
+    description: `Cupón de descuento de ${marca.nombre}`,
+    foregroundColor: tinta,
+    backgroundColor: rgbDe(marca.colorFondo),
+    labelColor: tintaLabel,
+    coupon: {
+      primaryFields: [{ key: 'dcto', label: 'DESCUENTO', value: descuento }],
+      secondaryFields: [
+        { key: 'codigo', label: 'CÓDIGO', value: cupon.code },
+        ...(vence
+          ? [{ key: 'vence', label: 'VÁLIDO HASTA', value: vence, textAlignment: 'PKTextAlignmentRight' }]
+          : []),
+      ],
+      backFields: [
+        {
+          key: 'como',
+          label: 'Cómo usarlo',
+          value: `Muestra este cupón al pagar en ${marca.nombre}. El cajero escanea el código QR o ingresa el código ${cupon.code}.`,
+        },
+        ...(marca.enlaces || []).map((e) => ({
+          key: e.id,
+          label: e.description,
+          value: e.uri,
+          attributedValue: `<a href="${e.uri}">${e.uri}</a>`,
+        })),
+      ],
+    },
+    // El QR lleva el CÓDIGO del cupón: es lo que valida el POS.
+    barcodes: [{ format: 'PKBarcodeFormatQR', message: String(cupon.code), messageEncoding: 'iso-8859-1' }],
+  }
+
+  const archivos = { 'pass.json': Buffer.from(JSON.stringify(passJson)) }
+  const tintaLogo = tinta.replace('rgb', 'rgba').replace(')', ',1)')
+  const [i1, i2, i3, l1, l2, l3] = await Promise.all([
+    iconoDesdeLogo(marca.logoUrl, 29, marca.colorFondo),
+    iconoDesdeLogo(marca.logoUrl, 58, marca.colorFondo),
+    iconoDesdeLogo(marca.logoUrl, 87, marca.colorFondo),
+    logoConNombre(marca.nombre, tintaLogo, 1, marca.logoUrl),
+    logoConNombre(marca.nombre, tintaLogo, 2, marca.logoUrl),
+    logoConNombre(marca.nombre, tintaLogo, 3, marca.logoUrl),
+  ])
+  Object.assign(archivos, {
+    'icon.png': i1, 'icon@2x.png': i2, 'icon@3x.png': i3,
+    'logo.png': l1, 'logo@2x.png': l2, 'logo@3x.png': l3,
+  })
+
+  return firmarYEmpaquetar(archivos, certPem, keyPem)
 }
 
 /**

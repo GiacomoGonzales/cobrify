@@ -130,8 +130,12 @@ export default {
           text: 'La lista muestra cada cupón con su estado — **Activo**, **Vencido**, **Agotado** o **Desactivado** — y cuántas veces se usó. El botón de encendido lo desactiva sin borrarlo (útil para pausar una campaña); el tacho lo elimina.',
         },
         {
+          type: 'texto',
+          text: 'Los cupones activos tienen además el botón de **compartir tarjeta para el celular**: genera un link que el cliente abre y agrega el cupón a **Google Wallet o Apple Wallet** según su equipo — con el descuento en grande, el código, el vencimiento y el QR listo para mostrar al pagar. El mismo link sirve para WhatsApp, redes o un afiche con QR.',
+        },
+        {
           type: 'consejo',
-          text: 'Ponle siempre vencimiento o límite de usos a los cupones que publiques en redes: un código sin tope circula para siempre.',
+          text: 'Ponle siempre vencimiento o límite de usos a los cupones que publiques en redes: un código sin tope circula para siempre. La tarjeta respeta lo mismo: si el cupón se agota o vence, el POS lo rechaza aunque el cliente lo tenga en su celular.',
         },
       ],
     },

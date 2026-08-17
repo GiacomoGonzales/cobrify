@@ -31,10 +31,11 @@ import { processSaleStock as runProcessSaleStock } from './src/services/saleStoc
 import {
   upsertLoyaltyClass as walletUpsertClass, upsertLoyaltyObject as walletUpsertObject,
   linkAgregarAWallet as walletSaveLink, notificarTarjeta as walletNotify,
+  upsertOfferClass, upsertOfferObject, linkCuponAWallet,
 } from './src/services/googleWalletService.js'
 import { logoCuadradoDe, portadaDe, cuadriculaDeSellos } from './src/services/walletAssetsService.js'
 import {
-  construirPkpass, esDispositivoApple, serialDe, parsearSerial,
+  construirPkpass, construirPkpassCupon, esDispositivoApple, serialDe, parsearSerial,
   tokenDeAutenticacion, notificarDispositivosApple,
 } from './src/services/appleWalletService.js'
 import { ubicacionDeNegocio } from './src/services/geocodeService.js'
@@ -8242,15 +8243,16 @@ export const redirectShortUrl = onRequest(
       const data = doc.data()
       const originalUrl = data.originalUrl
 
-      // Tarjeta de fidelización: el MISMO link cbrfy.link sirve para los dos
-      // mundos. Android sigue al JWT de Google Wallet (originalUrl); un
-      // iPhone se desvía a la función que arma y firma el .pkpass de Apple.
-      if (data.type === 'walletCard' && esDispositivoApple(req.headers['user-agent'])) {
+      // Tarjeta de fidelización y cupón: el MISMO link cbrfy.link sirve para
+      // los dos mundos. Android sigue al JWT de Google Wallet (originalUrl);
+      // un iPhone se desvía a la función que arma y firma el .pkpass de Apple.
+      if ((data.type === 'walletCard' || data.type === 'walletCoupon') && esDispositivoApple(req.headers['user-agent'])) {
+        const fn = data.type === 'walletCoupon' ? 'appleWalletCoupon' : 'appleWalletPass'
         docRef.update({
           hits: FieldValue.increment(1),
           lastAccessedAt: FieldValue.serverTimestamp()
         }).catch(err => console.error('Error actualizando hits:', err))
-        res.redirect(302, `https://us-central1-cobrify-395fe.cloudfunctions.net/appleWalletPass?code=${encodeURIComponent(code)}`)
+        res.redirect(302, `https://us-central1-cobrify-395fe.cloudfunctions.net/${fn}?code=${encodeURIComponent(code)}`)
         return
       }
 
@@ -12346,6 +12348,135 @@ export const getWalletPassLink = onRequest(
       console.error('[Wallet] getWalletPassLink:',
         (error.response && JSON.stringify(error.response.data).slice(0, 300)) || error.message)
       res.status(500).json({ error: 'No se pudo generar la tarjeta' })
+    }
+  }
+)
+
+/**
+ * Link corto de la TARJETA DE CUPON (16-ago-2026). Mismo modelo que el de la
+ * tarjeta de sellos: un codigo cbrfy.link ESTABLE por cupon (guardado en el
+ * doc del cupon), que en Android sigue al JWT de Google Wallet (OfferObject)
+ * y en iPhone se desvia al .pkpass estilo coupon. El QR de ambas lleva el
+ * CODIGO del cupon, que es lo que el POS valida.
+ */
+export const getCouponPassLink = onRequest(
+  {
+    region: 'us-central1', timeoutSeconds: 60, memory: '512MiB', cors: true,
+    secrets: walletSecrets,
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return }
+
+    try {
+      const authHeader = req.headers.authorization
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'No autorizado' }); return
+      }
+      const decoded = await auth.verifyIdToken(authHeader.split('Bearer ')[1])
+
+      const { businessId, couponId } = req.body || {}
+      if (!businessId || !couponId) {
+        res.status(400).json({ error: 'businessId y couponId son requeridos' }); return
+      }
+      if (!(await userCanAccessBusiness(decoded.uid, businessId))) {
+        res.status(403).json({ error: 'No autorizado para este negocio' }); return
+      }
+
+      const cupSnap = await db.collection('businesses').doc(businessId)
+        .collection('coupons').doc(String(couponId)).get()
+      if (!cupSnap.exists) { res.status(404).json({ error: 'El cupon no existe' }); return }
+      const cup = cupSnap.data()
+      if (cup.active === false) { res.status(400).json({ error: 'El cupon esta desactivado' }); return }
+
+      const marca = await marcaDelNegocio(businessId)
+      const titulo = cup.type === 'percent'
+        ? `${cup.value}% de descuento`
+        : `S/ ${cup.value} de descuento`
+      const expiraISO = cup.expiresAt?.toDate ? cup.expiresAt.toDate().toISOString() : null
+
+      await upsertOfferClass({
+        businessId, code: String(couponId),
+        nombre: marca.nombre, logoUrl: marca.logoUrl, colorFondo: marca.colorFondo,
+        titulo,
+      })
+      await upsertOfferObject({ businessId, code: String(couponId), expiraISO })
+
+      const urlLarga = linkCuponAWallet({ businessId, code: String(couponId) })
+
+      // Codigo corto estable por cupon; cada reenvio refresca el JWT.
+      let code = cup.walletShortCode
+      if (!code) {
+        code = generateShortCode()
+        for (let i = 0; i < 10 && (await db.collection('shortUrls').doc(code).get()).exists; i++) {
+          code = generateShortCode()
+        }
+        await cupSnap.ref.set({ walletShortCode: code }, { merge: true })
+      }
+      await db.collection('shortUrls').doc(code).set({
+        originalUrl: urlLarga,
+        businessId,
+        couponId: String(couponId),
+        type: 'walletCoupon',
+        createdAt: FieldValue.serverTimestamp(),
+      }, { merge: true })
+
+      res.status(200).json({ shortUrl: `https://cbrfy.link/${code}`, titulo })
+    } catch (error) {
+      console.error('[Wallet] getCouponPassLink:',
+        (error.response && JSON.stringify(error.response.data).slice(0, 300)) || error.message)
+      res.status(500).json({ error: 'No se pudo generar la tarjeta del cupon' })
+    }
+  }
+)
+
+/**
+ * Sirve el .pkpass de un CUPON. Llega aqui el iPhone que toco un link
+ * cbrfy.link de cupon (redirectShortUrl lo desvia). Publica a proposito: el
+ * cliente final no tiene cuenta; la llave es el codigo corto.
+ */
+export const appleWalletCoupon = onRequest(
+  {
+    region: 'us-central1', timeoutSeconds: 60, memory: '512MiB',
+    invoker: 'public', secrets: appleWalletSecrets,
+  },
+  async (req, res) => {
+    try {
+      const code = String(req.query.code || '').trim()
+      if (!code) { res.status(400).send('Falta el codigo'); return }
+
+      const linkSnap = await db.collection('shortUrls').doc(code).get()
+      const link = linkSnap.exists ? linkSnap.data() : null
+      if (!link || link.type !== 'walletCoupon' || !link.businessId || !link.couponId) {
+        res.status(404).send('Cupon no encontrado'); return
+      }
+
+      const cupSnap = await db.collection('businesses').doc(link.businessId)
+        .collection('coupons').doc(link.couponId).get()
+      if (!cupSnap.exists) { res.status(404).send('Cupon no encontrado'); return }
+      const cup = cupSnap.data()
+      if (cup.active === false) { res.status(410).send('Este cupon ya no esta disponible'); return }
+
+      const marca = await marcaDelNegocio(link.businessId)
+      const pkpass = await construirPkpassCupon({
+        businessId: link.businessId,
+        marca,
+        cupon: {
+          code: link.couponId,
+          type: cup.type,
+          value: cup.value,
+          expiresAt: cup.expiresAt?.toDate ? cup.expiresAt.toDate() : null,
+        },
+      })
+
+      res.set('Content-Type', 'application/vnd.apple.pkpass')
+      res.set('Content-Disposition', 'attachment; filename="cupon.pkpass"')
+      res.set('Cache-Control', 'no-store')
+      res.status(200).send(pkpass)
+    } catch (error) {
+      console.error('[Wallet] appleWalletCoupon:', error.message)
+      res.status(500).send('No se pudo generar el cupon')
     }
   }
 )

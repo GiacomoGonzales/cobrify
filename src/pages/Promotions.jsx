@@ -222,6 +222,28 @@ export default function Promotions() {
     }
   }
 
+  // Tarjeta del cupón para el celular del cliente (Google/Apple Wallet según
+  // el equipo que abra el link). Se comparte por WhatsApp sin destinatario
+  // fijo: el comercio elige el chat, o se lo copia a un afiche.
+  const compartirTarjetaCupon = async (cupon) => {
+    if (isDemoMode) { toast.error('No disponible en modo demo'); return }
+    setAccionandoCupon(cupon.id)
+    try {
+      const { getCouponPassLink } = await import('@/services/couponService')
+      const { getAuth } = await import('firebase/auth')
+      const idToken = await getAuth().currentUser?.getIdToken()
+      const res = await getCouponPassLink(businessId, cupon.id, idToken)
+      if (!res.success) { toast.error(res.error || 'No se pudo generar la tarjeta'); return }
+
+      const negocio = businessSettings?.name || businessSettings?.tradeName || 'nuestro negocio'
+      const texto = `${negocio}: ${res.titulo} con el cupon ${cupon.id}. ` +
+        `Agrega el cupon a tu celular y muestralo al pagar: ${res.shortUrl}`
+      window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank')
+    } finally {
+      setAccionandoCupon(null)
+    }
+  }
+
   const eliminarCupon = async (cupon) => {
     if (isDemoMode) { toast.error('No disponible en modo demo'); return }
     setAccionandoCupon(cupon.id)
@@ -664,6 +686,20 @@ export default function Promotions() {
                             {c.expiresAt ? ` · vence ${c.expiresAt.toDate().toLocaleDateString('es-PE')}` : ''}
                           </p>
                         </div>
+                        {/* Tarjeta para el celular: el link cbrfy sirve Google
+                            Wallet en Android y el .pkpass en iPhone. Solo para
+                            cupones utilizables — una tarjeta de un cupon
+                            muerto seria repartir decepcion. */}
+                        {estado === 'Activo' && (
+                          <Button
+                            size="sm" variant="ghost"
+                            title="Compartir tarjeta para el celular"
+                            disabled={accionandoCupon === c.id}
+                            onClick={() => compartirTarjetaCupon(c)}
+                          >
+                            <Send className="w-4 h-4 text-primary-600" />
+                          </Button>
+                        )}
                         <Button
                           size="sm" variant="ghost"
                           title={c.active ? 'Desactivar' : 'Activar'}

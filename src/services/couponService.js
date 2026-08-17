@@ -112,6 +112,26 @@ export const validateCoupon = async (businessId, code, { database } = {}) => {
  * falla, la venta ya está cobrada y el comprobante emitido — un contador
  * desfasado no puede frenar una caja.
  */
+/**
+ * Link corto de la TARJETA del cupón (Google Wallet / Apple Wallet según el
+ * celular que lo abra). El servidor crea el pase y devuelve un cbrfy.link
+ * estable por cupón — se puede mandar por WhatsApp o poner en un afiche.
+ */
+export const getCouponPassLink = async (businessId, couponId, idToken) => {
+  try {
+    const res = await fetch('https://us-central1-cobrify-395fe.cloudfunctions.net/getCouponPassLink', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify({ businessId, couponId }),
+    })
+    const data = await res.json()
+    if (!res.ok) return { success: false, error: data.error || 'No se pudo generar la tarjeta' }
+    return { success: true, ...data }
+  } catch (error) {
+    return { success: false, error: error.message || 'Error de red' }
+  }
+}
+
 export const redeemCoupon = async (businessId, code, invoiceId = null) => {
   try {
     await updateDoc(doc(couponsRef(businessId), normalizeCouponCode(code)), {
