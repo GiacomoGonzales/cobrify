@@ -134,6 +134,32 @@ export function matchesPrebuilt(query, haystack) {
  * @param {string} [currency='PEN'] - Código ISO de la moneda ('PEN' | 'USD')
  * @returns {string} - Monto formateado
  */
+/**
+ * Formatea la CANTIDAD de un ítem para impresiones y PDF: entero sin
+ * decimales, decimal sin ceros de relleno (2 -> "2", 32.03 -> "32.03").
+ *
+ * TOLERA que la cantidad venga como TEXTO, y esa es la razón de existir.
+ * El campo de cantidad decimal del POS conserva a propósito el string crudo
+ * mientras se escribe (sin eso, teclear "0.0" camino a "0.025" colapsaba a
+ * "0"); normalmente el blur lo vuelve número, pero si el cajero cobra sin
+ * salir del campo —con Enter, o en tablet donde el blur no siempre dispara
+ * antes del clic— el texto llega al comprobante y queda guardado.
+ *
+ * Antes, cada impresión hacía `item.quantity.toFixed(3)` sobre ese valor y
+ * reventaba con "quantity.toFixed is not a function": el comprobante quedaba
+ * imposible de imprimir o descargar PARA SIEMPRE (reporte 17-ago-2026, nota
+ * de venta N001-00000535 con quantity "32.030"). Este helper es la única
+ * puerta: si aparece otro dato viejo así, se muestra igual.
+ *
+ * @param {number|string} value - Cantidad del ítem
+ * @returns {string} - Cantidad lista para imprimir
+ */
+export function formatQuantity(value) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return '0'
+  return Number.isInteger(n) ? String(n) : n.toFixed(3).replace(/\.?0+$/, '')
+}
+
 export function formatCurrency(amount, currency = 'PEN') {
   const n = Number(amount)
   const safe = Number.isFinite(n) ? n : 0

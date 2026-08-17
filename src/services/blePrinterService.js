@@ -10,6 +10,7 @@ import { justifyTicketText } from '@/utils/ticketFooter'
 import { BleClient, numbersToDataView, numberToUUID } from '@capacitor-community/bluetooth-le';
 import { prepareLogoForPrinting } from './imageProcessingService';
 import { buildKitchenLines } from '@/utils/kitchenComandaFormat';
+import { formatQuantity } from '@/lib/utils'
 
 // Estado de conexión
 let connectedDeviceId = null;
@@ -950,9 +951,7 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
         commands.push(ESCPOSCommands.text(itemName + '\n'));
 
         // Línea 2: cantidad x precio -> total
-        const qtyFormatted = Number.isInteger(item.quantity)
-          ? item.quantity.toString()
-          : item.quantity.toFixed(3).replace(/\.?0+$/, '');
+        const qtyFormatted = formatQuantity(item.quantity);
         const unitSuffix = item.unit && item.allowDecimalQuantity ? item.unit.toLowerCase() : '';
         const qtyAndPrice = `${qtyFormatted}${unitSuffix}x ${currencySymbol} ${unitPrice.toFixed(2)}`;
         const totalStr = `${currencySymbol} ${itemTotal.toFixed(2)}`;

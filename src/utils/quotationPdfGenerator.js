@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf'
 import { getComprobanteBreakdown } from './peruUtils'
+import { formatQuantity } from '@/lib/utils'
 import { contrastTextColor } from '@/utils/pdfColors'
 import { storage } from '@/lib/firebase'
 import { ref, getBlob, getDownloadURL } from 'firebase/storage'
@@ -1176,7 +1177,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     doc.setTextColor(...BLACK)
     doc.setFontSize(7)
 
-    const quantityText = Number.isInteger(item.quantity) ? item.quantity.toString() : item.quantity.toFixed(3).replace(/\.?0+$/, '')
+    const quantityText = formatQuantity(item.quantity)
     doc.text(quantityText, cols.cant + colWidths.cant / 2, singleLineY, { align: 'center' })
 
     // Unidad de medida - alineada a la izquierda; si es larga, se parte en varias líneas.

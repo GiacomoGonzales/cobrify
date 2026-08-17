@@ -6287,7 +6287,7 @@ export default function POS() {
           productId: item.id,
           code: item.sku || item.code || '',
           name: item.presentationName ? `${item.name} (${item.presentationName})` : item.name,
-          quantity: item.quantity,
+          quantity: Number(item.quantity) || 0,
           unit: item.unit || 'NIU',
           unitPrice: item.price,
           ...(() => { const c = computeItemCostAtSale(item); return c != null ? { costAtSale: c } : {} })(), // costo congelado al momento de la venta (reportes de margen)
@@ -6497,7 +6497,13 @@ export default function POS() {
         productId: item.id,
         code: item.sku || item.code || '', // Priorizar SKU, luego código, vacío si no hay
         name: item.presentationName ? `${item.name} (${item.presentationName})` : item.name,
-        quantity: item.quantity,
+        // SIEMPRE numero. El campo de cantidad decimal conserva el string
+        // crudo mientras se escribe (para poder teclear "0.0" camino a
+        // "0.025"), y normalmente el blur lo normaliza — pero si se cobra sin
+        // salir del campo (Enter, o tablet donde el blur no dispara antes del
+        // clic) ese texto llegaba al comprobante y lo dejaba imposible de
+        // imprimir para siempre (reporte 17-ago-2026, N001-00000535).
+        quantity: Number(item.quantity) || 0,
         unit: item.unit || 'NIU',
         unitPrice: item.price,
         ...(() => { const c = computeItemCostAtSale(item); return c != null ? { costAtSale: c } : {} })(), // costo congelado al momento de la venta (reportes de margen)

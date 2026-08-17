@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf'
 import { contrastTextColor } from '@/utils/pdfColors'
 import { getNotaVentaLegend } from '@/utils/documentLegends'
-import { formatDate } from '@/lib/utils'
+import { formatDate, formatQuantity } from '@/lib/utils'
 import { getCurrencySymbol, normalizeCurrency } from '@/utils/currency'
 import { getComprobanteBreakdown } from '@/utils/peruUtils'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
@@ -1877,7 +1877,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
     // Cantidad (solo número) - centrado verticalmente
     doc.setFontSize(7)
-    const quantityText = Number.isInteger(item.quantity) ? item.quantity.toString() : item.quantity.toFixed(3).replace(/\.?0+$/, '')
+    const quantityText = formatQuantity(item.quantity)
     doc.text(quantityText, cols.cant + colWidths.cant / 2, centerY, { align: 'center' })
 
     // Unidad de medida - alineada a la izquierda; si la unidad es larga y supera el tope de
@@ -3488,7 +3488,7 @@ export const generateExitNotePDF = async (invoice, companySettings) => {
 
   items.forEach((item, index) => {
     const itemName = item.name || item.description || ''
-    const quantityText = Number.isInteger(item.quantity) ? item.quantity.toString() : item.quantity.toFixed(3).replace(/\.?0+$/, '')
+    const quantityText = formatQuantity(item.quantity)
     const unitLabels = {
       'UNIDAD': 'UND',
       'CAJA': 'CJA',

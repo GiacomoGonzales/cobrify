@@ -10,6 +10,7 @@ import { getComprobanteBreakdown } from '@/utils/peruUtils';
 import { buildKitchenLines, stationsForOrder } from '@/utils/kitchenComandaFormat';
 import { getSessionMoneyTotals } from '@/utils/cashTotals';
 import { getTicketFooterParts, justifyTicketText } from '@/utils/ticketFooter';
+import { formatQuantity } from '@/lib/utils'
 
 /**
  * Servicio para manejar impresoras térmicas WiFi/Bluetooth
@@ -851,9 +852,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
 
         // Línea 2: "cantidad X precio unitario" (izq) y "total" (der) - CON ESPACIOS PARA ALINEAR
         // Formatear cantidad: con decimales si tiene, sino entero
-        const qtyFormatted = Number.isInteger(item.quantity)
-          ? item.quantity.toString()
-          : item.quantity.toFixed(3).replace(/\.?0+$/, '');
+        const qtyFormatted = formatQuantity(item.quantity);
         const unitSuffix = item.unit && item.allowDecimalQuantity ? item.unit.toLowerCase() : '';
         const qtyAndPrice = `${qtyFormatted}${unitSuffix} X ${currencySymbol} ${unitPrice.toFixed(2)}`;
         const totalStr = `${currencySymbol} ${itemTotal.toFixed(2)}`;
@@ -917,9 +916,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
 
         // Línea 2: "cantidad x precio unitario" (izq) y "total" (der) - CON ESPACIOS PARA ALINEAR
         // Formatear cantidad: con decimales si tiene, sino entero
-        const qtyFormatted = Number.isInteger(item.quantity)
-          ? item.quantity.toString()
-          : item.quantity.toFixed(3).replace(/\.?0+$/, '');
+        const qtyFormatted = formatQuantity(item.quantity);
         const unitSuffix = item.unit && item.allowDecimalQuantity ? item.unit.toLowerCase() : '';
         const qtyAndPrice = `${qtyFormatted}${unitSuffix}x ${currencySymbol} ${unitPrice.toFixed(2)}`;
         const totalStr = `${currencySymbol} ${itemTotal.toFixed(2)}`;
@@ -2631,9 +2628,7 @@ const buildTicketEscPos = async (invoice, business, paperWidth = 58) => {
       const itemTotalWithDiscount = itemTotal - itemDiscount;
 
       // Formatear cantidad: con decimales si tiene, sino entero
-      const qtyFormatted = Number.isInteger(item.quantity)
-        ? item.quantity.toString()
-        : item.quantity.toFixed(3).replace(/\.?0+$/, '');
+      const qtyFormatted = formatQuantity(item.quantity);
       const unitSuffix = item.unit && item.allowDecimalQuantity ? item.unit.toLowerCase() : '';
 
       builder.text(itemName).newLine()
@@ -4676,9 +4671,7 @@ const buildQuotationEscPos = (quotation, business, paperWidth = 58) => {
     const itemName = item.name || item.description || '';
     const unitPrice = item.unitPrice || item.price || 0;
     const itemTotal = item.quantity * unitPrice;
-    const qtyFormatted = Number.isInteger(item.quantity)
-      ? item.quantity.toString()
-      : item.quantity.toFixed(3).replace(/\.?0+$/, '');
+    const qtyFormatted = formatQuantity(item.quantity);
 
     builder.alignLeft().text(convertSpanishText(itemName) + '\n')
       .text(`${qtyFormatted} x ${currencySymbol} ${unitPrice.toFixed(2)}`)
@@ -4855,9 +4848,7 @@ export const printQuotationTicket = async (quotation, business, paperWidth = 58)
       const itemName = item.name || item.description || '';
       const unitPrice = item.unitPrice || item.price || 0;
       const itemTotal = item.quantity * unitPrice;
-      const qtyFormatted = Number.isInteger(item.quantity)
-        ? item.quantity.toString()
-        : item.quantity.toFixed(3).replace(/\.?0+$/, '');
+      const qtyFormatted = formatQuantity(item.quantity);
       printer = printer
         .align('left').text(convertSpanishText(itemName) + '\n')
         .text(`${qtyFormatted} x ${currencySymbol} ${unitPrice.toFixed(2)}  ${currencySymbol} ${itemTotal.toFixed(2)}\n`);

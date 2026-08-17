@@ -6,6 +6,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { formatPricedModifierLines } from '@/utils/modifierHelpers'
 import { unitDisplayName } from '@/data/sunatUnits'
 import { getComprobanteBreakdown } from '@/utils/peruUtils'
+import { formatQuantity } from '@/lib/utils'
 import { getTicketFooterParts } from '@/utils/ticketFooter'
 
 /**
@@ -915,9 +916,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
         <div className="items-table">
           {invoice.items?.map((item, index) => {
             // Formatear cantidad: con decimales si tiene, sino entero
-            const qtyFormatted = Number.isInteger(item.quantity)
-              ? item.quantity.toString()
-              : item.quantity.toFixed(3).replace(/\.?0+$/, '');
+            const qtyFormatted = formatQuantity(item.quantity);
             const unitSuffix = item.unit && item.allowDecimalQuantity ? ` ${item.unit.toLowerCase()}` : '';
 
             // Usar 'name' como nombre principal, o 'description' si 'name' no existe (compatibilidad con datos antiguos)
