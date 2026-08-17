@@ -30,6 +30,7 @@ import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
+import DaySlotPicker from '@/components/appointments/DaySlotPicker'
 import {
   Calendar,
   Clock,
@@ -76,9 +77,17 @@ export default function VeterinaryAgenda() {
   // Vista: 'agenda' (calendario) | 'attention' (tablero "En atención", tipo Mesas)
   const [view, setView] = useState('agenda')
   const [inProgress, setInProgress] = useState([])
-  // Walk-in (atender ahora, sin cita previa)
+  // Walk-in (atender ahora, sin cita previa) y agendar cita a futuro.
+  // El MISMO modal sirve para los dos: cliente + mascota + servicios son
+  // idénticos; lo único que cambia es que agendar pide fecha/hora y NO
+  // arranca la atención.
   const [walkInOpen, setWalkInOpen] = useState(false)
+  const [walkInIntent, setWalkInIntent] = useState('now') // 'now' | 'schedule'
   const [walkInMode, setWalkInMode] = useState('existing') // 'existing' | 'new'
+  const [schedDate, setSchedDate] = useState('')
+  const [schedTime, setSchedTime] = useState('09:00')
+  // Citas ya tomadas del día elegido, para ver la disponibilidad al agendar
+  const [schedDayAppts, setSchedDayAppts] = useState([])
   const [customers, setCustomers] = useState([])
   const [walkInSearch, setWalkInSearch] = useState('')
   const [walkInCustomer, setWalkInCustomer] = useState(null)
@@ -88,8 +97,10 @@ export default function VeterinaryAgenda() {
   const [lookingUpDoc, setLookingUpDoc] = useState(false)
   // Servicios del walk-in: array (una mascota puede llevar baño + corte + movilidad, etc.)
   const [walkInServices, setWalkInServices] = useState([{ serviceId: '', serviceName: '', price: '' }])
-  // Servicios reales del negocio (Productos y Servicios) para el dropdown del walk-in
+  // Servicios reales del negocio (Productos y Servicios) para el buscador del walk-in
   const [serviceOptions, setServiceOptions] = useState([])
+  // Qué fila de servicio tiene el buscador abierto (índice) o null
+  const [activeSvcIdx, setActiveSvcIdx] = useState(null)
   const [savingWalkIn, setSavingWalkIn] = useState(false)
 
   // Cargar citas del mes para el calendario
@@ -297,7 +308,8 @@ export default function VeterinaryAgenda() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, monthAppointments])
 
-  const openWalkIn = async () => {
+  const openWalkIn = async (intent = 'now', { time } = {}) => {
+    setWalkInIntent(intent)
     setWalkInMode('existing')
     setWalkInCustomer(null)
     setWalkInSearch('')
@@ -305,6 +317,13 @@ export default function VeterinaryAgenda() {
     setNewClient({ documentType: ID_TYPES.DNI, documentNumber: '', name: '', phone: '' })
     setNewPet({ name: '', species: '' })
     setWalkInServices([{ serviceId: '', serviceName: '', price: '' }])
+    if (intent === 'schedule') {
+      // Arranca con el día que está seleccionado en el calendario: el flujo
+      // natural es "clic en el día → clic en la hora libre".
+      const d = selectedDate
+      setSchedDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)
+      setSchedTime(time || '09:00')
+    }
     setWalkInOpen(true)
     if (customers.length === 0) {
       try {
@@ -323,11 +342,86 @@ export default function VeterinaryAgenda() {
     } catch (e) { /* sin servicios */ }
   }
 
+  // Disponibilidad: al agendar, cargar las citas ya tomadas del día elegido
+  // para verlas dentro del modal antes de fijar la hora.
+  useEffect(() => {
+    if (!walkInOpen || walkInIntent !== 'schedule' || !schedDate) { setSchedDayAppts([]); return }
+    let alive = true
+    ;(async () => {
+      try {
+        const [y, m, d] = schedDate.split('-').map(Number)
+        const appts = await getAppointmentsByDate(getBusinessId(), new Date(y, m - 1, d))
+        if (alive) {
+          setSchedDayAppts(
+            appts
+              .filter(a => a.status !== 'cancelled' && a.status !== 'no_show')
+              .sort((a, b) => {
+                const dA = a.scheduledDate?.toDate ? a.scheduledDate.toDate() : new Date(a.scheduledDate)
+                const dB = b.scheduledDate?.toDate ? b.scheduledDate.toDate() : new Date(b.scheduledDate)
+                return dA - dB
+              })
+          )
+        }
+      } catch (e) {
+        if (alive) setSchedDayAppts([])
+      }
+    })()
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [walkInOpen, walkInIntent, schedDate])
+
   const selectWalkInCustomer = (c) => {
     setWalkInCustomer(c)
     setWalkInSearch(c.name || '')
     setWalkInPetIdx(normalizePets(c).length > 0 ? 0 : -1)
     setNewPet({ name: '', species: '' })
+  }
+
+  // El buscador de cliente también resuelve documentos NO registrados: si lo
+  // que se tipeó es un DNI (8 dígitos) o RUC (11) sin coincidencias, un clic
+  // lo consulta en RENIEC/SUNAT y deja el formulario de cliente nuevo con
+  // documento y nombre ya puestos — solo falta teléfono y mascota.
+  const buscarDocEnPadron = async () => {
+    const num = walkInSearch.trim()
+    const esDni = /^\d{8}$/.test(num)
+    const esRuc = /^\d{11}$/.test(num)
+    if (!esDni && !esRuc) return
+    setLookingUpDoc(true)
+    try {
+      const r = esDni ? await consultarDNI(num) : await consultarRUC(num)
+      const nombre = esDni
+        ? r?.data?.nombreCompleto
+        : (r?.data?.nombreComercial || r?.data?.razonSocial)
+      setWalkInMode('new')
+      setNewClient({
+        documentType: esDni ? ID_TYPES.DNI : ID_TYPES.RUC,
+        documentNumber: num,
+        name: r?.success ? (nombre || '') : '',
+        phone: '',
+      })
+      if (r?.success && nombre) toast.success('Datos encontrados. Completa teléfono y mascota.')
+      else toast.info('No figura en el padrón. Completa los datos a mano.')
+    } catch (e) {
+      setWalkInMode('new')
+      setNewClient({ documentType: esDni ? ID_TYPES.DNI : ID_TYPES.RUC, documentNumber: num, name: '', phone: '' })
+      toast.error('No se pudo consultar el documento. Completa los datos a mano.')
+    } finally {
+      setLookingUpDoc(false)
+    }
+  }
+
+  // "No está registrado → crearlo" sin re-tipear: lo buscado pasa al
+  // formulario de cliente nuevo como documento (si es número) o como nombre.
+  const irACrearNuevo = () => {
+    const q = walkInSearch.trim()
+    const esNum = /^\d+$/.test(q)
+    setWalkInMode('new')
+    setNewClient(c => ({
+      ...c,
+      documentType: /^\d{11}$/.test(q) ? ID_TYPES.RUC : c.documentType,
+      documentNumber: esNum ? q : '',
+      name: esNum ? '' : q,
+    }))
   }
 
   // Buscar nombre por DNI/RUC al crear cliente nuevo
@@ -369,6 +463,7 @@ export default function VeterinaryAgenda() {
 
   const handleCreateWalkIn = async () => {
     const businessId = getBusinessId()
+    const isSchedule = walkInIntent === 'schedule'
 
     // Validación según modo
     if (walkInMode === 'new') {
@@ -378,6 +473,11 @@ export default function VeterinaryAgenda() {
       if (!walkInCustomer) { toast.error('Selecciona un cliente'); return }
       const usingExistingPet = walkInPetIdx >= 0 && normalizePets(walkInCustomer)[walkInPetIdx]
       if (!usingExistingPet && !newPet.name.trim()) { toast.error('Indica la mascota'); return }
+    }
+    if (isSchedule) {
+      if (!schedDate) { toast.error('Elige la fecha de la cita'); return }
+      if (!schedTime) { toast.error('Elige la hora de la cita'); return }
+      if (!walkInServices.some(s => (s.serviceName || '').trim())) { toast.error('Indica al menos un servicio'); return }
     }
 
     setSavingWalkIn(true)
@@ -422,8 +522,12 @@ export default function VeterinaryAgenda() {
       const price = services.reduce((sum, s) => sum + s.price, 0)
       const svcName = services.map(s => s.name).join(' + ')
       const now = new Date()
-      const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+      const dateStr = isSchedule
+        ? schedDate
+        : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+      const timeStr = isSchedule
+        ? schedTime
+        : `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
       const id = await createAppointment(businessId, {
         customerId, customerName, petName, petSpecies, petId, phone,
         serviceName: svcName,
@@ -431,10 +535,21 @@ export default function VeterinaryAgenda() {
         services,
         scheduledDate: dateStr,
         scheduledTime: timeStr,
-        notes: 'Atención directa (walk-in)',
+        notes: isSchedule ? '' : 'Atención directa (walk-in)',
       })
-      await startAppointment(businessId, id) // dejarla "en atención" de una
-      toast.success('Atención iniciada')
+      if (isSchedule) {
+        // La cita queda "Programada"; la atención arranca el día que llegue.
+        const [y, m, d] = schedDate.split('-').map(Number)
+        toast.success(`Cita agendada para el ${new Date(y, m - 1, d).toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long' })} a las ${schedTime}`)
+        // Llevar el calendario al día agendado para que se vea de inmediato
+        setSelectedDate(new Date(y, m - 1, d))
+        if (m - 1 !== currentMonth.getMonth() || y !== currentMonth.getFullYear()) {
+          setCurrentMonth(new Date(y, m - 1, 1))
+        }
+      } else {
+        await startAppointment(businessId, id) // dejarla "en atención" de una
+        toast.success('Atención iniciada')
+      }
       setWalkInOpen(false)
       loadAppointments()
       loadInProgress()
@@ -514,6 +629,81 @@ export default function VeterinaryAgenda() {
 
   const isToday = selectedDate.toDateString() === new Date().toDateString()
 
+  // Acciones compactas de una cita, para las tarjetas del panel de horas.
+  // Misma lógica por estado que tenía la antigua lista de abajo.
+  const renderApptActions = (appointment) => {
+    if (actionLoading === appointment.id) {
+      return <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+    }
+    return (
+      <>
+        {appointment.phone && (
+          <button
+            onClick={() => handleWhatsApp(appointment)}
+            className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+            title="Enviar WhatsApp"
+          >
+            <MessageCircle className="w-4 h-4" />
+          </button>
+        )}
+        {appointment.status === 'scheduled' && (
+          <>
+            <button
+              onClick={() => handleConfirm(appointment)}
+              className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+              title="Confirmar"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setCancelModal(appointment)}
+              className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              title="Cancelar"
+            >
+              <XCircle className="w-4 h-4" />
+            </button>
+          </>
+        )}
+        {appointment.status === 'confirmed' && (
+          <>
+            <button
+              onClick={() => handleStart(appointment)}
+              className="p-1.5 text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors"
+              title="Iniciar atención"
+            >
+              <Play className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => handleNoShow(appointment)}
+              className="p-1.5 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+              title="No asistió"
+            >
+              <Ban className="w-4 h-4" />
+            </button>
+          </>
+        )}
+        {appointment.status === 'in_progress' && (
+          <button
+            onClick={() => handleComplete(appointment)}
+            className="inline-flex items-center gap-1 px-2 py-1 bg-primary-600 hover:bg-primary-700 text-white text-xs font-medium rounded-lg transition-colors"
+            title="Finalizar y Cobrar"
+          >
+            <ShoppingCart className="w-3.5 h-3.5" /> Cobrar
+          </button>
+        )}
+        {['scheduled', 'cancelled', 'no_show'].includes(appointment.status) && (
+          <button
+            onClick={() => handleDelete(appointment)}
+            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            title="Eliminar"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        )}
+      </>
+    )
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -538,6 +728,9 @@ export default function VeterinaryAgenda() {
           <Button variant="outline" size="sm" onClick={loadAppointments}>
             <RefreshCw className="w-4 h-4" />
           </Button>
+          <Button variant="outline" size="sm" onClick={() => openWalkIn('schedule')}>
+            <Plus className="w-4 h-4 mr-1" /> Agendar cita
+          </Button>
         </div>
       </div>
 
@@ -558,7 +751,7 @@ export default function VeterinaryAgenda() {
       {view === 'attention' && (
         <div>
           <div className="flex justify-end mb-3">
-            <Button size="sm" onClick={openWalkIn}>
+            <Button size="sm" onClick={() => openWalkIn('now')}>
               <Plus className="w-4 h-4 mr-1" /> Atender ahora
             </Button>
           </div>
@@ -601,7 +794,32 @@ export default function VeterinaryAgenda() {
 
       {view === 'agenda' && (
       <>
-      {/* Calendario mensual */}
+      {/* Resumen del día: chips compactos en vez de tarjetones de colores */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gray-100 text-gray-700 text-xs font-medium">
+          {dayStats.total || 0} {dayStats.total === 1 ? 'cita' : 'citas'} este día
+        </span>
+        {((dayStats.scheduled || 0) + (dayStats.confirmed || 0)) > 0 && (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium">
+            {(dayStats.scheduled || 0) + (dayStats.confirmed || 0)} pendientes
+          </span>
+        )}
+        {(dayStats.inProgress || 0) > 0 && (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-yellow-50 text-yellow-700 text-xs font-medium">
+            {dayStats.inProgress} en atención
+          </span>
+        )}
+        {(dayStats.completed || 0) > 0 && (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-50 text-green-700 text-xs font-medium">
+            {dayStats.completed} completadas
+          </span>
+        )}
+      </div>
+
+      {/* Calendario y horas del día, lado a lado (patrón Calendly/Fresha):
+          clic en el día → el panel derecho muestra sus horas; clic en una
+          hora libre → formulario de agendar con fecha y hora ya puestas. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
       <Card>
         <CardContent className="p-4">
           {/* Navegación del mes */}
@@ -661,185 +879,22 @@ export default function VeterinaryAgenda() {
         </CardContent>
       </Card>
 
-      {/* Stats del día seleccionado */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-white rounded-lg border p-3">
-          <p className="text-xs text-gray-500">Total</p>
-          <p className="text-2xl font-bold text-gray-900">{dayStats.total || 0}</p>
-        </div>
-        <div className="bg-blue-50 rounded-lg border border-blue-100 p-3">
-          <p className="text-xs text-blue-600">Pendientes</p>
-          <p className="text-2xl font-bold text-blue-700">{(dayStats.scheduled || 0) + (dayStats.confirmed || 0)}</p>
-        </div>
-        <div className="bg-yellow-50 rounded-lg border border-yellow-100 p-3">
-          <p className="text-xs text-yellow-600">En Atención</p>
-          <p className="text-2xl font-bold text-yellow-700">{dayStats.inProgress || 0}</p>
-        </div>
-        <div className="bg-green-50 rounded-lg border border-green-100 p-3">
-          <p className="text-xs text-green-600">Completadas</p>
-          <p className="text-2xl font-bold text-green-700">{dayStats.completed || 0}</p>
-        </div>
+      {/* Horas del día elegido. El key por fecha remonta el panel y con eso
+          la animación de entrada se repite en cada cambio de día. Altura
+          fija en escritorio: el scroll es SOLO interno, la página no crece. */}
+      <div key={selectedDate.toDateString()} className="animate-fade-in lg:h-[560px]">
+        <DaySlotPicker
+          date={selectedDate}
+          appointments={dayAppointments}
+          onPickSlot={(hora) => openWalkIn('schedule', { time: hora })}
+          onPrevDay={() => changeDate(-1)}
+          onNextDay={() => changeDate(1)}
+          renderStatus={(a) => getStatusBadge(a.status)}
+          renderActions={renderApptActions}
+        />
+      </div>
       </div>
 
-      {/* Lista de citas */}
-      {dayAppointments.length === 0 ? (
-        <Card>
-          <CardContent className="p-12 text-center">
-            <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              No hay citas para este día
-            </h3>
-            <p className="text-gray-600 mb-4">
-              Las citas agendadas desde la historia clínica de los pacientes aparecerán aquí.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {dayAppointments.map((appointment) => (
-            <Card key={appointment.id} className="overflow-hidden">
-              <CardContent className="p-0">
-                <div className="flex flex-col sm:flex-row">
-                  {/* Hora */}
-                  <div className="bg-primary-50 p-4 sm:w-24 flex-shrink-0 flex sm:flex-col items-center justify-center gap-2">
-                    <Clock className="w-4 h-4 text-primary-600" />
-                    <span className="text-lg font-bold text-primary-700">
-                      {formatTime(appointment.scheduledDate)}
-                    </span>
-                  </div>
-
-                  {/* Contenido */}
-                  <div className="flex-1 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        {/* Servicio y estado */}
-                        <div className="flex items-center gap-2 flex-wrap mb-2">
-                          <span className="font-semibold text-gray-900">{appointment.serviceName}</span>
-                          {getStatusBadge(appointment.status)}
-                        </div>
-
-                        {/* Mascota y dueño */}
-                        <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">
-                          <span className="inline-flex items-center gap-1">
-                            <PawPrint className="w-4 h-4" />
-                            <strong>{appointment.petName}</strong>
-                            {appointment.petSpecies && ` (${appointment.petSpecies})`}
-                          </span>
-                          <span className="inline-flex items-center gap-1">
-                            <User className="w-4 h-4" />
-                            {appointment.customerName}
-                          </span>
-                        </div>
-
-                        {/* Teléfono y precio */}
-                        <div className="flex items-center gap-4 text-sm text-gray-500">
-                          {appointment.phone && (
-                            <span className="inline-flex items-center gap-1">
-                              <Phone className="w-3 h-3" />
-                              {appointment.phone}
-                            </span>
-                          )}
-                          {appointment.servicePrice > 0 && (
-                            <span className="font-medium text-green-600">
-                              S/ {appointment.servicePrice.toFixed(2)}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Notas */}
-                        {appointment.notes && (
-                          <p className="text-xs text-gray-500 mt-2 italic">"{appointment.notes}"</p>
-                        )}
-                      </div>
-
-                      {/* Acciones */}
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        {actionLoading === appointment.id ? (
-                          <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
-                        ) : (
-                          <>
-                            {/* WhatsApp */}
-                            {appointment.phone && (
-                              <button
-                                onClick={() => handleWhatsApp(appointment)}
-                                className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                                title="Enviar WhatsApp"
-                              >
-                                <MessageCircle className="w-4 h-4" />
-                              </button>
-                            )}
-
-                            {/* Acciones según estado */}
-                            {appointment.status === 'scheduled' && (
-                              <>
-                                <button
-                                  onClick={() => handleConfirm(appointment)}
-                                  className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                                  title="Confirmar"
-                                >
-                                  <CheckCircle2 className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => setCancelModal(appointment)}
-                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                  title="Cancelar"
-                                >
-                                  <XCircle className="w-4 h-4" />
-                                </button>
-                              </>
-                            )}
-
-                            {appointment.status === 'confirmed' && (
-                              <>
-                                <button
-                                  onClick={() => handleStart(appointment)}
-                                  className="p-2 text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors"
-                                  title="Iniciar atención"
-                                >
-                                  <Play className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => handleNoShow(appointment)}
-                                  className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
-                                  title="No asistió"
-                                >
-                                  <Ban className="w-4 h-4" />
-                                </button>
-                              </>
-                            )}
-
-                            {appointment.status === 'in_progress' && (
-                              <Button
-                                size="sm"
-                                onClick={() => handleComplete(appointment)}
-                                className="gap-1"
-                              >
-                                <ShoppingCart className="w-4 h-4" />
-                                Finalizar y Cobrar
-                              </Button>
-                            )}
-
-                            {/* Eliminar (solo para programadas/canceladas) */}
-                            {['scheduled', 'cancelled', 'no_show'].includes(appointment.status) && (
-                              <button
-                                onClick={() => handleDelete(appointment)}
-                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                title="Eliminar"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
       </>
       )}
 
@@ -883,9 +938,63 @@ export default function VeterinaryAgenda() {
         </div>
       </Modal>
 
-      {/* Modal "Atender ahora" (walk-in, sin cita previa) */}
-      <Modal isOpen={walkInOpen} onClose={() => !savingWalkIn && setWalkInOpen(false)} title="Atender ahora" size="lg">
+      {/* Modal "Atender ahora" (walk-in) / "Agendar cita" (a futuro).
+          Mismo formulario de cliente + mascota + servicios; agendar suma
+          fecha, hora y la disponibilidad del día elegido. */}
+      <Modal isOpen={walkInOpen} onClose={() => !savingWalkIn && setWalkInOpen(false)} title={walkInIntent === 'schedule' ? 'Agendar cita' : 'Atender ahora'} size="lg">
         <div className="space-y-4">
+          {/* ===== FECHA, HORA Y DISPONIBILIDAD (solo al agendar) ===== */}
+          {walkInIntent === 'schedule' && (
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
+                  <input
+                    type="date"
+                    value={schedDate}
+                    onChange={(e) => setSchedDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Hora</label>
+                  <input
+                    type="time"
+                    value={schedTime}
+                    onChange={(e) => setSchedTime(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  />
+                </div>
+              </div>
+              {/* Disponibilidad del día elegido */}
+              {schedDayAppts.length === 0 ? (
+                <p className="text-xs text-green-600 bg-green-50 border border-green-100 rounded-lg px-3 py-2">
+                  Día libre: no hay citas agendadas para esta fecha.
+                </p>
+              ) : (
+                <div className="text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                  <p className="font-medium text-gray-700 mb-1">Horarios ya tomados ese día:</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {schedDayAppts.map(a => {
+                      const mismaHora = formatTime(a.scheduledDate) === schedTime
+                      return (
+                        <span
+                          key={a.id}
+                          title={`${a.serviceName || 'Cita'} — ${a.petName || ''}`}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border ${mismaHora ? 'bg-amber-100 border-amber-300 text-amber-800 font-semibold' : 'bg-white border-gray-200 text-gray-600'}`}
+                        >
+                          <Clock className="w-3 h-3" /> {formatTime(a.scheduledDate)} · {a.petName || a.customerName}
+                        </span>
+                      )
+                    })}
+                  </div>
+                  {schedDayAppts.some(a => formatTime(a.scheduledDate) === schedTime) && (
+                    <p className="text-amber-700 mt-1.5">Ya hay una cita a esa misma hora. Puedes agendarla igual o elegir otra.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           {/* Cliente existente / nuevo */}
           <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
             {[{ k: 'existing', label: 'Cliente existente' }, { k: 'new', label: 'Cliente nuevo' }].map(t => (
@@ -943,7 +1052,36 @@ export default function VeterinaryAgenda() {
                               </button>
                             )
                           })}
-                          {matches.length === 0 && <p className="px-3 py-2 text-sm text-gray-400">Sin coincidencias — usa &quot;Cliente nuevo&quot;</p>}
+                          {matches.length === 0 && (() => {
+                            const q = walkInSearch.trim()
+                            const esDni = /^\d{8}$/.test(q)
+                            const esRuc = /^\d{11}$/.test(q)
+                            const esNum = /^\d+$/.test(q)
+                            return (
+                              <div className="px-3 py-2.5 space-y-2">
+                                <p className="text-sm text-gray-500">No está registrado.</p>
+                                {(esDni || esRuc) && (
+                                  <button
+                                    type="button"
+                                    onClick={buscarDocEnPadron}
+                                    disabled={lookingUpDoc}
+                                    className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-60"
+                                  >
+                                    {lookingUpDoc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                                    Buscar {esDni ? 'DNI' : 'RUC'} {q} en {esDni ? 'RENIEC' : 'SUNAT'}
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={irACrearNuevo}
+                                  className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg transition-colors"
+                                >
+                                  <Plus className="w-4 h-4" />
+                                  Crear cliente nuevo {esNum ? 'con este documento' : q ? 'con este nombre' : ''}
+                                </button>
+                              </div>
+                            )
+                          })()}
                         </div>
                       )
                     })()}
@@ -1037,41 +1175,55 @@ export default function VeterinaryAgenda() {
             </>
           )}
 
-          {/* ===== SERVICIOS + PRECIOS (multi: baño + corte + movilidad...) ===== */}
+          {/* ===== SERVICIOS + PRECIOS (multi: baño + corte + movilidad...)
+               Buscador con sugerencias, no desplegable: se tipea y filtra
+               sobre Productos y Servicios; elegir uno trae su precio. Lo que
+               no está en la lista queda tal cual como servicio libre. ===== */}
           <div className="pt-3 border-t border-gray-100 space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="block text-sm font-medium text-gray-700">Servicios</label>
-              {serviceOptions.length === 0 && (
-                <span className="text-xs text-gray-400">Créalos en Productos y Servicios o usa "Otro".</span>
-              )}
-            </div>
+            <label className="block text-sm font-medium text-gray-700">Servicios</label>
 
-            {walkInServices.map((svc, idx) => (
-              <div key={idx} className="space-y-2">
-                <div className="flex items-start gap-2">
-                  <select
-                    value={svc.serviceId}
-                    onChange={(e) => {
-                      const val = e.target.value
-                      if (val === 'custom') {
-                        updateWalkInService(idx, { serviceId: 'custom', serviceName: '' })
-                      } else if (!val) {
-                        updateWalkInService(idx, { serviceId: '', serviceName: '', price: '' })
-                      } else {
-                        const prod = serviceOptions.find(p => p.id === val)
-                        updateWalkInService(idx, {
-                          serviceId: val,
-                          serviceName: prod?.name || '',
-                          price: prod?.price != null ? String(prod.price) : svc.price,
-                        })
-                      }
-                    }}
-                    className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  >
-                    <option value="">Selecciona un servicio</option>
-                    {serviceOptions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    <option value="custom">Otro (personalizado)</option>
-                  </select>
+            {walkInServices.map((svc, idx) => {
+              const q = (svc.serviceName || '').trim()
+              const sugerencias = (svc.serviceId ? [] : (q ? serviceOptions.filter(p => matchesSearchQuery(q, p.name)) : serviceOptions)).slice(0, 8)
+              return (
+                <div key={idx} className="flex items-start gap-2">
+                  <div className="relative flex-1 min-w-0">
+                    <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={svc.serviceName}
+                      onChange={(e) => updateWalkInService(idx, { serviceName: e.target.value, serviceId: '' })}
+                      onFocus={() => setActiveSvcIdx(idx)}
+                      onBlur={() => setActiveSvcIdx(i => (i === idx ? null : i))}
+                      placeholder="Busca el servicio o escríbelo (ej. Baño y corte)"
+                      className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                    {activeSvcIdx === idx && sugerencias.length > 0 && (
+                      <div className="absolute z-20 mt-1 w-full max-h-44 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg divide-y">
+                        {sugerencias.map(p => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onMouseDown={(e) => {
+                              // onMouseDown y no onClick: el blur del input
+                              // desmontaría la lista antes de que el click llegue.
+                              e.preventDefault()
+                              updateWalkInService(idx, {
+                                serviceId: p.id,
+                                serviceName: p.name,
+                                price: p.price != null ? String(p.price) : svc.price,
+                              })
+                              setActiveSvcIdx(null)
+                            }}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between gap-2"
+                          >
+                            <span className="truncate">{p.name}</span>
+                            {p.price != null && <span className="text-xs text-gray-400 flex-shrink-0">S/ {Number(p.price).toFixed(2)}</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <input
                     type="number"
                     min="0"
@@ -1091,17 +1243,8 @@ export default function VeterinaryAgenda() {
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
-                {svc.serviceId === 'custom' && (
-                  <input
-                    type="text"
-                    value={svc.serviceName}
-                    onChange={(e) => updateWalkInService(idx, { serviceName: e.target.value })}
-                    placeholder="Nombre del servicio (ej. Consulta general)"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  />
-                )}
-              </div>
-            ))}
+              )
+            })}
 
             <div className="flex items-center justify-between">
               <button
@@ -1120,7 +1263,11 @@ export default function VeterinaryAgenda() {
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setWalkInOpen(false)} disabled={savingWalkIn}>Cancelar</Button>
             <Button onClick={handleCreateWalkIn} disabled={savingWalkIn}>
-              {savingWalkIn ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Play className="w-4 h-4 mr-1" /> Iniciar atención</>}
+              {savingWalkIn
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : walkInIntent === 'schedule'
+                  ? <><Calendar className="w-4 h-4 mr-1" /> Agendar cita</>
+                  : <><Play className="w-4 h-4 mr-1" /> Iniciar atención</>}
             </Button>
           </div>
         </div>

@@ -298,6 +298,16 @@ export const GUIDES = [
     load: () => import('./cocina.js'),
   },
   {
+    id: 'agenda-citas',
+    route: '/app/agenda-veterinaria',
+    title: 'Agenda de Citas',
+    category: 'Operación',
+    description: 'Agendar citas viendo la disponibilidad del día, atender walk-ins y cobrar cada atención en el POS.',
+    keywords: 'agenda cita citas agendar programar calendario disponibilidad horario mascota paciente veterinaria confirmar no asistio walk-in atender ahora en atencion finalizar y cobrar recordatorio whatsapp',
+    modos: ['veterinary'],
+    load: () => import('./agenda-citas.js'),
+  },
+  {
     id: 'ingredientes',
     route: '/app/ingredientes',
     title: 'Insumos / Ingredientes',
