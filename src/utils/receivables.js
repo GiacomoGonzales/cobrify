@@ -104,6 +104,29 @@ export const getRealPayments = (invoice) => {
     }
   }
 
+  // AL CRÉDITO: sin un solo pago registrado (ni historial ni payments[]) pero
+  // con saldo pendiente. Se decide por `paymentStatus`/`balance`, que es lo
+  // que el sistema mantiene de verdad, y NO por `paymentMethod`.
+  //
+  // Esta comprobación va ANTES de la estructura antigua a propósito: el POS
+  // guarda las ventas al crédito con `paymentMethod: 'Efectivo'` (un fallback
+  // que rellena el campo aunque no haya habido pago), así que al llegar a la
+  // rama de abajo se imprimían como pagadas en efectivo — el ticket decía
+  // "EFECTIVO S/ 48.00" en una venta que nadie pagó, y desaparecía el
+  // "AL CRÉDITO / Saldo Pendiente" (reporte 17-ago-2026, N001-00000596).
+  // Al mirar el estado real, esto también corrige las ya emitidas.
+  const pendiente = getPendingAmount(invoice)
+  const esperandoCobro = invoice?.paymentStatus === 'pending' || invoice?.paymentStatus === 'partial'
+  if (esperandoCobro && pendiente > 0.01) {
+    return {
+      payments: [],
+      totalPaid: Math.max(0, Math.round((total - pendiente) * 100) / 100),
+      pending: pendiente,
+      isCredit: true,
+      fromHistory: false,
+    }
+  }
+
   // Estructura antigua: un solo método, sin desglose.
   if (invoice?.paymentMethod) {
     return {

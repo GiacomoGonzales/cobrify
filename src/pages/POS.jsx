@@ -6411,7 +6411,7 @@ export default function POS() {
           cardCommissionRate: cardSurchargeFactor > 1 ? (Number(cardCommissionConfig.rate) || 0) : 0,
           cardCommissionAmount: cardSurchargeFactor > 1 ? Number((amounts.total - amounts.total / cardSurchargeFactor).toFixed(2)) : 0,
           payments: allPayments,
-          paymentMethod: allPayments.length > 0 ? allPayments[0].method : 'Efectivo',
+          paymentMethod: allPayments.length > 0 ? allPayments[0].method : 'Crédito',
           // Vuelto (cambio que se devuelve al cliente). Solo aplica a pagos al contado.
           change: (!isCreditSaleDemo && totalPaid > amounts.total)
             ? Math.round((totalPaid - amounts.total) * 100) / 100
@@ -6704,8 +6704,11 @@ export default function POS() {
         cardCommissionAmount: cardSurchargeFactor > 1 ? Number((amounts.total - amounts.total / cardSurchargeFactor).toFixed(2)) : 0,
         // Guardar los métodos de pago
         payments: allPayments,
-        // Guardar el primer método como principal para compatibilidad
-        paymentMethod: allPayments.length > 0 ? allPayments[0].method : 'Efectivo',
+        // Primer método como principal, por compatibilidad. Sin pagos es una
+        // venta AL CRÉDITO: decía 'Efectivo' y el ticket la imprimía como
+        // pagada en efectivo (reporte 17-ago-2026). Rellenar un campo con un
+        // valor que no ocurrió es peor que dejarlo describir la realidad.
+        paymentMethod: allPayments.length > 0 ? allPayments[0].method : 'Crédito',
         // Vuelto (cambio que se devuelve al cliente, si pagó más que el total)
         change,
         // Monto entregado por el cliente (solo guardamos cuando hay vuelto, para mostrar
