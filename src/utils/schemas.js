@@ -346,7 +346,16 @@ export const productSchema = z.object({
   // Validar precio solo si NO tiene variantes (variantes se validan en onSubmit con state
   // local) Y NO hay precio en dólares. Si el producto está anclado al dólar (priceUSD),
   // el precio en soles es opcional: el POS lo calcula con el TC del momento.
-  if (!data.hasVariants && !data.price && !data.priceUSD) {
+  //
+  // OJO con el 0: `!data.price` daba TRUE para el precio 0 (en JS el cero es
+  // falsy) y el formulario respondía "Precio es requerido" a quien SÍ había
+  // escrito 0. Eso rompía las bonificaciones/cortesías, que son justamente
+  // productos de precio 0 — pese a que el resto del formulario ya lo permitía
+  // y hasta lo explica en su texto de ayuda. Lo que importa es si el campo
+  // vino VACÍO, no si vale cero.
+  const sinPrecio = data.price === undefined || data.price === null || data.price === ''
+  const sinPrecioUSD = data.priceUSD === undefined || data.priceUSD === null || data.priceUSD === ''
+  if (!data.hasVariants && sinPrecio && sinPrecioUSD) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: 'Precio es requerido',
