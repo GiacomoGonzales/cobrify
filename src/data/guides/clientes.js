@@ -91,9 +91,17 @@ export default {
           text: 'La tarjeta se identifica por el **teléfono del cliente**: el mismo cliente acumula compre en el mostrador o por tu catálogo online. Sin teléfono no hay tarjeta.',
         },
         {
+          type: 'texto',
+          text: 'Los sellos se ganan de dos maneras, y eliges la que le calza a tu negocio: **Por visita** (cada compra suma 1 sello — premia que el cliente vuelva: cafetería, barbería, restaurante) o **Por monto** (un sello por cada S/ X de compra — premia cuánto gasta: botica, ferretería, ropa). En el modo por monto puedes poner un tope de sellos por venta, y el vuelto no se arrastra: con sellos de S/ 20, una compra de S/ 50 da 2 sellos.',
+        },
+        {
+          type: 'texto',
+          text: 'El premio también se elige por tipo: **Producto gratis** (eliges cuál de tu catálogo), **Producto a precio especial** (el cliente accede a comprarlo a un precio de canje), **Descuento en la compra** (porcentaje o monto), u **Otro** en texto libre para premios que no viven en el sistema ("una clase gratis"). Con los tres primeros, el canje se aplica solo en el Punto de Venta; con texto libre el canje es manual.',
+        },
+        {
           type: 'pasos',
           items: [
-            'Activa **Programa activado** y define la meta de sellos y el premio.',
+            'Activa **Programa activado**, elige cómo se ganan los sellos, la meta y el tipo de premio.',
             'Elige un **tema** para la tarjeta: la ves pintada con tu logo antes de decidir. Puedes ajustar el color exacto.',
             'Elige la **portada**: la **Cuadrícula de sellos** dibuja los sellos del cliente como casilleros (llenos con check, vacíos punteados y el último con el regalo) y se redibuja sola en cada compra — con ella el contador sale en número, porque el progreso ya está dibujado. **Tu logo** pone tu logo como franja, y **Color plano** la deja sobria. La vista previa te muestra la tarjeta tal como queda.',
             'Con la cuadrícula también eliges **tu sello**: el icono que se estampa en los casilleros llenos (check, estrella, corazón, taza, pizza, hamburguesa, huella, tijeras, cruz o polo).',
@@ -109,6 +117,10 @@ export default {
         {
           type: 'texto',
           text: 'En la misma ventana ves las **tarjetas de todos tus clientes** con sus sellos y canjes. Cuando alguien llega a la meta, aparece el botón **Canjear**: descuenta la meta de sellos (si tenía 12 y la meta es 10, le quedan 2) y deja el registro.',
+        },
+        {
+          type: 'texto',
+          text: 'El mejor lugar para canjear es el **Punto de Venta**: al seleccionar al cliente, el recuadro ámbar avisa "Premio disponible" y el botón **Canjear** aplica el premio a la venta en curso — agrega el producto gratis como bonificación, lo agrega a su precio especial, o llena el descuento. Los sellos se descuentan recién **al cobrar**: si la venta se cancela, el cliente no pierde nada. Puedes quitar el premio aplicado con el botón **Quitar** antes de cobrar.',
         },
         {
           type: 'consejo',

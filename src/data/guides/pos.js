@@ -151,7 +151,7 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'En el **Carrito de Compras** cada producto permite más que cambiar la cantidad: puedes aplicar **descuento** por línea y marcar un producto como **bonificación** (regalo: sale en el comprobante pero no suma al total, como pide SUNAT). El total va siempre visible arriba del carrito.',
+          text: 'En el **Carrito de Compras** cada producto permite más que cambiar la cantidad: puedes aplicar **descuento** por línea y marcar un producto como **bonificación** (regalo: sale en el comprobante pero no suma al total). Al marcar bonificación en un producto libre, el precio que escribes pasa a ser el **valor referencial**: lo que regalas vale eso y así se declara a SUNAT, aunque el cliente no lo pague. Funciona en boleta, factura y nota de venta. El total va siempre visible arriba del carrito.',
         },
         {
           type: 'texto',

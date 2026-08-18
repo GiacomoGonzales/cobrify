@@ -941,13 +941,17 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
             const itemObservations = item.observations || null;
             // Descuento por ítem
             const itemDiscount = item.itemDiscount || 0;
-            const lineTotal = item.quantity * (item.price || item.unitPrice);
+            // `??` y no `||`: una bonificacion vale 0 y con `||` el cero se
+            // tomaba por "vacio", saltaba al otro campo (inexistente) e imprimia
+            // NaN en el comprobante (reporte 18-ago-2026).
+            const unitario = item.price ?? item.unitPrice ?? 0;
+            const lineTotal = (Number(item.quantity) || 0) * unitario;
 
             return (
               <div key={index} className="item-row">
                 <div className="item-desc">{showItemUnit ? `${qtyFormatted} ${measureUnit}  ${cleanName}` : itemName}</div>
                 <div className="item-details">
-                  <span style={{ whiteSpace: 'normal' }}>{qtyFormatted}{unitSuffix} x {formatCurrency(item.price || item.unitPrice)}</span>
+                  <span style={{ whiteSpace: 'normal' }}>{qtyFormatted}{unitSuffix} x {formatCurrency(unitario)}</span>
                   <span style={{ whiteSpace: 'nowrap' }}>{formatCurrency(lineTotal)}</span>
                 </div>
                 {itemDiscount > 0 && (

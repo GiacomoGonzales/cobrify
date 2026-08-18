@@ -15,8 +15,10 @@ import {
 } from '@/data/walletThemes'
 import {
   DEFAULT_LOYALTY_CONFIG, getLoyaltyCards, redeemReward, getWalletPassLink,
-  WALLET_EN_APROBACION,
+  WALLET_EN_APROBACION, rewardLabel,
 } from '@/services/loyaltyService'
+import { getProducts } from '@/services/firestoreService'
+import { matchesSearchQuery } from '@/lib/utils'
 
 /**
  * FIDELIZACIÓN — el panel completo, en la página de CLIENTES (15-ago-2026).
@@ -129,6 +131,10 @@ export default function LoyaltyManager({ isOpen, onClose }) {
   const [cargando, setCargando] = useState(true)
   const [guardando, setGuardando] = useState(false)
   const [config, setConfig] = useState({ ...DEFAULT_LOYALTY_CONFIG })
+  // Buscador de producto para el premio (tipos 'product' y 'product_discount')
+  const [productos, setProductos] = useState(null) // null = aún no cargados
+  const [buscaPremio, setBuscaPremio] = useState('')
+  const [buscandoPremio, setBuscandoPremio] = useState(false)
   const [tarjetas, setTarjetas] = useState([])
   const [busqueda, setBusqueda] = useState('')
   const [accionandoId, setAccionandoId] = useState(null)
@@ -179,6 +185,29 @@ export default function LoyaltyManager({ isOpen, onClose }) {
       (t.customerName || '').toLowerCase().includes(q) || String(t.phone || '').includes(q))
   }, [tarjetas, busqueda])
 
+  // Catálogo para el buscador del premio. Se carga UNA vez y solo cuando el
+  // premio es un producto — la mayoría de negocios nunca paga esta consulta.
+  // OJO: hook ANTES del early return de abajo (regla del proyecto, React #310).
+  useEffect(() => {
+    const esProducto = config.rewardType === 'product' || config.rewardType === 'product_discount'
+    if (!isOpen || !esProducto || productos !== null) return
+    let cancelado = false
+    ;(async () => {
+      setBuscandoPremio(true)
+      try {
+        const r = await getProducts(getBusinessId())
+        if (!cancelado) {
+          setProductos((r.success ? r.data : [])
+            .filter(p => p.active !== false)
+            .sort((a, b) => (a.name || '').localeCompare(b.name || '')))
+        }
+      } finally {
+        if (!cancelado) setBuscandoPremio(false)
+      }
+    })()
+    return () => { cancelado = true }
+  }, [isOpen, config.rewardType, productos, getBusinessId])
+
   if (!isOpen) return null
 
   const tema = config.walletTheme || resolveTheme()
@@ -204,13 +233,51 @@ export default function LoyaltyManager({ isOpen, onClose }) {
 
   const guardar = async () => {
     if (isDemoMode) { toast.error('En modo demo no se guardan cambios'); return }
+
+    // Validación del premio estructurado: guardar un premio a medias dejaría
+    // al cajero con un botón de canje que no sabe qué aplicar.
+    if (config.enabled) {
+      const t = config.rewardType || 'text'
+      if ((t === 'product' || t === 'product_discount') && !config.rewardProductId) {
+        toast.error('Elige el producto del premio'); return
+      }
+      if (t === 'product_discount' && !(Number(config.rewardSpecialPrice) > 0)) {
+        toast.error('Indica el precio especial de canje'); return
+      }
+      if (t === 'discount') {
+        const v = Number(config.rewardDiscountValue) || 0
+        if (v <= 0) { toast.error('Indica el valor del descuento'); return }
+        if (config.rewardDiscountType !== 'amount' && v > 100) { toast.error('El descuento no puede pasar de 100%'); return }
+      }
+      if (t === 'text' && !(config.reward || '').trim()) {
+        toast.error('Describe el premio'); return
+      }
+      if (config.earnMode === 'amount' && !(Number(config.amountPerStamp) > 0)) {
+        toast.error('Indica cuántos soles valen un sello'); return
+      }
+    }
+
     setGuardando(true)
     try {
+      const tipoPremio = config.rewardType || 'text'
+      // La etiqueta visible se genera desde el tipo (texto libre manda la suya).
+      const etiqueta = tipoPremio === 'text'
+        ? (config.reward || '').trim()
+        : rewardLabel(config)
       await setDoc(doc(db, 'businesses', getBusinessId()), {
         loyaltyConfig: {
           enabled: !!config.enabled,
           goal: Math.max(2, Number(config.goal) || 10),
-          reward: (config.reward || '').trim(),
+          reward: etiqueta,
+          rewardType: tipoPremio,
+          rewardProductId: (tipoPremio === 'product' || tipoPremio === 'product_discount') ? (config.rewardProductId || null) : null,
+          rewardProductName: (tipoPremio === 'product' || tipoPremio === 'product_discount') ? (config.rewardProductName || '') : '',
+          rewardSpecialPrice: tipoPremio === 'product_discount' ? (Number(config.rewardSpecialPrice) || 0) : 0,
+          rewardDiscountType: config.rewardDiscountType === 'amount' ? 'amount' : 'percent',
+          rewardDiscountValue: tipoPremio === 'discount' ? (Number(config.rewardDiscountValue) || 0) : 0,
+          earnMode: config.earnMode === 'amount' ? 'amount' : 'visit',
+          amountPerStamp: Number(config.amountPerStamp) || 20,
+          maxStampsPerSale: Number(config.maxStampsPerSale) || 0,
           minAmount: Number(config.minAmount) || 0,
           stampOnlineOrders: config.stampOnlineOrders !== false,
           walletTheme: resolveTheme({ temaId: tema.id, colorFondo: tema.colorFondo, motivo: tema.motivo, sello: tema.sello }),
@@ -288,26 +355,195 @@ export default function LoyaltyManager({ isOpen, onClose }) {
             </label>
 
             {config.enabled && (
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <Input
-                  label="Sellos para el premio"
-                  type="number" min="2" max="50"
-                  value={config.goal}
-                  onChange={(e) => setConfig({ ...config, goal: e.target.value })}
-                />
-                <Input
-                  label="Compra mínima (S/)"
-                  type="number" min="0" step="0.01"
-                  value={config.minAmount}
-                  onChange={(e) => setConfig({ ...config, minAmount: e.target.value })}
-                  placeholder="0 = cualquier compra"
-                />
-                <Input
-                  label="Premio"
-                  value={config.reward}
-                  onChange={(e) => setConfig({ ...config, reward: e.target.value })}
-                  placeholder="Ej: 1 pizza mediana gratis"
-                />
+              <div className="mt-4 space-y-4">
+                {/* ── Cómo se ganan los sellos ────────────────────────── */}
+                <div>
+                  <p className="text-sm font-medium text-gray-900 mb-2">Cómo se ganan los sellos</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {[
+                      { k: 'visit', titulo: 'Por visita', detalle: 'Cada compra suma 1 sello. Premia que el cliente vuelva (cafetería, barbería, restaurante).' },
+                      { k: 'amount', titulo: 'Por monto de compra', detalle: 'Un sello por cada S/ X de compra. Premia cuánto gasta (botica, ferretería, ropa).' },
+                    ].map(m => (
+                      <button
+                        key={m.k}
+                        type="button"
+                        onClick={() => setConfig({ ...config, earnMode: m.k })}
+                        className={`text-left p-3 rounded-lg border transition-colors ${(config.earnMode || 'visit') === m.k ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                      >
+                        <span className="block text-sm font-medium text-gray-900">{m.titulo}</span>
+                        <span className="block text-xs text-gray-500 mt-0.5">{m.detalle}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <Input
+                      label="Sellos para el premio"
+                      type="number" min="2" max="50"
+                      value={config.goal}
+                      onChange={(e) => setConfig({ ...config, goal: e.target.value })}
+                    />
+                    {(config.earnMode || 'visit') === 'visit' ? (
+                      <Input
+                        label="Compra mínima (S/)"
+                        type="number" min="0" step="0.01"
+                        value={config.minAmount}
+                        onChange={(e) => setConfig({ ...config, minAmount: e.target.value })}
+                        placeholder="0 = cualquier compra"
+                      />
+                    ) : (
+                      <>
+                        <Input
+                          label="Soles por sello (S/)"
+                          type="number" min="1" step="0.01"
+                          value={config.amountPerStamp}
+                          onChange={(e) => setConfig({ ...config, amountPerStamp: e.target.value })}
+                          placeholder="Ej: 20 = 1 sello por cada S/ 20"
+                        />
+                        <Input
+                          label="Tope de sellos por venta"
+                          type="number" min="0" step="1"
+                          value={config.maxStampsPerSale}
+                          onChange={(e) => setConfig({ ...config, maxStampsPerSale: e.target.value })}
+                          placeholder="0 = sin tope"
+                        />
+                      </>
+                    )}
+                  </div>
+                  {(config.earnMode || 'visit') === 'amount' && (
+                    <p className="mt-1.5 text-xs text-gray-500">
+                      El vuelto no se arrastra: una compra de S/ {Number(config.amountPerStamp) > 0 ? (Number(config.amountPerStamp) * 2 + Number(config.amountPerStamp) / 2).toFixed(0) : 50} con
+                      sellos de S/ {Number(config.amountPerStamp) || 20} da 2 sellos.
+                    </p>
+                  )}
+                </div>
+
+                {/* ── El premio ───────────────────────────────────────── */}
+                <div>
+                  <p className="text-sm font-medium text-gray-900 mb-2">El premio al completar la tarjeta</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      { k: 'product', label: 'Producto gratis' },
+                      { k: 'product_discount', label: 'Producto a precio especial' },
+                      { k: 'discount', label: 'Descuento en la compra' },
+                      { k: 'text', label: 'Otro (texto libre)' },
+                    ].map(t => (
+                      <button
+                        key={t.k}
+                        type="button"
+                        onClick={() => setConfig({ ...config, rewardType: t.k })}
+                        className={`px-2 py-2 rounded-lg border text-xs font-medium transition-colors ${(config.rewardType || 'text') === t.k ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Producto (gratis o a precio especial): buscador sobre el catálogo */}
+                  {(config.rewardType === 'product' || config.rewardType === 'product_discount') && (
+                    <div className="mt-3 space-y-2">
+                      {config.rewardProductId ? (
+                        <div className="flex items-center justify-between bg-primary-50 border border-primary-200 rounded-lg px-3 py-2">
+                          <span className="text-sm font-medium text-gray-900 truncate">{config.rewardProductName}</span>
+                          <button
+                            type="button"
+                            onClick={() => { setConfig({ ...config, rewardProductId: null, rewardProductName: '' }); setBuscaPremio('') }}
+                            className="text-xs text-primary-600 hover:underline flex-shrink-0 ml-2"
+                          >
+                            Cambiar
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="relative">
+                          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          <input
+                            type="text"
+                            value={buscaPremio}
+                            onChange={(e) => setBuscaPremio(e.target.value)}
+                            placeholder={buscandoPremio ? 'Cargando tu catálogo…' : 'Busca el producto del premio…'}
+                            className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                          {buscaPremio.trim() && (productos || []).length > 0 && (
+                            <div className="absolute z-20 mt-1 w-full max-h-44 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg divide-y">
+                              {(productos || []).filter(p => matchesSearchQuery(buscaPremio, p.name)).slice(0, 8).map(p => (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  onMouseDown={(e) => {
+                                    e.preventDefault()
+                                    setConfig({ ...config, rewardProductId: p.id, rewardProductName: p.name || '' })
+                                    setBuscaPremio('')
+                                  }}
+                                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between gap-2"
+                                >
+                                  <span className="truncate">{p.name}</span>
+                                  {p.price != null && <span className="text-xs text-gray-400 flex-shrink-0">S/ {Number(p.price).toFixed(2)}</span>}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {config.rewardType === 'product_discount' && (
+                        <Input
+                          label="Precio especial de canje (S/)"
+                          type="number" min="0.1" step="0.01"
+                          value={config.rewardSpecialPrice}
+                          onChange={(e) => setConfig({ ...config, rewardSpecialPrice: e.target.value })}
+                          placeholder="Lo que paga el cliente al canjear"
+                        />
+                      )}
+                    </div>
+                  )}
+
+                  {/* Descuento en la compra */}
+                  {config.rewardType === 'discount' && (
+                    <div className="mt-3 grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+                        <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+                          {[{ k: 'percent', l: '%' }, { k: 'amount', l: 'S/' }].map(o => (
+                            <button
+                              key={o.k}
+                              type="button"
+                              onClick={() => setConfig({ ...config, rewardDiscountType: o.k })}
+                              className={`flex-1 px-2 py-1.5 text-sm font-medium rounded-md transition-colors ${(config.rewardDiscountType || 'percent') === o.k ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-500'}`}
+                            >
+                              {o.l}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <Input
+                        label={config.rewardDiscountType === 'amount' ? 'Descuento (S/)' : 'Descuento (%)'}
+                        type="number" min="0.1" step="0.01"
+                        value={config.rewardDiscountValue}
+                        onChange={(e) => setConfig({ ...config, rewardDiscountValue: e.target.value })}
+                      />
+                    </div>
+                  )}
+
+                  {/* Texto libre (premios fuera del sistema: "una clase gratis") */}
+                  {(config.rewardType || 'text') === 'text' && (
+                    <div className="mt-3">
+                      <Input
+                        label="Premio"
+                        value={config.reward}
+                        onChange={(e) => setConfig({ ...config, reward: e.target.value })}
+                        placeholder="Ej: 1 pizza mediana gratis"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">
+                        Con texto libre el canje es manual: el sistema descuenta los sellos y el cajero entrega el premio.
+                        Con los otros tipos, el premio se aplica solo a la venta.
+                      </p>
+                    </div>
+                  )}
+
+                  {config.rewardType && config.rewardType !== 'text' && (
+                    <p className="mt-2 text-xs text-gray-500">
+                      En la tarjeta y el POS se mostrará: <span className="font-medium text-gray-700">{rewardLabel(config) || '—'}</span>
+                    </p>
+                  )}
+                </div>
               </div>
             )}
 
@@ -458,7 +694,7 @@ export default function LoyaltyManager({ isOpen, onClose }) {
                     negocio={nombreNegocio}
                     logoUrl={logoUrl}
                     meta={config.goal}
-                    premio={config.reward}
+                    premio={config.rewardType && config.rewardType !== 'text' ? rewardLabel(config) : config.reward}
                     motivo={tema.motivo}
                     sello={tema.sello}
                     grande

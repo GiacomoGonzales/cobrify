@@ -434,6 +434,35 @@ export default function POS() {
   // cliente, hoy", no "este producto siempre". Con 'auto' manda lo configurado.
   //
   // Las bonificaciones se resuelven aparte (afectación 15/30) y no pasan por acá.
+  /**
+   * Una bonificación, en el lenguaje que SUNAT (y nuestro generador de XML)
+   * entiende: NO es una línea de precio 0, es una línea a su VALOR REFERENCIAL
+   * con un descuento del 100%.
+   *
+   * El generador (functions/src/utils/xmlGenerator.js) reconoce la bonificación
+   * cuando `itemDiscount` iguala el total de la línea, y recién ahí la declara
+   * con afectación 15 (Gravado - Bonificaciones), PriceTypeCode 02 y tributo
+   * 9996 (GRA), que es lo que exige el Catálogo 07. Mandarla como precio 0
+   * "a secas" la declaraba como inafecta de valor cero — el caso que SUNAT
+   * rechaza con error 3105 (auditoría 18-ago-2026).
+   *
+   * Sin valor referencial (un producto del catálogo que de verdad vale 0) no
+   * hay nada que declarar como regalo: se deja pasar tal cual, como siempre.
+   */
+  const bonificacionParaSunat = (item) => {
+    if (!item?.isBonificacion) return {}
+    const ref = Number(item.bonificacionRefPrice) || 0
+    const cant = Number(item.quantity) || 0
+    if (ref <= 0 || cant <= 0) return {}
+    return {
+      unitPrice: ref,
+      subtotal: 0,
+      itemDiscount: Number((ref * cant).toFixed(2)),
+      itemDiscountType: 'amount',
+      isBonificacion: true,
+    }
+  }
+
   const resolveItemTaxAffectation = React.useCallback((item) => {
     if (allowManualTaxAffectation && saleTaxMode === 'gravado') return '10'
     if (effectiveTaxConfig.igvExempt) return '20'
@@ -951,6 +980,12 @@ export default function POS() {
   // cobrar y pueda canjear el premio si ya llegó a la meta.
   const [loyaltyCard, setLoyaltyCard] = useState(null)
   const [isRedeeming, setIsRedeeming] = useState(false)
+  // Canje de fidelización CONECTADO a la venta (F1, 17-ago-2026): al tocar
+  // "Canjear", el premio se aplica al carrito o al descuento y queda
+  // PENDIENTE; los sellos se descuentan recién cuando la venta se guarda
+  // (mismo patrón que los certificados de regalo). Antes se descontaban al
+  // toque: una venta cancelada se comía los sellos del cliente.
+  const [loyaltyRedemption, setLoyaltyRedemption] = useState(null) // { type, label, phone, discountType }
   const [sendingWalletCard, setSendingWalletCard] = useState(false)
 
   const [customerData, setCustomerData] = useState({
@@ -1766,6 +1801,9 @@ export default function POS() {
             basePrice: 0,
             total: 0,
             isBonificacion: true,
+            // El plato regalado SÍ tiene valor: se guarda para declararlo a
+            // SUNAT como valor referencial de la bonificación.
+            ...((Number(item.price) || 0) > 0 && { bonificacionRefPrice: Number(item.price) }),
             taxAffectation: '30', // Inafecto (las bonificaciones no gravan IGV)
             name: alreadyLabeled ? item.name : `${item.name} (BONIFICACIÓN)`,
           }
@@ -2473,7 +2511,7 @@ export default function POS() {
         sku: item.sku || item.code || '',
         name: item.name || item.description,
         description: item.description,
-        price: item.unitPrice || item.price,
+        price: item.unitPrice ?? item.price ?? 0,
         // basePrice (PEN) = fuente de verdad multi-divisa. En comprobantes USD
         // se guardó el precio en soles; en PEN cae al propio precio. Necesario
         // para que cambiar de moneda recompute bien (no "baje" los precios).
@@ -2647,7 +2685,7 @@ export default function POS() {
         sku: item.sku || item.code || '',
         name: item.name || item.description,
         description: item.description,
-        price: item.unitPrice || item.price,
+        price: item.unitPrice ?? item.price ?? 0,
         // basePrice (PEN) = fuente de verdad multi-divisa. En comprobantes USD
         // se guardó el precio en soles; en PEN cae al propio precio. Necesario
         // para que cambiar de moneda recompute bien (no "baje" los precios).
@@ -4435,8 +4473,21 @@ export default function POS() {
       return
     }
 
+    // En una bonificación lo tecleado es el VALOR REFERENCIAL de lo que se
+    // regala (lo que SUNAT necesita declarar); la línea se cobra a 0.
     let price = parseFloat(customProduct.price) || 0
+    let bonifRef = 0
     if (customProduct.isBonificacion) {
+      // El valor referencial es OBLIGATORIO: SUNAT necesita saber cuánto vale
+      // lo que se regala para declarar la transferencia gratuita. Sin él la
+      // línea sale con valor 0 y el comprobante REBOTA con error 3105
+      // ("El XML debe contener al menos un tributo por línea"), como pasó con
+      // la boleta BC03-00000018 del 18-ago-2026.
+      if (price <= 0) {
+        toast.error('Indica cuánto vale lo que regalas: SUNAT lo exige como valor referencial')
+        return
+      }
+      bonifRef = price
       price = 0
     } else if (price <= 0) {
       toast.error('El precio debe ser mayor a 0')
@@ -4507,7 +4558,7 @@ export default function POS() {
       ...(effectiveTaxConfig.taxType === 'standard' && customProduct.taxAffectation === '10' && !customProduct.isBonificacion && { igvRate: customIgvRate }),
       stock: null, // Productos personalizados no tienen control de stock
       isCustom: true,
-      ...(customProduct.isBonificacion && { isBonificacion: true }),
+      ...(customProduct.isBonificacion && { isBonificacion: true, ...(bonifRef > 0 && { bonificacionRefPrice: bonifRef }) }),
       // Multi-divisa: PEN exacto del precio para los totales en base (sesión USD)
       ...(customBasePrice != null && customBasePrice > 0 && { basePrice: customBasePrice }),
       // Anclado al dólar cuando se tecleó en $: el USD queda fijo al cambiar el TC
@@ -4814,10 +4865,16 @@ export default function POS() {
   const saveEditedPrice = (itemId) => {
     let newPrice = parseFloat(editingPrice)
 
-    if (isNaN(newPrice) || newPrice <= 0) {
-      toast.error('El precio debe ser mayor a 0')
+    // El 0 SÍ es válido: poner en cero un producto del carrito es regalarlo.
+    // Se convierte en bonificación y el precio que TENÍA queda como valor
+    // referencial para SUNAT (ver bonificacionParaSunat). Antes se rechazaba
+    // con "El precio debe ser mayor a 0" y no había forma de regalar un
+    // producto del catálogo desde el carrito (reporte 18-ago-2026).
+    if (isNaN(newPrice) || newPrice < 0) {
+      toast.error('El precio no puede ser negativo')
       return
     }
+    const esRegalo = newPrice === 0
 
     // Si editó sin IGV, calcular precio con IGV
     if (editingPriceWithoutIgv) {
@@ -4839,7 +4896,32 @@ export default function POS() {
       if (groupIds.has(currentItemId)) {
         // Edición manual: el ítem pasa a precio manual; soltamos el ancla USD para que el
         // recálculo por TC no lo sobreescriba con el priceUSD del catálogo.
-        return { ...item, price: newPrice, basePrice: newBasePrice, fixedPriceUSD: null }
+        const base = { ...item, price: newPrice, basePrice: newBasePrice, fixedPriceUSD: null }
+        const yaEtiquetado = (item.name || '').includes('(BONIFICACIÓN)')
+
+        if (esRegalo) {
+          // Valor referencial = lo que el producto valía antes de regalarlo.
+          // Si ya era bonificación se conserva el que tenía (no se pisa con 0).
+          const ref = Number(item.bonificacionRefPrice) > 0
+            ? Number(item.bonificacionRefPrice)
+            : (Number(item.price) || Number(item.basePrice) || 0)
+          return {
+            ...base,
+            isBonificacion: true,
+            taxAffectation: '30',
+            ...(ref > 0 && { bonificacionRefPrice: ref }),
+            name: yaEtiquetado ? item.name : `${item.name} (BONIFICACIÓN)`,
+          }
+        }
+
+        // Volver a ponerle precio deshace el regalo: se limpia la marca, la
+        // etiqueta del nombre y el valor referencial.
+        if (item.isBonificacion) {
+          const limpio = { ...base, isBonificacion: false, bonificacionRefPrice: null, name: (item.name || '').replace(' (BONIFICACIÓN)', '') }
+          limpio.taxAffectation = businessSettings?.defaultTaxAffectation || '10'
+          return limpio
+        }
+        return base
       }
       return item
     }))
@@ -4847,7 +4929,7 @@ export default function POS() {
     setEditingPriceItemId(null)
     setEditingPrice('')
     setEditingPriceWithoutIgv(false)
-    toast.success('Precio actualizado')
+    toast.success(esRegalo ? 'Producto marcado como bonificación (regalo)' : 'Precio actualizado')
   }
 
   // Actualizar observaciones de un item (IMEI, placa, serie, etc.)
@@ -5006,6 +5088,9 @@ export default function POS() {
     // validar en la proxima venta (el saldo vive en su doc, no aca).
     setAppliedGiftCert(null)
     setGiftCertInput('')
+    // Un canje de fidelidad pendiente muere con la venta abandonada: los
+    // sellos nunca se descontaron, el cliente no pierde nada.
+    setLoyaltyRedemption(null)
     // La afectación elegida vale SOLO para esa venta. Si quedara pegada, la
     // siguiente saldría gravada (o exonerada) sin que nadie lo pidiera, que es
     // justo el error que esta opción existe para evitar.
@@ -5392,6 +5477,12 @@ export default function POS() {
   const aplicarCupon = async () => {
     const codigo = couponInput.trim()
     if (!codigo) return
+    // El descuento global es UNO: si ya lo llena el premio de fidelidad
+    // canjeado, el cupon no puede pisarlo (y viceversa, ver aplicarPremioFidelidad).
+    if (loyaltyRedemption?.type === 'discount') {
+      toast.error('Ya hay un premio de fidelidad aplicado como descuento en esta venta')
+      return
+    }
     setValidatingCoupon(true)
     try {
       const { validateCoupon } = await import('@/services/couponService')
@@ -5436,6 +5527,71 @@ export default function POS() {
     } finally {
       setValidatingGiftCert(false)
     }
+  }
+
+  // ── Canje del premio de fidelización (Clientes > Fidelización) ──
+  // El premio estructurado se APLICA a la venta en curso según su tipo:
+  // producto gratis = línea de bonificación (precio 0, inafecto, mismo riel
+  // que las cortesías); producto a precio especial = línea con ese precio;
+  // descuento = llena el descuento global (mismo riel que el cupón). El
+  // descuento de sellos ocurre después de guardar la venta.
+  const aplicarPremioFidelidad = () => {
+    const cfg = companySettings?.loyaltyConfig || {}
+    const tipo = cfg.rewardType || 'text'
+    const etiqueta = cfg.reward || 'Premio de fidelidad'
+
+    if (tipo === 'product' || tipo === 'product_discount') {
+      const prod = products.find(p => p.id === cfg.rewardProductId)
+      if (!prod) {
+        toast.error('El producto del premio ya no está en el catálogo. Corrígelo en Clientes > Fidelización.')
+        return
+      }
+      const esGratis = tipo === 'product'
+      const precioEspecial = Number(cfg.rewardSpecialPrice) || 0
+      setCart(prev => ([...prev, {
+        ...prod,
+        cartId: `loyalty_${Date.now()}`,
+        quantity: 1,
+        price: esGratis ? 0 : precioEspecial,
+        basePrice: esGratis ? 0 : precioEspecial,
+        ...(esGratis && {
+          isBonificacion: true,
+          taxAffectation: '30',
+          // Valor referencial para SUNAT: lo que el producto cuesta normalmente.
+          ...((Number(prod.price) || 0) > 0 && { bonificacionRefPrice: Number(prod.price) }),
+        }),
+        name: esGratis ? `${prod.name} (BONIFICACIÓN)` : `${prod.name} (PREMIO FIDELIDAD)`,
+        isLoyaltyReward: true,
+      }]))
+    } else if (tipo === 'discount') {
+      if (appliedCoupon) {
+        toast.error('Quita el cupón antes de canjear el descuento del premio')
+        return
+      }
+      if (cfg.rewardDiscountType === 'amount') {
+        handleDiscountAmountChange(String(Number(cfg.rewardDiscountValue) || 0))
+      } else {
+        handleDiscountPercentageChange(String(Number(cfg.rewardDiscountValue) || 0))
+      }
+    }
+
+    setLoyaltyRedemption({
+      type: tipo,
+      label: etiqueta,
+      phone: customerData?.phone || '',
+      discountType: cfg.rewardDiscountType || 'percent',
+    })
+    toast.success('Premio aplicado. Los sellos se descuentan al cobrar la venta.')
+  }
+
+  const cancelarPremioFidelidad = () => {
+    if (!loyaltyRedemption) return
+    if (loyaltyRedemption.type === 'product' || loyaltyRedemption.type === 'product_discount') {
+      setCart(prev => prev.filter(i => !i.isLoyaltyReward))
+    } else if (loyaltyRedemption.type === 'discount') {
+      handleClearDiscount()
+    }
+    setLoyaltyRedemption(null)
   }
 
   const quitarCertificado = () => {
@@ -6305,6 +6461,7 @@ export default function POS() {
           taxAffectation: resolveItemTaxAffectation(item),
           ...(item.observations && { observations: item.observations }),
           ...(item.itemDiscount > 0 && { itemDiscount: item.itemDiscount }),
+          ...bonificacionParaSunat(item),
           ...(item.presentationName && { presentationName: item.presentationName, presentationFactor: item.presentationFactor }),
           ...(item.batchNumber && { batchNumber: item.batchNumber }),
           ...(item.batchExpiryDate && { batchExpiryDate: item.batchExpiryDate }),
@@ -6525,6 +6682,7 @@ export default function POS() {
         ...(resolveItemIgvRate(item) ? { igvRate: resolveItemIgvRate(item) } : {}),
         ...(item.observations && { observations: item.observations }), // Incluir observaciones si existen (IMEI, placa, serie, etc.)
         ...(item.itemDiscount > 0 && { itemDiscount: item.itemDiscount }), // Descuento por ítem para XML SUNAT
+        ...bonificacionParaSunat(item),
         ...(item.notes && { notes: item.notes }), // Incluir notas si existen
         ...(item.presentationName && { presentationName: item.presentationName, presentationFactor: item.presentationFactor }),
         ...(item.batchNumber && { batchNumber: item.batchNumber }),
@@ -7376,6 +7534,40 @@ export default function POS() {
 
             // Incrementar contador de ventas para review prompt
             try { const { incrementSalesCount } = await import('@/components/ReviewPrompt'); incrementSalesCount() } catch (e) { /* ignore */ }
+
+            // 3.0.-1.5. Canje de fidelización PENDIENTE: la venta ya está
+            // guardada, recién ahora se descuentan los sellos (si la venta se
+            // cancelaba antes de cobrar, el cliente no perdía nada). Guardas:
+            // el cliente de la venta debe seguir siendo el del canje, y si el
+            // premio era un producto, su línea debe seguir en el carrito (el
+            // cajero pudo quitarla). Nunca frena la venta: fire-and-forget.
+            if (loyaltyRedemption && companySettings?.loyaltyConfig?.enabled) {
+              try {
+                const mismoCliente = loyaltyRedemption.phone && bgCustomerData?.phone
+                  && loyaltyRedemption.phone === bgCustomerData.phone
+                const esProducto = loyaltyRedemption.type === 'product' || loyaltyRedemption.type === 'product_discount'
+                const premioEnCarrito = !esProducto || cart.some(i => i.isLoyaltyReward)
+                if (mismoCliente && premioEnCarrito) {
+                  const { redeemReward } = await import('@/services/loyaltyService')
+                  const r = await redeemReward(businessId, bgCustomerData.phone, {
+                    userName: user?.displayName || user?.email || '',
+                    note: loyaltyRedemption.label || companySettings.loyaltyConfig.reward || '',
+                  })
+                  if (r.success) {
+                    setLoyaltyCard(prev => (prev ? { ...prev, stamps: r.stamps } : prev))
+                    console.log(`🎁 Canje ejecutado tras la venta. Sellos restantes: ${r.stamps}`)
+                  } else {
+                    console.error('No se pudo descontar los sellos del canje:', r.error)
+                  }
+                } else {
+                  console.warn('Canje de fidelidad descartado: cambió el cliente o se quitó el premio del carrito')
+                }
+              } catch (loyaltyRedeemError) {
+                console.error('Error al ejecutar el canje de fidelidad:', loyaltyRedeemError)
+              } finally {
+                setLoyaltyRedemption(null)
+              }
+            }
 
             // 3.0.-1. Sello de fidelización (Configuración > Ventas > "Programa
             // de fidelización"). La tarjeta se identifica por el TELÉFONO, así
@@ -11009,13 +11201,30 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     <div className={`mt-1.5 p-2 rounded border text-xs ${listo ? 'bg-amber-50 border-amber-300' : 'bg-gray-50 border-gray-200'}`}>
                       <div className="flex items-center justify-between gap-2">
                         <span className={listo ? 'text-amber-800 font-medium' : 'text-gray-600'}>
-                          {listo ? '🎁 Premio disponible' : `Sellos: ${sellos} de ${meta}`}
+                          {loyaltyRedemption ? 'Premio aplicado a esta venta' : listo ? '🎁 Premio disponible' : `Sellos: ${sellos} de ${meta}`}
                         </span>
-                        {listo && (
+                        {loyaltyRedemption ? (
+                          <button
+                            type="button"
+                            onClick={cancelarPremioFidelidad}
+                            className="px-2 py-0.5 rounded border border-amber-400 text-amber-700 font-medium hover:bg-amber-100"
+                          >
+                            Quitar
+                          </button>
+                        ) : listo && (
                           <button
                             type="button"
                             disabled={isRedeeming}
                             onClick={async () => {
+                              const tipoPremio = companySettings.loyaltyConfig.rewardType || 'text'
+                              if (tipoPremio !== 'text') {
+                                // Premio estructurado: se aplica a la venta y los
+                                // sellos se descuentan al cobrar.
+                                aplicarPremioFidelidad()
+                                return
+                              }
+                              // Texto libre: canje manual, se descuenta al toque
+                              // (el premio no vive en el sistema).
                               setIsRedeeming(true)
                               try {
                                 const { redeemReward } = await import('@/services/loyaltyService')
@@ -11039,9 +11248,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           </button>
                         )}
                       </div>
-                      {listo && companySettings.loyaltyConfig.reward && (
+                      {loyaltyRedemption ? (
+                        <p className="text-amber-700 mt-0.5">{loyaltyRedemption.label} — los sellos se descuentan al cobrar</p>
+                      ) : listo && companySettings.loyaltyConfig.reward ? (
                         <p className="text-amber-700 mt-0.5">{companySettings.loyaltyConfig.reward}</p>
-                      )}
+                      ) : null}
                       {/* Mandarle su tarjeta al celular. Solo si ya tiene
                           sellos: una tarjeta en cero no se le ofrece a nadie. */}
                       {sellos > 0 && (
@@ -11356,7 +11567,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                     if (amountModeItemId === itemId) {
                                       setAmountModeValue(val)
                                       const amount = parseFloat(val)
-                                      const price = item.unitPrice || item.price
+                                      const price = item.unitPrice ?? item.price ?? 0
                                       if (!isNaN(amount) && amount > 0 && price > 0) {
                                         setQuantityDirectly(itemId, Math.round((amount / price) * 1000) / 1000)
                                       }
@@ -11392,7 +11603,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                   </button>
                                   <button
                                     onClick={() => {
-                                      const price = item.unitPrice || item.price
+                                      const price = item.unitPrice ?? item.price ?? 0
                                       const qty = parseFloat(item.quantity)
                                       const amount = (!isNaN(qty) && qty > 0 && price > 0) ? Math.round(qty * price * 100) / 100 : ''
                                       setAmountModeItemId(itemId)
@@ -11591,7 +11802,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           max={amounts.subtotal}
                           step="0.01"
                           className="flex-1 min-w-0 px-2 xl:px-3 py-1.5 xl:py-2 text-sm xl:text-base border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                          disabled={lastInvoiceData !== null || !!appliedCoupon}
+                          disabled={lastInvoiceData !== null || !!appliedCoupon || loyaltyRedemption?.type === 'discount'}
                         />
                       </div>
                       <span className="text-xs xl:text-sm text-green-600 font-medium shrink-0">ó</span>
@@ -11605,7 +11816,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           max="100"
                           step="0.01"
                           className="flex-1 min-w-0 px-2 xl:px-3 py-1.5 xl:py-2 text-sm xl:text-base border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                          disabled={lastInvoiceData !== null || !!appliedCoupon}
+                          disabled={lastInvoiceData !== null || !!appliedCoupon || loyaltyRedemption?.type === 'discount'}
                         />
                         <span className="text-xs xl:text-sm text-green-700 font-medium shrink-0">%</span>
                       </div>
@@ -12366,18 +12577,25 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             />
           </div>
 
-          {/* Bonificación - solo para notas de venta */}
-          {documentType === 'nota_venta' && (
+          {/* Bonificación. Disponible en TODO comprobante: el generador de XML
+              la declara con afectación 15 (Catálogo 07) usando el valor
+              referencial, que es como SUNAT pide las transferencias gratuitas.
+              Antes estaba limitada a notas de venta porque la línea viajaba
+              como inafecta de valor 0 y podía rebotar (auditoría 18-ago-2026). */}
+          {(
             <label className="flex items-center gap-3 p-3 bg-green-50 rounded-lg cursor-pointer hover:bg-green-100 transition-colors">
               <input
                 type="checkbox"
                 checked={customProduct.isBonificacion || false}
-                onChange={e => setCustomProduct({ ...customProduct, isBonificacion: e.target.checked, ...(e.target.checked ? { price: '0', taxAffectation: '30' } : {}) })}
+                onChange={e => setCustomProduct({ ...customProduct, isBonificacion: e.target.checked, ...(e.target.checked ? { taxAffectation: '30' } : {}) })}
                 className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
               />
               <div>
                 <span className="text-sm font-medium text-gray-700">Bonificación (gratis)</span>
-                <p className="text-xs text-gray-500 mt-0.5">Producto sin costo para el cliente</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  El cliente no paga esta línea, pero <strong>el precio de arriba es obligatorio</strong>:
+                  es el valor de lo que regalas y SUNAT lo exige para declarar la transferencia gratuita.
+                </p>
               </div>
             </label>
           )}
