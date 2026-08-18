@@ -301,7 +301,13 @@ export default function Inventory() {
     notes: '',
     batchNumber: '',
     expirationDate: '',
-    serials: ''
+    serials: '',
+    // Cuál variante se produce. El servicio de producción SIEMPRE soportó
+    // variantes (variantIndex/variantSku → updateVariantWarehouseStock, con
+    // reversión incluida); lo que faltaba era pedirla acá, así que producir un
+    // producto con variantes sumaba al stock del padre y las variantes
+    // quedaban intactas (reporte 18-ago-2026). '' = aún sin elegir.
+    variantIndex: ''
   })
   const [isProcessingProduction, setIsProcessingProduction] = useState(false)
   const [productionRecipeInfo, setProductionRecipeInfo] = useState(null)
@@ -1051,7 +1057,9 @@ export default function Inventory() {
       notes: '',
       batchNumber: '',
       expirationDate: '',
-      serials: ''
+      serials: '',
+      // Con una sola variante no se pregunta: se elige sola.
+      variantIndex: (product?.hasVariants && product.variants?.length === 1) ? 0 : ''
     })
     setShowProductionModal(true)
 
@@ -1145,6 +1153,17 @@ export default function Inventory() {
       return
     }
 
+    // Con variantes hay que decir CUÁL se produce: el stock vive en cada
+    // variante, no en el padre. Sin esto la producción engordaba el total del
+    // producto y ninguna variante subía.
+    const tieneVariantes = productionProduct.hasVariants && (productionProduct.variants || []).length > 0
+    if (tieneVariantes && productionData.variantIndex === '') {
+      toast.error('Elige qué variante estás produciendo')
+      return
+    }
+    const variantIndex = tieneVariantes ? Number(productionData.variantIndex) : null
+    const variantElegida = variantIndex != null ? productionProduct.variants[variantIndex] : null
+
     // Lote/vencimiento y series (solo productos sin variantes que los manejan)
     // El lote/vencimiento solo aplica si el control de lotes está habilitado globalmente
     // (farmacia o la preferencia "Control de Lotes y Vencimientos"); si está desactivado,
@@ -1200,6 +1219,7 @@ export default function Inventory() {
         notes: productionData.notes,
         userId: user.uid,
         product: productionProduct,
+        ...(variantIndex != null && { variantIndex, variantSku: variantElegida?.sku || '' }),
         ...(tracksBatch && { batchNumber: productionData.batchNumber.trim(), expirationDate: productionData.expirationDate }),
         ...(tracksSerials && { serials: serialsList }),
       }
@@ -4708,6 +4728,32 @@ export default function Inventory() {
                     </option>
                   ))}
               </Select>
+
+              {/* Variante a producir. El stock de un producto con variantes vive
+                  en cada variante, así que hay que decir cuál se está fabricando.
+                  Muestra el stock actual de cada una para no producir a ciegas. */}
+              {productionProduct?.hasVariants && (productionProduct.variants || []).length > 0 && (
+                <Select
+                  label="Variante a producir"
+                  required
+                  value={productionData.variantIndex}
+                  onChange={(e) => setProductionData({ ...productionData, variantIndex: e.target.value })}
+                >
+                  <option value="">Seleccionar variante</option>
+                  {productionProduct.variants.map((v, idx) => {
+                    const attrs = v.attributes
+                      ? Object.values(v.attributes).filter(Boolean).join(' / ')
+                      : ''
+                    const etiqueta = attrs || v.sku || `Variante ${idx + 1}`
+                    const stockVar = Number(v.stock) || 0
+                    return (
+                      <option key={v.sku || idx} value={idx}>
+                        {etiqueta}{v.sku ? ` (${v.sku})` : ''} — stock: {stockVar}
+                      </option>
+                    )
+                  })}
+                </Select>
+              )}
 
               <Input
                 label="Cantidad a producir"

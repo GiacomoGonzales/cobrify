@@ -226,6 +226,10 @@ export default {
           text: 'Antes de ejecutar te avisa si **alcanzan los insumos**, así no arrancas una producción que se va a quedar a medias. También te muestra el costo de esa producción, calculado desde la receta.',
         },
         {
+          type: 'texto',
+          text: 'Si el producto tiene **variantes** (tallas, colores, sabores), el modal te pide **cuál estás produciendo** y te muestra el stock actual de cada una. Es obligatorio elegirla: el stock vive en cada variante, no en el producto general, así que las unidades terminadas se suman a la variante que fabricaste.',
+        },
+        {
           type: 'consejo',
           text: 'Es la forma de que el inventario refleje lo que realmente pasa en cocina: sin registrar la producción, los insumos figuran completos y el producto terminado en cero.',
         },
