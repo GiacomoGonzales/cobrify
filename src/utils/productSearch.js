@@ -67,7 +67,7 @@ export function buildProductHaystack(product, opts = {}) {
   // 4 dígitos del motor no aparecían).
   const serialTokens = Array.isArray(product.serials)
     ? product.serials.flatMap(sn => (sn && sn.status === 'available' && sn.serialNumber)
-        ? [sn.serialNumber, sinGuiones(sn.serialNumber)]
+        ? [sn.serialNumber, sinGuiones(sn.serialNumber), sn.serialNumber2, sinGuiones(sn.serialNumber2)]
         : [])
     : []
 

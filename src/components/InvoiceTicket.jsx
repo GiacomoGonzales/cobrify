@@ -982,6 +982,9 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
                 {item.serialNumber && (
                   <div className="item-code">S/N: {item.serialNumber}</div>
                 )}
+                {item.serialNumber2 && (
+                  <div className="item-code">{companySettings?.secondSerialLabel || 'N° 2'}: {item.serialNumber2}</div>
+                )}
                 {itemObservations && (
                   <div className="item-code">{itemObservations}</div>
                 )}

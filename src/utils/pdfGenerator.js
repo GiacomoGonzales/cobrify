@@ -1491,9 +1491,13 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       existing.quantity += qty
       existing.itemDiscount = (existing.itemDiscount || 0) + (it.itemDiscount || 0)
       existing.serialNumbers.push(it.serialNumber)
+      existing.serialNumbers2.push(it.serialNumber2 || '')
     } else {
-      const grouped = { ...it, serialNumbers: [it.serialNumber] }
+      // serialNumbers2 va ALINEADO por posicion con serialNumbers (la unidad
+      // i tiene serie i y secundario i); vacio cuando la unidad no lo tiene.
+      const grouped = { ...it, serialNumbers: [it.serialNumber], serialNumbers2: [it.serialNumber2 || ''] }
       delete grouped.serialNumber
+      delete grouped.serialNumber2
       serialGroupMap.set(key, grouped)
       items.push(grouped)
     }
@@ -1719,9 +1723,17 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     // Línea(s) de número de serie (productos con trackSerials)
     // Soporta múltiples series agrupadas (serialNumbers: array) o una sola (serialNumber: string)
     let serialLines = []
-    const serialText = (Array.isArray(item.serialNumbers) && item.serialNumbers.length > 0)
+    // Numero secundario de la unidad (motor de moto, 2do IMEI): con etiqueta
+    // configurable por negocio (secondSerialLabel; p.ej. "N MOTOR").
+    const etiqueta2 = companySettings?.secondSerialLabel || 'N° 2'
+    const seconds = Array.isArray(item.serialNumbers2) ? item.serialNumbers2.filter(Boolean) : []
+    let serialText = (Array.isArray(item.serialNumbers) && item.serialNumbers.length > 0)
       ? `S/N: ${item.serialNumbers.join(', ')}`
       : (item.serialNumber ? `S/N: ${item.serialNumber}` : null)
+    if (serialText && (seconds.length > 0 || item.serialNumber2)) {
+      const lista2 = seconds.length > 0 ? seconds.join(', ') : item.serialNumber2
+      serialText += `  |  ${etiqueta2}: ${lista2}`
+    }
     if (serialText) {
       doc.setFontSize(7)
       serialLines = doc.splitTextToSize(serialText, descWidth)

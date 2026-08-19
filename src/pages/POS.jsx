@@ -2528,6 +2528,7 @@ export default function POS() {
         ...(item.batchNumber && { batchNumber: item.batchNumber }),
         ...(item.batchExpiryDate && { batchExpiryDate: item.batchExpiryDate }),
         ...(item.serialNumber && { serialNumber: item.serialNumber }),
+        ...(item.serialNumber2 && { serialNumber2: item.serialNumber2 }),
         ...(item.isVariant && { isVariant: true, variantSku: item.variantSku, variantAttributes: item.variantAttributes }),
         ...(item.modifiers && { modifiers: item.modifiers }),
         // Mantener referencia a datos originales
@@ -2702,6 +2703,7 @@ export default function POS() {
         ...(item.batchNumber && { batchNumber: item.batchNumber }),
         ...(item.batchExpiryDate && { batchExpiryDate: item.batchExpiryDate }),
         ...(item.serialNumber && { serialNumber: item.serialNumber }),
+        ...(item.serialNumber2 && { serialNumber2: item.serialNumber2 }),
         ...(item.isVariant && { isVariant: true, variantSku: item.variantSku, variantAttributes: item.variantAttributes }),
         ...(item.modifiers && { modifiers: item.modifiers }),
       }))
@@ -3945,6 +3947,9 @@ export default function POS() {
       quantity: 1,
       cartId: `${product.id}-serial-${serial.serialNumber}`,
       serialNumber: serial.serialNumber,
+      // Numero secundario de la unidad (motor de moto, 2do IMEI, codigo de
+      // fabrica). Viaja junto a la serie hasta el comprobante.
+      ...(serial.serialNumber2 && { serialNumber2: serial.serialNumber2 }),
       serialId: serial.id,
       // Si es Sin lote, limpiar batchNumber del producto
       ...(batchToUse?.isNoLot && {
@@ -6466,6 +6471,7 @@ export default function POS() {
           ...(item.batchNumber && { batchNumber: item.batchNumber }),
           ...(item.batchExpiryDate && { batchExpiryDate: item.batchExpiryDate }),
           ...(item.serialNumber && { serialNumber: item.serialNumber }),
+        ...(item.serialNumber2 && { serialNumber2: item.serialNumber2 }),
           ...(item.modifiers && { modifiers: item.modifiers }),
           ...(item.laboratoryName && { laboratoryName: item.laboratoryName }),
           ...(item.marca && { marca: item.marca }),
@@ -6688,6 +6694,7 @@ export default function POS() {
         ...(item.batchNumber && { batchNumber: item.batchNumber }),
         ...(item.batchExpiryDate && { batchExpiryDate: item.batchExpiryDate }),
         ...(item.serialNumber && { serialNumber: item.serialNumber }),
+        ...(item.serialNumber2 && { serialNumber2: item.serialNumber2 }),
         ...(item.isVariant && { isVariant: true, variantSku: item.variantSku, variantAttributes: item.variantAttributes }),
         ...(item.laboratoryName && { laboratoryName: item.laboratoryName }),
         ...(item.marca && { marca: item.marca }),
@@ -8134,6 +8141,7 @@ export default function POS() {
                       userId: bgUserUid,
                       ...(item.batchNumber && { batchNumber: item.batchNumber }),
                       ...(item.serialNumber && { serialNumber: item.serialNumber }),
+        ...(item.serialNumber2 && { serialNumber2: item.serialNumber2 }),
                       ...(item.variantSku && { variantSku: item.variantSku }),
                       notes: noteParts.join(' - '),
                       createdAt: _mts(),
@@ -13167,6 +13175,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       <div className="flex-1 flex items-center justify-between gap-2">
                         <div className="min-w-0">
                           <p className="font-medium text-gray-900 truncate">{serial.serialNumber}</p>
+                          {serial.serialNumber2 && (
+                            <p className="text-xs text-gray-500 truncate">{serial.serialNumber2}</p>
+                          )}
                           {serial.variantSku && (
                             <p className="text-xs text-gray-500">Variante: {serial.variantSku}</p>
                           )}
@@ -13587,6 +13598,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 // Presentación elegida (CAJA, PACK, ...): el ticket la antepone con showItemUnit
                 ...(item.presentationName && { presentationName: item.presentationName, presentationFactor: item.presentationFactor }),
                 ...(item.serialNumber && { serialNumber: item.serialNumber }),
+        ...(item.serialNumber2 && { serialNumber2: item.serialNumber2 }),
               })),
               series: lastInvoiceData.series,
               number: lastInvoiceData.number,
