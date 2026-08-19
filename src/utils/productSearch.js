@@ -60,6 +60,17 @@ export function buildProductHaystack(product, opts = {}) {
     ? product.presentations.map(p => p?.name)
     : []
 
+  // Números de serie DISPONIBLES: quien vende motos, celulares o electro
+  // busca la unidad por su serie (o por los últimos dígitos del motor/IMEI).
+  // Solo las disponibles: una serie vendida ya no debe traer el producto al
+  // teclearla en el POS (reporte 18-ago-2026: motos buscadas por los últimos
+  // 4 dígitos del motor no aparecían).
+  const serialTokens = Array.isArray(product.serials)
+    ? product.serials.flatMap(sn => (sn && sn.status === 'available' && sn.serialNumber)
+        ? [sn.serialNumber, sinGuiones(sn.serialNumber)]
+        : [])
+    : []
+
   return buildSearchHaystack(
     product.name,
     product.description,
@@ -83,6 +94,7 @@ export function buildProductHaystack(product, opts = {}) {
     ...extraCodes,
     ...variantTokens,
     ...presentationTokens,
+    ...serialTokens,
   )
 }
 
