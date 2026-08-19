@@ -5,7 +5,7 @@ import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign
 import JsBarcode from 'jsbarcode'
 import jsPDF from 'jspdf'
 import { Capacitor } from '@capacitor/core'
-import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
+import { scanBarcode, scannerDisponible } from '@/utils/scanBarcode'
 import { Camera as CapacitorCamera, CameraResultType, CameraSource } from '@capacitor/camera'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
@@ -2091,8 +2091,7 @@ export default function Products() {
 
   // Función para escanear código de barras
   const handleScanBarcode = async () => {
-    const isNativePlatform = Capacitor.isNativePlatform()
-    if (!isNativePlatform) {
+    if (!scannerDisponible()) {
       toast.info('El escáner de código de barras solo está disponible en la app móvil')
       return
     }
@@ -2100,48 +2099,14 @@ export default function Products() {
     setIsScanningBarcode(true)
 
     try {
-      // Verificar si el módulo de Google Barcode Scanner está disponible (solo Android)
-      if (Capacitor.getPlatform() === 'android') {
-        const { available } = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable()
-        if (!available) {
-          toast.info('Instalando módulo de escáner... Por favor espera')
-          await BarcodeScanner.installGoogleBarcodeScannerModule()
-          toast.success('Módulo instalado. Intenta escanear de nuevo.')
-          setIsScanningBarcode(false)
-          return
-        }
-      }
-
-      // Verificar y solicitar permisos de cámara
-      const { camera } = await BarcodeScanner.checkPermissions()
-
-      if (camera !== 'granted') {
-        const { camera: newPermission } = await BarcodeScanner.requestPermissions()
-        if (newPermission !== 'granted') {
-          toast.error('Se requiere permiso de cámara para escanear códigos')
-          setIsScanningBarcode(false)
-          return
-        }
-      }
-
-      // Escanear código de barras
-      const { barcodes } = await BarcodeScanner.scan()
-      await BarcodeScanner.stopScan().catch(() => {})
-
-      if (barcodes && barcodes.length > 0) {
-        const scannedCode = barcodes[0].rawValue
-        console.log('Código escaneado:', scannedCode)
-
-        // Establecer el código en el formulario
+      const scannedCode = await scanBarcode({ avisar: toast })
+      if (scannedCode) {
         setValue('code', scannedCode)
         toast.success(`Código escaneado: ${scannedCode}`)
       }
     } catch (error) {
       console.error('Error al escanear:', error)
-      await BarcodeScanner.stopScan().catch(() => {})
-      if (error.message !== 'User cancelled the scan') {
-        toast.error('Error al escanear el código de barras')
-      }
+      toast.error(error.message || 'Error al escanear el código de barras')
     } finally {
       setIsScanningBarcode(false)
     }
@@ -2169,40 +2134,17 @@ export default function Products() {
   }
 
   const handleScanExtraBarcode = async () => {
-    if (!Capacitor.isNativePlatform()) {
+    if (!scannerDisponible()) {
       toast.info('El escáner solo está disponible en la app móvil')
       return
     }
     setIsScanningExtraBarcode(true)
     try {
-      if (Capacitor.getPlatform() === 'android') {
-        const { available } = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable()
-        if (!available) {
-          toast.info('Instalando módulo de escáner... Por favor espera')
-          await BarcodeScanner.installGoogleBarcodeScannerModule()
-          toast.success('Módulo instalado. Intenta escanear de nuevo.')
-          return
-        }
-      }
-      const { camera } = await BarcodeScanner.checkPermissions()
-      if (camera !== 'granted') {
-        const { camera: newPermission } = await BarcodeScanner.requestPermissions()
-        if (newPermission !== 'granted') {
-          toast.error('Se requiere permiso de cámara para escanear')
-          return
-        }
-      }
-      const { barcodes } = await BarcodeScanner.scan()
-      await BarcodeScanner.stopScan().catch(() => {})
-      if (barcodes && barcodes.length > 0) {
-        addExtraBarcode(barcodes[0].rawValue)
-      }
+      const code = await scanBarcode({ avisar: toast })
+      if (code) addExtraBarcode(code)
     } catch (error) {
       console.error('Error al escanear código adicional:', error)
-      await BarcodeScanner.stopScan().catch(() => {})
-      if (error.message !== 'User cancelled the scan') {
-        toast.error('Error al escanear el código de barras')
-      }
+      toast.error(error.message || 'Error al escanear el código de barras')
     } finally {
       setIsScanningExtraBarcode(false)
     }
@@ -2210,8 +2152,7 @@ export default function Products() {
 
   // Función para escanear código de barras en la búsqueda
   const handleScanSearch = async () => {
-    const isNativePlatform = Capacitor.isNativePlatform()
-    if (!isNativePlatform) {
+    if (!scannerDisponible()) {
       toast.info('El escáner de código de barras solo está disponible en la app móvil')
       return
     }
@@ -2219,36 +2160,9 @@ export default function Products() {
     setIsScanningSearch(true)
 
     try {
-      // Verificar si el módulo de Google Barcode Scanner está disponible (solo Android)
-      if (Capacitor.getPlatform() === 'android') {
-        const { available } = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable()
-        if (!available) {
-          toast.info('Instalando módulo de escáner... Por favor espera')
-          await BarcodeScanner.installGoogleBarcodeScannerModule()
-          toast.success('Módulo instalado. Intenta escanear de nuevo.')
-          setIsScanningSearch(false)
-          return
-        }
-      }
+      const scannedCode = await scanBarcode({ avisar: toast })
 
-      // Verificar y solicitar permisos de cámara
-      const { camera } = await BarcodeScanner.checkPermissions()
-
-      if (camera !== 'granted') {
-        const { camera: newPermission } = await BarcodeScanner.requestPermissions()
-        if (newPermission !== 'granted') {
-          toast.error('Se requiere permiso de cámara para escanear códigos')
-          setIsScanningSearch(false)
-          return
-        }
-      }
-
-      // Escanear código de barras
-      const { barcodes } = await BarcodeScanner.scan()
-      await BarcodeScanner.stopScan().catch(() => {})
-
-      if (barcodes && barcodes.length > 0) {
-        const scannedCode = barcodes[0].rawValue
+      if (scannedCode) {
 
         // Buscar el producto con ese código (incluye códigos alternativos)
         const foundProduct = products.find(p =>
@@ -2267,10 +2181,7 @@ export default function Products() {
       }
     } catch (error) {
       console.error('Error al escanear:', error)
-      await BarcodeScanner.stopScan().catch(() => {})
-      if (error.message !== 'User cancelled the scan') {
-        toast.error('Error al escanear el código de barras')
-      }
+      toast.error(error.message || 'Error al escanear el código de barras')
     } finally {
       setIsScanningSearch(false)
     }

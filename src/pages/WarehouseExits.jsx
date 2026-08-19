@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, Fragment } from 'react'
 import { ArrowUpFromLine, Plus, Search, Loader2, Trash2, Package, Calendar, User, MapPin, ScanBarcode, ChevronDown, ChevronUp, HardHat, Download, FileText, PackageMinus, BarChart3, FileSpreadsheet } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
+import { scanBarcode, scannerDisponible } from '@/utils/scanBarcode'
 import Card, { CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
@@ -437,24 +438,14 @@ export default function WarehouseExits() {
   }
 
   const handleScanBarcode = async () => {
-    if (!Capacitor.isNativePlatform()) {
+    if (!scannerDisponible()) {
       toast.info('El escáner solo está disponible en la app móvil')
       return
     }
     try {
-      const { BarcodeScanner } = await import('@capacitor-mlkit/barcode-scanning')
-      if (Capacitor.getPlatform() === 'android') {
-        const { available } = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable()
-        if (!available) await BarcodeScanner.installGoogleBarcodeScannerModule()
-      }
-      const { camera } = await BarcodeScanner.checkPermissions()
-      if (camera !== 'granted') await BarcodeScanner.requestPermissions()
+      const code = await scanBarcode({ avisar: toast })
 
-      const { barcodes } = await BarcodeScanner.scan()
-      await BarcodeScanner.stopScan().catch(() => {})
-
-      if (barcodes?.length > 0) {
-        const code = barcodes[0].rawValue
+      if (code) {
         const found = products.find(p =>
           p.code === code ||
           p.barcode === code ||
@@ -470,7 +461,7 @@ export default function WarehouseExits() {
       }
     } catch (error) {
       console.error('Error scanner:', error)
-      toast.error('Error al escanear')
+      toast.error(error.message || 'Error al escanear')
     }
   }
 

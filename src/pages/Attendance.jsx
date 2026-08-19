@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
+import { scanBarcode } from '@/utils/scanBarcode'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 import { QRCodeSVG } from 'qrcode.react'
@@ -406,100 +407,9 @@ export default function Attendance() {
     navigator.geolocation.getCurrentPosition(onPos, onErr, { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 })
   })
 
-  // Espera a que el módulo Google Barcode Scanner esté instalado.
-  // installGoogleBarcodeScannerModule() solo dispara el download — si llamamos
-  // scan() antes de que termine, la app CRASHEA. Hay que escuchar el evento de
-  // progreso y esperar a state COMPLETED.
-  const ensureBarcodeModule = async (BarcodeScanner) => {
-    try {
-      const { available } = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable()
-      if (available) return true
-    } catch { /* fallthrough */ }
-
-    toast.info('Instalando módulo de escaneo (puede tardar unos segundos)…', 5000)
-
-    return await new Promise((resolve) => {
-      let listenerHandle = null
-      let settled = false
-      const settle = (ok) => {
-        if (settled) return
-        settled = true
-        try { listenerHandle?.remove?.() } catch { /* no-op */ }
-        resolve(ok)
-      }
-
-      // Timeout de seguridad: 60s para conexiones lentas
-      const timeoutId = setTimeout(() => {
-        toast.error('La instalación del módulo demoró demasiado. Intenta de nuevo con buena señal.', 5000)
-        settle(false)
-      }, 60000)
-
-      try {
-        // Listener de progreso. Cuando state === 4 (COMPLETED) seguimos.
-        BarcodeScanner.addListener('googleBarcodeScannerModuleInstallProgress', (info) => {
-          // info.state: 1=PENDING, 2=DOWNLOADING, 3=CANCELED, 4=COMPLETED, 5=FAILED, 6=INSTALLING, 7=DOWNLOAD_PAUSED
-          if (info.state === 4) {
-            clearTimeout(timeoutId)
-            toast.success('Módulo instalado, escaneando…')
-            settle(true)
-          } else if (info.state === 3 || info.state === 5) {
-            clearTimeout(timeoutId)
-            toast.error('La instalación del módulo de escaneo falló. Verifica tu conexión.', 5000)
-            settle(false)
-          }
-        }).then((h) => { listenerHandle = h })
-
-        // Disparar el download (no bloquea)
-        BarcodeScanner.installGoogleBarcodeScannerModule().catch(() => {
-          clearTimeout(timeoutId)
-          toast.error('No se pudo iniciar la instalación del módulo de escaneo.', 5000)
-          settle(false)
-        })
-      } catch (err) {
-        clearTimeout(timeoutId)
-        console.error('Error al instalar módulo Barcode Scanner:', err)
-        settle(false)
-      }
-    })
-  }
-
-  const scanQrNative = async () => {
-    const { BarcodeScanner } = await import('@capacitor-mlkit/barcode-scanning')
-
-    // 1. Permiso de cámara primero (necesario incluso para preparar la cámara)
-    const { camera } = await BarcodeScanner.checkPermissions()
-    if (camera !== 'granted') {
-      const { camera: n } = await BarcodeScanner.requestPermissions()
-      if (n !== 'granted') throw new Error('Se necesita permiso de cámara')
-    }
-
-    // 2. Asegurar que el módulo Google Barcode Scanner esté listo (evita crash).
-    //    Solo aplica en Android: en iOS el módulo viene bundled con el plugin
-    //    vía CocoaPods, no se instala en runtime — llamar a las APIs de
-    //    install/available en iOS rechaza con "Not implemented" y muestra
-    //    toasts de error falsos al usuario.
-    if (Capacitor.getPlatform() === 'android') {
-      const moduleReady = await ensureBarcodeModule(BarcodeScanner)
-      if (!moduleReady) {
-        throw new Error('El módulo de escaneo no está disponible. Reintenta en unos segundos.')
-      }
-    }
-
-    // 3. Escanear con manejo de errores
-    let scanResult
-    try {
-      scanResult = await BarcodeScanner.scan()
-    } catch (err) {
-      console.error('Error en BarcodeScanner.scan():', err)
-      throw new Error(err?.message || 'No se pudo abrir la cámara para escanear')
-    } finally {
-      await BarcodeScanner.stopScan().catch(() => {})
-    }
-
-    const { barcodes } = scanResult || {}
-    if (!barcodes || barcodes.length === 0) throw new Error('No se detectó ningún QR')
-    return barcodes[0].rawValue
-  }
+  // El escaneo con camara vive en src/utils/scanBarcode.js (la espera del
+  // modulo de Android, permisos y stopScan estan resueltos ahi una sola vez).
+  const scanQrNative = async () => scanBarcode({ avisar: toast })
 
   const handleMark = async () => {
     if (marking || scanningRef.current) return
@@ -515,6 +425,7 @@ export default function Attendance() {
       if (isNative) {
         try {
           qrContent = await scanQrNative()
+          if (!qrContent) return // cerró la cámara sin escanear
         } catch (e) {
           toast.error(e.message || 'Error al escanear')
           return

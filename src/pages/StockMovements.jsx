@@ -16,7 +16,7 @@ import {
   Cog,
 } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
-import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
+import { scanBarcode, scannerDisponible } from '@/utils/scanBarcode'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
@@ -611,42 +611,16 @@ export default function StockMovements() {
 
   // Escanear código de barras
   const handleScanBarcode = async () => {
-    // Solo disponible en plataformas nativas
-    if (!Capacitor.isNativePlatform()) {
+    if (!scannerDisponible()) {
       toast.error('El escáner solo está disponible en la app móvil')
       return
     }
 
     setIsScanning(true)
     try {
-      // Verificar si el módulo de Google Barcode Scanner está disponible (solo Android)
-      if (Capacitor.getPlatform() === 'android') {
-        const { available } = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable()
-        if (!available) {
-          toast.info('Instalando módulo de escáner... Por favor espera')
-          await BarcodeScanner.installGoogleBarcodeScannerModule()
-          toast.success('Módulo instalado. Intenta escanear de nuevo.')
-          setIsScanning(false)
-          return
-        }
-      }
+      const scannedCode = await scanBarcode({ avisar: toast })
 
-      // Verificar permisos de cámara
-      const { camera } = await BarcodeScanner.checkPermissions()
-      if (camera !== 'granted') {
-        const { camera: newPermission } = await BarcodeScanner.requestPermissions()
-        if (newPermission !== 'granted') {
-          toast.error('Se requiere permiso de cámara para escanear')
-          return
-        }
-      }
-
-      // Escanear código de barras
-      const { barcodes } = await BarcodeScanner.scan()
-      await BarcodeScanner.stopScan().catch(() => {})
-
-      if (barcodes && barcodes.length > 0) {
-        const scannedCode = barcodes[0].rawValue
+      if (scannedCode) {
         // Buscar si hay un producto con ese código (incluye códigos alternativos)
         const foundProduct = products.find(p =>
           p.code === scannedCode ||
@@ -664,10 +638,7 @@ export default function StockMovements() {
       }
     } catch (error) {
       console.error('Error al escanear:', error)
-      await BarcodeScanner.stopScan().catch(() => {})
-      if (error.message !== 'scan canceled') {
-        toast.error('Error al escanear código de barras')
-      }
+      toast.error(error.message || 'Error al escanear código de barras')
     } finally {
       setIsScanning(false)
     }
