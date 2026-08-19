@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -67,9 +68,17 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
 
     <!-- Bluetooth Permissions for Thermal Printer -->
-    <!-- For Android 11 and below -->
-    <uses-permission android:name="android.permission.BLUETOOTH" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <!-- El plugin @capacitor-community/bluetooth-le declara estos dos con
+         maxSdkVersion="30" y el fusionador de manifiestos aplica el tope aunque
+         aca se declaren sin el. Resultado: en Android 12+ el APK salia SIN el
+         permiso BLUETOOTH clasico, y la libreria de la ticketera (RT/EdrDriver)
+         lo exige igual al abrir el socket -> SecurityException en su propio
+         hilo, que tumba la app entera. tools:remove borra ese tope.
+         Es un permiso "normal": se otorga solo, sin preguntarle al usuario. -->
+    <uses-permission android:name="android.permission.BLUETOOTH"
+        tools:remove="android:maxSdkVersion" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
+        tools:remove="android:maxSdkVersion" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 

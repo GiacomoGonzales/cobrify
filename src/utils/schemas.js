@@ -46,6 +46,9 @@ export const customerSchema = z.object({
   studentSchedule: z.string().optional().or(z.literal('')),
   // Campo para placa de vehículo (venta de baterías, autopartes, etc.)
   vehiclePlate: z.string().optional().or(z.literal('')),
+  // Documentos del conductor/vehículo (transporte: licencia y tarjeta de propiedad)
+  licenseNumber: z.string().optional().or(z.literal('')),
+  propertyCard: z.string().optional().or(z.literal('')),
   // Campos para mascota (veterinarias) - legacy (single pet)
   petName: z.string().optional().or(z.literal('')),
   petSpecies: z.string().optional().or(z.literal('')),

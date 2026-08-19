@@ -1002,6 +1002,8 @@ export default function POS() {
     vehiclePlate: '', // Placa de vehículo
     vehicleModel: '', // Modelo de vehículo
     vehicleYear: '', // Año de vehículo
+    licenseNumber: '', // N° de licencia del cliente
+    propertyCard: '', // Tarjeta de propiedad del vehículo
     // Campos para transporte de carga
     originAddress: '', // Dirección de origen
     destinationAddress: '', // Dirección de destino
@@ -1639,7 +1641,7 @@ export default function POS() {
       holdCurrentSale()
     }
     setCart(sale.cart || [])
-    setCustomerData(sale.customerData || { documentType: ID_TYPES.DNI, documentNumber: '', name: '', businessName: '', address: '', email: '', phone: '', studentName: '', studentSchedule: '', petName: '', vehiclePlate: '', vehicleModel: '', vehicleYear: '', originAddress: '', destinationAddress: '', tripDetail: '', serviceReferenceValue: '', effectiveLoadValue: '', usefulLoadValue: '', bankAccount: '', detractionPercentage: '', detractionAmount: '', goodsServiceCode: '' })
+    setCustomerData(sale.customerData || { documentType: ID_TYPES.DNI, documentNumber: '', name: '', businessName: '', address: '', email: '', phone: '', studentName: '', studentSchedule: '', petName: '', vehiclePlate: '', vehicleModel: '', vehicleYear: '', licenseNumber: '', propertyCard: '', originAddress: '', destinationAddress: '', tripDetail: '', serviceReferenceValue: '', effectiveLoadValue: '', usefulLoadValue: '', bankAccount: '', detractionPercentage: '', detractionAmount: '', goodsServiceCode: '' })
     setSelectedCustomer(sale.selectedCustomer || null)
     setDocumentType(sale.documentType || companySettings?.defaultDocumentType || 'boleta')
     setPayments(sale.payments || [{ method: getDefaultPaymentMethod(), amount: '' }])
@@ -2243,6 +2245,8 @@ export default function POS() {
           vehiclePlate: customer.vehiclePlate || '',
           vehicleModel: customer.vehicleModel || '',
           vehicleYear: customer.vehicleYear || '',
+          licenseNumber: customer.licenseNumber || '',
+          propertyCard: customer.propertyCard || '',
           originAddress: customer.originAddress || '',
           destinationAddress: customer.destinationAddress || '',
           tripDetail: customer.tripDetail || '',
@@ -2492,6 +2496,8 @@ export default function POS() {
         vehiclePlate: invoice.customer?.vehiclePlate || '',
         vehicleModel: invoice.customer?.vehicleModel || '',
         vehicleYear: invoice.customer?.vehicleYear || '',
+        licenseNumber: invoice.customer?.licenseNumber || '',
+        propertyCard: invoice.customer?.propertyCard || '',
         originAddress: invoice.customer?.originAddress || '',
         destinationAddress: invoice.customer?.destinationAddress || '',
         tripDetail: invoice.customer?.tripDetail || '',
@@ -2670,6 +2676,8 @@ export default function POS() {
         vehiclePlate: invoice.customer?.vehiclePlate || '',
         vehicleModel: invoice.customer?.vehicleModel || '',
         vehicleYear: invoice.customer?.vehicleYear || '',
+        licenseNumber: invoice.customer?.licenseNumber || '',
+        propertyCard: invoice.customer?.propertyCard || '',
         originAddress: invoice.customer?.originAddress || '',
         destinationAddress: invoice.customer?.destinationAddress || '',
         tripDetail: invoice.customer?.tripDetail || '',
@@ -5102,7 +5110,7 @@ export default function POS() {
       petName: '',
       vehiclePlate: '',
       vehicleModel: '',
-      vehicleYear: '',
+      vehicleYear: '', licenseNumber: '', propertyCard: '',
       // Campos de transporte de carga
       originAddress: '',
       destinationAddress: '',
@@ -5242,6 +5250,8 @@ export default function POS() {
               vehiclePlate: existingCustomer.vehiclePlate || prev.vehiclePlate || '',
               vehicleModel: existingCustomer.vehicleModel || prev.vehicleModel || '',
               vehicleYear: existingCustomer.vehicleYear || prev.vehicleYear || '',
+              licenseNumber: existingCustomer.licenseNumber || prev.licenseNumber || '',
+              propertyCard: existingCustomer.propertyCard || prev.propertyCard || '',
               // Veterinaria: traer la mascota del cliente local (si la tiene).
               petName: getPrimaryPet(existingCustomer)?.name || existingCustomer.petName || prev.petName || '',
             }),
@@ -5263,6 +5273,8 @@ export default function POS() {
               vehiclePlate: existingCustomer.vehiclePlate || prev.vehiclePlate || '',
               vehicleModel: existingCustomer.vehicleModel || prev.vehicleModel || '',
               vehicleYear: existingCustomer.vehicleYear || prev.vehicleYear || '',
+              licenseNumber: existingCustomer.licenseNumber || prev.licenseNumber || '',
+              propertyCard: existingCustomer.propertyCard || prev.propertyCard || '',
               // Veterinaria: traer la mascota del cliente local (si la tiene).
               petName: getPrimaryPet(existingCustomer)?.name || existingCustomer.petName || prev.petName || '',
             }),
@@ -5291,6 +5303,8 @@ export default function POS() {
             vehiclePlate: existingCustomer.vehiclePlate || prev.vehiclePlate || '',
             vehicleModel: existingCustomer.vehicleModel || prev.vehicleModel || '',
             vehicleYear: existingCustomer.vehicleYear || prev.vehicleYear || '',
+              licenseNumber: existingCustomer.licenseNumber || prev.licenseNumber || '',
+              propertyCard: existingCustomer.propertyCard || prev.propertyCard || '',
           }))
           toast.success(`Cliente registrado encontrado: ${existingCustomer.name || existingCustomer.businessName}`)
         } else {
@@ -6497,6 +6511,8 @@ export default function POS() {
                 vehiclePlate: customerData.vehiclePlate || '',
                 vehicleModel: customerData.vehicleModel || '',
                 vehicleYear: customerData.vehicleYear || '',
+                licenseNumber: customerData.licenseNumber || '',
+                propertyCard: customerData.propertyCard || '',
                 // Campos de transporte de carga
                 originAddress: customerData.originAddress || '',
                 destinationAddress: customerData.destinationAddress || '',
@@ -6523,6 +6539,8 @@ export default function POS() {
                 vehiclePlate: customerData.vehiclePlate || '',
                 vehicleModel: customerData.vehicleModel || '',
                 vehicleYear: customerData.vehicleYear || '',
+                licenseNumber: customerData.licenseNumber || '',
+                propertyCard: customerData.propertyCard || '',
                 // Campos de transporte de carga
                 originAddress: customerData.originAddress || '',
                 destinationAddress: customerData.destinationAddress || '',
@@ -6608,7 +6626,7 @@ export default function POS() {
           petName: '',
           vehiclePlate: '',
           vehicleModel: '',
-          vehicleYear: '',
+          vehicleYear: '', licenseNumber: '', propertyCard: '',
           // Campos de transporte de carga
           originAddress: '',
           destinationAddress: '',
@@ -6780,6 +6798,8 @@ export default function POS() {
               vehiclePlate: customerData.vehiclePlate || '',
               vehicleModel: customerData.vehicleModel || '',
               vehicleYear: customerData.vehicleYear || '',
+                licenseNumber: customerData.licenseNumber || '',
+                propertyCard: customerData.propertyCard || '',
               // Campos de transporte de carga
               originAddress: customerData.originAddress || '',
               destinationAddress: customerData.destinationAddress || '',
@@ -6806,6 +6826,8 @@ export default function POS() {
               vehiclePlate: customerData.vehiclePlate || '',
               vehicleModel: customerData.vehicleModel || '',
               vehicleYear: customerData.vehicleYear || '',
+                licenseNumber: customerData.licenseNumber || '',
+                propertyCard: customerData.propertyCard || '',
               // Campos de transporte de carga
               originAddress: customerData.originAddress || '',
               destinationAddress: customerData.destinationAddress || '',
@@ -10415,6 +10437,24 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     )}
+                    {companySettings?.posCustomFields?.showLicenseNumberField && (
+                      <input
+                        type="text"
+                        value={customerData.licenseNumber}
+                        onChange={e => setCustomerData({ ...customerData, licenseNumber: e.target.value.toUpperCase() })}
+                        placeholder="N° de Licencia"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    )}
+                    {companySettings?.posCustomFields?.showPropertyCardField && (
+                      <input
+                        type="text"
+                        value={customerData.propertyCard}
+                        onChange={e => setCustomerData({ ...customerData, propertyCard: e.target.value.toUpperCase() })}
+                        placeholder="Tarjeta de Propiedad"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    )}
 
                     {/* Forma de Pago (bloque compartido con boleta: formaPagoCreditoBlock) */}
                     <div className="mt-2 pt-2 border-t border-gray-200">
@@ -10964,6 +11004,24 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     )}
+                    {companySettings?.posCustomFields?.showLicenseNumberField && (
+                      <input
+                        type="text"
+                        value={customerData.licenseNumber}
+                        onChange={e => setCustomerData({ ...customerData, licenseNumber: e.target.value.toUpperCase() })}
+                        placeholder="N° de Licencia"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    )}
+                    {companySettings?.posCustomFields?.showPropertyCardField && (
+                      <input
+                        type="text"
+                        value={customerData.propertyCard}
+                        onChange={e => setCustomerData({ ...customerData, propertyCard: e.target.value.toUpperCase() })}
+                        placeholder="Tarjeta de Propiedad"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    )}
 
                     <input
                       type="text"
@@ -11163,6 +11221,24 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         value={customerData.vehicleYear}
                         onChange={e => setCustomerData({ ...customerData, vehicleYear: e.target.value.replace(/\D/g, '').slice(0, 4) })}
                         placeholder="Año de Vehículo (opcional)"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    )}
+                    {companySettings?.posCustomFields?.showLicenseNumberField && (
+                      <input
+                        type="text"
+                        value={customerData.licenseNumber}
+                        onChange={e => setCustomerData({ ...customerData, licenseNumber: e.target.value.toUpperCase() })}
+                        placeholder="N° de Licencia (opcional)"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    )}
+                    {companySettings?.posCustomFields?.showPropertyCardField && (
+                      <input
+                        type="text"
+                        value={customerData.propertyCard}
+                        onChange={e => setCustomerData({ ...customerData, propertyCard: e.target.value.toUpperCase() })}
+                        placeholder="Tarjeta de Propiedad (opcional)"
                         className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     )}

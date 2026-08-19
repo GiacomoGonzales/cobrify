@@ -405,8 +405,15 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
 function appendItemsDetailSheet(wb, invoices, businessData, branchLabel) {
   if (!invoices || invoices.length === 0) return
 
+  // Documentos del cliente (licencia / tarjeta de propiedad): son columnas
+  // OPCIONALES, salen solo si el negocio activó esos campos en Configuración.
+  const conLicencia = businessData?.posCustomFields?.showLicenseNumberField === true
+  const conTarjeta = businessData?.posCustomFields?.showPropertyCardField === true
+
   const headers = [
     'N° Comprobante', 'Fecha', 'Tipo', 'Cliente',
+    ...(conLicencia ? ['N° Licencia'] : []),
+    ...(conTarjeta ? ['T. Propiedad'] : []),
     'Producto', 'SKU', 'Cantidad', 'Precio Unit.',
     'Descuento', 'Subtotal Item', 'Afectación IGV',
   ]
@@ -435,6 +442,8 @@ function appendItemsDetailSheet(wb, invoices, businessData, branchLabel) {
     if (!Array.isArray(inv.items)) continue
     const invDate = fmtInvoiceDate(inv)
     const customerName = inv.customer?.name || inv.customer?.businessName || 'Cliente General'
+    const licencia = String(inv.customer?.licenseNumber || '').toUpperCase()
+    const tarjeta = String(inv.customer?.propertyCard || '').toUpperCase()
     const tipo = typeNames[inv.documentType] || 'Boleta'
     // Montos en SOLES (TC congelado del doc) para poder totalizar sin mezclar monedas
     const rate = getDocumentRate(inv)
@@ -448,6 +457,8 @@ function appendItemsDetailSheet(wb, invoices, businessData, branchLabel) {
       totalAmount += sub
       aoa.push([
         inv.number || 'N/A', invDate, tipo, customerName,
+        ...(conLicencia ? [licencia] : []),
+        ...(conTarjeta ? [tarjeta] : []),
         item.name || item.description || 'Producto', item.sku || item.code || '',
         Number(qty), Number(price.toFixed(2)),
         Number(disc.toFixed(2)), Number(sub.toFixed(2)), afect,
@@ -459,32 +470,37 @@ function appendItemsDetailSheet(wb, invoices, businessData, branchLabel) {
   if (rowCount === 0) return
   aoa.push([])
   const totalRowIdx = aoa.length
-  aoa.push(['', '', '', '', '', 'TOTALES', Number(totalQty), '', '', Number(totalAmount.toFixed(2)), ''])
+  const relleno = ['', '', '', '', ...(conLicencia ? [''] : []), ...(conTarjeta ? [''] : []), '']
+  aoa.push([...relleno, 'TOTALES', Number(totalQty), '', '', Number(totalAmount.toFixed(2)), ''])
 
   const ws = XLSX.utils.aoa_to_sheet(aoa)
-  applyColumnWidths(ws, [14, 12, 14, 28, 36, 14, 10, 12, 12, 14, 14])
+  applyColumnWidths(ws, [14, 12, 14, 28, ...(conLicencia ? [16] : []), ...(conTarjeta ? [16] : []), 36, 14, 10, 12, 12, 14, 14])
   applyTitleRow(ws, 0, totalCols)
   applyMetadataRows(ws, metaStart, metaEnd)
   applyHeaderRow(ws, headerRow, totalCols)
+  // Cuántas columnas opcionales se insertaron después de Cliente: todo lo que
+  // viene a su derecha se corre por igual.
+  const ex = (conLicencia ? 1 : 0) + (conTarjeta ? 1 : 0)
   for (let i = 0; i < rowCount; i++) {
     const r = dataStart + i
     setStyle(ws, r, 0, centerStyle(i))
     setStyle(ws, r, 1, centerStyle(i))
     setStyle(ws, r, 2, centerStyle(i))
     setStyle(ws, r, 3, cellStyle(i))
-    setStyle(ws, r, 4, cellStyle(i))
-    setStyle(ws, r, 5, centerStyle(i))
-    setStyle(ws, r, 6, numberStyle(i))
-    setStyle(ws, r, 7, numberStyle(i))
-    setStyle(ws, r, 8, numberStyle(i))
-    setStyle(ws, r, 9, numberStyle(i))
-    setStyle(ws, r, 10, centerStyle(i))
+    for (let c = 0; c < ex; c++) setStyle(ws, r, 4 + c, centerStyle(i))
+    setStyle(ws, r, 4 + ex, cellStyle(i))
+    setStyle(ws, r, 5 + ex, centerStyle(i))
+    setStyle(ws, r, 6 + ex, numberStyle(i))
+    setStyle(ws, r, 7 + ex, numberStyle(i))
+    setStyle(ws, r, 8 + ex, numberStyle(i))
+    setStyle(ws, r, 9 + ex, numberStyle(i))
+    setStyle(ws, r, 10 + ex, centerStyle(i))
   }
-  for (let c = 0; c <= 5; c++) setStyle(ws, totalRowIdx, c, totalLabelStyle)
-  setStyle(ws, totalRowIdx, 6, totalNumberStyle)
-  for (let c = 7; c <= 8; c++) setStyle(ws, totalRowIdx, c, totalLabelStyle)
-  setStyle(ws, totalRowIdx, 9, totalNumberStyle)
-  setStyle(ws, totalRowIdx, 10, totalLabelStyle)
+  for (let c = 0; c <= 5 + ex; c++) setStyle(ws, totalRowIdx, c, totalLabelStyle)
+  setStyle(ws, totalRowIdx, 6 + ex, totalNumberStyle)
+  for (let c = 7 + ex; c <= 8 + ex; c++) setStyle(ws, totalRowIdx, c, totalLabelStyle)
+  setStyle(ws, totalRowIdx, 9 + ex, totalNumberStyle)
+  setStyle(ws, totalRowIdx, 10 + ex, totalLabelStyle)
   applyFreezeBelow(ws, headerRow)
   XLSX.utils.book_append_sheet(wb, ws, 'Items Detallados')
 }

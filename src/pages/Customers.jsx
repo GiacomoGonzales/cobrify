@@ -865,6 +865,8 @@ export default function Customers() {
       studentName: customer.studentName || '',
       studentSchedule: customer.studentSchedule || '',
       vehiclePlate: customer.vehiclePlate || '',
+      licenseNumber: customer.licenseNumber || '',
+      propertyCard: customer.propertyCard || '',
       priceLevel: customer.priceLevel || null,
       subscriptionPlan: customer.subscriptionPlan || '',
       subscriptionPrice: customer.subscriptionPrice || '',
@@ -1111,6 +1113,8 @@ export default function Customers() {
         customer.studentName,
         customer.studentSchedule,
         customer.vehiclePlate,
+        customer.licenseNumber,
+        customer.propertyCard,
         customer.subscriptionPlan
       ))
     }
@@ -1624,6 +1628,12 @@ export default function Customers() {
                   {businessSettings?.posCustomFields?.showVehiclePlateField && (
                     <TableHead className="text-xs py-2">Placa</TableHead>
                   )}
+                  {businessSettings?.posCustomFields?.showLicenseNumberField && (
+                    <TableHead className="text-xs py-2">Licencia</TableHead>
+                  )}
+                  {businessSettings?.posCustomFields?.showPropertyCardField && (
+                    <TableHead className="text-xs py-2">T. Propiedad</TableHead>
+                  )}
                   {businessMode === 'veterinary' && (
                     <TableHead className="text-xs py-2">Mascotas</TableHead>
                   )}
@@ -1691,6 +1701,16 @@ export default function Customers() {
                     {businessSettings?.posCustomFields?.showVehiclePlateField && (
                       <TableCell className="py-1.5">
                         <p className="text-xs font-medium uppercase">{customer.vehiclePlate || '-'}</p>
+                      </TableCell>
+                    )}
+                    {businessSettings?.posCustomFields?.showLicenseNumberField && (
+                      <TableCell className="py-1.5">
+                        <p className="text-xs font-medium uppercase">{customer.licenseNumber || '-'}</p>
+                      </TableCell>
+                    )}
+                    {businessSettings?.posCustomFields?.showPropertyCardField && (
+                      <TableCell className="py-1.5">
+                        <p className="text-xs font-medium uppercase">{customer.propertyCard || '-'}</p>
                       </TableCell>
                     )}
                     {businessMode === 'veterinary' && (
@@ -1977,6 +1997,26 @@ export default function Customers() {
               placeholder="Ej: ABC-123"
               error={errors.vehiclePlate?.message}
               {...register('vehiclePlate')}
+              className="uppercase"
+            />
+          )}
+
+          {/* Documentos del conductor/vehículo - solo si están habilitados */}
+          {businessSettings?.posCustomFields?.showLicenseNumberField && (
+            <Input
+              label="N° de Licencia"
+              placeholder="Ej: Q12345678"
+              error={errors.licenseNumber?.message}
+              {...register('licenseNumber')}
+              className="uppercase"
+            />
+          )}
+          {businessSettings?.posCustomFields?.showPropertyCardField && (
+            <Input
+              label="Tarjeta de Propiedad"
+              placeholder="N° de la tarjeta de propiedad"
+              error={errors.propertyCard?.message}
+              {...register('propertyCard')}
               className="uppercase"
             />
           )}

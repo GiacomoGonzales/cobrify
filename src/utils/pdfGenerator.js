@@ -1226,6 +1226,24 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     leftY += dataLineHeight
   }
 
+  // N° de Licencia
+  if (companySettings?.posCustomFields?.showLicenseNumberField && invoice.customer?.licenseNumber) {
+    doc.setFont('helvetica', 'bold')
+    doc.text('LICENCIA:', colLeftX, leftY)
+    doc.setFont('helvetica', 'normal')
+    doc.text(String(invoice.customer.licenseNumber).toUpperCase(), leftValueX, leftY)
+    leftY += dataLineHeight
+  }
+
+  // Tarjeta de Propiedad
+  if (companySettings?.posCustomFields?.showPropertyCardField && invoice.customer?.propertyCard) {
+    doc.setFont('helvetica', 'bold')
+    doc.text('T. PROPIEDAD:', colLeftX, leftY)
+    doc.setFont('helvetica', 'normal')
+    doc.text(String(invoice.customer.propertyCard).toUpperCase(), leftValueX, leftY)
+    leftY += dataLineHeight
+  }
+
   // Vendedor (si existe)
   if (invoice.sellerName) {
     doc.setFont('helvetica', 'bold')

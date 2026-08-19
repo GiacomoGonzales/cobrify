@@ -4238,7 +4238,7 @@ Gracias por tu preferencia.`
                 {viewingInvoice.customer?.address && (
                   <p className="text-sm text-gray-500">{viewingInvoice.customer.address}</p>
                 )}
-                {(viewingInvoice.customer?.vehiclePlate || viewingInvoice.customer?.vehicleModel || viewingInvoice.customer?.vehicleYear || viewingInvoice.customer?.studentName) && (
+                {(viewingInvoice.customer?.vehiclePlate || viewingInvoice.customer?.vehicleModel || viewingInvoice.customer?.vehicleYear || viewingInvoice.customer?.studentName || viewingInvoice.customer?.licenseNumber || viewingInvoice.customer?.propertyCard) && (
                   <div className="flex flex-wrap gap-4 pt-2 border-t border-gray-100 text-sm">
                     {viewingInvoice.customer?.vehiclePlate && (
                       <span className="text-gray-600"><strong>Placa:</strong> {viewingInvoice.customer.vehiclePlate}</span>
@@ -4248,6 +4248,12 @@ Gracias por tu preferencia.`
                     )}
                     {viewingInvoice.customer?.vehicleYear && (
                       <span className="text-gray-600"><strong>Año:</strong> {viewingInvoice.customer.vehicleYear}</span>
+                    )}
+                    {viewingInvoice.customer?.licenseNumber && (
+                      <span className="text-gray-600"><strong>Licencia:</strong> {viewingInvoice.customer.licenseNumber}</span>
+                    )}
+                    {viewingInvoice.customer?.propertyCard && (
+                      <span className="text-gray-600"><strong>T. Propiedad:</strong> {viewingInvoice.customer.propertyCard}</span>
                     )}
                     {viewingInvoice.customer?.studentName && (
                       <span className="text-gray-600"><strong>Alumno:</strong> {viewingInvoice.customer.studentName}</span>
