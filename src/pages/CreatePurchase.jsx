@@ -707,6 +707,18 @@ export default function CreatePurchase() {
     setPurchaseItems(newItems)
   }
 
+  // Numero secundario de la unidad (motor de moto, 2do IMEI). Array PARALELO
+  // a serialNumbers, alineado por posicion: la unidad i tiene serie i y
+  // secundario i. Opcional: puede quedar vacio.
+  const updateSerialNumber2 = (itemIndex, serialIndex, value) => {
+    const newItems = [...purchaseItems]
+    const serials2 = [...(newItems[itemIndex].serialNumbers2 || [])]
+    while (serials2.length <= serialIndex) serials2.push('')
+    serials2[serialIndex] = value
+    newItems[itemIndex].serialNumbers2 = serials2
+    setPurchaseItems(newItems)
+  }
+
   // Actualizar costo con IGV y calcular sin IGV
   const updateCostWithIGV = (index, value) => {
     const newItems = [...purchaseItems]
@@ -2242,11 +2254,13 @@ export default function CreatePurchase() {
             const currentSerials = product.serials || []
             const newSerials = []
             itemsWithSerials.forEach(item => {
-              item.serialNumbers.forEach(sn => {
+              item.serialNumbers.forEach((sn, snIdx) => {
                 if (sn.trim()) {
+                  const sn2 = (item.serialNumbers2?.[snIdx] || '').trim()
                   newSerials.push({
                     id: `serial-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                     serialNumber: sn.trim(),
+                    ...(sn2 && { serialNumber2: sn2 }),
                     status: 'available',
                     warehouseId: selectedWarehouse?.id || null,
                     purchaseId: resultId || null,
@@ -3518,14 +3532,22 @@ export default function CreatePurchase() {
                           <span className="text-xs font-medium text-amber-700 mt-1.5 whitespace-nowrap">N° de Serie:</span>
                           <div className="flex flex-wrap gap-1.5">
                             {item.serialNumbers.map((sn, snIdx) => (
-                              <input
-                                key={snIdx}
-                                type="text"
-                                placeholder={`Serie ${snIdx + 1}`}
-                                value={sn}
-                                onChange={e => updateSerialNumber(index, snIdx, e.target.value)}
-                                className="w-36 px-2 py-1 text-sm border border-amber-300 bg-white rounded focus:outline-none focus:ring-1 focus:ring-amber-500"
-                              />
+                              <div key={snIdx} className="flex gap-1">
+                                <input
+                                  type="text"
+                                  placeholder={`Serie ${snIdx + 1}`}
+                                  value={sn}
+                                  onChange={e => updateSerialNumber(index, snIdx, e.target.value)}
+                                  className="w-36 px-2 py-1 text-sm border border-amber-300 bg-white rounded focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                />
+                                <input
+                                  type="text"
+                                  placeholder="N° motor / 2do (opc.)"
+                                  value={item.serialNumbers2?.[snIdx] || ''}
+                                  onChange={e => updateSerialNumber2(index, snIdx, e.target.value)}
+                                  className="w-36 px-2 py-1 text-sm border border-amber-200 bg-white/70 rounded focus:outline-none focus:ring-1 focus:ring-amber-400"
+                                />
+                              </div>
                             ))}
                           </div>
                         </div>
@@ -3816,14 +3838,22 @@ export default function CreatePurchase() {
                     <label className="block text-xs text-amber-700 font-medium mb-1">N° de Serie</label>
                     <div className="grid grid-cols-2 gap-1.5">
                       {item.serialNumbers.map((sn, snIdx) => (
-                        <input
-                          key={snIdx}
-                          type="text"
-                          placeholder={`Serie ${snIdx + 1}`}
-                          value={sn}
-                          onChange={e => updateSerialNumber(index, snIdx, e.target.value)}
-                          className="w-full px-2 py-1.5 text-sm border border-amber-300 bg-amber-50/30 rounded focus:outline-none focus:ring-1 focus:ring-amber-500"
-                        />
+                        <div key={snIdx} className="grid grid-cols-2 gap-1.5">
+                          <input
+                            type="text"
+                            placeholder={`Serie ${snIdx + 1}`}
+                            value={sn}
+                            onChange={e => updateSerialNumber(index, snIdx, e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm border border-amber-300 bg-amber-50/30 rounded focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          />
+                          <input
+                            type="text"
+                            placeholder="N° motor / 2do (opc.)"
+                            value={item.serialNumbers2?.[snIdx] || ''}
+                            onChange={e => updateSerialNumber2(index, snIdx, e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm border border-amber-200 bg-white rounded focus:outline-none focus:ring-1 focus:ring-amber-400"
+                          />
+                        </div>
                       ))}
                     </div>
                   </div>

@@ -86,7 +86,7 @@ export default {
         },
         {
           type: 'texto',
-          text: 'Para productos con control de lotes, cada línea admite su **N° Lote** y su **F. Vencimiento**. Para los que llevan serie, puedes cargar los **N° de Serie** de cada unidad. En farmacia también está el campo de **Registro Sanitario**.',
+          text: 'Para productos con control de lotes, cada línea admite su **N° Lote** y su **F. Vencimiento**. Para los que llevan serie, puedes cargar los **N° de Serie** de cada unidad, y junto a cada serie un **número secundario opcional** (el N° de motor de una moto, el segundo IMEI de un celular): viaja con la unidad, sale en el comprobante al venderla y también se puede buscar en el POS. En farmacia también está el campo de **Registro Sanitario**.',
         },
       ],
     },
