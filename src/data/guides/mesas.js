@@ -104,6 +104,38 @@ export default {
 
     // ─────────────────────────────────────────────────────────────────────
     {
+      id: 'cliente-de-la-mesa',
+      title: 'Identificar al cliente desde la mesa',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Esta opción aparece solo si tienes activo el **programa de sellos** (Clientes → Fidelización). Con el programa apagado, la mesa se ve como siempre.',
+        },
+        {
+          type: 'texto',
+          text: 'En la mesa ocupada, la línea **Cliente** te deja pegarle un comensal a la cuenta sin esperar a la caja. El mozo toca **Escanear tarjeta**, apunta al QR de la tarjeta de sellos que el cliente tiene en el celular, y listo.',
+        },
+        {
+          type: 'texto',
+          text: 'El QR lleva el celular del cliente, que es la llave de todo el sistema: se trae su ficha (con su documento, si lo tiene registrado) y se ve al instante cómo va su tarjeta — "7 de 10 sellos" o "Premio disponible". Es información útil para el mozo en ese momento, cuando todavía puede ofrecerle algo.',
+        },
+        {
+          type: 'texto',
+          text: 'Al cerrar la cuenta, el Punto de Venta trae los datos ya cargados y **el sello se suma solo**: nadie vuelve a pedir el número en la caja, con la cola esperando.',
+        },
+        {
+          type: 'consejo',
+          text: 'Si el cliente no tiene la tarjeta a mano, puedes escribir su celular y buscarlo igual. Y si el número todavía no está registrado, se asigna con su nombre y queda listo para la boleta.',
+        },
+        {
+          type: 'ojo',
+          text: 'El escaneo con cámara funciona en la **app instalada**. Desde el navegador el botón te deja escribir el celular a mano.',
+        },
+      ],
+    },
+
+    // ─────────────────────────────────────────────────────────────────────
+    {
       id: 'reservas',
       title: 'Reservar una mesa',
       blocks: [

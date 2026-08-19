@@ -80,7 +80,7 @@ import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo }
 import { Capacitor } from '@capacitor/core'
 import { Share } from '@capacitor/share'
 import { Filesystem, Directory } from '@capacitor/filesystem'
-import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
+import { scanBarcode, scannerDisponible } from '@/utils/scanBarcode'
 import { getDoc, doc, Timestamp, collection, query, where, getDocs, limit as fsLimit, updateDoc } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { db, storage } from '@/lib/firebase'
@@ -3576,8 +3576,7 @@ export default function POS() {
       return
     }
 
-    const isNativePlatform = Capacitor.isNativePlatform()
-    if (!isNativePlatform) {
+    if (!scannerDisponible()) {
       toast.info('El escáner de código de barras solo está disponible en la app móvil')
       return
     }
@@ -3585,37 +3584,9 @@ export default function POS() {
     setIsScanning(true)
 
     try {
-      // Verificar si el módulo de Google Barcode Scanner está disponible (solo Android)
-      if (Capacitor.getPlatform() === 'android') {
-        const { available } = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable()
-        if (!available) {
-          toast.info('Instalando módulo de escáner... Por favor espera')
-          await BarcodeScanner.installGoogleBarcodeScannerModule()
-          toast.success('Módulo instalado. Intenta escanear de nuevo.')
-          setIsScanning(false)
-          return
-        }
-      }
+      const scannedCode = await scanBarcode({ avisar: toast })
 
-      // Verificar y solicitar permisos de cámara
-      const { camera } = await BarcodeScanner.checkPermissions()
-
-      if (camera !== 'granted') {
-        const { camera: newPermission } = await BarcodeScanner.requestPermissions()
-        if (newPermission !== 'granted') {
-          toast.error('Se requiere permiso de cámara para escanear códigos')
-          setIsScanning(false)
-          return
-        }
-      }
-
-      // Escanear código de barras
-      const { barcodes } = await BarcodeScanner.scan()
-      await BarcodeScanner.stopScan().catch(() => {})
-
-      if (barcodes && barcodes.length > 0) {
-        const scannedCode = barcodes[0].rawValue
-        console.log('Código escaneado:', scannedCode)
+      if (scannedCode) {
 
         // 1) Buscar producto por código de barras / SKU del producto padre
         //    Incluye `barcodes[]` (códigos adicionales para el mismo producto).
@@ -3674,10 +3645,7 @@ export default function POS() {
       }
     } catch (error) {
       console.error('Error al escanear:', error)
-      await BarcodeScanner.stopScan().catch(() => {})
-      if (error.message !== 'User cancelled the scan') {
-        toast.error('Error al escanear el código de barras')
-      }
+      toast.error(error.message || 'Error al escanear el código de barras')
     } finally {
       setIsScanning(false)
     }
@@ -5896,6 +5864,33 @@ export default function POS() {
     }
   }, [notaVentaCreditTermsOn])
 
+  // Índice de búsqueda de clientes: se arma UNA vez por cambio de cartera, no
+  // en cada tecla. Mismo motor que la página de Clientes (buildSearchHaystack
+  // + matchesPrebuilt): multi-palabra, sin tildes, insensible a mayúsculas.
+  //
+  // El CELULAR entra en tres formas porque cada quien lo guarda distinto: tal
+  // como está en la ficha ("987 654 321"), solo dígitos (para quien lo teclea
+  // de corrido) y con prefijo 51 (para quien pega un número de WhatsApp).
+  // Es la vía más rápida de encontrar a un cliente de fidelización: ahí el
+  // teléfono ES la llave de su tarjeta.
+  const customerSearchIndex = React.useMemo(() => {
+    const map = new Map()
+    for (const c of customers) {
+      const digitos = String(c.phone || '').replace(/\D/g, '')
+      map.set(c.id, buildSearchHaystack(
+        c.name,
+        c.businessName,
+        c.documentNumber,
+        c.phone,
+        digitos,
+        digitos.length === 9 ? `51${digitos}` : '',
+        // Colegios: encontrar al apoderado por el nombre del alumno
+        c.studentName
+      ))
+    }
+    return map
+  }, [customers])
+
   // Filtrar clientes (optimizado con useMemo)
   const filteredCustomers = React.useMemo(() => {
     if (!customerSearchTerm) return []
@@ -5906,18 +5901,9 @@ export default function POS() {
         ? c.documentNumber?.length === 11
         : true
 
-      // Filtrar según búsqueda
-      const searchLower = customerSearchTerm.toLowerCase()
-      const matchesSearch =
-        c.name?.toLowerCase().includes(searchLower) ||
-        c.businessName?.toLowerCase().includes(searchLower) ||
-        c.documentNumber?.includes(customerSearchTerm) ||
-        // Colegios: buscar al apoderado por el nombre del alumno
-        (showStudentField && c.studentName?.toLowerCase().includes(searchLower))
-
-      return matchesDocType && matchesSearch
+      return matchesDocType && matchesPrebuilt(customerSearchTerm, customerSearchIndex.get(c.id) || '')
     })
-  }, [customers, customerSearchTerm, documentType, showStudentField])
+  }, [customers, customerSearchTerm, documentType, customerSearchIndex])
 
   // Actualizar método de pago
   const handlePaymentMethodChange = (index, method) => {
@@ -10164,7 +10150,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           setShowCustomerDropdown(true)
                         }}
                         onFocus={() => setShowCustomerDropdown(true)}
-                        placeholder="Buscar cliente registrado..."
+                        placeholder="Buscar por nombre, documento o celular..."
                         className="w-full pl-8 pr-8 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                       {(customerSearchTerm || selectedCustomer) && (
@@ -10228,7 +10214,12 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                               className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0"
                             >
                               <p className="font-medium text-gray-900 truncate">{customer.name || customer.businessName}</p>
-                              <p className="text-xs text-gray-500">{customer.documentNumber}</p>
+                              {/* El celular se muestra junto al documento: si se
+                                  buscó por número, es lo que confirma que este
+                                  es el cliente (y no un homónimo). */}
+                              <p className="text-xs text-gray-500 truncate">
+                                {[customer.documentNumber, customer.phone].filter(Boolean).join(' · ')}
+                              </p>
                               {showStudentField && customer.studentName && (
                                 <p className="text-xs text-primary-600 truncate">Alumno: {customer.studentName}</p>
                               )}

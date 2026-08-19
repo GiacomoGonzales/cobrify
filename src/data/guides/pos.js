@@ -307,7 +307,7 @@ export default {
         {
           type: 'pasos',
           items: [
-            'Si el cliente ya compró antes, escríbelo en **Buscar cliente registrado...** y selecciónalo: sus datos se completan solos.',
+            'Si el cliente ya compró antes, búscalo por **nombre, documento o celular** y selecciónalo: sus datos se completan solos. El celular lo encuentra escrito como sea (con espacios, de corrido o con el 51 delante), y es la forma más rápida de ubicar a un cliente de la tarjeta de sellos, porque su teléfono es la llave de la tarjeta.',
             'Si es nuevo, escribe su **RUC** o **DNI** y toca la lupa: el sistema consulta el padrón y trae el nombre o razón social automáticamente.',
             'Para boletas simples puedes cobrar sin datos del cliente.',
           ],

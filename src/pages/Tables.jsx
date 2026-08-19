@@ -17,6 +17,7 @@ import SplitTableModal from '@/components/restaurant/SplitTableModal'
 import PreBillPreviewModal from '@/components/restaurant/PreBillPreviewModal'
 import IndividualPaymentModal from '@/components/restaurant/IndividualPaymentModal'
 import CloseTableModal from '@/components/restaurant/CloseTableModal'
+import OrderCustomerModal from '@/components/restaurant/OrderCustomerModal'
 import KitchenTicket from '@/components/KitchenTicket'
 import { useReactToPrint } from 'react-to-print'
 import { printPreBill, printAllSplitPreBills } from '@/utils/printPreBill'
@@ -111,6 +112,7 @@ export default function Tables() {
 
   // Estado para impresión de comanda web
   const [companySettings, setCompanySettings] = useState(null)
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false)
   const [orderToPrint, setOrderToPrint] = useState(null)
   const [webPrintLegible, setWebPrintLegible] = useState(false)
   const [ticketFontSize, setTicketFontSize] = useState('small')
@@ -1196,6 +1198,46 @@ export default function Tables() {
     }
   }
 
+  /**
+   * Guardar (o quitar) el cliente de la orden de la mesa.
+   *
+   * Estos son los mismos campos que el POS ya lee al cobrar la orden, así que
+   * con esto el cajero no vuelve a pedir los datos y el sello de fidelidad se
+   * suma solo al cerrar la cuenta.
+   */
+  const handleAssignCustomer = async (datos) => {
+    if (!selectedOrder?.id) return
+    if (isDemoMode) {
+      toast.error('No disponible en modo demo')
+      return
+    }
+    try {
+      const result = await updateOrder(getBusinessId(), selectedOrder.id, datos)
+      if (!result.success) {
+        toast.error(result.error || 'No se pudo asignar el cliente')
+        return
+      }
+      setSelectedOrder(prev => (prev ? { ...prev, ...datos } : prev))
+      toast.success(datos.customerName ? `Cliente asignado: ${datos.customerName}` : 'Cliente quitado de la mesa')
+    } catch (error) {
+      console.error('Error al asignar el cliente a la orden:', error)
+      toast.error('No se pudo asignar el cliente')
+    }
+  }
+
+  // Quitar el cliente: se vacían los campos en vez de borrarlos, para que el
+  // POS no encuentre restos del anterior al cobrar.
+  const handleRemoveCustomer = async () => {
+    await handleAssignCustomer({
+      customerName: '',
+      customerPhone: '',
+      customerBusinessName: '',
+      customerDocumentType: '',
+      customerDocumentNumber: '',
+    })
+    setIsCustomerModalOpen(false)
+  }
+
   // Marcar items como impresos en Firestore
   const markItemsAsPrinted = async (order) => {
     try {
@@ -2147,6 +2189,18 @@ export default function Tables() {
         onPrintKitchenTicket={handlePrintKitchenTicket}
         onToggleItemServed={handleToggleItemServed}
         onMarkAllServed={handleMarkAllServed}
+        onAssignCustomer={companySettings?.loyaltyConfig?.enabled === true && selectedOrder ? () => setIsCustomerModalOpen(true) : null}
+      />
+
+      {/* Cliente de la mesa: se escanea la tarjeta de sellos del comensal */}
+      <OrderCustomerModal
+        isOpen={isCustomerModalOpen}
+        onClose={() => setIsCustomerModalOpen(false)}
+        businessId={getBusinessId()}
+        order={selectedOrder}
+        loyaltyConfig={companySettings?.loyaltyConfig || null}
+        onAssign={handleAssignCustomer}
+        onRemove={handleRemoveCustomer}
       />
 
       {/* Modal para agregar items a la orden */}

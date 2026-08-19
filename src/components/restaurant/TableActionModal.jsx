@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Users, Clock, CheckCircle, XCircle, Loader2, UserPlus, ShoppingCart, Edit, Receipt, UserCheck, Printer, ArrowRightLeft, FileText, Split, ChevronDown, ChevronUp, Check, Combine, AlertTriangle } from 'lucide-react'
+import { Users, Clock, CheckCircle, XCircle, Loader2, UserPlus, ShoppingCart, Edit, Receipt, UserCheck, Printer, ArrowRightLeft, FileText, Split, ChevronDown, ChevronUp, Check, Combine, AlertTriangle, QrCode } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -28,6 +28,7 @@ export default function TableActionModal({
   onPrintKitchenTicket,
   onToggleItemServed,
   onMarkAllServed,
+  onAssignCustomer = null,
   waiters = [],
   defaultWaiterId = null,
   availableTables = [],
@@ -433,6 +434,31 @@ export default function TableActionModal({
                       S/ {(table.amount || 0).toFixed(2)}
                     </span>
                   </div>
+                  {/* Cliente de la mesa: se escanea su tarjeta de sellos y queda
+                      pegado a la orden, así el POS lo trae solo al cobrar. */}
+                  {onAssignCustomer && (
+                    <div className="flex justify-between items-center gap-2 text-sm pt-2 border-t border-red-200">
+                      <span className="text-gray-600 shrink-0">Cliente:</span>
+                      {order?.customerName || order?.customerPhone ? (
+                        <button
+                          type="button"
+                          onClick={onAssignCustomer}
+                          className="font-medium text-gray-900 truncate hover:text-primary-600 text-right"
+                        >
+                          {order.customerName || order.customerPhone}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={onAssignCustomer}
+                          className="flex items-center gap-1 text-primary-600 font-medium hover:text-primary-700"
+                        >
+                          <QrCode className="w-3.5 h-3.5" />
+                          Escanear tarjeta
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Vista previa del pedido con tracking de "Servido" */}
