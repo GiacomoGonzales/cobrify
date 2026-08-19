@@ -1414,24 +1414,27 @@ export default function AdminUsers() {
 
       await updateDoc(businessRef, updateData)
 
-      // Actualizar también el plan del usuario si cambió el método
-      if (sunatForm.emissionMethod === 'qpse') {
-        // Verificar si tiene plan qpse, si no asignar uno
-        const currentPlan = users.find(u => u.id === sunatUserToEdit.id)?.plan
-        if (!currentPlan?.includes('qpse')) {
-          await updateDoc(doc(db, 'subscriptions', sunatUserToEdit.id), {
-            plan: 'qpse_1_month',
-            limits: PLANS['qpse_1_month'].limits
-          })
-        }
-      } else if (sunatForm.emissionMethod === 'sunat_direct') {
-        const currentPlan = users.find(u => u.id === sunatUserToEdit.id)?.plan
-        if (!currentPlan?.includes('sunat_direct')) {
-          await updateDoc(doc(db, 'subscriptions', sunatUserToEdit.id), {
-            plan: 'sunat_direct_1_month',
-            limits: PLANS['sunat_direct_1_month'].limits
-          })
-        }
+      // Si el cliente no tiene un plan que emita por el método elegido, se le
+      // asigna uno mínimo para que pueda facturar.
+      //
+      // OJO con la condición: antes preguntaba si el ID del plan CONTENÍA la
+      // palabra "qpse". Los planes del catálogo actual se llaman mensual,
+      // anual, ilimitado_anual… y ninguno la lleva, aunque todos emiten por
+      // QPse — así que daba verdadero SIEMPRE y le pisaba el plan pagado con
+      // qpse_1_month (S/19.90, 500 comprobantes). Le pasó a 69 cuentas, entre
+      // ellas dos que habían pagado el Ilimitado anual. Ahora se mira el
+      // `emissionMethod` real del plan, no el texto de su ID.
+      const currentPlan = users.find(u => u.id === sunatUserToEdit.id)?.plan
+      const metodoDelPlan = PLANS[currentPlan]?.emissionMethod
+      // Enterprise ('any') sirve para cualquier método: no se toca nunca.
+      const yaEmitePorEseMetodo = metodoDelPlan === sunatForm.emissionMethod || metodoDelPlan === 'any'
+
+      if (!yaEmitePorEseMetodo && (sunatForm.emissionMethod === 'qpse' || sunatForm.emissionMethod === 'sunat_direct')) {
+        const planPorDefecto = sunatForm.emissionMethod === 'qpse' ? 'qpse_1_month' : 'sunat_direct_1_month'
+        await updateDoc(doc(db, 'subscriptions', sunatUserToEdit.id), {
+          plan: planPorDefecto,
+          limits: PLANS[planPorDefecto].limits
+        })
       }
 
       setShowSunatModal(false)
