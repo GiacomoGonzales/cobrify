@@ -52,7 +52,7 @@ import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
 import PostSaleModal from '@/components/pos/PostSaleModal'
-import { WALLET_EN_APROBACION } from '@/services/loyaltyService'
+import { WALLET_EN_APROBACION, programaVigente, vigenciaLegible } from '@/services/loyaltyService'
 import { promoParaProducto } from '@/services/scheduledDiscountService'
 import { formatCurrency, formatUnitPrice, formatLineAmount, formatProductPrice, applyMarginToCost, matchesSearchQuery, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import { buildProductHaystack } from '@/utils/productSearch'
@@ -1026,7 +1026,7 @@ export default function POS() {
     ;(async () => {
       try {
         const { getLoyaltyCard } = await import('@/services/loyaltyService')
-        const res = await getLoyaltyCard(getBusinessId(), tel)
+        const res = await getLoyaltyCard(getBusinessId(), tel, companySettings?.loyaltyConfig)
         if (alive && res.success) setLoyaltyCard(res.data)
       } catch { /* la tarjeta es informativa: nunca frena el POS */ }
     })()
@@ -7559,6 +7559,7 @@ export default function POS() {
                   const r = await redeemReward(businessId, bgCustomerData.phone, {
                     userName: user?.displayName || user?.email || '',
                     note: loyaltyRedemption.label || companySettings.loyaltyConfig.reward || '',
+                    config: companySettings.loyaltyConfig,
                   })
                   if (r.success) {
                     setLoyaltyCard(prev => (prev ? { ...prev, stamps: r.stamps } : prev))
@@ -11204,12 +11205,19 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 {companySettings?.loyaltyConfig?.enabled && customerData?.phone && (() => {
                   const meta = companySettings.loyaltyConfig.goal || 10
                   const sellos = loyaltyCard?.stamps || 0
-                  const listo = sellos >= meta
+                  // Programa vencido: la tarjeta se sigue viendo (el cliente
+                  // preguntara) pero no se ofrece canje ni se promete nada.
+                  const vigente = programaVigente(companySettings.loyaltyConfig)
+                  const listo = vigente && sellos >= meta
                   return (
                     <div className={`mt-1.5 p-2 rounded border text-xs ${listo ? 'bg-amber-50 border-amber-300' : 'bg-gray-50 border-gray-200'}`}>
                       <div className="flex items-center justify-between gap-2">
                         <span className={listo ? 'text-amber-800 font-medium' : 'text-gray-600'}>
-                          {loyaltyRedemption ? 'Premio aplicado a esta venta' : listo ? '🎁 Premio disponible' : `Sellos: ${sellos} de ${meta}`}
+                          {loyaltyRedemption
+                            ? 'Premio aplicado a esta venta'
+                            : !vigente
+                              ? `Programa vencido el ${vigenciaLegible(companySettings.loyaltyConfig)}`
+                              : listo ? '🎁 Premio disponible' : `Sellos: ${sellos} de ${meta}`}
                         </span>
                         {loyaltyRedemption ? (
                           <button
@@ -11239,6 +11247,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                 const res = await redeemReward(getBusinessId(), customerData.phone, {
                                   userName: user?.displayName || user?.email || '',
                                   note: companySettings.loyaltyConfig.reward || '',
+                                  config: companySettings.loyaltyConfig,
                                 })
                                 if (res.success) {
                                   toast.success(`Premio canjeado. Le quedan ${res.stamps} sellos.`)

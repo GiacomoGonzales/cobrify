@@ -367,7 +367,7 @@ export default function Promotions() {
     if (isDemoMode) { toast.error('No disponible en modo demo'); return }
     setAccionandoId(`canje_${tarjeta.id}`)
     try {
-      const res = await redeemReward(businessId, tarjeta.phone || tarjeta.id)
+      const res = await redeemReward(businessId, tarjeta.phone || tarjeta.id, { config: businessSettings?.loyaltyConfig })
       if (!res.success) { toast.error(res.error || 'No se pudo canjear'); return }
       toast.success(`Premio canjeado. Le quedan ${res.stamps} sellos`)
       setTarjetas((prev) => prev.map((t) => t.id === tarjeta.id

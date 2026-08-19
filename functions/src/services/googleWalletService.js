@@ -172,7 +172,7 @@ function textoDeSellos(sellos, meta, tema = {}) {
  */
 export async function upsertLoyaltyObject({
   businessId, phone, nombreCliente, sellos = 0, meta = 10, premio = '', tema = {},
-  heroUrl = null, mensaje = '', nombreNegocio = '',
+  heroUrl = null, mensaje = '', nombreNegocio = '', vigenciaHasta = '', sellosVencenEl = '',
 }) {
   const id = objectIdDe(businessId, phone)
   const faltan = Math.max(0, meta - sellos)
@@ -180,10 +180,16 @@ export async function upsertLoyaltyObject({
   // baja a número simple. Puntos ●●●○○ + cuadrícula sería lo mismo dos veces.
   const conCuadricula = !!heroUrl
 
+  // Vigencia del programa ('YYYY-MM-DD'): Google marca la tarjeta como vencida
+  // solo al pasar la fecha. El final del dia para que "hasta el 31" incluya
+  // el 31 completo, igual que el motor (programaVigente compara por dia).
+  const vigenciaISO = vigenciaHasta ? `${vigenciaHasta}T23:59:59Z` : null
+
   const cuerpo = {
     id,
     classId: classIdDe(businessId),
     state: 'ACTIVE',
+    ...(vigenciaISO ? { validTimeInterval: { end: { date: vigenciaISO } } } : {}),
     accountId: phone,
     accountName: nombreCliente || 'Cliente',
     // El contador grande de la tarjeta.
@@ -211,6 +217,19 @@ export async function upsertLoyaltyObject({
       // es numérico: esta fila sería la tercera vez que se dice lo mismo.)
       ...(!conCuadricula && tema.sellosComoPuntos ? [{ id: 'progreso', header: 'Tu progreso', body: `${sellos} de ${meta} sellos` }] : []),
       ...(premio ? [{ id: 'premio', header: 'Tu premio', body: premio }] : []),
+      // Cuándo vencen SUS sellos (caducidad por antigüedad). Es la fila que
+      // hace volver al cliente: un plazo propio es más urgente que una fecha
+      // general del programa.
+      ...(sellosVencenEl ? (() => {
+        const [a, m, d] = sellosVencenEl.split('-')
+        return [{ id: 'vencesellos', header: 'Tus sellos vencen el', body: `${d}/${m}/${a}` }]
+      })() : []),
+      // La fecha impresa en la tarjeta del cliente: sin esto la vigencia es
+      // una regla que solo conoce el comercio.
+      ...(vigenciaHasta ? (() => {
+        const [a, m, d] = vigenciaHasta.split('-')
+        return [{ id: 'vigencia', header: 'Válido hasta', body: `${d}/${m}/${a}` }]
+      })() : []),
       // Mensaje libre del comercio ("Gracias por tu preferencia...").
       ...(mensaje ? [{ id: 'mensaje', header: nombreNegocio || 'Mensaje', body: mensaje }] : []),
     ],

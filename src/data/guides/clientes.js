@@ -102,6 +102,8 @@ export default {
           type: 'pasos',
           items: [
             'Activa **Programa activado**, elige cómo se ganan los sellos, la meta y el tipo de premio.',
+            'Si quieres, pon una fecha en **Válido hasta**: pasada esa fecha no se suman sellos ni se canjean premios. Sirve para que una promoción no se vuelva eterna y nadie aparezca años después con una tarjeta llena. La fecha se imprime en la tarjeta del cliente, así que la regla queda clara desde el primer día. Déjalo vacío y el programa no vence.',
+            'La otra forma de ponerle plazo es **Los sellos vencen a los (meses)**: cada sello muere a los X meses de ganado, uno por uno, en vez de todos en una fecha común. Es más justo — al cliente que recién empieza su reloj le arranca el día que compra — y empuja a volver, porque en su tarjeta ve cuándo vencen los suyos. Al canjear se usan primero los sellos más viejos. Con 0 no vencen.',
             'Elige un **tema** para la tarjeta: la ves pintada con tu logo antes de decidir. Puedes ajustar el color exacto.',
             'Elige la **portada**: la **Cuadrícula de sellos** dibuja los sellos del cliente como casilleros (llenos con check, vacíos punteados y el último con el regalo) y se redibuja sola en cada compra — con ella el contador sale en número, porque el progreso ya está dibujado. **Tu logo** pone tu logo como franja, y **Color plano** la deja sobria. La vista previa te muestra la tarjeta tal como queda.',
             'Con la cuadrícula también eliges **tu sello**: el icono que se estampa en los casilleros llenos (check, estrella, corazón, taza, pizza, hamburguesa, huella, tijeras, cruz o polo).',
@@ -121,6 +123,21 @@ export default {
         {
           type: 'texto',
           text: 'El mejor lugar para canjear es el **Punto de Venta**: al seleccionar al cliente, el recuadro ámbar avisa "Premio disponible" y el botón **Canjear** aplica el premio a la venta en curso — agrega el producto gratis como bonificación, lo agrega a su precio especial, o llena el descuento. Los sellos se descuentan recién **al cobrar**: si la venta se cancela, el cliente no pierde nada. Puedes quitar el premio aplicado con el botón **Quitar** antes de cobrar.',
+        },
+        {
+          type: 'texto',
+          text: 'Y para que los clientes se registren **solos**, la misma ventana te da el **QR de mesa**: un código para imprimir y poner en tus mesas o en el mostrador. El cliente lo escanea desde su celular, llena un formulario con tus colores y tu logo (nombre, celular, y si quiere DNI, cumpleaños y correo), y al terminar recibe su tarjeta de sellos lista para agregar a Google Wallet o Apple Wallet. Queda registrado en tu lista de clientes, con su cumpleaños para tus promociones.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'En la sección **Registro de clientes (QR de mesa)**, decide el gancho: **Sellos de regalo al registrarse** (0 a 5) y/o un **texto libre** ("Regístrate y participa del sorteo mensual"). Ambos son opcionales.',
+            'Guarda, y luego usa **Descargar QR** para imprimirlo o **Copiar link** para compartirlo por WhatsApp o redes.',
+          ],
+        },
+        {
+          type: 'consejo',
+          text: 'El sello de regalo es el gancho que mejor funciona: el cliente empieza con la tarjeta ya avanzada y le pica completar el resto. El formulario tiene defensas contra registros falsos y un límite diario, así que puedes dejar el QR en la mesa sin miedo.',
         },
         {
           type: 'consejo',

@@ -149,7 +149,7 @@ async function stripDeSellos({ colorFondo, sellos, meta, sello }, escala) {
  * Construye el .pkpass completo de una tarjeta. Devuelve el Buffer del zip
  * firmado, listo para servir con content-type application/vnd.apple.pkpass.
  */
-export async function construirPkpass({ businessId, phone, marca, sellos, meta, nombreCliente }) {
+export async function construirPkpass({ businessId, phone, marca, sellos, meta, nombreCliente, sellosVencenEl = '' }) {
   const certPem = process.env.APPLE_PASS_CERT
   const keyPem = process.env.APPLE_PASS_KEY
   if (!certPem || !keyPem) throw new Error('Faltan los secretos APPLE_PASS_CERT / APPLE_PASS_KEY')
@@ -171,6 +171,10 @@ export async function construirPkpass({ businessId, phone, marca, sellos, meta, 
     authenticationToken: tokenDeAutenticacion(serial),
     organizationName: marca.nombre,
     description: `Tarjeta de fidelidad de ${marca.nombre}`,
+    // Vigencia del programa: con expirationDate iOS marca el pase como
+    // vencido solo al pasar la fecha. Fin del dia para que "hasta el 31"
+    // incluya el 31 completo (mismo criterio que el motor y que Google).
+    ...(marca.vigenciaHasta ? { expirationDate: `${marca.vigenciaHasta}T23:59:59-05:00` } : {}),
     foregroundColor: tinta,
     backgroundColor: rgbDe(marca.colorFondo),
     labelColor: tintaLabel,
@@ -189,6 +193,14 @@ export async function construirPkpass({ businessId, phone, marca, sellos, meta, 
           : []),
       ],
       backFields: [
+        ...(sellosVencenEl ? (() => {
+          const [a, m, d] = sellosVencenEl.split('-')
+          return [{ key: 'vencesellos', label: 'Tus sellos vencen el', value: `${d}/${m}/${a}` }]
+        })() : []),
+        ...(marca.vigenciaHasta ? (() => {
+          const [a, m, d] = marca.vigenciaHasta.split('-')
+          return [{ key: 'vigencia', label: 'Válido hasta', value: `${d}/${m}/${a}` }]
+        })() : []),
         ...(marca.mensaje ? [{ key: 'mensaje', label: marca.nombre, value: marca.mensaje }] : []),
         ...(marca.enlaces || []).map((e) => ({
           key: e.id,

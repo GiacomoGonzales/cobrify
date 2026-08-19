@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { getAuth } from 'firebase/auth'
-import { Loader2, Send, Gift, MapPin, Search } from 'lucide-react'
+import { Loader2, Send, Gift, MapPin, Search, Copy, Download, QrCode } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
+import QRCode from 'qrcode'
 import { db } from '@/lib/firebase'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -15,7 +17,7 @@ import {
 } from '@/data/walletThemes'
 import {
   DEFAULT_LOYALTY_CONFIG, getLoyaltyCards, redeemReward, getWalletPassLink,
-  WALLET_EN_APROBACION, rewardLabel,
+  WALLET_EN_APROBACION, rewardLabel, programaVigente, vigenciaLegible,
 } from '@/services/loyaltyService'
 import { getProducts } from '@/services/firestoreService'
 import { matchesSearchQuery } from '@/lib/utils'
@@ -279,7 +281,12 @@ export default function LoyaltyManager({ isOpen, onClose }) {
           amountPerStamp: Number(config.amountPerStamp) || 20,
           maxStampsPerSale: Number(config.maxStampsPerSale) || 0,
           minAmount: Number(config.minAmount) || 0,
+          programEndDate: (config.programEndDate || '').trim(),
+          stampExpiryMonths: Number(config.stampExpiryMonths) || 0,
           stampOnlineOrders: config.stampOnlineOrders !== false,
+          // Formulario público de registro (el QR de mesa)
+          welcomeStamps: Math.max(0, Math.min(5, Number(config.welcomeStamps) || 0)),
+          registerIncentiveText: (config.registerIncentiveText || '').trim(),
           walletTheme: resolveTheme({ temaId: tema.id, colorFondo: tema.colorFondo, motivo: tema.motivo, sello: tema.sello }),
           walletNearby: config.walletNearby !== false,
           walletMessage: (config.walletMessage || '').trim(),
@@ -291,6 +298,33 @@ export default function LoyaltyManager({ isOpen, onClose }) {
       toast.error('No se pudo guardar')
     } finally {
       setGuardando(false)
+    }
+  }
+
+  // ── Registro público: el link del QR de mesa ──
+  // El id del negocio en la URL no es un secreto (ya viaja en el catálogo y
+  // en los links de Wallet); la función del servidor valida todo igual.
+  const linkRegistro = isDemoMode ? '' : `${window.location.origin}/registro/${getBusinessId()}`
+
+  const copiarLinkRegistro = async () => {
+    try {
+      await navigator.clipboard.writeText(linkRegistro)
+      toast.success('Link copiado')
+    } catch {
+      toast.error('No se pudo copiar')
+    }
+  }
+
+  const descargarQrRegistro = async () => {
+    try {
+      // PNG grande (nítido para imprimir en la mesa) con margen blanco.
+      const dataUrl = await QRCode.toDataURL(linkRegistro, { width: 1024, margin: 2 })
+      const a = document.createElement('a')
+      a.href = dataUrl
+      a.download = 'qr-registro-sellos.png'
+      a.click()
+    } catch {
+      toast.error('No se pudo generar el QR')
     }
   }
 
@@ -317,7 +351,7 @@ export default function LoyaltyManager({ isOpen, onClose }) {
     if (isDemoMode) { toast.error('No disponible en modo demo'); return }
     setAccionandoId(`canje_${tarjeta.id}`)
     try {
-      const res = await redeemReward(getBusinessId(), tarjeta.phone)
+      const res = await redeemReward(getBusinessId(), tarjeta.phone, { config })
       if (!res.success) { toast.error(res.error || 'No se pudo canjear'); return }
       toast.success(`Premio canjeado. Le quedan ${res.stamps} sellos`)
       setTarjetas(prev => prev.map(t => t.id === tarjeta.id
@@ -548,6 +582,42 @@ export default function LoyaltyManager({ isOpen, onClose }) {
             )}
 
             {config.enabled && (
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
+                  <Input
+                    label="Válido hasta (opcional)"
+                    type="date"
+                    value={config.programEndDate || ''}
+                    onChange={(e) => setConfig({ ...config, programEndDate: e.target.value })}
+                  />
+                  <Input
+                    label="Los sellos vencen a los (meses)"
+                    type="number" min="0" max="60" step="1"
+                    value={config.stampExpiryMonths}
+                    onChange={(e) => setConfig({ ...config, stampExpiryMonths: e.target.value })}
+                    placeholder="0 = no vencen"
+                  />
+                </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  {Number(config.stampExpiryMonths) > 0
+                    ? <span>Cada sello muere a los <strong>{config.stampExpiryMonths} meses</strong> de ganado, uno por uno. Al canjear se usan primero los más viejos. El cliente ve en su tarjeta cuándo vencen los suyos — es lo que lo hace volver antes.</span>
+                    : <span>Con 0 los sellos no vencen. Puedes usar esto en vez de (o junto a) la fecha fija: es más justo con el cliente nuevo, porque su reloj empieza el día que compra.</span>}
+                </p>
+                <div className="mt-3">
+                  <div className="text-xs text-gray-500">
+                    {config.programEndDate ? (
+                      programaVigente(config)
+                        ? <span>Pasado el <strong>{vigenciaLegible(config)}</strong> no se suman sellos ni se canjean premios. La fecha sale impresa en la tarjeta del cliente.</span>
+                        : <span className="text-red-600 font-medium">El programa está vencido desde el {vigenciaLegible(config)}: no se suman sellos ni se canjean premios.</span>
+                    ) : (
+                      <span>Déjalo vacío y el programa no vence. Con fecha, evitas que alguien aparezca años después con una tarjeta llena a reclamar el premio.</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {config.enabled && (
               <label className="mt-3 flex items-start gap-3 cursor-pointer">
                 <input
                   type="checkbox"
@@ -564,6 +634,76 @@ export default function LoyaltyManager({ isOpen, onClose }) {
               </label>
             )}
           </section>
+
+          {/* ── Registro de clientes: el QR de mesa ──────────────────── */}
+          {config.enabled && (
+            <section className="border-t border-gray-100 pt-5">
+              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                <QrCode className="w-4 h-4 text-gray-400" />
+                Registro de clientes (QR de mesa)
+              </h3>
+              <p className="text-xs text-gray-500 mt-1 mb-3">
+                Imprime este QR y ponlo en tus mesas o en el mostrador. El cliente se registra
+                solo desde su celular, queda en tu lista de clientes y recibe al instante su
+                tarjeta de sellos para agregarla a Google Wallet o Apple Wallet.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
+                <div>
+                  <Input
+                    label="Sellos de regalo al registrarse (0 a 5)"
+                    type="number" min="0" max="5" step="1"
+                    value={config.welcomeStamps ?? 0}
+                    onChange={(e) => setConfig({ ...config, welcomeStamps: e.target.value })}
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Con 0 no se regala nada: el registro igual crea la tarjeta.
+                  </p>
+                </div>
+                <div>
+                  <Input
+                    label="Gancho del formulario (opcional)"
+                    value={config.registerIncentiveText || ''}
+                    onChange={(e) => setConfig({ ...config, registerIncentiveText: e.target.value })}
+                    placeholder="Ej: Regístrate y participa del sorteo mensual"
+                    maxLength={90}
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Texto libre que se muestra arriba del formulario. Si lo dejas vacío y regalas
+                    sellos, el formulario anuncia los sellos de regalo.
+                  </p>
+                </div>
+              </div>
+
+              {!isDemoMode && (
+                <div className="mt-4 flex flex-col sm:flex-row gap-4 items-start">
+                  <div className="bg-white border border-gray-200 rounded-xl p-3 shrink-0">
+                    <QRCodeSVG value={linkRegistro} size={128} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-gray-500 mb-1">Link de registro</p>
+                    <p className="text-sm text-gray-800 break-all bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                      {linkRegistro}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button type="button" variant="outline" size="sm" onClick={copiarLinkRegistro}>
+                        <Copy className="w-4 h-4 mr-1.5" />
+                        Copiar link
+                      </Button>
+                      <Button type="button" variant="outline" size="sm" onClick={descargarQrRegistro}>
+                        <Download className="w-4 h-4 mr-1.5" />
+                        Descargar QR
+                      </Button>
+                    </div>
+                    <p className="mt-2 text-xs text-gray-500">
+                      Recuerda <span className="font-medium text-gray-700">guardar</span> después de
+                      cambiar el regalo o el gancho: el formulario muestra lo guardado.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
 
           {/* ── Diseño de la tarjeta (Google Wallet) ─────────────────── */}
           {config.enabled && (

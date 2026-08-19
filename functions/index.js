@@ -12054,6 +12054,37 @@ function nombreTarjeta(completo) {
     .map((p) => p[0].toUpperCase() + p.slice(1).toLowerCase()).join(' ')
 }
 
+/**
+ * Cuándo vencen los sellos MÁS VIEJOS de una tarjeta ('YYYY-MM-DD' o '').
+ *
+ * Espeja `vencimientoProximo` del front (src/services/loyaltyService.js): los
+ * sellos viven en LOTES fechados dentro del propio documento de la tarjeta, y
+ * el que vence primero es el más antiguo. Tarjeta vieja sin lotes: se toma su
+ * última actividad, igual que el front — nadie pierde sellos por la migración.
+ */
+function vencimientoDeSellos(card, cfg) {
+  const meses = Number(cfg?.stampExpiryMonths) || 0
+  if (meses <= 0) return ''
+  const aFecha = (v) => {
+    if (!v) return null
+    if (typeof v.toDate === 'function') return v.toDate()
+    const d = v instanceof Date ? v : new Date(v)
+    return isNaN(d.getTime()) ? null : d
+  }
+  const crudos = Array.isArray(card?.stampLots) && card.stampLots.length > 0
+    ? card.stampLots
+    : ((card?.stamps || 0) > 0 ? [{ date: card.lastActivityAt || card.createdAt, quantity: card.stamps }] : [])
+  const fechas = crudos
+    .filter(l => (Number(l.quantity) || 0) > 0)
+    .map(l => aFecha(l.date))
+    .filter(Boolean)
+    .sort((a, b) => a - b)
+  if (fechas.length === 0) return ''
+  const vence = new Date(fechas[0])
+  vence.setMonth(vence.getMonth() + meses)
+  return vence.toISOString().slice(0, 10)
+}
+
 async function marcaDelNegocio(businessId) {
   const snap = await db.collection('businesses').doc(businessId).get()
   const b = snap.exists ? snap.data() : {}
@@ -12115,6 +12146,12 @@ async function marcaDelNegocio(businessId) {
     programa: cfg.reward ? `Junta ${cfg.goal || 10} y gana` : 'Tarjeta de sellos',
     meta: cfg.goal || 10,
     premio: cfg.reward || '',
+    // Vigencia del programa ('YYYY-MM-DD' o ''): viaja a la tarjeta para que
+    // el cliente vea hasta cuando vale, y Google la vence sola.
+    vigenciaHasta: (cfg.programEndDate || '').trim(),
+    // Meses de caducidad por sello: el vencimiento concreto es POR TARJETA
+    // (depende de cuándo compró cada cliente), así que se calcula abajo.
+    caducidadMeses: Number(cfg.stampExpiryMonths) || 0,
     mensaje: (cfg.walletMessage || '').trim(),
     tema,
     motivo,
@@ -12188,6 +12225,8 @@ export const syncWalletPass = onDocumentWritten(
         heroUrl,
         mensaje: marca.mensaje,
         nombreNegocio: marca.nombre,
+        vigenciaHasta: marca.vigenciaHasta,
+        sellosVencenEl: vencimientoDeSellos(after, { stampExpiryMonths: marca.caducidadMeses }),
       })
       console.log(`[Wallet] Tarjeta sincronizada ${businessId}/${cardId}: ${after.stamps} sellos`)
 
@@ -12264,6 +12303,63 @@ export const syncWalletPass = onDocumentWritten(
  * Se asegura de que la clase y el objeto existan ANTES de firmar el link: si
  * el objeto no existe, Google muestra un error al abrirlo.
  */
+/**
+ * Sincroniza la tarjeta Wallet de un cliente y devuelve su link corto ESTABLE.
+ *
+ * Es el corazón de getWalletPassLink, extraído para que el REGISTRO PÚBLICO
+ * (registerLoyaltyCustomer) entregue exactamente el mismo link que el botón
+ * de WhatsApp del negocio — si divergieran, la tarjeta del que se registra
+ * solo y la del que registró el cajero serían distintas.
+ */
+async function tarjetaYLinkCorto(businessId, phone) {
+  const cardSnap = await db.collection('businesses').doc(businessId)
+    .collection('loyaltyCards').doc(String(phone)).get()
+  if (!cardSnap.exists) throw new Error('CARD_NOT_FOUND')
+  const card = cardSnap.data()
+  const marca = await marcaDelNegocio(businessId)
+
+  const heroUrl = await heroDeTarjeta(businessId, marca, {
+    phone: String(phone),
+    sellos: card.stamps || 0,
+    meta: card.goal || marca.meta,
+  })
+  await walletUpsertClass(claseDesdeMarca(businessId, marca))
+  await walletUpsertObject({
+    businessId, phone: String(phone),
+    nombreCliente: nombreTarjeta(card.customerName),
+    sellos: card.stamps || 0,
+    meta: card.goal || marca.meta,
+    premio: marca.premio,
+    tema: marca.tema,
+    heroUrl,
+    mensaje: marca.mensaje,
+    nombreNegocio: marca.nombre,
+    vigenciaHasta: marca.vigenciaHasta,
+    sellosVencenEl: vencimientoDeSellos(card, { stampExpiryMonths: marca.caducidadMeses }),
+  })
+
+  // Link corto estable por tarjeta (cbrfy.link): mismo codigo siempre, destino
+  // refrescado con un JWT recien firmado en cada emision.
+  const urlLarga = walletSaveLink({ businessId, phone: String(phone) })
+  let code = card.walletShortCode
+  if (!code) {
+    code = generateShortCode()
+    for (let i = 0; i < 10 && (await db.collection('shortUrls').doc(code).get()).exists; i++) {
+      code = generateShortCode()
+    }
+    await cardSnap.ref.set({ walletShortCode: code }, { merge: true })
+  }
+  await db.collection('shortUrls').doc(code).set({
+    originalUrl: urlLarga,
+    businessId,
+    phone: String(phone),
+    type: 'walletCard',
+    createdAt: FieldValue.serverTimestamp(),
+  }, { merge: true })
+
+  return { url: urlLarga, shortUrl: `https://cbrfy.link/${code}`, stamps: card.stamps || 0, goal: card.goal || marca.meta }
+}
+
 export const getWalletPassLink = onRequest(
   {
     region: 'us-central1', timeoutSeconds: 60, memory: '256MiB', cors: true,
@@ -12289,65 +12385,275 @@ export const getWalletPassLink = onRequest(
         res.status(403).json({ error: 'No autorizado para este negocio' }); return
       }
 
-      const cardSnap = await db.collection('businesses').doc(businessId)
-        .collection('loyaltyCards').doc(String(phone)).get()
-      if (!cardSnap.exists) {
-        res.status(404).json({ error: 'Este cliente todavia no tiene tarjeta' }); return
-      }
-      const card = cardSnap.data()
-      const marca = await marcaDelNegocio(businessId)
-
-      const heroUrl = await heroDeTarjeta(businessId, marca, {
-        phone: String(phone),
-        sellos: card.stamps || 0,
-        meta: card.goal || marca.meta,
-      })
-      await walletUpsertClass(claseDesdeMarca(businessId, marca))
-      await walletUpsertObject({
-        businessId, phone: String(phone),
-        nombreCliente: nombreTarjeta(card.customerName),
-        sellos: card.stamps || 0,
-        meta: card.goal || marca.meta,
-        premio: marca.premio,
-        tema: marca.tema,
-        heroUrl,
-        mensaje: marca.mensaje,
-        nombreNegocio: marca.nombre,
-      })
-
-      // LINK CORTO: el link real de Google es un JWT de ~800 caracteres que
-      // en WhatsApp ocupa media pantalla. Se reusa el acortador cbrfy.link
-      // que ya sirve los PDFs de comprobantes (coleccion shortUrls +
-      // redirectShortUrl): un codigo ESTABLE por tarjeta, guardado en ella.
-      // En cada reenvio se refresca el destino con un JWT recien firmado —
-      // mismo codigo, firma nueva (aguanta hasta una rotacion de la llave).
-      const urlLarga = walletSaveLink({ businessId, phone: String(phone) })
-      let code = card.walletShortCode
-      if (!code) {
-        code = generateShortCode()
-        for (let i = 0; i < 10 && (await db.collection('shortUrls').doc(code).get()).exists; i++) {
-          code = generateShortCode()
+      let resultado
+      try {
+        resultado = await tarjetaYLinkCorto(businessId, String(phone))
+      } catch (e) {
+        if (e.message === 'CARD_NOT_FOUND') {
+          res.status(404).json({ error: 'Este cliente todavia no tiene tarjeta' }); return
         }
-        await cardSnap.ref.set({ walletShortCode: code }, { merge: true })
+        throw e
       }
-      await db.collection('shortUrls').doc(code).set({
-        originalUrl: urlLarga,
-        businessId,
-        phone: String(phone), // lo usa appleWalletPass para ubicar la tarjeta
-        type: 'walletCard',
-        createdAt: FieldValue.serverTimestamp(),
-      }, { merge: true })
-
-      res.status(200).json({
-        url: urlLarga,
-        shortUrl: `https://cbrfy.link/${code}`,
-        stamps: card.stamps || 0,
-        goal: card.goal || marca.meta,
-      })
+      res.status(200).json(resultado)
     } catch (error) {
       console.error('[Wallet] getWalletPassLink:',
         (error.response && JSON.stringify(error.response.data).slice(0, 300)) || error.message)
       res.status(500).json({ error: 'No se pudo generar la tarjeta' })
+    }
+  }
+)
+
+/**
+ * REGISTRO PÚBLICO DE FIDELIZACIÓN (18-ago-2026) — el QR de mesa.
+ *
+ * GET  ?negocio={id|slugDelCatalogo} → la marca del negocio para pintar la
+ *      página (nombre, logo, color, gancho). Nada sensible: solo lo que ya
+ *      es público en su catálogo.
+ * POST → valida TODO en el servidor, crea el cliente + su tarjeta con los
+ *      sellos de bienvenida, y devuelve el MISMO link corto de Wallet que
+ *      entrega el botón de WhatsApp del negocio (tarjetaYLinkCorto).
+ *
+ * DEFENSAS (es un formulario abierto a internet, sin login):
+ *  - El navegador nunca escribe Firestore directo: todo pasa por acá.
+ *  - Tope de 300 registros/día por negocio (contador transaccional) → 429.
+ *  - Honeypot ("website") + tiempo mínimo de llenado: los bots reciben un
+ *    200 de utilería y no tocan la base — devolverles un error es
+ *    enseñarles qué corregir.
+ *  - Idempotente por teléfono: el doc de la tarjeta ES el teléfono
+ *    (phoneKey), así que repetir el registro saluda ("ya estabas
+ *    registrado") en vez de duplicar o re-regalar sellos.
+ *  - Merge suave en clientes: solo COMPLETA campos vacíos, nunca pisa lo
+ *    que el negocio ya tenía.
+ */
+export const registerLoyaltyCustomer = onRequest(
+  {
+    region: 'us-central1', timeoutSeconds: 60, memory: '256MiB', cors: true,
+    secrets: walletSecrets,
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+
+    // Vigencia por día calendario de Lima, INCLUSIVA (espejo de
+    // programaVigente del front — src/services/loyaltyService.js).
+    const programaVigente = (cfg) => {
+      const hasta = (cfg?.programEndDate || '').trim()
+      if (!hasta) return true
+      const hoyLima = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Lima', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(new Date())
+      return hoyLima <= hasta
+    }
+
+    // Espejo de rewardLabel del front: el premio legible según su tipo.
+    const premioLegible = (cfg) => {
+      switch (cfg.rewardType) {
+        case 'product':
+          return cfg.rewardProductName ? `${cfg.rewardProductName} GRATIS` : ''
+        case 'product_discount':
+          return cfg.rewardProductName
+            ? `${cfg.rewardProductName} a S/ ${Number(cfg.rewardSpecialPrice || 0).toFixed(2)}`
+            : ''
+        case 'discount':
+          return cfg.rewardDiscountType === 'amount'
+            ? `S/ ${Number(cfg.rewardDiscountValue || 0).toFixed(2)} de descuento`
+            : `${Number(cfg.rewardDiscountValue || 0)}% de descuento`
+        default:
+          return (cfg.reward || '').trim()
+      }
+    }
+
+    const resolverNegocio = async (idOSlug) => {
+      // Los IDs de Firestore nunca traen espacios ni son tan cortos como un
+      // slug típico, pero probar el doc directo primero es 1 lectura.
+      const porId = await db.collection('businesses').doc(String(idOSlug)).get()
+      if (porId.exists) return porId
+      const porSlug = await db.collection('businesses')
+        .where('catalogSlug', '==', String(idOSlug)).limit(1).get()
+      return porSlug.empty ? null : porSlug.docs[0]
+    }
+
+    try {
+      // ── GET: la marca para pintar la página pública ──
+      if (req.method === 'GET') {
+        const idOSlug = String(req.query.negocio || '').trim()
+        if (!idOSlug) { res.status(400).json({ error: 'Falta el negocio' }); return }
+        const snap = await resolverNegocio(idOSlug)
+        if (!snap) { res.status(404).json({ error: 'Negocio no encontrado' }); return }
+        const b = snap.data()
+        const cfg = b.loyaltyConfig || {}
+        res.status(200).json({
+          ok: true,
+          businessId: snap.id,
+          nombre: b.name || b.tradeName || b.businessName || 'Comercio',
+          logoUrl: b.logoUrl || null,
+          color: cfg.walletTheme?.colorFondo || b.pdfAccentColor || '#1e3a8a',
+          enabled: cfg.enabled === true,
+          vigente: programaVigente(cfg),
+          goal: cfg.goal || 10,
+          premio: premioLegible(cfg),
+          welcomeStamps: Math.max(0, Math.min(5, Number(cfg.welcomeStamps) || 0)),
+          incentivo: (cfg.registerIncentiveText || '').trim(),
+        })
+        return
+      }
+
+      if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return }
+
+      const {
+        businessId, documentType = 'DNI', documentNumber = '', name = '',
+        phone = '', birthdayDay = null, birthdayMonth = null, birthdayYear = null,
+        email = '', website = '', fillMs = 0,
+      } = req.body || {}
+
+      // Honeypot lleno o formulario "llenado" en menos de 3 segundos: solo
+      // un bot hace eso. Respuesta de utilería, sin tocar nada.
+      if (String(website || '').trim() !== '' || (Number(fillMs) > 0 && Number(fillMs) < 3000)) {
+        res.status(200).json({ ok: true, alreadyRegistered: false, stamps: 0, goal: 10, shortUrl: null })
+        return
+      }
+
+      if (!businessId) { res.status(400).json({ error: 'Falta el negocio' }); return }
+      const bizSnap = await db.collection('businesses').doc(String(businessId)).get()
+      if (!bizSnap.exists) { res.status(404).json({ error: 'Negocio no encontrado' }); return }
+      const cfg = bizSnap.data().loyaltyConfig || {}
+      if (cfg.enabled !== true) {
+        res.status(409).json({ error: 'Este negocio no tiene activo su programa de sellos' }); return
+      }
+      if (!programaVigente(cfg)) {
+        res.status(409).json({ error: 'El programa de sellos de este negocio ya terminó' }); return
+      }
+
+      // ── Validación dura (el cliente puede mandar cualquier cosa) ──
+      const nombre = String(name || '').replace(/\s+/g, ' ').trim()
+      if (nombre.length < 2 || nombre.length > 80) {
+        res.status(400).json({ error: 'Escribe tu nombre completo' }); return
+      }
+      const digitos = String(phone || '').replace(/\D/g, '')
+      const celular = digitos.length === 11 && digitos.startsWith('51') ? digitos.slice(2) : digitos
+      if (!/^9\d{8}$/.test(celular)) {
+        res.status(400).json({ error: 'El celular debe tener 9 dígitos y empezar con 9' }); return
+      }
+      const numDoc = String(documentNumber || '').trim().toUpperCase()
+      if (numDoc) {
+        if (documentType === 'DNI' && !/^\d{8}$/.test(numDoc)) {
+          res.status(400).json({ error: 'El DNI debe tener 8 dígitos' }); return
+        }
+        if (documentType !== 'DNI' && !/^[A-Z0-9-]{6,12}$/.test(numDoc)) {
+          res.status(400).json({ error: 'Número de documento inválido' }); return
+        }
+      }
+      const correo = String(email || '').trim().toLowerCase()
+      if (correo && (correo.length > 100 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo))) {
+        res.status(400).json({ error: 'Correo inválido' }); return
+      }
+      const dia = Number(birthdayDay) || 0
+      const mes = Number(birthdayMonth) || 0
+      const anio = Number(birthdayYear) || 0
+      const hayCumple = dia > 0 && mes > 0
+      if ((dia !== 0 && (dia < 1 || dia > 31)) || (mes !== 0 && (mes < 1 || mes > 12))
+        || (anio !== 0 && (anio < 1900 || anio > new Date().getFullYear()))) {
+        res.status(400).json({ error: 'Fecha de cumpleaños inválida' }); return
+      }
+      // El esquema de clientes guarda birthDate como 'YYYY-MM-DD'. Si el
+      // cliente no dio su año, va 1900 de comodín: la app solo muestra y
+      // filtra por día/mes (Customers.jsx pinta d/m).
+      const birthDate = hayCumple
+        ? `${anio || 1900}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
+        : ''
+
+      // ── Tope diario por negocio: anti-spam y anti-sorpresas de factura ──
+      const hoyLima = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' })
+        .format(new Date()).replace(/-/g, '')
+      const contadorRef = db.collection('businesses').doc(String(businessId))
+        .collection('counters').doc(`loyaltyRegister-${hoyLima}`)
+      const pasa = await db.runTransaction(async (tx) => {
+        const c = await tx.get(contadorRef)
+        const n = (c.exists ? c.data().count : 0) || 0
+        if (n >= 300) return false
+        tx.set(contadorRef, { count: n + 1, updatedAt: FieldValue.serverTimestamp() }, { merge: true })
+        return true
+      })
+      if (!pasa) {
+        res.status(429).json({ error: 'Se alcanzó el límite de registros de hoy. Inténtalo mañana.' }); return
+      }
+
+      // ── Cliente: completar sin pisar lo que el negocio ya tenía ──
+      const clientesRef = db.collection('businesses').doc(String(businessId)).collection('customers')
+      let clienteSnap = await clientesRef.where('phone', '==', celular).limit(1).get()
+      if (clienteSnap.empty && numDoc) {
+        clienteSnap = await clientesRef.where('documentNumber', '==', numDoc).limit(1).get()
+      }
+      if (!clienteSnap.empty) {
+        const prev = clienteSnap.docs[0].data()
+        await clienteSnap.docs[0].ref.set({
+          ...(prev.name ? {} : { name: nombre }),
+          ...(prev.phone ? {} : { phone: celular }),
+          ...(prev.email || !correo ? {} : { email: correo }),
+          ...(prev.birthDate || !birthDate ? {} : { birthDate }),
+          ...(prev.documentNumber || !numDoc ? {} : { documentType, documentNumber: numDoc }),
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true })
+      } else {
+        await clientesRef.add({
+          name: nombre,
+          documentType: numDoc ? documentType : '',
+          documentNumber: numDoc,
+          phone: celular,
+          email: correo,
+          ...(birthDate ? { birthDate } : {}),
+          source: 'registro_fidelidad',
+          createdAt: FieldValue.serverTimestamp(),
+        })
+      }
+
+      // ── Tarjeta: idempotente, el doc es el teléfono ──
+      const cardRef = db.collection('businesses').doc(String(businessId))
+        .collection('loyaltyCards').doc(celular)
+      const cardSnap = await cardRef.get()
+      const bienvenida = Math.max(0, Math.min(5, Number(cfg.welcomeStamps) || 0))
+      const yaEstaba = cardSnap.exists
+
+      if (!yaEstaba) {
+        const conCaducidad = (Number(cfg.stampExpiryMonths) || 0) > 0
+        await cardRef.set({
+          phone: celular,
+          customerName: nombre,
+          stamps: bienvenida,
+          totalStamps: bienvenida,
+          // Si los sellos caducan, el de bienvenida nace con su lote fechado
+          // hoy — mismo modelo stampLots que earnStamp en el front.
+          ...(conCaducidad && bienvenida > 0
+            ? { stampLots: [{ date: new Date(), quantity: bienvenida }] }
+            : {}),
+          goal: cfg.goal || 10,
+          rewardsRedeemed: 0,
+          source: 'registro_fidelidad',
+          lastActivityAt: FieldValue.serverTimestamp(),
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        })
+        if (bienvenida > 0) {
+          await cardRef.collection('movements').doc(`welcome_${celular}`).set({
+            type: 'earn', stamps: bienvenida, source: 'registro', amount: 0,
+            date: FieldValue.serverTimestamp(),
+          })
+        }
+      }
+
+      const link = await tarjetaYLinkCorto(String(businessId), celular)
+      res.status(200).json({
+        ok: true,
+        alreadyRegistered: yaEstaba,
+        stamps: link.stamps,
+        goal: link.goal,
+        shortUrl: link.shortUrl,
+        incentivo: yaEstaba ? '' : (cfg.registerIncentiveText || '').trim(),
+        nombre: nombre.split(' ')[0],
+      })
+    } catch (error) {
+      console.error('[RegistroFidelidad]', error.message)
+      res.status(500).json({ error: 'No se pudo completar el registro. Inténtalo de nuevo.' })
     }
   }
 )
@@ -12532,6 +12838,7 @@ export const appleWalletPass = onRequest(
         sellos: card.stamps || 0,
         meta: card.goal || marca.meta,
         nombreCliente: nombreTarjeta(card.customerName),
+        sellosVencenEl: vencimientoDeSellos(card, { stampExpiryMonths: marca.caducidadMeses }),
       })
 
       res.set('Content-Type', 'application/vnd.apple.pkpass')
@@ -12652,6 +12959,7 @@ export const appleWalletPassWeb = onRequest(
           sellos: card.stamps || 0,
           meta: card.goal || marca.meta,
           nombreCliente: nombreTarjeta(card.customerName),
+          sellosVencenEl: vencimientoDeSellos(card, { stampExpiryMonths: marca.caducidadMeses }),
         })
         res.set('Content-Type', 'application/vnd.apple.pkpass')
         res.set('Last-Modified', modificado.toUTCString())

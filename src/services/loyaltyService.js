@@ -66,6 +66,35 @@ export const DEFAULT_LOYALTY_CONFIG = {
   maxStampsPerSale: 0,        // tope de sellos por venta (0 = sin tope)
 
   minAmount: 0,        // compra mínima para sellar (0 = cualquier compra; solo modo 'visit')
+
+  // ── Vigencia del programa (18-ago-2026) ────────────────────────────────
+  // Fecha 'YYYY-MM-DD' hasta la que vale el programa; '' = sin vencimiento
+  // (comportamiento de siempre). Pasada la fecha NO se suman sellos ni se
+  // canjean premios. Existe para que nadie aparezca a los cinco años con una
+  // tarjeta llena a reclamar algo gratis: es una promoción, no una deuda
+  // eterna. La fecha viaja a la tarjeta de Wallet ("Válido hasta ..."), que
+  // es lo que hace la regla defendible ante el cliente final.
+  programEndDate: '',
+
+  // ── Caducidad POR ANTIGÜEDAD del sello (18-ago-2026) ───────────────────
+  // 0 = los sellos no vencen (comportamiento de siempre). Con 12, un sello
+  // muere a los 12 meses de ganado. Es la caducidad "rodante" que usan las
+  // cadenas: convive con programEndDate (fecha única para todos) y es más
+  // justa — al cliente nuevo no le caduca nada por una fecha que ya venía
+  // corriendo. Y de paso empuja a volver: los sellos tienen reloj.
+  //
+  // El saldo deja de ser un contador ciego: la tarjeta guarda LOTES
+  // (`stampLots`), igual que un producto guarda lotes de stock, y las
+  // redenciones consumen del más viejo primero (FIFO).
+  stampExpiryMonths: 0,
+
+  // ── Formulario público de registro (18-ago-2026) ───────────────────────
+  // El QR de mesa: /registro/{negocio}. El gancho es a libertad del negocio
+  // y AMBOS son opcionales e independientes: sellos que regala el registro
+  // (0 = ninguno) y/o un texto libre ("un postre gratis en tu primera
+  // visita") que la pantalla de éxito muestra como regalo a reclamar.
+  welcomeStamps: 0,
+  registerIncentiveText: '',
   stampOnlineOrders: true, // sellar también los pedidos del catálogo online
   // Diseño de la tarjeta de Google Wallet. Se guarda RESUELTO (ver
   // src/data/walletThemes.js): el backend lee estos valores, no la tabla.
@@ -107,6 +136,91 @@ export const rewardLabel = (cfg) => {
 }
 
 /**
+ * ¿El programa sigue vigente? Sin fecha configurada, siempre sí.
+ *
+ * Se compara por DÍA CALENDARIO de Lima y de forma INCLUSIVA: con vigencia
+ * "hasta el 31/12", el 31 a las 11 de la noche todavía se puede sellar y
+ * canjear. Comparar instantes exactos haría que el último día valiera medio
+ * día, que no es lo que nadie entiende por "hasta el 31".
+ */
+export const programaVigente = (cfg, ahora = new Date()) => {
+  const hasta = (cfg?.programEndDate || '').trim()
+  if (!hasta) return true
+  // 'YYYY-MM-DD' de hoy en Lima, comparable como texto (ISO ordena bien).
+  const hoyLima = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Lima', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(ahora)
+  return hoyLima <= hasta
+}
+
+/** La fecha de vigencia en formato peruano, para mostrarla. */
+export const vigenciaLegible = (cfg) => {
+  const hasta = (cfg?.programEndDate || '').trim()
+  if (!hasta) return ''
+  const [a, m, d] = hasta.split('-')
+  return `${d}/${m}/${a}`
+}
+
+/** Fecha JS a partir de lo que devuelve Firestore (Timestamp | Date | ISO). */
+const aFecha = (v) => {
+  if (!v) return null
+  if (typeof v.toDate === 'function') return v.toDate()
+  const d = v instanceof Date ? v : new Date(v)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+/**
+ * Los LOTES de sellos que siguen vivos, del más viejo al más nuevo.
+ *
+ * Cada lote es `{ date, quantity }`: los sellos que entraron en una venta.
+ * Es el mismo modelo que los lotes de stock de un producto, y por la misma
+ * razón — para saber qué vence primero hay que saber cuándo entró cada cosa.
+ *
+ * Tarjeta vieja sin `stampLots` (todas las de antes de esta función): se
+ * reconstruye UN lote con el saldo actual fechado en su última actividad. Es
+ * una aproximación deliberadamente generosa: nadie pierde sellos por una
+ * migración, y a la siguiente compra el registro ya queda fino.
+ */
+export const lotesVigentes = (card, cfg, ahora = new Date()) => {
+  const meses = Number(cfg?.stampExpiryMonths) || 0
+  const crudos = Array.isArray(card?.stampLots) && card.stampLots.length > 0
+    ? card.stampLots
+    : ((card?.stamps || 0) > 0
+        ? [{ date: card.lastActivityAt || card.createdAt || ahora, quantity: card.stamps }]
+        : [])
+  const lotes = crudos
+    .map(l => ({ fecha: aFecha(l.date) || ahora, cantidad: Number(l.quantity) || 0 }))
+    .filter(l => l.cantidad > 0)
+    .sort((a, b) => a.fecha - b.fecha)
+  if (meses <= 0) return lotes
+  const limite = new Date(ahora)
+  limite.setMonth(limite.getMonth() - meses)
+  return lotes.filter(l => l.fecha > limite)
+}
+
+/** Saldo REAL de sellos: los de los lotes que no han vencido. */
+export const sellosVigentes = (card, cfg, ahora = new Date()) =>
+  lotesVigentes(card, cfg, ahora).reduce((s, l) => s + l.cantidad, 0)
+
+/**
+ * Cuándo vence el lote MÁS VIEJO del cliente. Es la fecha que vale la pena
+ * decirle ("tus sellos vencen el 5 de marzo"): la que lo hace volver.
+ * Devuelve null si no hay caducidad configurada o no tiene sellos.
+ */
+export const vencimientoProximo = (card, cfg, ahora = new Date()) => {
+  const meses = Number(cfg?.stampExpiryMonths) || 0
+  if (meses <= 0) return null
+  const lotes = lotesVigentes(card, cfg, ahora)
+  if (lotes.length === 0) return null
+  const vence = new Date(lotes[0].fecha)
+  vence.setMonth(vence.getMonth() + meses)
+  return vence
+}
+
+/** Los lotes en el formato que se guarda en Firestore. */
+const aLotesGuardables = (lotes) => lotes.map(l => ({ date: l.fecha, quantity: l.cantidad }))
+
+/**
  * Teléfono → llave de tarjeta. Se queda con los dígitos y descarta el código de
  * país peruano para que "+51 987654321", "51987654321" y "987654321" sean la
  * MISMA tarjeta. Devuelve null si no hay teléfono usable (no se puede fidelizar
@@ -121,12 +235,20 @@ export const phoneKey = (phone) => {
 
 const cardsRef = (businessId) => collection(db, 'businesses', businessId, 'loyaltyCards')
 
-export const getLoyaltyCard = async (businessId, phone) => {
+export const getLoyaltyCard = async (businessId, phone, config = null) => {
   const key = phoneKey(phone)
   if (!key) return { success: false, error: 'Sin teléfono válido' }
   try {
     const snap = await getDoc(doc(cardsRef(businessId), key))
-    return { success: true, data: snap.exists() ? { id: snap.id, ...snap.data() } : null }
+    if (!snap.exists()) return { success: true, data: null }
+    const card = { id: snap.id, ...snap.data() }
+    // El saldo se calcula al LEER, no se confía en el contador guardado: si
+    // pasaron meses sin comprar, sus sellos ya vencieron aunque nadie haya
+    // tocado la tarjeta. Sale gratis — los lotes viven en el mismo documento.
+    const cfg = { ...DEFAULT_LOYALTY_CONFIG, ...(config || {}) }
+    return { success: true, data: cfg.stampExpiryMonths > 0
+      ? { ...card, stamps: sellosVigentes(card, cfg), stampsGuardados: card.stamps || 0 }
+      : card }
   } catch (error) {
     console.error('Error al leer tarjeta de fidelidad:', error)
     return { success: false, error: error.message }
@@ -161,6 +283,9 @@ export const earnStamp = async (businessId, {
 
   const cfg = { ...DEFAULT_LOYALTY_CONFIG, ...(config || {}) }
   if (!cfg.enabled) return { success: false, error: 'Programa desactivado' }
+  if (!programaVigente(cfg)) {
+    return { success: false, expirado: true, error: `El programa de sellos venció el ${vigenciaLegible(cfg)}` }
+  }
 
   // ¿Cuántos sellos gana ESTA venta? Modo 'visit': siempre 1 (con ticket
   // mínimo opcional). Modo 'amount': 1 por cada S/ amountPerStamp, sin
@@ -191,7 +316,18 @@ export const earnStamp = async (businessId, {
 
       const cardSnap = await tx.get(cardDoc)
       const prev = cardSnap.exists() ? cardSnap.data() : null
-      const stamps = (prev?.stamps || 0) + sellosGanados
+
+      // Con caducidad activa el saldo se REARMA desde los lotes vivos: los
+      // vencidos se caen solos en esta misma escritura, sin proceso aparte.
+      const ahora = new Date()
+      const conCaducidad = cfg.stampExpiryMonths > 0
+      const lotesPrevios = conCaducidad ? lotesVigentes(prev, cfg, ahora) : []
+      const lotesNuevos = conCaducidad
+        ? [...lotesPrevios, { fecha: ahora, cantidad: sellosGanados }]
+        : []
+      const stamps = conCaducidad
+        ? lotesNuevos.reduce((acc, l) => acc + l.cantidad, 0)
+        : (prev?.stamps || 0) + sellosGanados
       const totalStamps = (prev?.totalStamps || 0) + sellosGanados
 
       const card = {
@@ -200,6 +336,7 @@ export const earnStamp = async (businessId, {
         ...(customerId ? { customerId } : {}),
         stamps,
         totalStamps,
+        ...(conCaducidad ? { stampLots: aLotesGuardables(lotesNuevos) } : {}),
         goal: cfg.goal,
         rewardsRedeemed: prev?.rewardsRedeemed || 0,
         lastActivityAt: serverTimestamp(),
@@ -235,9 +372,14 @@ export const earnStamp = async (businessId, {
  * Canjear el premio: descuenta la meta de sellos (no reinicia a cero — si tenía
  * 12 con meta 10, le quedan 2, que es lo justo) y deja el movimiento.
  */
-export const redeemReward = async (businessId, phone, { userName = '', note = '' } = {}) => {
+export const redeemReward = async (businessId, phone, { userName = '', note = '', config = null } = {}) => {
   const key = phoneKey(phone)
   if (!key) return { success: false, error: 'Sin teléfono válido' }
+  // La vigencia se valida también acá y no solo en la pantalla: el canje es
+  // el momento en que se entrega algo gratis.
+  if (config && !programaVigente({ ...DEFAULT_LOYALTY_CONFIG, ...config })) {
+    return { success: false, expirado: true, error: `El programa venció el ${vigenciaLegible(config)} y ya no admite canjes` }
+  }
   try {
     const cardDoc = doc(cardsRef(businessId), key)
     const result = await runTransaction(db, async (tx) => {
@@ -245,11 +387,35 @@ export const redeemReward = async (businessId, phone, { userName = '', note = ''
       if (!snap.exists()) throw new Error('Este cliente no tiene tarjeta')
       const card = snap.data()
       const goal = card.goal || DEFAULT_LOYALTY_CONFIG.goal
-      if ((card.stamps || 0) < goal) throw new Error('Todavía no llega a la meta de sellos')
+      const cfg = { ...DEFAULT_LOYALTY_CONFIG, ...(config || {}) }
+      const conCaducidad = cfg.stampExpiryMonths > 0
+      const ahora = new Date()
 
-      const stamps = card.stamps - goal
+      // Con caducidad, el saldo que cuenta es el de los lotes VIVOS: unos
+      // sellos vencidos no pueden pagar un premio.
+      const lotes = conCaducidad ? lotesVigentes(card, cfg, ahora) : []
+      const disponibles = conCaducidad
+        ? lotes.reduce((acc, l) => acc + l.cantidad, 0)
+        : (card.stamps || 0)
+      if (disponibles < goal) throw new Error('Todavía no llega a la meta de sellos')
+
+      // FIFO: el canje se come los sellos MÁS VIEJOS, que son los que están
+      // por vencer. Cobrarle los nuevos sería regalarle la caducidad.
+      let porConsumir = goal
+      const restantes = []
+      for (const lote of lotes) {
+        if (porConsumir <= 0) { restantes.push(lote); continue }
+        const usa = Math.min(lote.cantidad, porConsumir)
+        porConsumir -= usa
+        if (lote.cantidad - usa > 0) restantes.push({ ...lote, cantidad: lote.cantidad - usa })
+      }
+
+      const stamps = conCaducidad
+        ? restantes.reduce((acc, l) => acc + l.cantidad, 0)
+        : card.stamps - goal
       tx.set(cardDoc, {
         stamps,
+        ...(conCaducidad ? { stampLots: aLotesGuardables(restantes) } : {}),
         rewardsRedeemed: (card.rewardsRedeemed || 0) + 1,
         lastActivityAt: serverTimestamp(),
         updatedAt: serverTimestamp(),

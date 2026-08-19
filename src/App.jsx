@@ -120,6 +120,7 @@ import VeterinaryAgenda from './pages/VeterinaryAgenda'
 import CatalogoPublico from './pages/CatalogoPublico'
 // Public complaints book
 import LibroReclamaciones from './pages/LibroReclamaciones'
+import RegistroFidelidad from './pages/RegistroFidelidad'
 // Admin complaints
 import ComplaintsList from './pages/ComplaintsList'
 // Student payment control
@@ -217,6 +218,9 @@ function App() {
             {/* Libro de Reclamaciones público */}
             <Route path="/reclamos/:slug" element={<LibroReclamaciones />} />
             <Route path="/app/reclamos/:slug" element={<LibroReclamaciones />} />
+
+            {/* Registro público de fidelización (el QR de mesa) */}
+            <Route path="/registro/:negocio" element={<RegistroFidelidad />} />
 
             {/* Catálogo Demo */}
             <Route path="/demo/catalogo" element={<CatalogoPublico isDemo />} />
