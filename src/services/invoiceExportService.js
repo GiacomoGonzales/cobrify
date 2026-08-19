@@ -412,7 +412,7 @@ function appendItemsDetailSheet(wb, invoices, businessData, branchLabel) {
 
   const headers = [
     'N° Comprobante', 'Fecha', 'Tipo', 'Cliente',
-    ...(conLicencia ? ['N° Licencia'] : []),
+    ...(conLicencia ? ['Licencia / Resolución'] : []),
     ...(conTarjeta ? ['T. Propiedad'] : []),
     'Producto', 'SKU', 'Cantidad', 'Precio Unit.',
     'Descuento', 'Subtotal Item', 'Afectación IGV',

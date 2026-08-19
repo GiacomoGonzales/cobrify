@@ -4250,7 +4250,7 @@ Gracias por tu preferencia.`
                       <span className="text-gray-600"><strong>Año:</strong> {viewingInvoice.customer.vehicleYear}</span>
                     )}
                     {viewingInvoice.customer?.licenseNumber && (
-                      <span className="text-gray-600"><strong>Licencia:</strong> {viewingInvoice.customer.licenseNumber}</span>
+                      <span className="text-gray-600"><strong>Licencia / Resolución:</strong> {viewingInvoice.customer.licenseNumber}</span>
                     )}
                     {viewingInvoice.customer?.propertyCard && (
                       <span className="text-gray-600"><strong>T. Propiedad:</strong> {viewingInvoice.customer.propertyCard}</span>

@@ -1062,6 +1062,12 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   // Calcular anchos de etiquetas para cada columna
   const leftLabels = ['RAZÓN SOCIAL:', 'RUC:', 'DIRECCIÓN:', 'VENDEDOR:']
+  // Las etiquetas de los campos opcionales entran al cálculo SOLO si el negocio
+  // los usa: "LICENCIA / RESOLUCIÓN:" es más larga que cualquiera de las fijas y
+  // sin contarla el valor se encimaría con ella. Incluirlas siempre correría los
+  // datos de TODOS los PDF por campos que casi nadie tiene activos.
+  if (companySettings?.posCustomFields?.showLicenseNumberField) leftLabels.push('LICENCIA / RESOLUCIÓN:')
+  if (companySettings?.posCustomFields?.showPropertyCardField) leftLabels.push('T. PROPIEDAD:')
   const rightLabels = ['EMISIÓN:', 'MONEDA:', 'FORMA DE PAGO:', 'VENCIMIENTO:', 'OPERACIÓN:']
 
   doc.setFont('helvetica', 'bold')
@@ -1226,10 +1232,10 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     leftY += dataLineHeight
   }
 
-  // N° de Licencia
+  // N° de Licencia (persona natural) o de resolución (empresa)
   if (companySettings?.posCustomFields?.showLicenseNumberField && invoice.customer?.licenseNumber) {
     doc.setFont('helvetica', 'bold')
-    doc.text('LICENCIA:', colLeftX, leftY)
+    doc.text('LICENCIA / RESOLUCIÓN:', colLeftX, leftY)
     doc.setFont('helvetica', 'normal')
     doc.text(String(invoice.customer.licenseNumber).toUpperCase(), leftValueX, leftY)
     leftY += dataLineHeight

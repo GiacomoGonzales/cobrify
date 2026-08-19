@@ -1197,7 +1197,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
         printer = printer.text(convertSpanishText(`Ano: ${invoice.customer.vehicleYear}\n`));
       }
       if (business?.posCustomFields?.showLicenseNumberField && invoice.customer?.licenseNumber) {
-        printer = printer.text(convertSpanishText(`Licencia: ${String(invoice.customer.licenseNumber).toUpperCase()}\n`));
+        printer = printer.text(convertSpanishText(`Lic./Resol.: ${String(invoice.customer.licenseNumber).toUpperCase()}\n`));
       }
       if (business?.posCustomFields?.showPropertyCardField && invoice.customer?.propertyCard) {
         printer = printer.text(convertSpanishText(`T. Propiedad: ${String(invoice.customer.propertyCard).toUpperCase()}\n`));
@@ -2615,7 +2615,7 @@ const buildTicketEscPos = async (invoice, business, paperWidth = 58) => {
       builder.text(`Ano: ${invoice.customer.vehicleYear}`).newLine();
     }
     if (business?.posCustomFields?.showLicenseNumberField && invoice.customer?.licenseNumber) {
-      builder.text(`Licencia: ${String(invoice.customer.licenseNumber).toUpperCase()}`).newLine();
+      builder.text(`Lic./Resol.: ${String(invoice.customer.licenseNumber).toUpperCase()}`).newLine();
     }
     if (business?.posCustomFields?.showPropertyCardField && invoice.customer?.propertyCard) {
       builder.text(`T. Propiedad: ${String(invoice.customer.propertyCard).toUpperCase()}`).newLine();

@@ -1635,7 +1635,7 @@ export default function Customers() {
                     <TableHead className="text-xs py-2">Placa</TableHead>
                   )}
                   {businessSettings?.posCustomFields?.showLicenseNumberField && (
-                    <TableHead className="text-xs py-2">Licencia</TableHead>
+                    <TableHead className="text-xs py-2">Lic./Resol.</TableHead>
                   )}
                   {businessSettings?.posCustomFields?.showPropertyCardField && (
                     <TableHead className="text-xs py-2">T. Propiedad</TableHead>
@@ -2010,8 +2010,8 @@ export default function Customers() {
           {/* Documentos del conductor/vehículo - solo si están habilitados */}
           {businessSettings?.posCustomFields?.showLicenseNumberField && (
             <Input
-              label="N° de Licencia"
-              placeholder="Ej: Q12345678"
+              label="Licencia / Resolución"
+              placeholder="Licencia (persona) o resolución (empresa)"
               error={errors.licenseNumber?.message}
               {...register('licenseNumber')}
               className="uppercase"

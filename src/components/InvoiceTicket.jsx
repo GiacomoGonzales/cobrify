@@ -909,7 +909,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           )}
           {companySettings?.posCustomFields?.showLicenseNumberField && invoice.customer?.licenseNumber && (
             <div className="info-row">
-              <span className="info-label">Licencia:</span>
+              <span className="info-label">Lic./Resol.:</span>
               <span style={{ textTransform: 'uppercase' }}>{invoice.customer.licenseNumber}</span>
             </div>
           )}

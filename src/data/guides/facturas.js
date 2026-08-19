@@ -302,7 +302,7 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'Para rubros que necesitan un dato más por venta, hay campos opcionales que se capturan en el POS y viajan al comprobante. El campo **Alumno** (colegios, academias) agrega su columna a esta tabla y — importante — deja **buscar el comprobante por el nombre del alumno**, que suele ser lo único que el padre recuerda. El campo **Placa de Vehículo** (talleres, lavaderos) se muestra en el detalle y en el documento, igual que **Modelo**, **Año**, **N° de Licencia** y **Tarjeta de Propiedad** (transporte). Todos se activan en Configuración → Campos del cliente, y los de licencia y tarjeta de propiedad salen además como columnas del reporte de ventas en Excel.',
+          text: 'Para rubros que necesitan un dato más por venta, hay campos opcionales que se capturan en el POS y viajan al comprobante. El campo **Alumno** (colegios, academias) agrega su columna a esta tabla y — importante — deja **buscar el comprobante por el nombre del alumno**, que suele ser lo único que el padre recuerda. El campo **Placa de Vehículo** (talleres, lavaderos) se muestra en el detalle y en el documento, igual que **Modelo**, **Año**, **Licencia / Resolución** y **Tarjeta de Propiedad** (transporte). Todos se activan en Configuración → Campos del cliente, y los de licencia y tarjeta de propiedad salen además como columnas del reporte de ventas en Excel.',
         },
         {
           type: 'enlace',

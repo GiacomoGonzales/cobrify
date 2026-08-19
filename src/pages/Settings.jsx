@@ -667,7 +667,7 @@ export default function Settings() {
   const [posCustomFields, setPosCustomFields] = useState({
     showStudentField: false, // Mostrar campo "Alumno" en el POS
     showVehiclePlateField: false, // Mostrar campo "Placa de Vehículo" en el POS
-    showLicenseNumberField: false, // Mostrar campo "N° de Licencia" en el POS
+    showLicenseNumberField: false, // Mostrar campo "Licencia / Resolución" en el POS
     showPropertyCardField: false, // Mostrar campo "Tarjeta de Propiedad" en el POS
     // Campos para transporte de carga
     showOriginAddressField: false, // Dirección de origen
@@ -5566,8 +5566,8 @@ export default function Settings() {
                   <SettingToggle
                     checked={posCustomFields.showLicenseNumberField}
                     onChange={(e) => setPosCustomFields({ ...posCustomFields, showLicenseNumberField: e.target.checked })}
-                    title={'Campo "N° de Licencia"'}
-                    description="Muestra un campo para ingresar el número de licencia del cliente en el POS y comprobantes"
+                    title={'Campo "Licencia / Resolución"'}
+                    description="Muestra un campo para el número de licencia (persona natural) o de resolución (empresa) del cliente en el POS y comprobantes"
                   />
                   <SettingToggle
                     checked={posCustomFields.showPropertyCardField}

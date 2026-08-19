@@ -1002,7 +1002,7 @@ export default function POS() {
     vehiclePlate: '', // Placa de vehículo
     vehicleModel: '', // Modelo de vehículo
     vehicleYear: '', // Año de vehículo
-    licenseNumber: '', // N° de licencia del cliente
+    licenseNumber: '', // N° de licencia (persona natural) o de resolución (empresa)
     propertyCard: '', // Tarjeta de propiedad del vehículo
     customerCoords: null, // Ubicación GPS marcada en el catálogo online ({lat,lng})
     // Campos para transporte de carga
@@ -10455,7 +10455,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         type="text"
                         value={customerData.licenseNumber}
                         onChange={e => setCustomerData({ ...customerData, licenseNumber: e.target.value.toUpperCase() })}
-                        placeholder="N° de Licencia"
+                        placeholder="N° de Licencia / Resolución"
                         className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     )}
@@ -11029,7 +11029,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         type="text"
                         value={customerData.licenseNumber}
                         onChange={e => setCustomerData({ ...customerData, licenseNumber: e.target.value.toUpperCase() })}
-                        placeholder="N° de Licencia"
+                        placeholder="N° de Licencia / Resolución"
                         className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     )}
@@ -11256,7 +11256,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         type="text"
                         value={customerData.licenseNumber}
                         onChange={e => setCustomerData({ ...customerData, licenseNumber: e.target.value.toUpperCase() })}
-                        placeholder="N° de Licencia (opcional)"
+                        placeholder="N° de Licencia / Resolución (opcional)"
                         className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     )}
