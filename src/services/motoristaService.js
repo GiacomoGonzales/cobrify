@@ -255,6 +255,10 @@ export const createDeliveryRecord = async (businessId, data) => {
       customerName: data.customerName || '',
       customerPhone: data.customerPhone || '',
       customerAddress: data.customerAddress || '',
+      // Ubicación GPS del comprador, tal como la marcó en el catálogo. Es lo
+      // que le sirve al repartidor: una dirección escrita a mano puede no
+      // existir en el mapa, un punto siempre lleva a algún lado.
+      customerCoords: data.customerCoords || null,
       amount: parseFloat(data.amount) || 0,
       deliveryFee: parseFloat(data.deliveryFee) || 0,
       paymentMethod: data.paymentMethod || 'cash',

@@ -1004,6 +1004,7 @@ export default function POS() {
     vehicleYear: '', // Año de vehículo
     licenseNumber: '', // N° de licencia del cliente
     propertyCard: '', // Tarjeta de propiedad del vehículo
+    customerCoords: null, // Ubicación GPS marcada en el catálogo online ({lat,lng})
     // Campos para transporte de carga
     originAddress: '', // Dirección de origen
     destinationAddress: '', // Dirección de destino
@@ -2155,6 +2156,7 @@ export default function POS() {
           email: c.email || '',
           phone: c.phone || '',
           address: c.address || '',
+          customerCoords: c.coords || null,
         }))
         setSelectedCustomer({
           id: null,
@@ -6513,6 +6515,7 @@ export default function POS() {
                 vehicleYear: customerData.vehicleYear || '',
                 licenseNumber: customerData.licenseNumber || '',
                 propertyCard: customerData.propertyCard || '',
+                coords: customerData.customerCoords || null,
                 // Campos de transporte de carga
                 originAddress: customerData.originAddress || '',
                 destinationAddress: customerData.destinationAddress || '',
@@ -6541,6 +6544,7 @@ export default function POS() {
                 vehicleYear: customerData.vehicleYear || '',
                 licenseNumber: customerData.licenseNumber || '',
                 propertyCard: customerData.propertyCard || '',
+                coords: customerData.customerCoords || null,
                 // Campos de transporte de carga
                 originAddress: customerData.originAddress || '',
                 destinationAddress: customerData.destinationAddress || '',
@@ -6800,6 +6804,7 @@ export default function POS() {
               vehicleYear: customerData.vehicleYear || '',
                 licenseNumber: customerData.licenseNumber || '',
                 propertyCard: customerData.propertyCard || '',
+                coords: customerData.customerCoords || null,
               // Campos de transporte de carga
               originAddress: customerData.originAddress || '',
               destinationAddress: customerData.destinationAddress || '',
@@ -6828,6 +6833,7 @@ export default function POS() {
               vehicleYear: customerData.vehicleYear || '',
                 licenseNumber: customerData.licenseNumber || '',
                 propertyCard: customerData.propertyCard || '',
+                coords: customerData.customerCoords || null,
               // Campos de transporte de carga
               originAddress: customerData.originAddress || '',
               destinationAddress: customerData.destinationAddress || '',

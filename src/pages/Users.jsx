@@ -26,6 +26,7 @@ import { getWarehouses } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
 import { getSellers } from '@/services/sellerService'
 import { getActiveWaiters } from '@/services/waiterService'
+import { getActiveMotoristas } from '@/services/motoristaService'
 import { formatDate } from '@/lib/utils'
 import { db } from '@/lib/firebase'
 import { collection, getDocs } from 'firebase/firestore'
@@ -67,6 +68,8 @@ export default function Users() {
   const [hideStockInPOS, setHideStockInPOS] = useState(false)
   const [hideDiscountInPOS, setHideDiscountInPOS] = useState(false)
   const [waiters, setWaiters] = useState([])
+  const [motoristas, setMotoristas] = useState([])
+  const [assignedMotoristaId, setAssignedMotoristaId] = useState('')
   const [defaultWaiterId, setDefaultWaiterId] = useState('')
 
   // Preferencias de notificaciones para sub-usuarios.
@@ -169,6 +172,7 @@ export default function Users() {
     loadWarehouses()
     loadBranches()
     loadPosSellers()
+    loadMotoristas()
     if (isRealEstateMode) {
       loadAgents()
     }
@@ -248,6 +252,20 @@ export default function Users() {
     } catch (error) {
       console.log('Error loading sellers:', error.message)
       setPosSellers([])
+    }
+  }
+
+  const loadMotoristas = async () => {
+    try {
+      const businessId = getBusinessId()
+      if (!businessId) return
+      const result = await getActiveMotoristas(businessId)
+      if (result.success) {
+        setMotoristas(result.data || [])
+      }
+    } catch (error) {
+      console.log('Error loading motoristas:', error.message)
+      setMotoristas([])
     }
   }
 
@@ -364,6 +382,7 @@ export default function Users() {
     setAllowedDocumentTypes(userToEdit.allowedDocumentTypes || [])
     setAllowedPaymentMethods(userToEdit.allowedPaymentMethods || [])
     setAssignedSellerId(userToEdit.assignedSellerId || '')
+    setAssignedMotoristaId(userToEdit.assignedMotoristaId || '')
     setDefaultWaiterId(userToEdit.defaultWaiterId || '')
     setIndependentCashRegister(userToEdit.independentCashRegister || false)
     setHideStockInPOS(userToEdit.hideStockInPOS || false)
@@ -522,6 +541,8 @@ export default function Users() {
           allowedPaymentMethods,
           assignedSellerId: assignedSellerId || null,
           assignedSellerName: selectedSellerObj?.name || null,
+          assignedMotoristaId: assignedMotoristaId || null,
+          assignedMotoristaName: motoristas.find(m => m.id === assignedMotoristaId)?.name || null,
           defaultWaiterId: defaultWaiterId || null,
           defaultWaiterName: selectedWaiterObj?.name || null,
           independentCashRegister,
@@ -563,6 +584,8 @@ export default function Users() {
           allowedPaymentMethods,
           assignedSellerId: assignedSellerId || null,
           assignedSellerName: selectedSellerForCreate?.name || null,
+          assignedMotoristaId: assignedMotoristaId || null,
+          assignedMotoristaName: motoristas.find(m => m.id === assignedMotoristaId)?.name || null,
           defaultWaiterId: defaultWaiterId || null,
           defaultWaiterName: selectedWaiterForCreate?.name || null,
           independentCashRegister,
@@ -1459,7 +1482,7 @@ export default function Users() {
                         </div>
 
                         {/* Vendedor / Mozo asignado */}
-                        {(posSellers.length > 0 || (isRestaurantMode && waiters.length > 0)) && (
+                        {(posSellers.length > 0 || (isRestaurantMode && waiters.length > 0) || motoristas.length > 0) && (
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {posSellers.length > 0 && (
                               <div>
@@ -1478,6 +1501,27 @@ export default function Users() {
                                 </select>
                                 <p className="text-xs text-gray-500 mt-1">
                                   Si se asigna, queda fijo en el POS.
+                                </p>
+                              </div>
+                            )}
+
+                            {motoristas.length > 0 && (
+                              <div>
+                                <h4 className="text-sm font-medium text-gray-700 mb-1">Repartidor asignado</h4>
+                                <select
+                                  value={assignedMotoristaId}
+                                  onChange={(e) => setAssignedMotoristaId(e.target.value)}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+                                >
+                                  <option value="">Sin asignar (ve todos los envíos)</option>
+                                  {motoristas.map(m => (
+                                    <option key={m.id} value={m.id}>
+                                      {m.code ? `${m.code} - ` : ''}{m.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  En Envíos verá solo las entregas que le asignaron.
                                 </p>
                               </div>
                             )}

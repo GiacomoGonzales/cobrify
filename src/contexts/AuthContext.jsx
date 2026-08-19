@@ -62,6 +62,7 @@ export const AuthProvider = ({ children }) => {
   const [allowedDocumentTypes, setAllowedDocumentTypes] = useState(EMPTY_PERMS) // Tipos de comprobante POS (vacío = todos)
   const [allowedPaymentMethods, setAllowedPaymentMethods] = useState(EMPTY_PERMS) // Métodos de pago POS (vacío = todos)
   const [assignedSellerId, setAssignedSellerId] = useState(null) // Vendedor asignado al sub-usuario
+  const [assignedMotoristaId, setAssignedMotoristaId] = useState(null) // Repartidor asignado al sub-usuario
   const [assignedSellerName, setAssignedSellerName] = useState(null)
   const [independentCashRegister, setIndependentCashRegister] = useState(false) // Si el sub-usuario tiene caja independiente
   const [hideStockInPOS, setHideStockInPOS] = useState(false) // Ocultar stock en tarjetas del POS
@@ -201,6 +202,7 @@ export const AuthProvider = ({ children }) => {
                 setAllowedDocumentTypes(userData.allowedDocumentTypes || EMPTY_PERMS)
                 setAllowedPaymentMethods(userData.allowedPaymentMethods || EMPTY_PERMS)
                 setAssignedSellerId(userData.assignedSellerId || null)
+                setAssignedMotoristaId(userData.assignedMotoristaId || null)
                 setAssignedSellerName(userData.assignedSellerName || null)
                 setIndependentCashRegister(userData.independentCashRegister || false)
                 setHideStockInPOS(userData.hideStockInPOS || false)
@@ -580,6 +582,7 @@ export const AuthProvider = ({ children }) => {
       setAllowedDocumentTypes(userData.allowedDocumentTypes || EMPTY_PERMS)
       setAllowedPaymentMethods(userData.allowedPaymentMethods || EMPTY_PERMS)
       setAssignedSellerId(userData.assignedSellerId || null)
+      setAssignedMotoristaId(userData.assignedMotoristaId || null)
       setAssignedSellerName(userData.assignedSellerName || null)
       setIndependentCashRegister(userData.independentCashRegister || false)
       setHideStockInPOS(userData.hideStockInPOS || false)
@@ -891,6 +894,7 @@ export const AuthProvider = ({ children }) => {
     allowedDocumentTypes, // Tipos de comprobante permitidos en POS
     allowedPaymentMethods, // Métodos de pago permitidos en POS
     assignedSellerId, // Vendedor asignado al sub-usuario en POS
+    assignedMotoristaId, // Repartidor asignado al sub-usuario (filtra Envíos)
     assignedSellerName,
     independentCashRegister, // Si el sub-usuario tiene caja independiente
     hideStockInPOS, // Ocultar stock en tarjetas del POS

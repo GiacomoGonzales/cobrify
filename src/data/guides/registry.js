@@ -369,6 +369,16 @@ export const GUIDES = [
     load: () => import('./catalogo-online.js'),
   },
   {
+    id: 'envios',
+    route: '/app/envios',
+    title: 'Envíos',
+    category: 'Operación',
+    description: 'Repartidores, asignación de entregas, la dirección que abre el mapa y el arqueo del efectivo cobrado.',
+    keywords: 'envios delivery repartidor motorista motorizado entrega direccion mapa google maps ubicacion gps ruta arqueo efectivo cobrar al entregar asignar repartidor usuario',
+    modos: null,
+    load: () => import('./envios.js'),
+  },
+  {
     id: 'pedidos-online',
     route: '/app/pedidos-online',
     title: 'Pedidos Online',

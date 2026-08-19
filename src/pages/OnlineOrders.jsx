@@ -233,6 +233,9 @@ export default function OnlineOrders() {
           email: order.customerEmail || '',
           phone: order.customerPhone || '',
           address: order.customerAddress || '',
+          // La ubicación que el comprador marcó en el catálogo: viaja hasta el
+          // envío para que el repartidor la abra en el mapa.
+          coords: order.customerCoords || null,
         },
         notes: order.notes || '',
       },

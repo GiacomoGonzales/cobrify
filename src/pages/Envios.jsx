@@ -2,9 +2,10 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Truck, Plus, Edit, Trash2, UserCheck, DollarSign, TrendingUp,
   Loader2, Search, Package, Clock, CheckCircle, XCircle, Filter,
-  CircleDot, Coffee, WifiOff, X, FileText, ArrowRight, Bike, Receipt,
+  CircleDot, Coffee, WifiOff, X, FileText, ArrowRight, Bike, Receipt, MapPin,
 } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import GuideLink from '@/components/guide/GuideLink'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Input from '@/components/ui/Input'
@@ -64,8 +65,22 @@ const PAYMENT_METHOD_LABELS = {
   plin: 'Plin',
 }
 
+/**
+ * Enlace al mapa para una entrega. Con la ubicación que el comprador marcó en
+ * el catálogo apunta al punto EXACTO; si no la hay, busca la dirección escrita.
+ * Devuelve null cuando no hay ni una ni otra.
+ */
+const enlaceMapa = (delivery) => {
+  const c = delivery?.customerCoords
+  if (c && Number.isFinite(Number(c.lat)) && Number.isFinite(Number(c.lng))) {
+    return `https://www.google.com/maps?q=${c.lat},${c.lng}`
+  }
+  const dir = String(delivery?.customerAddress || '').trim()
+  return dir ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(dir)}` : null
+}
+
 export default function Envios() {
-  const { getBusinessId, isDemoMode, branchScope } = useAppContext()
+  const { getBusinessId, isDemoMode, branchScope, assignedMotoristaId } = useAppContext()
   const toast = useToast()
 
   const [activeTab, setActiveTab] = useState('envios')
@@ -234,7 +249,13 @@ export default function Envios() {
   const loadDeliveries = async () => {
     setDeliveriesLoading(true)
     try {
-      const result = await getDeliveries(getBusinessId(), deliveryFilters)
+      const result = await getDeliveries(getBusinessId(), {
+        ...deliveryFilters,
+        // Un sub-usuario con repartidor asignado ve SOLO sus entregas. Se
+        // acota en la consulta y no en pantalla: las de los demás ni siquiera
+        // se descargan a su celular.
+        ...(assignedMotoristaId ? { motoristaId: assignedMotoristaId } : {}),
+      })
       if (result.success) {
         setDeliveries(result.data || [])
       } else {
@@ -411,11 +432,16 @@ export default function Envios() {
     )
   }
 
-  const tabs = [
-    { id: 'envios', label: 'Envíos' },
-    { id: 'motoristas', label: 'Motoristas' },
-    { id: 'arqueo', label: 'Arqueo' },
-  ]
+  // El repartidor entra a ver SU ruta: administrar la flota y el arqueo de caja
+  // son tareas del negocio, no suyas.
+  const esRepartidor = !!assignedMotoristaId
+  const tabs = esRepartidor
+    ? [{ id: 'envios', label: 'Mis Envíos' }]
+    : [
+        { id: 'envios', label: 'Envíos' },
+        { id: 'motoristas', label: 'Motoristas' },
+        { id: 'arqueo', label: 'Arqueo' },
+      ]
 
   return (
     <div className="space-y-6">
@@ -425,10 +451,15 @@ export default function Envios() {
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <Truck className="w-7 h-7" />
             Envíos
+            <GuideLink />
           </h1>
-          <p className="text-gray-600 mt-1">Gestión de envíos, repartidores y arqueo de caja</p>
+          <p className="text-gray-600 mt-1">
+            {esRepartidor
+              ? 'Tus entregas asignadas: toca la dirección para abrirla en el mapa'
+              : 'Gestión de envíos, repartidores y arqueo de caja'}
+          </p>
         </div>
-        {activeTab === 'envios' && (
+        {activeTab === 'envios' && !esRepartidor && (
           <Button onClick={() => {
             if (isDemoMode) { toast.info('No disponible en demo'); return }
             setIsNewDeliveryModalOpen(true)
@@ -611,6 +642,10 @@ function NewDeliveryModal({ isOpen, onClose, motoristas, onSuccess }) {
     setDeliveryAddress(inv.customer?.address || inv.customerAddress || '')
   }
 
+  // Coordenadas del comprobante (solo las traen las ventas que nacieron de un
+  // pedido del catálogo, donde el comprador marcó su ubicación).
+  const coordsDelComprobante = (inv) => inv?.customer?.coords || inv?.customerCoords || null
+
   const handleCreateDelivery = async () => {
     if (!selectedInvoice) {
       toast.error('Selecciona una factura')
@@ -633,6 +668,7 @@ function NewDeliveryModal({ isOpen, onClose, motoristas, onSuccess }) {
         orderNumber: inv.serie ? `${inv.serie}-${inv.number}` : (inv.number || ''),
         customerName: inv.customer?.name || inv.customerName || '',
         customerAddress: deliveryAddress,
+        customerCoords: coordsDelComprobante(inv),
         amount: inv.total || inv.amount || 0,
         deliveryFee: parseFloat(deliveryFee) || 0,
         paymentMethod: inv.paymentMethod || inv.metodoPago || 'cash',
@@ -1028,6 +1064,26 @@ function TabEnvios({ deliveries, loading, filters, setFilters, motoristas, onSea
                         </span>
                       </div>
 
+                      {/* Fila 2b: Dirección — se toca y abre el mapa. Es lo que
+                          el repartidor necesita del celular. */}
+                      {(d.customerAddress || d.customerCoords) && (() => {
+                        const url = enlaceMapa(d)
+                        return url ? (
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-1.5 flex items-start gap-1.5 text-sm text-primary-600 hover:underline"
+                          >
+                            <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                            <span className="break-words">
+                              {d.customerAddress || 'Ver ubicación en el mapa'}
+                              {d.customerCoords && <span className="text-xs text-gray-500"> · ubicación exacta</span>}
+                            </span>
+                          </a>
+                        ) : null
+                      })()}
+
                       {/* Fila 3: Fecha + Estado */}
                       <div className="flex items-center justify-between mt-2">
                         <span className="text-xs text-gray-500">
@@ -1077,6 +1133,7 @@ function TabEnvios({ deliveries, loading, filters, setFilters, motoristas, onSea
                       <TableHead>Factura #</TableHead>
                       <TableHead>Motorista</TableHead>
                       <TableHead>Cliente</TableHead>
+                      <TableHead>Dirección</TableHead>
                       <TableHead className="text-right">Monto</TableHead>
                       <TableHead>Método Pago</TableHead>
                       <TableHead>Pago</TableHead>
@@ -1097,6 +1154,24 @@ function TabEnvios({ deliveries, loading, filters, setFilters, motoristas, onSea
                           <TableCell className="font-mono">{d.orderNumber || '-'}</TableCell>
                           <TableCell className="font-medium">{d.motoristaName || '-'}</TableCell>
                           <TableCell>{d.customerName || '-'}</TableCell>
+                          <TableCell className="max-w-xs">
+                            {(() => {
+                              const url = enlaceMapa(d)
+                              if (!url) return <span className="text-gray-400">-</span>
+                              return (
+                                <a
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-start gap-1.5 text-sm text-primary-600 hover:underline"
+                                  title={d.customerCoords ? 'Abrir la ubicación exacta en Google Maps' : 'Buscar la dirección en Google Maps'}
+                                >
+                                  <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                                  <span className="truncate">{d.customerAddress || 'Ver ubicación'}</span>
+                                </a>
+                              )
+                            })()}
+                          </TableCell>
                           <TableCell className="text-right font-semibold">
                             S/ {(d.amount || 0).toFixed(2)}
                           </TableCell>
