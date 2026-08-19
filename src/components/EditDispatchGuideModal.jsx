@@ -418,6 +418,7 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
         gtin: item.gtin || '',
         subpCode: item.subpCode || '',
         isNormalized: item.isNormalized || false,
+        weight: item.weight != null && item.weight !== '' ? String(item.weight) : '',
         batchNumber: item.batchNumber || '',
         batchExpiryDate: item.batchExpiryDate || '',
         marca: item.marca || '',
@@ -498,6 +499,7 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
       gtin: '',
       subpCode: '',
       isNormalized: false,
+      weight: '',
     }])
   }
 
@@ -1061,7 +1063,11 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
 
         items: items.map((item, index) => {
           const { serials, trackSerials, ...rest } = item
-          return { ...rest, lineNumber: index + 1 }
+          return {
+            ...rest,
+            weight: rest.weight === '' || rest.weight == null ? null : Number(rest.weight),
+            lineNumber: index + 1,
+          }
         }),
 
         additionalInfo,
@@ -2187,6 +2193,7 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                       <th className="w-12 px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
                       <th className="w-28 px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cantidad</th>
                       <th className="w-28 px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unidad</th>
+                      <th className="w-28 px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Peso unit.</th>
                       <th className="w-36 px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Código</th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Descripción</th>
                       <th className="w-12 px-3 py-3"><span className="sr-only">Acciones</span></th>
@@ -2219,6 +2226,18 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                               </option>
                             ))}
                           </select>
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.001"
+                            value={item.weight ?? ''}
+                            onChange={(e) => updateItem(item.id, 'weight', e.target.value)}
+                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                            placeholder="kg"
+                            title="Peso de UNA unidad, en kilogramos"
+                          />
                         </td>
                         <td className="px-3 py-2">
                           <input
@@ -2259,7 +2278,7 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                         if (filteredSerials.length === 0) return null
                         return (
                           <tr className="bg-amber-50/50">
-                            <td colSpan={6} className="px-3 py-1.5">
+                            <td colSpan={7} className="px-3 py-1.5">
                               <div className="flex items-center gap-2">
                                 <span className="text-xs font-medium text-amber-700">S/N:</span>
                                 <select

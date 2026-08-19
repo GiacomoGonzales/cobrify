@@ -434,6 +434,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
             gtin: '',
             subpCode: '',
             isNormalized: false,
+            weight: product?.weight != null && product?.weight !== '' ? String(product.weight) : '',
             batchNumber,
             batchExpiryDate,
             marca: product?.marca || item.marca || '',
@@ -676,6 +677,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       gtin: item.gtin || '',
       subpCode: item.subpCode || '',
       isNormalized: item.isNormalized || false,
+      weight: item.weight != null && item.weight !== '' ? String(item.weight) : '',
       batchNumber: item.batchNumber || '',
       batchExpiryDate: item.batchExpiryDate || '',
     }))
@@ -725,8 +727,12 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     if (!items || items.length === 0) return
 
     const estimated = items.reduce((sum, item) => {
+      // El peso del ÍTEM manda: viene precargado de la ficha del producto pero
+      // el usuario pudo ajustarlo. Solo si la línea no tiene peso propio se cae
+      // a la ficha (items viejos, guías clonadas de antes de este campo).
       const product = item.productId ? productsMap[item.productId] : null
-      const unitWeight = Number(product?.weight || 0)
+      const propio = item.weight !== '' && item.weight != null ? Number(item.weight) : null
+      const unitWeight = Number.isFinite(propio) && propio !== null ? propio : Number(product?.weight || 0)
       const qty = Number(item.quantity || 0)
       return sum + (unitWeight * qty)
     }, 0)
@@ -993,6 +999,11 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
         batchExpiryDate,
         marca: product.marca || '',
         laboratoryName: product.laboratoryName || '',
+        // Peso unitario de la ficha del producto. Queda EDITABLE: la ficha
+        // suele tener el peso del empaque y el transportista a veces pesa la
+        // carga real. Si el producto no lo tiene, el campo queda vacío para
+        // escribirlo a mano.
+        weight: product.weight != null && product.weight !== '' ? String(product.weight) : '',
         trackSerials: product.trackSerials || false,
         serials: product.serials || [],
         serialNumber: '',
@@ -1063,6 +1074,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       gtin: '',
       subpCode: '',
       isNormalized: false,
+      weight: '',
       batchNumber: '',
       batchExpiryDate: '',
     }])
@@ -1745,7 +1757,13 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
         items: items.map((item, index) => {
           const { serials, trackSerials, ...rest } = item
-          return { ...rest, lineNumber: index + 1 }
+          return {
+            ...rest,
+            // El input entrega texto: se guarda como número (o null) para que
+            // sume sin sorpresas al clonar la guía o al recalcular el total.
+            weight: rest.weight === '' || rest.weight == null ? null : Number(rest.weight),
+            lineNumber: index + 1,
+          }
         }),
 
         additionalInfo,
@@ -3154,6 +3172,26 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                         onChange={(e) => updateItem(item.id, 'sunatCode', e.target.value)}
                         className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                         placeholder="Opcional"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-0.5">
+                        Peso unit. (kg)
+                        {item.weight !== '' && item.weight != null && Number(item.quantity) > 0 && (
+                          <span className="text-gray-400 font-normal">
+                            {' '}· línea {(Number(item.weight) * Number(item.quantity)).toFixed(2)} kg
+                          </span>
+                        )}
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.001"
+                        value={item.weight ?? ''}
+                        onChange={(e) => updateItem(item.id, 'weight', e.target.value)}
+                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                        placeholder={item.productId ? 'Sin peso en la ficha' : 'Opcional'}
+                        title="Peso de UNA unidad. Se multiplica por la cantidad y suma al peso bruto total."
                       />
                     </div>
 

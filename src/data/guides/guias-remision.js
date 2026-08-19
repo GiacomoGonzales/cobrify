@@ -36,7 +36,7 @@ export default {
             'Crea la guía (o genérala desde el comprobante de venta, que arrastra cliente y productos).',
             'Completa **Origen y Destino**: el punto de partida y el punto de llegada con sus direcciones.',
             'Llena los **Datos de Transporte**: la **Modalidad**, la **Placa** del vehículo, el **Conductor** con su **DNI** y su **Licencia**.',
-            'Revisa los **Bienes a Transportar** y el **Peso total**.',
+            'Revisa los **Bienes a Transportar** y el **Peso total**. Cada ítem tiene su **Peso unit. (kg)**: si el producto ya lo tiene cargado en su ficha, viene puesto solo; si no, lo escribes ahí. El sistema multiplica por la cantidad, suma todas las líneas y llena el peso bruto total — y si prefieres poner el total a mano, el tuyo manda.',
             'Emite: la guía se envía a SUNAT y queda con su **XML SUNAT** y su **CDR SUNAT**.',
           ],
         },
