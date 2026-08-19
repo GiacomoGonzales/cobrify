@@ -295,6 +295,33 @@ export default function CreateCreditNote() {
           const globalDisc = Number(invoice.globalDiscount) || 0
           const globalRatio = grossTotal > 0 ? Math.max(0, grossTotal - globalDisc) / grossTotal : 1
 
+          // Prorratear el descuento global deja líneas de MEDIO CENTAVO
+          // (0.75 × 22.50 = 16.875). Redondeando cada una por separado, todas
+          // suben, y la NC termina costando MÁS que la factura: una boleta de
+          // S/75.00 daba una NC de S/75.02 que el sistema bloquea con razón
+          // —SUNAT la rechaza con el error 3286—, dejando al usuario sin poder
+          // emitirla. Se redondea línea por línea y la diferencia acumulada se
+          // descuenta de la línea MÁS GRANDE, donde un par de céntimos no
+          // distorsiona el precio de forma perceptible.
+          const lineasEfectivas = invoice.items.map(item => {
+            const q = Number(item.quantity) || 0
+            const bruto = unitGrossOf(item) * q
+            const netoItem = Math.max(0, bruto - (Number(item.itemDiscount) || 0))
+            return Number((netoItem * globalRatio).toFixed(2))
+          })
+          // El objetivo nunca puede superar el total de la factura: es el techo
+          // que valida SUNAT.
+          const efectivoTotal = Math.max(0, grossTotal - globalDisc)
+          const totalFactura = Number(invoice.total) || 0
+          const objetivo = Number((totalFactura > 0 ? Math.min(efectivoTotal, totalFactura) : efectivoTotal).toFixed(2))
+          const sumado = Number(lineasEfectivas.reduce((s, v) => s + v, 0).toFixed(2))
+          const desvio = Number((sumado - objetivo).toFixed(2))
+          if (desvio !== 0 && lineasEfectivas.length > 0) {
+            let mayor = 0
+            lineasEfectivas.forEach((v, i) => { if (v > lineasEfectivas[mayor]) mayor = i })
+            lineasEfectivas[mayor] = Number(Math.max(0, lineasEfectivas[mayor] - desvio).toFixed(2))
+          }
+
           return {
             ...prev,
             // Preservar la cantidad original como `originalQuantity` para que
@@ -302,7 +329,7 @@ export default function CreateCreditNote() {
             // referencie el valor de la factura original — no la cantidad
             // actual ya editada. Sin esto, al bajar de 5 a 4, el usuario no
             // podía volver a subir a 5 porque el cap caía al valor actual.
-            items: invoice.items.map(item => {
+            items: invoice.items.map((item, idx) => {
               const qty = Number(item.quantity) || 0
               const lineGross = unitGrossOf(item) * qty
               const lineAfterItemDisc = Math.max(0, lineGross - (Number(item.itemDiscount) || 0))
@@ -333,7 +360,12 @@ export default function CreateCreditNote() {
                 originalName: item.name || item.description || '',
                 price: unitEffective,
                 unitPrice: unitEffective,
-                subtotal: Number((ncQty != null ? unitEffective * ncQty : lineEffective).toFixed(2)),
+                // Cantidad parcial (NC rechazada que se re-edita): se calcula
+                // sobre esa cantidad. Línea completa: el valor YA cuadrado con
+                // el total de la factura.
+                subtotal: ncQty != null && ncQty !== qty
+                  ? Number((unitEffective * ncQty).toFixed(2))
+                  : lineasEfectivas[idx],
                 ...(ncQty != null && { quantity: ncQty }),
                 ...(baseEffective != null && { basePrice: baseEffective }),
               }
