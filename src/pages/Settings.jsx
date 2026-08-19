@@ -3974,6 +3974,7 @@ export default function Settings() {
                         { title: 'Guías y envíos', items: [
                           { id: 'dispatch-guides', label: 'GRE Remitente', description: 'Guías de remisión como remitente' },
                           { id: 'carrier-dispatch-guides', label: 'GRE Transportista', description: 'Guías de remisión como transportista' },
+                          { id: 'bulk-emission', label: 'Emisión Masiva', description: 'Crear muchos comprobantes o guías de una vez desde un Excel' },
                           { id: 'envios', label: 'Envíos', description: 'Gestión de repartidores y entregas' },
                         ] },
                         { title: 'Finanzas', items: [
@@ -4099,6 +4100,7 @@ export default function Settings() {
                         { id: 'suppliers', label: 'Proveedores', description: 'Droguerías y distribuidores' },
                         { id: 'purchases', label: 'Compras', description: 'Registro de compras' },
                         { id: 'dispatch-guides', label: 'GRE Remitente', description: 'Guías de remisión como remitente' },
+                        { id: 'bulk-emission', label: 'Emisión Masiva', description: 'Crear muchos comprobantes o guías de una vez desde un Excel' },
                         { id: 'purchase-orders', label: 'Órdenes de Compra', description: 'Pedidos a proveedores' },
                         { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
                         { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
@@ -4196,6 +4198,7 @@ export default function Settings() {
                         { id: 'quotations', label: 'Cotizaciones', description: 'Presupuestos y proformas' },
                         { id: 'dispatch-guides', label: 'GRE Remitente', description: 'Guías de remisión como remitente' },
                         { id: 'carrier-dispatch-guides', label: 'GRE Transportista', description: 'Guías de remisión como transportista' },
+                        { id: 'bulk-emission', label: 'Emisión Masiva', description: 'Crear muchos comprobantes o guías de una vez desde un Excel' },
                         { id: 'sellers', label: 'Vendedores', description: 'Gestión de vendedores y comisiones' },
                         { id: 'inventory', label: 'Inventario', description: 'Control de stock por producto' },
                         { id: 'warehouses', label: 'Almacenes', description: 'Múltiples ubicaciones de stock' },

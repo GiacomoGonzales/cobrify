@@ -55,6 +55,7 @@ export const RETAIL_PAGES = [
   { id: 'quotations', name: 'Cotizaciones', path: '/cotizaciones', category: 'documentos' },
   { id: 'dispatch-guides', name: 'Guías de Remisión', path: '/guias-remision', category: 'documentos' },
   { id: 'carrier-dispatch-guides', name: 'GRE Transportista', path: '/guias-transportista', category: 'documentos' },
+  { id: 'bulk-emission', name: 'Emisión Masiva', path: '/emision-masiva', category: 'documentos' },
   // Inventario
   { id: 'inventory', name: 'Inventario', path: '/inventario', category: 'inventario' },
   { id: 'warehouses', name: 'Almacenes', path: '/almacenes', category: 'inventario' },
@@ -117,6 +118,7 @@ export const PHARMACY_PAGES = [
   // Documentos
   { id: 'quotations', name: 'Cotizaciones', path: '/cotizaciones', category: 'documentos' },
   { id: 'dispatch-guides', name: 'GRE Remitente', path: '/guias-remision', category: 'documentos' },
+  { id: 'bulk-emission', name: 'Emisión Masiva', path: '/emision-masiva', category: 'documentos' },
   // Ventas
   { id: 'sellers', name: 'Vendedores', path: '/vendedores', category: 'ventas' },
   // El sidebar de farmacia SIEMPRE tuvo Pedidos Online, pero faltaba aquí:
@@ -201,6 +203,7 @@ export const TRANSPORT_PAGES = [
   { id: 'quotations', name: 'Cotizaciones', path: '/cotizaciones', category: 'documentos' },
   { id: 'dispatch-guides', name: 'Guías de Remisión', path: '/guias-remision', category: 'documentos' },
   { id: 'carrier-dispatch-guides', name: 'GRE Transportista', path: '/guias-transportista', category: 'documentos' },
+  { id: 'bulk-emission', name: 'Emisión Masiva', path: '/emision-masiva', category: 'documentos' },
   // Inventario
   { id: 'inventory', name: 'Inventario', path: '/inventario', category: 'inventario' },
   { id: 'warehouses', name: 'Almacenes', path: '/almacenes', category: 'inventario' },

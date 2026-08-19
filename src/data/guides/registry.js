@@ -228,6 +228,16 @@ export const GUIDES = [
     load: () => import('./ordenes-compra.js'),
   },
   {
+    id: 'emision-masiva',
+    route: '/app/emision-masiva',
+    title: 'Emisión Masiva',
+    category: 'Ventas',
+    description: 'Crear muchos documentos de una vez desde un Excel: comprobantes con vista previa validada, y GRE Transportista con emisión del lote a SUNAT.',
+    keywords: 'emision masiva excel plantilla lote importar comprobantes facturas boletas guias transportista gre masivo carga masiva subir archivo validar errores por fila ubigeo',
+    modos: ['retail', 'pharmacy', 'transport'],
+    load: () => import('./emision-masiva.js'),
+  },
+  {
     id: 'cotizaciones',
     route: '/app/cotizaciones',
     title: 'Cotizaciones',

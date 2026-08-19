@@ -56,6 +56,7 @@ import BusinessManagement from './pages/BusinessManagement'
 import GetMyUID from './pages/GetMyUID'
 import NotificationTest from './pages/NotificationTest'
 import Quotations from './pages/Quotations'
+import BulkEmission from './pages/BulkEmission'
 import CreateQuotation from './pages/CreateQuotation'
 import StockMovements from './pages/StockMovements'
 import Demo from './pages/Demo'
@@ -480,6 +481,7 @@ function App() {
               <Route path="cotizaciones" element={<Quotations />} />
               <Route path="cotizaciones/nueva" element={<CreateQuotation />} />
               <Route path="cotizaciones/editar/:id" element={<CreateQuotation />} />
+              <Route path="emision-masiva" element={<BulkEmission />} />
               <Route path="guias-remision" element={<DispatchGuides />} />
               <Route path="guias-transportista" element={<CarrierDispatchGuides />} />
               <Route path="clientes" element={<Customers />} />

@@ -75,6 +75,7 @@ import {
   HelpCircle,
   HandCoins,
   Gift,
+  FileSpreadsheet,
 } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -231,6 +232,14 @@ function Sidebar() {
           label: 'GRE Transportista',
           pageId: 'carrier-dispatch-guides',
           menuId: 'carrier-dispatch-guides',
+          hideInDemo: true,
+        },
+        {
+          path: '/emision-masiva',
+          icon: FileSpreadsheet,
+          label: 'Emisión Masiva',
+          pageId: 'bulk-emission',
+          menuId: 'bulk-emission',
           hideInDemo: true,
         },
       ],
@@ -896,6 +905,14 @@ function Sidebar() {
           label: 'GRE Remitente',
           pageId: 'dispatch-guides',
           menuId: 'dispatch-guides',
+        },
+        {
+          path: '/emision-masiva',
+          icon: FileSpreadsheet,
+          label: 'Emisión Masiva',
+          pageId: 'bulk-emission',
+          menuId: 'bulk-emission',
+          hideInDemo: true,
         },
       ],
     },
