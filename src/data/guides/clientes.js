@@ -133,6 +133,7 @@ export default {
           items: [
             'En la sección **Registro de clientes (QR de mesa)**, decide el gancho: **Sellos de regalo al registrarse** (0 a 5) y/o un **texto libre** ("Regístrate y participa del sorteo mensual"). Ambos son opcionales.',
             'Guarda, y luego usa **Descargar QR** para imprimirlo o **Copiar link** para compartirlo por WhatsApp o redes.',
+            'El link es corto (cbrfy.link) para que entre en un afiche y se pueda dictar por teléfono. Es siempre el mismo, así que el QR que imprimiste una vez te sirve para siempre.',
           ],
         },
         {

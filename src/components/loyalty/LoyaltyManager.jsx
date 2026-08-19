@@ -20,6 +20,7 @@ import {
   WALLET_EN_APROBACION, rewardLabel, programaVigente, vigenciaLegible,
 } from '@/services/loyaltyService'
 import { getProducts } from '@/services/firestoreService'
+import { shortenUrl } from '@/services/urlShortenerService'
 import { matchesSearchQuery } from '@/lib/utils'
 
 /**
@@ -140,6 +141,8 @@ export default function LoyaltyManager({ isOpen, onClose }) {
   const [tarjetas, setTarjetas] = useState([])
   const [busqueda, setBusqueda] = useState('')
   const [accionandoId, setAccionandoId] = useState(null)
+  // Link corto del formulario de registro ('' mientras se pide)
+  const [linkCortoRegistro, setLinkCortoRegistro] = useState('')
 
   const logoUrl = businessSettings?.logoUrl || null
   // El nombre comercial vive en `name` (Settings guarda name = tradeName ||
@@ -209,6 +212,24 @@ export default function LoyaltyManager({ isOpen, onClose }) {
     })()
     return () => { cancelado = true }
   }, [isOpen, config.rewardType, productos, getBusinessId])
+
+  // Link corto del formulario de registro. Se pide UNA vez por apertura y solo
+  // si el programa está activo (la sección del QR ni se muestra si no).
+  // createShortUrl reutiliza el código cuando la URL ya existe, así que el
+  // cbrfy.link es SIEMPRE el mismo para el negocio: el QR que imprimió el mes
+  // pasado sigue sirviendo. Si el acortador falla, shortenUrl devuelve la URL
+  // larga y el QR funciona igual — solo se ve más feo.
+  // OJO: hook ANTES del early return (regla del proyecto, React #310).
+  useEffect(() => {
+    if (!isOpen || isDemoMode || !config.enabled || linkCortoRegistro) return
+    let cancelado = false
+    const businessId = getBusinessId()
+    ;(async () => {
+      const corto = await shortenUrl(`${window.location.origin}/registro/${businessId}`, businessId)
+      if (!cancelado) setLinkCortoRegistro(corto)
+    })()
+    return () => { cancelado = true }
+  }, [isOpen, isDemoMode, config.enabled, linkCortoRegistro, getBusinessId])
 
   if (!isOpen) return null
 
@@ -303,8 +324,11 @@ export default function LoyaltyManager({ isOpen, onClose }) {
 
   // ── Registro público: el link del QR de mesa ──
   // El id del negocio en la URL no es un secreto (ya viaja en el catálogo y
-  // en los links de Wallet); la función del servidor valida todo igual.
-  const linkRegistro = isDemoMode ? '' : `${window.location.origin}/registro/${getBusinessId()}`
+  // en los links de Wallet); la función del servidor valida todo igual. Se
+  // muestra el cbrfy.link — cabe en un afiche y se dicta por teléfono — y
+  // mientras llega se usa la URL larga, que ya es válida.
+  const linkRegistroLargo = isDemoMode ? '' : `${window.location.origin}/registro/${getBusinessId()}`
+  const linkRegistro = linkCortoRegistro || linkRegistroLargo
 
   const copiarLinkRegistro = async () => {
     try {
@@ -677,20 +701,24 @@ export default function LoyaltyManager({ isOpen, onClose }) {
 
               {!isDemoMode && (
                 <div className="mt-4 flex flex-col sm:flex-row gap-4 items-start">
-                  <div className="bg-white border border-gray-200 rounded-xl p-3 shrink-0">
-                    <QRCodeSVG value={linkRegistro} size={128} />
+                  <div className="bg-white border border-gray-200 rounded-xl p-3 shrink-0 w-[152px] h-[152px] flex items-center justify-center">
+                    {linkCortoRegistro
+                      ? <QRCodeSVG value={linkRegistro} size={128} />
+                      : <Loader2 className="w-6 h-6 text-gray-300 animate-spin" />}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-xs text-gray-500 mb-1">Link de registro</p>
                     <p className="text-sm text-gray-800 break-all bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-                      {linkRegistro}
+                      {linkCortoRegistro || 'Generando el link corto...'}
                     </p>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <Button type="button" variant="outline" size="sm" onClick={copiarLinkRegistro}>
+                      <Button type="button" variant="outline" size="sm"
+                        onClick={copiarLinkRegistro} disabled={!linkCortoRegistro}>
                         <Copy className="w-4 h-4 mr-1.5" />
                         Copiar link
                       </Button>
-                      <Button type="button" variant="outline" size="sm" onClick={descargarQrRegistro}>
+                      <Button type="button" variant="outline" size="sm"
+                        onClick={descargarQrRegistro} disabled={!linkCortoRegistro}>
                         <Download className="w-4 h-4 mr-1.5" />
                         Descargar QR
                       </Button>
