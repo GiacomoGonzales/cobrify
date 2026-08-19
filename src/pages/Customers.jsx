@@ -21,7 +21,7 @@ import {
   updateCustomer,
   deleteCustomer,
 } from '@/services/firestoreService'
-import { formatCurrency, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
+import { formatCurrency, buildSearchHaystack, matchesPrebuilt, cleanText } from '@/lib/utils'
 import { generateCustomersExcel } from '@/services/customerExportService'
 import ImportCustomersModal from '@/components/ImportCustomersModal'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
@@ -972,7 +972,13 @@ export default function Customers() {
     try {
       // Agregar mascotas al data si estamos en modo veterinaria
       if (businessMode === 'veterinary' && pets.length > 0) {
-        const validPets = pets.filter(p => p.name.trim() !== '')
+        // Los nombres se guardan LIMPIOS: un espacio al final ("Flaca ") no se
+        // ve en pantalla pero rompe la selección de mascotas del POS, que
+        // compara por nombre — el chip no se marcaba y volver a tocarlo
+        // duplicaba el nombre en el comprobante.
+        const validPets = pets
+          .filter(p => p.name.trim() !== '')
+          .map(p => ({ ...p, name: cleanText(p.name) }))
         data.pets = validPets
         // Backward compatibility: escribir datos de la primera mascota en campos legacy
         const primary = validPets[0]

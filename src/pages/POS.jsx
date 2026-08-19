@@ -54,7 +54,7 @@ import Badge from '@/components/ui/Badge'
 import PostSaleModal from '@/components/pos/PostSaleModal'
 import { WALLET_EN_APROBACION, programaVigente, vigenciaLegible } from '@/services/loyaltyService'
 import { promoParaProducto } from '@/services/scheduledDiscountService'
-import { formatCurrency, formatUnitPrice, formatLineAmount, formatProductPrice, applyMarginToCost, matchesSearchQuery, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
+import { formatCurrency, formatUnitPrice, formatLineAmount, formatProductPrice, applyMarginToCost, matchesSearchQuery, buildSearchHaystack, matchesPrebuilt, cleanText } from '@/lib/utils'
 import { buildProductHaystack } from '@/utils/productSearch'
 import {
   isMultiCurrencyEnabled,
@@ -10358,7 +10358,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                 ? [{ id: 'legacy', name: selectedCustomer.petName }]
                                 : []))
                         : []
-                      const allPetNames = pets.map(p => p.name).filter(Boolean).join(', ')
+                      const allPetNames = pets.map(p => cleanText(p.name)).filter(Boolean).join(', ')
                       return (
                         <div className="space-y-1.5">
                           <input
@@ -10370,18 +10370,25 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           />
                           {pets.length > 1 && (() => {
                             // Selección MÚLTIPLE: petName guarda las mascotas elegidas separadas por coma.
-                            const selectedNames = customerData.petName.split(',').map(s => s.trim()).filter(Boolean)
-                            const allOn = pets.every(p => selectedNames.includes(p.name))
+                            // Los nombres del campo se leen ya limpios, pero el nombre GUARDADO
+                            // puede traer espacios en los bordes ("Flaca "). Comparando en crudo,
+                            // el chip quedaba apagado aunque "Todas" sí lo hubiera escrito, y
+                            // volver a tocarlo AGREGABA el nombre otra vez: salía duplicado en el
+                            // comprobante. Se compara limpio de los dos lados.
+                            const selectedNames = customerData.petName.split(',').map(s => cleanText(s)).filter(Boolean)
+                            const nombreDe = (p) => cleanText(p.name)
+                            const allOn = pets.every(p => selectedNames.includes(nombreDe(p)))
                             const togglePet = (name) => {
-                              const next = selectedNames.includes(name)
-                                ? selectedNames.filter(n => n !== name)
-                                : [...selectedNames, name]
+                              const limpio = cleanText(name)
+                              const next = selectedNames.includes(limpio)
+                                ? selectedNames.filter(n => n !== limpio)
+                                : [...selectedNames, limpio]
                               setCustomerData({ ...customerData, petName: next.join(', ') })
                             }
                             return (
                               <div className="flex flex-wrap gap-1">
                                 {pets.map(p => {
-                                  const on = selectedNames.includes(p.name)
+                                  const on = selectedNames.includes(nombreDe(p))
                                   return (
                                     <button
                                       key={p.id || p.name}
@@ -10925,7 +10932,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                 ? [{ id: 'legacy', name: selectedCustomer.petName }]
                                 : []))
                         : []
-                      const allPetNames = pets.map(p => p.name).filter(Boolean).join(', ')
+                      const allPetNames = pets.map(p => cleanText(p.name)).filter(Boolean).join(', ')
                       return (
                         <div className="space-y-1.5">
                           <input
@@ -10937,18 +10944,25 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           />
                           {pets.length > 1 && (() => {
                             // Selección MÚLTIPLE: petName guarda las mascotas elegidas separadas por coma.
-                            const selectedNames = customerData.petName.split(',').map(s => s.trim()).filter(Boolean)
-                            const allOn = pets.every(p => selectedNames.includes(p.name))
+                            // Los nombres del campo se leen ya limpios, pero el nombre GUARDADO
+                            // puede traer espacios en los bordes ("Flaca "). Comparando en crudo,
+                            // el chip quedaba apagado aunque "Todas" sí lo hubiera escrito, y
+                            // volver a tocarlo AGREGABA el nombre otra vez: salía duplicado en el
+                            // comprobante. Se compara limpio de los dos lados.
+                            const selectedNames = customerData.petName.split(',').map(s => cleanText(s)).filter(Boolean)
+                            const nombreDe = (p) => cleanText(p.name)
+                            const allOn = pets.every(p => selectedNames.includes(nombreDe(p)))
                             const togglePet = (name) => {
-                              const next = selectedNames.includes(name)
-                                ? selectedNames.filter(n => n !== name)
-                                : [...selectedNames, name]
+                              const limpio = cleanText(name)
+                              const next = selectedNames.includes(limpio)
+                                ? selectedNames.filter(n => n !== limpio)
+                                : [...selectedNames, limpio]
                               setCustomerData({ ...customerData, petName: next.join(', ') })
                             }
                             return (
                               <div className="flex flex-wrap gap-1">
                                 {pets.map(p => {
-                                  const on = selectedNames.includes(p.name)
+                                  const on = selectedNames.includes(nombreDe(p))
                                   return (
                                     <button
                                       key={p.id || p.name}
@@ -11145,7 +11159,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                 ? [{ id: 'legacy', name: selectedCustomer.petName }]
                                 : []))
                         : []
-                      const allPetNames = pets.map(p => p.name).filter(Boolean).join(', ')
+                      const allPetNames = pets.map(p => cleanText(p.name)).filter(Boolean).join(', ')
                       return (
                         <div className="space-y-1.5">
                           <input
@@ -11157,18 +11171,25 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           />
                           {pets.length > 1 && (() => {
                             // Selección MÚLTIPLE: petName guarda las mascotas elegidas separadas por coma.
-                            const selectedNames = customerData.petName.split(',').map(s => s.trim()).filter(Boolean)
-                            const allOn = pets.every(p => selectedNames.includes(p.name))
+                            // Los nombres del campo se leen ya limpios, pero el nombre GUARDADO
+                            // puede traer espacios en los bordes ("Flaca "). Comparando en crudo,
+                            // el chip quedaba apagado aunque "Todas" sí lo hubiera escrito, y
+                            // volver a tocarlo AGREGABA el nombre otra vez: salía duplicado en el
+                            // comprobante. Se compara limpio de los dos lados.
+                            const selectedNames = customerData.petName.split(',').map(s => cleanText(s)).filter(Boolean)
+                            const nombreDe = (p) => cleanText(p.name)
+                            const allOn = pets.every(p => selectedNames.includes(nombreDe(p)))
                             const togglePet = (name) => {
-                              const next = selectedNames.includes(name)
-                                ? selectedNames.filter(n => n !== name)
-                                : [...selectedNames, name]
+                              const limpio = cleanText(name)
+                              const next = selectedNames.includes(limpio)
+                                ? selectedNames.filter(n => n !== limpio)
+                                : [...selectedNames, limpio]
                               setCustomerData({ ...customerData, petName: next.join(', ') })
                             }
                             return (
                               <div className="flex flex-wrap gap-1">
                                 {pets.map(p => {
-                                  const on = selectedNames.includes(p.name)
+                                  const on = selectedNames.includes(nombreDe(p))
                                   return (
                                     <button
                                       key={p.id || p.name}
