@@ -91,8 +91,21 @@ export async function getBrandingForClient(userId) {
 
   try {
     // Obtener la suscripción del cliente
-    const subscriptionDoc = await getDoc(doc(db, 'subscriptions', userId))
+    let subscriptionDoc = await getDoc(doc(db, 'subscriptions', userId))
     console.log('📋 Subscription exists:', subscriptionDoc.exists())
+
+    // Sin suscripción propia = casi siempre un SUB-USUARIO (cajero, mozo): la
+    // suscripción vive en el doc del DUEÑO. Sin este salto, el cajero de un
+    // cliente de reseller veía la marca por defecto — logo, nombre y contacto
+    // de Cobrify — en vez de la de su proveedor.
+    if (!subscriptionDoc.exists()) {
+      const userDoc = await getDoc(doc(db, 'users', userId))
+      const ownerId = userDoc.exists() ? userDoc.data()?.ownerId : null
+      if (ownerId && ownerId !== userId) {
+        console.log('👥 Sub-usuario: usando la suscripción del dueño', ownerId)
+        subscriptionDoc = await getDoc(doc(db, 'subscriptions', ownerId))
+      }
+    }
 
     if (subscriptionDoc.exists()) {
       const subscription = subscriptionDoc.data()

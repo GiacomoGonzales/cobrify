@@ -17,7 +17,7 @@ const BrandingContext = createContext({
 })
 
 export function BrandingProvider({ children }) {
-  const { user, isReseller, isAdmin, resellerData, isLoading: authLoading } = useAuth()
+  const { user, isReseller, isAdmin, resellerData, isLoading: authLoading, getBusinessId } = useAuth()
   const [branding, setBranding] = useState(DEFAULT_BRANDING)
   const [isLoading, setIsLoading] = useState(true)
   const [brandingLoaded, setBrandingLoaded] = useState(false)
@@ -101,8 +101,14 @@ export function BrandingProvider({ children }) {
         loadedBranding = await getResellerBranding(resellerId)
       } else if (!isAdmin) {
         // Si es usuario normal (no admin, no reseller), verificar si fue creado por un reseller
-        console.log('👤 Loading client branding for:', user.uid)
-        loadedBranding = await getBrandingForClient(user.uid)
+        // La marca se resuelve con el uid del DUEÑO, no con el de quien inició
+        // sesión: un sub-usuario no tiene documento de suscripción propio, así
+        // que buscarlo por su uid devolvía la marca por defecto y el cajero de
+        // un cliente de reseller terminaba viendo "Cobrify" (logo, nombre y
+        // contacto) en vez de la marca de su proveedor.
+        const idDelNegocio = getBusinessId?.() || user.uid
+        console.log('👤 Loading client branding for:', idDelNegocio)
+        loadedBranding = await getBrandingForClient(idDelNegocio)
 
         // Si no tiene branding del reseller en su suscripción, verificar por hostname
         if (loadedBranding.primaryColor === DEFAULT_BRANDING.primaryColor) {

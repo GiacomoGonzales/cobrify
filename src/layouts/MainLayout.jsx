@@ -342,6 +342,26 @@ export default function MainLayout() {
     [subscription, isBusinessOwner, isAdmin]
   )
 
+  // A quién escribe el cliente desde los banners de vencimiento y de límite.
+  //
+  // Orden: su RESELLER primero (si lo tiene, es su proveedor y quien le cobra),
+  // luego el vendedor asignado de Cobrify, y recién al final el número de
+  // Cobrify. Antes solo se miraba `vendedorId`, así que TODO cliente de
+  // reseller terminaba escribiéndole a Cobrify — que no puede ampliarle nada
+  // porque no es su proveedor.
+  //
+  // El número del reseller se guarda como lo escribió él (p. ej. "924014716"),
+  // pero wa.me exige el código de país: un celular peruano de 9 dígitos se
+  // completa con 51.
+  const conCodigoPais = (tel) => {
+    const digitos = String(tel || '').replace(/\D/g, '')
+    if (!digitos) return null
+    return /^9\d{8}$/.test(digitos) ? `51${digitos}` : digitos
+  }
+  const contactoWhatsApp = conCodigoPais(branding?.whatsapp)
+    || conCodigoPais(vendedorWhatsApp)
+    || '51900434988'
+
   // Cargar WhatsApp del vendedor si tiene uno asignado (para banners de gracia / límite)
   useEffect(() => {
     if (subscription?.vendedorId && (avisoVencimiento || overInvoiceLimit)) {
@@ -528,7 +548,7 @@ export default function MainLayout() {
             </span>
           </div>
           <a
-            href={`https://wa.me/${vendedorWhatsApp || '51900434988'}?text=${encodeURIComponent(`Hola, quiero renovar mi suscripción de ${branding?.companyName || 'Cobrify'}. Mi email es ${user?.email || ''}.`)}`}
+            href={`https://wa.me/${contactoWhatsApp}?text=${encodeURIComponent(`Hola, quiero renovar mi suscripción de ${branding?.companyName || 'Cobrify'}. Mi email es ${user?.email || ''}.`)}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1 px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-white whitespace-nowrap transition-colors font-medium"
@@ -547,7 +567,7 @@ export default function MainLayout() {
             <span className="font-medium">Has superado tu límite de envíos a SUNAT este mes. Comunícate con nosotros para ampliarlo.</span>
           </div>
           <a
-            href={`https://wa.me/${vendedorWhatsApp || '51900434988'}?text=${encodeURIComponent(`Hola, superé mi límite de comprobantes en ${branding?.companyName || 'Cobrify'} y quiero ampliarlo. Mi email es ${user?.email || ''}.`)}`}
+            href={`https://wa.me/${contactoWhatsApp}?text=${encodeURIComponent(`Hola, superé mi límite de comprobantes en ${branding?.companyName || 'Cobrify'} y quiero ampliarlo. Mi email es ${user?.email || ''}.`)}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1 px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-white whitespace-nowrap transition-colors"
