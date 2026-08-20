@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { db, auth } from '@/lib/firebase'
-import { collection, getDocs, query, where, doc, getDoc, updateDoc, setDoc, deleteDoc, Timestamp, arrayUnion, increment, serverTimestamp } from 'firebase/firestore'
-import { PLANS, SELLABLE_PLAN_IDS, updateUserFeatures, updateMaxBranches } from '@/services/subscriptionService'
+import { collection, getDocs, query, where, doc, getDoc, updateDoc, setDoc, deleteDoc, Timestamp, increment, serverTimestamp } from 'firebase/firestore'
+import { PLANS, SELLABLE_PLAN_IDS, updateUserFeatures, updateMaxBranches, registerPayment } from '@/services/subscriptionService'
 import { getCustomPlans } from '@/services/customPlanService'
-import { notifyPaymentReceived } from '@/services/notificationService'
 import { getVendedores, createVendedor, updateVendedor, deleteVendedor } from '@/services/vendedorService'
 import { getEmissionSecrets, saveEmissionSecrets } from '@/services/emissionSecretsService'
 import UserDetailsModal from '@/components/admin/UserDetailsModal'
@@ -1808,109 +1807,28 @@ export default function AdminUsers() {
   }
 
   // Función para registrar pago
-  // OJO: esta pantalla NO usa registerPayment() del servicio — escribe la
-  // suscripción a mano. Son dos implementaciones del mismo cobro, y esta es la
-  // que se usa a diario, así que tiene que respetar las mismas reglas.
-  //
-  // El 6º argumento es un objeto de opciones (antes era igvData suelto). El
-  // modal manda `{ igvInfo?, updateRenewalPrice }`.
+  // El cobro vive en registerPayment() del servicio, una sola vez. Esta pantalla
+  // tenía su propia copia escribiendo la suscripción a mano y las dos habían
+  // derivado: la copia pisaba los límites personalizados en cada renovación, no
+  // congelaba el precio pactado y no levantaba el bloqueo de acceso ni el del
+  // catálogo al cobrarle a un suspendido. Acá solo queda lo que es de la
+  // pantalla: avisar, cerrar el modal y recargar la lista.
   async function handleRegisterPayment(userId, amount, method, planKey, customEndDate = null, options = {}) {
-    const igvData = options?.igvInfo || null
     setProcessingPayment(true)
     try {
-      const plan = PLANS[planKey] || customPlans[planKey]
-      if (!plan) {
-        toast.error('Plan no válido')
-        return
-      }
-
-      const subscriptionRef = doc(db, 'subscriptions', userId)
-      const subscriptionDoc = await getDoc(subscriptionRef)
-      const currentData = subscriptionDoc.exists() ? subscriptionDoc.data() : {}
-
-      // Calcular nueva fecha de vencimiento
-      let newEndDate
-      if (customEndDate) {
-        // Usar fecha personalizada
-        newEndDate = new Date(customEndDate)
-      } else {
-        // Calcular desde la fecha actual o desde el vencimiento actual si aún no venció
-        const currentEnd = currentData.currentPeriodEnd?.toDate?.() || new Date()
-        const baseDate = currentEnd > new Date() ? currentEnd : new Date()
-        newEndDate = new Date(baseDate)
-        newEndDate.setMonth(newEndDate.getMonth() + plan.months)
-      }
-
-      // Crear registro de pago
-      const paymentRecord = {
-        date: Timestamp.now(),
-        amount: parseFloat(amount),
-        method: method,
-        plan: planKey,
-        planName: plan.name,
-        months: plan.months,
-        status: 'completed',
-        registeredBy: 'admin',
-        ...(igvData && {
-          includesIgv: true,
-          baseAmount: igvData.baseAmount,
-          igvAmount: igvData.igvAmount
-        })
-      }
-
-      // Mismas reglas que registerPayment() del servicio, para que renovar por
-      // acá no deshaga lo que se respeta por allá:
-      //  - Mismo plan = renovación: se CONSERVAN los límites del documento (hay
-      //    ~30 clientes con ajustes a mano, 2000 comprobantes o 3 sucursales;
-      //    pisarlos con el catálogo en cada renovación les quitaba lo pactado).
-      //  - Mismo plan = se conserva su precio pactado; si no tenía, queda
-      //    congelado el monto que se cobra ahora.
-      //  - Cambio de plan = contrato nuevo: límites del catálogo y el monto
-      //    cobrado pasa a ser el precio pactado.
-      //  - `updateRenewalPrice` = el admin vio que el cobro no coincide con lo
-      //    pactado y decidió a propósito que este monto sea el nuevo precio.
-      const montoNum = parseFloat(amount) || 0
-      const esMismoPlan = currentData.plan === planKey
-      const pisarPrecio = options?.updateRenewalPrice === true && montoNum > 0
-      const nuevosLimites = esMismoPlan
-        ? (currentData.limits || plan.limits)
-        : (plan.limits || currentData.limits)
-      const nuevoPrecioPactado = (esMismoPlan && !pisarPrecio)
-        ? (currentData.renewalPrice ?? (montoNum > 0 ? montoNum : null))
-        : (montoNum > 0 ? montoNum : null)
-
-      // Actualizar suscripción
-      await updateDoc(subscriptionRef, {
-        plan: planKey,
-        planName: plan.name,
-        status: 'active',
-        currentPeriodStart: Timestamp.now(),
-        currentPeriodEnd: Timestamp.fromDate(newEndDate),
-        limits: nuevosLimites,
-        renewalPrice: nuevoPrecioPactado,
-        ...(nuevoPrecioPactado !== (currentData.renewalPrice ?? null)
-          ? { pricingFrozenAt: Timestamp.now() }
-          : {}),
-        paymentHistory: arrayUnion(paymentRecord),
-        updatedAt: Timestamp.now()
-      })
-
-      // Enviar notificación al usuario
-      try {
-        await notifyPaymentReceived(userId, parseFloat(amount), plan.name, newEndDate)
-        console.log('✅ Notificación de pago enviada al usuario')
-      } catch (notifError) {
-        console.error('Error al enviar notificación:', notifError)
-        // No fallar si la notificación falla
-      }
-
-      toast.success(`Pago registrado. Nuevo vencimiento: ${newEndDate.toLocaleDateString('es-PE')}`)
+      const resultado = await registerPayment(userId, parseFloat(amount), method, planKey, customEndDate, options)
+      const vence = resultado?.newPeriodEnd
+      toast.success(
+        vence
+          ? `Pago registrado. Nuevo vencimiento: ${vence.toLocaleDateString('es-PE')}`
+          : 'Pago registrado'
+      )
       setShowPaymentModal(false)
       setPaymentUserToEdit(null)
       loadUsers()
     } catch (error) {
       console.error('Error al registrar pago:', error)
-      toast.error('Error al registrar el pago')
+      toast.error(error.message || 'Error al registrar el pago')
     } finally {
       setProcessingPayment(false)
     }

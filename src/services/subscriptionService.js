@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { notifyPaymentReceived, notifySubscriptionRenewed, notifyPlanChanged, notifyWelcome } from './notificationService';
+import { getCustomPlans } from './customPlanService';
 
 // Planes disponibles - Nuevos precios 2025
 export const PLANS = {
@@ -766,7 +767,21 @@ export const reactivateUser = async (userId, extendDays = 30) => {
   }
 };
 
-// Registrar pago manual (Admin)
+/**
+ * Registrar un pago manual (Admin) y extender la suscripción.
+ *
+ * ES LA UNICA implementación del cobro. AdminUsers tenía su propia copia
+ * escribiendo la suscripción a mano, y las dos derivaron: la copia pisaba los
+ * límites personalizados en cada renovación, no congelaba el precio pactado y
+ * no levantaba el bloqueo de acceso ni el del catálogo. Si hace falta cambiar
+ * algo del cobro, se cambia acá y vale para todas las pantallas.
+ *
+ * @param {Object} options
+ * @param {Object} [options.igvInfo] {includesIgv, baseAmount, igvAmount} para el historial
+ * @param {boolean} [options.updateRenewalPrice] permiso explícito para que este
+ *   monto pase a ser el precio pactado aunque sea el mismo plan
+ * @returns {Promise<{success: boolean, newPeriodEnd: Date|null, planName: string}>}
+ */
 export const registerPayment = async (userId, amount, method = 'Transferencia', selectedPlan = 'plan_3_months', customEndDate = null, options = {}) => {
   try {
     const subscriptionRef = doc(db, 'subscriptions', userId);
@@ -780,8 +795,18 @@ export const registerPayment = async (userId, amount, method = 'Transferencia', 
     const now = new Date();
     const currentPeriodEnd = subscription.currentPeriodEnd?.toDate?.() || subscription.currentPeriodEnd;
 
-    // Obtener configuración del plan
-    const planConfig = PLANS[selectedPlan];
+    // Configuración del plan: catálogo + los planes PERSONALIZADOS que el
+    // superadmin crea en Configuración. AdminUsers ya los resolvía; el servicio
+    // no, así que cobrar un plan personalizado por acá caía en el `|| 3` de
+    // abajo y regalaba 3 meses en silencio.
+    let planConfig = PLANS[selectedPlan];
+    if (!planConfig) {
+      const custom = await getCustomPlans();
+      planConfig = custom?.[selectedPlan];
+    }
+    if (!planConfig) {
+      throw new Error(`Plan no válido: ${selectedPlan}`);
+    }
 
     // Verificar si es un add-on (paquete adicional)
     if (planConfig?.isAddon) {
@@ -813,7 +838,7 @@ export const registerPayment = async (userId, amount, method = 'Transferencia', 
       });
 
       await notifyPaymentReceived(userId, amount, planConfig.name, null);
-      return;
+      return { success: true, newPeriodEnd: null, planName: planConfig.name };
     }
 
     // Para planes normales: extender suscripción
@@ -867,17 +892,25 @@ export const registerPayment = async (userId, amount, method = 'Transferencia', 
       planName: planConfig?.name || selectedPlan,
       months: monthsToAdd,
       status: 'completed',
-      registeredBy: 'admin'
+      registeredBy: 'admin',
+      // Desglose del IGV cuando el admin marcó la casilla en el modal.
+      ...(options.igvInfo ? {
+        includesIgv: true,
+        baseAmount: options.igvInfo.baseAmount ?? null,
+        igvAmount: options.igvInfo.igvAmount ?? null,
+      } : {}),
     };
 
     const updatedHistory = [...(subscription.paymentHistory || []), paymentRecord];
 
     await updateDoc(subscriptionRef, {
       plan: selectedPlan,
+      planName: planConfig?.name || selectedPlan,
       status: 'active',
       accessBlocked: false,
       blockReason: null,
       blockedAt: null,
+      currentPeriodStart: Timestamp.fromDate(now),
       lastPaymentDate: Timestamp.fromDate(now),
       currentPeriodEnd: Timestamp.fromDate(newPeriodEnd),
       nextPaymentDate: Timestamp.fromDate(newPeriodEnd),
@@ -891,6 +924,9 @@ export const registerPayment = async (userId, amount, method = 'Transferencia', 
 
     await mirrorCatalogSuspended(userId, false);
     await notifyPaymentReceived(userId, amount, planConfig?.name || selectedPlan, newPeriodEnd);
+
+    // La pantalla necesita la fecha para avisarle al admin qué vencimiento quedó.
+    return { success: true, newPeriodEnd, planName: planConfig?.name || selectedPlan };
   } catch (error) {
     console.error('Error al registrar pago:', error);
     throw error;
