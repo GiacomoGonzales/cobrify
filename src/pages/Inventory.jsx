@@ -697,17 +697,57 @@ export default function Inventory() {
             return isProductInBranch(p, bId) || (typeof st === 'number' && st > 0)
           })
         : products
+      // Inventario a una fecha pasada: no guardamos fotos del stock, así que se
+      // reconstruye caminando el historial hacia atrás (stockSnapshotService).
+      let itemsProductos = productsForExport
+      let itemsInsumos = ingredients
+      let snapshotLabel = null
+      if (options.snapshotDate) {
+        const { buildStockSnapshot, applyStockSnapshot } = await import('@/services/stockSnapshotService')
+        const snap = await buildStockSnapshot(getBusinessId(), options.snapshotDate)
+        if (!snap.success) throw new Error(snap.error || 'No se pudo reconstruir el inventario a esa fecha')
+
+        const almacenesDelExport = filteredWarehouses.filter(w => (options.warehouseIds || []).includes(w.id))
+        const rp = applyStockSnapshot(productsForExport, snap.data, almacenesDelExport)
+        const ri = applyStockSnapshot(ingredients, snap.data, almacenesDelExport)
+        itemsProductos = rp.items
+        itemsInsumos = ri.items
+        const [y, m, d] = options.snapshotDate.split('-')
+        snapshotLabel = `${d}/${m}/${y}`
+
+        if (snap.data.truncado) {
+          toast.warning(
+            'El historial de movimientos es muy extenso y se leyó solo una parte: las cantidades de esa fecha pueden estar incompletas.',
+            9000
+          )
+        }
+        // Un stock reconstruido por debajo de cero significa que a ese producto
+        // le movieron el stock sin dejar movimiento. Se corta en cero, pero hay
+        // que decirlo: si no, el usuario asume que el número es exacto.
+        const sinHistorial = rp.negativos + ri.negativos
+        if (sinHistorial > 0) {
+          toast.warning(
+            `${sinHistorial} item(s) no tienen historial completo hasta esa fecha; su cantidad puede no ser exacta.`,
+            9000
+          )
+        }
+      }
+
       const result = await exportInventoryWithOptions({
-        products: productsForExport,
-        ingredients,
+        products: itemsProductos,
+        ingredients: itemsInsumos,
         categories: productCategories,
         brands,
         warehouses: filteredWarehouses,
         businessData,
-        options,
+        options: { ...options, snapshotLabel },
       })
 
-      toast.success(`${result.itemCount} item(s) exportado(s) exitosamente`)
+      toast.success(
+        snapshotLabel
+          ? `Inventario al ${snapshotLabel}: ${result.itemCount} item(s) exportado(s)`
+          : `${result.itemCount} item(s) exportado(s) exitosamente`
+      )
       setShowExportModal(false)
     } catch (error) {
       console.error('Error al exportar inventario:', error)

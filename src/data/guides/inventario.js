@@ -302,6 +302,14 @@ export default {
           type: 'consejo',
           text: 'Antes de un recuento grande, exportar la lista y salir a contar con ella impresa suele ser más rápido que ir con el celular estante por estante.',
         },
+        {
+          type: 'texto',
+          text: '**Inventario a una fecha pasada.** En las opciones de exportación puedes pedir el stock **al cierre de un día anterior** — el clásico "necesito el inventario al 31 de julio" que pide el contador. El sistema no guarda fotos del inventario: reconstruye ese día caminando el historial de movimientos hacia atrás desde el stock de hoy. El Excel sale titulado con esa fecha para que no se confunda con el actual.',
+        },
+        {
+          type: 'ojo',
+          text: 'La reconstrucción es tan buena como el historial. Si a un producto le cambiaron el stock sin dejar movimiento (cargas masivas antiguas, por ejemplo), su cantidad de esa fecha puede salir corrida y el sistema te avisa cuántos items están en ese caso. Los productos creados después de la fecha no aparecen, y los que tienen variantes salen con su total: las ventas no registran cuál variante se vendió.',
+        },
       ],
     },
 

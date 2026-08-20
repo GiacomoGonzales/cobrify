@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { FileSpreadsheet, Loader2, Building2, Filter } from 'lucide-react'
+import { FileSpreadsheet, Loader2, Building2, Filter, CalendarClock } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 
@@ -11,6 +11,8 @@ import Button from '@/components/ui/Button'
  *  - Almacenes a incluir (todos o específicos)
  *  - Si incluir items que no manejan stock
  *  - Formato de stock (columnas por almacén o fila por almacén)
+ *  - La FECHA del inventario: hoy, o una fecha pasada reconstruida desde el
+ *    historial de movimientos (el contador suele pedir el cierre de mes)
  */
 export default function InventoryExportModal({
   isOpen,
@@ -34,6 +36,11 @@ export default function InventoryExportModal({
   // Formato
   const [format, setFormat] = useState('columns') // 'columns' | 'rows'
 
+  // Fecha del inventario: 'hoy' o 'fecha' (reconstruido)
+  const [dateMode, setDateMode] = useState('hoy')
+  const [snapshotDate, setSnapshotDate] = useState('')
+  const hoyISO = new Date().toISOString().slice(0, 10)
+
   // Reset cuando se abre el modal
   useEffect(() => {
     if (isOpen) {
@@ -43,6 +50,8 @@ export default function InventoryExportModal({
       setAllWarehouses(true)
       setIncludeNoStockTracking(false)
       setFormat('columns')
+      setDateMode('hoy')
+      setSnapshotDate('')
     }
   }, [isOpen, hasIngredients])
 
@@ -72,12 +81,14 @@ export default function InventoryExportModal({
       warehouseIds: finalWarehouseIds,
       includeNoStockTracking,
       format,
+      snapshotDate: dateMode === 'fecha' && snapshotDate ? snapshotDate : null,
     })
   }
 
   const canExport =
     (includeProducts || includeIngredients) &&
     (allWarehouses || selectedWarehouseIds.length > 0) &&
+    (dateMode === 'hoy' || !!snapshotDate) &&
     !isExporting
 
   const activeWarehouses = warehouses.filter(w => w.isActive !== false)
@@ -90,6 +101,55 @@ export default function InventoryExportModal({
       size="lg"
     >
       <div className="space-y-6">
+        {/* Fecha del inventario */}
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
+            <CalendarClock className="w-4 h-4 text-indigo-600" />
+            Fecha del inventario
+          </h3>
+          <div className="space-y-2 pl-1">
+            <label className="flex items-center gap-2 cursor-pointer text-sm">
+              <input
+                type="radio"
+                name="inventarioFecha"
+                checked={dateMode === 'hoy'}
+                onChange={() => setDateMode('hoy')}
+                className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+              />
+              <span className="text-gray-700">Stock actual (hoy)</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer text-sm">
+              <input
+                type="radio"
+                name="inventarioFecha"
+                checked={dateMode === 'fecha'}
+                onChange={() => setDateMode('fecha')}
+                className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+              />
+              <span className="text-gray-700">A una fecha pasada</span>
+            </label>
+            {dateMode === 'fecha' && (
+              <div className="ml-6 mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-2">
+                <input
+                  type="date"
+                  value={snapshotDate}
+                  max={hoyISO}
+                  onChange={e => setSnapshotDate(e.target.value)}
+                  className="w-full sm:w-56 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+                <p className="text-xs text-gray-600">
+                  Se toma el stock al cierre de ese día, reconstruido desde el historial de
+                  movimientos. Los productos creados despues de esa fecha no aparecen, y los
+                  que tienen variantes salen con su total (las ventas no registran cual
+                  variante se vendio).
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="border-t border-gray-200"></div>
+
         {/* Tipos de items */}
         <div>
           <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">

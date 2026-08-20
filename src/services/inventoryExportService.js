@@ -36,6 +36,11 @@ const itemTypeBadgeStyle = (isProduct) => badgeStyle({
 // Stock de un item en un almacén específico
 const getStockAtWarehouse = (item, warehouseId) => {
   if (!warehouseId) return 0
+  // Inventario a una fecha pasada: el stock reconstruido manda sobre el vivo.
+  if (item._snapshotWarehouseStocks) {
+    const snap = item._snapshotWarehouseStocks.find(s => s.warehouseId === warehouseId)
+    return snap?.stock || 0
+  }
   // Producto con variantes: sumar stock de todas las variantes en el almacén
   if (item.hasVariants && item.variants?.length > 0) {
     return item.variants.reduce((sum, v) => {
@@ -50,6 +55,7 @@ const getStockAtWarehouse = (item, warehouseId) => {
 
 // Stock total (todos los almacenes) de un item
 const getTotalStock = (item) => {
+  if (item._snapshotStock !== undefined) return item._snapshotStock
   if (item.hasVariants && item.variants?.length > 0) {
     return item.variants.reduce((sum, v) => sum + (v.stock || 0), 0)
   }
@@ -97,6 +103,9 @@ export const exportInventoryWithOptions = async ({
     warehouseIds = [],
     includeNoStockTracking = false,
     format: exportFormat = 'columns',
+    // Inventario a una fecha pasada: etiqueta dd/MM/yyyy. Los items ya vienen
+    // con el stock reconstruido desde la pantalla (stockSnapshotService).
+    snapshotLabel = null,
   } = options
 
   const selectedWarehouses = warehouses.filter(w => warehouseIds.includes(w.id))
@@ -131,8 +140,8 @@ export const exportInventoryWithOptions = async ({
 
   const wb = XLSX.utils.book_new()
   const sheet = exportFormat === 'rows'
-    ? buildSheetRows(items, selectedWarehouses, categories, businessData, brands)
-    : buildSheetColumns(items, selectedWarehouses, categories, businessData, brands)
+    ? buildSheetRows(items, selectedWarehouses, categories, businessData, brands, snapshotLabel)
+    : buildSheetColumns(items, selectedWarehouses, categories, businessData, brands, snapshotLabel)
   XLSX.utils.book_append_sheet(wb, sheet, 'Inventario')
 
   const warehouseSheet = buildWarehouseInfoSheet(selectedWarehouses, items)
@@ -143,7 +152,9 @@ export const exportInventoryWithOptions = async ({
   appendByCategorySheet(wb, items, categories, businessData)
   appendByBrandSheet(wb, items, brands, businessData)
 
-  const fileName = buildExcelFileName('Inventario')
+  const fileName = buildExcelFileName(
+    snapshotLabel ? `Inventario al ${String(snapshotLabel).replace(/\//g, '-')}` : 'Inventario'
+  )
   await saveAndShareExcel(wb, fileName, {
     shareTitle: fileName,
     shareText: 'Reporte de inventario',
@@ -173,7 +184,7 @@ function getUnitCost(item, variant = null) {
 
 // =================== FORMATO A: UNA COLUMNA POR ALMACÉN ===================
 
-function buildSheetColumns(items, selectedWarehouses, categories, businessData, brands = []) {
+function buildSheetColumns(items, selectedWarehouses, categories, businessData, brands = [], snapshotLabel = null) {
   const brandMap = new Map((brands || []).map(b => [b.id, b.name]))
   const resolveBrand = (item) => {
     if (item.brandId && brandMap.has(item.brandId)) return brandMap.get(item.brandId)
@@ -190,7 +201,9 @@ function buildSheetColumns(items, selectedWarehouses, categories, businessData, 
   // Expandir variantes y filas
   const rows = []
   items.forEach(item => {
-    if (item.itemType === 'product' && item.hasVariants && item.variants?.length > 0) {
+    // En un inventario a fecha NO se abren las variantes: las ventas no dejan
+    // registrada cuál se vendió, así que solo el total del producto es fiel.
+    if (item._snapshotStock === undefined && item.itemType === 'product' && item.hasVariants && item.variants?.length > 0) {
       item.variants.forEach(v => {
         const variantLabel = Object.values(v.attributes || {}).join(' / ')
         const name = variantLabel ? `${item.name} — ${variantLabel}` : item.name
@@ -240,12 +253,18 @@ function buildSheetColumns(items, selectedWarehouses, categories, businessData, 
   })
 
   // AOA: título / metadata / header / data / resumen
-  const aoa = [['REPORTE DE INVENTARIO'], []]
+  const aoa = [[snapshotLabel ? `INVENTARIO AL ${snapshotLabel}` : 'REPORTE DE INVENTARIO'], []]
   const metaStart = aoa.length
   aoa.push(...buildBusinessMetadataRows(businessData, {
     warehouseLabel: selectedWarehouses.map(w => w.name).join(', '),
     totalLabel: 'Total items',
     totalItems: rows.length,
+    // Que el Excel diga en su cara a qué fecha corresponde: un archivo suelto
+    // titulado "Inventario" se confunde con el de hoy con demasiada facilidad.
+    extra: snapshotLabel
+      ? [['Inventario al:', snapshotLabel],
+         ['Reconstruido desde:', 'historial de movimientos']]
+      : undefined,
   }))
   const metaEnd = aoa.length - 1
   aoa.push([])
@@ -319,7 +338,7 @@ function buildSheetColumns(items, selectedWarehouses, categories, businessData, 
 
 // =================== FORMATO B: UNA FILA POR (ITEM, ALMACÉN) ===================
 
-function buildSheetRows(items, selectedWarehouses, categories, businessData, brands = []) {
+function buildSheetRows(items, selectedWarehouses, categories, businessData, brands = [], snapshotLabel = null) {
   const brandMap = new Map((brands || []).map(b => [b.id, b.name]))
   const resolveBrand = (item) => {
     if (item.brandId && brandMap.has(item.brandId)) return brandMap.get(item.brandId)
@@ -334,7 +353,9 @@ function buildSheetRows(items, selectedWarehouses, categories, businessData, bra
 
   const rows = []
   items.forEach(item => {
-    if (item.itemType === 'product' && item.hasVariants && item.variants?.length > 0) {
+    // En un inventario a fecha NO se abren las variantes: las ventas no dejan
+    // registrada cuál se vendió, así que solo el total del producto es fiel.
+    if (item._snapshotStock === undefined && item.itemType === 'product' && item.hasVariants && item.variants?.length > 0) {
       item.variants.forEach(v => {
         const variantLabel = Object.values(v.attributes || {}).join(' / ')
         const name = variantLabel ? `${item.name} — ${variantLabel}` : item.name
@@ -383,12 +404,18 @@ function buildSheetRows(items, selectedWarehouses, categories, businessData, bra
     }
   })
 
-  const aoa = [['REPORTE DE INVENTARIO (formato extendido)'], []]
+  const aoa = [[snapshotLabel ? `INVENTARIO AL ${snapshotLabel} (formato extendido)` : 'REPORTE DE INVENTARIO (formato extendido)'], []]
   const metaStart = aoa.length
   aoa.push(...buildBusinessMetadataRows(businessData, {
     warehouseLabel: selectedWarehouses.map(w => w.name).join(', '),
     totalLabel: 'Total filas',
     totalItems: rows.length,
+    // Que el Excel diga en su cara a qué fecha corresponde: un archivo suelto
+    // titulado "Inventario" se confunde con el de hoy con demasiada facilidad.
+    extra: snapshotLabel
+      ? [['Inventario al:', snapshotLabel],
+         ['Reconstruido desde:', 'historial de movimientos']]
+      : undefined,
   }))
   const metaEnd = aoa.length - 1
   aoa.push([])
