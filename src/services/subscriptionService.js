@@ -472,6 +472,28 @@ export const isSellablePlan = (id) => SELLABLE_PLAN_IDS.includes(id);
 // ============================================
 export const ONLINE_PAYMENTS_ENABLED = false;
 
+// Encendido POR ETAPAS. Con el cobro activo, este interruptor decide a quiénes
+// les aparece el botón de pagar:
+//   true  = solo a las cuentas marcadas con `allowSelfCheckout` (piloto)
+//   false = a todos los clientes directos
+//
+// Hace falta porque la pantalla solo miraba "¿es cliente directo?": encenderla
+// abría el cobro a los 462 directos de golpe. `allowSelfCheckout` ya existía,
+// pero SOLO en el servidor, así que no servía para probar con unas pocas
+// cuentas. Ahora el front usa el mismo criterio que el server.
+export const ONLINE_PAYMENTS_PILOT_ONLY = true;
+
+/**
+ * ¿Esta suscripción puede pagar en línea ahora mismo?
+ * Mismo criterio que la Cloud Function, para que la pantalla nunca ofrezca un
+ * cobro que el servidor va a rechazar.
+ */
+export const canPayOnline = (subscription) => {
+  if (!ONLINE_PAYMENTS_ENABLED) return false;
+  if (!ONLINE_PAYMENTS_PILOT_ONLY) return true;
+  return subscription?.allowSelfCheckout === true;
+};
+
 // ============================================
 // NIVEL × CICLO — cómo se ofrecen los planes al cliente.
 //

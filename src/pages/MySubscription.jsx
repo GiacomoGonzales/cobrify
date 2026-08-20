@@ -14,7 +14,7 @@ import {
   resolvePlanTier,
   getTierPrice,
   getAnnualSavings,
-  ONLINE_PAYMENTS_ENABLED,
+  canPayOnline,
 } from '@/services/subscriptionService';
 import { getVendedorByLinkedUser, getVendedorClients } from '@/services/vendedorService';
 import { useSubscriptionPaymentInfo } from '@/hooks/useSubscriptionPaymentInfo';
@@ -262,6 +262,10 @@ export default function MySubscription() {
 
   // Datos para renovación / cambio de plan (solo clientes directos de Cobrify)
   const isDirectClient = !isResellerAccount && !vendedorInfo && !subscription.resellerId && !subscription.vendedorId;
+  // Cobro en línea disponible para ESTA cuenta. Durante el piloto solo lo ven
+  // las marcadas con `allowSelfCheckout`; el resto sigue viendo "Próximamente",
+  // igual que hasta ahora. Mismo criterio que la Cloud Function.
+  const pagoEnLinea = canPayOnline(subscription);
   // Monto de renovación del plan ACTUAL: el precio pactado congelado manda sobre
   // el catálogo (así un cliente viejo renueva a su precio, no al de la lista).
   const renewAmount = subscription.renewalPrice != null ? subscription.renewalPrice : planInfo.totalPrice;
@@ -322,19 +326,19 @@ export default function MySubscription() {
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-lg font-bold text-gray-900">Renovación automática</h3>
-                {!ONLINE_PAYMENTS_ENABLED && (
+                {!pagoEnLinea && (
                   <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800">
                     PRÓXIMAMENTE
                   </span>
                 )}
-                {ONLINE_PAYMENTS_ENABLED && subscription.autoRenew && (
+                {pagoEnLinea && subscription.autoRenew && (
                   <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-700">
                     ACTIVA
                   </span>
                 )}
               </div>
 
-              {!ONLINE_PAYMENTS_ENABLED ? (
+              {!pagoEnLinea ? (
                 <p className="text-gray-500 text-sm mt-1">
                   Pronto podrás registrar tu tarjeta una vez y tu plan se renovará solo cada
                   período, sin que tengas que hacer nada. Por ahora la renovación sigue siendo
@@ -369,7 +373,7 @@ export default function MySubscription() {
             </div>
 
             <div className="flex-shrink-0">
-              {!ONLINE_PAYMENTS_ENABLED ? (
+              {!pagoEnLinea ? (
                 <button
                   disabled
                   className="px-5 py-2.5 rounded-xl bg-gray-100 text-gray-400 text-sm font-semibold cursor-not-allowed inline-flex items-center gap-2"
@@ -398,7 +402,7 @@ export default function MySubscription() {
             </div>
           </div>
 
-          {ONLINE_PAYMENTS_ENABLED && subscription.autoRenewDisabledReason && !subscription.autoRenew && (
+          {pagoEnLinea && subscription.autoRenewDisabledReason && !subscription.autoRenew && (
             <div className="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-900">
               Desactivamos la renovación automática: {subscription.autoRenewDisabledReason.toLowerCase()}.
               Puedes volver a activarla con otra tarjeta.
@@ -418,14 +422,14 @@ export default function MySubscription() {
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-lg font-bold text-gray-900">Renueva o cambia tu plan</h3>
-                {!ONLINE_PAYMENTS_ENABLED && (
+                {!pagoEnLinea && (
                   <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800">
                     PRÓXIMAMENTE
                   </span>
                 )}
               </div>
               <p className="text-gray-500 text-sm mt-0.5">
-                {ONLINE_PAYMENTS_ENABLED
+                {pagoEnLinea
                   ? 'Paga en segundos y extiende tu suscripción al instante.'
                   : 'Estos son los planes disponibles. El pago en línea se activará muy pronto.'}
               </p>
@@ -462,8 +466,8 @@ export default function MySubscription() {
             </div>
           </div>
 
-          {/* Aviso mientras el cobro en línea está apagado (ver ONLINE_PAYMENTS_ENABLED) */}
-          {!ONLINE_PAYMENTS_ENABLED && (
+          {/* Aviso mientras el cobro en línea no está disponible para esta cuenta */}
+          {!pagoEnLinea && (
             <div className="mt-4 rounded-xl bg-amber-50 border border-amber-200 p-4 flex items-start gap-3">
               <Clock className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
               <div>
@@ -563,16 +567,16 @@ export default function MySubscription() {
                   <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col gap-2">
                     <button
                       onClick={() => handlePayWithFlow(isCurrent ? null : planId, planId)}
-                      disabled={paying || !ONLINE_PAYMENTS_ENABLED}
+                      disabled={paying || !pagoEnLinea}
                       className={`w-full px-4 py-2.5 rounded-xl font-semibold text-sm transition-colors ${
-                        !ONLINE_PAYMENTS_ENABLED
+                        !pagoEnLinea
                           ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                           : isCurrent
                           ? 'bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-60'
                           : 'border border-primary-600 text-primary-700 hover:bg-primary-50 disabled:opacity-60'
                       }`}
                     >
-                      {!ONLINE_PAYMENTS_ENABLED ? 'Próximamente'
+                      {!pagoEnLinea ? 'Próximamente'
                         : payingPlan === planId ? 'Abriendo…'
                         : isCurrent ? 'Renovar ahora' : 'Cambiar a este plan'}
                     </button>
@@ -591,14 +595,14 @@ export default function MySubscription() {
               </p>
               <button
                 onClick={() => handlePayWithFlow(null, 'legacy')}
-                disabled={paying || !ONLINE_PAYMENTS_ENABLED}
+                disabled={paying || !pagoEnLinea}
                 className={`px-5 py-2.5 rounded-xl font-semibold text-sm whitespace-nowrap transition-colors ${
-                  !ONLINE_PAYMENTS_ENABLED
+                  !pagoEnLinea
                     ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                     : 'bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-60'
                 }`}
               >
-                {!ONLINE_PAYMENTS_ENABLED ? 'Próximamente'
+                {!pagoEnLinea ? 'Próximamente'
                   : payingPlan === 'legacy' ? 'Abriendo…' : 'Renovar mi plan actual'}
               </button>
             </div>
