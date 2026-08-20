@@ -191,6 +191,32 @@ export default function UserManagement() {
     }
   };
 
+  // Activar / desactivar un sub-usuario desde el panel.
+  //
+  // Se referenciaba desde el boton de la fila desde nov-2025 pero NUNCA se
+  // definio: al hacerle clic la pantalla reventaba con "handleToggleBlockUser
+  // is not defined".
+  //
+  // Va contra `isActive`, que es el campo que de verdad manda: AuthContext lo
+  // escucha en vivo y cierra la sesion al instante cuando pasa a false. El
+  // `status` que miraba esta tabla no existe en ningun documento de sub-usuario
+  // (verificado: 124 de 124 sin ese campo), por eso todos salian "Desconocido".
+  const handleToggleBlockUser = async (subUserId, ownerId, estaActivo) => {
+    try {
+      setActionLoading(true);
+      const { toggleUserStatus } = await import('@/services/userManagementService');
+      const result = await toggleUserStatus(subUserId, !estaActivo);
+      if (!result.success) throw new Error(result.error || 'No se pudo cambiar el estado');
+      await loadSubUsers(ownerId);
+      toast.success(estaActivo ? 'Sub-usuario desactivado' : 'Sub-usuario activado');
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error(error.message || 'Error al cambiar el estado del sub-usuario');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleChangePlan = async (userId, newPlan) => {
     try {
       setActionLoading(true);
@@ -613,10 +639,12 @@ export default function UserManagement() {
 
                     {/* Filas de sub-usuarios (cuando está expandido) */}
                     {isExpanded && ownerSubUsers.length > 0 && ownerSubUsers.map((subUser) => {
-                      const subUserBlocked = subUser.status === 'blocked';
+                      // Sin el campo, un sub-usuario viejo se asume ACTIVO:
+                      // solo `isActive: false` desactiva (mismo criterio que AuthContext).
+                      const subUserActivo = subUser.isActive !== false;
 
                       return (
-                        <tr key={`sub-${subUser.id}`} className={`bg-blue-50 ${subUserBlocked ? 'opacity-60' : ''}`}>
+                        <tr key={`sub-${subUser.id}`} className={`bg-blue-50 ${subUserActivo ? '' : 'opacity-60'}`}>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center gap-2 pl-8">
                               <UserCircle className="w-4 h-4 text-blue-600" />
@@ -634,18 +662,12 @@ export default function UserManagement() {
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span
                               className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                                subUser.status === 'active'
+                                subUserActivo
                                   ? 'bg-green-100 text-green-800'
-                                  : subUser.status === 'blocked'
-                                  ? 'bg-red-100 text-red-800'
-                                  : 'bg-gray-100 text-gray-800'
+                                  : 'bg-red-100 text-red-800'
                               }`}
                             >
-                              {subUser.status === 'active'
-                                ? 'Activo'
-                                : subUser.status === 'blocked'
-                                ? 'Bloqueado'
-                                : subUser.status || 'Desconocido'}
+                              {subUserActivo ? 'Activo' : 'Desactivado'}
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -688,19 +710,20 @@ export default function UserManagement() {
                               </button>
                               <button
                                 onClick={() =>
-                                  handleToggleBlockUser(subUser.id, subUser.status === 'blocked')
+                                  handleToggleBlockUser(subUser.id, sub.userId, subUserActivo)
                                 }
+                                disabled={actionLoading}
                                 className={
-                                  subUser.status === 'blocked'
-                                    ? 'text-green-600 hover:text-green-900'
-                                    : 'text-red-600 hover:text-red-900'
+                                  subUserActivo
+                                    ? 'text-red-600 hover:text-red-900 disabled:opacity-50'
+                                    : 'text-green-600 hover:text-green-900 disabled:opacity-50'
                                 }
-                                title={subUser.status === 'blocked' ? 'Activar' : 'Bloquear'}
+                                title={subUserActivo ? 'Desactivar' : 'Activar'}
                               >
-                                {subUser.status === 'blocked' ? (
-                                  <CheckCircle className="w-5 h-5" />
-                                ) : (
+                                {subUserActivo ? (
                                   <XCircle className="w-5 h-5" />
+                                ) : (
+                                  <CheckCircle className="w-5 h-5" />
                                 )}
                               </button>
                             </div>
