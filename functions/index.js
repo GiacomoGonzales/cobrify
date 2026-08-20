@@ -5111,6 +5111,30 @@ export const voidInvoice = onRequest(
 
       const invoiceData = invoiceDoc.data()
 
+      // REINTENTO SOBRE UNA ANULACION YA CONFIRMADA: responder confirmado, no 400.
+      //
+      // Caso real (Olive Corp, 20-ago-2026): la anulacion tarda ~10s (resumen +
+      // ticket SUNAT) y el navegador de la usuaria murio en esa ventana. El doc
+      // quedo 'voided' en el server, pero TODA la devolucion de stock corre en
+      // el cliente al recibir la respuesta — que nunca llego. Al reintentar,
+      // esta validacion respondia 400 "ya esta anulada": un camino que tampoco
+      // dispara la devolucion. Resultado: dos boletas anuladas ante SUNAT con
+      // el stock sin devolver, y la usuaria contando aceitunas a mano.
+      //
+      // Respondiendo {success, status:'voided'} el reintento se vuelve el
+      // camino de RECUPERACION: el front lo trata como confirmacion y aplica
+      // los efectos pendientes; su flag stockRestored (leido fresco) evita
+      // duplicar si ya corrieron.
+      if (invoiceData.sunatStatus === 'voided' || invoiceData.status === 'voided') {
+        res.status(200).json({
+          success: true,
+          status: 'voided',
+          alreadyVoided: true,
+          message: 'El documento ya estaba anulado ante SUNAT'
+        })
+        return
+      }
+
       // 2. Validar que se puede anular
       // Priorizar emissionDate (fecha del POS) sobre issueDate
       const validationResult = canVoidDocument({
@@ -5882,6 +5906,20 @@ export const voidBoleta = onRequest(
         return
       }
 
+      // REINTENTO SOBRE UNA ANULACION YA CONFIRMADA: responder confirmado, no 400.
+      // (Ver el comentario largo en voidInvoice — caso Olive Corp 20-ago-2026:
+      // el navegador murio en los ~10s del tramite y el reintento recibia 400,
+      // dejando la devolucion de stock del cliente sin ejecutarse jamas.)
+      if (boletaData.sunatStatus === 'voided' || boletaData.status === 'voided') {
+        res.status(200).json({
+          success: true,
+          status: 'voided',
+          alreadyVoided: true,
+          message: 'El documento ya estaba anulado ante SUNAT'
+        })
+        return
+      }
+
       // 3. Validar que se puede anular
       const validationResult = canVoidBoleta({
         sunatStatus: boletaData.sunatStatus,
@@ -6399,6 +6437,20 @@ export const voidBoletaQPse = onRequest(
         return
       }
 
+      // REINTENTO SOBRE UNA ANULACION YA CONFIRMADA: responder confirmado, no 400.
+      // (Ver el comentario largo en voidInvoice — caso Olive Corp 20-ago-2026:
+      // el navegador murio en los ~10s del tramite y el reintento recibia 400,
+      // dejando la devolucion de stock del cliente sin ejecutarse jamas.)
+      if (boletaData.sunatStatus === 'voided' || boletaData.status === 'voided') {
+        res.status(200).json({
+          success: true,
+          status: 'voided',
+          alreadyVoided: true,
+          message: 'El documento ya estaba anulado ante SUNAT'
+        })
+        return
+      }
+
       // 3. Validar que se puede anular
       const validationResult = canVoidBoleta({
         sunatStatus: boletaData.sunatStatus,
@@ -6841,6 +6893,20 @@ export const voidInvoiceQPse = onRequest(
 
       // 3. Validar que se puede anular
       // Priorizar emissionDate (fecha del POS) sobre issueDate
+      // REINTENTO SOBRE UNA ANULACION YA CONFIRMADA: responder confirmado, no 400.
+      // (Ver el comentario largo en voidInvoice — caso Olive Corp 20-ago-2026:
+      // el navegador murio en los ~10s del tramite y el reintento recibia 400,
+      // dejando la devolucion de stock del cliente sin ejecutarse jamas.)
+      if (invoiceData.sunatStatus === 'voided' || invoiceData.status === 'voided') {
+        res.status(200).json({
+          success: true,
+          status: 'voided',
+          alreadyVoided: true,
+          message: 'El documento ya estaba anulado ante SUNAT'
+        })
+        return
+      }
+
       const validationResult = canVoidDocument({
         sunatStatus: invoiceData.sunatStatus,
         delivered: invoiceData.delivered || false,
