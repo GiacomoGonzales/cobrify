@@ -176,10 +176,10 @@ export default function UserManagement() {
     }
   };
 
-  const handleRegisterPayment = async (userId, amount, method, planKey, customEndDate = null) => {
+  const handleRegisterPayment = async (userId, amount, method, planKey, customEndDate = null, options = {}) => {
     try {
       setActionLoading(true);
-      await registerPayment(userId, amount, method, planKey, customEndDate);
+      await registerPayment(userId, amount, method, planKey, customEndDate, options);
       await loadSubscriptions();
       setShowModal(false);
       toast.success('Pago registrado exitosamente');

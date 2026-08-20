@@ -41,6 +41,10 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
   const [selectedPlan, setSelectedPlan] = useState(user.plan);
   const [showPasswords, setShowPasswords] = useState(false);
   const [addIgv, setAddIgv] = useState(false);
+  // Cuando el cobro no coincide con el precio pactado, el admin decide si ese
+  // monto pasa a ser el nuevo precio de renovación. Antes se ignoraba en
+  // silencio y quedaban precios viejos cobrando planes nuevos.
+  const [actualizarPrecioPactado, setActualizarPrecioPactado] = useState(false);
   const [useCustomDate, setUseCustomDate] = useState(false);
   const [customEndDate, setCustomEndDate] = useState('');
   // Corrección manual del vencimiento (sin registrar pago): sirve para arreglar
@@ -90,7 +94,16 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
         : (plan.totalPrice || 0);
       setPaymentAmount(addIgv ? parseFloat((base * 1.18).toFixed(2)) : base);
     }
+    setActualizarPrecioPactado(false);
   }, [selectedPlanForPayment, addIgv]);
+
+  // Precio pactado vigente para ESTE plan (null si está cambiando de plan: ahí
+  // el monto cobrado se congela solo y no hay nada que decidir).
+  const precioPactado = (selectedPlanForPayment === user.plan && user.renewalPrice != null)
+    ? Number(user.renewalPrice)
+    : null;
+  const difiereDelPactado = precioPactado !== null
+    && Math.abs(Number(paymentAmount) - precioPactado) > 0.01;
 
   const periodEnd = user.currentPeriodEnd?.toDate?.() || user.currentPeriodEnd;
   const now = new Date();
@@ -686,7 +699,10 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                   paymentMethod,
                   selectedPlanForPayment,
                   useCustomDate && customEndDate ? new Date(customEndDate) : null,
-                  addIgv ? { includesIgv: true, baseAmount: selectedPlanConfig?.totalPrice || 0, igvAmount: parseFloat(((selectedPlanConfig?.totalPrice || 0) * 0.18).toFixed(2)) } : null
+                  {
+                    ...(addIgv ? { igvInfo: { includesIgv: true, baseAmount: selectedPlanConfig?.totalPrice || 0, igvAmount: parseFloat(((selectedPlanConfig?.totalPrice || 0) * 0.18).toFixed(2)) } } : {}),
+                    updateRenewalPrice: difiereDelPactado && actualizarPrecioPactado,
+                  }
                 );
               }}
               className="space-y-4"
@@ -780,6 +796,32 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                     </>
                   )}
                 </p>
+
+                {/* El cobro no coincide con el precio pactado: decidirlo, no ignorarlo */}
+                {difiereDelPactado && (
+                  <div className="mt-3 p-3 bg-amber-50 border border-amber-300 rounded-lg">
+                    <p className="text-sm text-amber-900">
+                      Su precio pactado es <strong>S/ {precioPactado.toFixed(2)}</strong> y estás
+                      cobrando <strong>S/ {Number(paymentAmount).toFixed(2)}</strong>.
+                    </p>
+                    <label className="flex items-start gap-2 cursor-pointer mt-2">
+                      <input
+                        type="checkbox"
+                        checked={actualizarPrecioPactado}
+                        onChange={(e) => setActualizarPrecioPactado(e.target.checked)}
+                        className="w-4 h-4 mt-0.5 text-amber-600 border-amber-400 rounded focus:ring-amber-500"
+                      />
+                      <span className="text-sm text-amber-900">
+                        Que S/ {Number(paymentAmount).toFixed(2)} pase a ser su nuevo precio de renovación
+                      </span>
+                    </label>
+                    <p className="text-xs text-amber-700 mt-1.5">
+                      Sin marcar, sigue pactado en S/ {precioPactado.toFixed(2)} y eso es lo que se le
+                      cobrará al renovar. Déjalo sin marcar si cobraste varios períodos juntos o un
+                      monto parcial.
+                    </p>
+                  </div>
+                )}
 
                 {/* Checkbox IGV */}
                 <div className="mt-3 pt-3 border-t border-green-200">

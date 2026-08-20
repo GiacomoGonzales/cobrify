@@ -745,7 +745,7 @@ export const reactivateUser = async (userId, extendDays = 30) => {
 };
 
 // Registrar pago manual (Admin)
-export const registerPayment = async (userId, amount, method = 'Transferencia', selectedPlan = 'plan_3_months', customEndDate = null) => {
+export const registerPayment = async (userId, amount, method = 'Transferencia', selectedPlan = 'plan_3_months', customEndDate = null, options = {}) => {
   try {
     const subscriptionRef = doc(db, 'subscriptions', userId);
     const subscriptionSnap = await getDoc(subscriptionRef);
@@ -810,7 +810,12 @@ export const registerPayment = async (userId, amount, method = 'Transferencia', 
     const newLimits = isSamePlan
       ? (subscription.limits || planConfig?.limits)
       : (planConfig?.limits || subscription.limits);
-    const newRenewalPrice = isSamePlan
+    // `updateRenewalPrice` = el admin vio que este cobro NO coincide con el
+    // precio pactado y decidió a propósito que el nuevo monto pase a ser el
+    // precio (subida de tarifa, corrección). Sin ese permiso explícito se
+    // respeta lo pactado, que es lo que protege a los clientes antiguos.
+    const pisarPrecio = options.updateRenewalPrice === true && amountNum > 0;
+    const newRenewalPrice = (isSamePlan && !pisarPrecio)
       ? (subscription.renewalPrice ?? (amountNum > 0 ? amountNum : null))
       : (amountNum > 0 ? amountNum : null);
 
@@ -889,12 +894,25 @@ export const changePlan = async (userId, newPlan) => {
 
     const subscription = subscriptionSnap.data();
     const oldPlan = PLANS[subscription.plan]?.name || subscription.plan;
+    const cambiaDePlan = subscription.plan !== newPlan;
 
-    // Solo actualizar el plan y sus límites, SIN tocar las fechas
+    // El precio pactado (renewalPrice) pertenece a UN plan: es lo que esta
+    // persona paga por ESE plan. Al mudarla a otro plan hay que soltarlo, o
+    // queda un precio huérfano que después se cobra por algo que no es.
+    //
+    // Esto causó 14 cuentas cobrando un año al precio de un mes (ago-2026): el
+    // flujo real del panel es cambiar el plan PRIMERO y registrar el pago
+    // DESPUÉS. Para cuando llegaba el pago, el plan ya coincidía, así que
+    // registerPayment lo leía como renovación normal, conservaba el S/19.90
+    // mensual viejo e ignoraba los S/199.90 anuales recién cobrados.
+    //
+    // Soltándolo acá, el pago que viene detrás congela el monto real (ver
+    // `subscription.renewalPrice ?? amountNum` en registerPayment).
     await updateDoc(subscriptionRef, {
       plan: newPlan,
       monthlyPrice: planConfig.pricePerMonth,
       limits: planConfig.limits,
+      ...(cambiaDePlan ? { renewalPrice: null, pricingFrozenAt: null } : {}),
       updatedAt: serverTimestamp()
     });
 
