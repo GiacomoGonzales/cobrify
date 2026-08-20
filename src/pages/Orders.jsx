@@ -121,11 +121,30 @@ function HistorialOrdenes({ ordenes, cargando, fechas, setFechas, abierta, setAb
                   <div className="text-right shrink-0">
                     <p className="text-sm font-bold text-gray-900">S/ {(Number(o.total) || 0).toFixed(2)}</p>
                     {o.invoiceNumber ? (
-                      <p className="text-xs text-primary-600 font-mono">{o.invoiceNumber}</p>
+                      <p className="text-xs text-primary-600 font-mono">
+                        {o.invoiceNumber}
+                        {o._pago?.metodo && <span className="text-gray-500 font-sans"> · {o._pago.metodo}</span>}
+                      </p>
                     ) : (
                       <p className="text-xs text-amber-600">Sin comprobante</p>
                     )}
                   </div>
+                  {/* Las dos alertas que valen dinero: el comprobante al que
+                      apunta la orden fue ANULADO (la venta quedó sin documento),
+                      o su total NO es el de la orden (el sello se cruzó de
+                      orden — caso real Mandil: orden de 62 apuntando a una nota
+                      de 131 anulada; el efectivo sobraba en caja y la venta no
+                      salía en ningún reporte). */}
+                  {o._pago?.anulado && (
+                    <Badge variant="danger" className="shrink-0" title="El comprobante con el que se cerró esta orden fue anulado: la venta quedó sin documento">
+                      Comprobante anulado
+                    </Badge>
+                  )}
+                  {!o._pago?.anulado && o._pago?.descuadre && (
+                    <Badge variant="warning" className="shrink-0" title={`El comprobante es de S/ ${o._pago.totalComprobante.toFixed(2)} y la orden de S/ ${(Number(o.total) || 0).toFixed(2)}: no corresponde a esta orden`}>
+                      No coincide
+                    </Badge>
+                  )}
                   {cancelada && <Badge variant="danger" className="shrink-0">Anulada</Badge>}
                   {abiertaEsta
                     ? <ChevronUp className="w-4 h-4 text-gray-400 shrink-0" />

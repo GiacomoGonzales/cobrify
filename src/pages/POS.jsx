@@ -5085,6 +5085,20 @@ export default function POS() {
     // Si se abandona un folio sin facturarlo, la siguiente venta no debe salir
     // enlazada a esa reserva.
     pendingFolioReservationIdRef.current = null
+    // Soltar también la ORDEN DE MESA/PEDIDO cargada. Sin esto, "Limpiar" vaciaba
+    // el carrito pero dejaba pendingOrderId apuntando a la mesa anterior: la
+    // siguiente venta —armada a mano para OTRO cliente— sellaba como facturada a
+    // la mesa equivocada y con un comprobante que no era el suyo. Pasó en
+    // producción (Mandil, 19-ago-2026: orden de S/62 de MESA 4 quedó apuntando a
+    // una nota de S/131 de la barra, que además anularon — el efectivo sobraba
+    // en caja y la venta no salía en ningún reporte).
+    setPendingOrderId(null)
+    setMarkOrderPaidOnComplete(false)
+    setMarkOnlineOrderCompleteOnSale(false)
+    setTableData(null)
+    onlineOrderLoadedRef.current = false
+    orderLoadedRef.current = false
+    tableLoadedRef.current = false
     avisoFaltantesRef.current = ''
     // Resetear al default del negocio, pero respetando los tipos permitidos del
     // usuario logueado. Si el default no está en allowedDocumentTypes (típico en

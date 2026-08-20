@@ -1390,6 +1390,53 @@ export const getClosedOrders = async (businessId, filtros = {}) => {
       orders.push({ id: doc.id, ...data })
     })
 
+    // Cruce con los comprobantes del mismo rango. El MÉTODO DE PAGO y el
+    // estado (aceptada/anulada) viven en el comprobante, no en la orden: sin
+    // este cruce el historial no puede decir "con qué se pagó".
+    //
+    // Y de paso destapa un problema real: si el total de la orden NO coincide
+    // con el de su comprobante, o el comprobante está anulado, esa venta no
+    // está documentada aunque la orden diga "pagada". Pasó en producción
+    // (Mandil, 19-ago-2026: una orden de S/62 quedó apuntando a una nota de
+    // S/131 que además anularon; el dinero estaba en la caja y la venta no
+    // figuraba en ningún reporte).
+    const conComprobante = orders.filter((o) => o.invoiceId)
+    if (conComprobante.length > 0) {
+      try {
+        const invRef = collection(db, 'businesses', businessId, 'invoices')
+        const invConstraints = []
+        if (filtros.startDate) {
+          const [y, m, d] = filtros.startDate.split('-').map(Number)
+          invConstraints.push(where('createdAt', '>=', Timestamp.fromDate(new Date(y, m - 1, d, 0, 0, 0, 0))))
+        }
+        if (filtros.endDate) {
+          const [y, m, d] = filtros.endDate.split('-').map(Number)
+          invConstraints.push(where('createdAt', '<=', Timestamp.fromDate(new Date(y, m - 1, d, 23, 59, 59, 999))))
+        }
+        const invSnap = await getDocs(query(invRef, ...invConstraints))
+        const porId = {}
+        invSnap.forEach((d) => { porId[d.id] = d.data() })
+
+        for (const o of orders) {
+          const inv = o.invoiceId ? porId[o.invoiceId] : null
+          if (!inv) continue
+          const totalOrden = Number(o.total) || 0
+          const totalComprobante = Number(inv.total) || 0
+          o._pago = {
+            metodo: inv.paymentMethod || null,
+            estado: inv.status || null,
+            anulado: ['voided', 'cancelled'].includes(inv.status),
+            totalComprobante,
+            // Más de un centavo de diferencia = el comprobante no es de esta orden.
+            descuadre: Math.abs(totalComprobante - totalOrden) > 0.01,
+          }
+        }
+      } catch (e) {
+        // El cruce es informativo: si falla, el historial igual se muestra.
+        console.warn('No se pudieron cruzar los comprobantes del historial:', e.message)
+      }
+    }
+
     return { success: true, data: orders }
   } catch (error) {
     console.error('Error al obtener el historial de órdenes:', error)
