@@ -13,6 +13,7 @@ import {
   writeBatch,
   setDoc,
   runTransaction,
+  Timestamp,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { updateTableAmount, updateTableServedStatus } from './tableService'
@@ -1342,6 +1343,60 @@ export const completeOrder = async (businessId, orderId) => {
  * en la versión anterior markOrderAsPaid no cambiaba el status, dejando órdenes
  * pagadas pero con status 'pending' visibles aquí indefinidamente.
  */
+/**
+ * Órdenes YA CERRADAS (historial).
+ *
+ * La página de Órdenes solo muestra las activas: apenas se cobra la mesa, la
+ * orden desaparece de la vista aunque el documento sigue guardado. Esto lee
+ * justamente esas — con su mesa, mozo, items y el comprobante con el que se
+ * cobró — para poder responder "¿qué se vendió en la mesa 5 anoche?".
+ *
+ * Se acota por FECHA para no bajar el historial entero: un restaurante suma
+ * miles de órdenes al año.
+ *
+ * @param {string} businessId
+ * @param {object} [filtros]
+ * @param {string} [filtros.startDate] - 'YYYY-MM-DD' (inclusive, hora de Lima)
+ * @param {string} [filtros.endDate]   - 'YYYY-MM-DD' (inclusive)
+ * @param {string} [filtros.branchId]  - sede; null/undefined = todas
+ */
+export const getClosedOrders = async (businessId, filtros = {}) => {
+  try {
+    const ordersRef = collection(db, 'businesses', businessId, 'orders')
+    const constraints = []
+
+    if (filtros.startDate) {
+      const [y, m, d] = filtros.startDate.split('-').map(Number)
+      constraints.push(where('createdAt', '>=', Timestamp.fromDate(new Date(y, m - 1, d, 0, 0, 0, 0))))
+    }
+    if (filtros.endDate) {
+      const [y, m, d] = filtros.endDate.split('-').map(Number)
+      constraints.push(where('createdAt', '<=', Timestamp.fromDate(new Date(y, m - 1, d, 23, 59, 59, 999))))
+    }
+    constraints.push(orderBy('createdAt', 'desc'))
+
+    const snapshot = await getDocs(query(ordersRef, ...constraints))
+
+    const orders = []
+    snapshot.forEach((doc) => {
+      const data = doc.data()
+      // Cerrada = ya no está en circulación: entregada/cerrada, o pagada.
+      // Se filtra acá y no en la consulta porque `paid` y `status` son dos
+      // caminos distintos al mismo estado y Firestore no hace OR sobre campos
+      // distintos sin un índice por cada combinación.
+      const cerrada = ['delivered', 'closed', 'completed', 'cancelled'].includes(data.status) || data.paid === true
+      if (!cerrada) return
+      if (filtros.branchId !== undefined && filtros.branchId !== null && (data.branchId || null) !== filtros.branchId) return
+      orders.push({ id: doc.id, ...data })
+    })
+
+    return { success: true, data: orders }
+  } catch (error) {
+    console.error('Error al obtener el historial de órdenes:', error)
+    return { success: false, error: error.message }
+  }
+}
+
 export const getActiveOrders = async (businessId) => {
   try {
     const ordersRef = collection(db, 'businesses', businessId, 'orders')

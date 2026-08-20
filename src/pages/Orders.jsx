@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
-import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, ChevronDown, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer, X, ShoppingCart, Truck, PackageCheck, Edit2, MoreVertical, FileText, Split, UserMinus, Wine, UtensilsCrossed } from 'lucide-react'
+import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, ChevronDown, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer, X, ShoppingCart, Truck, PackageCheck, Edit2, MoreVertical, FileText, Split, UserMinus, Wine, UtensilsCrossed, ChevronUp, ClipboardList } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
-import { getActiveOrders, getOrdersStats, updateOrderStatus, createOrder, completeOrder, markOrderAsPaid, updateOrder, getOrder } from '@/services/orderService'
+import { getActiveOrders, getClosedOrders, getOrdersStats, updateOrderStatus, createOrder, completeOrder, markOrderAsPaid, updateOrder, getOrder } from '@/services/orderService'
 import { getActiveBranches } from '@/services/branchService'
 import { createBarTab, occupyTable } from '@/services/tableService'
 import { useLocationAccess } from '@/utils/locationAccess'
@@ -31,6 +31,145 @@ import { getActiveMotoristas, createDeliveryRecord, updateOperationalStatus } fr
 import { stationsForOrder } from '@/utils/kitchenComandaFormat'
 import GuideLink from '@/components/guide/GuideLink'
 
+/**
+ * HISTORIAL DE ÓRDENES CERRADAS.
+ *
+ * Responde la pregunta que la vista de activas no podía: "¿qué se vendió en la
+ * mesa 5 anoche y con qué comprobante se cobró?". La orden guarda el
+ * `invoiceNumber`, así que se puede enlazar el consumo con el documento sin
+ * cruzar nada a mano.
+ */
+function HistorialOrdenes({ ordenes, cargando, fechas, setFechas, abierta, setAbierta }) {
+  const hora = (t) => {
+    const d = t?.toDate?.() || (t ? new Date(t) : null)
+    if (!d || Number.isNaN(d.getTime())) return '-'
+    return d.toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })
+  }
+  const totalPeriodo = ordenes.reduce((s, o) => s + (Number(o.total) || 0), 0)
+  const anuladas = ordenes.filter((o) => o.status === 'cancelled').length
+
+  return (
+    <div className="space-y-4">
+      {/* Filtro de fechas */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Desde</label>
+              <input
+                type="date"
+                value={fechas.desde}
+                onChange={(e) => setFechas({ ...fechas, desde: e.target.value })}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Hasta</label>
+              <input
+                type="date"
+                value={fechas.hasta}
+                onChange={(e) => setFechas({ ...fechas, hasta: e.target.value })}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              />
+            </div>
+            <div className="sm:ml-auto text-sm text-gray-600">
+              <span className="font-semibold text-gray-900">{ordenes.length}</span> órdenes
+              {anuladas > 0 && <span className="text-red-600"> · {anuladas} anulada{anuladas === 1 ? '' : 's'}</span>}
+              {' · '}
+              <span className="font-semibold text-gray-900">S/ {totalPeriodo.toFixed(2)}</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {cargando ? (
+        <div className="flex items-center justify-center py-16 text-gray-500">
+          <Loader2 className="w-6 h-6 animate-spin mr-2" />
+          Cargando historial...
+        </div>
+      ) : ordenes.length === 0 ? (
+        <Card>
+          <CardContent className="py-16 text-center">
+            <ClipboardList className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-600 font-medium">No hay órdenes cerradas en esas fechas</p>
+            <p className="text-sm text-gray-500 mt-1">Prueba ampliando el rango de fechas</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {ordenes.map((o) => {
+            const abiertaEsta = abierta === o.id
+            const cancelada = o.status === 'cancelled'
+            return (
+              <Card key={o.id} className={cancelada ? 'border-red-200' : ''}>
+                <button
+                  type="button"
+                  onClick={() => setAbierta(abiertaEsta ? null : o.id)}
+                  className="w-full text-left px-4 py-3 flex items-center gap-3"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {o.orderNumber || 'Orden'}
+                      {o.tableNumber ? ` · Mesa ${o.tableNumber}` : ''}
+                      {o.waiterName ? ` · ${o.waiterName}` : ''}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {hora(o.paidAt || o.deliveredAt || o.createdAt)}
+                      {' · '}{(o.items || []).length} {(o.items || []).length === 1 ? 'ítem' : 'ítems'}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-bold text-gray-900">S/ {(Number(o.total) || 0).toFixed(2)}</p>
+                    {o.invoiceNumber ? (
+                      <p className="text-xs text-primary-600 font-mono">{o.invoiceNumber}</p>
+                    ) : (
+                      <p className="text-xs text-amber-600">Sin comprobante</p>
+                    )}
+                  </div>
+                  {cancelada && <Badge variant="danger" className="shrink-0">Anulada</Badge>}
+                  {abiertaEsta
+                    ? <ChevronUp className="w-4 h-4 text-gray-400 shrink-0" />
+                    : <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />}
+                </button>
+
+                {abiertaEsta && (
+                  <div className="border-t border-gray-100 px-4 py-3">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-xs text-gray-500 border-b border-gray-100">
+                          <th className="py-1.5 pr-3 font-medium">Producto</th>
+                          <th className="py-1.5 pr-3 font-medium text-right">Cant.</th>
+                          <th className="py-1.5 pr-3 font-medium text-right">Precio</th>
+                          <th className="py-1.5 font-medium text-right">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(o.items || []).map((it, i) => (
+                          <tr key={i} className="border-b border-gray-50 last:border-0">
+                            <td className="py-1.5 pr-3 text-gray-900">
+                              {it.name}
+                              {it.notes && <span className="block text-xs text-gray-500">{it.notes}</span>}
+                            </td>
+                            <td className="py-1.5 pr-3 text-right text-gray-700">{it.quantity}</td>
+                            <td className="py-1.5 pr-3 text-right text-gray-700">S/ {(Number(it.price) || 0).toFixed(2)}</td>
+                            <td className="py-1.5 text-right text-gray-700">
+                              S/ {(Number(it.total) || (Number(it.price) || 0) * (Number(it.quantity) || 0)).toFixed(2)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </Card>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Orders() {
   const { user, getBusinessId, isDemoMode, demoData, filterBranchesByAccess, allowedBranches, hasMainBranchAccess, userPermissions } = useAppContext()
   const isOwner = !userPermissions?.ownerId
@@ -41,6 +180,17 @@ export default function Orders() {
   const appNavigate = useAppNavigate()
 
   const [orders, setOrders] = useState([])
+  // Pestaña de HISTORIAL: las órdenes cerradas desaparecían de la vista al
+  // cobrarlas, aunque el documento sigue guardado con su mesa, mozo, items y
+  // el comprobante con el que se cobró. Acá se pueden volver a mirar.
+  const [pestana, setPestana] = useState('activas')
+  const [historial, setHistorial] = useState([])
+  const [historialCargando, setHistorialCargando] = useState(false)
+  const [historialAbierta, setHistorialAbierta] = useState(null)
+  const [historialFechas, setHistorialFechas] = useState(() => {
+    const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
+    return { desde: hoy, hasta: hoy }
+  })
   // Sucursales (sedes): para filtrar las órdenes por sede y crear órdenes manuales en la sede activa
   const [branches, setBranches] = useState([])
   const [selectedBranchId, setSelectedBranchId] = useState(null) // null = Sucursal Principal
@@ -496,6 +646,32 @@ export default function Orders() {
   // repetido en 4 sitios, y una orden "En Local" (counter) salia como Para Llevar.
   const ORDER_TYPE_LABEL = { delivery: 'Delivery', takeaway: 'Para Llevar', counter: 'En Local' }
   const orderTypeLabel = (t) => ORDER_TYPE_LABEL[t] || 'Para Llevar'
+
+  // El historial se pide bajo demanda (al abrir la pestaña o cambiar fechas):
+  // son cientos de órdenes por mes y no tiene sentido bajarlas si nadie las mira.
+  const cargarHistorial = async () => {
+    if (isDemoMode) { setHistorial([]); return }
+    setHistorialCargando(true)
+    try {
+      const res = await getClosedOrders(getBusinessId(), {
+        startDate: historialFechas.desde,
+        endDate: historialFechas.hasta,
+        branchId: branches.length > 0 ? selectedBranchId : undefined,
+      })
+      if (res.success) setHistorial(res.data || [])
+      else toast.error('No se pudo cargar el historial: ' + res.error)
+    } catch (e) {
+      console.error('Error al cargar el historial de órdenes:', e)
+      toast.error('No se pudo cargar el historial')
+    } finally {
+      setHistorialCargando(false)
+    }
+  }
+
+  useEffect(() => {
+    if (pestana === 'historial') cargarHistorial()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pestana, historialFechas.desde, historialFechas.hasta, selectedBranchId])
 
   const handleCreateOrderClick = () => {
     setShowCreateOrderModal(true)
@@ -1263,10 +1439,16 @@ export default function Orders() {
       <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
         <div>
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Órdenes Activas</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+              {pestana === 'historial' ? 'Historial de Órdenes' : 'Órdenes Activas'}
+            </h1>
             <GuideLink />
           </div>
-          <p className="text-gray-600 mt-1">Monitorea las órdenes en tiempo real</p>
+          <p className="text-gray-600 mt-1">
+            {pestana === 'historial'
+              ? 'Órdenes ya cobradas, con su mesa, mozo y el comprobante con el que se cerraron'
+              : 'Monitorea las órdenes en tiempo real'}
+          </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
           {/* Selector de sede: solo si el negocio tiene sucursales configuradas */}
@@ -1282,22 +1464,60 @@ export default function Orders() {
               ))}
             </Select>
           )}
-          <Button
-            variant="outline"
-            size="lg"
-            onClick={() => { setBarTabName(''); setShowBarTabModal(true) }}
-            className="w-full sm:w-auto"
-          >
-            <Wine className="w-5 h-5 mr-2" />
-            Cuenta de barra
-          </Button>
-          <Button onClick={handleCreateOrderClick} size="lg" className="w-full sm:w-auto">
-            <Plus className="w-5 h-5 mr-2" />
-            Nueva Orden
-          </Button>
+          {pestana === 'activas' && (
+            <>
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => { setBarTabName(''); setShowBarTabModal(true) }}
+                className="w-full sm:w-auto"
+              >
+                <Wine className="w-5 h-5 mr-2" />
+                Cuenta de barra
+              </Button>
+              <Button onClick={handleCreateOrderClick} size="lg" className="w-full sm:w-auto">
+                <Plus className="w-5 h-5 mr-2" />
+                Nueva Orden
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
+      {/* Pestañas: activas / historial */}
+      <div className="border-b border-gray-200">
+        <nav className="flex space-x-8">
+          {[
+            { id: 'activas', label: 'Activas' },
+            { id: 'historial', label: 'Historial' },
+          ].map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setPestana(t.id)}
+              className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                pestana === t.id
+                  ? 'border-primary-500 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {pestana === 'historial' ? (
+        <HistorialOrdenes
+          ordenes={historial}
+          cargando={historialCargando}
+          fechas={historialFechas}
+          setFechas={setHistorialFechas}
+          abierta={historialAbierta}
+          setAbierta={setHistorialAbierta}
+        />
+      ) : (
+      <>
       {/* Estadísticas */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
@@ -1826,6 +2046,8 @@ export default function Orders() {
           })
         )}
       </div>
+      </>
+      )}
 
       {/* Modal para crear nueva orden */}
       <CreateOrderModal

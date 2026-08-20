@@ -108,6 +108,26 @@ export default {
 
     // ─────────────────────────────────────────────────────────────────────
     {
+      id: 'historial',
+      title: 'Ver las órdenes ya cobradas',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Al cobrar, la orden sale de la lista de activas — esa vista es para lo que está en marcha. Para volver a mirarla está la pestaña **Historial**, con las órdenes ya cerradas del rango de fechas que elijas.',
+        },
+        {
+          type: 'texto',
+          text: 'Cada línea muestra la **mesa**, el **mozo**, la hora en que se cobró, el total y el **número del comprobante** con el que se cerró. Al tocarla se abre el detalle con todo lo que se consumió, incluidas las notas de cocina. Arriba tienes el total del período y cuántas órdenes se anularon.',
+        },
+        {
+          type: 'consejo',
+          text: 'Sirve para responder rápido "¿qué se vendió en la mesa 5 anoche?" y para cruzar una orden con su boleta cuando un cliente reclama. Si una orden dice **Sin comprobante**, es de las que se cerraron como cortesía.',
+        },
+      ],
+    },
+
+    // ─────────────────────────────────────────────────────────────────────
+    {
       id: 'menu-digital',
       title: 'Pedidos que llegan solos',
       blocks: [
