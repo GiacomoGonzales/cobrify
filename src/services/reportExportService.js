@@ -225,8 +225,17 @@ const appendGroupedSheet = (wb, { sheetName, title, groupLabel, businessData, pe
 
 /** Agrega hoja "Items Detallados" con una fila por línea vendida. */
 const appendItemsDetailSheet = (wb, { businessData, periodLabel, branchLabel, invoices, sheetName = 'Items Detallados', title = 'ITEMS DETALLADOS DE VENTAS' }) => {
+  // Documentos del cliente (licencia / tarjeta de propiedad): columnas OPCIONALES,
+  // salen solo si el negocio activó esos campos del POS en Configuración. Mismo
+  // criterio que la exportación de Comprobantes (invoiceExportService).
+  const conLicencia = businessData?.posCustomFields?.showLicenseNumberField === true
+  const conTarjeta = businessData?.posCustomFields?.showPropertyCardField === true
+
   const headers = [
-    'N° Comprobante', 'Fecha', 'Tipo', 'Cliente', 'Producto', 'SKU',
+    'N° Comprobante', 'Fecha', 'Tipo', 'Cliente',
+    ...(conLicencia ? ['Licencia / Resolución'] : []),
+    ...(conTarjeta ? ['T. Propiedad'] : []),
+    'Producto', 'SKU',
     'Cantidad', 'Precio Unit.', 'Descuento', 'Subtotal Item', 'Afectación IGV',
   ]
   const totalCols = headers.length
@@ -246,6 +255,8 @@ const appendItemsDetailSheet = (wb, { businessData, periodLabel, branchLabel, in
     if (!Array.isArray(inv.items)) continue
     const invDate = getInvoiceDate(inv)
     const customerName = inv.customer?.name || inv.customer?.businessName || 'Cliente General'
+    const licencia = String(inv.customer?.licenseNumber || '').toUpperCase()
+    const tarjeta = String(inv.customer?.propertyCard || '').toUpperCase()
     const tipo = DOC_TYPE_LABELS[inv.documentType] || 'Boleta'
     // Montos en SOLES (TC congelado del doc) para totalizar sin mezclar monedas
     const rate = getDocumentRate(inv)
@@ -262,6 +273,8 @@ const appendItemsDetailSheet = (wb, { businessData, periodLabel, branchLabel, in
         invDate ? formatDateLocale(invDate) : 'N/A',
         tipo,
         customerName,
+        ...(conLicencia ? [licencia] : []),
+        ...(conTarjeta ? [tarjeta] : []),
         item.name || item.description || 'Producto',
         item.sku || item.code || '',
         Number(qty),
@@ -276,33 +289,38 @@ const appendItemsDetailSheet = (wb, { businessData, periodLabel, branchLabel, in
 
   aoa.push([])
   const totalRowIdx = aoa.length
-  aoa.push(['', '', '', '', '', 'TOTALES', Number(totalQty), '', '', Number(totalAmount.toFixed(2)), ''])
+  const relleno = ['', '', '', '', ...(conLicencia ? [''] : []), ...(conTarjeta ? [''] : []), '']
+  aoa.push([...relleno, 'TOTALES', Number(totalQty), '', '', Number(totalAmount.toFixed(2)), ''])
 
   const ws = XLSX.utils.aoa_to_sheet(aoa)
-  applyColumnWidths(ws, [14, 12, 12, 28, 36, 14, 10, 12, 12, 14, 14])
+  applyColumnWidths(ws, [14, 12, 12, 28, ...(conLicencia ? [18] : []), ...(conTarjeta ? [16] : []), 36, 14, 10, 12, 12, 14, 14])
   applyTitleRow(ws, 0, totalCols)
   applyMetadataRows(ws, metaStart, metaEnd)
   applyHeaderRow(ws, headerRow, totalCols)
+  // Cuántas columnas opcionales se insertaron después de Cliente: todo lo que
+  // viene a su derecha se corre por igual.
+  const ex = (conLicencia ? 1 : 0) + (conTarjeta ? 1 : 0)
   for (let i = 0; i < rowCount; i++) {
     const r = dataStart + i
     setStyle(ws, r, 0, centerStyle(i))
     setStyle(ws, r, 1, centerStyle(i))
     setStyle(ws, r, 2, centerStyle(i))
     setStyle(ws, r, 3, cellStyle(i))
-    setStyle(ws, r, 4, cellStyle(i))
-    setStyle(ws, r, 5, centerStyle(i))
-    setStyle(ws, r, 6, numberStyle(i))
-    setStyle(ws, r, 7, numberStyle(i))
-    setStyle(ws, r, 8, numberStyle(i))
-    setStyle(ws, r, 9, numberStyle(i))
-    setStyle(ws, r, 10, centerStyle(i))
+    for (let c = 0; c < ex; c++) setStyle(ws, r, 4 + c, centerStyle(i))
+    setStyle(ws, r, 4 + ex, cellStyle(i))
+    setStyle(ws, r, 5 + ex, centerStyle(i))
+    setStyle(ws, r, 6 + ex, numberStyle(i))
+    setStyle(ws, r, 7 + ex, numberStyle(i))
+    setStyle(ws, r, 8 + ex, numberStyle(i))
+    setStyle(ws, r, 9 + ex, numberStyle(i))
+    setStyle(ws, r, 10 + ex, centerStyle(i))
   }
-  for (let c = 0; c <= 5; c++) setStyle(ws, totalRowIdx, c, totalLabelStyle)
-  setStyle(ws, totalRowIdx, 6, totalNumberStyle)
-  setStyle(ws, totalRowIdx, 7, totalLabelStyle)
-  setStyle(ws, totalRowIdx, 8, totalLabelStyle)
-  setStyle(ws, totalRowIdx, 9, totalNumberStyle)
-  setStyle(ws, totalRowIdx, 10, totalLabelStyle)
+  for (let c = 0; c <= 5 + ex; c++) setStyle(ws, totalRowIdx, c, totalLabelStyle)
+  setStyle(ws, totalRowIdx, 6 + ex, totalNumberStyle)
+  setStyle(ws, totalRowIdx, 7 + ex, totalLabelStyle)
+  setStyle(ws, totalRowIdx, 8 + ex, totalLabelStyle)
+  setStyle(ws, totalRowIdx, 9 + ex, totalNumberStyle)
+  setStyle(ws, totalRowIdx, 10 + ex, totalLabelStyle)
   applyFreezeBelow(ws, headerRow)
   XLSX.utils.book_append_sheet(wb, ws, sheetName)
 }
@@ -1624,8 +1642,16 @@ export const exportSalesReport = async (data) => {
 
   // ============== HOJA 3: DETALLE COMPLETO ==============
   {
+    // Documentos del cliente: columnas OPCIONALES, solo si el negocio activó
+    // esos campos del POS en Configuración (mismo criterio que Items Detallados).
+    const conLicencia = businessData?.posCustomFields?.showLicenseNumberField === true
+    const conTarjeta = businessData?.posCustomFields?.showPropertyCardField === true
+    const ex = (conLicencia ? 1 : 0) + (conTarjeta ? 1 : 0)
+
     const headers = [
       'Número', 'Fecha', 'Tipo', 'Cliente', 'Doc Cliente',
+      ...(conLicencia ? ['Licencia / Resolución'] : []),
+      ...(conTarjeta ? ['T. Propiedad'] : []),
       'Estado', 'Estado SUNAT', 'Método Pago',
       'Descuento', 'Op. Gravada', 'Op. Exonerada', 'Op. Inafecta',
       'Subtotal', 'IGV', 'Total', 'Costo', 'Utilidad', 'Margen %', 'Notas',
@@ -1659,6 +1685,8 @@ export const exportSalesReport = async (data) => {
         DOC_TYPE_LABELS[inv.documentType] || 'Boleta',
         inv.customer?.name || 'Cliente General',
         `${inv.customer?.documentType || ''} ${inv.customer?.documentNumber || ''}`.trim() || '-',
+        ...(conLicencia ? [String(inv.customer?.licenseNumber || '').toUpperCase()] : []),
+        ...(conTarjeta ? [String(inv.customer?.propertyCard || '').toUpperCase()] : []),
         inv.status === 'paid' ? 'Pagada' : 'Pendiente',
         sunatStatus,
         formatPayments(inv),
@@ -1678,7 +1706,9 @@ export const exportSalesReport = async (data) => {
 
     const ws = XLSX.utils.aoa_to_sheet(aoa)
     applyColumnWidths(ws, [
-      15, 12, 14, 30, 18, 12, 14, 25, 12, 14, 14, 14, 12, 10, 12, 12, 12, 10, 28,
+      15, 12, 14, 30, 18,
+      ...(conLicencia ? [18] : []), ...(conTarjeta ? [16] : []),
+      12, 14, 25, 12, 14, 14, 14, 12, 10, 12, 12, 12, 10, 28,
     ])
     applyTitleRow(ws, 0, totalCols)
     applyMetadataRows(ws, metaStart, metaEnd)
@@ -1691,11 +1721,13 @@ export const exportSalesReport = async (data) => {
       setStyle(ws, r, 2, centerStyle(i))
       setStyle(ws, r, 3, cellStyle(i))
       setStyle(ws, r, 4, centerStyle(i))
-      setStyle(ws, r, 5, centerStyle(i))
-      setStyle(ws, r, 6, centerStyle(i))
-      setStyle(ws, r, 7, cellStyle(i))
-      for (let c = 8; c <= 17; c++) setStyle(ws, r, c, numberStyle(i))
-      setStyle(ws, r, 18, cellStyle(i))
+      // Las opcionales van pegadas a Doc Cliente; el resto se corre por igual.
+      for (let c = 0; c < ex; c++) setStyle(ws, r, 5 + c, centerStyle(i))
+      setStyle(ws, r, 5 + ex, centerStyle(i))
+      setStyle(ws, r, 6 + ex, centerStyle(i))
+      setStyle(ws, r, 7 + ex, cellStyle(i))
+      for (let c = 8 + ex; c <= 17 + ex; c++) setStyle(ws, r, c, numberStyle(i))
+      setStyle(ws, r, 18 + ex, cellStyle(i))
     }
     applyFreezeBelow(ws, headerRow)
     XLSX.utils.book_append_sheet(wb, ws, 'Detalle Completo')

@@ -322,6 +322,10 @@ export default {
         },
         { type: 'ui', kind: 'boton', label: 'Descargar Reporte General (Excel)' },
         {
+          type: 'texto',
+          text: 'Si activaste los campos opcionales del cliente **Licencia / Resolución** y **Tarjeta de Propiedad** (Configuración → Campos del cliente), el Excel de ventas los trae como columnas propias en las hojas **Detalle Completo** e **Items Detallados**, al lado del cliente. Si no los tienes activados, esas columnas no aparecen y el reporte se ve igual que siempre.',
+        },
+        {
           type: 'ojo',
           text: 'El archivo respeta el **período y la sucursal** que tengas filtrados en pantalla. Si vas a mandárselo a tu contador, verifica los filtros antes de descargar: un Excel dice "ventas" en el título aunque sea de una sola sucursal y de tres días.',
         },
