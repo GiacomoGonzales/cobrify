@@ -54,8 +54,18 @@ service cloud.firestore {
       allow read: if isAuthenticated() && isSubUserOfOwner(userId);
       // Resellers pueden leer suscripciones de clientes que crearon (verificar por UID o email)
       allow read: if isAuthenticated() && resource.data.resellerId != null && isReseller(resource.data.resellerId);
-      // Users can create their own subscription (for trial), admins can modify any
-      allow create: if isAuthenticated() && isOwner(userId);
+      // NADIE se crea su propia suscripcion. Aca vivia
+      // `allow create: if isAuthenticated() && isOwner(userId)`, heredado del
+      // auto-registro con trial. El codigo que lo usaba se elimino el 16-ago-2026
+      // (641fce47), pero la app instalada corre su PROPIA copia del bundle: los
+      // celulares con una version vieja seguian entrando por esta puerta y
+      // acunando cuentas "Mi Negocio" en trial (una el 18-ago). Un arreglo de
+      // codigo no alcanza a quien no actualiza; la regla si.
+      // Los tres caminos legitimos NO la necesitan:
+      //   - alta desde el admin: escribe como el ADMIN (la sesion secundaria se
+      //     cierra antes de tocar Firestore) -> la cubre isAdmin()
+      //   - reseller creando cliente: escribe con resellerId -> regla de abajo
+      //   - usuario normal: ya no crea ninguna
       // Admin: necesario para que el onboarding desde el panel admin
       // (AdminCreateAccount → registerBusinessAsAdmin) cree la suscripción de
       // prueba del nuevo negocio sin que el dueño tenga que loguearse primero.
