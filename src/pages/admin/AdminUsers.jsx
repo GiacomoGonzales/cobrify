@@ -1808,7 +1808,14 @@ export default function AdminUsers() {
   }
 
   // Función para registrar pago
-  async function handleRegisterPayment(userId, amount, method, planKey, customEndDate = null, igvData = null) {
+  // OJO: esta pantalla NO usa registerPayment() del servicio — escribe la
+  // suscripción a mano. Son dos implementaciones del mismo cobro, y esta es la
+  // que se usa a diario, así que tiene que respetar las mismas reglas.
+  //
+  // El 6º argumento es un objeto de opciones (antes era igvData suelto). El
+  // modal manda `{ igvInfo?, updateRenewalPrice }`.
+  async function handleRegisterPayment(userId, amount, method, planKey, customEndDate = null, options = {}) {
+    const igvData = options?.igvInfo || null
     setProcessingPayment(true)
     try {
       const plan = PLANS[planKey] || customPlans[planKey]
@@ -1851,6 +1858,27 @@ export default function AdminUsers() {
         })
       }
 
+      // Mismas reglas que registerPayment() del servicio, para que renovar por
+      // acá no deshaga lo que se respeta por allá:
+      //  - Mismo plan = renovación: se CONSERVAN los límites del documento (hay
+      //    ~30 clientes con ajustes a mano, 2000 comprobantes o 3 sucursales;
+      //    pisarlos con el catálogo en cada renovación les quitaba lo pactado).
+      //  - Mismo plan = se conserva su precio pactado; si no tenía, queda
+      //    congelado el monto que se cobra ahora.
+      //  - Cambio de plan = contrato nuevo: límites del catálogo y el monto
+      //    cobrado pasa a ser el precio pactado.
+      //  - `updateRenewalPrice` = el admin vio que el cobro no coincide con lo
+      //    pactado y decidió a propósito que este monto sea el nuevo precio.
+      const montoNum = parseFloat(amount) || 0
+      const esMismoPlan = currentData.plan === planKey
+      const pisarPrecio = options?.updateRenewalPrice === true && montoNum > 0
+      const nuevosLimites = esMismoPlan
+        ? (currentData.limits || plan.limits)
+        : (plan.limits || currentData.limits)
+      const nuevoPrecioPactado = (esMismoPlan && !pisarPrecio)
+        ? (currentData.renewalPrice ?? (montoNum > 0 ? montoNum : null))
+        : (montoNum > 0 ? montoNum : null)
+
       // Actualizar suscripción
       await updateDoc(subscriptionRef, {
         plan: planKey,
@@ -1858,7 +1886,11 @@ export default function AdminUsers() {
         status: 'active',
         currentPeriodStart: Timestamp.now(),
         currentPeriodEnd: Timestamp.fromDate(newEndDate),
-        limits: plan.limits,
+        limits: nuevosLimites,
+        renewalPrice: nuevoPrecioPactado,
+        ...(nuevoPrecioPactado !== (currentData.renewalPrice ?? null)
+          ? { pricingFrozenAt: Timestamp.now() }
+          : {}),
         paymentHistory: arrayUnion(paymentRecord),
         updatedAt: Timestamp.now()
       })
