@@ -176,18 +176,6 @@ export default function Chat() {
     finDelHilo.current?.scrollIntoView({ behavior: 'smooth' })
   }, [mensajes, pendientes])
 
-  // Al abrir una conversacion, el cursor va al cuadro de escribir: se abre y
-  // se responde sin tocar nada mas.
-  //
-  // SOLO en escritorio. En el celular enfocar levanta el teclado y tapa media
-  // pantalla cuando uno solo queria leer; WhatsApp hace exactamente esta
-  // distincion. `pointer: fine` es lo que separa un mouse de un dedo.
-  useEffect(() => {
-    if (!activaId || !ventanaAbierta) return
-    if (!window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) return
-    cuadroTexto.current?.focus()
-  }, [activaId, ventanaAbierta])
-
   useEffect(() => {
     const t = setInterval(() => setAhora(Date.now()), 60000)
     return () => clearInterval(t)
@@ -211,6 +199,23 @@ export default function Chat() {
     ? Math.max(0, (activa.ventanaVenceAt?.toMillis?.() || 0) - ahora)
     : 0
   const ventanaAbierta = restante > 0
+
+  // Al abrir una conversacion, el cursor va al cuadro de escribir: se abre y
+  // se responde sin tocar nada mas.
+  //
+  // SOLO en escritorio. En el celular enfocar levanta el teclado y tapa media
+  // pantalla cuando uno solo queria leer; WhatsApp hace exactamente esta
+  // distincion. `pointer: fine` es lo que separa un mouse de un dedo.
+  //
+  // OJO: va DESPUES de `ventanaAbierta`. El arreglo de dependencias se evalua
+  // durante el render, asi que un hook que nombra una const declarada mas
+  // abajo revienta con "Cannot access before initialization" — y `vite build`
+  // NO lo detecta, solo se ve al abrir la pantalla.
+  useEffect(() => {
+    if (!activaId || !ventanaAbierta) return
+    if (!window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) return
+    cuadroTexto.current?.focus()
+  }, [activaId, ventanaAbierta])
 
   // El hilo son los confirmados mas los provisionales que todavia no volvieron.
   // Un pendiente desaparece en cuanto su id ya esta entre los confirmados: asi
