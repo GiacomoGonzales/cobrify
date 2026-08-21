@@ -4,11 +4,17 @@ import {
   ArrowLeft,
   Camera,
   Clock,
+  FileText,
+  Film,
+  Image as ImageIcon,
   MessageSquareText,
+  Music,
+  Paperclip,
   Plus,
   Save,
   Trash2,
   UserCircle,
+  X,
   Zap,
 } from 'lucide-react'
 import { useToast } from '@/contexts/ToastContext'
@@ -19,6 +25,10 @@ import {
   suscribirAutomaticos,
   guardarAutomaticos,
   CONFIG_AUTOMATICOS_DEFAULT,
+  subirArchivoBiblioteca,
+  validarArchivo,
+  ADJUNTOS_ACEPTADOS,
+  NOMBRE_TIPO,
 } from '@/services/whatsappChatService'
 
 const DIAS = [[1, 'L'], [2, 'M'], [3, 'X'], [4, 'J'], [5, 'V'], [6, 'S'], [7, 'D']]
@@ -309,6 +319,10 @@ function SeccionRapidas() {
   const [atajo, setAtajo] = useState('')
   const [texto, setTexto] = useState('')
   const [guardando, setGuardando] = useState(false)
+  // Indice de la respuesta cuyo archivo se esta subiendo (null = ninguna).
+  const [subiendo, setSubiendo] = useState(null)
+  const selectorRef = useRef(null)
+  const destinoRef = useRef(null)
 
   useEffect(() => suscribirAutomaticos((c) => setLista((prev) => prev || (c.respuestasRapidas || []))), [])
 
@@ -319,6 +333,38 @@ function SeccionRapidas() {
     setLista([...lista, { atajo: a, texto: texto.trim() }])
     setAtajo('')
     setTexto('')
+  }
+
+  const pedirArchivo = (indice) => {
+    destinoRef.current = indice
+    selectorRef.current?.click()
+  }
+
+  const recibirArchivo = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    const i = destinoRef.current
+    if (!file || i === null || i === undefined) return
+
+    const problema = validarArchivo(file)
+    if (problema) { toast.error(problema); return }
+
+    setSubiendo(i)
+    try {
+      // Se guarda UNA vez; despues cada envio manda solo la direccion.
+      const idToken = await getAuth().currentUser?.getIdToken()
+      const media = await subirArchivoBiblioteca(file, idToken)
+      setLista((prev) => {
+        const copia = [...prev]
+        copia[i] = { ...copia[i], media }
+        return copia
+      })
+      toast.success('Archivo listo. Acordate de guardar.')
+    } catch (err) {
+      toast.error(err.message || 'No se pudo subir el archivo')
+    } finally {
+      setSubiendo(null)
+    }
   }
 
   const guardar = async () => {
@@ -342,6 +388,18 @@ function SeccionRapidas() {
         <code className="bg-gray-100 px-1 rounded mx-1">/</code> y elegí el atajo: el texto se pega y lo podés
         retocar antes de enviar. Acepta <code className="bg-gray-100 px-1 rounded">{'{nombre}'}</code>.
       </p>
+      <p className="text-sm text-gray-600">
+        Cada una puede llevar <strong>una imagen, un video, un audio o un PDF</strong>. El archivo se
+        guarda una sola vez: mandarlo después es instantáneo, no importa cuánto pese.
+      </p>
+
+      <input
+        ref={selectorRef}
+        type="file"
+        accept={ADJUNTOS_ACEPTADOS}
+        onChange={recibirArchivo}
+        className="hidden"
+      />
 
       {lista.length === 0 && (
         <p className="text-sm text-gray-400 italic">Todavía no hay respuestas rápidas. Algunas ideas: /precios, /pago, /horario, /demo.</p>
@@ -362,10 +420,36 @@ function SeccionRapidas() {
                 }}
                 className="flex-1 text-sm bg-transparent focus:outline-none resize-none"
               />
+              <button
+                onClick={() => pedirArchivo(i)}
+                disabled={subiendo !== null}
+                className={`p-1 disabled:opacity-40 ${r.media ? 'text-green-600' : 'text-gray-300 hover:text-gray-600'}`}
+                title={r.media ? 'Cambiar archivo' : 'Adjuntar archivo'}
+              >
+                <Paperclip className="w-4 h-4" />
+              </button>
               <button onClick={() => setLista(lista.filter((x) => x.atajo !== r.atajo))} className="p-1 text-gray-300 hover:text-red-500" title="Eliminar">
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>
+
+            {subiendo === i && (
+              <p className="text-xs text-gray-500 mt-2 pl-1">Subiendo el archivo...</p>
+            )}
+
+            {r.media && subiendo !== i && (
+              <VistaAdjunto
+                media={r.media}
+                onQuitar={() => {
+                  const copia = [...lista]
+                  // Se reconstruye sin `media` en vez de ponerlo en null:
+                  // Firestore guardaría el null y la respuesta parecería tener
+                  // adjunto vacío.
+                  copia[i] = { atajo: copia[i].atajo, texto: copia[i].texto }
+                  setLista(copia)
+                }}
+              />
+            )}
           </div>
         ))}
       </div>
@@ -408,6 +492,36 @@ function SeccionRapidas() {
 /* ============================ piezas ============================ */
 const inputCls = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500'
 const btnPrimario = 'inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50'
+
+/** Vista compacta del archivo de una respuesta rápida, con opción de quitarlo. */
+const ICONO_TIPO = { image: ImageIcon, video: Film, audio: Music, document: FileText }
+
+function VistaAdjunto({ media, onQuitar }) {
+  const Icono = ICONO_TIPO[media.tipo] || FileText
+  return (
+    <div className="mt-2 flex items-center gap-3 bg-gray-50 rounded-lg p-2">
+      {media.tipo === 'image' ? (
+        <img src={media.url} alt="" className="w-14 h-14 rounded object-cover flex-none" />
+      ) : media.tipo === 'video' ? (
+        <video src={media.url} className="w-14 h-14 rounded object-cover flex-none bg-black" muted />
+      ) : (
+        <div className="w-14 h-14 rounded bg-white border border-gray-200 flex items-center justify-center flex-none">
+          <Icono className="w-6 h-6 text-gray-400" />
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-medium text-gray-800 truncate">{media.filename || NOMBRE_TIPO[media.tipo]}</p>
+        <p className="text-[11px] text-gray-400">
+          {NOMBRE_TIPO[media.tipo]}
+          {media.bytes ? ` · ${(media.bytes / 1024 / 1024).toFixed(1)} MB` : ''}
+        </p>
+      </div>
+      <button onClick={onQuitar} className="p-1 text-gray-300 hover:text-red-500 flex-none" title="Quitar archivo">
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  )
+}
 
 function Campo({ etiqueta, ayuda, children }) {
   return (

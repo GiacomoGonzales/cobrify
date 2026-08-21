@@ -94,9 +94,41 @@ export const enviarMensaje = async (conversationId, texto, idToken) => {
   return data
 }
 
-/** Tipos que se pueden adjuntar desde la bandeja. */
-export const ADJUNTOS_ACEPTADOS = 'image/jpeg,image/png,image/webp,application/pdf'
-export const ADJUNTO_MAX_BYTES = 10 * 1024 * 1024
+/**
+ * Tipos que se pueden adjuntar, con el tope de CADA UNO: WhatsApp usa límites
+ * distintos (5 MB imagen, 16 MB video y audio, 100 MB documento). Saberlos acá
+ * permite avisar antes de subir en vez de después.
+ */
+export const TIPOS_MEDIA = {
+  'image/jpeg': { tipo: 'image', max: 5 * 1024 * 1024 },
+  'image/png': { tipo: 'image', max: 5 * 1024 * 1024 },
+  'image/webp': { tipo: 'image', max: 5 * 1024 * 1024 },
+  'video/mp4': { tipo: 'video', max: 16 * 1024 * 1024 },
+  'video/3gpp': { tipo: 'video', max: 16 * 1024 * 1024 },
+  'audio/mpeg': { tipo: 'audio', max: 16 * 1024 * 1024 },
+  'audio/ogg': { tipo: 'audio', max: 16 * 1024 * 1024 },
+  'audio/mp4': { tipo: 'audio', max: 16 * 1024 * 1024 },
+  'application/pdf': { tipo: 'document', max: 100 * 1024 * 1024 },
+}
+export const ADJUNTOS_ACEPTADOS = Object.keys(TIPOS_MEDIA).join(',')
+export const NOMBRE_TIPO = { image: 'Imagen', video: 'Video', audio: 'Audio', document: 'Documento' }
+
+/** null si el archivo sirve; si no, el motivo en castellano. */
+export const validarArchivo = (file) => {
+  const t = TIPOS_MEDIA[file.type]
+  if (!t) return 'WhatsApp no admite ese tipo de archivo'
+  if (file.size > t.max) {
+    return `${NOMBRE_TIPO[t.tipo]}: el límite de WhatsApp es ${Math.round(t.max / 1024 / 1024)} MB`
+  }
+  return null
+}
+
+const aBase64 = (file) => new Promise((resolve, reject) => {
+  const r = new FileReader()
+  r.onload = () => resolve(String(r.result).split(',')[1])
+  r.onerror = () => reject(new Error('No se pudo leer el archivo'))
+  r.readAsDataURL(file)
+})
 
 const SEND_MEDIA_URL = import.meta.env.VITE_WHATSAPP_SEND_MEDIA_URL
   || 'https://us-central1-cobrify-395fe.cloudfunctions.net/sendWhatsappMediaMessage'
@@ -107,15 +139,9 @@ const SEND_MEDIA_URL = import.meta.env.VITE_WHATSAPP_SEND_MEDIA_URL
  * ruta que siguen los archivos recibidos, así el historial vive en un lugar.
  */
 export const enviarArchivo = async (conversationId, file, caption, idToken) => {
-  if (file.size > ADJUNTO_MAX_BYTES) {
-    throw new Error('El archivo pasa de 10 MB')
-  }
-  const base64 = await new Promise((resolve, reject) => {
-    const r = new FileReader()
-    r.onload = () => resolve(String(r.result).split(',')[1])
-    r.onerror = () => reject(new Error('No se pudo leer el archivo'))
-    r.readAsDataURL(file)
-  })
+  const problema = validarArchivo(file)
+  if (problema) throw new Error(problema)
+  const base64 = await aBase64(file)
   const res = await fetch(SEND_MEDIA_URL, {
     method: 'POST',
     headers: {
@@ -137,6 +163,43 @@ export const enviarArchivo = async (conversationId, file, caption, idToken) => {
     throw error
   }
   return data
+}
+
+/**
+ * Envía un archivo que YA está guardado (el de una respuesta rápida): viaja
+ * solo su dirección, no el archivo. Por eso mandar un video de 15 MB con un
+ * atajo es instantáneo.
+ */
+export const enviarArchivoGuardado = async (conversationId, media, caption, idToken) => {
+  const res = await fetch(SEND_MEDIA_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+    body: JSON.stringify({
+      conversationId,
+      mediaUrl: media.url,
+      mimeType: media.mimeType,
+      filename: media.filename || null,
+      caption: caption || '',
+    }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const error = new Error(data.error || 'No se pudo enviar el archivo')
+    error.ventanaCerrada = data.ventanaCerrada === true
+    throw error
+  }
+  return data
+}
+
+/** Guarda un archivo en la biblioteca (una vez) y devuelve sus datos. */
+export const subirArchivoBiblioteca = async (file, idToken) => {
+  const problema = validarArchivo(file)
+  if (problema) throw new Error(problema)
+  const base64 = await aBase64(file)
+  const r = await postConToken(FN('uploadWhatsappLibraryMedia'), {
+    base64, mimeType: file.type, filename: file.name,
+  }, idToken)
+  return r.media
 }
 
 /** Marca la conversación como leída. */

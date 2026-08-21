@@ -13823,11 +13823,23 @@ async function camposDeVinculo(waId) {
 // Mismas reglas que el envio de texto: dueno o admin, y dentro de la ventana
 // de 24 horas.
 // ============================================================
+// Tipos que acepta la Cloud API, con el tope de tamano de CADA UNO (Meta usa
+// limites distintos: 5 MB imagen, 16 MB video/audio, 100 MB documento).
+// Rechazar aca con un mensaje claro es mejor que dejar que Meta devuelva un
+// error criptico despues de subir el archivo.
 const MEDIA_PERMITIDOS = {
-  'image/jpeg': 'image', 'image/png': 'image', 'image/webp': 'image',
-  'application/pdf': 'document',
+  'image/jpeg': { tipo: 'image', max: 5 * 1024 * 1024 },
+  'image/png': { tipo: 'image', max: 5 * 1024 * 1024 },
+  'image/webp': { tipo: 'image', max: 5 * 1024 * 1024 },
+  'video/mp4': { tipo: 'video', max: 16 * 1024 * 1024 },
+  'video/3gpp': { tipo: 'video', max: 16 * 1024 * 1024 },
+  'audio/mpeg': { tipo: 'audio', max: 16 * 1024 * 1024 },
+  'audio/ogg': { tipo: 'audio', max: 16 * 1024 * 1024 },
+  'audio/mp4': { tipo: 'audio', max: 16 * 1024 * 1024 },
+  'application/pdf': { tipo: 'document', max: 100 * 1024 * 1024 },
 }
-const MEDIA_MAX_BYTES = 10 * 1024 * 1024 // 10 MB: sobra para capturas y PDF
+
+const nombreLegibleMedia = { image: 'Imagen', video: 'Video', audio: 'Audio', document: 'Documento' }
 
 export const sendWhatsappMediaMessage = onRequest(
   {
@@ -13849,19 +13861,31 @@ export const sendWhatsappMediaMessage = onRequest(
       }
       const decoded = await auth.verifyIdToken(authHeader.split('Bearer ')[1])
 
-      const { conversationId, base64, mimeType, filename, caption } = req.body || {}
-      if (!conversationId || !base64 || !mimeType) {
+      // Dos formas de mandar un archivo:
+      //  - base64: archivo nuevo, se guarda en R2 y se envia.
+      //  - mediaUrl: archivo YA guardado (respuestas rapidas), se manda por
+      //    su direccion sin volver a subirlo. Guardar una vez y reusar es lo
+      //    que hace que una respuesta rapida con video sea instantanea.
+      const { conversationId, base64, mediaUrl, mimeType, filename, caption } = req.body || {}
+      if (!conversationId || (!base64 && !mediaUrl) || !mimeType) {
         res.status(400).json({ error: 'Faltan datos del archivo' }); return
       }
 
-      const tipo = MEDIA_PERMITIDOS[mimeType]
-      if (!tipo) {
-        res.status(400).json({ error: 'Solo se pueden enviar imagenes (JPG, PNG, WebP) o PDF' }); return
+      const permitido = MEDIA_PERMITIDOS[mimeType]
+      if (!permitido) {
+        res.status(400).json({ error: 'Tipo de archivo no admitido por WhatsApp' }); return
       }
+      const tipo = permitido.tipo
 
-      const buffer = Buffer.from(base64, 'base64')
-      if (buffer.length > MEDIA_MAX_BYTES) {
-        res.status(400).json({ error: 'El archivo pasa de 10 MB' }); return
+      let buffer = null
+      if (base64) {
+        buffer = Buffer.from(base64, 'base64')
+        if (buffer.length > permitido.max) {
+          res.status(400).json({
+            error: `${nombreLegibleMedia[tipo]}: el limite de WhatsApp es ${Math.round(permitido.max / 1024 / 1024)} MB`,
+          })
+          return
+        }
       }
 
       const convRef = db.collection('whatsappConversations').doc(conversationId)
@@ -13887,10 +13911,15 @@ export const sendWhatsappMediaMessage = onRequest(
         return
       }
 
-      // Primero a R2 (nuestra copia), despues a Meta con esa URL.
+      // Primero a R2 (nuestra copia), despues a Meta con esa URL. Si ya venia
+      // guardado, se usa tal cual.
       const ext = extensionDeMime(mimeType)
-      const key = `whatsapp/${conversationId}/out-${Date.now()}.${ext}`
-      const { url } = await putObjectToR2({ key, body: buffer, contentType: mimeType })
+      let url = mediaUrl
+      if (buffer) {
+        const key = `whatsapp/${conversationId}/out-${Date.now()}.${ext}`
+        const subido = await putObjectToR2({ key, body: buffer, contentType: mimeType })
+        url = subido.url
+      }
 
       const { waMessageId } = await sendWhatsappMedia({
         token: process.env.WHATSAPP_TOKEN,
@@ -13917,7 +13946,7 @@ export const sendWhatsappMediaMessage = onRequest(
       })
 
       await convRef.set({
-        ultimoMensaje: caption ? String(caption).trim() : (tipo === 'image' ? 'Imagen' : 'Documento'),
+        ultimoMensaje: caption ? String(caption).trim() : (nombreLegibleMedia[tipo] || 'Archivo'),
         ultimoMensajeAt: ahora,
         ultimaDireccion: 'saliente',
         sinLeer: 0,
@@ -14225,6 +14254,72 @@ export const updateWhatsappProfile = onRequest(
       res.status(200).json({ success: true, perfil })
     } catch (error) {
       console.error('[WhatsApp] Error guardando perfil:', error.message)
+      res.status(500).json({ error: error.message })
+    }
+  }
+)
+
+// ============================================================
+// WHATSAPP — BIBLIOTECA DE ARCHIVOS DE LAS RESPUESTAS RAPIDAS
+//
+// El archivo de una respuesta rapida se guarda UNA VEZ y despues se manda por
+// su direccion, cuantas veces haga falta. Es lo que hace que mandar un video
+// de 15 MB con /demo sea instantaneo en vez de subirlo en cada uso.
+//
+// Van a una carpeta propia (whatsapp/biblioteca/) y no a la de una
+// conversacion: no pertenecen a ninguna, se usan en todas.
+// ============================================================
+export const uploadWhatsappLibraryMedia = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 300,
+    memory: '1GiB', // los videos llegan enteros en memoria
+    cors: true,
+    secrets: ['R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY'],
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return }
+
+    try {
+      if (!(await autorizarAdminWa(req, res))) return
+
+      const { base64, mimeType, filename } = req.body || {}
+      if (!base64 || !mimeType) { res.status(400).json({ error: 'Falta el archivo' }); return }
+
+      const permitido = MEDIA_PERMITIDOS[mimeType]
+      if (!permitido) {
+        res.status(400).json({ error: 'WhatsApp no admite ese tipo de archivo' }); return
+      }
+
+      const buffer = Buffer.from(base64, 'base64')
+      if (buffer.length > permitido.max) {
+        res.status(400).json({
+          error: `${nombreLegibleMedia[permitido.tipo]}: el limite de WhatsApp es ${Math.round(permitido.max / 1024 / 1024)} MB`,
+        })
+        return
+      }
+
+      const ext = extensionDeMime(mimeType)
+      const { url } = await putObjectToR2({
+        key: `whatsapp/biblioteca/${randomUUID()}.${ext}`,
+        body: buffer,
+        contentType: mimeType,
+      })
+
+      res.status(200).json({
+        success: true,
+        media: {
+          url,
+          mimeType,
+          tipo: permitido.tipo,
+          filename: filename || `archivo.${ext}`,
+          bytes: buffer.length,
+        },
+      })
+    } catch (error) {
+      console.error('[WhatsApp] Error subiendo a la biblioteca:', error.message)
       res.status(500).json({ error: error.message })
     }
   }
