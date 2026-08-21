@@ -90,6 +90,7 @@ import MobileRedirect from './components/MobileRedirect'
 import DispatchGuides from './pages/DispatchGuides'
 import CarrierDispatchGuides from './pages/CarrierDispatchGuides'
 import TermsAndConditions from './pages/TermsAndConditions'
+import Chat from './pages/Chat'
 import Pricing from './pages/Pricing'
 import PublicManual from './pages/PublicManual'
 import MigratePurchases from './pages/MigratePurchases'
@@ -201,6 +202,10 @@ function App() {
 
             {/* Rutas públicas */}
             <Route path="/terminos-y-condiciones" element={<TermsAndConditions />} />
+            {/* Bandeja de WhatsApp: a pantalla completa y FUERA del panel, para que
+                abrirla sea entrar al chat y nada mas. Es lo que va a servir el
+                subdominio tal cual. El acceso lo controla la propia pagina. */}
+            <Route path="/chat" element={<Chat />} />
             <Route path="/pricing" element={<Pricing />} />
             {/* Manual PUBLICO: se comparte por WhatsApp y abre sin sesion.
                 Ver el porque en src/pages/PublicManual.jsx */}

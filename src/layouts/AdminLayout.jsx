@@ -17,10 +17,20 @@ import {
   CalendarClock,
   Bell,
   Sparkles,
-  Package
+  Package,
+  MessageCircle
 } from 'lucide-react'
 
 const navItems = [
+  {
+    // La bandeja de WhatsApp vive FUERA del panel (a pantalla completa), asi
+    // que se marca como externa: sale del layout en vez de renderizarse dentro.
+    path: '/chat',
+    icon: MessageCircle,
+    label: 'WhatsApp',
+    description: 'Conversaciones con clientes',
+    fuera: true
+  },
   {
     path: '/app/admin/dashboard',
     icon: LayoutDashboard,
@@ -177,7 +187,9 @@ export default function AdminLayout() {
             {/* Mobile Nav Items */}
             <nav className="p-4 space-y-1 flex-1 overflow-y-auto sidebar-scrollbar">
               {navItems.map((item) => {
-                const isActive = location.pathname.startsWith(item.path)
+                const isActive = item.fuera
+                  ? location.pathname === item.path
+                  : location.pathname.startsWith(item.path)
                 return (
                   <NavLink
                     key={item.path}
