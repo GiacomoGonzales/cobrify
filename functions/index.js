@@ -13330,6 +13330,19 @@ async function guardarMensajeEntrante(m) {
   const convId = idConversacionWa(phoneNumberId, m.waId)
   const convRef = db.collection('whatsappConversations').doc(convId)
 
+  // Vinculo con el cliente de Cobrify: UNA vez por conversacion (el resultado
+  // queda marcado con linkAttempted; la vinculacion manual de la pantalla lo
+  // puede corregir despues). El cruce es una lectura al indice, no un barrido.
+  let vinculo = {}
+  const convPrevia = await convRef.get()
+  if (!convPrevia.exists || convPrevia.data().linkAttempted !== true) {
+    try {
+      vinculo = await camposDeVinculo(m.waId)
+    } catch (e) {
+      console.error('[WhatsApp] Error intentando vincular:', e.message)
+    }
+  }
+
   await convRef.collection('messages').doc(m.waMessageId).set({
     direccion: 'entrante',
     waMessageId: m.waMessageId,
@@ -13364,6 +13377,7 @@ async function guardarMensajeEntrante(m) {
     // bandeja activa sola — una respuesta perdida en "Completadas" es un
     // cliente que cree que lo ignoraron.
     estado: 'abierta',
+    ...vinculo,
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true })
 
@@ -13538,3 +13552,101 @@ export const sendWhatsappMessage = onRequest(
     }
   }
 )
+
+// ============================================================
+// WHATSAPP — VINCULACION CON CLIENTES DE COBRIFY (Fase 2 del CRM)
+//
+// La columna vertebral del CRM: reconocer si quien escribe es un negocio que
+// paga. El cruce es por telefono, contra un INDICE precalculado
+// (whatsappPhoneIndex/{ultimos 9 digitos} -> negocio) en vez de barrer los
+// ~650 negocios en cada mensaje: una lectura por intento, no seiscientas.
+//
+// El campo phone de los negocios es texto libre y esta sucio de verdad
+// (verificado): "991023951 / 959083091", "962401943,926440706", "+51 939 792
+// 108". Se extrae TODO numero de 9 digitos que empiece con 9 (celular
+// peruano), tambien de los pegados con prefijo 51.
+// ============================================================
+
+/** Todos los celulares peruanos que haya dentro de un texto libre. */
+function celularesDe(texto) {
+  if (!texto) return []
+  const grupos = String(texto).match(/\d+/g) || []
+  const vistos = new Set()
+  for (let g of grupos) {
+    // "+51 939 792 108" llega como "51939792108"; "51" + 9 digitos -> pelar
+    if (g.length === 11 && g.startsWith('51')) g = g.slice(2)
+    if (g.length === 9 && g.startsWith('9')) vistos.add(g)
+  }
+  return [...vistos]
+}
+
+/** waId de Meta (51926258059) -> celular local (926258059). */
+function celularDeWaId(waId) {
+  const n = String(waId || '')
+  if (n.startsWith('51') && n.length === 11) return n.slice(2)
+  return n.length === 9 ? n : null
+}
+
+/**
+ * Reconstruye el indice telefono -> negocio. Corre a diario; barrer 650
+ * negocios una vez al dia es trivial y evita mantener el indice sincronizado
+ * escritura por escritura (telefonos que cambian, negocios nuevos).
+ *
+ * Si dos negocios declaran el mismo numero gana el ultimo del barrido: es un
+ * caso raro (numero compartido entre sucursales de distinto dueno) y la
+ * vinculacion manual de la pantalla lo corrige.
+ */
+export const rebuildWhatsappPhoneIndex = onSchedule(
+  {
+    schedule: '0 3 * * *', // 03:00 Lima
+    timeZone: 'America/Lima',
+    region: 'us-central1',
+    memory: '512MiB',
+    timeoutSeconds: 300,
+  },
+  async () => {
+    const negocios = await db.collection('businesses')
+      .select('phone', 'whatsapp', 'businessName')
+      .get()
+
+    let escritos = 0
+    let lote = db.batch()
+    for (const docSnap of negocios.docs) {
+      const d = docSnap.data()
+      const celulares = new Set([
+        ...celularesDe(d.phone),
+        ...celularesDe(d.whatsapp),
+      ])
+      for (const cel of celulares) {
+        lote.set(db.collection('whatsappPhoneIndex').doc(cel), {
+          businessId: docSnap.id,
+          businessName: d.businessName || null,
+          updatedAt: FieldValue.serverTimestamp(),
+        })
+        escritos++
+        if (escritos % 450 === 0) { await lote.commit(); lote = db.batch() }
+      }
+    }
+    await lote.commit()
+    console.log(`[WhatsApp] Indice de telefonos reconstruido: ${escritos} numeros de ${negocios.size} negocios`)
+  }
+)
+
+/**
+ * Intenta vincular una conversacion con un negocio de Cobrify.
+ * Devuelve los campos a guardar (o solo la marca de intento si no hubo cruce).
+ */
+async function camposDeVinculo(waId) {
+  const cel = celularDeWaId(waId)
+  if (!cel) return { linkAttempted: true }
+  const snap = await db.collection('whatsappPhoneIndex').doc(cel).get()
+  if (!snap.exists) return { linkAttempted: true }
+  const { businessId, businessName } = snap.data()
+  console.log(`[WhatsApp] ${waId} reconocido como cliente: ${businessName || businessId}`)
+  return {
+    linkAttempted: true,
+    linkedBusinessId: businessId,
+    linkedBusinessName: businessName || null,
+    linkedBy: 'auto',
+  }
+}

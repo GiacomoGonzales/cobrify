@@ -14,11 +14,13 @@ import {
   Search,
   Send,
   StickyNote,
+  UserCircle,
   Tag,
   Trash2,
   AlertTriangle,
   X,
 } from 'lucide-react'
+import FichaCliente from '@/components/chat/FichaCliente'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import {
@@ -69,6 +71,9 @@ export default function Chat() {
   const [busqueda, setBusqueda] = useState('')
   // Organización (Fase 1): pestaña por estado, filtro por etiqueta, catálogo.
   const [tab, setTab] = useState('abierta')
+  // Los dos mundos: todos / clientes (vinculados a un negocio) / leads.
+  const [mundo, setMundo] = useState('todos')
+  const [fichaVisible, setFichaVisible] = useState(false)
   const [filtroEtiqueta, setFiltroEtiqueta] = useState(null)
   const [etiquetas, setEtiquetas] = useState([])
   const [tagPickerAbierto, setTagPickerAbierto] = useState(false)
@@ -144,6 +149,8 @@ export default function Chat() {
 
   const filtradas = useMemo(() => {
     let lista = conversaciones.filter((c) => estadoDe(c) === tab)
+    if (mundo === 'clientes') lista = lista.filter((c) => c.linkedBusinessId)
+    if (mundo === 'leads') lista = lista.filter((c) => !c.linkedBusinessId)
     if (filtroEtiqueta) {
       lista = lista.filter((c) => (c.etiquetas || []).includes(filtroEtiqueta))
     }
@@ -155,7 +162,7 @@ export default function Chat() {
       )
     }
     return lista
-  }, [conversaciones, tab, filtroEtiqueta, busqueda])
+  }, [conversaciones, tab, mundo, filtroEtiqueta, busqueda])
 
   const etiquetaPorId = useMemo(() => {
     const m = new Map()
@@ -230,7 +237,7 @@ export default function Chat() {
   if (!isAdmin) return <Navigate to="/app/dashboard" replace />
 
   return (
-    <div className="h-screen flex bg-gray-50 overflow-hidden">
+    <div className="h-screen flex bg-gray-50 overflow-hidden relative">
 
       {/* ---------- Lista de conversaciones ---------- */}
       <aside
@@ -243,6 +250,23 @@ export default function Chat() {
             <MessageCircle className="w-5 h-5 text-green-600" />
             <h1 className="font-bold text-gray-900">WhatsApp</h1>
           </div>
+          {/* Los dos mundos */}
+          <div className="flex gap-1 mb-3 text-xs font-semibold">
+            {[['todos', 'Todos'], ['clientes', 'Clientes'], ['leads', 'Leads']].map(([id, nombre]) => (
+              <button
+                key={id}
+                onClick={() => setMundo(id)}
+                className={`px-3 py-1.5 rounded-full border transition-colors ${
+                  mundo === id
+                    ? 'bg-gray-900 text-white border-gray-900'
+                    : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                {nombre}
+              </button>
+            ))}
+          </div>
+
           <div className="relative">
             <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
@@ -354,6 +378,11 @@ export default function Chat() {
                       <span className="font-semibold text-gray-900 text-sm truncate">
                         {c.nombre || formatearNumero(c.waId)}
                       </span>
+                      {c.linkedBusinessId && (
+                        <span title={c.linkedBusinessName || 'Cliente de Cobrify'}>
+                          <UserCircle className="w-3.5 h-3.5 text-green-600 flex-none" />
+                        </span>
+                      )}
                       {!abierta && (
                         <span title="Ventana de 24 horas cerrada">
                           <Clock className="w-3.5 h-3.5 text-gray-400 flex-none" />
@@ -428,7 +457,12 @@ export default function Chat() {
                 <h2 className="font-semibold text-gray-900 truncate">
                   {activa.nombre || formatearNumero(activa.waId)}
                 </h2>
-                <p className="text-xs text-gray-500">{formatearNumero(activa.waId)}</p>
+                <p className="text-xs text-gray-500 truncate">
+                  {formatearNumero(activa.waId)}
+                  {activa.linkedBusinessName && (
+                    <span className="text-green-700"> · {activa.linkedBusinessName}</span>
+                  )}
+                </p>
               </div>
               {ventanaAbierta && (
                 <span
@@ -441,6 +475,15 @@ export default function Chat() {
 
               {/* Acciones de organizacion */}
               <div className="flex items-center gap-1 relative">
+                <button
+                  onClick={() => setFichaVisible((v) => !v)}
+                  className={`p-2 rounded-lg hover:bg-gray-100 ${
+                    activa.linkedBusinessId ? 'text-green-600' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                  title={activa.linkedBusinessId ? `Cliente: ${activa.linkedBusinessName || ''}` : 'Ficha del cliente'}
+                >
+                  <UserCircle className="w-5 h-5" />
+                </button>
                 <button
                   onClick={() => setTagPickerAbierto((v) => !v)}
                   className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700"
@@ -663,6 +706,20 @@ export default function Chat() {
           </>
         )}
       </main>
+
+      {/* Ficha del cliente: columna en escritorio, superpuesta en el celular */}
+      {activa && fichaVisible && (
+        <div className="absolute inset-0 z-30 sm:static sm:z-auto sm:inset-auto flex justify-end bg-black/30 sm:bg-transparent sm:flex-none"
+          onClick={() => setFichaVisible(false)}
+        >
+          <div className="h-full w-full max-w-xs sm:max-w-none sm:w-auto" onClick={(e) => e.stopPropagation()}>
+            <FichaCliente
+              conversacion={activa}
+              onCerrar={() => setFichaVisible(false)}
+            />
+          </div>
+        </div>
+      )}
 
       {gestorAbierto && (
         <GestorDeEtiquetas

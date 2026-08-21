@@ -115,7 +115,9 @@ service cloud.firestore {
       // alterar nadie desde el navegador, ni por error ni a propósito.
       allow update: if isAdmin() &&
         request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['estado', 'etiquetas', 'nota', 'sinLeer', 'updatedAt']);
+          .hasOnly(['estado', 'etiquetas', 'nota', 'sinLeer',
+                    'linkedBusinessId', 'linkedBusinessName', 'linkedBy',
+                    'linkAttempted', 'updatedAt']);
       allow create, delete: if false;
 
       match /messages/{messageId} {

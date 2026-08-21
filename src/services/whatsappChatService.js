@@ -3,12 +3,16 @@ import {
   arrayUnion,
   collection,
   doc,
+  getDoc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
   limit,
   serverTimestamp,
   setDoc,
+  startAt,
+  endAt,
   updateDoc,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -161,6 +165,96 @@ export const suscribirEtiquetas = (onChange) =>
 
 export const guardarEtiquetas = (lista) =>
   setDoc(etiquetasRef(), { lista, updatedAt: serverTimestamp() })
+
+// =================== VINCULACION CON CLIENTES (Fase 2) ===================
+// El webhook vincula solo por telefono; esto cubre la ficha, la correccion
+// manual y la renovacion desde el chat.
+
+/**
+ * Ficha del cliente vinculado: suscripcion + datos del negocio, juntos.
+ * Devuelve null si el negocio ya no existe.
+ */
+export const obtenerFichaCliente = async (businessId) => {
+  const [subSnap, bizSnap] = await Promise.all([
+    getDoc(doc(db, 'subscriptions', businessId)),
+    getDoc(doc(db, 'businesses', businessId)),
+  ])
+  if (!subSnap.exists() && !bizSnap.exists()) return null
+  const sub = subSnap.exists() ? subSnap.data() : {}
+  const biz = bizSnap.exists() ? bizSnap.data() : {}
+  const vence = sub.currentPeriodEnd?.toDate?.() || null
+  const diasParaVencer = vence
+    ? Math.ceil((vence.getTime() - Date.now()) / 86400000)
+    : null
+  return {
+    businessId,
+    nombre: biz.businessName || sub.businessName || null,
+    ruc: biz.ruc || null,
+    email: sub.email || biz.email || null,
+    plan: sub.plan || null,
+    planName: sub.planName || sub.plan || null,
+    vence,
+    diasParaVencer,
+    renewalPrice: sub.renewalPrice ?? null,
+    accessBlocked: sub.accessBlocked === true,
+    // Los ultimos pagos, del mas reciente al mas viejo.
+    pagos: [...(sub.paymentHistory || [])].reverse().slice(0, 3),
+  }
+}
+
+/**
+ * Buscar negocios por nombre (prefijo), para la vinculacion manual.
+ * El que escribe desde otro numero sigue siendo cliente: el cruce por telefono
+ * no lo ve, el admin si.
+ */
+export const buscarNegocios = async (texto) => {
+  const t = texto.trim()
+  if (t.length < 2) return []
+  // La busqueda por prefijo de Firestore distingue mayusculas y los nombres
+  // estan como cada negocio los escribio ("WATON CHIFA", "Kathya Castro").
+  // Se prueba con las tres formas tipicas y se unen los resultados.
+  const variantes = [...new Set([
+    t,
+    t.toUpperCase(),
+    t.charAt(0).toUpperCase() + t.slice(1).toLowerCase(),
+  ])]
+  const resultados = new Map()
+  await Promise.all(variantes.map(async (v) => {
+    const q = query(
+      collection(db, 'businesses'),
+      orderBy('businessName'),
+      startAt(v),
+      endAt(v + '\uf8ff'),
+      limit(8),
+    )
+    const snap = await getDocs(q)
+    for (const d of snap.docs) {
+      resultados.set(d.id, {
+        businessId: d.id,
+        nombre: d.data().businessName || '(sin nombre)',
+        ruc: d.data().ruc || null,
+      })
+    }
+  }))
+  return [...resultados.values()].slice(0, 10)
+}
+
+export const vincularConversacion = (conversationId, businessId, businessName) =>
+  updateDoc(doc(db, 'whatsappConversations', conversationId), {
+    linkedBusinessId: businessId,
+    linkedBusinessName: businessName || null,
+    linkedBy: 'manual',
+    linkAttempted: true,
+    updatedAt: serverTimestamp(),
+  })
+
+export const desvincularConversacion = (conversationId) =>
+  updateDoc(doc(db, 'whatsappConversations', conversationId), {
+    linkedBusinessId: null,
+    linkedBusinessName: null,
+    linkedBy: null,
+    updatedAt: serverTimestamp(),
+  })
 
 /** Id legible a partir del nombre: "Cliente VIP" -> "cliente-vip" */
 export const idParaEtiqueta = (nombre) =>
