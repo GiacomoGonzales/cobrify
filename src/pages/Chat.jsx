@@ -117,7 +117,12 @@ export default function Chat() {
   const [configAbierta, setConfigAbierta] = useState(false)
   const [respuestasRapidas, setRespuestasRapidas] = useState([])
 
-  const finDelHilo = useRef(null)
+  const contenedorHilo = useRef(null)
+  // Si el usuario esta mirando el final del hilo. Cuando esta leyendo mensajes
+  // viejos NO hay que arrastrarlo abajo porque llego uno nuevo.
+  const pegadoAlFondo = useRef(true)
+  // La primera bajada de una conversacion es un salto, no una animacion.
+  const reciénAbierta = useRef(true)
   const selectorArchivo = useRef(null)
   const cuadroTexto = useRef(null)
   // Adjunto elegido, esperando confirmacion (con su vista previa y pie).
@@ -186,16 +191,56 @@ export default function Chat() {
     setBuscadorAbierto(false)
     setBuscarEnChat('')
     setResaltado(null)
+    pegadoAlFondo.current = true
+    reciénAbierta.current = true
     if (!activaId) { setMensajes([]); return undefined }
     const parar = suscribirMensajes(activaId, setMensajes)
     marcarComoLeida(activaId)
     return parar
   }, [activaId])
 
-  // Al llegar un mensaje, bajar al final del hilo.
+  const irAlFondo = (suave) => {
+    const c = contenedorHilo.current
+    if (!c) return
+    c.scrollTo({ top: c.scrollHeight, behavior: suave ? 'smooth' : 'auto' })
+  }
+
+  // Bajar al final del hilo.
+  //
+  // Al ABRIR una conversacion es un salto instantaneo, no una animacion: el
+  // scroll suave tarda ~300 ms y en ese rato las imagenes y los PDF terminan
+  // de cargar, empujan el contenido hacia abajo y la animacion queda a mitad
+  // de camino. Saltar es instantaneo y no puede quedar corto.
+  //
+  // Con la conversacion ya abierta, un mensaje nuevo baja suave — pero SOLO si
+  // el usuario estaba mirando el final. Si esta leyendo mensajes viejos, se
+  // respeta donde esta.
   useEffect(() => {
-    finDelHilo.current?.scrollIntoView({ behavior: 'smooth' })
+    if (!pegadoAlFondo.current) return
+    if (reciénAbierta.current) {
+      irAlFondo(false)
+      // Dos pasadas mas: el contenido que carga tarde (imagenes, miniaturas de
+      // PDF) cambia el alto despues del primer render.
+      requestAnimationFrame(() => irAlFondo(false))
+      setTimeout(() => irAlFondo(false), 150)
+      reciénAbierta.current = false
+    } else {
+      irAlFondo(true)
+    }
   }, [mensajes, pendientes])
+
+  // Mientras el usuario mire el final, mantenerlo ahi aunque el contenido
+  // crezca por su cuenta: una imagen que termina de cargar agranda su burbuja
+  // y empujaria el ultimo mensaje fuera de la vista.
+  useEffect(() => {
+    const c = contenedorHilo.current
+    if (!c || !activaId) return undefined
+    const obs = new ResizeObserver(() => {
+      if (pegadoAlFondo.current) irAlFondo(false)
+    })
+    for (const hijo of c.children) obs.observe(hijo)
+    return () => obs.disconnect()
+  }, [activaId, mensajes.length])
 
   useEffect(() => {
     const t = setInterval(() => setAhora(Date.now()), 60000)
@@ -263,6 +308,9 @@ export default function Chat() {
   const irAlMensaje = (id) => {
     setPanelMedia(false)
     setResaltado(id)
+    // Se va a un mensaje viejo a proposito: no arrastrarlo de vuelta al final
+    // si entra un mensaje nuevo mientras lo lee.
+    pegadoAlFondo.current = false
     setTimeout(() => {
       document.getElementById(`msg-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }, 50)
@@ -929,7 +977,16 @@ export default function Chat() {
               </button>
             )}
 
-            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2">
+            <div
+              ref={contenedorHilo}
+              onScroll={(e) => {
+                const c = e.currentTarget
+                // 150 px de margen: alcanza para considerar que esta "abajo"
+                // sin exigir el pixel exacto.
+                pegadoAlFondo.current = c.scrollHeight - c.scrollTop - c.clientHeight < 150
+              }}
+              className="flex-1 overflow-y-auto px-4 py-4 space-y-2"
+            >
               {hilo.map((m) => {
                 const mio = m.direccion === 'saliente'
                 return (
@@ -1026,7 +1083,6 @@ export default function Chat() {
                   </div>
                 )
               })}
-              <div ref={finDelHilo} />
             </div>
 
             {/* Cuadro para escribir, o el aviso de por qué no se puede */}
