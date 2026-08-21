@@ -128,3 +128,50 @@ function extraerMedia(m) {
 
 /** Milisegundos que dura la ventana de servicio de WhatsApp. */
 export const VENTANA_24H_MS = 24 * 60 * 60 * 1000
+
+/** Version de la Graph API. Debe coincidir con la que la app tiene configurada. */
+const GRAPH_VERSION = 'v26.0'
+
+/**
+ * Envia un mensaje de texto por la Cloud API.
+ *
+ * @param {Object} p
+ * @param {string} p.token        token permanente (WHATSAPP_TOKEN)
+ * @param {string} p.phoneNumberId numero de la empresa que envia
+ * @param {string} p.to           numero del destinatario (solo digitos)
+ * @param {string} p.texto
+ * @returns {Promise<{waMessageId: string}>}
+ */
+export async function sendWhatsappText({ token, phoneNumberId, to, texto }) {
+  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: 'text',
+      // preview_url: que los enlaces se vean con su tarjeta, como en WhatsApp normal.
+      text: { preview_url: true, body: texto },
+    }),
+  })
+
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    // El error de Meta viene anidado y con codigo propio; se propaga tal cual
+    // para poder mostrarselo al usuario en vez de un "fallo" generico.
+    const msg = data?.error?.message || `Error ${res.status} de Meta`
+    const err = new Error(msg)
+    err.metaCode = data?.error?.code || null
+    err.metaSubcode = data?.error?.error_subcode || null
+    throw err
+  }
+
+  const waMessageId = data?.messages?.[0]?.id
+  if (!waMessageId) throw new Error('Meta acepto el envio pero no devolvio el id del mensaje')
+  return { waMessageId }
+}

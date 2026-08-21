@@ -28,7 +28,7 @@ import {
 } from './src/services/cloudinaryAdmin.js'
 import { migrateUrlToR2, isR2Url, isFirebaseStorageUrl, putObjectToR2 } from './src/services/r2Admin.js'
 import { processSaleStock as runProcessSaleStock } from './src/services/saleStockService.js'
-import { verifyWhatsappSignature, parseWhatsappWebhook, VENTANA_24H_MS } from './src/services/whatsappService.js'
+import { verifyWhatsappSignature, parseWhatsappWebhook, VENTANA_24H_MS, sendWhatsappText } from './src/services/whatsappService.js'
 import {
   upsertLoyaltyClass as walletUpsertClass, upsertLoyaltyObject as walletUpsertObject,
   linkAgregarAWallet as walletSaveLink, notificarTarjeta as walletNotify,
@@ -13424,3 +13424,112 @@ async function avisarMensajeNuevoWa(phoneNumberId, m) {
     console.error('[WhatsApp] No se pudo enviar el aviso push:', error.message)
   }
 }
+
+// ============================================================
+// WHATSAPP — ENVIAR UN MENSAJE
+//
+// La contracara del webhook. Manda el texto por la Cloud API y lo guarda en la
+// misma conversacion, con el id que devuelve WhatsApp: asi el aviso de
+// entregado/leido que llega despues por el webhook cae sobre ESTE documento y
+// no crea uno suelto.
+//
+// LA VENTANA DE 24 HORAS SE RESPETA ACA. Fuera de ella Meta rechaza el texto
+// libre y solo acepta plantillas aprobadas (que se pagan). Se corta antes de
+// llamar a Meta para poder explicarlo en castellano en vez de devolver el
+// error crudo de la API.
+// ============================================================
+export const sendWhatsappMessage = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 60,
+    memory: '256MiB',
+    cors: true,
+    secrets: ['WHATSAPP_TOKEN'],
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return }
+
+    try {
+      const authHeader = req.headers.authorization
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'No autorizado' }); return
+      }
+      const decoded = await auth.verifyIdToken(authHeader.split('Bearer ')[1])
+
+      const { conversationId, texto } = req.body || {}
+      if (!conversationId || !texto || !String(texto).trim()) {
+        res.status(400).json({ error: 'Faltan la conversacion o el texto' }); return
+      }
+
+      const convRef = db.collection('whatsappConversations').doc(conversationId)
+      const convSnap = await convRef.get()
+      if (!convSnap.exists) {
+        res.status(404).json({ error: 'La conversacion no existe' }); return
+      }
+      const conv = convSnap.data()
+
+      // Quien puede responder: el dueno de esa bandeja, o un admin. Mismo
+      // criterio que las reglas de Firestore, para que la pantalla nunca
+      // ofrezca algo que el servidor va a rechazar.
+      const cuentaSnap = await db.collection('whatsappAccounts').doc(conv.phoneNumberId).get()
+      const esDueno = cuentaSnap.data()?.ownerId === decoded.uid
+      const esAdmin = (await db.collection('admins').doc(decoded.uid).get()).exists
+      if (!esDueno && !esAdmin) {
+        res.status(403).json({ error: 'No tienes acceso a esta conversacion' }); return
+      }
+
+      // Ventana de servicio: pasadas 24 horas desde el ultimo mensaje del
+      // cliente, WhatsApp ya no deja escribir libremente.
+      const vence = conv.ventanaVenceAt?.toMillis?.() || 0
+      if (Date.now() > vence) {
+        res.status(409).json({
+          error: 'La ventana de 24 horas se cerro. Para escribirle ahora hace falta una plantilla aprobada por Meta.',
+          ventanaCerrada: true,
+          ventanaVencioEl: vence ? new Date(vence).toISOString() : null,
+        })
+        return
+      }
+
+      const { waMessageId } = await sendWhatsappText({
+        token: process.env.WHATSAPP_TOKEN,
+        phoneNumberId: conv.phoneNumberId,
+        to: conv.waId,
+        texto: String(texto).trim(),
+      })
+
+      const ahora = Timestamp.now()
+      await convRef.collection('messages').doc(waMessageId).set({
+        direccion: 'saliente',
+        waMessageId,
+        waId: conv.waId,
+        tipo: 'text',
+        texto: String(texto).trim(),
+        // 'enviado' es provisional: el webhook lo va a pisar con entregado y
+        // leido a medida que Meta los informe.
+        estado: 'enviado',
+        enviadoPor: decoded.uid,
+        timestamp: ahora,
+        createdAt: FieldValue.serverTimestamp(),
+      })
+
+      await convRef.set({
+        ultimoMensaje: String(texto).trim(),
+        ultimoMensajeAt: ahora,
+        ultimaDireccion: 'saliente',
+        // Responder implica haber leido: se limpia el contador.
+        sinLeer: 0,
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true })
+
+      res.status(200).json({ success: true, waMessageId })
+    } catch (error) {
+      console.error('[WhatsApp] Error al enviar:', error.message, error.metaCode || '')
+      res.status(500).json({
+        error: error.message || 'No se pudo enviar el mensaje',
+        metaCode: error.metaCode || null,
+      })
+    }
+  }
+)
