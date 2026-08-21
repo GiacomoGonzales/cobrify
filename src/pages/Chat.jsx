@@ -46,6 +46,10 @@ export default function Chat() {
   const [mensajes, setMensajes] = useState([])
   const [texto, setTexto] = useState('')
   const [enviando, setEnviando] = useState(false)
+  // Mensajes recien enviados que todavia no volvieron por la suscripcion.
+  // Sin esto la pantalla queda vacia 2 o 3 segundos entre que uno manda y que
+  // el mensaje vuelve del servidor, y se siente como si no hubiera salido.
+  const [pendientes, setPendientes] = useState([])
   const [busqueda, setBusqueda] = useState('')
   // Se refresca solo para que el contador de la ventana no quede congelado.
   const [ahora, setAhora] = useState(Date.now())
@@ -62,6 +66,7 @@ export default function Chat() {
   }, [user, isAdmin])
 
   useEffect(() => {
+    setPendientes([])
     if (!activaId) { setMensajes([]); return undefined }
     const parar = suscribirMensajes(activaId, setMensajes)
     marcarComoLeida(activaId)
@@ -71,7 +76,7 @@ export default function Chat() {
   // Al llegar un mensaje, bajar al final del hilo.
   useEffect(() => {
     finDelHilo.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [mensajes])
+  }, [mensajes, pendientes])
 
   useEffect(() => {
     const t = setInterval(() => setAhora(Date.now()), 60000)
@@ -91,6 +96,15 @@ export default function Chat() {
     : 0
   const ventanaAbierta = restante > 0
 
+  // El hilo son los confirmados mas los provisionales que todavia no volvieron.
+  // Un pendiente desaparece en cuanto su id ya esta entre los confirmados: asi
+  // no se ve dos veces el mismo mensaje ni por un instante.
+  const hilo = useMemo(() => {
+    const idsConfirmados = new Set(mensajes.map((m) => m.waMessageId || m.id))
+    const enVuelo = pendientes.filter((p) => !p.waMessageId || !idsConfirmados.has(p.waMessageId))
+    return [...mensajes, ...enVuelo]
+  }, [mensajes, pendientes])
+
   const filtradas = useMemo(() => {
     const t = busqueda.trim().toLowerCase()
     if (!t) return conversaciones
@@ -108,12 +122,28 @@ export default function Chat() {
     setEnviando(true)
     const previo = texto
     setTexto('')
+
+    // Se pinta al instante con estado 'enviando'. Cuando el mensaje real
+    // aparezca por la suscripción, este provisional se descarta (se reconocen
+    // por el id que devuelve WhatsApp, no adivinando por el texto).
+    const tempId = `pendiente-${Date.now()}`
+    setPendientes((p) => [...p, {
+      id: tempId,
+      direccion: 'saliente',
+      tipo: 'text',
+      texto: limpio,
+      estado: 'enviando',
+      timestamp: { toDate: () => new Date() },
+    }])
+
     try {
       const idToken = await getAuth().currentUser?.getIdToken()
-      await enviarMensaje(activaId, limpio, idToken)
+      const { waMessageId } = await enviarMensaje(activaId, limpio, idToken)
+      setPendientes((p) => p.map((m) => (m.id === tempId ? { ...m, waMessageId } : m)))
     } catch (error) {
       // Devolver el texto al cuadro: perder lo que uno escribió por un error de
       // red es la peor forma de enterarse de que algo falló.
+      setPendientes((p) => p.filter((m) => m.id !== tempId))
       setTexto(previo)
       toast.error(error.message || 'No se pudo enviar el mensaje')
     } finally {
@@ -264,7 +294,7 @@ export default function Chat() {
             </header>
 
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2">
-              {mensajes.map((m) => {
+              {hilo.map((m) => {
                 const mio = m.direccion === 'saliente'
                 return (
                   <div key={m.id} className={`flex ${mio ? 'justify-end' : 'justify-start'}`}>
@@ -285,11 +315,13 @@ export default function Chat() {
                       >
                         <span className="text-[10px]">{formatearHora(m.timestamp)}</span>
                         {mio && (
-                          m.estado === 'read'
-                            ? <CheckCheck className="w-3.5 h-3.5 text-blue-200" />
-                            : m.estado === 'delivered'
-                              ? <CheckCheck className="w-3.5 h-3.5" />
-                              : <Check className="w-3.5 h-3.5" />
+                          m.estado === 'enviando'
+                            ? <Clock className="w-3.5 h-3.5 opacity-70" />
+                            : m.estado === 'read'
+                              ? <CheckCheck className="w-3.5 h-3.5 text-blue-200" />
+                              : m.estado === 'delivered'
+                                ? <CheckCheck className="w-3.5 h-3.5" />
+                                : <Check className="w-3.5 h-3.5" />
                         )}
                       </div>
                     </div>
