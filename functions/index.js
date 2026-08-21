@@ -28,7 +28,7 @@ import {
 } from './src/services/cloudinaryAdmin.js'
 import { migrateUrlToR2, isR2Url, isFirebaseStorageUrl, putObjectToR2 } from './src/services/r2Admin.js'
 import { processSaleStock as runProcessSaleStock } from './src/services/saleStockService.js'
-import { verifyWhatsappSignature, parseWhatsappWebhook, VENTANA_24H_MS, sendWhatsappText, sendWhatsappMedia, downloadWhatsappMedia, extensionDeMime } from './src/services/whatsappService.js'
+import { verifyWhatsappSignature, parseWhatsappWebhook, VENTANA_24H_MS, sendWhatsappText, sendWhatsappMedia, downloadWhatsappMedia, extensionDeMime, extraerPrimeraUrl, obtenerVistaPreviaDeEnlace } from './src/services/whatsappService.js'
 import {
   upsertLoyaltyClass as walletUpsertClass, upsertLoyaltyObject as walletUpsertObject,
   linkAgregarAWallet as walletSaveLink, notificarTarjeta as walletNotify,
@@ -13383,6 +13383,18 @@ async function guardarMensajeEntrante(m) {
 
   await asegurarCuentaWa(m.cuenta)
 
+  // Si el texto trae un enlace, se le arma la tarjeta (titulo, imagen OG)
+  // igual que hace WhatsApp. Despues de guardar: un sitio lento jamas debe
+  // demorar la entrega del mensaje.
+  const urlEntrante = extraerPrimeraUrl(m.texto)
+  if (urlEntrante) {
+    obtenerVistaPreviaDeEnlace(urlEntrante).then((vp) => {
+      if (!vp) return null
+      return convRef.collection('messages').doc(m.waMessageId)
+        .set({ linkPreview: vp }, { merge: true })
+    }).catch(() => {})
+  }
+
   // Los archivos se bajan APENAS llegan: la URL que da Meta caduca en minutos.
   // Si la descarga falla, el mensaje ya quedo guardado con su referencia y el
   // error en los logs — nunca al reves.
@@ -13565,6 +13577,16 @@ export const sendWhatsappMessage = onRequest(
         timestamp: ahora,
         createdAt: FieldValue.serverTimestamp(),
       })
+
+      // La tarjeta del enlace, si lo hay — sin demorar la respuesta al panel.
+      const urlSaliente = extraerPrimeraUrl(texto)
+      if (urlSaliente) {
+        obtenerVistaPreviaDeEnlace(urlSaliente).then((vp) => {
+          if (!vp) return null
+          return convRef.collection('messages').doc(waMessageId)
+            .set({ linkPreview: vp }, { merge: true })
+        }).catch(() => {})
+      }
 
       await convRef.set({
         ultimoMensaje: String(texto).trim(),

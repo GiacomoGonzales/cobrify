@@ -23,6 +23,7 @@ import {
   X,
 } from 'lucide-react'
 import FichaCliente from '@/components/chat/FichaCliente'
+import TextoWhatsapp, { TarjetaEnlace } from '@/components/chat/TextoWhatsapp'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import {
@@ -668,7 +669,7 @@ export default function Chat() {
                 return (
                   <div key={m.id} className={`flex ${mio ? 'justify-end' : 'justify-start'}`}>
                     <div
-                      className={`max-w-[75%] rounded-2xl px-3.5 py-2 ${
+                      className={`${m.linkPreview ? 'w-72 max-w-[85%]' : 'max-w-[75%]'} rounded-2xl px-3.5 py-2 ${
                         mio
                           ? 'bg-green-600 text-white rounded-br-sm'
                           : 'bg-white border border-gray-200 text-gray-900 rounded-bl-sm'
@@ -710,8 +711,14 @@ export default function Chat() {
                           {m.tipo === 'image' ? 'Imagen' : m.tipo === 'audio' ? 'Audio' : m.tipo === 'video' ? 'Video' : m.tipo === 'document' ? 'Documento' : 'Sticker'} no disponible
                         </p>
                       )}
+                      {m.linkPreview && <TarjetaEnlace vista={m.linkPreview} mio={mio} />}
                       {m.texto
-                        ? <p className="text-sm whitespace-pre-wrap break-words">{m.texto}</p>
+                        ? (
+                          <TextoWhatsapp
+                            texto={m.texto}
+                            claseEnlace={`underline break-all ${mio ? 'text-green-100' : 'text-blue-600'}`}
+                          />
+                        )
                         : !['image', 'sticker', 'video', 'audio', 'document'].includes(m.tipo)
                           && <p className="text-sm italic opacity-75">[{m.tipo}]</p>}
                       <div

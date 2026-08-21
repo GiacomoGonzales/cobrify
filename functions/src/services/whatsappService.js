@@ -260,3 +260,79 @@ export async function sendWhatsappMedia({ token, phoneNumberId, to, tipo, link, 
   if (!waMessageId) throw new Error('Meta acepto el envio pero no devolvio el id del mensaje')
   return { waMessageId }
 }
+
+// =================== VISTA PREVIA DE ENLACES ===================
+// WhatsApp muestra los enlaces con su tarjeta (imagen, titulo, descripcion).
+// Para que la bandeja se vea igual, el servidor lee esos datos de la pagina en
+// el momento del mensaje y los guarda JUNTO al mensaje: la tarjeta queda
+// congelada como estaba ese dia, y la bandeja no tiene que salir a internet
+// (el navegador ademas no podria, por CORS).
+
+/** El primer enlace http(s) dentro de un texto, o null. */
+export function extraerPrimeraUrl(texto) {
+  const m = String(texto || '').match(/https?:\/\/[^\s<>"]+/i)
+  return m ? m[0].replace(/[).,;!?]+$/, '') : null
+}
+
+/**
+ * Lee titulo, descripcion e imagen OG de una pagina. Tolerante a fallos: si la
+ * pagina tarda, bloquea robots o no tiene etiquetas, devuelve null y el
+ * mensaje se muestra como enlace pelado — nunca se frena un mensaje por esto.
+ */
+export async function obtenerVistaPreviaDeEnlace(url) {
+  try {
+    const ctl = new AbortController()
+    const timer = setTimeout(() => ctl.abort(), 5000)
+    const res = await fetch(url, {
+      signal: ctl.signal,
+      redirect: 'follow',
+      headers: {
+        // Algunos hosting devuelven 403 sin User-Agent (nos paso con SiteGround).
+        'User-Agent': 'Mozilla/5.0 (compatible; CobrifyChat/1.0; +https://cobrifyperu.com)',
+        Accept: 'text/html',
+      },
+    })
+    clearTimeout(timer)
+    if (!res.ok) return null
+    const tipo = res.headers.get('content-type') || ''
+    if (!tipo.includes('text/html')) return null
+
+    // Con los primeros ~200 KB alcanza: las etiquetas OG viven en el <head>.
+    const html = (await res.text()).slice(0, 200000)
+
+    const meta = (prop) => {
+      const re = new RegExp(
+        `<meta[^>]+(?:property|name)=["']${prop}["'][^>]+content=["']([^"']+)["']|` +
+        `<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${prop}["']`,
+        'i',
+      )
+      const m = html.match(re)
+      return m ? (m[1] || m[2]) : null
+    }
+
+    const titulo = meta('og:title') || (html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1] || null)
+    if (!titulo) return null
+
+    let imagen = meta('og:image')
+    // Imagen relativa -> absoluta, que el navegador de la bandeja no adivina.
+    if (imagen && !/^https?:\/\//i.test(imagen)) {
+      try { imagen = new URL(imagen, url).href } catch { imagen = null }
+    }
+
+    return {
+      url,
+      titulo: decodificarEntidades(titulo).slice(0, 150),
+      descripcion: decodificarEntidades(meta('og:description') || meta('description') || '').slice(0, 200) || null,
+      imagen: imagen || null,
+      sitio: new URL(url).hostname.replace(/^www\./, ''),
+    }
+  } catch {
+    return null
+  }
+}
+
+function decodificarEntidades(t) {
+  return String(t)
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&nbsp;/g, ' ')
+}
