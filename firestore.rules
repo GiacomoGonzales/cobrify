@@ -90,6 +90,35 @@ service cloud.firestore {
       allow write: if false; // Solo se gestiona manualmente desde consola Firebase
     }
 
+    // ============================================
+    // WHATSAPP — bandeja de conversaciones (Cloud API)
+    //
+    // Quien ESCRIBE es el webhook, que corre en el servidor y no pasa por
+    // estas reglas. Desde el navegador se permite SOLO LEER, y solo al admin:
+    // acá vive el contenido de las conversaciones con los clientes.
+    //
+    // El día que esto se le ofrezca a los negocios habrá que abrir la lectura
+    // al dueño de cada cuenta (whatsappAccounts/{id}.ownerId) en vez de solo
+    // al admin. Se deja anotado para no improvisarlo en ese momento.
+    // ============================================
+    match /whatsappAccounts/{phoneNumberId} {
+      allow read: if isAdmin();
+      allow write: if false; // lo administra el servidor
+    }
+
+    match /whatsappConversations/{conversationId} {
+      allow read: if isAdmin();
+      // Marcar como leída o asignar un cliente se hace desde la pantalla, pero
+      // por ahora se deja cerrado: se abrirá con los campos puntuales cuando
+      // la bandeja los necesite, no antes.
+      allow write: if false;
+
+      match /messages/{messageId} {
+        allow read: if isAdmin();
+        allow write: if false; // los mensajes los escribe el servidor
+      }
+    }
+
     // Config collection (configuración del sistema)
     match /config/{configId} {
       // Solo admins pueden leer/escribir configuración del sistema
