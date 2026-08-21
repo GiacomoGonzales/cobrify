@@ -59,6 +59,7 @@ import Input from '@/components/ui/Input'
 import { formatCurrency, formatDate, formatDateTime, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import { getDocumentTotalInBase, getReportsCurrency, resolveReportsRate, convertBaseToDisplay } from '@/utils/currency'
 import { getInvoiceDate } from '@/utils/invoiceDate'
+import { toDateString } from '@/utils/emissionDate'
 import { getInvoicesPage, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat, updateProductStockTransaction } from '@/services/firestoreService'
 import { getCashRegisterSession, addCashMovement } from '@/services/firestoreService'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, generateExitNotePDF, preloadLogo } from '@/utils/pdfGenerator'
@@ -367,6 +368,9 @@ export default function InvoiceList() {
   const [isRegisteringPayment, setIsRegisteringPayment] = useState(false)
   const [newPaymentAmount, setNewPaymentAmount] = useState('')
   const [newPaymentMethod, setNewPaymentMethod] = useState('Efectivo')
+  // Fecha en que se recibió el pago. Por defecto hoy; se puede fechar hacia
+  // atrás para registrar cobros de días anteriores (formato YYYY-MM-DD).
+  const [newPaymentDate, setNewPaymentDate] = useState(() => toDateString())
 
   // Estado para configuración de impresión web legible y compacta
   const [webPrintLegible, setWebPrintLegible] = useState(false)
@@ -1995,6 +1999,29 @@ Gracias por tu preferencia.`
     })
   }
 
+  /** "2026-08-19" -> "19 de agosto", para el aviso del modal. */
+  const formatearFechaDePago = (texto) => {
+    if (!texto) return ''
+    const [anio, mes, dia] = texto.split('-').map(Number)
+    return new Date(anio, mes - 1, dia).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })
+  }
+
+  /**
+   * Convierte "2026-08-19" en una fecha LOCAL al mediodía.
+   *
+   * `new Date('2026-08-19')` se interpreta como medianoche UTC, que en Perú es
+   * el día ANTERIOR a las 19:00 — el pago quedaría fechado un día antes.
+   * Armándola por partes y al mediodía, ningún huso la corre de día.
+   *
+   * Si la fecha elegida es HOY se devuelve la hora real, para que el cobro
+   * caiga en la sesión de caja abierta ahora mismo.
+   */
+  const fechaDePagoElegida = (texto) => {
+    if (!texto || texto === toDateString()) return new Date()
+    const [anio, mes, dia] = texto.split('-').map(Number)
+    return new Date(anio, mes - 1, dia, 12, 0, 0)
+  }
+
   const handleRegisterPayment = async () => {
     if (!paymentInvoice || !user?.uid) return
     if (paymentInvoice.status === 'cancelled' || paymentInvoice.status === 'voided') {
@@ -2020,6 +2047,14 @@ Gracias por tu preferencia.`
       return
     }
 
+    // Un pago no se puede recibir en el futuro. El `max` del campo pinta en
+    // gris los días de más, pero si la fecha se escribe a mano en los
+    // segmentos entra igual: por eso se revisa acá también.
+    if (newPaymentDate > toDateString()) {
+      toast.error('La fecha del pago no puede ser futura')
+      return
+    }
+
     const businessId = getBusinessId()
     setIsRegisteringPayment(true)
 
@@ -2032,7 +2067,7 @@ Gracias por tu preferencia.`
       // Crear nuevo registro de pago
       const newPaymentRecord = {
         amount: paymentAmount,
-        date: new Date(),
+        date: fechaDePagoElegida(newPaymentDate),
         method: newPaymentMethod,
         recordedBy: user.email || user.uid,
         recordedByName: user.displayName || user.email || 'Usuario'
@@ -2058,6 +2093,7 @@ Gracias por tu preferencia.`
         setPaymentInvoice(null)
         setNewPaymentAmount('')
         setNewPaymentMethod('Efectivo')
+        setNewPaymentDate(toDateString())
         loadInvoices()
       } else {
         throw new Error(result.error)
@@ -5139,6 +5175,29 @@ Gracias por tu preferencia.`
               </Select>
             </div>
 
+            {/* Fecha del pago */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Fecha del pago
+              </label>
+              <input
+                type="date"
+                value={newPaymentDate}
+                max={toDateString()}
+                onChange={(e) => setNewPaymentDate(e.target.value)}
+                disabled={isRegisteringPayment}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-60"
+              />
+              {newPaymentDate !== toDateString() && (
+                <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  <p className="text-xs text-amber-800">
+                    Se va a registrar con fecha <strong>{formatearFechaDePago(newPaymentDate)}</strong>,
+                    así que <strong>no aparecerá en el cuadre de caja de hoy</strong> sino en el de ese día.
+                  </p>
+                </div>
+              )}
+            </div>
+
             {/* Payment Preview */}
             {newPaymentAmount && parseFloat(newPaymentAmount) > 0 && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
@@ -5175,6 +5234,7 @@ Gracias por tu preferencia.`
                   setPaymentInvoice(null)
                   setNewPaymentAmount('')
                   setNewPaymentMethod('Efectivo')
+                  setNewPaymentDate(toDateString())
                 }}
                 disabled={isRegisteringPayment}
               >

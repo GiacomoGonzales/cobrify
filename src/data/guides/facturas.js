@@ -84,7 +84,7 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'Cuando una venta sale al crédito, queda **Pendiente** con su saldo visible. Si pasó la fecha acordada sin pagarse, pasa a **Vencida**. En sus acciones tienes **Registrar Pago**: anotas cuánto te pagaron y con qué método, y el sistema baja el saldo. Puedes registrar tantos pagos parciales como haga falta; cada uno queda en el historial con fecha, método y quién lo registró.',
+          text: 'Cuando una venta sale al crédito, queda **Pendiente** con su saldo visible. Si pasó la fecha acordada sin pagarse, pasa a **Vencida**. En sus acciones tienes **Registrar Pago**: anotas cuánto te pagaron y con qué método, y el sistema baja el saldo. Puedes registrar tantos pagos parciales como haga falta; cada uno queda en el historial con fecha, método y quién lo registró. Si el cobro entró un día anterior, puedes cambiar la **fecha del pago** al registrarlo: el sistema te avisa que ese cobro irá al cuadre de caja de ese día y no al de hoy.',
         },
         {
           type: 'texto',
