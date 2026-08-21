@@ -115,6 +115,7 @@ export default function Chat() {
 
   const finDelHilo = useRef(null)
   const selectorArchivo = useRef(null)
+  const cuadroTexto = useRef(null)
   // Adjunto elegido, esperando confirmacion (con su vista previa y pie).
   const [adjunto, setAdjunto] = useState(null)
   const [pieAdjunto, setPieAdjunto] = useState('')
@@ -174,6 +175,18 @@ export default function Chat() {
   useEffect(() => {
     finDelHilo.current?.scrollIntoView({ behavior: 'smooth' })
   }, [mensajes, pendientes])
+
+  // Al abrir una conversacion, el cursor va al cuadro de escribir: se abre y
+  // se responde sin tocar nada mas.
+  //
+  // SOLO en escritorio. En el celular enfocar levanta el teclado y tapa media
+  // pantalla cuando uno solo queria leer; WhatsApp hace exactamente esta
+  // distincion. `pointer: fine` es lo que separa un mouse de un dedo.
+  useEffect(() => {
+    if (!activaId || !ventanaAbierta) return
+    if (!window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) return
+    cuadroTexto.current?.focus()
+  }, [activaId, ventanaAbierta])
 
   useEffect(() => {
     const t = setInterval(() => setAhora(Date.now()), 60000)
@@ -303,6 +316,11 @@ export default function Chat() {
       toast.error(error.message || 'No se pudo enviar el mensaje')
     } finally {
       setEnviando(false)
+      // El boton de enviar se queda con el cursor; devolverlo permite encadenar
+      // mensajes sin volver a hacer clic.
+      if (window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
+        cuadroTexto.current?.focus()
+      }
     }
   }
 
@@ -956,6 +974,7 @@ export default function Chat() {
                   </div>
                 )}
                 <input
+                  ref={cuadroTexto}
                   type="text"
                   value={texto}
                   onChange={(e) => setTexto(e.target.value)}
