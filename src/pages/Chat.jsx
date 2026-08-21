@@ -5,11 +5,19 @@ import {
   ArrowLeft,
   Check,
   CheckCheck,
+  CheckCircle2,
   Clock,
   MessageCircle,
+  Pencil,
+  Plus,
+  RotateCcw,
   Search,
   Send,
+  StickyNote,
+  Tag,
+  Trash2,
   AlertTriangle,
+  X,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -22,6 +30,14 @@ import {
   formatearRestante,
   formatearNumero,
   formatearHora,
+  ESTADOS,
+  estadoDe,
+  cambiarEstado,
+  alternarEtiqueta,
+  guardarNota,
+  suscribirEtiquetas,
+  guardarEtiquetas,
+  idParaEtiqueta,
 } from '@/services/whatsappChatService'
 
 /**
@@ -51,6 +67,14 @@ export default function Chat() {
   // el mensaje vuelve del servidor, y se siente como si no hubiera salido.
   const [pendientes, setPendientes] = useState([])
   const [busqueda, setBusqueda] = useState('')
+  // Organización (Fase 1): pestaña por estado, filtro por etiqueta, catálogo.
+  const [tab, setTab] = useState('abierta')
+  const [filtroEtiqueta, setFiltroEtiqueta] = useState(null)
+  const [etiquetas, setEtiquetas] = useState([])
+  const [tagPickerAbierto, setTagPickerAbierto] = useState(false)
+  const [gestorAbierto, setGestorAbierto] = useState(false)
+  const [notaAbierta, setNotaAbierta] = useState(false)
+  const [notaBorrador, setNotaBorrador] = useState('')
   // Se refresca solo para que el contador de la ventana no quede congelado.
   const [ahora, setAhora] = useState(Date.now())
 
@@ -66,7 +90,14 @@ export default function Chat() {
   }, [user, isAdmin])
 
   useEffect(() => {
+    if (!user || !isAdmin) return undefined
+    return suscribirEtiquetas(setEtiquetas)
+  }, [user, isAdmin])
+
+  useEffect(() => {
     setPendientes([])
+    setTagPickerAbierto(false)
+    setNotaAbierta(false)
     if (!activaId) { setMensajes([]); return undefined }
     const parar = suscribirMensajes(activaId, setMensajes)
     marcarComoLeida(activaId)
@@ -105,14 +136,51 @@ export default function Chat() {
     return [...mensajes, ...enVuelo]
   }, [mensajes, pendientes])
 
+  const conteos = useMemo(() => {
+    const c = { abierta: 0, pendiente: 0, completada: 0 }
+    for (const conv of conversaciones) c[estadoDe(conv)] = (c[estadoDe(conv)] || 0) + 1
+    return c
+  }, [conversaciones])
+
   const filtradas = useMemo(() => {
+    let lista = conversaciones.filter((c) => estadoDe(c) === tab)
+    if (filtroEtiqueta) {
+      lista = lista.filter((c) => (c.etiquetas || []).includes(filtroEtiqueta))
+    }
     const t = busqueda.trim().toLowerCase()
-    if (!t) return conversaciones
-    return conversaciones.filter((c) =>
-      (c.nombre || '').toLowerCase().includes(t)
-      || (c.waId || '').includes(t.replace(/\D/g, '')),
-    )
-  }, [conversaciones, busqueda])
+    if (t) {
+      lista = lista.filter((c) =>
+        (c.nombre || '').toLowerCase().includes(t)
+        || (c.waId || '').includes(t.replace(/\D/g, '')),
+      )
+    }
+    return lista
+  }, [conversaciones, tab, filtroEtiqueta, busqueda])
+
+  const etiquetaPorId = useMemo(() => {
+    const m = new Map()
+    for (const e of etiquetas) m.set(e.id, e)
+    return m
+  }, [etiquetas])
+
+  const handleEstado = async (estado) => {
+    try {
+      await cambiarEstado(activaId, estado)
+      if (estado !== tab) toast.success(estado === 'completada' ? 'Conversación completada' : estado === 'pendiente' ? 'Movida a pendientes' : 'Conversación reabierta')
+    } catch {
+      toast.error('No se pudo cambiar el estado')
+    }
+  }
+
+  const handleGuardarNota = async () => {
+    try {
+      await guardarNota(activaId, notaBorrador.trim())
+      setNotaAbierta(false)
+      toast.success(notaBorrador.trim() ? 'Nota guardada' : 'Nota eliminada')
+    } catch {
+      toast.error('No se pudo guardar la nota')
+    }
+  }
 
   const handleEnviar = async (e) => {
     e.preventDefault()
@@ -185,6 +253,60 @@ export default function Chat() {
               className="w-full pl-9 pr-3 py-2 text-sm bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
             />
           </div>
+
+          {/* Pestañas por estado */}
+          <div className="flex gap-1 mt-3 bg-gray-100 rounded-lg p-1">
+            {ESTADOS.map((e) => (
+              <button
+                key={e.id}
+                onClick={() => setTab(e.id)}
+                className={`flex-1 px-2 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                  tab === e.id
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {e.nombre}
+                {conteos[e.id] > 0 && (
+                  <span className="ml-1 text-[10px] text-gray-400">{conteos[e.id]}</span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Filtro por etiqueta */}
+          {etiquetas.length > 0 && (
+            <div className="flex gap-1.5 mt-2.5 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none' }}>
+              {etiquetas.map((e) => {
+                const activo = filtroEtiqueta === e.id
+                return (
+                  <button
+                    key={e.id}
+                    onClick={() => setFiltroEtiqueta(activo ? null : e.id)}
+                    className={`flex-none inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors ${
+                      activo ? 'text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                    }`}
+                    style={activo
+                      ? { backgroundColor: e.color, borderColor: e.color }
+                      : { borderColor: '#e5e7eb' }}
+                  >
+                    <span
+                      className="w-1.5 h-1.5 rounded-full flex-none"
+                      style={{ backgroundColor: activo ? 'white' : e.color }}
+                    />
+                    {e.nombre}
+                  </button>
+                )
+              })}
+              <button
+                onClick={() => setGestorAbierto(true)}
+                className="flex-none inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border border-dashed border-gray-300 text-gray-400 hover:text-gray-600 hover:border-gray-400"
+                title="Administrar etiquetas"
+              >
+                <Pencil className="w-3 h-3" />
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto">
@@ -205,9 +327,13 @@ export default function Chat() {
             <div className="p-6 text-center">
               <MessageCircle className="w-10 h-10 text-gray-300 mx-auto mb-3" />
               <p className="text-sm text-gray-500">
-                {busqueda
+                {busqueda || filtroEtiqueta
                   ? 'No hay conversaciones que coincidan.'
-                  : 'Todavía no hay conversaciones. Aparecerán acá apenas alguien te escriba.'}
+                  : tab === 'pendiente'
+                    ? 'Nada pendiente.'
+                    : tab === 'completada'
+                      ? 'Todavía no completaste ninguna conversación.'
+                      : 'Todavía no hay conversaciones. Aparecerán acá apenas alguien te escriba.'}
               </p>
             </div>
           )}
@@ -240,6 +366,27 @@ export default function Chat() {
                       )}
                       {c.ultimoMensaje}
                     </p>
+                    {((c.etiquetas || []).length > 0 || c.nota) && (
+                      <div className="flex items-center gap-1 mt-1 flex-wrap">
+                        {(c.etiquetas || []).slice(0, 3).map((id) => {
+                          const e = etiquetaPorId.get(id)
+                          if (!e) return null
+                          return (
+                            <span
+                              key={id}
+                              className="inline-flex items-center gap-1 px-1.5 py-px rounded text-[10px] font-semibold"
+                              style={{ backgroundColor: `${e.color}18`, color: e.color }}
+                            >
+                              {e.nombre}
+                            </span>
+                          )
+                        })}
+                        {(c.etiquetas || []).length > 3 && (
+                          <span className="text-[10px] text-gray-400">+{(c.etiquetas || []).length - 3}</span>
+                        )}
+                        {c.nota && <StickyNote className="w-3 h-3 text-amber-500" />}
+                      </div>
+                    )}
                   </div>
                   <div className="flex flex-col items-end gap-1 flex-none">
                     <span className="text-[11px] text-gray-400">
@@ -285,13 +432,155 @@ export default function Chat() {
               </div>
               {ventanaAbierta && (
                 <span
-                  className="text-xs text-gray-500 hidden sm:block"
+                  className="text-xs text-gray-500 hidden lg:block"
                   title="Tiempo que queda para responder sin plantilla"
                 >
                   Ventana: {formatearRestante(restante)}
                 </span>
               )}
+
+              {/* Acciones de organizacion */}
+              <div className="flex items-center gap-1 relative">
+                <button
+                  onClick={() => setTagPickerAbierto((v) => !v)}
+                  className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                  title="Etiquetas"
+                >
+                  <Tag className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => {
+                    setNotaBorrador(activa.nota || '')
+                    setNotaAbierta((v) => !v)
+                  }}
+                  className={`p-2 rounded-lg hover:bg-gray-100 ${activa.nota ? 'text-amber-500' : 'text-gray-500 hover:text-gray-700'}`}
+                  title="Nota interna"
+                >
+                  <StickyNote className="w-5 h-5" />
+                </button>
+                {estadoDe(activa) === 'abierta' && (
+                  <button
+                    onClick={() => handleEstado('pendiente')}
+                    className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-amber-600"
+                    title="Marcar pendiente"
+                  >
+                    <Clock className="w-5 h-5" />
+                  </button>
+                )}
+                {estadoDe(activa) !== 'completada' ? (
+                  <button
+                    onClick={() => handleEstado('completada')}
+                    className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-green-600"
+                    title="Completar"
+                  >
+                    <CheckCircle2 className="w-5 h-5" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleEstado('abierta')}
+                    className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-green-600"
+                    title="Reabrir"
+                  >
+                    <RotateCcw className="w-5 h-5" />
+                  </button>
+                )}
+
+                {/* Selector de etiquetas */}
+                {tagPickerAbierto && (
+                  <div className="absolute right-0 top-11 z-20 w-60 bg-white border border-gray-200 rounded-xl shadow-lg py-2">
+                    {etiquetas.map((e) => {
+                      const tiene = (activa.etiquetas || []).includes(e.id)
+                      return (
+                        <button
+                          key={e.id}
+                          onClick={() => alternarEtiqueta(activaId, e.id, tiene).catch(() => toast.error('No se pudo cambiar la etiqueta'))}
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left hover:bg-gray-50"
+                        >
+                          <span className="w-2.5 h-2.5 rounded-full flex-none" style={{ backgroundColor: e.color }} />
+                          <span className="flex-1 text-gray-800">{e.nombre}</span>
+                          {tiene && <Check className="w-4 h-4 text-green-600" />}
+                        </button>
+                      )
+                    })}
+                    <div className="border-t border-gray-100 mt-1 pt-1">
+                      <button
+                        onClick={() => { setTagPickerAbierto(false); setGestorAbierto(true) }}
+                        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-gray-500 hover:bg-gray-50"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        Administrar etiquetas
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </header>
+
+            {/* Etiquetas puestas, visibles bajo la cabecera */}
+            {(activa.etiquetas || []).length > 0 && (
+              <div className="px-4 py-1.5 bg-white border-b border-gray-100 flex gap-1.5 flex-wrap">
+                {(activa.etiquetas || []).map((id) => {
+                  const e = etiquetaPorId.get(id)
+                  if (!e) return null
+                  return (
+                    <span
+                      key={id}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold"
+                      style={{ backgroundColor: `${e.color}18`, color: e.color }}
+                    >
+                      {e.nombre}
+                      <button
+                        onClick={() => alternarEtiqueta(activaId, id, true).catch(() => {})}
+                        className="opacity-50 hover:opacity-100"
+                        aria-label={`Quitar ${e.nombre}`}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Nota interna: solo la ves vos, el cliente nunca */}
+            {notaAbierta && (
+              <div className="px-4 py-3 bg-amber-50 border-b border-amber-200">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-semibold text-amber-800 uppercase tracking-wide">
+                    Nota interna (el cliente no la ve)
+                  </span>
+                  <button onClick={() => setNotaAbierta(false)} className="text-amber-500 hover:text-amber-700">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <textarea
+                  value={notaBorrador}
+                  onChange={(e) => setNotaBorrador(e.target.value)}
+                  rows={2}
+                  placeholder="Quedo en llamar el lunes, pidio cotizacion de 3 sucursales..."
+                  className="w-full text-sm bg-white border border-amber-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
+                />
+                <div className="flex justify-end mt-1.5">
+                  <button
+                    onClick={handleGuardarNota}
+                    className="px-3 py-1.5 text-xs font-semibold bg-amber-600 text-white rounded-lg hover:bg-amber-700"
+                  >
+                    Guardar nota
+                  </button>
+                </div>
+              </div>
+            )}
+            {!notaAbierta && activa.nota && (
+              <button
+                onClick={() => { setNotaBorrador(activa.nota); setNotaAbierta(true) }}
+                className="px-4 py-2 bg-amber-50 border-b border-amber-100 text-left w-full hover:bg-amber-100 transition-colors"
+              >
+                <p className="text-xs text-amber-800 truncate">
+                  <StickyNote className="w-3 h-3 inline mr-1.5 -mt-0.5" />
+                  {activa.nota}
+                </p>
+              </button>
+            )}
 
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2">
               {hilo.map((m) => {
@@ -374,6 +663,147 @@ export default function Chat() {
           </>
         )}
       </main>
+
+      {gestorAbierto && (
+        <GestorDeEtiquetas
+          etiquetas={etiquetas}
+          onCerrar={() => setGestorAbierto(false)}
+          onGuardar={async (lista) => {
+            try {
+              await guardarEtiquetas(lista)
+              toast.success('Etiquetas guardadas')
+            } catch {
+              toast.error('No se pudieron guardar las etiquetas')
+            }
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+/**
+ * Administrar el catalogo de etiquetas: crear, renombrar, recolorear, borrar.
+ *
+ * Borrar una etiqueta NO recorre las conversaciones quitandola: el id huerfano
+ * simplemente deja de mostrarse (la pantalla ignora ids que no estan en el
+ * catalogo). Es barato, reversible —recrearla con el mismo nombre la revive— y
+ * evita una escritura masiva por un clic.
+ */
+const COLORES = ['#1B6E4A', '#A3352C', '#26456E', '#96690F', '#6B7280', '#7C3AED', '#0E7490', '#BE185D']
+
+function GestorDeEtiquetas({ etiquetas, onCerrar, onGuardar }) {
+  const [lista, setLista] = useState(etiquetas)
+  const [nombreNuevo, setNombreNuevo] = useState('')
+  const [colorNuevo, setColorNuevo] = useState(COLORES[0])
+
+  const agregar = () => {
+    const nombre = nombreNuevo.trim()
+    if (!nombre) return
+    const id = idParaEtiqueta(nombre)
+    if (lista.some((e) => e.id === id)) return
+    setLista([...lista, { id, nombre, color: colorNuevo }])
+    setNombreNuevo('')
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+      onClick={onCerrar}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[85vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+          <h3 className="font-bold text-gray-900">Etiquetas</h3>
+          <button onClick={onCerrar} className="text-gray-400 hover:text-gray-600" aria-label="Cerrar">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-3">
+          {lista.map((e, i) => (
+            <div key={e.id} className="flex items-center gap-2 py-2 border-b border-gray-100 last:border-0">
+              <input
+                type="color"
+                value={e.color}
+                onChange={(ev) => {
+                  const copia = [...lista]
+                  copia[i] = { ...e, color: ev.target.value }
+                  setLista(copia)
+                }}
+                className="w-7 h-7 rounded cursor-pointer border-0 bg-transparent p-0"
+                title="Color"
+              />
+              <input
+                type="text"
+                value={e.nombre}
+                onChange={(ev) => {
+                  const copia = [...lista]
+                  copia[i] = { ...e, nombre: ev.target.value }
+                  setLista(copia)
+                }}
+                className="flex-1 text-sm px-2 py-1.5 border border-transparent hover:border-gray-200 focus:border-gray-300 rounded-lg focus:outline-none"
+              />
+              <button
+                onClick={() => setLista(lista.filter((x) => x.id !== e.id))}
+                className="p-1.5 text-gray-300 hover:text-red-500"
+                title="Eliminar"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+
+          <div className="flex items-center gap-2 pt-3">
+            <input
+              type="color"
+              value={colorNuevo}
+              onChange={(e) => setColorNuevo(e.target.value)}
+              className="w-7 h-7 rounded cursor-pointer border-0 bg-transparent p-0"
+              title="Color"
+            />
+            <input
+              type="text"
+              value={nombreNuevo}
+              onChange={(e) => setNombreNuevo(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') agregar() }}
+              placeholder="Nueva etiqueta"
+              className="flex-1 text-sm px-3 py-1.5 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+            />
+            <button
+              onClick={agregar}
+              disabled={!nombreNuevo.trim()}
+              className="p-1.5 text-green-600 hover:text-green-700 disabled:opacity-30"
+              title="Agregar"
+            >
+              <Plus className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="px-5 py-3 border-t border-gray-200 flex justify-end gap-2">
+          <button
+            onClick={onCerrar}
+            className="px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100 rounded-lg"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={async () => {
+              const limpias = lista
+                .map((e) => ({ ...e, nombre: e.nombre.trim() }))
+                .filter((e) => e.nombre)
+              await onGuardar(limpias)
+              onCerrar()
+            }}
+            className="px-4 py-2 text-sm font-semibold bg-green-600 text-white rounded-lg hover:bg-green-700"
+          >
+            Guardar
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

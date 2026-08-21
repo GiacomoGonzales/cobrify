@@ -13359,6 +13359,11 @@ async function guardarMensajeEntrante(m) {
     ultimaDireccion: 'entrante',
     ventanaVenceAt: Timestamp.fromMillis(venceVentana),
     sinLeer: FieldValue.increment(1),
+    // Un mensaje nuevo REABRE la conversacion: si estaba archivada como
+    // completada y el cliente vuelve a escribir, tiene que reaparecer en la
+    // bandeja activa sola — una respuesta perdida en "Completadas" es un
+    // cliente que cree que lo ignoraron.
+    estado: 'abierta',
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true })
 

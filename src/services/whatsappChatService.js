@@ -1,10 +1,14 @@
 import {
+  arrayRemove,
+  arrayUnion,
   collection,
   doc,
   onSnapshot,
   orderBy,
   query,
   limit,
+  serverTimestamp,
+  setDoc,
   updateDoc,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -86,21 +90,84 @@ export const enviarMensaje = async (conversationId, texto, idToken) => {
   return data
 }
 
-/**
- * Marca la conversación como leída.
- *
- * OJO: las reglas de Firestore tienen la escritura CERRADA a propósito, así que
- * esto falla en silencio hasta que se abra el campo puntual. Se deja porque el
- * contador igual se limpia solo al responder (lo hace el servidor), y no vale
- * la pena abrir permisos de escritura antes de necesitarlos de verdad.
- */
+/** Marca la conversación como leída. */
 export const marcarComoLeida = async (conversationId) => {
   try {
     await updateDoc(doc(db, 'whatsappConversations', conversationId), { sinLeer: 0 })
-  } catch {
-    // Silencio deliberado: ver el comentario de arriba.
+  } catch (error) {
+    // No vale la pena molestar por esto: el contador también se limpia al responder.
+    console.warn('No se pudo marcar como leída:', error)
   }
 }
+
+// =================== ORGANIZACIÓN (Fase 1) ===================
+// Las reglas de Firestore solo permiten tocar estado, etiquetas, nota y
+// sinLeer. Los mensajes siguen siendo territorio exclusivo del servidor.
+
+/** Estados posibles de una conversación. Sin el campo se asume 'abierta'. */
+export const ESTADOS = [
+  { id: 'abierta', nombre: 'Abiertas' },
+  { id: 'pendiente', nombre: 'Pendientes' },
+  { id: 'completada', nombre: 'Completadas' },
+]
+
+export const estadoDe = (conversacion) => conversacion?.estado || 'abierta'
+
+export const cambiarEstado = (conversationId, estado) =>
+  updateDoc(doc(db, 'whatsappConversations', conversationId), {
+    estado,
+    updatedAt: serverTimestamp(),
+  })
+
+export const alternarEtiqueta = (conversationId, tagId, tiene) =>
+  updateDoc(doc(db, 'whatsappConversations', conversationId), {
+    etiquetas: tiene ? arrayRemove(tagId) : arrayUnion(tagId),
+    updatedAt: serverTimestamp(),
+  })
+
+export const guardarNota = (conversationId, nota) =>
+  updateDoc(doc(db, 'whatsappConversations', conversationId), {
+    nota: nota || null,
+    updatedAt: serverTimestamp(),
+  })
+
+// ---------- Catálogo de etiquetas ----------
+// Un solo documento con la lista completa: son pocas y se editan juntas.
+
+/** Las de fábrica. Se siembran la primera vez y después el admin las gobierna. */
+export const ETIQUETAS_DE_FABRICA = [
+  { id: 'lead', nombre: 'Lead', color: '#1B6E4A' },
+  { id: 'reporte-error', nombre: 'Reporte de error', color: '#A3352C' },
+  { id: 'capacitacion', nombre: 'Capacitación', color: '#26456E' },
+  { id: 'por-renovar', nombre: 'Por renovar', color: '#96690F' },
+  { id: 'no-respondio', nombre: 'No respondió', color: '#6B7280' },
+  { id: 'facturacion', nombre: 'Facturación SUNAT', color: '#7C3AED' },
+]
+
+const etiquetasRef = () => doc(db, 'whatsappSettings', 'etiquetas')
+
+export const suscribirEtiquetas = (onChange) =>
+  onSnapshot(etiquetasRef(), (snap) => {
+    if (snap.exists()) {
+      onChange(snap.data().lista || [])
+    } else {
+      // Primera vez: sembrar las de fábrica para que existan de verdad y el
+      // admin pueda editarlas, en vez de vivir solo en el código.
+      setDoc(etiquetasRef(), { lista: ETIQUETAS_DE_FABRICA, updatedAt: serverTimestamp() })
+        .catch((e) => console.error('No se pudo sembrar el catálogo de etiquetas:', e))
+      onChange(ETIQUETAS_DE_FABRICA)
+    }
+  }, (error) => console.error('Error al leer las etiquetas:', error))
+
+export const guardarEtiquetas = (lista) =>
+  setDoc(etiquetasRef(), { lista, updatedAt: serverTimestamp() })
+
+/** Id legible a partir del nombre: "Cliente VIP" -> "cliente-vip" */
+export const idParaEtiqueta = (nombre) =>
+  nombre.trim().toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+    .slice(0, 40) || `etiqueta-${Date.now()}`
 
 /** Milisegundos que le quedan a la ventana de 24 h (0 = cerrada). */
 export const msRestantesDeVentana = (conversacion) => {

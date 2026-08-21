@@ -108,15 +108,26 @@ service cloud.firestore {
 
     match /whatsappConversations/{conversationId} {
       allow read: if isAdmin();
-      // Marcar como leída o asignar un cliente se hace desde la pantalla, pero
-      // por ahora se deja cerrado: se abrirá con los campos puntuales cuando
-      // la bandeja los necesite, no antes.
-      allow write: if false;
+      // La pantalla puede tocar SOLO los campos de organización (estado,
+      // etiquetas, nota interna, contador de no leídos). El contenido — los
+      // mensajes y la identidad de la conversación — sigue siendo territorio
+      // exclusivo del servidor: el historial con los clientes no lo puede
+      // alterar nadie desde el navegador, ni por error ni a propósito.
+      allow update: if isAdmin() &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['estado', 'etiquetas', 'nota', 'sinLeer', 'updatedAt']);
+      allow create, delete: if false;
 
       match /messages/{messageId} {
         allow read: if isAdmin();
         allow write: if false; // los mensajes los escribe el servidor
       }
+    }
+
+    // Catálogo de etiquetas de la bandeja (nombre + color). Lo edita el admin
+    // desde la propia pantalla.
+    match /whatsappSettings/{docId} {
+      allow read, write: if isAdmin();
     }
 
     // Config collection (configuración del sistema)
