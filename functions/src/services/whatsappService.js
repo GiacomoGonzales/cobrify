@@ -447,3 +447,90 @@ export function pareceBajaVoluntaria(texto) {
   if (!t || t.length > 80) return false
   return /^(no enviar|no me envi|no quiero recibir|no mas mensajes|no m[aá]s mensajes|baja|stop|cancelar|dar de baja|darme de baja|dejen de escribir|no me escriban|no molestar)/.test(t)
 }
+
+// =================== PERFIL DEL NEGOCIO ===================
+// Lo que el cliente ve al tocar el nombre en su WhatsApp: foto, descripcion,
+// direccion, correo, web, rubro. Se edita por la API; el NOMBRE VISIBLE no
+// (eso requiere aprobacion de Meta y se cambia en WhatsApp Manager).
+
+const CAMPOS_PERFIL = 'about,address,description,email,profile_picture_url,websites,vertical'
+
+export async function getWhatsappBusinessProfile({ token, phoneNumberId }) {
+  const res = await fetch(
+    `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/whatsapp_business_profile?fields=${CAMPOS_PERFIL}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data?.error?.message || `Error ${res.status} leyendo el perfil`)
+  const p = data?.data?.[0] || {}
+  return {
+    about: p.about || '',
+    address: p.address || '',
+    description: p.description || '',
+    email: p.email || '',
+    websites: p.websites || [],
+    vertical: p.vertical || '',
+    profilePictureUrl: p.profile_picture_url || null,
+  }
+}
+
+/**
+ * Sube la foto de perfil por la API de carga reanudable de Meta y devuelve el
+ * "handle" que el perfil acepta. Son dos pasos (abrir sesion, subir bytes).
+ */
+export async function uploadWhatsappProfilePhoto({ token, appId, buffer, mimeType }) {
+  const abrir = await fetch(
+    `https://graph.facebook.com/${GRAPH_VERSION}/${appId}/uploads?file_length=${buffer.length}&file_type=${encodeURIComponent(mimeType)}`,
+    { method: 'POST', headers: { Authorization: `Bearer ${token}` } },
+  )
+  const sesion = await abrir.json().catch(() => ({}))
+  if (!abrir.ok || !sesion.id) throw new Error(sesion?.error?.message || 'No se pudo abrir la sesion de carga')
+
+  const subir = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${sesion.id}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `OAuth ${token}`,
+      file_offset: '0',
+      'Content-Type': mimeType,
+    },
+    body: buffer,
+  })
+  const resultado = await subir.json().catch(() => ({}))
+  if (!subir.ok || !resultado.h) throw new Error(resultado?.error?.message || 'No se pudo subir la foto')
+  return resultado.h
+}
+
+export async function updateWhatsappBusinessProfile({ token, phoneNumberId, campos, profilePictureHandle = null }) {
+  const cuerpo = { messaging_product: 'whatsapp' }
+  for (const k of ['about', 'address', 'description', 'email', 'vertical']) {
+    if (campos[k] !== undefined) cuerpo[k] = String(campos[k] ?? '')
+  }
+  if (Array.isArray(campos.websites)) cuerpo.websites = campos.websites.filter(Boolean).slice(0, 2)
+  if (profilePictureHandle) cuerpo.profile_picture_handle = profilePictureHandle
+
+  const res = await fetch(
+    `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/whatsapp_business_profile`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(cuerpo),
+    },
+  )
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data?.error?.error_user_msg || data?.error?.message || `Error ${res.status} guardando el perfil`)
+  return data
+}
+
+// =================== HORARIO DE ATENCION ===================
+/** ¿Ahora cae dentro del horario? horario = { dias:[1..7 lun=1], desde:'09:00', hasta:'18:00' } en hora de Lima. */
+export function dentroDelHorario(horario, fecha = new Date()) {
+  if (!horario) return true
+  // Hora de Lima sin depender de la zona del servidor.
+  const lima = new Date(fecha.toLocaleString('en-US', { timeZone: 'America/Lima' }))
+  const dia = lima.getDay() === 0 ? 7 : lima.getDay() // lun=1 ... dom=7
+  if (Array.isArray(horario.dias) && horario.dias.length && !horario.dias.includes(dia)) return false
+  const [hd, md] = String(horario.desde || '00:00').split(':').map(Number)
+  const [hh, mh] = String(horario.hasta || '23:59').split(':').map(Number)
+  const minutos = lima.getHours() * 60 + lima.getMinutes()
+  return minutos >= hd * 60 + md && minutos <= hh * 60 + mh
+}

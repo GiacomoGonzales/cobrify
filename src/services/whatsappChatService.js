@@ -391,6 +391,60 @@ export const previsualizarPlantilla = (plantilla, valores) => {
   return partes.join('\n\n')
 }
 
+// =================== CONFIGURACIÓN: perfil, automáticos, respuestas rápidas (Fase 5) ===================
+
+export const obtenerPerfil = (idToken) => postConToken(FN('getWhatsappProfile'), {}, idToken)
+
+/** campos: {about, description, address, email, websites[], vertical}; foto opcional (File JPG/PNG). */
+export const guardarPerfil = async (campos, foto, idToken) => {
+  let fotoBase64 = null
+  let fotoMime = null
+  if (foto) {
+    fotoMime = foto.type
+    fotoBase64 = await new Promise((resolve, reject) => {
+      const r = new FileReader()
+      r.onload = () => resolve(String(r.result).split(',')[1])
+      r.onerror = () => reject(new Error('No se pudo leer la foto'))
+      r.readAsDataURL(foto)
+    })
+  }
+  return postConToken(FN('updateWhatsappProfile'), { campos, fotoBase64, fotoMime }, idToken)
+}
+
+/** Rubros que acepta Meta para el perfil. */
+export const RUBROS = [
+  ['', 'Sin especificar'], ['PROF_SERVICES', 'Servicios profesionales'], ['RETAIL', 'Comercio minorista'],
+  ['RESTAURANT', 'Restaurante'], ['OTHER', 'Otro'], ['AUTO', 'Automotriz'], ['BEAUTY', 'Belleza y cuidado'],
+  ['APPAREL', 'Ropa y accesorios'], ['EDU', 'Educación'], ['ENTERTAIN', 'Entretenimiento'],
+  ['EVENT_PLAN', 'Eventos'], ['FINANCE', 'Finanzas'], ['GROCERY', 'Abarrotes'], ['GOVT', 'Gobierno'],
+  ['HOTEL', 'Hotelería'], ['HEALTH', 'Salud'], ['NONPROFIT', 'Sin fines de lucro'], ['TRAVEL', 'Viajes'],
+  ['NOT_A_BIZ', 'No es un negocio'],
+]
+
+/** Configuración de automáticos y respuestas rápidas: un solo documento. */
+const automaticosRef = () => doc(db, 'whatsappSettings', 'automaticos')
+
+export const CONFIG_AUTOMATICOS_DEFAULT = {
+  bienvenida: {
+    activa: false,
+    texto: 'Hola {nombre}, gracias por escribir a Cobrify. En breve te atendemos.',
+  },
+  ausencia: {
+    activa: false,
+    texto: 'Hola, gracias por tu mensaje. Nuestro horario de atención es de lunes a viernes de 9:00 a 18:00. Te respondemos apenas estemos de vuelta.',
+    horario: { dias: [1, 2, 3, 4, 5], desde: '09:00', hasta: '18:00' },
+  },
+  respuestasRapidas: [],
+}
+
+export const suscribirAutomaticos = (onChange) =>
+  onSnapshot(automaticosRef(), (snap) => {
+    onChange(snap.exists() ? { ...CONFIG_AUTOMATICOS_DEFAULT, ...snap.data() } : CONFIG_AUTOMATICOS_DEFAULT)
+  }, (e) => console.error('Error leyendo automáticos:', e))
+
+export const guardarAutomaticos = (cfg) =>
+  setDoc(automaticosRef(), { ...cfg, updatedAt: serverTimestamp() }, { merge: true })
+
 /** Id legible a partir del nombre: "Cliente VIP" -> "cliente-vip" */
 export const idParaEtiqueta = (nombre) =>
   nombre.trim().toLowerCase()

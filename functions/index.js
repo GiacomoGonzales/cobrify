@@ -28,7 +28,7 @@ import {
 } from './src/services/cloudinaryAdmin.js'
 import { migrateUrlToR2, isR2Url, isFirebaseStorageUrl, putObjectToR2 } from './src/services/r2Admin.js'
 import { processSaleStock as runProcessSaleStock } from './src/services/saleStockService.js'
-import { verifyWhatsappSignature, parseWhatsappWebhook, VENTANA_24H_MS, sendWhatsappText, sendWhatsappMedia, downloadWhatsappMedia, extensionDeMime, extraerPrimeraUrl, obtenerVistaPreviaDeEnlace, listWhatsappTemplates, sendWhatsappTemplate, renderTemplateText, pareceBajaVoluntaria } from './src/services/whatsappService.js'
+import { verifyWhatsappSignature, parseWhatsappWebhook, VENTANA_24H_MS, sendWhatsappText, sendWhatsappMedia, downloadWhatsappMedia, extensionDeMime, extraerPrimeraUrl, obtenerVistaPreviaDeEnlace, listWhatsappTemplates, sendWhatsappTemplate, renderTemplateText, pareceBajaVoluntaria, getWhatsappBusinessProfile, uploadWhatsappProfilePhoto, updateWhatsappBusinessProfile, dentroDelHorario } from './src/services/whatsappService.js'
 import {
   upsertLoyaltyClass as walletUpsertClass, upsertLoyaltyObject as walletUpsertObject,
   linkAgregarAWallet as walletSaveLink, notificarTarjeta as walletNotify,
@@ -13386,6 +13386,12 @@ async function guardarMensajeEntrante(m) {
 
   await asegurarCuentaWa(m.cuenta)
 
+  // Respuestas automaticas (bienvenida al primer mensaje, ausencia fuera de
+  // horario). Despues de guardar el entrante y sin bloquear nada: un fallo
+  // aca jamas debe costar el mensaje del cliente.
+  responderAutomaticoWa(convRef, convPrevia, m).catch((e) =>
+    console.error('[WhatsApp] Error en respuesta automatica:', e.message))
+
   // Si el texto trae un enlace, se le arma la tarjeta (titulo, imagen OG)
   // igual que hace WhatsApp. Despues de guardar: un sitio lento jamas debe
   // demorar la entrega del mensaje.
@@ -13471,6 +13477,59 @@ async function asegurarCuentaWa(cuenta) {
     createdAt: FieldValue.serverTimestamp(),
   })
   console.log(`[WhatsApp] Numero nuevo registrado: ${cuenta.displayNumber || cuenta.phoneNumberId}`)
+}
+
+/**
+ * Bienvenida y ausencia, segun whatsappSettings/automaticos:
+ *   bienvenida: { activa, texto }         -> solo al PRIMER mensaje de un numero nuevo
+ *   ausencia:   { activa, texto, horario } -> fuera del horario, maximo una vez cada 12 h
+ *                                            por conversacion (no se repite en cada mensaje)
+ * Los dos se guardan en el hilo como salientes de 'auto', para que se vea
+ * que los mando el sistema.
+ */
+async function responderAutomaticoWa(convRef, convPrevia, m) {
+  const cfgSnap = await db.collection('whatsappSettings').doc('automaticos').get()
+  const cfg = cfgSnap.exists ? cfgSnap.data() : null
+  if (!cfg) return
+  const esNueva = !convPrevia.exists
+  const datosPrevios = convPrevia.exists ? convPrevia.data() : {}
+
+  let texto = null
+  let motivo = null
+  if (esNueva && cfg.bienvenida?.activa && cfg.bienvenida?.texto) {
+    texto = cfg.bienvenida.texto
+    motivo = 'bienvenida'
+  } else if (cfg.ausencia?.activa && cfg.ausencia?.texto && !dentroDelHorario(cfg.ausencia.horario)) {
+    const ultima = datosPrevios.ultimaAusenciaAt?.toMillis?.() || 0
+    if (Date.now() - ultima > 12 * 60 * 60 * 1000) {
+      texto = cfg.ausencia.texto
+      motivo = 'ausencia'
+    }
+  }
+  if (!texto) return
+
+  const nombre = m.nombre || ''
+  texto = texto.replace(/\{nombre\}/gi, nombre).trim()
+  if (!texto) return
+
+  const { waMessageId } = await sendWhatsappText({
+    token: process.env.WHATSAPP_TOKEN,
+    phoneNumberId: m.cuenta.phoneNumberId,
+    to: m.waId,
+    texto,
+  })
+  const ahora = Timestamp.now()
+  await convRef.collection('messages').doc(waMessageId).set({
+    direccion: 'saliente', waMessageId, waId: m.waId, tipo: 'text', texto,
+    automatico: motivo, estado: 'enviado', enviadoPor: 'auto',
+    timestamp: ahora, createdAt: FieldValue.serverTimestamp(),
+  })
+  await convRef.set({
+    ultimoMensaje: texto.slice(0, 120), ultimoMensajeAt: ahora, ultimaDireccion: 'saliente',
+    ...(motivo === 'ausencia' ? { ultimaAusenciaAt: ahora } : {}),
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true })
+  console.log(`[WhatsApp] Respuesta automatica (${motivo}) enviada a ${m.waId}`)
 }
 
 /** Aviso push al dueno de la bandeja, si ya tiene uno asignado. */
@@ -14094,6 +14153,79 @@ export const sendWhatsappCampaign = onRequest(
     } catch (error) {
       console.error('[WhatsApp] Error en campaña:', error.message)
       if (!res.headersSent) res.status(500).json({ error: error.message })
+    }
+  }
+)
+
+// ============================================================
+// WHATSAPP — PERFIL DEL NEGOCIO (leer y editar desde la bandeja)
+// ============================================================
+const WHATSAPP_APP_ID = '1482853280198385'
+
+async function cuentaWaActiva(phoneNumberId) {
+  const snap = phoneNumberId
+    ? await db.collection('whatsappAccounts').doc(phoneNumberId).get()
+    : (await db.collection('whatsappAccounts').where('activo', '==', true).limit(1).get()).docs[0]
+  return snap?.exists ? { id: snap.id, ...snap.data() } : null
+}
+
+export const getWhatsappProfile = onRequest(
+  {
+    region: 'us-central1', timeoutSeconds: 30, memory: '256MiB', cors: true,
+    secrets: ['WHATSAPP_TOKEN'],
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return }
+    try {
+      if (!(await autorizarAdminWa(req, res))) return
+      const cuenta = await cuentaWaActiva(req.body?.phoneNumberId)
+      if (!cuenta) { res.status(404).json({ error: 'No hay cuenta de WhatsApp registrada' }); return }
+      const perfil = await getWhatsappBusinessProfile({ token: process.env.WHATSAPP_TOKEN, phoneNumberId: cuenta.id })
+      res.status(200).json({ success: true, perfil, displayNumber: cuenta.displayNumber || null })
+    } catch (error) {
+      console.error('[WhatsApp] Error leyendo perfil:', error.message)
+      res.status(500).json({ error: error.message })
+    }
+  }
+)
+
+export const updateWhatsappProfile = onRequest(
+  {
+    region: 'us-central1', timeoutSeconds: 60, memory: '512MiB', cors: true,
+    secrets: ['WHATSAPP_TOKEN'],
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return }
+    try {
+      if (!(await autorizarAdminWa(req, res))) return
+      const { phoneNumberId, campos = {}, fotoBase64 = null, fotoMime = null } = req.body || {}
+      const cuenta = await cuentaWaActiva(phoneNumberId)
+      if (!cuenta) { res.status(404).json({ error: 'No hay cuenta de WhatsApp registrada' }); return }
+
+      let handle = null
+      if (fotoBase64) {
+        if (!['image/jpeg', 'image/png'].includes(fotoMime)) {
+          res.status(400).json({ error: 'La foto debe ser JPG o PNG' }); return
+        }
+        const buffer = Buffer.from(fotoBase64, 'base64')
+        if (buffer.length > 5 * 1024 * 1024) { res.status(400).json({ error: 'La foto pasa de 5 MB' }); return }
+        handle = await uploadWhatsappProfilePhoto({
+          token: process.env.WHATSAPP_TOKEN, appId: WHATSAPP_APP_ID, buffer, mimeType: fotoMime,
+        })
+      }
+
+      await updateWhatsappBusinessProfile({
+        token: process.env.WHATSAPP_TOKEN, phoneNumberId: cuenta.id, campos, profilePictureHandle: handle,
+      })
+      const perfil = await getWhatsappBusinessProfile({ token: process.env.WHATSAPP_TOKEN, phoneNumberId: cuenta.id })
+      res.status(200).json({ success: true, perfil })
+    } catch (error) {
+      console.error('[WhatsApp] Error guardando perfil:', error.message)
+      res.status(500).json({ error: error.message })
     }
   }
 )

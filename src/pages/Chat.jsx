@@ -19,6 +19,7 @@ import {
   UserCircle,
   Megaphone,
   LayoutTemplate,
+  Settings,
   Tag,
   Trash2,
   AlertTriangle,
@@ -28,6 +29,7 @@ import FichaCliente from '@/components/chat/FichaCliente'
 import TextoWhatsapp, { TarjetaEnlace } from '@/components/chat/TextoWhatsapp'
 import MiniaturaPdf, { formatoKB } from '@/components/chat/MiniaturaPdf'
 import SelectorPlantilla from '@/components/chat/SelectorPlantilla'
+import ConfiguracionChat from '@/components/chat/ConfiguracionChat'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import {
@@ -53,6 +55,7 @@ import {
   enviarCampana,
   suscribirCampana,
   revertirBaja,
+  suscribirAutomaticos,
 } from '@/services/whatsappChatService'
 
 /**
@@ -101,6 +104,9 @@ export default function Chat() {
   const [campanaEnCurso, setCampanaEnCurso] = useState(null)
   // Filtro rapido: a quienes les escribimos y no contestaron en 7 dias.
   const [soloSinRespuesta, setSoloSinRespuesta] = useState(false)
+  // Configuracion del chat (perfil, automaticos, rapidas) en el panel principal.
+  const [configAbierta, setConfigAbierta] = useState(false)
+  const [respuestasRapidas, setRespuestasRapidas] = useState([])
 
   const finDelHilo = useRef(null)
   const selectorArchivo = useRef(null)
@@ -123,6 +129,24 @@ export default function Chat() {
   }, [user, isAdmin])
 
   useEffect(() => {
+    if (!user || !isAdmin) return undefined
+    return suscribirAutomaticos((c) => setRespuestasRapidas(c.respuestasRapidas || []))
+  }, [user, isAdmin])
+
+  // Sugerencias de respuestas rapidas: al tipear "/" en el cuadro.
+  const sugerenciasRapidas = useMemo(() => {
+    if (!texto.startsWith('/')) return []
+    const q = texto.slice(1).toLowerCase()
+    return respuestasRapidas.filter((r) => r.atajo.startsWith(q)).slice(0, 6)
+  }, [texto, respuestasRapidas])
+
+  const aplicarRapida = (r) => {
+    const nombre = (activa?.nombre || '').split(' ')[0]
+    setTexto(r.texto.replace(/\{nombre\}/gi, nombre))
+  }
+
+  useEffect(() => {
+    if (activaId) setConfigAbierta(false)
     setPendientes([])
     setTagPickerAbierto(false)
     setNotaAbierta(false)
@@ -314,6 +338,13 @@ export default function Chat() {
           <div className="flex items-center gap-2 mb-3">
             <MessageCircle className="w-5 h-5 text-green-600" />
             <h1 className="font-bold text-gray-900">WhatsApp</h1>
+            <button
+              onClick={() => { setConfigAbierta(true); setActivaId(null) }}
+              className={`ml-auto p-1.5 rounded-lg hover:bg-gray-100 ${configAbierta ? 'text-green-600' : 'text-gray-400 hover:text-gray-600'}`}
+              title="Configuracion del chat"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
           </div>
           {/* Los dos mundos */}
           <div className="flex gap-1 mb-3 text-xs font-semibold">
@@ -485,7 +516,8 @@ export default function Chat() {
                   c.id === activaId ? 'bg-green-50' : ''
                 }`}
               >
-                <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start gap-3">
+                  <Avatar nombre={c.nombre} waId={c.waId} cliente={!!c.linkedBusinessId} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-gray-900 text-sm truncate">
@@ -548,8 +580,10 @@ export default function Chat() {
       </aside>
 
       {/* ---------- Conversación ---------- */}
-      <main className={`flex-1 flex flex-col ${activaId ? 'flex' : 'hidden md:flex'}`}>
-        {!activa ? (
+      <main className={`flex-1 flex flex-col ${activaId || configAbierta ? 'flex' : 'hidden md:flex'}`}>
+        {configAbierta ? (
+          <ConfiguracionChat onVolver={() => setConfigAbierta(false)} />
+        ) : !activa ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <MessageCircle className="w-12 h-12 text-gray-300 mx-auto mb-3" />
@@ -769,6 +803,11 @@ export default function Chat() {
                           Plantilla
                         </span>
                       )}
+                      {m.automatico && (
+                        <span className={`inline-block text-[10px] font-semibold uppercase tracking-wide mb-1 ${mio ? 'text-green-200' : 'text-gray-400'}`}>
+                          Respuesta automática
+                        </span>
+                      )}
                       {(m.tipo === 'image' || m.tipo === 'sticker' || m.tipo === 'template') && m.media?.url && (
                         <a href={m.media.url} target="_blank" rel="noopener noreferrer">
                           <img
@@ -830,7 +869,7 @@ export default function Chat() {
             {ventanaAbierta ? (
               <form
                 onSubmit={handleEnviar}
-                className="px-4 py-3 bg-white border-t border-gray-200 flex items-center gap-2"
+                className="relative px-4 py-3 bg-white border-t border-gray-200 flex items-center gap-2"
               >
                 <input
                   ref={selectorArchivo}
@@ -848,11 +887,29 @@ export default function Chat() {
                 >
                   <Paperclip className="w-5 h-5" />
                 </button>
+                {sugerenciasRapidas.length > 0 && (
+                  <div className="absolute bottom-full left-4 right-4 mb-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden z-10">
+                    {sugerenciasRapidas.map((r) => (
+                      <button
+                        key={r.atajo}
+                        type="button"
+                        onClick={() => aplicarRapida(r)}
+                        className="w-full text-left px-3.5 py-2 hover:bg-gray-50 flex items-start gap-3"
+                      >
+                        <span className="font-mono text-xs font-semibold text-green-700 bg-green-50 px-1.5 py-0.5 rounded flex-none">/{r.atajo}</span>
+                        <span className="text-sm text-gray-700 truncate">{r.texto}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <input
                   type="text"
                   value={texto}
                   onChange={(e) => setTexto(e.target.value)}
-                  placeholder="Escribí un mensaje"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Tab' && sugerenciasRapidas.length > 0) { e.preventDefault(); aplicarRapida(sugerenciasRapidas[0]) }
+                  }}
+                  placeholder={respuestasRapidas.length ? 'Escribí un mensaje, o / para una respuesta rápida' : 'Escribí un mensaje'}
                   disabled={enviando}
                   className="flex-1 px-4 py-2.5 bg-gray-100 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-60"
                 />
@@ -1005,6 +1062,31 @@ export default function Chat() {
             }
           }}
         />
+      )}
+    </div>
+  )
+}
+
+/** Avatar con iniciales y color estable por contacto. Meta no entrega las fotos de perfil por la API. */
+const PALETA_AVATAR = ['#1B6E4A', '#26456E', '#96690F', '#7C3AED', '#0E7490', '#BE185D', '#A3352C', '#4B5563']
+function Avatar({ nombre, waId, cliente }) {
+  const base = (nombre || '').trim()
+  const iniciales = base
+    ? base.split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase()
+    : String(waId || '').slice(-2)
+  let h = 0
+  for (const ch of String(waId || nombre || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  const color = PALETA_AVATAR[h % PALETA_AVATAR.length]
+  return (
+    <div className="relative flex-none">
+      <div
+        className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold"
+        style={{ backgroundColor: color }}
+      >
+        {iniciales}
+      </div>
+      {cliente && (
+        <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full" title="Cliente de Cobrify" />
       )}
     </div>
   )
