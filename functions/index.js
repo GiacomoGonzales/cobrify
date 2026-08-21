@@ -3,7 +3,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { onDocumentWritten } from 'firebase-functions/v2/firestore'
 import { initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
-import { getFirestore, FieldValue } from 'firebase-admin/firestore'
+import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { getMessaging } from 'firebase-admin/messaging'
 import { getStorage } from 'firebase-admin/storage'
 import JSZip from 'jszip'
@@ -28,6 +28,7 @@ import {
 } from './src/services/cloudinaryAdmin.js'
 import { migrateUrlToR2, isR2Url, isFirebaseStorageUrl, putObjectToR2 } from './src/services/r2Admin.js'
 import { processSaleStock as runProcessSaleStock } from './src/services/saleStockService.js'
+import { verifyWhatsappSignature, parseWhatsappWebhook, VENTANA_24H_MS } from './src/services/whatsappService.js'
 import {
   upsertLoyaltyClass as walletUpsertClass, upsertLoyaltyObject as walletUpsertObject,
   linkAgregarAWallet as walletSaveLink, notificarTarjeta as walletNotify,
@@ -13212,3 +13213,214 @@ export const trackLandingVisit = onRequest(
     }
   }
 )
+
+// ============================================================
+// WHATSAPP CLOUD API — WEBHOOK
+//
+// Punto de entrada de todo lo que Meta nos manda: mensajes de clientes y
+// actualizaciones de estado (enviado / entregado / leido).
+//
+// Dos metodos en la misma URL, porque asi lo pide Meta:
+//   GET  = apreton de manos al configurar el webhook. Meta manda un desafio y
+//          hay que devolverlo tal cual si el token de verificacion coincide.
+//   POST = los eventos reales, firmados con el App Secret.
+//
+// MULTI-CUENTA DESDE EL DIA UNO: aunque hoy existe un solo numero (el de
+// Cobrify), todo se guarda colgado del `phoneNumberId`. El dia que esto se le
+// ofrezca a los negocios, sumar cuentas es agregar filas, no reescribir.
+//
+// Modelo:
+//   whatsappAccounts/{phoneNumberId}                  -> el numero y su dueno
+//   whatsappConversations/{phoneNumberId_waId}        -> una por cliente
+//   whatsappConversations/{id}/messages/{waMessageId} -> los mensajes
+// ============================================================
+export const whatsappWebhook = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 60,
+    memory: '256MiB',
+    secrets: ['WHATSAPP_VERIFY_TOKEN', 'WHATSAPP_APP_SECRET'],
+  },
+  async (req, res) => {
+    // ---------- Verificacion del webhook (GET) ----------
+    if (req.method === 'GET') {
+      const modo = req.query['hub.mode']
+      const token = req.query['hub.verify_token']
+      const desafio = req.query['hub.challenge']
+
+      if (modo === 'subscribe' && token === process.env.WHATSAPP_VERIFY_TOKEN) {
+        console.log('[WhatsApp] Webhook verificado por Meta')
+        // Meta espera el desafio en texto plano, sin comillas ni JSON.
+        res.status(200).send(String(desafio))
+        return
+      }
+      console.warn('[WhatsApp] Verificacion rechazada: el token no coincide')
+      res.status(403).send('Forbidden')
+      return
+    }
+
+    if (req.method !== 'POST') {
+      res.status(405).send('Method not allowed')
+      return
+    }
+
+    // ---------- Firma ----------
+    // Sin esto cualquiera que descubra la URL puede inyectar mensajes falsos en
+    // la bandeja. Se rechaza antes de tocar la base de datos.
+    const firmaOk = verifyWhatsappSignature(
+      req.rawBody,
+      req.headers['x-hub-signature-256'],
+      process.env.WHATSAPP_APP_SECRET
+    )
+    if (!firmaOk) {
+      // Diagnostico sin exponer secretos: solo si la cabecera vino y su tamano.
+      // Distingue "Meta no firma este envio" (cabecera ausente) de "la clave
+      // cargada no es la correcta" (cabecera presente pero no coincide).
+      const cab = req.headers['x-hub-signature-256']
+      console.warn('[WhatsApp] Firma invalida: se descarta el evento', JSON.stringify({
+        cabeceraPresente: !!cab,
+        largoCabecera: cab ? String(cab).length : 0,
+        claveConfigurada: !!process.env.WHATSAPP_APP_SECRET,
+        largoClave: (process.env.WHATSAPP_APP_SECRET || '').length,
+        largoCuerpo: req.rawBody ? req.rawBody.length : 0,
+      }))
+      res.status(401).send('Invalid signature')
+      return
+    }
+
+    // A Meta se le responde 200 SIEMPRE que la firma sea valida, incluso si
+    // guardar falla. Un webhook que devuelve error entra en reintentos y, si
+    // insiste, Meta lo da de baja y se cortan los mensajes. Mejor confirmar
+    // recepcion y dejar el problema en los logs.
+    try {
+      const { mensajes, estados } = parseWhatsappWebhook(req.body)
+
+      for (const m of mensajes) {
+        await guardarMensajeEntrante(m)
+      }
+      for (const s of estados) {
+        await actualizarEstadoMensaje(s)
+      }
+
+      if (mensajes.length || estados.length) {
+        console.log(`[WhatsApp] ${mensajes.length} mensaje(s), ${estados.length} estado(s)`)
+      }
+    } catch (error) {
+      console.error('[WhatsApp] Error procesando el evento:', error)
+    }
+
+    res.status(200).send('EVENT_RECEIVED')
+  }
+)
+
+/** Id de conversacion: una por cliente DENTRO de cada numero de la empresa. */
+const idConversacionWa = (phoneNumberId, waId) => `${phoneNumberId}_${waId}`
+
+/**
+ * Guarda un mensaje entrante y deja la conversacion al dia.
+ *
+ * Idempotente: el id del documento es el id que asigna WhatsApp, asi que si
+ * Meta reintenta el mismo evento (lo hace seguido) se reescribe encima en vez
+ * de duplicar el mensaje en la bandeja.
+ */
+async function guardarMensajeEntrante(m) {
+  const { phoneNumberId } = m.cuenta
+  if (!phoneNumberId || !m.waId || !m.waMessageId) return
+
+  const convId = idConversacionWa(phoneNumberId, m.waId)
+  const convRef = db.collection('whatsappConversations').doc(convId)
+
+  await convRef.collection('messages').doc(m.waMessageId).set({
+    direccion: 'entrante',
+    waMessageId: m.waMessageId,
+    waId: m.waId,
+    tipo: m.tipo,
+    texto: m.texto || '',
+    media: m.media || null,
+    respondeA: m.respondeA || null,
+    timestamp: Timestamp.fromMillis(m.timestamp),
+    createdAt: FieldValue.serverTimestamp(),
+  })
+
+  // La VENTANA DE 24 HORAS es la regla que gobierna todo el producto: mientras
+  // este abierta se puede responder libremente y sin costo; una vez cerrada,
+  // solo se puede escribir con una plantilla aprobada y paga. Se guarda cuando
+  // vence para que la bandeja lo pueda mostrar sin recalcular nada.
+  const venceVentana = m.timestamp + VENTANA_24H_MS
+
+  await convRef.set({
+    phoneNumberId,
+    wabaId: m.cuenta.wabaId || null,
+    displayNumber: m.cuenta.displayNumber || null,
+    waId: m.waId,
+    nombre: m.nombre || null,
+    ultimoMensaje: m.texto || `[${m.tipo}]`,
+    ultimoMensajeAt: Timestamp.fromMillis(m.timestamp),
+    ultimaDireccion: 'entrante',
+    ventanaVenceAt: Timestamp.fromMillis(venceVentana),
+    sinLeer: FieldValue.increment(1),
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true })
+
+  await asegurarCuentaWa(m.cuenta)
+  await avisarMensajeNuevoWa(phoneNumberId, m)
+}
+
+/** Actualiza enviado / entregado / leido de un mensaje que mandamos nosotros. */
+async function actualizarEstadoMensaje(s) {
+  const { phoneNumberId } = s.cuenta
+  if (!phoneNumberId || !s.waId || !s.waMessageId) return
+
+  const ref = db.collection('whatsappConversations')
+    .doc(idConversacionWa(phoneNumberId, s.waId))
+    .collection('messages').doc(s.waMessageId)
+
+  // merge: el estado puede llegar ANTES que el mensaje que lo origino (Meta no
+  // garantiza el orden), asi que no se asume que el documento ya exista.
+  await ref.set({
+    estado: s.estado,
+    ...(s.error ? { error: s.error } : {}),
+    estadoAt: Timestamp.fromMillis(s.timestamp),
+  }, { merge: true })
+}
+
+/**
+ * Crea el registro del numero la primera vez que aparece.
+ *
+ * Sirve de descubrimiento: al llegar el primer mensaje queda anotado el
+ * phoneNumberId sin que nadie lo cargue a mano. El `ownerId` se asigna despues
+ * (es quien recibe los avisos y quien vera la bandeja).
+ */
+async function asegurarCuentaWa(cuenta) {
+  const ref = db.collection('whatsappAccounts').doc(cuenta.phoneNumberId)
+  const snap = await ref.get()
+  if (snap.exists) return
+  await ref.set({
+    phoneNumberId: cuenta.phoneNumberId,
+    wabaId: cuenta.wabaId || null,
+    displayNumber: cuenta.displayNumber || null,
+    ownerId: null,
+    activo: true,
+    createdAt: FieldValue.serverTimestamp(),
+  })
+  console.log(`[WhatsApp] Numero nuevo registrado: ${cuenta.displayNumber || cuenta.phoneNumberId}`)
+}
+
+/** Aviso push al dueno de la bandeja, si ya tiene uno asignado. */
+async function avisarMensajeNuevoWa(phoneNumberId, m) {
+  try {
+    const cuentaSnap = await db.collection('whatsappAccounts').doc(phoneNumberId).get()
+    const ownerId = cuentaSnap.data()?.ownerId
+    if (!ownerId) return
+
+    await sendPushNotification(
+      ownerId,
+      m.nombre || m.waId,
+      m.texto || 'Te envio un archivo',
+      { type: 'whatsapp', conversationId: idConversacionWa(phoneNumberId, m.waId) }
+    )
+  } catch (error) {
+    // Que falle el aviso nunca debe costar el mensaje.
+    console.error('[WhatsApp] No se pudo enviar el aviso push:', error.message)
+  }
+}
