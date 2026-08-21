@@ -17,6 +17,8 @@ import {
   Send,
   StickyNote,
   UserCircle,
+  Megaphone,
+  LayoutTemplate,
   Tag,
   Trash2,
   AlertTriangle,
@@ -25,6 +27,7 @@ import {
 import FichaCliente from '@/components/chat/FichaCliente'
 import TextoWhatsapp, { TarjetaEnlace } from '@/components/chat/TextoWhatsapp'
 import MiniaturaPdf, { formatoKB } from '@/components/chat/MiniaturaPdf'
+import SelectorPlantilla from '@/components/chat/SelectorPlantilla'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import {
@@ -46,6 +49,10 @@ import {
   suscribirEtiquetas,
   guardarEtiquetas,
   idParaEtiqueta,
+  enviarPlantilla,
+  enviarCampana,
+  suscribirCampana,
+  revertirBaja,
 } from '@/services/whatsappChatService'
 
 /**
@@ -88,6 +95,12 @@ export default function Chat() {
   const [notaBorrador, setNotaBorrador] = useState('')
   // Se refresca solo para que el contador de la ventana no quede congelado.
   const [ahora, setAhora] = useState(Date.now())
+  // Plantillas y campañas (Fase 4)
+  const [selectorAbierto, setSelectorAbierto] = useState(false)
+  const [campanaAbierta, setCampanaAbierta] = useState(false)
+  const [campanaEnCurso, setCampanaEnCurso] = useState(null)
+  // Filtro rapido: a quienes les escribimos y no contestaron en 7 dias.
+  const [soloSinRespuesta, setSoloSinRespuesta] = useState(false)
 
   const finDelHilo = useRef(null)
   const selectorArchivo = useRef(null)
@@ -131,6 +144,12 @@ export default function Chat() {
     return () => clearInterval(t)
   }, [])
 
+  useEffect(() => {
+    if (!campanaEnCurso?.id) return undefined
+    return suscribirCampana(campanaEnCurso.id, setCampanaEnCurso)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campanaEnCurso?.id])
+
   const activa = useMemo(
     () => conversaciones.find((c) => c.id === activaId) || null,
     [conversaciones, activaId],
@@ -166,6 +185,13 @@ export default function Chat() {
     if (filtroEtiqueta) {
       lista = lista.filter((c) => (c.etiquetas || []).includes(filtroEtiqueta))
     }
+    if (soloSinRespuesta) {
+      const hace7 = ahora - 7 * 86400000
+      lista = lista.filter((c) =>
+        c.ultimaDireccion === 'saliente'
+        && (c.ultimoMensajeAt?.toMillis?.() || 0) < hace7,
+      )
+    }
     const t = busqueda.trim().toLowerCase()
     if (t) {
       lista = lista.filter((c) =>
@@ -174,7 +200,7 @@ export default function Chat() {
       )
     }
     return lista
-  }, [conversaciones, tab, mundo, filtroEtiqueta, busqueda])
+  }, [conversaciones, tab, mundo, filtroEtiqueta, busqueda, soloSinRespuesta, ahora])
 
   const etiquetaPorId = useMemo(() => {
     const m = new Map()
@@ -368,6 +394,54 @@ export default function Chat() {
               >
                 <Pencil className="w-3 h-3" />
               </button>
+            </div>
+          )}
+
+          {/* Sin respuesta + campaña a la lista filtrada */}
+          <div className="flex items-center gap-2 mt-2.5">
+            <button
+              onClick={() => setSoloSinRespuesta((v) => !v)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors ${
+                soloSinRespuesta ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+              }`}
+              title="Les escribimos y no contestaron en 7 dias"
+            >
+              <Clock className="w-3 h-3" />
+              Sin respuesta +7d
+            </button>
+            {filtradas.length > 0 && (
+              <button
+                onClick={() => setCampanaAbierta(true)}
+                className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-green-600 text-white hover:bg-green-700"
+                title="Enviar una plantilla a todas las conversaciones de esta lista"
+              >
+                <Megaphone className="w-3 h-3" />
+                Campaña a {filtradas.length}
+              </button>
+            )}
+          </div>
+
+          {campanaEnCurso && (
+            <div className="mt-2.5 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-green-800 truncate">{campanaEnCurso.titulo}</span>
+                <button onClick={() => setCampanaEnCurso(null)} className="text-green-600 hover:text-green-800" aria-label="Ocultar">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div className="h-1.5 bg-green-100 rounded-full mt-1.5 overflow-hidden">
+                <div
+                  className="h-full bg-green-600 transition-all"
+                  style={{ width: `${Math.round(((campanaEnCurso.enviados || 0) + (campanaEnCurso.fallidos || 0) + (campanaEnCurso.omitidos || 0)) / Math.max(1, campanaEnCurso.total) * 100)}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-green-800 mt-1">
+                {campanaEnCurso.enviados || 0} enviados
+                {campanaEnCurso.fallidos ? ` · ${campanaEnCurso.fallidos} fallidos` : ''}
+                {campanaEnCurso.omitidos ? ` · ${campanaEnCurso.omitidos} omitidos (baja)` : ''}
+                {' '}de {campanaEnCurso.total}
+                {campanaEnCurso.estado === 'terminada' ? ' · terminada' : ''}
+              </p>
             </div>
           )}
         </div>
@@ -598,6 +672,20 @@ export default function Chat() {
               </div>
             </header>
 
+            {activa.optOut && (
+              <div className="px-4 py-2 bg-red-50 border-b border-red-200 flex items-center justify-between gap-3">
+                <p className="text-xs text-red-800">
+                  Este contacto pidió no recibir más mensajes. Las campañas lo saltan.
+                </p>
+                <button
+                  onClick={() => revertirBaja(activaId).then(() => toast.success('Baja revertida')).catch(() => toast.error('No se pudo revertir'))}
+                  className="text-xs font-semibold text-red-700 underline whitespace-nowrap"
+                >
+                  Revertir
+                </button>
+              </div>
+            )}
+
             {/* Etiquetas puestas, visibles bajo la cabecera */}
             {(activa.etiquetas || []).length > 0 && (
               <div className="px-4 py-1.5 bg-white border-b border-gray-100 flex gap-1.5 flex-wrap">
@@ -676,7 +764,12 @@ export default function Chat() {
                           : 'bg-white border border-gray-200 text-gray-900 rounded-bl-sm'
                       }`}
                     >
-                      {(m.tipo === 'image' || m.tipo === 'sticker') && m.media?.url && (
+                      {m.tipo === 'template' && (
+                        <span className={`inline-block text-[10px] font-semibold uppercase tracking-wide mb-1 ${mio ? 'text-green-200' : 'text-gray-400'}`}>
+                          Plantilla
+                        </span>
+                      )}
+                      {(m.tipo === 'image' || m.tipo === 'sticker' || m.tipo === 'template') && m.media?.url && (
                         <a href={m.media.url} target="_blank" rel="noopener noreferrer">
                           <img
                             src={m.media.url}
@@ -786,6 +879,13 @@ export default function Chat() {
                       que se cobra aparte. Si te vuelve a escribir, la ventana se reabre.
                     </p>
                   </div>
+                  <button
+                    onClick={() => setSelectorAbierto(true)}
+                    className="ml-auto flex-none inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-amber-600 text-white rounded-lg hover:bg-amber-700"
+                  >
+                    <LayoutTemplate className="w-4 h-4" />
+                    Enviar plantilla
+                  </button>
                 </div>
               </div>
             )}
@@ -859,6 +959,37 @@ export default function Chat() {
             />
           </div>
         </div>
+      )}
+
+      {selectorAbierto && activa && (
+        <SelectorPlantilla
+          titulo={`Plantilla para ${activa.nombre || formatearNumero(activa.waId)}`}
+          destinatarios={1}
+          onCerrar={() => setSelectorAbierto(false)}
+          onEnviar={async (plantilla, valores) => {
+            const idToken = await getAuth().currentUser?.getIdToken()
+            await enviarPlantilla(activaId, plantilla, valores, idToken)
+            toast.success('Plantilla enviada')
+            setSelectorAbierto(false)
+          }}
+        />
+      )}
+
+      {campanaAbierta && (
+        <SelectorPlantilla
+          titulo="Campaña"
+          modoCampana
+          destinatarios={filtradas.length}
+          onCerrar={() => setCampanaAbierta(false)}
+          onEnviar={async (plantilla, valores) => {
+            const idToken = await getAuth().currentUser?.getIdToken()
+            const tituloCamp = `${plantilla.name} · ${filtradas.length} contactos`
+            const r = await enviarCampana(filtradas.map((c) => c.id), plantilla, valores, tituloCamp, idToken)
+            setCampanaEnCurso({ id: r.campaignId, titulo: tituloCamp, total: filtradas.length, enviados: 0 })
+            setCampanaAbierta(false)
+            toast.success('Campaña en marcha')
+          }}
+        />
       )}
 
       {gestorAbierto && (

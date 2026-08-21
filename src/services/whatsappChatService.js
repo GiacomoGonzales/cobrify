@@ -301,6 +301,96 @@ export const desvincularConversacion = (conversationId) =>
     updatedAt: serverTimestamp(),
   })
 
+// =================== PLANTILLAS Y CAMPAÑAS (Fase 4) ===================
+// Fuera de la ventana de 24 horas solo se puede escribir con una plantilla
+// aprobada por Meta. El catálogo vive en whatsappSettings/plantillas y lo
+// actualiza el servidor (sincronizarPlantillas); acá solo se lee y se envía.
+
+const FN = (nombre) => `https://us-central1-cobrify-395fe.cloudfunctions.net/${nombre}`
+
+const postConToken = async (url, cuerpo, idToken) => {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+    body: JSON.stringify(cuerpo),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || 'La operación falló')
+  return data
+}
+
+export const suscribirPlantillas = (onChange) =>
+  onSnapshot(doc(db, 'whatsappSettings', 'plantillas'), (snap) => {
+    onChange(snap.exists() ? (snap.data().lista || []) : [], snap.data()?.syncedAt?.toDate?.() || null)
+  }, (e) => console.error('Error leyendo plantillas:', e))
+
+export const sincronizarPlantillas = (idToken) =>
+  postConToken(FN('syncWhatsappTemplates'), {}, idToken)
+
+export const enviarPlantilla = (conversationId, plantilla, valores, idToken) =>
+  postConToken(FN('sendWhatsappTemplateMessage'), {
+    conversationId,
+    templateName: plantilla.name,
+    language: plantilla.language,
+    bodyValues: valores.body || [],
+    headerText: valores.headerText || null,
+    headerImageUrl: valores.headerImageUrl || null,
+  }, idToken)
+
+export const enviarCampana = (conversationIds, plantilla, valores, titulo, idToken) =>
+  postConToken(FN('sendWhatsappCampaign'), {
+    conversationIds,
+    templateName: plantilla.name,
+    language: plantilla.language,
+    bodyValues: valores.body || [],
+    headerText: valores.headerText || null,
+    headerImageUrl: valores.headerImageUrl || null,
+    titulo,
+  }, idToken)
+
+export const suscribirCampana = (campaignId, onChange) =>
+  onSnapshot(doc(db, 'whatsappCampaigns', campaignId), (snap) => {
+    if (snap.exists()) onChange({ id: snap.id, ...snap.data() })
+  })
+
+/** Revertir una baja voluntaria marcada por error. */
+export const revertirBaja = (conversationId) =>
+  updateDoc(doc(db, 'whatsappConversations', conversationId), {
+    optOut: false,
+    updatedAt: serverTimestamp(),
+  })
+
+/** Cuántos {{n}} pide el cuerpo de una plantilla. */
+export const variablesDelCuerpo = (plantilla) => {
+  const body = (plantilla?.components || []).find((c) => c.type === 'BODY')
+  const nums = [...String(body?.text || '').matchAll(/\{\{(\d+)\}\}/g)].map((m) => Number(m[1]))
+  return nums.length ? Math.max(...nums) : 0
+}
+
+/** Qué cabecera tiene la plantilla: null, 'TEXT' (con o sin variable) o 'IMAGE'. */
+export const cabeceraDe = (plantilla) => {
+  const h = (plantilla?.components || []).find((c) => c.type === 'HEADER')
+  if (!h) return null
+  return { formato: h.format, conVariable: h.format === 'TEXT' && /\{\{1\}\}/.test(h.text || ''), texto: h.text || null }
+}
+
+/** Texto final con los valores puestos, para la vista previa. */
+export const previsualizarPlantilla = (plantilla, valores) => {
+  const partes = []
+  for (const c of plantilla?.components || []) {
+    if (c.type === 'HEADER' && c.format === 'TEXT' && c.text) {
+      partes.push(valores.headerText ? c.text.replace('{{1}}', valores.headerText) : c.text)
+    } else if (c.type === 'BODY' && c.text) {
+      let t = c.text
+      ;(valores.body || []).forEach((v, i) => { t = t.split(`{{${i + 1}}}`).join(v || `{{${i + 1}}}`) })
+      partes.push(t)
+    } else if (c.type === 'FOOTER' && c.text) {
+      partes.push(c.text)
+    }
+  }
+  return partes.join('\n\n')
+}
+
 /** Id legible a partir del nombre: "Cliente VIP" -> "cliente-vip" */
 export const idParaEtiqueta = (nombre) =>
   nombre.trim().toLowerCase()

@@ -117,7 +117,7 @@ service cloud.firestore {
         request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['estado', 'etiquetas', 'nota', 'sinLeer',
                     'linkedBusinessId', 'linkedBusinessName', 'linkedBy',
-                    'linkAttempted', 'updatedAt']);
+                    'linkAttempted', 'optOut', 'optOutAt', 'updatedAt']);
       allow create, delete: if false;
 
       match /messages/{messageId} {
@@ -130,6 +130,17 @@ service cloud.firestore {
     // desde la propia pantalla.
     match /whatsappSettings/{docId} {
       allow read, write: if isAdmin();
+    }
+
+    // Campañas de plantillas: las crea y avanza el servidor; la pantalla solo
+    // sigue el progreso.
+    match /whatsappCampaigns/{campaignId} {
+      allow read: if isAdmin();
+      allow write: if false;
+      match /destinatarios/{convId} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
     }
 
     // Config collection (configuración del sistema)

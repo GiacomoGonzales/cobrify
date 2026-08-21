@@ -28,7 +28,7 @@ import {
 } from './src/services/cloudinaryAdmin.js'
 import { migrateUrlToR2, isR2Url, isFirebaseStorageUrl, putObjectToR2 } from './src/services/r2Admin.js'
 import { processSaleStock as runProcessSaleStock } from './src/services/saleStockService.js'
-import { verifyWhatsappSignature, parseWhatsappWebhook, VENTANA_24H_MS, sendWhatsappText, sendWhatsappMedia, downloadWhatsappMedia, extensionDeMime, extraerPrimeraUrl, obtenerVistaPreviaDeEnlace } from './src/services/whatsappService.js'
+import { verifyWhatsappSignature, parseWhatsappWebhook, VENTANA_24H_MS, sendWhatsappText, sendWhatsappMedia, downloadWhatsappMedia, extensionDeMime, extraerPrimeraUrl, obtenerVistaPreviaDeEnlace, listWhatsappTemplates, sendWhatsappTemplate, renderTemplateText, pareceBajaVoluntaria } from './src/services/whatsappService.js'
 import {
   upsertLoyaltyClass as walletUpsertClass, upsertLoyaltyObject as walletUpsertObject,
   linkAgregarAWallet as walletSaveLink, notificarTarjeta as walletNotify,
@@ -13378,6 +13378,9 @@ async function guardarMensajeEntrante(m) {
     // cliente que cree que lo ignoraron.
     estado: 'abierta',
     ...vinculo,
+    // Baja voluntaria: "no enviar mas", "baja", "stop"... queda marcado y las
+    // campañas lo saltan para siempre. Reversible a mano desde la ficha.
+    ...(pareceBajaVoluntaria(m.texto) ? { optOut: true, optOutAt: FieldValue.serverTimestamp() } : {}),
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true })
 
@@ -13866,6 +13869,231 @@ export const sendWhatsappMediaMessage = onRequest(
     } catch (error) {
       console.error('[WhatsApp] Error al enviar archivo:', error.message, error.metaCode || '')
       res.status(500).json({ error: error.message || 'No se pudo enviar el archivo' })
+    }
+  }
+)
+
+// ============================================================
+// WHATSAPP — PLANTILLAS Y CAMPAÑAS (Fase 4 del CRM)
+//
+// Todo lo anterior responde a quien escribe. Esto es lo que deja escribir
+// PRIMERO: reabrir una conversacion con la ventana cerrada, y campañas a una
+// lista. Solo con plantillas aprobadas por Meta, que es la unica forma que
+// WhatsApp permite fuera de las 24 horas.
+// ============================================================
+
+/** Autenticacion + permiso de admin o dueno de la cuenta. Devuelve el uid o responde el error. */
+async function autorizarAdminWa(req, res) {
+  const authHeader = req.headers.authorization
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    res.status(401).json({ error: 'No autorizado' }); return null
+  }
+  const decoded = await auth.verifyIdToken(authHeader.split('Bearer ')[1])
+  const esAdmin = (await db.collection('admins').doc(decoded.uid).get()).exists
+  if (!esAdmin) { res.status(403).json({ error: 'Solo administradores' }); return null }
+  return decoded.uid
+}
+
+/**
+ * Trae las plantillas de la cuenta de WhatsApp y las guarda en
+ * whatsappSettings/plantillas. La bandeja las lee de ahi; este endpoint es el
+ * boton "Actualizar" y lo que corre solo al abrir el selector.
+ */
+export const syncWhatsappTemplates = onRequest(
+  {
+    region: 'us-central1', timeoutSeconds: 60, memory: '256MiB', cors: true,
+    secrets: ['WHATSAPP_TOKEN'],
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return }
+    try {
+      if (!(await autorizarAdminWa(req, res))) return
+
+      // El WABA sale de la cuenta registrada; con varias cuentas se pasa el
+      // phoneNumberId. Hoy hay una sola: se toma la primera activa.
+      const { phoneNumberId } = req.body || {}
+      const cuentaSnap = phoneNumberId
+        ? await db.collection('whatsappAccounts').doc(phoneNumberId).get()
+        : (await db.collection('whatsappAccounts').where('activo', '==', true).limit(1).get()).docs[0]
+      const wabaId = cuentaSnap?.data()?.wabaId
+      if (!wabaId) { res.status(400).json({ error: 'La cuenta no tiene WABA registrado' }); return }
+
+      const lista = await listWhatsappTemplates({ token: process.env.WHATSAPP_TOKEN, wabaId })
+      await db.collection('whatsappSettings').doc('plantillas').set({
+        lista, wabaId, syncedAt: FieldValue.serverTimestamp(),
+      })
+      res.status(200).json({ success: true, total: lista.length })
+    } catch (error) {
+      console.error('[WhatsApp] Error sincronizando plantillas:', error.message)
+      res.status(500).json({ error: error.message })
+    }
+  }
+)
+
+/**
+ * Envia UNA plantilla a una conversacion (tipicamente con la ventana cerrada).
+ * No exige ventana abierta: para eso existen las plantillas.
+ */
+async function enviarPlantillaAConversacion({ convRef, conv, plantilla, bodyValues, headerText, headerImageUrl, uid, campaignId }) {
+  const { waMessageId } = await sendWhatsappTemplate({
+    token: process.env.WHATSAPP_TOKEN,
+    phoneNumberId: conv.phoneNumberId,
+    to: conv.waId,
+    name: plantilla.name,
+    language: plantilla.language,
+    bodyValues, headerText, headerImageUrl,
+  })
+  const textoFinal = renderTemplateText(plantilla.components, bodyValues, headerText)
+  const ahora = Timestamp.now()
+  await convRef.collection('messages').doc(waMessageId).set({
+    direccion: 'saliente',
+    waMessageId,
+    waId: conv.waId,
+    tipo: 'template',
+    texto: textoFinal,
+    plantilla: { name: plantilla.name, category: plantilla.category, language: plantilla.language },
+    ...(headerImageUrl ? { media: { url: headerImageUrl, mimeType: null, filename: null } } : {}),
+    ...(campaignId ? { campaignId } : {}),
+    estado: 'enviado',
+    enviadoPor: uid,
+    timestamp: ahora,
+    createdAt: FieldValue.serverTimestamp(),
+  })
+  await convRef.set({
+    ultimoMensaje: textoFinal.slice(0, 120),
+    ultimoMensajeAt: ahora,
+    ultimaDireccion: 'saliente',
+    ultimaPlantillaAt: ahora,
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true })
+  return waMessageId
+}
+
+async function leerPlantilla(name, language) {
+  const snap = await db.collection('whatsappSettings').doc('plantillas').get()
+  const lista = snap.data()?.lista || []
+  return lista.find(t => t.name === name && (!language || t.language === language)) || null
+}
+
+export const sendWhatsappTemplateMessage = onRequest(
+  {
+    region: 'us-central1', timeoutSeconds: 60, memory: '256MiB', cors: true,
+    secrets: ['WHATSAPP_TOKEN'],
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return }
+    try {
+      const uid = await autorizarAdminWa(req, res)
+      if (!uid) return
+
+      const { conversationId, templateName, language, bodyValues = [], headerText = null, headerImageUrl = null } = req.body || {}
+      if (!conversationId || !templateName) {
+        res.status(400).json({ error: 'Faltan la conversacion o la plantilla' }); return
+      }
+      const convRef = db.collection('whatsappConversations').doc(conversationId)
+      const convSnap = await convRef.get()
+      if (!convSnap.exists) { res.status(404).json({ error: 'La conversacion no existe' }); return }
+      const conv = convSnap.data()
+      if (conv.optOut === true) {
+        res.status(409).json({ error: 'Este contacto pidio no recibir mas mensajes. Se respeta, salvo que lo reviertas desde la ficha.' }); return
+      }
+
+      const plantilla = await leerPlantilla(templateName, language)
+      if (!plantilla) { res.status(400).json({ error: 'Plantilla desconocida: actualiza el catalogo' }); return }
+      if (plantilla.status !== 'APPROVED') {
+        res.status(400).json({ error: `La plantilla esta en estado ${plantilla.status}; solo se envian aprobadas` }); return
+      }
+
+      const waMessageId = await enviarPlantillaAConversacion({
+        convRef, conv, plantilla, bodyValues, headerText, headerImageUrl, uid,
+      })
+      res.status(200).json({ success: true, waMessageId })
+    } catch (error) {
+      console.error('[WhatsApp] Error enviando plantilla:', error.message, error.metaDetails || '')
+      res.status(500).json({ error: error.metaDetails || error.message })
+    }
+  }
+)
+
+/**
+ * Campaña: la misma plantilla a una lista de conversaciones, en serie y con
+ * pausa. El progreso se escribe en whatsappCampaigns/{id} y la pantalla lo
+ * sigue en vivo. Los valores del cuerpo pueden usar {nombre} y {negocio}, que
+ * se reemplazan por contacto.
+ *
+ * Se respeta la baja voluntaria (optOut) y nunca se repite el mismo contacto
+ * dentro de una campaña.
+ */
+export const sendWhatsappCampaign = onRequest(
+  {
+    region: 'us-central1', timeoutSeconds: 540, memory: '512MiB', cors: true,
+    secrets: ['WHATSAPP_TOKEN'],
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return }
+    try {
+      const uid = await autorizarAdminWa(req, res)
+      if (!uid) return
+
+      const { conversationIds = [], templateName, language, bodyValues = [], headerText = null, headerImageUrl = null, titulo = '' } = req.body || {}
+      const ids = [...new Set(conversationIds)].slice(0, 300)
+      if (!ids.length || !templateName) {
+        res.status(400).json({ error: 'Faltan los destinatarios o la plantilla' }); return
+      }
+      const plantilla = await leerPlantilla(templateName, language)
+      if (!plantilla || plantilla.status !== 'APPROVED') {
+        res.status(400).json({ error: 'La plantilla no existe o no esta aprobada' }); return
+      }
+
+      const campRef = db.collection('whatsappCampaigns').doc()
+      await campRef.set({
+        titulo: titulo || plantilla.name,
+        plantilla: plantilla.name,
+        total: ids.length, enviados: 0, fallidos: 0, omitidos: 0,
+        estado: 'en_curso',
+        creadaPor: uid,
+        createdAt: FieldValue.serverTimestamp(),
+      })
+      // Se responde YA con el id: la pantalla sigue el progreso por
+      // suscripcion mientras esta funcion sigue enviando.
+      res.status(202).json({ success: true, campaignId: campRef.id })
+
+      let enviados = 0, fallidos = 0, omitidos = 0
+      for (const convId of ids) {
+        try {
+          const convRef = db.collection('whatsappConversations').doc(convId)
+          const conv = (await convRef.get()).data()
+          if (!conv || conv.optOut === true) { omitidos++; continue }
+
+          const nombre = conv.nombre || ''
+          const negocio = conv.linkedBusinessName || ''
+          const valores = bodyValues.map(v => String(v ?? '')
+            .replace(/\{nombre\}/gi, nombre).replace(/\{negocio\}/gi, negocio))
+
+          await enviarPlantillaAConversacion({
+            convRef, conv, plantilla, bodyValues: valores, headerText, headerImageUrl, uid, campaignId: campRef.id,
+          })
+          enviados++
+          await campRef.collection('destinatarios').doc(convId).set({ estado: 'enviado', at: FieldValue.serverTimestamp() })
+        } catch (e) {
+          fallidos++
+          await campRef.collection('destinatarios').doc(convId).set({ estado: 'fallido', error: e.message, at: FieldValue.serverTimestamp() })
+        }
+        await campRef.set({ enviados, fallidos, omitidos }, { merge: true })
+        // Pausa entre envios: amable con el limite de Meta y con la cuenta.
+        await new Promise(r => setTimeout(r, 350))
+      }
+      await campRef.set({ estado: 'terminada', finishedAt: FieldValue.serverTimestamp() }, { merge: true })
+      console.log(`[WhatsApp] Campaña ${campRef.id}: ${enviados} enviados, ${fallidos} fallidos, ${omitidos} omitidos`)
+    } catch (error) {
+      console.error('[WhatsApp] Error en campaña:', error.message)
+      if (!res.headersSent) res.status(500).json({ error: error.message })
     }
   }
 )

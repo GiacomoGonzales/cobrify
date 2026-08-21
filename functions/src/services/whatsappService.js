@@ -336,3 +336,114 @@ function decodificarEntidades(t) {
     .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&nbsp;/g, ' ')
 }
+
+// =================== PLANTILLAS (Fase 4) ===================
+// Fuera de la ventana de 24 horas, WhatsApp solo deja escribir con una
+// plantilla aprobada por Meta. Las plantillas viven en la cuenta de WhatsApp
+// (WABA), no en la app: se listan por la API y se guardan en Firestore para
+// que la bandeja las tenga a mano sin consultar Meta cada vez.
+
+/** Lista las plantillas de la cuenta, con su estado y sus componentes. */
+export async function listWhatsappTemplates({ token, wabaId }) {
+  const todas = []
+  let url = `https://graph.facebook.com/${GRAPH_VERSION}/${wabaId}/message_templates`
+    + '?fields=name,status,category,language,components,rejected_reason&limit=100'
+  while (url) {
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data?.error?.message || `Error ${res.status} listando plantillas`)
+    todas.push(...(data.data || []))
+    url = data.paging?.next || null
+  }
+  return todas.map(t => ({
+    id: t.id,
+    name: t.name,
+    status: t.status,
+    category: t.category,
+    language: t.language,
+    rejectedReason: t.rejected_reason || null,
+    // Se conserva la estructura tal cual la manda Meta: HEADER (TEXT/IMAGE/...),
+    // BODY con {{n}}, FOOTER y BUTTONS. La bandeja la usa para pedir los
+    // valores y para armar la vista previa.
+    components: t.components || [],
+  }))
+}
+
+/**
+ * Texto final de una plantilla con sus valores puestos, para guardarlo en el
+ * mensaje y mostrarlo en la bandeja tal como lo vio el cliente.
+ */
+export function renderTemplateText(components, bodyValues = [], headerText = null) {
+  const partes = []
+  for (const c of components || []) {
+    if (c.type === 'HEADER' && c.format === 'TEXT' && c.text) {
+      partes.push(headerText ? c.text.replace('{{1}}', headerText) : c.text)
+    } else if (c.type === 'BODY' && c.text) {
+      let t = c.text
+      bodyValues.forEach((v, i) => { t = t.split(`{{${i + 1}}}`).join(v ?? '') })
+      partes.push(t)
+    } else if (c.type === 'FOOTER' && c.text) {
+      partes.push(c.text)
+    }
+  }
+  return partes.join('\n\n')
+}
+
+/**
+ * Envia una plantilla. Arma los componentes con parametros en el formato de
+ * Meta: cabecera (texto o imagen por URL) y cuerpo ({{1}}, {{2}}...).
+ */
+export async function sendWhatsappTemplate({
+  token, phoneNumberId, to, name, language,
+  bodyValues = [], headerText = null, headerImageUrl = null,
+}) {
+  const components = []
+  if (headerImageUrl) {
+    components.push({ type: 'header', parameters: [{ type: 'image', image: { link: headerImageUrl } }] })
+  } else if (headerText) {
+    components.push({ type: 'header', parameters: [{ type: 'text', text: headerText }] })
+  }
+  if (bodyValues.length) {
+    components.push({
+      type: 'body',
+      parameters: bodyValues.map(v => ({ type: 'text', text: String(v ?? '') })),
+    })
+  }
+
+  const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: 'template',
+      template: {
+        name,
+        language: { code: language || 'es' },
+        ...(components.length ? { components } : {}),
+      },
+    }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const err = new Error(data?.error?.message || `Error ${res.status} de Meta`)
+    err.metaCode = data?.error?.code || null
+    err.metaDetails = data?.error?.error_data?.details || null
+    throw err
+  }
+  const waMessageId = data?.messages?.[0]?.id
+  if (!waMessageId) throw new Error('Meta acepto la plantilla pero no devolvio el id del mensaje')
+  return { waMessageId }
+}
+
+/**
+ * Baja voluntaria: si el cliente pide que no le escriban mas, se respeta para
+ * siempre en campanas. Se detecta con frases tipicas; el admin puede
+ * revertirlo a mano desde la ficha si fue un malentendido.
+ */
+export function pareceBajaVoluntaria(texto) {
+  const t = String(texto || '').trim().toLowerCase()
+  if (!t || t.length > 80) return false
+  return /^(no enviar|no me envi|no quiero recibir|no mas mensajes|no m[aá]s mensajes|baja|stop|cancelar|dar de baja|darme de baja|dejen de escribir|no me escriban|no molestar)/.test(t)
+}
