@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import FichaCliente from '@/components/chat/FichaCliente'
 import TextoWhatsapp, { TarjetaEnlace } from '@/components/chat/TextoWhatsapp'
+import MiniaturaPdf, { formatoKB } from '@/components/chat/MiniaturaPdf'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import {
@@ -669,7 +670,7 @@ export default function Chat() {
                 return (
                   <div key={m.id} className={`flex ${mio ? 'justify-end' : 'justify-start'}`}>
                     <div
-                      className={`${m.linkPreview ? 'w-72 max-w-[85%]' : 'max-w-[75%]'} rounded-2xl px-3.5 py-2 ${
+                      className={`${m.linkPreview || m.tipo === 'document' ? 'w-72 max-w-[85%]' : 'max-w-[75%]'} rounded-2xl px-3.5 py-2 ${
                         mio
                           ? 'bg-green-600 text-white rounded-br-sm'
                           : 'bg-white border border-gray-200 text-gray-900 rounded-bl-sm'
@@ -692,19 +693,7 @@ export default function Chat() {
                         <audio src={m.media.url} controls className="mb-1 max-w-full" />
                       )}
                       {m.tipo === 'document' && m.media?.url && (
-                        <a
-                          href={m.media.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={`flex items-center gap-2 rounded-lg px-3 py-2 mb-1 ${
-                            mio ? 'bg-green-700/60' : 'bg-gray-100'
-                          }`}
-                        >
-                          <FileText className={`w-5 h-5 flex-none ${mio ? 'text-green-100' : 'text-gray-500'}`} />
-                          <span className="text-sm truncate max-w-[180px]">
-                            {m.media.filename || 'Documento'}
-                          </span>
-                        </a>
+                        <BurbujaDocumento media={m.media} mio={mio} />
                       )}
                       {['image', 'sticker', 'video', 'audio', 'document'].includes(m.tipo) && !m.media?.url && (
                         <p className="text-sm italic opacity-75 mb-1">
@@ -887,6 +876,43 @@ export default function Chat() {
         />
       )}
     </div>
+  )
+}
+
+/**
+ * Tarjeta de un documento, como la muestra WhatsApp: miniatura de la primera
+ * pagina (si es PDF y se pudo dibujar), nombre, paginas y tamano. La miniatura
+ * se rasteriza en el navegador desde nuestra copia en R2 — vale igual para
+ * enviados y recibidos, incluso los de antes de este cambio.
+ */
+function BurbujaDocumento({ media, mio }) {
+  const [info, setInfo] = useState(null)
+  const esPdf = /\.pdf($|\?)/i.test(media.url) || media.mimeType === 'application/pdf'
+
+  return (
+    <a
+      href={media.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`block rounded-lg overflow-hidden mb-1 ${mio ? 'bg-green-700/50' : 'bg-gray-100'}`}
+    >
+      {esPdf && <MiniaturaPdf url={media.url} onDatos={setInfo} />}
+      <div className="flex items-center gap-2.5 px-3 py-2.5">
+        <div className="w-9 h-9 rounded-lg bg-red-500 flex items-center justify-center flex-none">
+          <FileText className="w-5 h-5 text-white" />
+        </div>
+        <div className="min-w-0">
+          <p className={`text-sm font-medium truncate ${mio ? 'text-white' : 'text-gray-900'}`}>
+            {media.filename || 'Documento'}
+          </p>
+          <p className={`text-xs ${mio ? 'text-green-100' : 'text-gray-500'}`}>
+            {info ? `${info.paginas} pagina${info.paginas === 1 ? '' : 's'} · ` : ''}
+            {esPdf ? 'PDF' : 'Archivo'}
+            {info?.tamano ? ` · ${formatoKB(info.tamano)}` : ''}
+          </p>
+        </div>
+      </div>
+    </a>
   )
 }
 
