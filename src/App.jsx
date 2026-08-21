@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { BrandingProvider } from './contexts/BrandingContext'
@@ -8,136 +8,162 @@ import MainLayout from './layouts/MainLayout'
 import LandingRouter from './components/LandingRouter'
 import { Capacitor } from '@capacitor/core'
 import { StatusBar, Style } from '@capacitor/status-bar'
-import Login from './pages/Login'
-import Register from './pages/Register'
-import Dashboard from './pages/Dashboard'
-import InvoiceList from './pages/InvoiceList'
-import Customers from './pages/Customers'
-import Promotions from './pages/Promotions'
-import Products from './pages/Products'
-import Settings from './pages/Settings'
-import POS from './pages/POS'
-import Inventory from './pages/Inventory'
-import Warehouses from './pages/Warehouses'
-import BusinessCreate from './pages/BusinessCreate'
-import CreateCreditNote from './pages/CreateCreditNote'
-import CreateDebitNote from './pages/CreateDebitNote'
-import Reports from './pages/Reports'
-import MetaAdsExport from './pages/MetaAdsExport'
-import Suppliers from './pages/Suppliers'
-import Purchases from './pages/Purchases'
-import CreatePurchase from './pages/CreatePurchase'
-import PurchaseOrders from './pages/PurchaseOrders'
-import CashRegister from './pages/CashRegister'
-import AccountSuspended from './pages/AccountSuspended'
-import MySubscription from './pages/MySubscription'
-import Manual from './pages/Manual'
-import UserManagement from './pages/admin/UserManagement'
+// ============================================================
+// CARGA BAJO DEMANDA DE LAS PANTALLAS
+//
+// Cada pantalla se descarga recien cuando se entra a su ruta. Antes estaban
+// todas en un solo archivo de ~9 MB: abrir el chat, o el login, bajaba tambien
+// el punto de venta, el inventario, los reportes y todo el panel de
+// administracion antes de mostrar nada.
+//
+// Los LAYOUTS quedan de carga normal: son chicos y envuelven a todas las
+// rutas, asi que dividirlos solo agregaria una espera mas.
+//
+// El service worker igual precachea todo DESPUES de la primera carga, en
+// segundo plano: el modo sin conexion (ventas del POS) se mantiene intacto.
+// ============================================================
+const Login = lazy(() => import('./pages/Login'))
+const Register = lazy(() => import('./pages/Register'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const InvoiceList = lazy(() => import('./pages/InvoiceList'))
+const Customers = lazy(() => import('./pages/Customers'))
+const Promotions = lazy(() => import('./pages/Promotions'))
+const Products = lazy(() => import('./pages/Products'))
+const Settings = lazy(() => import('./pages/Settings'))
+const POS = lazy(() => import('./pages/POS'))
+const Inventory = lazy(() => import('./pages/Inventory'))
+const Warehouses = lazy(() => import('./pages/Warehouses'))
+const BusinessCreate = lazy(() => import('./pages/BusinessCreate'))
+const CreateCreditNote = lazy(() => import('./pages/CreateCreditNote'))
+const CreateDebitNote = lazy(() => import('./pages/CreateDebitNote'))
+const Reports = lazy(() => import('./pages/Reports'))
+const MetaAdsExport = lazy(() => import('./pages/MetaAdsExport'))
+const Suppliers = lazy(() => import('./pages/Suppliers'))
+const Purchases = lazy(() => import('./pages/Purchases'))
+const CreatePurchase = lazy(() => import('./pages/CreatePurchase'))
+const PurchaseOrders = lazy(() => import('./pages/PurchaseOrders'))
+const CashRegister = lazy(() => import('./pages/CashRegister'))
+const AccountSuspended = lazy(() => import('./pages/AccountSuspended'))
+const MySubscription = lazy(() => import('./pages/MySubscription'))
+const Manual = lazy(() => import('./pages/Manual'))
+const UserManagement = lazy(() => import('./pages/admin/UserManagement'))
 import AdminLayout from './layouts/AdminLayout'
-import AdminDashboard from './pages/admin/AdminDashboard'
-import AdminUsers from './pages/admin/AdminUsers'
-import AdminPayments from './pages/admin/AdminPayments'
-import AdminAnalytics from './pages/admin/AdminAnalytics'
-import AdminInvestorReport from './pages/admin/AdminInvestorReport'
-import AdminSettings from './pages/admin/AdminSettings'
-import AdminResellers from './pages/admin/AdminResellers'
-import AdminExpirations from './pages/admin/AdminExpirations'
-import AdminPlanDistribution from './pages/admin/AdminPlanDistribution'
-import AdminNotifications from './pages/admin/AdminNotifications'
+const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'))
+const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'))
+const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'))
+const AdminAnalytics = lazy(() => import('./pages/admin/AdminAnalytics'))
+const AdminInvestorReport = lazy(() => import('./pages/admin/AdminInvestorReport'))
+const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'))
+const AdminResellers = lazy(() => import('./pages/admin/AdminResellers'))
+const AdminExpirations = lazy(() => import('./pages/admin/AdminExpirations'))
+const AdminPlanDistribution = lazy(() => import('./pages/admin/AdminPlanDistribution'))
+const AdminNotifications = lazy(() => import('./pages/admin/AdminNotifications'))
 // Reseller pages
 import ResellerLayout from './layouts/ResellerLayout'
-import ResellerDashboard from './pages/reseller/ResellerDashboard'
-import ResellerClients from './pages/reseller/ResellerClients'
-import CreateResellerClient from './pages/reseller/CreateResellerClient'
-import ResellerBalance from './pages/reseller/ResellerBalance'
-import ResellerSettings from './pages/reseller/ResellerSettings'
-import Users from './pages/Users'
-import BusinessManagement from './pages/BusinessManagement'
-import GetMyUID from './pages/GetMyUID'
-import NotificationTest from './pages/NotificationTest'
-import Quotations from './pages/Quotations'
-import BulkEmission from './pages/BulkEmission'
-import CreateQuotation from './pages/CreateQuotation'
-import StockMovements from './pages/StockMovements'
-import Demo from './pages/Demo'
+const ResellerDashboard = lazy(() => import('./pages/reseller/ResellerDashboard'))
+const ResellerClients = lazy(() => import('./pages/reseller/ResellerClients'))
+const CreateResellerClient = lazy(() => import('./pages/reseller/CreateResellerClient'))
+const ResellerBalance = lazy(() => import('./pages/reseller/ResellerBalance'))
+const ResellerSettings = lazy(() => import('./pages/reseller/ResellerSettings'))
+const Users = lazy(() => import('./pages/Users'))
+const GetMyUID = lazy(() => import('./pages/GetMyUID'))
+const NotificationTest = lazy(() => import('./pages/NotificationTest'))
+const Quotations = lazy(() => import('./pages/Quotations'))
+const BulkEmission = lazy(() => import('./pages/BulkEmission'))
+const CreateQuotation = lazy(() => import('./pages/CreateQuotation'))
+const StockMovements = lazy(() => import('./pages/StockMovements'))
+const Demo = lazy(() => import('./pages/Demo'))
 import DemoLayout from './layouts/DemoLayout'
-import DemoRestaurant from './pages/DemoRestaurant'
+const DemoRestaurant = lazy(() => import('./pages/DemoRestaurant'))
 import DemoRestaurantLayout from './layouts/DemoRestaurantLayout'
-import DemoPharmacy from './pages/DemoPharmacy'
+const DemoPharmacy = lazy(() => import('./pages/DemoPharmacy'))
 import DemoPharmacyLayout from './layouts/DemoPharmacyLayout'
-import DemoHotel from './pages/DemoHotel'
+const DemoHotel = lazy(() => import('./pages/DemoHotel'))
 import DemoHotelLayout from './layouts/DemoHotelLayout'
-import DemoVeterinary from './pages/DemoVeterinary'
+const DemoVeterinary = lazy(() => import('./pages/DemoVeterinary'))
 import DemoVeterinaryLayout from './layouts/DemoVeterinaryLayout'
-import DemoLogistics from './pages/DemoLogistics'
+const DemoLogistics = lazy(() => import('./pages/DemoLogistics'))
 import DemoLogisticsLayout from './layouts/DemoLogisticsLayout'
 // Restaurant pages
-import Tables from './pages/Tables'
-import Waiters from './pages/Waiters'
-import Sellers from './pages/Sellers'
-import Attendance from './pages/Attendance'
-import MySchedule from './pages/MySchedule'
-import Orders from './pages/Orders'
-import OnlineOrders from './pages/OnlineOrders'
-import RappiOrders from './pages/RappiOrders'
-import Kitchen from './pages/Kitchen'
-import Ingredients from './pages/Ingredients'
-import Recipes from './pages/Recipes'
-import RegisterPurchase from './pages/RegisterPurchase'
-import PurchaseHistory from './pages/PurchaseHistory'
-import Requirements from './pages/Requirements'
+const Tables = lazy(() => import('./pages/Tables'))
+const Waiters = lazy(() => import('./pages/Waiters'))
+const Sellers = lazy(() => import('./pages/Sellers'))
+const Attendance = lazy(() => import('./pages/Attendance'))
+const MySchedule = lazy(() => import('./pages/MySchedule'))
+const Orders = lazy(() => import('./pages/Orders'))
+const OnlineOrders = lazy(() => import('./pages/OnlineOrders'))
+const RappiOrders = lazy(() => import('./pages/RappiOrders'))
+const Kitchen = lazy(() => import('./pages/Kitchen'))
+const Ingredients = lazy(() => import('./pages/Ingredients'))
+const Recipes = lazy(() => import('./pages/Recipes'))
+const RegisterPurchase = lazy(() => import('./pages/RegisterPurchase'))
+const PurchaseHistory = lazy(() => import('./pages/PurchaseHistory'))
+const Requirements = lazy(() => import('./pages/Requirements'))
 import MobileRedirect from './components/MobileRedirect'
-import DispatchGuides from './pages/DispatchGuides'
-import CarrierDispatchGuides from './pages/CarrierDispatchGuides'
-import TermsAndConditions from './pages/TermsAndConditions'
-import Chat from './pages/Chat'
-import Pricing from './pages/Pricing'
-import PublicManual from './pages/PublicManual'
-import MigratePurchases from './pages/MigratePurchases'
-import Expenses from './pages/Expenses'
-import Loans from './pages/Loans'
-import LendingPortfolio from './pages/LendingPortfolio'
-import Certificates from './pages/Certificates'
-import CashFlow from './pages/CashFlow'
-import Accounting from './pages/Accounting'
+const DispatchGuides = lazy(() => import('./pages/DispatchGuides'))
+const CarrierDispatchGuides = lazy(() => import('./pages/CarrierDispatchGuides'))
+const TermsAndConditions = lazy(() => import('./pages/TermsAndConditions'))
+const Chat = lazy(() => import('./pages/Chat'))
+const Pricing = lazy(() => import('./pages/Pricing'))
+const PublicManual = lazy(() => import('./pages/PublicManual'))
+const MigratePurchases = lazy(() => import('./pages/MigratePurchases'))
+const Expenses = lazy(() => import('./pages/Expenses'))
+const Loans = lazy(() => import('./pages/Loans'))
+const LendingPortfolio = lazy(() => import('./pages/LendingPortfolio'))
+const Certificates = lazy(() => import('./pages/Certificates'))
+const CashFlow = lazy(() => import('./pages/CashFlow'))
+const Accounting = lazy(() => import('./pages/Accounting'))
 // Pharmacy pages
-import Laboratories from './pages/Laboratories'
-import ExpiryAlerts from './pages/ExpiryAlerts'
-import BatchControl from './pages/BatchControl'
+const Laboratories = lazy(() => import('./pages/Laboratories'))
+const ExpiryAlerts = lazy(() => import('./pages/ExpiryAlerts'))
+const BatchControl = lazy(() => import('./pages/BatchControl'))
 // Hotel pages
-import HotelRooms from './pages/HotelRooms'
-import HotelReservations from './pages/HotelReservations'
-import HotelServices from './pages/HotelServices'
-import HotelHousekeeping from './pages/HotelHousekeeping'
-import HotelNightAudit from './pages/HotelNightAudit'
+const HotelRooms = lazy(() => import('./pages/HotelRooms'))
+const HotelReservations = lazy(() => import('./pages/HotelReservations'))
+const HotelServices = lazy(() => import('./pages/HotelServices'))
+const HotelHousekeeping = lazy(() => import('./pages/HotelHousekeeping'))
+const HotelNightAudit = lazy(() => import('./pages/HotelNightAudit'))
 // Real Estate pages
-import Properties from './pages/Properties'
-import Operations from './pages/Operations'
-import Commissions from './pages/Commissions'
-import Agents from './pages/Agents'
+const Properties = lazy(() => import('./pages/Properties'))
+const Operations = lazy(() => import('./pages/Operations'))
+const Commissions = lazy(() => import('./pages/Commissions'))
+const Agents = lazy(() => import('./pages/Agents'))
 // Veterinary pages
-import VeterinaryAlerts from './pages/VeterinaryAlerts'
-import VeterinaryAgenda from './pages/VeterinaryAgenda'
+const VeterinaryAlerts = lazy(() => import('./pages/VeterinaryAlerts'))
+const VeterinaryAgenda = lazy(() => import('./pages/VeterinaryAgenda'))
 // Public catalog
-import CatalogoPublico from './pages/CatalogoPublico'
+const CatalogoPublico = lazy(() => import('./pages/CatalogoPublico'))
 // Public complaints book
-import LibroReclamaciones from './pages/LibroReclamaciones'
-import RegistroFidelidad from './pages/RegistroFidelidad'
+const LibroReclamaciones = lazy(() => import('./pages/LibroReclamaciones'))
+const RegistroFidelidad = lazy(() => import('./pages/RegistroFidelidad'))
 // Admin complaints
-import ComplaintsList from './pages/ComplaintsList'
+const ComplaintsList = lazy(() => import('./pages/ComplaintsList'))
 // Student payment control
-import StudentPaymentControl from './pages/StudentPaymentControl'
+const StudentPaymentControl = lazy(() => import('./pages/StudentPaymentControl'))
 // Production
-import Production from './pages/Production'
+const Production = lazy(() => import('./pages/Production'))
 // Envíos
-import Envios from './pages/Envios'
+const Envios = lazy(() => import('./pages/Envios'))
 // Logística
-import Projects from './pages/Projects'
-import WarehouseExits from './pages/WarehouseExits'
-import WarehouseReturns from './pages/WarehouseReturns'
-import LogisticsReports from './pages/LogisticsReports'
+const Projects = lazy(() => import('./pages/Projects'))
+const WarehouseExits = lazy(() => import('./pages/WarehouseExits'))
+const WarehouseReturns = lazy(() => import('./pages/WarehouseReturns'))
+const LogisticsReports = lazy(() => import('./pages/LogisticsReports'))
 
 // Registro solo accesible para super admin
+/**
+ * Lo que se ve mientras baja el archivo de una pantalla. Es un instante en
+ * conexiones normales, pero tiene que existir: sin fallback, React lanza un
+ * error al suspender.
+ */
+function PantallaCargando() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+    </div>
+  )
+}
+
 function AdminOnlyRegister() {
   const { isAdmin, isLoading } = useAuth()
   if (isLoading) return null
@@ -192,6 +218,7 @@ function App() {
       <AuthProvider>
         <BrandingProvider>
           <ToastProvider>
+            <Suspense fallback={<PantallaCargando />}>
             <Routes>
             {/* Landing Page - En móvil redirige a dashboard, en web usa LandingRouter */}
             <Route path="/" element={isNative ? <Navigate to="/app/dashboard" replace /> : <LandingRouter />} />
@@ -601,6 +628,7 @@ function App() {
             {/* Ruta 404 */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+            </Suspense>
           <AppLifecycleManager />
           </ToastProvider>
         </BrandingProvider>
