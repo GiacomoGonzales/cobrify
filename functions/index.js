@@ -28,7 +28,7 @@ import {
 } from './src/services/cloudinaryAdmin.js'
 import { migrateUrlToR2, isR2Url, isFirebaseStorageUrl, putObjectToR2 } from './src/services/r2Admin.js'
 import { processSaleStock as runProcessSaleStock } from './src/services/saleStockService.js'
-import { verifyWhatsappSignature, parseWhatsappWebhook, VENTANA_24H_MS, sendWhatsappText } from './src/services/whatsappService.js'
+import { verifyWhatsappSignature, parseWhatsappWebhook, VENTANA_24H_MS, sendWhatsappText, sendWhatsappMedia, downloadWhatsappMedia, extensionDeMime } from './src/services/whatsappService.js'
 import {
   upsertLoyaltyClass as walletUpsertClass, upsertLoyaltyObject as walletUpsertObject,
   linkAgregarAWallet as walletSaveLink, notificarTarjeta as walletNotify,
@@ -13239,7 +13239,7 @@ export const whatsappWebhook = onRequest(
     region: 'us-central1',
     timeoutSeconds: 60,
     memory: '256MiB',
-    secrets: ['WHATSAPP_VERIFY_TOKEN', 'WHATSAPP_APP_SECRET'],
+    secrets: ['WHATSAPP_VERIFY_TOKEN', 'WHATSAPP_APP_SECRET', 'WHATSAPP_TOKEN', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY'],
   },
   async (req, res) => {
     // ---------- Verificacion del webhook (GET) ----------
@@ -13382,7 +13382,40 @@ async function guardarMensajeEntrante(m) {
   }, { merge: true })
 
   await asegurarCuentaWa(m.cuenta)
+
+  // Los archivos se bajan APENAS llegan: la URL que da Meta caduca en minutos.
+  // Si la descarga falla, el mensaje ya quedo guardado con su referencia y el
+  // error en los logs — nunca al reves.
+  if (m.media?.mediaId) {
+    try {
+      await archivarMediaDeWhatsapp(convId, m.waMessageId, m.media)
+    } catch (e) {
+      console.error(`[WhatsApp] No se pudo archivar el adjunto de ${m.waMessageId}:`, e.message)
+    }
+  }
+
   await avisarMensajeNuevoWa(phoneNumberId, m)
+}
+
+/**
+ * Baja un adjunto de Meta y lo guarda en R2, dejando la URL propia en el
+ * mensaje. La bandeja muestra SIEMPRE nuestra copia: la de Meta caduca.
+ */
+async function archivarMediaDeWhatsapp(convId, waMessageId, media) {
+  const { buffer, mimeType } = await downloadWhatsappMedia({
+    token: process.env.WHATSAPP_TOKEN,
+    mediaId: media.mediaId,
+  })
+  const ext = extensionDeMime(media.mimeType || mimeType)
+  const { url } = await putObjectToR2({
+    key: `whatsapp/${convId}/${waMessageId}.${ext}`,
+    body: buffer,
+    contentType: media.mimeType || mimeType,
+  })
+  await db.collection('whatsappConversations').doc(convId)
+    .collection('messages').doc(waMessageId)
+    .set({ media: { ...media, url } }, { merge: true })
+  console.log(`[WhatsApp] Adjunto archivado (${buffer.length} bytes): ${url}`)
 }
 
 /** Actualiza enviado / entregado / leido de un mensaje que mandamos nosotros. */
@@ -13650,3 +13683,123 @@ async function camposDeVinculo(waId) {
     linkedBy: 'auto',
   }
 }
+
+// ============================================================
+// WHATSAPP — ENVIAR UN ARCHIVO (imagen o PDF)
+//
+// El archivo viaja en base64 desde la pantalla, se guarda en R2 y a Meta se
+// le manda la URL publica. Asi el archivo queda archivado en nuestro
+// almacenamiento de paso, igual que los que recibimos: el historial completo
+// vive en un solo lugar.
+//
+// Mismas reglas que el envio de texto: dueno o admin, y dentro de la ventana
+// de 24 horas.
+// ============================================================
+const MEDIA_PERMITIDOS = {
+  'image/jpeg': 'image', 'image/png': 'image', 'image/webp': 'image',
+  'application/pdf': 'document',
+}
+const MEDIA_MAX_BYTES = 10 * 1024 * 1024 // 10 MB: sobra para capturas y PDF
+
+export const sendWhatsappMediaMessage = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 120,
+    memory: '512MiB',
+    cors: true,
+    secrets: ['WHATSAPP_TOKEN', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY'],
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return }
+
+    try {
+      const authHeader = req.headers.authorization
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'No autorizado' }); return
+      }
+      const decoded = await auth.verifyIdToken(authHeader.split('Bearer ')[1])
+
+      const { conversationId, base64, mimeType, filename, caption } = req.body || {}
+      if (!conversationId || !base64 || !mimeType) {
+        res.status(400).json({ error: 'Faltan datos del archivo' }); return
+      }
+
+      const tipo = MEDIA_PERMITIDOS[mimeType]
+      if (!tipo) {
+        res.status(400).json({ error: 'Solo se pueden enviar imagenes (JPG, PNG, WebP) o PDF' }); return
+      }
+
+      const buffer = Buffer.from(base64, 'base64')
+      if (buffer.length > MEDIA_MAX_BYTES) {
+        res.status(400).json({ error: 'El archivo pasa de 10 MB' }); return
+      }
+
+      const convRef = db.collection('whatsappConversations').doc(conversationId)
+      const convSnap = await convRef.get()
+      if (!convSnap.exists) {
+        res.status(404).json({ error: 'La conversacion no existe' }); return
+      }
+      const conv = convSnap.data()
+
+      const cuentaSnap = await db.collection('whatsappAccounts').doc(conv.phoneNumberId).get()
+      const esDueno = cuentaSnap.data()?.ownerId === decoded.uid
+      const esAdmin = (await db.collection('admins').doc(decoded.uid).get()).exists
+      if (!esDueno && !esAdmin) {
+        res.status(403).json({ error: 'No tienes acceso a esta conversacion' }); return
+      }
+
+      const vence = conv.ventanaVenceAt?.toMillis?.() || 0
+      if (Date.now() > vence) {
+        res.status(409).json({
+          error: 'La ventana de 24 horas se cerro. Para escribirle ahora hace falta una plantilla aprobada por Meta.',
+          ventanaCerrada: true,
+        })
+        return
+      }
+
+      // Primero a R2 (nuestra copia), despues a Meta con esa URL.
+      const ext = extensionDeMime(mimeType)
+      const key = `whatsapp/${conversationId}/out-${Date.now()}.${ext}`
+      const { url } = await putObjectToR2({ key, body: buffer, contentType: mimeType })
+
+      const { waMessageId } = await sendWhatsappMedia({
+        token: process.env.WHATSAPP_TOKEN,
+        phoneNumberId: conv.phoneNumberId,
+        to: conv.waId,
+        tipo,
+        link: url,
+        caption: caption ? String(caption).trim() : undefined,
+        filename: tipo === 'document' ? (filename || `documento.${ext}`) : undefined,
+      })
+
+      const ahora = Timestamp.now()
+      await convRef.collection('messages').doc(waMessageId).set({
+        direccion: 'saliente',
+        waMessageId,
+        waId: conv.waId,
+        tipo,
+        texto: caption ? String(caption).trim() : '',
+        media: { url, mimeType, filename: filename || null },
+        estado: 'enviado',
+        enviadoPor: decoded.uid,
+        timestamp: ahora,
+        createdAt: FieldValue.serverTimestamp(),
+      })
+
+      await convRef.set({
+        ultimoMensaje: caption ? String(caption).trim() : (tipo === 'image' ? 'Imagen' : 'Documento'),
+        ultimoMensajeAt: ahora,
+        ultimaDireccion: 'saliente',
+        sinLeer: 0,
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true })
+
+      res.status(200).json({ success: true, waMessageId })
+    } catch (error) {
+      console.error('[WhatsApp] Error al enviar archivo:', error.message, error.metaCode || '')
+      res.status(500).json({ error: error.message || 'No se pudo enviar el archivo' })
+    }
+  }
+)

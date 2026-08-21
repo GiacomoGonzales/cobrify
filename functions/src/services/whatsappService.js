@@ -175,3 +175,88 @@ export async function sendWhatsappText({ token, phoneNumberId, to, texto }) {
   if (!waMessageId) throw new Error('Meta acepto el envio pero no devolvio el id del mensaje')
   return { waMessageId }
 }
+
+/**
+ * Descarga un archivo recibido por WhatsApp.
+ *
+ * Son dos pasos porque asi lo diseño Meta: primero se pide la ficha del
+ * archivo (que trae una URL temporal) y despues se baja de esa URL, ambas con
+ * el token. La URL caduca en minutos: por eso el archivo se baja APENAS llega
+ * y se guarda en almacenamiento propio, no cuando alguien abre el chat.
+ *
+ * @returns {Promise<{buffer: Buffer, mimeType: string}>}
+ */
+export async function downloadWhatsappMedia({ token, mediaId }) {
+  const fichaRes = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${mediaId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const ficha = await fichaRes.json().catch(() => ({}))
+  if (!fichaRes.ok || !ficha.url) {
+    throw new Error(ficha?.error?.message || `Meta no entrego la ficha del archivo ${mediaId}`)
+  }
+
+  const archivoRes = await fetch(ficha.url, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!archivoRes.ok) {
+    throw new Error(`No se pudo descargar el archivo (${archivoRes.status})`)
+  }
+  const buffer = Buffer.from(await archivoRes.arrayBuffer())
+  return { buffer, mimeType: ficha.mime_type || 'application/octet-stream' }
+}
+
+/** Extension de archivo a partir del tipo MIME de WhatsApp. */
+export function extensionDeMime(mimeType) {
+  const mapa = {
+    'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp',
+    'video/mp4': 'mp4', 'video/3gpp': '3gp',
+    'audio/ogg': 'ogg', 'audio/mpeg': 'mp3', 'audio/mp4': 'm4a',
+    'audio/aac': 'aac', 'audio/amr': 'amr',
+    'application/pdf': 'pdf',
+  }
+  const base = String(mimeType || '').split(';')[0].trim()
+  return mapa[base] || base.split('/')[1] || 'bin'
+}
+
+/**
+ * Envia un archivo por la Cloud API, referenciado por URL publica (nuestro
+ * R2). Mas simple y robusto que subir el binario a Meta: el archivo ya queda
+ * guardado en nuestro almacenamiento de paso.
+ *
+ * @param {Object} p
+ * @param {'image'|'document'|'video'|'audio'} p.tipo
+ * @param {string} p.link URL publica del archivo
+ * @param {string} [p.caption] pie (imagenes, videos y documentos)
+ * @param {string} [p.filename] nombre visible (solo documentos)
+ */
+export async function sendWhatsappMedia({ token, phoneNumberId, to, tipo, link, caption, filename }) {
+  const cuerpoMedia = { link }
+  if (caption && tipo !== 'audio') cuerpoMedia.caption = caption
+  if (filename && tipo === 'document') cuerpoMedia.filename = filename
+
+  const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: tipo,
+      [tipo]: cuerpoMedia,
+    }),
+  })
+
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const msg = data?.error?.message || `Error ${res.status} de Meta`
+    const err = new Error(msg)
+    err.metaCode = data?.error?.code || null
+    throw err
+  }
+  const waMessageId = data?.messages?.[0]?.id
+  if (!waMessageId) throw new Error('Meta acepto el envio pero no devolvio el id del mensaje')
+  return { waMessageId }
+}

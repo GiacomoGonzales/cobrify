@@ -7,7 +7,9 @@ import {
   CheckCheck,
   CheckCircle2,
   Clock,
+  FileText,
   MessageCircle,
+  Paperclip,
   Pencil,
   Plus,
   RotateCcw,
@@ -27,6 +29,8 @@ import {
   suscribirConversaciones,
   suscribirMensajes,
   enviarMensaje,
+  enviarArchivo,
+  ADJUNTOS_ACEPTADOS,
   marcarComoLeida,
   msRestantesDeVentana,
   formatearRestante,
@@ -84,6 +88,10 @@ export default function Chat() {
   const [ahora, setAhora] = useState(Date.now())
 
   const finDelHilo = useRef(null)
+  const selectorArchivo = useRef(null)
+  // Adjunto elegido, esperando confirmacion (con su vista previa y pie).
+  const [adjunto, setAdjunto] = useState(null)
+  const [pieAdjunto, setPieAdjunto] = useState('')
 
   useEffect(() => {
     if (!user || !isAdmin) return undefined
@@ -103,6 +111,8 @@ export default function Chat() {
     setPendientes([])
     setTagPickerAbierto(false)
     setNotaAbierta(false)
+    setAdjunto(null)
+    setPieAdjunto('')
     if (!activaId) { setMensajes([]); return undefined }
     const parar = suscribirMensajes(activaId, setMensajes)
     marcarComoLeida(activaId)
@@ -221,6 +231,33 @@ export default function Chat() {
       setPendientes((p) => p.filter((m) => m.id !== tempId))
       setTexto(previo)
       toast.error(error.message || 'No se pudo enviar el mensaje')
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  const handleElegirArchivo = (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!ADJUNTOS_ACEPTADOS.includes(file.type)) {
+      toast.error('Solo imágenes (JPG, PNG, WebP) o PDF')
+      return
+    }
+    setAdjunto(file)
+    setPieAdjunto('')
+  }
+
+  const handleEnviarAdjunto = async () => {
+    if (!adjunto || enviando) return
+    setEnviando(true)
+    try {
+      const idToken = await getAuth().currentUser?.getIdToken()
+      await enviarArchivo(activaId, adjunto, pieAdjunto.trim(), idToken)
+      setAdjunto(null)
+      setPieAdjunto('')
+    } catch (error) {
+      toast.error(error.message || 'No se pudo enviar el archivo')
     } finally {
       setEnviando(false)
     }
@@ -637,9 +674,46 @@ export default function Chat() {
                           : 'bg-white border border-gray-200 text-gray-900 rounded-bl-sm'
                       }`}
                     >
+                      {(m.tipo === 'image' || m.tipo === 'sticker') && m.media?.url && (
+                        <a href={m.media.url} target="_blank" rel="noopener noreferrer">
+                          <img
+                            src={m.media.url}
+                            alt={m.texto || 'Imagen'}
+                            loading="lazy"
+                            className={`rounded-lg mb-1 ${m.tipo === 'sticker' ? 'w-28' : 'max-w-full max-h-72 object-contain'}`}
+                          />
+                        </a>
+                      )}
+                      {m.tipo === 'video' && m.media?.url && (
+                        <video src={m.media.url} controls className="rounded-lg mb-1 max-w-full max-h-72" />
+                      )}
+                      {m.tipo === 'audio' && m.media?.url && (
+                        <audio src={m.media.url} controls className="mb-1 max-w-full" />
+                      )}
+                      {m.tipo === 'document' && m.media?.url && (
+                        <a
+                          href={m.media.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`flex items-center gap-2 rounded-lg px-3 py-2 mb-1 ${
+                            mio ? 'bg-green-700/60' : 'bg-gray-100'
+                          }`}
+                        >
+                          <FileText className={`w-5 h-5 flex-none ${mio ? 'text-green-100' : 'text-gray-500'}`} />
+                          <span className="text-sm truncate max-w-[180px]">
+                            {m.media.filename || 'Documento'}
+                          </span>
+                        </a>
+                      )}
+                      {['image', 'sticker', 'video', 'audio', 'document'].includes(m.tipo) && !m.media?.url && (
+                        <p className="text-sm italic opacity-75 mb-1">
+                          {m.tipo === 'image' ? 'Imagen' : m.tipo === 'audio' ? 'Audio' : m.tipo === 'video' ? 'Video' : m.tipo === 'document' ? 'Documento' : 'Sticker'} no disponible
+                        </p>
+                      )}
                       {m.texto
                         ? <p className="text-sm whitespace-pre-wrap break-words">{m.texto}</p>
-                        : <p className="text-sm italic opacity-75">[{m.tipo}]</p>}
+                        : !['image', 'sticker', 'video', 'audio', 'document'].includes(m.tipo)
+                          && <p className="text-sm italic opacity-75">[{m.tipo}]</p>}
                       <div
                         className={`flex items-center gap-1 justify-end mt-0.5 ${
                           mio ? 'text-green-100' : 'text-gray-400'
@@ -669,6 +743,22 @@ export default function Chat() {
                 onSubmit={handleEnviar}
                 className="px-4 py-3 bg-white border-t border-gray-200 flex items-center gap-2"
               >
+                <input
+                  ref={selectorArchivo}
+                  type="file"
+                  accept={ADJUNTOS_ACEPTADOS}
+                  onChange={handleElegirArchivo}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => selectorArchivo.current?.click()}
+                  disabled={enviando}
+                  className="p-2.5 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-40"
+                  title="Adjuntar imagen o PDF"
+                >
+                  <Paperclip className="w-5 h-5" />
+                </button>
                 <input
                   type="text"
                   value={texto}
@@ -706,6 +796,60 @@ export default function Chat() {
           </>
         )}
       </main>
+
+      {/* Vista previa del adjunto antes de enviarlo */}
+      {adjunto && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setAdjunto(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="font-bold text-gray-900 text-sm">Enviar archivo</h3>
+              <button onClick={() => setAdjunto(null)} className="text-gray-400 hover:text-gray-600" aria-label="Cancelar">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5">
+              {adjunto.type.startsWith('image/') ? (
+                <img
+                  src={URL.createObjectURL(adjunto)}
+                  alt="Vista previa"
+                  className="rounded-lg max-h-64 mx-auto object-contain"
+                />
+              ) : (
+                <div className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3">
+                  <FileText className="w-8 h-8 text-red-500 flex-none" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-800 truncate">{adjunto.name}</p>
+                    <p className="text-xs text-gray-400">{(adjunto.size / 1024 / 1024).toFixed(1)} MB</p>
+                  </div>
+                </div>
+              )}
+              <input
+                type="text"
+                value={pieAdjunto}
+                onChange={(e) => setPieAdjunto(e.target.value)}
+                placeholder="Agregar un comentario (opcional)"
+                className="w-full mt-4 px-4 py-2.5 bg-gray-100 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+            </div>
+            <div className="px-5 py-3 border-t border-gray-200 flex justify-end gap-2">
+              <button
+                onClick={() => setAdjunto(null)}
+                disabled={enviando}
+                className="px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleEnviarAdjunto}
+                disabled={enviando}
+                className="px-4 py-2 text-sm font-semibold bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+              >
+                {enviando ? 'Enviando...' : 'Enviar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Ficha del cliente: columna en escritorio, superpuesta en el celular */}
       {activa && fichaVisible && (

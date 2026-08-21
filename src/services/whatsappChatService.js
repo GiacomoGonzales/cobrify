@@ -94,6 +94,51 @@ export const enviarMensaje = async (conversationId, texto, idToken) => {
   return data
 }
 
+/** Tipos que se pueden adjuntar desde la bandeja. */
+export const ADJUNTOS_ACEPTADOS = 'image/jpeg,image/png,image/webp,application/pdf'
+export const ADJUNTO_MAX_BYTES = 10 * 1024 * 1024
+
+const SEND_MEDIA_URL = import.meta.env.VITE_WHATSAPP_SEND_MEDIA_URL
+  || 'https://us-central1-cobrify-395fe.cloudfunctions.net/sendWhatsappMediaMessage'
+
+/**
+ * Envía una imagen o un PDF. El archivo viaja en base64; el servidor lo
+ * guarda en nuestro almacenamiento y se lo manda a Meta por URL — la misma
+ * ruta que siguen los archivos recibidos, así el historial vive en un lugar.
+ */
+export const enviarArchivo = async (conversationId, file, caption, idToken) => {
+  if (file.size > ADJUNTO_MAX_BYTES) {
+    throw new Error('El archivo pasa de 10 MB')
+  }
+  const base64 = await new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(String(r.result).split(',')[1])
+    r.onerror = () => reject(new Error('No se pudo leer el archivo'))
+    r.readAsDataURL(file)
+  })
+  const res = await fetch(SEND_MEDIA_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({
+      conversationId,
+      base64,
+      mimeType: file.type,
+      filename: file.name,
+      caption: caption || '',
+    }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const error = new Error(data.error || 'No se pudo enviar el archivo')
+    error.ventanaCerrada = data.ventanaCerrada === true
+    throw error
+  }
+  return data
+}
+
 /** Marca la conversación como leída. */
 export const marcarComoLeida = async (conversationId) => {
   try {
