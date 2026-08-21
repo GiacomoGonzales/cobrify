@@ -13556,20 +13556,64 @@ export const sendWhatsappMessage = onRequest(
         return
       }
 
-      const { waMessageId } = await sendWhatsappText({
-        token: process.env.WHATSAPP_TOKEN,
-        phoneNumberId: conv.phoneNumberId,
-        to: conv.waId,
-        texto: String(texto).trim(),
-      })
+      const cuerpo = String(texto).trim()
+
+      // ENLACES CON IMAGEN GRANDE. Los mensajes de texto de la Cloud API
+      // viajan SIN la miniatura incrustada (eso solo lo hace la app del
+      // celular al componer), asi que el WhatsApp del receptor dibuja la
+      // tarjeta compacta por buena que sea la imagen OG — verificado con
+      // rastreo fresco. La salida: si el texto trae un enlace cuya pagina
+      // tiene imagen, se envia como IMAGEN con el texto de pie. El receptor
+      // ve la foto a lo ancho con el enlace clicable debajo: mejor que la
+      // tarjeta de la app. Si algo falla (imagen webp, pagina lenta, Meta la
+      // rechaza), se cae al texto plano de siempre: el mensaje SIEMPRE sale.
+      const urlSaliente = extraerPrimeraUrl(cuerpo)
+      let vista = null
+      // 1024 = tope del pie de una imagen; mas largo que eso va como texto.
+      if (urlSaliente && cuerpo.length <= 1024) {
+        vista = await obtenerVistaPreviaDeEnlace(urlSaliente).catch(() => null)
+      }
+
+      let waMessageId = null
+      let tipoGuardado = 'text'
+      let mediaGuardada = null
+      if (vista?.imagen) {
+        try {
+          const r = await sendWhatsappMedia({
+            token: process.env.WHATSAPP_TOKEN,
+            phoneNumberId: conv.phoneNumberId,
+            to: conv.waId,
+            tipo: 'image',
+            link: vista.imagen,
+            caption: cuerpo,
+          })
+          waMessageId = r.waMessageId
+          tipoGuardado = 'image'
+          mediaGuardada = { url: vista.imagen, mimeType: null, filename: null }
+        } catch (e) {
+          console.warn('[WhatsApp] Enlace con imagen rechazado, va como texto:', e.message)
+        }
+      }
+
+      if (!waMessageId) {
+        const r = await sendWhatsappText({
+          token: process.env.WHATSAPP_TOKEN,
+          phoneNumberId: conv.phoneNumberId,
+          to: conv.waId,
+          texto: cuerpo,
+        })
+        waMessageId = r.waMessageId
+      }
 
       const ahora = Timestamp.now()
       await convRef.collection('messages').doc(waMessageId).set({
         direccion: 'saliente',
         waMessageId,
         waId: conv.waId,
-        tipo: 'text',
-        texto: String(texto).trim(),
+        tipo: tipoGuardado,
+        texto: cuerpo,
+        ...(mediaGuardada ? { media: mediaGuardada } : {}),
+        ...(vista && !mediaGuardada ? { linkPreview: vista } : {}),
         // 'enviado' es provisional: el webhook lo va a pisar con entregado y
         // leido a medida que Meta los informe.
         estado: 'enviado',
@@ -13578,9 +13622,9 @@ export const sendWhatsappMessage = onRequest(
         createdAt: FieldValue.serverTimestamp(),
       })
 
-      // La tarjeta del enlace, si lo hay — sin demorar la respuesta al panel.
-      const urlSaliente = extraerPrimeraUrl(texto)
-      if (urlSaliente) {
+      // Enlace sin imagen o texto largo: la tarjeta para la bandeja se
+      // resuelve aparte, sin demorar la respuesta al panel.
+      if (urlSaliente && !vista) {
         obtenerVistaPreviaDeEnlace(urlSaliente).then((vp) => {
           if (!vp) return null
           return convRef.collection('messages').doc(waMessageId)
