@@ -13313,6 +13313,44 @@ export const whatsappWebhook = onRequest(
   }
 )
 
+/**
+ * Miniatura de una imagen, como hace WhatsApp.
+ *
+ * La burbuja no debe cargar el original: una foto de camara son 3-5 MB y en la
+ * lista se ve a 300 px. Se genera una version de 600 px de ancho en JPEG, que
+ * pesa decenas de kB, y el original queda para cuando se toca la imagen.
+ *
+ * Devuelve null si falla: sin miniatura la burbuja usa el original, que es lo
+ * que hacia antes. Nunca vale la pena perder un mensaje por una miniatura.
+ */
+async function generarMiniatura({ buffer, key }) {
+  try {
+    const sharp = (await import('sharp')).default
+    const img = sharp(buffer, { failOn: 'none' })
+    const meta = await img.metadata()
+
+    const mini = await img
+      .rotate() // respeta la orientacion EXIF: las fotos de celular vienen giradas
+      .resize({ width: 600, withoutEnlargement: true })
+      .jpeg({ quality: 72, mozjpeg: true })
+      .toBuffer()
+
+    const { url } = await putObjectToR2({ key, body: mini, contentType: 'image/jpeg' })
+    // Las medidas viajan con la miniatura para que la burbuja reserve el
+    // espacio exacto y la conversacion no salte cuando la imagen carga.
+    const vertical = meta.orientation >= 5
+    return {
+      thumbUrl: url,
+      ancho: vertical ? meta.height : meta.width,
+      alto: vertical ? meta.width : meta.height,
+      thumbBytes: mini.length,
+    }
+  } catch (e) {
+    console.warn('[WhatsApp] No se pudo generar la miniatura:', e.message)
+    return null
+  }
+}
+
 /** Id de conversacion: una por cliente DENTRO de cada numero de la empresa. */
 const idConversacionWa = (phoneNumberId, waId) => `${phoneNumberId}_${waId}`
 
@@ -13427,16 +13465,27 @@ async function archivarMediaDeWhatsapp(convId, waMessageId, media) {
     token: process.env.WHATSAPP_TOKEN,
     mediaId: media.mediaId,
   })
-  const ext = extensionDeMime(media.mimeType || mimeType)
+  const tipoReal = media.mimeType || mimeType
+  const ext = extensionDeMime(tipoReal)
   const { url } = await putObjectToR2({
     key: `whatsapp/${convId}/${waMessageId}.${ext}`,
     body: buffer,
-    contentType: media.mimeType || mimeType,
+    contentType: tipoReal,
   })
+
+  // Miniatura para las imagenes: es lo que ve la burbuja.
+  let extra = {}
+  if (String(tipoReal).startsWith('image/')) {
+    const mini = await generarMiniatura({
+      buffer, key: `whatsapp/${convId}/${waMessageId}_mini.jpg`,
+    })
+    if (mini) extra = mini
+  }
+
   await db.collection('whatsappConversations').doc(convId)
     .collection('messages').doc(waMessageId)
-    .set({ media: { ...media, url } }, { merge: true })
-  console.log(`[WhatsApp] Adjunto archivado (${buffer.length} bytes): ${url}`)
+    .set({ media: { ...media, url, ...extra } }, { merge: true })
+  console.log(`[WhatsApp] Adjunto archivado (${buffer.length} bytes${extra.thumbBytes ? `, miniatura ${extra.thumbBytes}` : ''}): ${url}`)
 }
 
 /** Actualiza enviado / entregado / leido de un mensaje que mandamos nosotros. */
@@ -13915,10 +13964,14 @@ export const sendWhatsappMediaMessage = onRequest(
       // guardado, se usa tal cual.
       const ext = extensionDeMime(mimeType)
       let url = mediaUrl
+      let mini = null
       if (buffer) {
-        const key = `whatsapp/${conversationId}/out-${Date.now()}.${ext}`
-        const subido = await putObjectToR2({ key, body: buffer, contentType: mimeType })
+        const base = `whatsapp/${conversationId}/out-${Date.now()}`
+        const subido = await putObjectToR2({ key: `${base}.${ext}`, body: buffer, contentType: mimeType })
         url = subido.url
+        if (tipo === 'image') {
+          mini = await generarMiniatura({ buffer, key: `${base}_mini.jpg` })
+        }
       }
 
       const { waMessageId } = await sendWhatsappMedia({
@@ -13938,7 +13991,7 @@ export const sendWhatsappMediaMessage = onRequest(
         waId: conv.waId,
         tipo,
         texto: caption ? String(caption).trim() : '',
-        media: { url, mimeType, filename: filename || null },
+        media: { url, mimeType, filename: filename || null, ...(mini || {}) },
         estado: 'enviado',
         enviadoPor: decoded.uid,
         timestamp: ahora,
@@ -14302,11 +14355,16 @@ export const uploadWhatsappLibraryMedia = onRequest(
       }
 
       const ext = extensionDeMime(mimeType)
+      const base = `whatsapp/biblioteca/${randomUUID()}`
       const { url } = await putObjectToR2({
-        key: `whatsapp/biblioteca/${randomUUID()}.${ext}`,
+        key: `${base}.${ext}`,
         body: buffer,
         contentType: mimeType,
       })
+
+      const mini = permitido.tipo === 'image'
+        ? await generarMiniatura({ buffer, key: `${base}_mini.jpg` })
+        : null
 
       res.status(200).json({
         success: true,
@@ -14316,6 +14374,7 @@ export const uploadWhatsappLibraryMedia = onRequest(
           tipo: permitido.tipo,
           filename: filename || `archivo.${ext}`,
           bytes: buffer.length,
+          ...(mini || {}),
         },
       })
     } catch (error) {

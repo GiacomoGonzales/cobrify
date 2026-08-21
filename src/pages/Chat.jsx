@@ -22,6 +22,8 @@ import {
   Megaphone,
   LayoutTemplate,
   Settings,
+  GalleryThumbnails,
+  ArrowDown,
   Tag,
   Trash2,
   AlertTriangle,
@@ -31,6 +33,8 @@ import FichaCliente from '@/components/chat/FichaCliente'
 import TextoWhatsapp, { TarjetaEnlace } from '@/components/chat/TextoWhatsapp'
 import MiniaturaPdf, { formatoKB } from '@/components/chat/MiniaturaPdf'
 import SelectorPlantilla from '@/components/chat/SelectorPlantilla'
+import VisorMedia from '@/components/chat/VisorMedia'
+import PanelMultimedia from '@/components/chat/PanelMultimedia'
 import ConfiguracionChat from '@/components/chat/ConfiguracionChat'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -122,6 +126,14 @@ export default function Chat() {
   // Archivo de una respuesta rapida: ya esta guardado, asi que no se sube de
   // nuevo — queda enganchado al cuadro y sale con el texto como pie.
   const [adjuntoGuardado, setAdjuntoGuardado] = useState(null)
+  // Visor de imagenes, panel de archivos y busqueda dentro de la conversacion.
+  const [visorIndice, setVisorIndice] = useState(null)
+  const [panelMedia, setPanelMedia] = useState(false)
+  const [buscarEnChat, setBuscarEnChat] = useState('')
+  const [buscadorAbierto, setBuscadorAbierto] = useState(false)
+  const [resaltado, setResaltado] = useState(null)
+  // Cual sugerencia esta seleccionada con las flechas.
+  const [sugerenciaSel, setSugerenciaSel] = useState(0)
 
   useEffect(() => {
     if (!user || !isAdmin) return undefined
@@ -149,12 +161,17 @@ export default function Chat() {
     return respuestasRapidas.filter((r) => r.atajo.startsWith(q)).slice(0, 6)
   }, [texto, respuestasRapidas])
 
+  useEffect(() => { setSugerenciaSel(0) }, [texto])
+
   const aplicarRapida = (r) => {
     const nombre = (activa?.nombre || '').split(' ')[0]
     setTexto(r.texto.replace(/\{nombre\}/gi, nombre))
     // El archivo ya esta guardado: se engancha al cuadro y viaja como pie del
     // mensaje al enviar, sin volver a subirlo.
     setAdjuntoGuardado(r.media || null)
+    // El cursor vuelve al cuadro: se elige el atajo y se manda con Enter, sin
+    // tocar el mouse.
+    setTimeout(() => cuadroTexto.current?.focus(), 0)
   }
 
   useEffect(() => {
@@ -165,6 +182,10 @@ export default function Chat() {
     setAdjunto(null)
     setPieAdjunto('')
     setAdjuntoGuardado(null)
+    setPanelMedia(false)
+    setBuscadorAbierto(false)
+    setBuscarEnChat('')
+    setResaltado(null)
     if (!activaId) { setMensajes([]); return undefined }
     const parar = suscribirMensajes(activaId, setMensajes)
     marcarComoLeida(activaId)
@@ -225,6 +246,35 @@ export default function Chat() {
     const enVuelo = pendientes.filter((p) => !p.waMessageId || !idsConfirmados.has(p.waMessageId))
     return [...mensajes, ...enVuelo]
   }, [mensajes, pendientes])
+
+  // Todas las imagenes del hilo, para que el visor navegue entre ellas.
+  const imagenesDelHilo = useMemo(
+    () => hilo.filter((m) => (m.tipo === 'image' || m.tipo === 'sticker') && m.media?.url)
+      .map((m) => m.media),
+    [hilo],
+  )
+
+  const abrirVisorDe = (media) => {
+    const i = imagenesDelHilo.findIndex((x) => x.url === media.url)
+    setVisorIndice(i >= 0 ? i : 0)
+  }
+
+  // Ir a un mensaje puntual: lo trae a la vista y lo resalta un momento.
+  const irAlMensaje = (id) => {
+    setPanelMedia(false)
+    setResaltado(id)
+    setTimeout(() => {
+      document.getElementById(`msg-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 50)
+    setTimeout(() => setResaltado(null), 2500)
+  }
+
+  // Coincidencias de la busqueda dentro de la conversacion.
+  const coincidencias = useMemo(() => {
+    const q = buscarEnChat.trim().toLowerCase()
+    if (!q) return []
+    return hilo.filter((m) => (m.texto || '').toLowerCase().includes(q))
+  }, [hilo, buscarEnChat])
 
   const conteos = useMemo(() => {
     const c = { abierta: 0, pendiente: 0, completada: 0 }
@@ -323,6 +373,7 @@ export default function Chat() {
       setEnviando(false)
       // El boton de enviar se queda con el cursor; devolverlo permite encadenar
       // mensajes sin volver a hacer clic.
+      if (cuadroTexto.current) cuadroTexto.current.style.height = 'auto'
       if (window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
         cuadroTexto.current?.focus()
       }
@@ -662,7 +713,21 @@ export default function Chat() {
               {/* Acciones de organizacion */}
               <div className="flex items-center gap-1 relative">
                 <button
-                  onClick={() => setFichaVisible((v) => !v)}
+                  onClick={() => { setBuscadorAbierto((v) => !v); setPanelMedia(false) }}
+                  className={`p-2 rounded-lg hover:bg-gray-100 ${buscadorAbierto ? 'text-green-600' : 'text-gray-500 hover:text-gray-700'}`}
+                  title="Buscar en la conversacion"
+                >
+                  <Search className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => { setPanelMedia((v) => !v); setFichaVisible(false) }}
+                  className={`p-2 rounded-lg hover:bg-gray-100 ${panelMedia ? 'text-green-600' : 'text-gray-500 hover:text-gray-700'}`}
+                  title="Archivos de la conversacion"
+                >
+                  <GalleryThumbnails className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => { setFichaVisible((v) => !v); setPanelMedia(false) }}
                   className={`p-2 rounded-lg hover:bg-gray-100 ${
                     activa.linkedBusinessId ? 'text-green-600' : 'text-gray-500 hover:text-gray-700'
                   }`}
@@ -744,6 +809,45 @@ export default function Chat() {
                 )}
               </div>
             </header>
+
+            {buscadorAbierto && (
+              <div className="px-4 py-2 bg-white border-b border-gray-200">
+                <div className="relative">
+                  <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    autoFocus
+                    value={buscarEnChat}
+                    onChange={(e) => setBuscarEnChat(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') { setBuscadorAbierto(false); setBuscarEnChat('') }
+                      if (e.key === 'Enter' && coincidencias.length) irAlMensaje(coincidencias[coincidencias.length - 1].id)
+                    }}
+                    placeholder="Buscar en esta conversacion"
+                    className="w-full pl-9 pr-3 py-2 text-sm bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                </div>
+                {buscarEnChat.trim() && (
+                  <div className="mt-1.5 max-h-40 overflow-y-auto">
+                    {coincidencias.length === 0 ? (
+                      <p className="text-xs text-gray-400 py-1">Sin coincidencias</p>
+                    ) : (
+                      [...coincidencias].reverse().slice(0, 20).map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => irAlMensaje(m.id)}
+                          className="w-full text-left px-2 py-1.5 rounded hover:bg-gray-50 flex items-center gap-2"
+                        >
+                          <ArrowDown className="w-3 h-3 text-gray-300 flex-none" />
+                          <span className="text-xs text-gray-700 truncate flex-1">{m.texto}</span>
+                          <span className="text-[10px] text-gray-400 flex-none">{formatearHora(m.timestamp)}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {activa.optOut && (
               <div className="px-4 py-2 bg-red-50 border-b border-red-200 flex items-center justify-between gap-3">
@@ -829,7 +933,13 @@ export default function Chat() {
               {hilo.map((m) => {
                 const mio = m.direccion === 'saliente'
                 return (
-                  <div key={m.id} className={`flex ${mio ? 'justify-end' : 'justify-start'}`}>
+                  <div
+                    key={m.id}
+                    id={`msg-${m.id}`}
+                    className={`flex ${mio ? 'justify-end' : 'justify-start'} ${
+                      resaltado === m.id ? 'animate-pulse' : ''
+                    }`}
+                  >
                     <div
                       className={`${m.linkPreview || m.tipo === 'document' ? 'w-72 max-w-[85%]' : 'max-w-[75%]'} rounded-2xl px-3.5 py-2 ${
                         mio
@@ -848,17 +958,32 @@ export default function Chat() {
                         </span>
                       )}
                       {(m.tipo === 'image' || m.tipo === 'sticker' || m.tipo === 'template') && m.media?.url && (
-                        <a href={m.media.url} target="_blank" rel="noopener noreferrer">
+                        <button
+                          type="button"
+                          onClick={() => abrirVisorDe(m.media)}
+                          className="block w-full"
+                        >
                           <img
-                            src={m.media.url}
+                            // La MINIATURA, no el original: una foto de camara
+                            // son megas y aca se ve a 300 px. El original se
+                            // baja recien al abrir el visor.
+                            src={m.media.thumbUrl || m.media.url}
                             alt={m.texto || 'Imagen'}
                             loading="lazy"
-                            className={`rounded-lg mb-1 ${m.tipo === 'sticker' ? 'w-28' : 'max-w-full max-h-72 object-contain'}`}
+                            decoding="async"
+                            // Medidas reales: reservan el espacio y evitan que
+                            // la conversacion salte cuando la imagen carga.
+                            width={m.media.ancho || undefined}
+                            height={m.media.alto || undefined}
+                            className={`rounded-lg mb-1 bg-black/5 ${m.tipo === 'sticker' ? 'w-28' : 'max-w-full max-h-72 object-contain'}`}
                           />
-                        </a>
+                        </button>
                       )}
                       {m.tipo === 'video' && m.media?.url && (
-                        <video src={m.media.url} controls className="rounded-lg mb-1 max-w-full max-h-72" />
+                        // preload="metadata": baja solo la cabecera para poder
+                        // mostrar el primer cuadro y la duracion. Sin esto el
+                        // navegador se traia el video entero al abrir el chat.
+                        <video src={m.media.url} controls preload="metadata" className="rounded-lg mb-1 max-w-full max-h-72" />
                       )}
                       {m.tipo === 'audio' && m.media?.url && (
                         <audio src={m.media.url} controls className="mb-1 max-w-full" />
@@ -908,7 +1033,7 @@ export default function Chat() {
             {ventanaAbierta ? (
               <form
                 onSubmit={handleEnviar}
-                className="relative px-4 py-3 bg-white border-t border-gray-200 flex items-center gap-2"
+                className="relative px-4 py-3 bg-white border-t border-gray-200 flex items-end gap-2"
               >
                 <input
                   ref={selectorArchivo}
@@ -957,12 +1082,18 @@ export default function Chat() {
                 )}
                 {!adjuntoGuardado && sugerenciasRapidas.length > 0 && (
                   <div className="absolute bottom-full left-4 right-4 mb-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden z-10">
-                    {sugerenciasRapidas.map((r) => (
+                    <div className="px-3.5 py-1.5 bg-gray-50 border-b border-gray-100">
+                      <p className="text-[10px] text-gray-400">Flechas para elegir · Enter para usar</p>
+                    </div>
+                    {sugerenciasRapidas.map((r, idx) => (
                       <button
                         key={r.atajo}
                         type="button"
                         onClick={() => aplicarRapida(r)}
-                        className="w-full text-left px-3.5 py-2 hover:bg-gray-50 flex items-start gap-3"
+                        onMouseEnter={() => setSugerenciaSel(idx)}
+                        className={`w-full text-left px-3.5 py-2 flex items-start gap-3 ${
+                          idx === sugerenciaSel ? 'bg-green-50' : 'hover:bg-gray-50'
+                        }`}
                       >
                         <span className="font-mono text-xs font-semibold text-green-700 bg-green-50 px-1.5 py-0.5 rounded flex-none">/{r.atajo}</span>
                         <span className="text-sm text-gray-700 truncate flex-1">{r.texto}</span>
@@ -978,17 +1109,49 @@ export default function Chat() {
                     ))}
                   </div>
                 )}
-                <input
+                <textarea
                   ref={cuadroTexto}
-                  type="text"
+                  rows={1}
                   value={texto}
-                  onChange={(e) => setTexto(e.target.value)}
+                  onChange={(e) => {
+                    setTexto(e.target.value)
+                    // Alto automatico: crece con el texto hasta 6 lineas, como
+                    // WhatsApp. Un input de una linea obliga a escribir a
+                    // ciegas cuando el mensaje es largo.
+                    e.target.style.height = 'auto'
+                    e.target.style.height = `${Math.min(e.target.scrollHeight, 132)}px`
+                  }}
                   onKeyDown={(e) => {
-                    if (e.key === 'Tab' && sugerenciasRapidas.length > 0) { e.preventDefault(); aplicarRapida(sugerenciasRapidas[0]) }
+                    // Con la lista de atajos abierta, las flechas la recorren y
+                    // Enter usa el elegido — sin sacar la mano del teclado.
+                    if (sugerenciasRapidas.length > 0 && !adjuntoGuardado) {
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault()
+                        setSugerenciaSel((i) => (i + 1) % sugerenciasRapidas.length)
+                        return
+                      }
+                      if (e.key === 'ArrowUp') {
+                        e.preventDefault()
+                        setSugerenciaSel((i) => (i - 1 + sugerenciasRapidas.length) % sugerenciasRapidas.length)
+                        return
+                      }
+                      if (e.key === 'Enter' || e.key === 'Tab') {
+                        e.preventDefault()
+                        aplicarRapida(sugerenciasRapidas[sugerenciaSel] || sugerenciasRapidas[0])
+                        return
+                      }
+                      if (e.key === 'Escape') { e.preventDefault(); setTexto(''); return }
+                    }
+                    // Enter envia; Shift+Enter hace salto de linea.
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      e.target.style.height = 'auto'
+                      handleEnviar(e)
+                    }
                   }}
                   placeholder={respuestasRapidas.length ? 'Escribí un mensaje, o / para una respuesta rápida' : 'Escribí un mensaje'}
                   disabled={enviando}
-                  className="flex-1 px-4 py-2.5 bg-gray-100 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-60"
+                  className="flex-1 px-4 py-2.5 bg-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-60 resize-none leading-5 max-h-[132px]"
                 />
                 <button
                   type="submit"
@@ -1079,6 +1242,31 @@ export default function Chat() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Archivos de la conversacion */}
+      {activa && panelMedia && (
+        <div
+          className="absolute inset-0 z-30 sm:static sm:z-auto sm:inset-auto flex justify-end bg-black/30 sm:bg-transparent sm:flex-none"
+          onClick={() => setPanelMedia(false)}
+        >
+          <div className="h-full w-full max-w-xs sm:max-w-none sm:w-auto" onClick={(e) => e.stopPropagation()}>
+            <PanelMultimedia
+              mensajes={hilo}
+              onCerrar={() => setPanelMedia(false)}
+              onAbrirImagen={(m) => abrirVisorDe(m.media)}
+              onIrAlMensaje={irAlMensaje}
+            />
+          </div>
+        </div>
+      )}
+
+      {visorIndice !== null && imagenesDelHilo.length > 0 && (
+        <VisorMedia
+          imagenes={imagenesDelHilo}
+          indiceInicial={visorIndice}
+          onCerrar={() => setVisorIndice(null)}
+        />
       )}
 
       {/* Ficha del cliente: columna en escritorio, superpuesta en el celular */}

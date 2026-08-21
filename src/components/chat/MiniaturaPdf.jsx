@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 /**
  * Miniatura de la primera página de un PDF, como la muestra WhatsApp.
@@ -65,8 +65,28 @@ export function formatoKB(bytes) {
 
 export default function MiniaturaPdf({ url, onDatos }) {
   const [datos, setDatos] = useState(null)
+  const contenedor = useRef(null)
+  const [visible, setVisible] = useState(false)
+
+  // Solo se dibuja cuando el documento está por entrar en pantalla. Antes se
+  // rasterizaban TODOS los PDF del hilo al abrir la conversación: cada uno se
+  // descarga entero para poder dibujar su primera página, así que una
+  // conversación con varios documentos se volvía lentísima al abrirla.
+  useEffect(() => {
+    const nodo = contenedor.current
+    if (!nodo || visible) return undefined
+    const obs = new IntersectionObserver((entradas) => {
+      if (entradas.some((e) => e.isIntersecting)) {
+        setVisible(true)
+        obs.disconnect()
+      }
+    }, { rootMargin: '300px' })
+    obs.observe(nodo)
+    return () => obs.disconnect()
+  }, [visible])
 
   useEffect(() => {
+    if (!visible) return undefined
     let vivo = true
     renderizar(url)
       .then((d) => {
@@ -77,14 +97,18 @@ export default function MiniaturaPdf({ url, onDatos }) {
       .catch(() => { /* sin miniatura: la tarjeta simple sigue funcionando */ })
     return () => { vivo = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [url])
+  }, [url, visible])
 
-  if (!datos) return null
+  // El div vacío es el que el observador vigila: sin él no habría nada en el
+  // DOM que avisara que el documento entró en pantalla.
+  if (!datos) return <div ref={contenedor} className="h-px" />
 
   return (
     <img
+      ref={contenedor}
       src={datos.imagen}
       alt="Primera página del documento"
+      loading="lazy"
       className="w-full max-h-44 object-cover object-top bg-white"
     />
   )
