@@ -1,5 +1,6 @@
 import { onRequest } from 'firebase-functions/v2/https'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
+import { createHash } from 'crypto'
 
 /**
  * Cloud Function HTTP para recibir pagos de Yape desde el servicio nativo de Android.
@@ -46,6 +47,39 @@ export const saveYapePaymentNative = onRequest(
       const reparsedAmount = reparseYapeAmount(originalText) ?? reparseYapeAmount(originalTitle)
       const finalAmount = reparsedAmount != null ? reparsedAmount : parseFloat(amount)
 
+      // Re-parsear el NOMBRE, por el mismo motivo que el monto: el app arma
+      // "titulo + texto" y busca "de NOMBRE", pero Yape titula la notificacion
+      // "Confirmación de Pago". Ese "de Pago" enganchaba el patron y se llevaba
+      // media frase: el nombre quedaba como "Pago Victor D. Valle C. te envió
+      // un pago por S" (caso real, Agrovet Sahual 21-ago).
+      //
+      // Se mira el TEXTO solo, nunca titulo+texto: el nombre siempre va antes
+      // de "te envió".
+      const reparseYapeSender = (txt, soloEnvio = false) => {
+        if (!txt) return null
+        const limpio = String(txt).replace(/^\s*¡?\s*Yape!?\s*/i, '')
+        const porEnvio = limpio.match(/^(.+?)\s+te\s+envi[óo]/i)
+        if (porEnvio) return porEnvio[1].trim()
+        // El patron "de NOMBRE" solo se acepta sobre el TEXTO. Sobre el
+        // titulo daria "Pago" (de "Confirmación de Pago"), que es peor que
+        // decir "Desconocido" porque parece un nombre.
+        if (soloEnvio) return null
+        // Formato viejo: "Recibiste S/ 50.00 de Juan Pérez"
+        const porDe = limpio.match(/\bde\s+([A-Za-zÁÉÍÓÚÑáéíóúñ][A-Za-zÁÉÍÓÚÑáéíóúñ\s.]*)/i)
+        if (porDe) return porDe[1].trim()
+        return null
+      }
+      const nombreDelApp = (senderName || '').trim()
+      // Un nombre que contiene la propia frase de la notificacion es basura del
+      // patron viejo: mejor "Desconocido" que una frase a medias.
+      const nombreDelAppSirve = nombreDelApp
+        && nombreDelApp !== 'Desconocido'
+        && !/te\s+envi[óo]/i.test(nombreDelApp)
+      const finalSenderName =
+        reparseYapeSender(originalText)
+        || reparseYapeSender(originalTitle, true)
+        || (nombreDelAppSirve ? nombreDelApp : 'Desconocido')
+
       // Validar datos requeridos
       if (!businessId) {
         console.log('❌ Missing businessId')
@@ -75,7 +109,7 @@ export const saveYapePaymentNative = onRequest(
       // Crear el documento del pago
       const paymentData = {
         amount: finalAmount,
-        senderName: senderName || 'Desconocido',
+        senderName: finalSenderName,
         originalText: originalText || '',
         originalTitle: originalTitle || '',
         source: 'native_notification', // Indica que viene del servicio nativo
@@ -87,12 +121,55 @@ export const saveYapePaymentNative = onRequest(
 
       console.log('💾 Saving Yape payment:', paymentData)
 
-      // Guardar en Firestore (esto disparará el trigger onYapePayment)
-      const docRef = await db
+      const pagosRef = db
         .collection('businesses')
         .doc(businessId)
         .collection('yapePayments')
-        .add(paymentData)
+
+      // ==================== ANTI-DUPLICADOS ====================
+      // Android llama a onNotificationPosted MAS DE UNA VEZ por la misma
+      // notificacion: Yape la publica y enseguida la actualiza. El servicio
+      // nativo no distingue una cosa de la otra y manda dos veces, asi que se
+      // guardaban dos pagos y sonaban dos campanitas por un solo yape (caso
+      // Agrovet Sahual 21-ago: 5 de 7 pagos duplicados, siempre con ~1s de
+      // diferencia).
+      //
+      // La clave esta en que `timestamp` (sbn.getPostTime) es IDENTICO en las
+      // dos llamadas, y el texto trae el codigo de seguridad, que es distinto
+      // en cada pago real. Con eso el id del documento se vuelve determinista:
+      // el segundo intento choca contra el primero y no entra.
+      //
+      // Se usa create() y no set(): create() falla si el documento ya existe,
+      // y esa falla es atomica — dos llamadas simultaneas no pueden ganar las
+      // dos. Con set() la segunda pisaria a la primera sin que nadie se entere.
+      const claveNatural = [timestamp || '', finalAmount, originalText || originalTitle || ''].join('|')
+      const sePuedeDeduplicar = !!(timestamp || originalText)
+
+      let docRef
+      if (sePuedeDeduplicar) {
+        const idDeterminista = createHash('sha1').update(claveNatural).digest('hex').slice(0, 24)
+        docRef = pagosRef.doc(idDeterminista)
+        try {
+          await docRef.create(paymentData)
+        } catch (err) {
+          // 6 = ALREADY_EXISTS. Es el caso esperado, no un error: la misma
+          // notificacion llegando por segunda vez.
+          const yaExistia = err?.code === 6 || /ALREADY_EXISTS/i.test(err?.message || '')
+          if (!yaExistia) throw err
+          console.log(`🔁 Pago de Yape duplicado ignorado (${idDeterminista}) — misma notificacion reenviada por Android`)
+          res.status(200).json({
+            success: true,
+            paymentId: idDeterminista,
+            duplicate: true,
+            message: 'Yape payment already registered'
+          })
+          return
+        }
+      } else {
+        // Sin timestamp ni texto no hay con que identificarlo. Antes que
+        // perder el pago, se guarda con id aleatorio (comportamiento viejo).
+        docRef = await pagosRef.add(paymentData)
+      }
 
       console.log('✅ Yape payment saved with ID:', docRef.id)
       console.log('📤 Trigger onYapePayment should now send push notification')
