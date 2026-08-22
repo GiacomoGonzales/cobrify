@@ -15,7 +15,7 @@ import { getWarehouses } from '@/services/warehouseService'
 import { downloadLogisticsMovementPDF } from '@/utils/logisticsPdfGenerator'
 import { getCompanySettings, saveCompanySettings } from '@/services/firestoreService'
 import { getExitReasons, getCustomExitReasons, isCustomExitReason, buildCustomExitReason } from '@/utils/warehouseExitReasons'
-import { groupExitsByProject } from '@/utils/exitCosting'
+import { groupExitsByProject, groupExitsBySimpleReason } from '@/utils/exitCosting'
 import { generateExitReportExcel } from '@/services/exitReportExportService'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import { useLocationAccess } from '@/utils/locationAccess'
@@ -62,6 +62,9 @@ export default function WarehouseExits() {
 
   // Reporte de consumo por obra
   const [isReportOpen, setIsReportOpen] = useState(false)
+  // Qué historial se está mirando: 'obra' agrupa por proyecto, 'simple' agrupa
+  // las salidas de uso interno por motivo. Cuentan igual, cambia el criterio.
+  const [reportView, setReportView] = useState('obra')
   const [isExportingReport, setIsExportingReport] = useState(false)
   const [expandedGroup, setExpandedGroup] = useState(null)
   const [reportFilters, setReportFilters] = useState({
@@ -200,7 +203,8 @@ export default function WarehouseExits() {
     return isNaN(d.getTime()) ? null : d
   }
 
-  const openReportModal = () => {
+  const openReportModal = (vista = 'obra') => {
+    setReportView(vista)
     // Arranca en el MES EN CURSO: el caso que pidió el usuario es cerrar el mes
     // y ver cuánto se consumió en cada obra.
     const hoy = new Date()
@@ -241,8 +245,10 @@ export default function WarehouseExits() {
   }, [exits, reportFilters])
 
   const reportData = useMemo(
-    () => groupExitsByProject(reportExits, products),
-    [reportExits, products]
+    () => (reportView === 'simple'
+      ? groupExitsBySimpleReason(reportExits, products)
+      : groupExitsByProject(reportExits, products)),
+    [reportExits, products, reportView]
   )
 
   /** Etiqueta del período, para el encabezado del Excel. */
@@ -259,13 +265,18 @@ export default function WarehouseExits() {
   }
 
   const handleExportReport = async () => {
-    if (reportExits.length === 0) {
-      toast.error('No hay salidas en el período seleccionado')
+    if (reportData.groups.length === 0) {
+      toast.error(reportView === 'simple'
+        ? 'No hay salidas simples en el período seleccionado'
+        : 'No hay salidas en el período seleccionado')
       return
     }
     setIsExportingReport(true)
     try {
       await generateExitReportExcel(reportExits, products, businessInfo, {
+        // El Excel sigue la pestaña abierta: exportar algo distinto de lo que
+        // se está viendo en pantalla seria peor que no tener el boton.
+        view: reportView,
         periodLabel: reportPeriodLabel(),
         warehouseLabel: reportFilters.warehouseId === 'all'
           ? 'Todos'
@@ -609,9 +620,13 @@ export default function WarehouseExits() {
           <p className="text-gray-600 mt-1">Salidas hacia obras/proyectos o salidas simples para uso interno</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={openReportModal} variant="outline">
+          <Button onClick={() => openReportModal('obra')} variant="outline">
             <BarChart3 className="w-4 h-4 mr-2" />
             Reporte por Obra
+          </Button>
+          <Button onClick={() => openReportModal('simple')} variant="outline">
+            <BarChart3 className="w-4 h-4 mr-2" />
+            Reporte de Salidas Simples
           </Button>
           <Button onClick={() => openCreateModal('simple')} variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50">
             <PackageMinus className="w-4 h-4 mr-2" />
@@ -1127,10 +1142,32 @@ export default function WarehouseExits() {
       <Modal
         isOpen={isReportOpen}
         onClose={() => setIsReportOpen(false)}
-        title="Consumo por Obra"
+        title={reportView === 'simple' ? 'Salidas Simples por Motivo' : 'Consumo por Obra'}
         size="4xl"
       >
         <div className="space-y-5">
+          {/* Los dos historiales. Comparten filtros y forma de contar: lo único
+              que cambia es con qué criterio se agrupa. */}
+          <div className="flex gap-1 p-1 bg-gray-100 rounded-lg">
+            {[
+              { id: 'obra', label: 'Por obra' },
+              { id: 'simple', label: 'Salidas simples' },
+            ].map(t => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => { setReportView(t.id); setExpandedGroup(null) }}
+                className={`flex-1 px-3 py-1.5 text-sm rounded-md transition-colors ${
+                  reportView === t.id
+                    ? 'bg-white text-gray-900 shadow-sm font-medium'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
           {/* Filtros */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div>
@@ -1164,17 +1201,21 @@ export default function WarehouseExits() {
                 ))}
               </select>
             </div>
-            <div className="flex items-end">
-              <label className="flex items-center gap-2 pb-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={reportFilters.includeSimple}
-                  onChange={e => setReportFilters(prev => ({ ...prev, includeSimple: e.target.checked }))}
-                  className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                />
-                <span className="text-sm text-gray-700">Incluir salidas simples</span>
-              </label>
-            </div>
+            {/* Solo tiene sentido en el reporte por obra: en el de simples
+                serían las únicas filas, apagarlo dejaría la pantalla vacía. */}
+            {reportView === 'obra' && (
+              <div className="flex items-end">
+                <label className="flex items-center gap-2 pb-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={reportFilters.includeSimple}
+                    onChange={e => setReportFilters(prev => ({ ...prev, includeSimple: e.target.checked }))}
+                    className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                  />
+                  <span className="text-sm text-gray-700">Incluir salidas simples</span>
+                </label>
+              </div>
+            )}
           </div>
 
           {/* Totales del período */}
@@ -1184,8 +1225,10 @@ export default function WarehouseExits() {
               <p className="text-xl font-bold text-indigo-900">{formatCurrency(reportData.totals.total)}</p>
             </div>
             <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
-              <p className="text-xs text-gray-600">Obras</p>
-              <p className="text-xl font-bold text-gray-900">{reportData.totals.projectCount}</p>
+              <p className="text-xs text-gray-600">{reportView === 'simple' ? 'Motivos' : 'Obras'}</p>
+              <p className="text-xl font-bold text-gray-900">
+                {reportView === 'simple' ? reportData.totals.groupCount : reportData.totals.projectCount}
+              </p>
             </div>
             <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
               <p className="text-xs text-gray-600">Salidas</p>
@@ -1211,7 +1254,9 @@ export default function WarehouseExits() {
           {/* Listado por obra */}
           {reportData.groups.length === 0 ? (
             <div className="text-center py-10 text-gray-500 text-sm">
-              No hay salidas en el período seleccionado.
+              {reportView === 'simple'
+                ? 'No hay salidas simples en el período seleccionado.'
+                : 'No hay salidas en el período seleccionado.'}
             </div>
           ) : (
             <div className="border border-gray-200 rounded-xl divide-y divide-gray-200 max-h-[45vh] overflow-y-auto">

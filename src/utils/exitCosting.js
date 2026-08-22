@@ -68,27 +68,30 @@ export const buildProductIndex = (products = []) => {
 }
 
 /**
- * Agrupa las salidas por obra y devuelve, por cada una, cuánto salió y cuánto
- * vale. Las salidas simples (sin proyecto) se agrupan bajo una entrada propia
- * para que el total del reporte cuadre con lo que salió del almacén.
+ * Motor de agrupación: recorre las salidas una vez y acumula cuánto salió y
+ * cuánto vale por grupo, con el desglose por producto.
+ *
+ * Quién va con quién lo decide `clasificar`, no esta función. Así el reporte por
+ * obra y el de salidas simples cuentan exactamente igual — que es lo que
+ * importa, porque son los dos números que el usuario compara.
  *
  * @param {Array} exits    - salidas ya filtradas por fecha/almacén
  * @param {Array} products - catálogo, para el costo de las salidas viejas
+ * @param {Function} clasificar - (exit) => { key, name, code, isProject }
  * @returns {{ groups: Array, totals: Object }}
  */
-export const groupExitsByProject = (exits = [], products = []) => {
+const agruparSalidas = (exits, products, clasificar) => {
   const productsById = buildProductIndex(products)
   const map = new Map()
 
   for (const exit of exits) {
-    const esObra = exit.exitType !== 'simple' && exit.projectId
-    const key = esObra ? exit.projectId : '__simple__'
+    const { key, name, code, isProject } = clasificar(exit)
 
     const grupo = map.get(key) || {
       key,
-      isProject: !!esObra,
-      name: esObra ? (exit.projectName || 'Obra sin nombre') : 'Salidas simples (uso interno)',
-      code: esObra ? (exit.projectCode || '') : '',
+      isProject: !!isProject,
+      name,
+      code: code || '',
       exitCount: 0,
       itemCount: 0,
       unitCount: 0,
@@ -163,6 +166,48 @@ export const groupExitsByProject = (exits = [], products = []) => {
   }, { total: 0, exitCount: 0, unitCount: 0, estimatedLines: 0 })
   totals.total = Math.round(totals.total * 100) / 100
   totals.projectCount = groups.filter(g => g.isProject).length
+  totals.groupCount = groups.length
 
   return { groups, totals }
 }
+
+/** ¿Es una salida simple (uso interno) y no una salida a obra? */
+export const esSalidaSimple = (exit) => exit?.exitType === 'simple' || !exit?.projectId
+
+/**
+ * Agrupa las salidas por obra. Las simples caen todas juntas en una entrada
+ * propia, para que el total del reporte cuadre con lo que salió del almacén.
+ */
+export const groupExitsByProject = (exits = [], products = []) =>
+  agruparSalidas(exits, products, (exit) => {
+    const esObra = !esSalidaSimple(exit)
+    return {
+      key: esObra ? exit.projectId : '__simple__',
+      isProject: esObra,
+      name: esObra ? (exit.projectName || 'Obra sin nombre') : 'Salidas simples (uso interno)',
+      code: esObra ? (exit.projectCode || '') : '',
+    }
+  })
+
+/**
+ * Agrupa SOLO las salidas simples, por motivo.
+ *
+ * En el reporte por obra las simples caen todas en un mismo montón —lo que
+ * importa ahí es cuánto se llevó cada obra—, así que el que solo hace salidas
+ * internas no tenía historial: veía una sola fila con todo junto. Acá cada
+ * motivo (Limpieza, Personal administrativo, ...) es su propia fila, con el
+ * mismo desglose por producto.
+ *
+ * Se agrupa por `reasonLabel` y no por `reason`: el motivo puede ser uno propio
+ * creado por el negocio, y el código interno de esos no le dice nada a nadie.
+ */
+export const groupExitsBySimpleReason = (exits = [], products = []) =>
+  agruparSalidas(exits.filter(esSalidaSimple), products, (exit) => {
+    const etiqueta = (exit.reasonLabel || '').trim() || 'Sin motivo'
+    return {
+      key: etiqueta.toLowerCase(),
+      isProject: false,
+      name: etiqueta,
+      code: '',
+    }
+  })

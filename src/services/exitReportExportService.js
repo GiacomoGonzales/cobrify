@@ -2,8 +2,8 @@
  * Excel del reporte de consumo por obra (modo logística).
  *
  * Hojas:
- *   1) Resumen por Obra   — cuánto se consumió en cada una
- *   2) Detalle por Obra   — qué producto salió a cada obra y por cuánto
+ *   1) Resumen  — cuánto se consumió en cada obra (o en cada motivo)
+ *   2) Detalle  — qué producto salió a cada una y por cuánto
  *   3) Salidas            — el listado de salidas del período
  *
  * La valorización NO se calcula acá: viene de `@/utils/exitCosting`, el mismo
@@ -12,7 +12,7 @@
  */
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { groupExitsByProject, buildProductIndex, getExitTotalCost } from '@/utils/exitCosting'
+import { groupExitsByProject, groupExitsBySimpleReason, buildProductIndex, getExitTotalCost } from '@/utils/exitCosting'
 import {
   XLSX,
   cellStyle, centerStyle, numberStyle,
@@ -41,11 +41,21 @@ const fmtDateTime = (value) => {
  * @param {Array}  exits    - salidas ya filtradas por el período elegido
  * @param {Array}  products - catálogo, para valorizar salidas viejas sin costo
  * @param {Object} businessData
- * @param {Object} options   - { periodLabel, warehouseLabel }
+ * @param {Object} options   - { periodLabel, warehouseLabel, view }
+ *   `view`: 'obra' (default) agrupa por proyecto; 'simple' agrupa las salidas
+ *   de uso interno por motivo. Tiene que seguir a la pestaña que el usuario
+ *   está mirando: exportar algo distinto de lo que ve en pantalla es peor que
+ *   no tener el botón.
  */
 export const generateExitReportExcel = async (exits, products, businessData = {}, options = {}) => {
-  const { periodLabel = 'Todas las fechas', warehouseLabel = 'Todos' } = options
-  const { groups, totals } = groupExitsByProject(exits, products)
+  const { periodLabel = 'Todas las fechas', warehouseLabel = 'Todos', view = 'obra' } = options
+  const esSimple = view === 'simple'
+  const { groups, totals } = esSimple
+    ? groupExitsBySimpleReason(exits, products)
+    : groupExitsByProject(exits, products)
+  // La primera columna cambia de significado con la vista: en una es la obra
+  // que consumió, en la otra el motivo de la salida interna.
+  const colDestino = esSimple ? 'Motivo' : 'Obra / Destino'
   const workbook = XLSX.utils.book_new()
 
   const metaExtra = []
@@ -57,11 +67,11 @@ export const generateExitReportExcel = async (exits, products, businessData = {}
   }
 
   // ============== HOJA 1: RESUMEN POR OBRA ==============
-  const headers1 = ['Obra / Destino', 'Código', 'Salidas', 'Unidades', 'Valor Consumido (S/)', '% del Total', 'Primera Salida', 'Última Salida']
+  const headers1 = [colDestino, 'Código', 'Salidas', 'Unidades', 'Valor Consumido (S/)', '% del Total', 'Primera Salida', 'Última Salida']
   const totalCols1 = headers1.length
 
   const aoa1 = []
-  aoa1.push(['CONSUMO POR OBRA'])
+  aoa1.push([esSimple ? 'SALIDAS SIMPLES POR MOTIVO' : 'CONSUMO POR OBRA'])
   aoa1.push([])
   const metaStart = aoa1.length
   aoa1.push(...buildBusinessMetadataRows(businessData, {
@@ -74,7 +84,7 @@ export const generateExitReportExcel = async (exits, products, businessData = {}
   const metaEnd = aoa1.length - 1
   aoa1.push([])
   const subtitleRow = aoa1.length
-  aoa1.push(['RESUMEN POR OBRA'])
+  aoa1.push([esSimple ? 'RESUMEN POR MOTIVO' : 'RESUMEN POR OBRA'])
   aoa1.push([])
   const header1Row = aoa1.length
   aoa1.push(headers1)
@@ -124,10 +134,10 @@ export const generateExitReportExcel = async (exits, products, businessData = {}
   setStyle(ws1, totalRow1, 6, totalLabelStyle)
   setStyle(ws1, totalRow1, 7, totalLabelStyle)
   applyFreezeBelow(ws1, header1Row)
-  XLSX.utils.book_append_sheet(workbook, ws1, 'Resumen por Obra')
+  XLSX.utils.book_append_sheet(workbook, ws1, esSimple ? 'Resumen por Motivo' : 'Resumen por Obra')
 
   // ============== HOJA 2: DETALLE POR OBRA ==============
-  const headers2 = ['Obra / Destino', 'Código Obra', 'Producto', 'Código', 'Variante', 'Unidad', 'Cantidad', 'Costo Unitario (S/)', 'Valor (S/)', 'Costo Estimado']
+  const headers2 = [colDestino, 'Código Obra', 'Producto', 'Código', 'Variante', 'Unidad', 'Cantidad', 'Costo Unitario (S/)', 'Valor (S/)', 'Costo Estimado']
   const totalCols2 = headers2.length
 
   const aoa2 = []
@@ -185,7 +195,7 @@ export const generateExitReportExcel = async (exits, products, businessData = {}
   setStyle(ws2, totalRow2, 7, totalLabelStyle)
   setStyle(ws2, totalRow2, 8, totalNumberStyle)
   applyFreezeBelow(ws2, header2Row)
-  XLSX.utils.book_append_sheet(workbook, ws2, 'Detalle por Obra')
+  XLSX.utils.book_append_sheet(workbook, ws2, esSimple ? 'Detalle por Motivo' : 'Detalle por Obra')
 
   // ============== HOJA 3: SALIDAS ==============
   const headers3 = ['Nro. Salida', 'Fecha', 'Tipo', 'Obra / Motivo', 'Código Obra', 'Almacén', 'Productos', 'Unidades', 'Valor (S/)', 'Registrado por', 'Notas']
@@ -257,10 +267,12 @@ export const generateExitReportExcel = async (exits, products, businessData = {}
   applyFreezeBelow(ws3, header3Row)
   XLSX.utils.book_append_sheet(workbook, ws3, 'Salidas')
 
-  const fileName = buildExcelFileName('Consumo-por-Obra', [])
+  const fileName = buildExcelFileName(esSimple ? 'Salidas-Simples' : 'Consumo-por-Obra', [])
   await saveAndShareExcel(workbook, fileName, {
     shareTitle: fileName,
-    shareText: `Reporte de consumo por obra: ${fileName}`,
+    shareText: esSimple
+      ? `Reporte de salidas simples: ${fileName}`
+      : `Reporte de consumo por obra: ${fileName}`,
     subDirectory: 'Reportes',
   })
 }
