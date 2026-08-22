@@ -5,6 +5,7 @@ import { useHidePrivateData } from '@/hooks/useHidePrivateData'
 import { useToast } from '@/contexts/ToastContext'
 import { getActiveBranches } from '@/services/branchService'
 import { getTables } from '@/services/tableService'
+import { useUserNames } from '@/hooks/useUserNames'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -181,6 +182,7 @@ export default function CashRegister() {
   const [mesasAbiertas, setMesasAbiertas] = useState([])
 
   const isRestaurantMode = businessMode === 'restaurant'
+  const nombreDe = useUserNames()
   // Throttle del refresco de sesión + ref a la última versión de la función
   // (el listener de foco vive entre renders; sin el ref capturaría un closure viejo)
   const lastSessionRefreshRef = useRef(0)
@@ -1564,6 +1566,10 @@ export default function CashRegister() {
         currency: cashMultiCurrencyOn ? (movementData.currency || 'PEN') : 'PEN',
         // Método de fondo: efectivo (default) o Yape
         method: movementData.method || 'cash',
+        // Quién lo registró. Sin esto el movimiento quedaba firmado por el
+        // dueño aunque lo hiciera la cajera.
+        userId: user?.uid,
+        userName: user?.displayName || user?.email || '',
       })
 
       if (result.success) {
@@ -2910,6 +2916,12 @@ export default function CashRegister() {
                             <p className="text-sm sm:text-base font-medium text-gray-900 truncate">{movement.description}</p>
                             <p className="text-xs text-gray-500 flex items-center gap-1.5 flex-wrap">
                               <span>{movement.category}</span>
+                              {movement.createdByName && (
+                                <span className="text-gray-400">· {movement.createdByName}</span>
+                              )}
+                              {!movement.createdByName && movement.createdBy && movement.createdBy !== getBusinessId() && (
+                                <span className="text-gray-400">· {nombreDe(movement.createdBy)}</span>
+                              )}
                               {movement.method === 'yape' && (
                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 border border-purple-200 text-[10px] font-semibold">
                                   Yape

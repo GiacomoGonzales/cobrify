@@ -8,6 +8,7 @@ import { Capacitor } from '@capacitor/core'
 import { scanBarcode, scannerDisponible } from '@/utils/scanBarcode'
 import { Camera as CapacitorCamera, CameraResultType, CameraSource } from '@capacitor/camera'
 import { useAppContext } from '@/hooks/useAppContext'
+import { registrarCambiosDePrecio } from '@/services/priceHistoryService'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useHidePrivateData } from '@/hooks/useHidePrivateData'
 import { useToast } from '@/contexts/ToastContext'
@@ -1853,6 +1854,20 @@ export default function Products() {
       if (editingProduct) {
         // Update
         result = await updateProduct(getBusinessId(), editingProduct.id, productData)
+
+        // Dejar rastro de los precios que cambiaron. Va DESPUÉS de guardar y
+        // sin await bloqueante del resultado: si la anotación falla, el cambio
+        // de precio igual quedó hecho.
+        if (result?.success) {
+          registrarCambiosDePrecio(getBusinessId(), {
+            productId: editingProduct.id,
+            productName: productData.name || editingProduct.name,
+            antes: editingProduct,
+            despues: productData,
+            usuario: { uid: user?.uid, nombre: user?.displayName || user?.email || '' },
+            origen: 'manual',
+          })
+        }
 
         // Crear stockMovements de auditoría por cada cambio manual aplicado.
         // Usamos type='adjustment' y quantity CON signo (delta), igual que el flujo

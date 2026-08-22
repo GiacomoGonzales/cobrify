@@ -2649,10 +2649,24 @@ export const addCashMovement = async (userId, sessionId, movementData) => {
       sessionId,
       type: movementData.type, // 'income' o 'expense'
       amount: movementData.amount,
-      description: movementData.description,
+      // LendingPortfolio manda `reason` en vez de `description`: sin este
+      // respaldo el campo viajaba como undefined y Firestore rechazaba la
+      // escritura entera — el movimiento de caja del pago de un prestamo se
+      // perdia en silencio (el llamador traga el error a proposito).
+      description: movementData.description || movementData.reason || '',
       category: movementData.category || 'Otros',
       createdAt: serverTimestamp(),
-      createdBy: userId,
+      // OJO: el primer parametro `userId` es en realidad el businessId — es la
+      // ruta de la coleccion. Guardarlo como `createdBy` hacia que TODOS los
+      // movimientos figuraran a nombre del dueño, porque getBusinessId()
+      // devuelve el uid del dueño cuando entra un sub-usuario. Un retiro hecho
+      // por la cajera quedaba firmado por el dueño: peor que no tener el dato,
+      // porque parecia informacion y siempre decia lo mismo.
+      //
+      // Ahora el autor viene explicito. El fallback al businessId queda solo
+      // para no romper llamadas viejas que no lo manden.
+      createdBy: movementData.userId || userId,
+      createdByName: movementData.userName || '',
     }
     // Multi-divisa: si vino currency='USD', persistirlo. PEN no se guarda
     // (default implícito) para mantener compatibilidad con movimientos legacy.

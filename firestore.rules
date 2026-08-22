@@ -518,6 +518,14 @@ service cloud.firestore {
         allow read, write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
+      // Subcollection: Historial de Precios (quién cambió qué precio y cuándo).
+      // Mismo criterio que stockMovements: quien puede editar el producto puede
+      // dejar constancia de haberlo hecho.
+      match /priceChanges/{changeId} {
+        allow read, write: if isAdmin();
+        allow read, write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
       // Subcollection: Stock Backups (respaldo previo de las herramientas masivas
       // de inventario — Verificar/Corregir stock — y su botón "Revertir").
       // SOLO EL DUEÑO: esas herramientas son solo-dueño por diseño (blindaje Fase 1).

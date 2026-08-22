@@ -1164,6 +1164,8 @@ Gracias por tu preferencia.`
                 description: `Devolución por anulación de ${voidingInvoice.number}${voidReason.trim() ? ` — ${voidReason.trim()}` : ''}`,
                 category: 'Devoluciones',
                 ...(voidingInvoice.currency === 'USD' && { currency: 'USD' }),
+                userId: user?.uid,
+                userName: user?.displayName || user?.email || '',
               })
               if (!mov.success) {
                 toast.error('Documento anulado, pero no se pudo registrar la devolución en caja. Regístrala a mano como egreso.', 8000)

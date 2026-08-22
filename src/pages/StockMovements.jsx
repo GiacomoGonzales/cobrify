@@ -26,6 +26,7 @@ import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Select from '@/components/ui/Select'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
+import { useUserNames } from '@/hooks/useUserNames'
 import { getStockMovements } from '@/services/warehouseService'
 import { getWarehouses } from '@/services/warehouseService'
 import { getProducts } from '@/services/firestoreService'
@@ -37,6 +38,10 @@ import GuideLink from '@/components/guide/GuideLink'
 
 export default function StockMovements() {
   const { user, isDemoMode, demoData, getBusinessId, hasMainBranchAccess, businessMode, filterWarehousesByAccess, allowedBranches, allowedWarehouses, businessSettings , branchScope } = useAppContext()
+  // Quién hizo cada movimiento: el uid se viene guardando hace tiempo, pero
+  // nunca se mostró. El hook lo traduce a nombre.
+  const nombreDe = useUserNames()
+
   // Filtro de seguridad por ubicación (sucursal/almacén) para usuarios secundarios.
   // Los movimientos llevan warehouseId y, en transferencias, fromWarehouse/toWarehouse.
   const canAccess = useLocationAccess()
@@ -1043,6 +1048,11 @@ export default function StockMovements() {
                     {(movement.notes || movement.reason) && (
                       <p className="text-xs text-gray-400 mt-0.5 truncate">{movement.notes || movement.reason}</p>
                     )}
+
+                    {/* Fila 5: quién lo hizo */}
+                    {movement.userId && (
+                      <p className="text-[11px] text-gray-400 mt-0.5 truncate">Por {nombreDe(movement.userId)}</p>
+                    )}
                   </div>
                 )
               })}
@@ -1069,7 +1079,8 @@ export default function StockMovements() {
                     <th className="sticky top-0 z-10 bg-gray-50 w-[15%] px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Almacén</th>
                     <th className="sticky top-0 z-10 bg-gray-50 w-[7%] px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase">Cant.</th>
                     <th className="sticky top-0 z-10 bg-gray-50 w-[7%] px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase">Saldo</th>
-                    <th className="sticky top-0 z-10 bg-gray-50 w-[29%] px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Motivo</th>
+                    <th className="sticky top-0 z-10 bg-gray-50 w-[20%] px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Motivo</th>
+                    <th className="sticky top-0 z-10 bg-gray-50 w-[9%] px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Usuario</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1133,6 +1144,11 @@ export default function StockMovements() {
                         <td className="px-2 py-2">
                           <p className="text-xs text-gray-600 line-clamp-2" title={movement.notes || movement.reason}>
                             {movement.notes || movement.reason || '-'}
+                          </p>
+                        </td>
+                        <td className="px-2 py-2">
+                          <p className="text-xs text-gray-600 truncate" title={nombreDe(movement.userId)}>
+                            {nombreDe(movement.userId)}
                           </p>
                         </td>
                       </tr>

@@ -46,6 +46,8 @@ import { scanBarcode, scannerDisponible } from '@/utils/scanBarcode'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useAuth } from '@/contexts/AuthContext'
 import ConsumoInternoModal from '@/components/inventory/ConsumoInternoModal'
+import { useUserNames } from '@/hooks/useUserNames'
+import { getPriceHistory } from '@/services/priceHistoryService'
 import { useHidePrivateData } from '@/hooks/useHidePrivateData'
 import { useToast } from '@/contexts/ToastContext'
 import { recalculateProductCostsFromPurchases } from '@/services/inventoryCostService'
@@ -259,6 +261,8 @@ export default function Inventory() {
 
   // Warehouses, sucursales y transferencias
   const [warehouses, setWarehouses] = useState([])
+  const nombreDe = useUserNames()
+  const [cambiosDePrecio, setCambiosDePrecio] = useState([])
   const [showConsumoInternoModal, setShowConsumoInternoModal] = useState(false)
   const [allWarehouses, setAllWarehouses] = useState([]) // Todos los almacenes (para transferencias entre sucursales)
   const [branches, setBranches] = useState([])
@@ -1269,7 +1273,13 @@ export default function Inventory() {
       const businessId = getBusinessId()
       // Usar ingredientId si es ingrediente, productId si es producto
       const filterKey = product.isIngredient ? 'ingredientId' : 'productId'
+      // Los precios se piden en paralelo: son otra colección y no deben
+      // demorar el historial de stock, que es lo que casi siempre se viene a ver.
+      const precios = getPriceHistory(businessId, product.id)
+        .then(r => setCambiosDePrecio(r?.data || []))
+        .catch(() => setCambiosDePrecio([]))
       const result = await getStockMovements(businessId, { [filterKey]: product.id })
+      void precios
 
       if (result.success) {
         // Enriquecer movimientos con nombres de almacenes
@@ -1304,6 +1314,7 @@ export default function Inventory() {
     setShowHistoryModal(false)
     setHistoryProduct(null)
     setProductMovements([])
+    setCambiosDePrecio([])
   }
 
   // Recalcular stock desde movimientos (ESCRIBE stock: solo el dueño)
@@ -4944,6 +4955,45 @@ export default function Inventory() {
             </div>
           )}
 
+          {/* Cambios de precio: solo aparece si hubo alguno. Un bloque vacío
+              en cada producto sería ruido en la pantalla que uno abre justamente
+              para encontrar algo. */}
+          {cambiosDePrecio.length > 0 && (
+            <div className="border border-gray-200 rounded-lg overflow-hidden">
+              <div className="px-3 py-2 bg-gray-50 border-b border-gray-200">
+                <p className="text-sm font-semibold text-gray-900">
+                  Cambios de precio ({cambiosDePrecio.length})
+                </p>
+              </div>
+              <div className="divide-y divide-gray-100 max-h-48 overflow-y-auto">
+                {cambiosDePrecio.map((c) => (
+                  <div key={c.id} className="px-3 py-2 flex items-center justify-between gap-3 text-sm">
+                    <div className="min-w-0">
+                      <p className="text-gray-900 truncate">
+                        {c.campoNombre}
+                        {c.variantSku && <span className="text-gray-400"> · {c.variantSku}</span>}
+                      </p>
+                      <p className="text-xs text-gray-400 truncate">
+                        {formatMovementDate(c.createdAt)}
+                        {' · '}
+                        {c.userName || nombreDe(c.userId)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-none text-sm">
+                      <span className="text-gray-400 line-through">
+                        {c.valorAnterior != null && c.valorAnterior !== '' ? formatCurrency(c.valorAnterior) : '—'}
+                      </span>
+                      <span className="text-gray-400">→</span>
+                      <span className="font-semibold text-gray-900">
+                        {c.valorNuevo != null && c.valorNuevo !== '' ? formatCurrency(c.valorNuevo) : '—'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {isLoadingHistory ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
@@ -5019,7 +5069,10 @@ export default function Inventory() {
 
                       {/* Fila 4: Fecha + Referencia */}
                       <div className="flex items-center justify-between text-xs text-gray-500 pt-1 border-t border-gray-200/50">
-                        <span>{formatMovementDate(movement.createdAt)}</span>
+                        <span>
+                          {formatMovementDate(movement.createdAt)}
+                          {movement.userId && <span className="text-gray-400"> · {nombreDe(movement.userId)}</span>}
+                        </span>
                         {movement.referenceNumber && (
                           <span className="text-gray-400">{movement.referenceNumber}</span>
                         )}
@@ -5085,6 +5138,9 @@ export default function Inventory() {
                             </p>
                             {movement.referenceNumber && (
                               <p className="text-[10px] text-gray-400 mt-0.5">{movement.referenceNumber}</p>
+                            )}
+                            {movement.userId && (
+                              <p className="text-[10px] text-gray-400 mt-0.5">Por {nombreDe(movement.userId)}</p>
                             )}
                           </td>
                         </tr>
