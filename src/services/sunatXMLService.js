@@ -395,6 +395,16 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
   const detractionAmt = hasDetraction ? parseFloat(invoiceData.detractionAmount) : 0
   const netPayableAmount = paymentTotalAmount - detractionAmt
 
+  // SUNAT exige el monto de la detracción SIEMPRE en PEN (regla 3208), aunque
+  // el comprobante sea en dólares. Este generador arma el XML que el usuario
+  // DESCARGA para su contador; el que se envía a SUNAT lo arma la Cloud
+  // Function. Los dos tienen que decir lo mismo, así que se usa el mismo campo.
+  const detractionAmtPEN = Number(invoiceData.detractionAmountPEN) > 0
+    ? Number(invoiceData.detractionAmountPEN)
+    : ((invoiceData.currency === 'USD')
+      ? Math.round(detractionAmt * (Number(invoiceData.exchangeRate) || 1) * 100) / 100
+      : detractionAmt)
+
   let paymentTermsXml = ''
 
   // === PaymentTerms de detracción (DEBE ir ANTES de FormaPago según SUNAT) ===
@@ -405,7 +415,7 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
     <cbc:PaymentMeansID schemeAgencyName="PE:SUNAT" schemeName="Codigo de detraccion" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo54">${invoiceData.detractionType}</cbc:PaymentMeansID>
     <cbc:Note>${netPayableAmount.toFixed(2)}</cbc:Note>
     <cbc:PaymentPercent>${invoiceData.detractionRate || 0}</cbc:PaymentPercent>
-    <cbc:Amount currencyID="${currency}">${detractionAmt.toFixed(2)}</cbc:Amount>
+    <cbc:Amount currencyID="PEN">${detractionAmtPEN.toFixed(2)}</cbc:Amount>
   </cac:PaymentTerms>`
   }
 

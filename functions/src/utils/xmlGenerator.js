@@ -686,12 +686,21 @@ export function generateInvoiceXML(invoiceData, businessData) {
     detractionTerms.ele('cbc:Note').txt(netPayableAmount.toFixed(2))
     detractionTerms.ele('cbc:PaymentPercent').txt(String(invoiceData.detractionRate || 0))
     // SUNAT exige el monto de la detracción SIEMPRE en PEN (regla 3208),
-    // aunque la factura sea en USD: se convierte con el TC congelado del
-    // documento. Caso real: factura USD con detracción rechazada por enviar
-    // currencyID="USD" en este nodo.
-    const detractionAmountPEN = (invoiceData.currency === 'USD')
-      ? Math.round(detractionAmount * (Number(invoiceData.exchangeRate) || 1) * 100) / 100
-      : detractionAmount
+    // aunque la factura sea en USD.
+    //
+    // Se prefiere `detractionAmountPEN`, que el POS calcula aplicando el
+    // porcentaje sobre el total EN SOLES y redondeando a soles enteros — que
+    // es como se deposita en el Banco de la Nación. Convertir el monto en
+    // dólares (que ya venía redondeado a dólares enteros) daba otra cifra:
+    // $26 x 3.352 = S/ 87.15 donde correspondían S/ 88.
+    //
+    // El camino viejo queda como respaldo para los comprobantes emitidos antes
+    // de que existiera el campo.
+    const detractionAmountPEN = Number(invoiceData.detractionAmountPEN) > 0
+      ? Number(invoiceData.detractionAmountPEN)
+      : ((invoiceData.currency === 'USD')
+        ? Math.round(detractionAmount * (Number(invoiceData.exchangeRate) || 1) * 100) / 100
+        : detractionAmount)
     detractionTerms.ele('cbc:Amount', { 'currencyID': 'PEN' })
       .txt(detractionAmountPEN.toFixed(2))
   }

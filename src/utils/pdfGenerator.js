@@ -2594,7 +2594,15 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.setFont('helvetica', 'normal')
     doc.text('Monto de detracción:', detractionInfoX + 5, dataY)
     doc.setFont('helvetica', 'bold')
-    doc.text(`${CCY} ${(invoice.detractionAmount || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 })}`, detractionInfoX + 95, dataY)
+    // El depósito se hace en SOLES en el Banco de la Nación, aunque el
+    // comprobante sea en dólares: acá va la cifra que el cliente deposita, no
+    // su equivalente en la moneda del documento (que no le sirve para nada).
+    // Los comprobantes viejos sin `detractionAmountPEN` caen al valor anterior.
+    const detPEN = Number(invoice.detractionAmountPEN) > 0 ? Number(invoice.detractionAmountPEN) : null
+    const detTexto = detPEN !== null
+      ? `S/ ${detPEN.toLocaleString('es-PE', { minimumFractionDigits: 2 })}`
+      : `${CCY} ${(invoice.detractionAmount || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 })}`
+    doc.text(detTexto, detractionInfoX + 95, dataY)
 
     // Guardar donde termina la sección de detracción
     detractionSectionEndY = detractionInfoY + detractionTotalHeight + 5

@@ -69,7 +69,7 @@ import { getRateForDate } from '@/services/exchangeRateService'
 import { applyBranchPricing } from '@/utils/branchPricing'
 import { filterProductsForBranch, isProductInBranch } from '@/utils/branchCatalog'
 import { getAvailableDocumentTypes, resolveDocumentType } from '@/utils/documentTypes'
-import { calculateInvoiceAmounts, calculateMixedInvoiceAmounts, calculateRecargoConsumo, ID_TYPES, DETRACTION_TYPES, DETRACTION_MIN_AMOUNT } from '@/utils/peruUtils'
+import { calculateInvoiceAmounts, calculateMixedInvoiceAmounts, calculateRecargoConsumo, ID_TYPES, DETRACTION_TYPES, DETRACTION_MIN_AMOUNT, calcularDetraccion } from '@/utils/peruUtils'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
 // El import de Capacitor tiene que ser EXPLÍCITO: este archivo lo usa en 6
 // lugares (escáner, comanda automática, impresión térmica) pero funcionaba
@@ -7096,14 +7096,29 @@ export default function POS() {
           orderNumber: orderNumber || null,
           // Datos de detracción
           hasDetraction: hasDetraction,
-          ...(hasDetraction && detractionType && {
-            detractionType: detractionType,
-            detractionTypeName: DETRACTION_TYPES.find(t => t.code === detractionType)?.name || '',
-            detractionRate: DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0,
-            detractionAmount: Math.round((amounts.total * (DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0)) / 100),
-            detractionBankAccount: detractionBankAccount || null,
-            netPayable: Number((amounts.total - Math.round((amounts.total * (DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0)) / 100)).toFixed(2)),
-          }),
+          ...(hasDetraction && detractionType && (() => {
+            // El depósito del SPOT va en SOLES al Banco de la Nación, aunque el
+            // comprobante sea en dólares: el porcentaje se aplica sobre el total
+            // en soles y se redondea a soles enteros. Antes se calculaba sobre
+            // el total en dólares (caso real FZZ1-00000087: $652.82 al 4% daba
+            // $26, y el XML mandaba S/ 87.15 en vez de los S/ 88 que corresponden).
+            const tasa = DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0
+            const tc = currency === 'USD' ? (Number(exchangeRate) || 1) : 1
+            const det = calcularDetraccion(amounts.total, tc, tasa)
+            return {
+              detractionType: detractionType,
+              detractionTypeName: DETRACTION_TYPES.find(t => t.code === detractionType)?.name || '',
+              detractionRate: tasa,
+              // El monto que se deposita. Es el que va al XML y el que se le
+              // muestra al cliente en el comprobante.
+              detractionAmountPEN: det.pen,
+              // Su equivalente en la moneda del documento, solo para restarlo
+              // del total. En un comprobante en soles los dos son iguales.
+              detractionAmount: det.doc,
+              detractionBankAccount: detractionBankAccount || null,
+              netPayable: Number((amounts.total - det.doc).toFixed(2)),
+            }
+          })()),
           // Datos de retención (Régimen de Retención del IGV — cliente agente de retención).
           // Solo leyenda + cálculo informativo: el total NO cambia (el comprador retiene el 3%).
           hasRetencion: hasRetencion,
@@ -9075,8 +9090,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   let montoInicial = amounts.total
                   if (hasDetraction && detractionType && paymentInstallments.length === 0) {
                     const detractionRate = DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0
-                    const detractionAmt = Math.round((amounts.total * detractionRate) / 100)
-                    montoInicial = amounts.total - detractionAmt
+                    const tc = currency === 'USD' ? (Number(exchangeRate) || 1) : 1
+                    montoInicial = amounts.total - calcularDetraccion(amounts.total, tc, detractionRate).doc
                   }
                   const newInstallment = {
                     number: paymentInstallments.length + 1,
@@ -9112,8 +9127,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     let montoNeto = amounts.total
                     if (hasDetraction && detractionType) {
                       const detractionRate = DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0
-                      const detractionAmt = Math.round((amounts.total * detractionRate) / 100)
-                      montoNeto = amounts.total - detractionAmt
+                      const tc = currency === 'USD' ? (Number(exchangeRate) || 1) : 1
+                      montoNeto = amounts.total - calcularDetraccion(amounts.total, tc, detractionRate).doc
                     }
                     setPaymentInstallments([{ ...paymentInstallments[0], amount: montoNeto.toFixed(2) }])
                   }}

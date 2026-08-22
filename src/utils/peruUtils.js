@@ -61,6 +61,39 @@ export const DETRACTION_TYPES = [
 export const DETRACTION_MIN_AMOUNT = 700
 
 /**
+ * Calcula la detracción (SPOT) de una operación.
+ *
+ * El depósito del SPOT se hace SIEMPRE en soles y en el Banco de la Nación,
+ * aunque el comprobante sea en dólares. Por eso el porcentaje se aplica sobre
+ * el total EN SOLES y el resultado se redondea a soles enteros — no sobre el
+ * total en dólares, que daba un número que nadie puede depositar.
+ *
+ * Devuelve las dos caras del mismo monto:
+ *   - `pen`: lo que se deposita. Es el que va al XML (SUNAT lo exige en PEN) y
+ *            el que hay que mostrarle al cliente.
+ *   - `doc`: su equivalente en la moneda del comprobante, solo para restarlo
+ *            del total y llegar al neto a pagar.
+ *
+ * En un comprobante en soles el tipo de cambio es 1 y las dos son iguales, así
+ * que el resultado es idéntico al de siempre.
+ *
+ * @param {number} totalEnMonedaDoc  total del comprobante, con IGV
+ * @param {number} tipoDeCambio      TC congelado del documento (1 si es PEN)
+ * @param {number} tasa              porcentaje de detracción (4, 10, 12...)
+ * @returns {{pen: number, doc: number}}
+ */
+export function calcularDetraccion(totalEnMonedaDoc, tipoDeCambio, tasa) {
+  const total = Number(totalEnMonedaDoc) || 0
+  const tc = Number(tipoDeCambio) > 0 ? Number(tipoDeCambio) : 1
+  const pct = Number(tasa) || 0
+  if (total <= 0 || pct <= 0) return { pen: 0, doc: 0 }
+
+  const pen = Math.round((total * tc * pct) / 100)
+  const doc = Math.round((pen / tc) * 100) / 100
+  return { pen, doc }
+}
+
+/**
  * Calcula el IGV (18%) de un monto
  * @param {number} amount - Monto base
  * @returns {number} - IGV calculado
