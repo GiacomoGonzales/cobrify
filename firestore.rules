@@ -510,6 +510,14 @@ service cloud.firestore {
         allow read, write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
+      // Subcollection: Consumo Interno (salidas que no son venta: consumo del
+      // personal, merma, cortesías). Mismo criterio que stockMovements: quien
+      // puede mover el stock del negocio puede registrar por qué salió.
+      match /internalConsumptions/{consumptionId} {
+        allow read, write: if isAdmin();
+        allow read, write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
       // Subcollection: Stock Backups (respaldo previo de las herramientas masivas
       // de inventario — Verificar/Corregir stock — y su botón "Revertir").
       // SOLO EL DUEÑO: esas herramientas son solo-dueño por diseño (blindaje Fase 1).
