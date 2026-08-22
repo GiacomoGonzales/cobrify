@@ -55,6 +55,25 @@ export default {
       ],
     },
     {
+      id: 'restaurante',
+      title: 'En restaurante: la comanda de personal',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'La comida del personal hay que cocinarla, así que no alcanza con descontarla: la cocina tiene que verla. En **Órdenes** hay un botón **Comanda de personal** que arma el pedido como cualquier otro — elige los platos, entra a cocina, se prepara.',
+        },
+        {
+          type: 'texto',
+          text: 'La diferencia está al cerrarla: donde una orden normal dice **Cobrar**, esta dice **Registrar consumo**. No emite comprobante ni suma a las ventas: descuenta los insumos al costo y queda en el historial de consumo interno.',
+        },
+        { type: 'ui', kind: 'boton', label: 'Comanda de personal' },
+        {
+          type: 'ojo',
+          text: 'La tarjeta de la orden se marca en azul como **Consumo interno** y muestra el total en cero, para que nadie la confunda con un pedido que hay que cobrar.',
+        },
+      ],
+    },
+    {
       id: 'corregir',
       title: 'Si te equivocaste',
       blocks: [

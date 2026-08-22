@@ -9,6 +9,9 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import { getActiveOrders, getClosedOrders, getOrdersStats, updateOrderStatus, createOrder, completeOrder, markOrderAsPaid, updateOrder, getOrder } from '@/services/orderService'
+import { createInternalConsumption, MOTIVOS_CONSUMO } from '@/services/internalConsumptionService'
+import { getProducts } from '@/services/firestoreService'
+import { getWarehouses } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
 import { createBarTab, occupyTable } from '@/services/tableService'
 import { useLocationAccess } from '@/utils/locationAccess'
@@ -190,7 +193,7 @@ function HistorialOrdenes({ ordenes, cargando, fechas, setFechas, abierta, setAb
 }
 
 export default function Orders() {
-  const { user, getBusinessId, isDemoMode, demoData, filterBranchesByAccess, allowedBranches, hasMainBranchAccess, userPermissions } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData, filterBranchesByAccess, allowedBranches, hasMainBranchAccess, userPermissions, businessMode, businessSettings } = useAppContext()
   const isOwner = !userPermissions?.ownerId
   // Filtro de seguridad por sede (respeta las sucursales habilitadas del usuario secundario)
   const canAccess = useLocationAccess()
@@ -250,6 +253,13 @@ export default function Orders() {
   const [showCreateOrderModal, setShowCreateOrderModal] = useState(false)
   const [showOrderItemsModal, setShowOrderItemsModal] = useState(false)
   const [newOrderData, setNewOrderData] = useState(null)
+  // Comanda de personal: el almuerzo del equipo entra como una orden normal
+  // (la cocina tiene que prepararla igual), pero al cerrarla no cobra: registra
+  // el consumo interno. Ver [Consumo Interno] en Inventario.
+  const [showPersonalModal, setShowPersonalModal] = useState(false)
+  const [personalEmpleado, setPersonalEmpleado] = useState('')
+  const [personalMotivo, setPersonalMotivo] = useState('personal')
+  const [registrandoConsumo, setRegistrandoConsumo] = useState(null)
   // Cuenta de barra creada desde acá: es una mesa efímera (zona Barra) que
   // acumula como una mesa. Se toma el pedido al toque; las rondas siguientes y
   // el cobro se hacen desde Mesas > Barra.
@@ -663,7 +673,7 @@ export default function Orders() {
 
   // Etiqueta del tipo de pedido sin mesa. Antes era un binario delivery/llevar
   // repetido en 4 sitios, y una orden "En Local" (counter) salia como Para Llevar.
-  const ORDER_TYPE_LABEL = { delivery: 'Delivery', takeaway: 'Para Llevar', counter: 'En Local' }
+  const ORDER_TYPE_LABEL = { delivery: 'Delivery', takeaway: 'Para Llevar', counter: 'En Local', personal: 'Personal' }
   const orderTypeLabel = (t) => ORDER_TYPE_LABEL[t] || 'Para Llevar'
 
   // El historial se pide bajo demanda (al abrir la pestaña o cambiar fechas):
@@ -740,6 +750,78 @@ export default function Orders() {
     }
   }
 
+  /** Abre el selector de productos ya marcado como consumo interno. */
+  const abrirComandaDePersonal = () => {
+    setNewOrderData({
+      orderType: 'personal',
+      esConsumoInterno: true,
+      motivoConsumo: personalMotivo,
+      empleadoNombre: personalEmpleado.trim() || null,
+    })
+    setShowPersonalModal(false)
+    setShowOrderItemsModal(true)
+  }
+
+  /**
+   * Cierra una comanda de personal: descuenta el stock (los INSUMOS si hay
+   * receta) valuado al COSTO y marca la orden como entregada.
+   *
+   * El costo NO sale del precio de venta: se lee del producto. Lo que el
+   * personal come no es una venta perdida, es lo que costó reponerlo.
+   */
+  const registrarConsumoDeOrden = async (order) => {
+    if (isDemoMode) { toast.info('Esta función no está disponible en modo demo'); return }
+    if (!window.confirm(`¿Registrar el consumo de la orden #${order.orderNumber}? Se descuenta el stock.`)) return
+
+    setRegistrandoConsumo(order.id)
+    try {
+      // El catálogo y los almacenes se leen recién acá: Órdenes no los necesita
+      // para nada más, y cargarlos siempre encarecería una pantalla que los
+      // mozos abren todo el día.
+      const [prodRes, almRes] = await Promise.all([
+        getProducts(getBusinessId()),
+        getWarehouses(getBusinessId()),
+      ])
+      const catalogo = prodRes.success ? prodRes.data : []
+      const almacen = (almRes.success ? almRes.data : []).find((w) => w.isDefault)
+        || (almRes.success ? almRes.data : [])[0]
+
+      const items = (order.items || []).map((it) => {
+        const producto = catalogo.find((p) => p.id === it.productId)
+        return {
+          productId: it.productId,
+          nombre: it.name || it.productName || '',
+          cantidad: Number(it.quantity) || 0,
+          costoUnitario: Number(producto?.cost ?? producto?.costPrice ?? producto?.purchasePrice ?? 0) || 0,
+        }
+      }).filter((i) => i.productId && i.cantidad > 0)
+
+      const r = await createInternalConsumption(getBusinessId(), {
+        items,
+        motivo: order.motivoConsumo || 'personal',
+        fecha: new Date(),
+        empleadoNombre: order.empleadoNombre || null,
+        nota: `Comanda #${order.orderNumber}`,
+        warehouseId: almacen?.id || null,
+        branchId: order.branchId || null,
+        businessMode,
+        permitirNegativo: !!businessSettings?.allowNegativeStock,
+        usuario: { uid: user?.uid, email: user?.email, nombre: user?.displayName },
+      })
+      if (!r.success) throw new Error(r.error)
+
+      await updateOrderStatus(getBusinessId(), order.id, 'delivered')
+      await updateOrder(getBusinessId(), order.id, { consumoInternoId: r.id })
+
+      toast.success(`Consumo registrado por S/ ${r.total.toFixed(2)}`)
+      loadOrders()
+    } catch (e) {
+      toast.error(e.message || 'No se pudo registrar el consumo')
+    } finally {
+      setRegistrandoConsumo(null)
+    }
+  }
+
   const handleOrderTypeSelected = (orderData) => {
     // Guardar datos de la orden (tipo, fuente, cliente)
     setNewOrderData(orderData)
@@ -759,13 +841,16 @@ export default function Orders() {
       const total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0)
 
       // Crear la orden
+      const esConsumo = !!newOrderData?.esConsumoInterno
       const orderPayload = {
         ...newOrderData,
         items: items.map(item => ({
           ...item,
           total: item.price * item.quantity
         })),
-        total,
+        // Una comanda de personal no se cobra: mostrar el precio de venta
+        // haría creer que alguien va a pagarla.
+        total: esConsumo ? 0 : total,
         status: 'pending',
         tableId: null,
         tableNumber: null,
@@ -1494,6 +1579,15 @@ export default function Orders() {
                 <Wine className="w-5 h-5 mr-2" />
                 Cuenta de barra
               </Button>
+              <Button
+                onClick={() => setShowPersonalModal(true)}
+                size="lg"
+                variant="outline"
+                className="w-full sm:w-auto"
+              >
+                <UtensilsCrossed className="w-5 h-5 mr-2" />
+                Comanda de personal
+              </Button>
               <Button onClick={handleCreateOrderClick} size="lg" className="w-full sm:w-auto">
                 <Plus className="w-5 h-5 mr-2" />
                 Nueva Orden
@@ -1781,6 +1875,17 @@ export default function Orders() {
                     </div>
                   </div>
 
+                  {/* Comanda de personal: que se distinga de un pedido que sí se cobra */}
+                  {order.esConsumoInterno && (
+                    <div className="flex items-center gap-2 text-sm pb-2">
+                      <UtensilsCrossed className="w-4 h-4 text-blue-600" />
+                      <span className="font-medium text-blue-700">
+                        Consumo interno
+                        {order.empleadoNombre ? ` — ${order.empleadoNombre}` : ''}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Nombre del cliente si existe */}
                   {order.customerName && (
                     <div className="flex items-center gap-2 text-sm text-gray-600 pb-2">
@@ -1990,7 +2095,7 @@ export default function Orders() {
                         comanda del motorizado (saber si cobrar al entregar), NO equivale a
                         "facturado". Por eso una orden con pago anticipado sigue mostrando esta
                         acción hasta que se emite su comprobante. */}
-                    {order.status !== 'delivered' && !order.invoiced && (
+                    {order.status !== 'delivered' && !order.invoiced && !order.esConsumoInterno && (
                       <Button
                         onClick={() => handleGoToPayment(order)}
                         variant="outline"
@@ -1999,6 +2104,21 @@ export default function Orders() {
                       >
                         <DollarSign className="w-4 h-4 mr-1" />
                         {order.paid ? 'Facturar' : 'Cobrar'}
+                      </Button>
+                    )}
+
+                    {/* Una comanda de personal no se cobra: se registra el
+                        consumo, que descuenta el stock al costo. */}
+                    {order.status !== 'delivered' && order.esConsumoInterno && (
+                      <Button
+                        onClick={() => registrarConsumoDeOrden(order)}
+                        disabled={registrandoConsumo === order.id}
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 border-blue-500 text-blue-600 hover:bg-blue-50"
+                      >
+                        <UtensilsCrossed className="w-4 h-4 mr-1" />
+                        {registrandoConsumo === order.id ? 'Registrando...' : 'Registrar consumo'}
                       </Button>
                     )}
 
@@ -2075,6 +2195,59 @@ export default function Orders() {
         onConfirm={handleOrderTypeSelected}
         brands={brands}
       />
+
+      {/* Comanda de personal: motivo y (opcional) de quien es */}
+      <Modal
+        isOpen={showPersonalModal}
+        onClose={() => setShowPersonalModal(false)}
+        title="Comanda de personal"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Entra a cocina como cualquier comanda. Al cerrarla no se cobra:
+            descuenta el stock y queda registrada como consumo interno.
+          </p>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Motivo</label>
+            <div className="flex flex-wrap gap-2">
+              {MOTIVOS_CONSUMO.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setPersonalMotivo(m.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                    personalMotivo === m.id ? 'text-white' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                  }`}
+                  style={personalMotivo === m.id ? { backgroundColor: m.color, borderColor: m.color } : {}}
+                >
+                  {m.nombre}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {personalMotivo === 'personal' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Para quién <span className="font-normal text-gray-400">(opcional)</span>
+              </label>
+              <input
+                type="text"
+                value={personalEmpleado}
+                onChange={(e) => setPersonalEmpleado(e.target.value)}
+                placeholder="Nombre del empleado"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setShowPersonalModal(false)}>Cancelar</Button>
+            <Button variant="primary" onClick={abrirComandaDePersonal}>Elegir platos</Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Modal Nueva cuenta de barra: solo pide el nombre del cliente */}
       <Modal
