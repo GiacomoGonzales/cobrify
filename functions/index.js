@@ -195,6 +195,18 @@ function setCorsHeaders(res) {
  * el check anterior buscaba 'comunicación' con tilde y nunca matcheaba, dejando
  * la factura atascada en 'voiding'). También cubre 1033 y variantes.
  * Se normalizan las tildes antes de comparar.
+ *
+ * Para BOLETAS (resumen de baja) el mensaje es OTRO y con código 99:
+ *   "El comprobante ya fue informado y se encuentra anulado o rechazado."
+ * Decía 'ya FUE informado' y acá se buscaba 'ya informado', que no es subcadena
+ * suya. Mismo tipo de fallo que el de la tilde: la boleta quedaba activa en el
+ * sistema aunque SUNAT ya la tenía anulada, y cada reintento mandaba un resumen
+ * nuevo que SUNAT volvía a rechazar (caso BB01-00000002 de GRUPO DMS, 22-ago:
+ * tres resúmenes rechazados seguidos).
+ *
+ * OJO: NO se matchea por código 99 a secas. En los resúmenes, 99 significa
+ * "el proceso terminó con errores" y el motivo real va en el mensaje: tomarlo
+ * como "ya anulado" daría por anulado cualquier resumen que falle por otra cosa.
  */
 function isAlreadyVoidedResponse(qpseResult) {
   const rawDesc = `${qpseResult?.description || ''} ${qpseResult?.notes || ''}`.toLowerCase()
@@ -206,6 +218,8 @@ function isAlreadyVoidedResponse(qpseResult) {
     code === '2323' || code.includes('2323') ||
     desc.includes('2323') ||
     desc.includes('ya informado') ||
+    desc.includes('ya fue informado') ||
+    desc.includes('se encuentra anulado') ||
     desc.includes('ya fue comunicad') ||
     (desc.includes('comunicacion de baja') && desc.includes('existe')) ||
     desc.includes('already') ||
