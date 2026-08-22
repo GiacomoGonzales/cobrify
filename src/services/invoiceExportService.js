@@ -9,12 +9,27 @@
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { getDocumentRate, getDocumentTotalInBase, normalizeCurrency } from '@/utils/currency'
-import { getInvoiceDate, parseLocalDateString } from '@/utils/invoiceDate'
+import { getInvoiceDate, getInvoiceTimeInfo, parseLocalDateString } from '@/utils/invoiceDate'
 
 /** Formatea la fecha de un comprobante (prioriza emissionDate) como dd/MM/yyyy. */
 const fmtInvoiceDate = (invoice) => {
   const d = getInvoiceDate(invoice)
   return d ? format(d, 'dd/MM/yyyy', { locale: es }) : 'N/A'
+}
+
+/**
+ * Hora del comprobante para el Excel. Mismo criterio que la pantalla de Ventas.
+ *
+ * La columna se llama "Hora de registro" porque eso es lo que hay: la fecha de
+ * la fila es la de EMISIÓN (puede ser retroactiva) y la hora es la del momento
+ * en que se cargó. Cuando las dos coinciden alcanza con "14:25"; cuando no,
+ * se antepone el día para que nadie lea la hora como si fuera de la fecha de
+ * al lado. Vacío si el comprobante no tiene hora real.
+ */
+const fmtInvoiceTime = (invoice) => {
+  const t = getInvoiceTimeInfo(invoice)
+  if (!t) return ''
+  return t.mismoDia ? t.hora : `${t.fechaRegistro} ${t.hora}`
 }
 
 /** Formatea una fecha "YYYY-MM-DD" (input date) como dd/MM/yyyy sin corrimiento UTC. */
@@ -64,7 +79,7 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
 
   // ============== HOJA 1: COMPROBANTES ==============
   const headers1 = [
-    'Fecha', 'Tipo', 'Número', 'Cliente', 'RUC/DNI', 'Alumno', 'Productos',
+    'Fecha', 'Hora de registro', 'Tipo', 'Número', 'Cliente', 'RUC/DNI', 'Alumno', 'Productos',
     'Op. Gravada', 'Op. Exonerada', 'Op. Inafecta', 'Subtotal', 'Descuento',
     'IGV', 'Total', 'Moneda', 'T.C.', 'Estado', 'Estado SUNAT', 'Método de Pago', 'Vendedor',
   ]
@@ -166,6 +181,7 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
 
     aoa1.push([
       fmtInvoiceDate(invoice),
+      fmtInvoiceTime(invoice),
       typeNames[docType] || docType || 'N/A',
       invoice.number || 'N/A',
       customerName,
@@ -208,7 +224,7 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
   aoa1.push([])
   const totalRow = aoa1.length
   aoa1.push([
-    '', '', '', '', '', '', 'TOTALES (S/):',
+    '', '', '', '', '', '', '', 'TOTALES (S/):',
     Number(taxBuckets.g.toFixed(2)),
     Number(taxBuckets.e.toFixed(2)),
     Number(taxBuckets.i.toFixed(2)),
@@ -223,7 +239,7 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
   const ws1 = XLSX.utils.aoa_to_sheet(aoa1)
 
   applyColumnWidths(ws1, [
-    12, 14, 14, 30, 14, 22, 45, 13, 14, 13, 12, 11, 10, 12, 9, 8, 12, 14, 30, 22,
+    12, 15, 14, 14, 30, 14, 22, 45, 13, 14, 13, 12, 11, 10, 12, 9, 8, 12, 14, 30, 22,
   ])
 
   // Layout: título / metadata / subtítulo / header
@@ -236,26 +252,30 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
   for (let i = 0; i < invoices.length; i++) {
     const r = dataStart1 + i
     const docType = invoiceDocTypes[i]
+    // OJO: los estilos van por INDICE de columna. Al agregar "Hora de registro"
+    // en la posicion 1, todo lo que venia despues corrio un lugar — si se agrega
+    // otra columna hay que volver a correrlos, incluida la fila de TOTALES.
     setStyle(ws1, r, 0, centerStyle(i))       // Fecha
-    setStyle(ws1, r, 1, docTypeBadgeStyle(docType)) // Tipo (badge)
-    setStyle(ws1, r, 2, centerStyle(i))       // Número
-    setStyle(ws1, r, 3, cellStyle(i))         // Cliente
-    setStyle(ws1, r, 4, centerStyle(i))       // RUC/DNI
-    setStyle(ws1, r, 5, cellStyle(i))         // Alumno
-    setStyle(ws1, r, 6, cellStyle(i))         // Productos
-    for (let c = 7; c <= 13; c++) setStyle(ws1, r, c, numberStyle(i))
-    setStyle(ws1, r, 14, centerStyle(i)) // Moneda
-    setStyle(ws1, r, 15, numberStyle(i)) // T.C.
-    setStyle(ws1, r, 16, statusStyle(i, aoa1[r][16]))
+    setStyle(ws1, r, 1, centerStyle(i))       // Hora de registro
+    setStyle(ws1, r, 2, docTypeBadgeStyle(docType)) // Tipo (badge)
+    setStyle(ws1, r, 3, centerStyle(i))       // Número
+    setStyle(ws1, r, 4, cellStyle(i))         // Cliente
+    setStyle(ws1, r, 5, centerStyle(i))       // RUC/DNI
+    setStyle(ws1, r, 6, cellStyle(i))         // Alumno
+    setStyle(ws1, r, 7, cellStyle(i))         // Productos
+    for (let c = 8; c <= 14; c++) setStyle(ws1, r, c, numberStyle(i))
+    setStyle(ws1, r, 15, centerStyle(i)) // Moneda
+    setStyle(ws1, r, 16, numberStyle(i)) // T.C.
     setStyle(ws1, r, 17, statusStyle(i, aoa1[r][17]))
-    setStyle(ws1, r, 18, cellStyle(i))
-    setStyle(ws1, r, 19, cellStyle(i)) // Vendedor
+    setStyle(ws1, r, 18, statusStyle(i, aoa1[r][18]))
+    setStyle(ws1, r, 19, cellStyle(i))
+    setStyle(ws1, r, 20, cellStyle(i)) // Vendedor
   }
 
   // Fila de totales
   for (let c = 0; c < totalCols1; c++) {
-    if (c === 6) setStyle(ws1, totalRow, c, totalLabelStyle)
-    else if (c >= 7 && c <= 13) setStyle(ws1, totalRow, c, totalNumberStyle)
+    if (c === 7) setStyle(ws1, totalRow, c, totalLabelStyle)
+    else if (c >= 8 && c <= 14) setStyle(ws1, totalRow, c, totalNumberStyle)
     else setStyle(ws1, totalRow, c, { ...totalNumberStyle, alignment: { horizontal: 'left', vertical: 'center' } })
   }
 
@@ -411,7 +431,7 @@ function appendItemsDetailSheet(wb, invoices, businessData, branchLabel) {
   const conTarjeta = businessData?.posCustomFields?.showPropertyCardField === true
 
   const headers = [
-    'N° Comprobante', 'Fecha', 'Tipo', 'Cliente',
+    'N° Comprobante', 'Fecha', 'Hora de registro', 'Tipo', 'Cliente',
     ...(conLicencia ? ['Licencia / Resolución'] : []),
     ...(conTarjeta ? ['T. Propiedad'] : []),
     'Producto', 'SKU', 'Cantidad', 'Precio Unit.',
@@ -441,6 +461,7 @@ function appendItemsDetailSheet(wb, invoices, businessData, branchLabel) {
   for (const inv of invoices) {
     if (!Array.isArray(inv.items)) continue
     const invDate = fmtInvoiceDate(inv)
+    const invTime = fmtInvoiceTime(inv)
     const customerName = inv.customer?.name || inv.customer?.businessName || 'Cliente General'
     const licencia = String(inv.customer?.licenseNumber || '').toUpperCase()
     const tarjeta = String(inv.customer?.propertyCard || '').toUpperCase()
@@ -456,7 +477,7 @@ function appendItemsDetailSheet(wb, invoices, businessData, branchLabel) {
       totalQty += qty
       totalAmount += sub
       aoa.push([
-        inv.number || 'N/A', invDate, tipo, customerName,
+        inv.number || 'N/A', invDate, invTime, tipo, customerName,
         ...(conLicencia ? [licencia] : []),
         ...(conTarjeta ? [tarjeta] : []),
         item.name || item.description || 'Producto', item.sku || item.code || '',
@@ -470,11 +491,11 @@ function appendItemsDetailSheet(wb, invoices, businessData, branchLabel) {
   if (rowCount === 0) return
   aoa.push([])
   const totalRowIdx = aoa.length
-  const relleno = ['', '', '', '', ...(conLicencia ? [''] : []), ...(conTarjeta ? [''] : []), '']
+  const relleno = ['', '', '', '', '', ...(conLicencia ? [''] : []), ...(conTarjeta ? [''] : []), '']
   aoa.push([...relleno, 'TOTALES', Number(totalQty), '', '', Number(totalAmount.toFixed(2)), ''])
 
   const ws = XLSX.utils.aoa_to_sheet(aoa)
-  applyColumnWidths(ws, [14, 12, 14, 28, ...(conLicencia ? [16] : []), ...(conTarjeta ? [16] : []), 36, 14, 10, 12, 12, 14, 14])
+  applyColumnWidths(ws, [14, 12, 15, 14, 28, ...(conLicencia ? [16] : []), ...(conTarjeta ? [16] : []), 36, 14, 10, 12, 12, 14, 14])
   applyTitleRow(ws, 0, totalCols)
   applyMetadataRows(ws, metaStart, metaEnd)
   applyHeaderRow(ws, headerRow, totalCols)
@@ -483,24 +504,25 @@ function appendItemsDetailSheet(wb, invoices, businessData, branchLabel) {
   const ex = (conLicencia ? 1 : 0) + (conTarjeta ? 1 : 0)
   for (let i = 0; i < rowCount; i++) {
     const r = dataStart + i
-    setStyle(ws, r, 0, centerStyle(i))
-    setStyle(ws, r, 1, centerStyle(i))
-    setStyle(ws, r, 2, centerStyle(i))
-    setStyle(ws, r, 3, cellStyle(i))
-    for (let c = 0; c < ex; c++) setStyle(ws, r, 4 + c, centerStyle(i))
-    setStyle(ws, r, 4 + ex, cellStyle(i))
-    setStyle(ws, r, 5 + ex, centerStyle(i))
-    setStyle(ws, r, 6 + ex, numberStyle(i))
+    setStyle(ws, r, 0, centerStyle(i))          // N° Comprobante
+    setStyle(ws, r, 1, centerStyle(i))          // Fecha
+    setStyle(ws, r, 2, centerStyle(i))          // Hora de registro
+    setStyle(ws, r, 3, centerStyle(i))          // Tipo
+    setStyle(ws, r, 4, cellStyle(i))            // Cliente
+    for (let c = 0; c < ex; c++) setStyle(ws, r, 5 + c, centerStyle(i))
+    setStyle(ws, r, 5 + ex, cellStyle(i))       // Producto
+    setStyle(ws, r, 6 + ex, centerStyle(i))     // SKU
     setStyle(ws, r, 7 + ex, numberStyle(i))
     setStyle(ws, r, 8 + ex, numberStyle(i))
     setStyle(ws, r, 9 + ex, numberStyle(i))
-    setStyle(ws, r, 10 + ex, centerStyle(i))
+    setStyle(ws, r, 10 + ex, numberStyle(i))
+    setStyle(ws, r, 11 + ex, centerStyle(i))    // Afectación IGV
   }
-  for (let c = 0; c <= 5 + ex; c++) setStyle(ws, totalRowIdx, c, totalLabelStyle)
-  setStyle(ws, totalRowIdx, 6 + ex, totalNumberStyle)
-  for (let c = 7 + ex; c <= 8 + ex; c++) setStyle(ws, totalRowIdx, c, totalLabelStyle)
-  setStyle(ws, totalRowIdx, 9 + ex, totalNumberStyle)
-  setStyle(ws, totalRowIdx, 10 + ex, totalLabelStyle)
+  for (let c = 0; c <= 6 + ex; c++) setStyle(ws, totalRowIdx, c, totalLabelStyle)
+  setStyle(ws, totalRowIdx, 7 + ex, totalNumberStyle)
+  for (let c = 8 + ex; c <= 9 + ex; c++) setStyle(ws, totalRowIdx, c, totalLabelStyle)
+  setStyle(ws, totalRowIdx, 10 + ex, totalNumberStyle)
+  setStyle(ws, totalRowIdx, 11 + ex, totalLabelStyle)
   applyFreezeBelow(ws, headerRow)
   XLSX.utils.book_append_sheet(wb, ws, 'Items Detallados')
 }
