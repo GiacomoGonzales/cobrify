@@ -43,6 +43,27 @@ export default function middleware(request) {
   const userAgent = request.headers.get('user-agent') || ''
   const pathname = url.pathname
 
+  // Manifiesto PWA por dominio. Va ANTES del filtro de bots: acá quien pide es
+  // el navegador de una persona. Es lo que Chrome lee para armar el cuadro
+  // "Instalar aplicación" — nombre, descripción e ícono — y estaba horneado en
+  // el build, así que un reseller con dominio propio veía la marca de Cobrify.
+  //
+  // OJO con cuál se intercepta: index.html declara DOS <link rel="manifest">,
+  // el manual /manifest.json y el que inyecta vite-plugin-pwa
+  // (/manifest.webmanifest). El navegador usa el PRIMERO, o sea /manifest.json
+  // — que ademas NO esta precacheado por el service worker (globPatterns no
+  // incluye json), asi que la peticion llega de verdad hasta acá. Se atienden
+  // los dos por si alguna vez cambia el orden.
+  //
+  // Solo se desvía en dominios de resellers: el dominio propio de Cobrify sigue
+  // sirviendo el archivo estático, sin pagar una función por request.
+  if ((pathname === '/manifest.json' || pathname === '/manifest.webmanifest') && isResellerDomain(hostname)) {
+    const normalizedHost = hostname.toLowerCase().replace(/^www\./, '').split(':')[0]
+    url.pathname = '/api/manifest'
+    url.searchParams.set('host', normalizedHost)
+    return Response.redirect(url.toString(), 307)
+  }
+
   // Solo interceptar para bots sociales
   if (!isSocialBot(userAgent)) {
     return // Continuar normalmente
@@ -85,5 +106,5 @@ export default function middleware(request) {
 }
 
 export const config = {
-  matcher: ['/', '/catalogo/:path*', '/menu/:path*']
+  matcher: ['/', '/manifest.json', '/manifest.webmanifest', '/catalogo/:path*', '/menu/:path*']
 }
