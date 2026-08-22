@@ -839,7 +839,20 @@ export async function voidInvoiceViaQPse(voidedXml, ruc, voidedId, config) {
     }
 
     const accepted = responseCode === '0' || responseCode === '0000' || estadoFinal?.sunat_success === true
-    const description = estadoFinal?.descripcion || estadoFinal?.description || resultadoEnvio?.descripcion ||
+    // OJO con los nombres de campo: QPse devuelve el mensaje de SUNAT en
+    // `message` (y a veces `mensaje`), NUNCA en `descripcion`/`description`.
+    // Al leer solo esos dos, el mensaje real se perdia y quedaba el texto de
+    // relleno "Pendiente de confirmacion de SUNAT" — asi que quien mirara la
+    // respuesta (isAlreadyVoidedResponse, la UI, los logs) nunca veia lo que
+    // SUNAT habia dicho de verdad.
+    //
+    // Caso BB01-00000002 de GRUPO DMS (22-ago): SUNAT respondia code 99 con
+    // "El comprobante ya fue informado y se encuentra anulado o rechazado" y el
+    // sistema lo reportaba como "pendiente", asi que la boleta seguia activa y
+    // cada reintento mandaba otro resumen. Once resumenes rechazados.
+    const description = estadoFinal?.descripcion || estadoFinal?.description ||
+      estadoFinal?.message || estadoFinal?.mensaje ||
+      resultadoEnvio?.descripcion || resultadoEnvio?.message || resultadoEnvio?.mensaje ||
       (accepted ? 'Factura anulada correctamente' : (responseCode === '98' ? 'Pendiente de confirmación de SUNAT' : 'Sin respuesta de SUNAT'))
 
     console.log('==========================================')
@@ -1007,7 +1020,20 @@ export async function voidBoletaViaQPse(summaryXml, ruc, summaryId, config) {
     // 7. Parsear respuesta final
     const responseCode = estadoFinal?.codigo || estadoFinal?.code || resultadoEnvio.codigo || '98'
     const accepted = responseCode === '0' || responseCode === '0000' || estadoFinal?.sunat_success === true
-    const description = estadoFinal?.descripcion || estadoFinal?.description || resultadoEnvio.descripcion ||
+    // OJO con los nombres de campo: QPse devuelve el mensaje de SUNAT en
+    // `message` (y a veces `mensaje`), NUNCA en `descripcion`/`description`.
+    // Al leer solo esos dos, el mensaje real se perdia y quedaba el texto de
+    // relleno "Pendiente de confirmacion de SUNAT" — asi que quien mirara la
+    // respuesta (isAlreadyVoidedResponse, la UI, los logs) nunca veia lo que
+    // SUNAT habia dicho de verdad.
+    //
+    // Caso BB01-00000002 de GRUPO DMS (22-ago): SUNAT respondia code 99 con
+    // "El comprobante ya fue informado y se encuentra anulado o rechazado" y el
+    // sistema lo reportaba como "pendiente", asi que la boleta seguia activa y
+    // cada reintento mandaba otro resumen. Once resumenes rechazados.
+    const description = estadoFinal?.descripcion || estadoFinal?.description ||
+      estadoFinal?.message || estadoFinal?.mensaje ||
+      resultadoEnvio?.descripcion || resultadoEnvio?.message || resultadoEnvio?.mensaje ||
       (accepted ? 'Boleta anulada correctamente' : 'Pendiente de confirmación de SUNAT')
 
     // Capturar CDR del campo `cdr` (base64 sin comprimir para resumen RC).
