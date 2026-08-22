@@ -328,6 +328,22 @@ export const productSchema = z.object({
     ])
     .nullable()
     .optional(),
+  // Veterinaria: cada cuántos días recordar este servicio después de darlo.
+  // Vacío/null = no genera recordatorio. Mismo tratamiento que minStock.
+  reminderDays: z
+    .union([
+      z.number().int().positive('Los días deben ser mayores a cero'),
+      z
+        .string()
+        .transform(val => {
+          if (val === '' || val === null || val === undefined) return null
+          const num = parseInt(val)
+          return isNaN(num) || num <= 0 ? null : num
+        })
+        .nullable(),
+    ])
+    .nullable()
+    .optional(),
   noStock: z.boolean().optional(),
   marca: z.string().optional(),
   brandId: z.string().optional().nullable(), // Marca administrada (ID). Sin esto, zodResolver descartaba brandId del form al guardar.

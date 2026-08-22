@@ -171,6 +171,95 @@ export const markServiceCompleted = async (businessId, customerId, serviceId, co
 }
 
 /**
+ * Programar (o reprogramar) los recordatorios que deja una venta.
+ *
+ * Es el disparador que faltaba: hasta ahora el recordatorio existía pero
+ * alguien tenía que acordarse de cargarlo a mano en la ficha de la mascota.
+ * Ahora, al cobrar un servicio marcado con "Recordar servicio (días)", la
+ * próxima fecha se programa sola.
+ *
+ * REPROGRAMA, no duplica: si la mascota ya tenía ese mismo servicio cargado,
+ * corre su fecha en vez de crear un segundo recordatorio idéntico. Sin esto,
+ * a los seis baños la ficha tendría seis "Baño" y la pantalla de Alertas
+ * avisaría seis veces por lo mismo.
+ *
+ * @param {string} businessId
+ * @param {string} customerId  dueño; si la venta fue a un cliente no registrado, no hay dónde guardar
+ * @param {string|null} petName  mascota atendida (el POS la sabe por los chips)
+ * @param {Array<{nombre: string, dias: number, productId?: string}>} servicios
+ * @returns {Promise<{programados: number}>}
+ */
+export const programarRecordatoriosDeVenta = async (businessId, customerId, petName, servicios) => {
+  if (!businessId || !customerId || !Array.isArray(servicios) || servicios.length === 0) {
+    return { programados: 0 }
+  }
+
+  const ref = collection(db, 'businesses', businessId, 'customers', customerId, 'recurringServices')
+  const existentes = await getDocs(ref)
+  const mascota = (petName || '').trim()
+
+  // Índice de lo que ya existe, por producto y por nombre. La clave incluye
+  // la mascota: en una casa con dos perros, el baño de cada uno es un
+  // recordatorio distinto. Se prefiere el productId (sobrevive a que renombren
+  // el servicio) y se cae al nombre para los recordatorios cargados a mano
+  // antes de que existiera este campo.
+  const porProducto = new Map()
+  const porNombre = new Map()
+  existentes.forEach(d => {
+    const data = d.data()
+    const registro = { id: d.id, ...data }
+    if (data.productId) porProducto.set(claveDeRecordatorio(data.productId, data.petName), registro)
+    porNombre.set(claveDeRecordatorio(data.name, data.petName), registro)
+  })
+
+  const ahora = new Date()
+  let programados = 0
+
+  for (const servicio of servicios) {
+    const dias = Number(servicio?.dias) || 0
+    const nombre = (servicio?.nombre || '').trim()
+    if (!nombre || dias <= 0) continue
+
+    const proxima = new Date(ahora)
+    proxima.setDate(proxima.getDate() + dias)
+
+    const yaExiste =
+      (servicio.productId && porProducto.get(claveDeRecordatorio(servicio.productId, mascota))) ||
+      porNombre.get(claveDeRecordatorio(nombre, mascota))
+    if (yaExiste) {
+      await updateDoc(doc(ref, yaExiste.id), {
+        // La frecuencia se actualiza al valor con el que se cobró: si esta vez
+        // el cliente pidió 15 días, de ahí en adelante son 15.
+        frequency: dias,
+        lastDate: Timestamp.fromDate(ahora),
+        nextDate: Timestamp.fromDate(proxima),
+        ...(mascota && !yaExiste.petName ? { petName: mascota } : {}),
+        ...(servicio.productId && !yaExiste.productId ? { productId: servicio.productId } : {}),
+        updatedAt: Timestamp.now(),
+      })
+    } else {
+      await addDoc(ref, {
+        name: nombre,
+        productId: servicio.productId || null,
+        petName: mascota || null,
+        frequency: dias,
+        lastDate: Timestamp.fromDate(ahora),
+        nextDate: Timestamp.fromDate(proxima),
+        notes: '',
+        createdAt: Timestamp.now(),
+      })
+    }
+    programados++
+  }
+
+  return { programados }
+}
+
+/** Clave de identidad: servicio (id o nombre) + mascota, sin distinguir mayúsculas. */
+const claveDeRecordatorio = (servicio, petName) =>
+  `${String(servicio || '').trim().toLowerCase()}|${(petName || '').trim().toLowerCase()}`
+
+/**
  * Eliminar servicio recurrente
  */
 export const deleteRecurringService = async (businessId, customerId, serviceId) => {
@@ -239,7 +328,10 @@ export const getPendingAlerts = async (businessId, daysAhead = 7) => {
             type: 'service',
             customerId: customer.id,
             customerName: customer.name,
-            petName: customer.petName,
+            // La mascota del recordatorio manda: un cliente puede tener dos
+            // perros, y `customer.petName` es siempre el primero. Sin esto, el
+            // baño de Toby llegaba avisado como si fuera el de Firulais.
+            petName: svc.petName || customer.petName,
             petSpecies: customer.petSpecies,
             title: svc.name,
             description: `Cada ${svc.frequency} días`,
@@ -313,7 +405,7 @@ export const getOverdueAlerts = async (businessId) => {
             type: 'service',
             customerId: customer.id,
             customerName: customer.name,
-            petName: customer.petName,
+            petName: svc.petName || customer.petName,
             petSpecies: customer.petSpecies,
             title: svc.name,
             description: `VENCIDO - Cada ${svc.frequency} días`,

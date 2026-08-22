@@ -1076,6 +1076,7 @@ export default function Products() {
       expirationDate: formattedExpirationDate,
       batchNumber: product.batchNumber || '',
       minStock: product.minStock != null ? product.minStock.toString() : '',
+      reminderDays: product.reminderDays != null ? product.reminderDays.toString() : '',
     })
 
     // Cargar códigos de barra adicionales existentes (si los hay)
@@ -1238,6 +1239,7 @@ export default function Products() {
       expirationDate: formattedExpirationDate,
       batchNumber: product.batchNumber || '',
       minStock: product.minStock != null ? product.minStock.toString() : '',
+      reminderDays: product.reminderDays != null ? product.reminderDays.toString() : '',
     })
 
     setIsModalOpen(true)
@@ -1447,6 +1449,11 @@ export default function Products() {
         // se guarda null y los lugares que consumen el dato usan el default
         // (3) preservando el comportamiento anterior a esta feature.
         minStock: data.minStock && data.minStock !== '' ? Math.max(0, parseInt(data.minStock)) : null,
+        // Veterinaria: días para volver a recordar este servicio. Al cobrarlo,
+        // el POS programa el recordatorio de la mascota con este número.
+        reminderDays: data.reminderDays && data.reminderDays !== ''
+          ? Math.max(1, parseInt(data.reminderDays))
+          : null,
         taxAffectation: taxAffectation, // '10' = Gravado, '20' = Exonerado, '30' = Inafecto (SUNAT Catálogo 07)
         // Código de Producto SUNAT (Catálogo 25). Opcional; se guarda con su
         // descripción para no depender del catálogo al mostrarlo.
@@ -8030,6 +8037,20 @@ export default function Products() {
                   {...register('minStock')}
                   helperText="Cuando el stock baje de este valor, aparece en amarillo y se notifica. Vacío = usa el default (3)."
                 />
+
+                {/* Veterinaria: recordatorio del servicio. Solo tiene sentido
+                    en este rubro, que es donde vive la pantalla de Alertas. */}
+                {businessMode === 'veterinary' && (
+                  <Input
+                    label="Recordar servicio (días)"
+                    type="number"
+                    min="1"
+                    placeholder="30"
+                    error={errors.reminderDays?.message}
+                    {...register('reminderDays')}
+                    helperText="Al cobrar este servicio se programa solo el recordatorio de la mascota. Ej: baño 30, desparasitación 90. Vacío = no recuerda nada."
+                  />
+                )}
 
                 {/* Fecha de vencimiento — SOLO para productos sin lotes.
                     Con lotes, la fecha vive en cada lote y se edita en Control de Lotes;

@@ -120,6 +120,7 @@ import { markOrderAsPaid, updateOrder, updateOrderStatus, claimOrderForInvoicing
 import { markQuotationAsConverted } from '@/services/quotationService'
 import { markNotaVentaAsConverted } from '@/services/firestoreService'
 import { completeAppointment } from '@/services/appointmentService'
+import { programarRecordatoriosDeVenta } from '@/services/veterinaryService'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { savePendingSale } from '@/services/offlineQueueService'
 import * as CustomerDisplay from '@/services/customerDisplayService'
@@ -739,6 +740,9 @@ export default function POS() {
 
   // Estado para cita veterinaria (para marcar como completada al finalizar la venta)
   const [pendingAppointmentData, setPendingAppointmentData] = useState(null)
+  // Veterinaria: días de recordatorio elegidos a mano para esta venta, por
+  // producto. Vacío = se usa el que tiene configurado el servicio.
+  const [diasRecordatorio, setDiasRecordatorio] = useState({})
 
   // Cash register check
   const [cashRegisterOpen, setCashRegisterOpen] = useState(true)
@@ -3181,6 +3185,34 @@ export default function POS() {
     return () => { cancelled = true; clearTimeout(handle) }
   }, [isLoading, isDemoMode, getBusinessId, saleCompleted])
 
+  /**
+   * Veterinaria: servicios de este carrito que dejan recordatorio.
+   *
+   * Un servicio recuerda si su ficha de producto tiene "Recordar servicio
+   * (días)". El número se puede pisar acá mismo para esta venta — es el caso
+   * de "salvo que el cliente pida 15 o 20 días".
+   */
+  const serviciosARecordar = React.useMemo(() => {
+    if (businessMode !== 'veterinary' || cart.length === 0) return []
+    const idsEnCarrito = new Set(cart.map(i => i.id))
+    const fichaPorId = new Map()
+    for (const p of productsRaw) {
+      if (idsEnCarrito.has(p.id)) fichaPorId.set(p.id, p)
+    }
+    const salida = []
+    for (const item of cart) {
+      if (item.isCustom) continue
+      const base = Number(fichaPorId.get(item.id)?.reminderDays) || 0
+      if (base <= 0) continue
+      const elegido = diasRecordatorio[item.id]
+      const dias = (elegido === undefined || elegido === '')
+        ? base
+        : (parseInt(elegido) || 0)
+      salida.push({ productId: item.id, nombre: item.name, dias, base })
+    }
+    return salida
+  }, [businessMode, cart, productsRaw, diasRecordatorio])
+
   // useDeferredValue mantiene el <input> responsivo aunque el filtro tarde.
   // React renderiza el input con la última tecla de inmediato, y el filter
   // se procesa "low priority" un tick después. Sensación instantánea con 4k+ productos.
@@ -5068,6 +5100,9 @@ export default function POS() {
   const clearCart = () => {
     setCart([])
     setSelectedCustomer(null)
+    // Los días de recordatorio que se pisaron a mano valen para ESA venta. Sin
+    // esto, el "15 días" que pidió un cliente se le aplicaba al siguiente.
+    setDiasRecordatorio({})
     // El cupón vale para UNA venta: la siguiente arranca sin él.
     setAppliedCoupon(null)
     setCouponInput('')
@@ -7573,6 +7608,11 @@ export default function POS() {
         const bgTaxConfig = taxConfig
         const bgAmounts = { ...amounts }
         const bgCustomerData = { ...customerData }
+        // Veterinaria: a quién y qué recordarle. Se captura antes de limpiar el
+        // carrito, igual que el resto de los datos del background.
+        const bgRecordatorios = serviciosARecordar.map(s => ({ ...s }))
+        const bgCustomerIdVet = selectedCustomer?.id || null
+        const bgPetName = customerData.petName || null
         const bgSelectedSeller = selectedSeller ? { ...selectedSeller } : null
         const bgNumberResult = { ...numberResult }
         const bgUserUid = user.uid
@@ -8459,6 +8499,20 @@ export default function POS() {
                 console.log('✅ Cita veterinaria marcada como completada:', _pendingAppointmentData.appointmentId)
               } catch (appointmentError) {
                 console.error('Error al completar cita veterinaria:', appointmentError)
+              }
+            }
+
+            // 6.5. Veterinaria: programar el próximo recordatorio de la mascota.
+            // Va acá y no antes porque no debe demorar el cobro: si falla, la
+            // venta ya está hecha y el recordatorio se puede cargar a mano.
+            if (bgRecordatorios.length > 0 && bgCustomerIdVet) {
+              try {
+                const { programados } = await programarRecordatoriosDeVenta(
+                  businessId, bgCustomerIdVet, bgPetName, bgRecordatorios,
+                )
+                console.log(`✅ Recordatorios veterinarios programados: ${programados}`)
+              } catch (recordatorioError) {
+                console.error('Error al programar recordatorios:', recordatorioError)
               }
             }
 
@@ -12659,6 +12713,42 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     </div>
                   )}
                     </>
+                  )}
+                </div>
+              )}
+
+              {/* Veterinaria: qué queda agendado con esta venta. Se muestra
+                  acá, junto al botón de cobrar, para que se vea que pasó — y
+                  para poder pisar los días sin salir del cobro. */}
+              {serviciosARecordar.length > 0 && (
+                <div className="mt-4 border border-gray-200 rounded-lg p-3 space-y-2">
+                  <p className="text-xs font-semibold text-gray-600">
+                    Próximo recordatorio{customerData.petName ? ` de ${customerData.petName}` : ''}
+                  </p>
+                  {serviciosARecordar.map(servicio => (
+                    <div key={servicio.productId} className="flex items-center justify-between gap-2">
+                      <span className="text-sm text-gray-700 truncate min-w-0">{servicio.nombre}</span>
+                      <div className="flex items-center gap-1.5 flex-none">
+                        <input
+                          type="number"
+                          min="1"
+                          value={diasRecordatorio[servicio.productId] ?? ''}
+                          placeholder={String(servicio.base)}
+                          onChange={e => setDiasRecordatorio(prev => ({
+                            ...prev,
+                            [servicio.productId]: e.target.value,
+                          }))}
+                          className="w-16 text-center px-1 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        />
+                        <span className="text-xs text-gray-500">días</span>
+                      </div>
+                    </div>
+                  ))}
+                  {!selectedCustomer?.id && (
+                    <p className="text-[11px] text-amber-600">
+                      El recordatorio se guarda en la ficha del cliente: elige uno registrado
+                      para que quede agendado.
+                    </p>
                   )}
                 </div>
               )}

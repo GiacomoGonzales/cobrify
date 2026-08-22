@@ -199,9 +199,14 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
       const nextDate = new Date()
       nextDate.setDate(nextDate.getDate() + (formData.frequency || 30))
 
+      const petsDelCliente = normalizePets(customer)
+      const mascotaActual = petsDelCliente[selectedPetIndex] || petsDelCliente[0] || {}
+
       await addRecurringService(businessId, customer.id, {
         name: selectedProduct.name,
         productId: selectedProduct.id,
+        // Sin esto, en una casa con dos perros el recordatorio no decía cuál.
+        petName: mascotaActual.name || customer.petName || null,
         frequency: formData.frequency || 30,
         lastDate: null,
         nextDate: nextDate.toISOString().split('T')[0],

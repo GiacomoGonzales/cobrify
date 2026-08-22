@@ -328,6 +328,16 @@ export const GUIDES = [
     load: () => import('./agenda-citas.js'),
   },
   {
+    id: 'recordatorios-veterinaria',
+    route: '/app/alertas-veterinaria',
+    title: 'Recordatorios',
+    category: 'Operación',
+    description: 'Qué mascota toca esta semana y cuál se pasó de fecha, con el recordatorio que se agenda solo al cobrar el servicio.',
+    keywords: 'recordatorio recordatorios alerta alertas veterinaria mascota bano spa desparasitacion vacuna refuerzo vencido proximo whatsapp frecuencia dias servicio recurrente cada cuanto repetir agendar',
+    modos: ['veterinary'],
+    load: () => import('./recordatorios-veterinaria.js'),
+  },
+  {
     id: 'ingredientes',
     route: '/app/ingredientes',
     title: 'Insumos / Ingredientes',
