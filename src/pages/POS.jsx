@@ -5825,6 +5825,25 @@ export default function POS() {
 
   // Anticipos aplicados a esta factura: suma de los anticipos seleccionados,
   // acotada al total de la venta (no se puede deducir más de lo que se factura).
+  /**
+   * Detracción de esta venta, con sus dos caras.
+   *
+   * `pen` es lo que se DEPOSITA en el Banco de la Nación —siempre soles, siempre
+   * entero— y `doc` su equivalente en la moneda del comprobante, que es lo que
+   * se resta del total para llegar al neto. En una venta en soles los dos son
+   * iguales.
+   *
+   * Es la misma cuenta que se guarda en el comprobante: un solo lugar para que
+   * la pantalla y el documento no puedan decir cosas distintas.
+   */
+  const detraccionActual = React.useMemo(() => {
+    if (!hasDetraction || !detractionType) return null
+    const tasa = DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0
+    const tc = currency === 'USD' ? (Number(exchangeRate) || 1) : 1
+    const { pen, doc } = calcularDetraccion(amounts.total, tc, tasa)
+    return { tasa, pen, doc, neto: Number((amounts.total - doc).toFixed(2)) }
+  }, [hasDetraction, detractionType, amounts.total, currency, exchangeRate])
+
   const advancesApplied = React.useMemo(() => {
     if (documentType !== 'factura' || !deductAdvances) return 0
     const sum = advancesList.reduce((s, a) => s + (parseFloat(a.amount) || 0), 0)
@@ -7096,29 +7115,19 @@ export default function POS() {
           orderNumber: orderNumber || null,
           // Datos de detracción
           hasDetraction: hasDetraction,
-          ...(hasDetraction && detractionType && (() => {
-            // El depósito del SPOT va en SOLES al Banco de la Nación, aunque el
-            // comprobante sea en dólares: el porcentaje se aplica sobre el total
-            // en soles y se redondea a soles enteros. Antes se calculaba sobre
-            // el total en dólares (caso real FZZ1-00000087: $652.82 al 4% daba
-            // $26, y el XML mandaba S/ 87.15 en vez de los S/ 88 que corresponden).
-            const tasa = DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0
-            const tc = currency === 'USD' ? (Number(exchangeRate) || 1) : 1
-            const det = calcularDetraccion(amounts.total, tc, tasa)
-            return {
-              detractionType: detractionType,
-              detractionTypeName: DETRACTION_TYPES.find(t => t.code === detractionType)?.name || '',
-              detractionRate: tasa,
-              // El monto que se deposita. Es el que va al XML y el que se le
-              // muestra al cliente en el comprobante.
-              detractionAmountPEN: det.pen,
-              // Su equivalente en la moneda del documento, solo para restarlo
-              // del total. En un comprobante en soles los dos son iguales.
-              detractionAmount: det.doc,
-              detractionBankAccount: detractionBankAccount || null,
-              netPayable: Number((amounts.total - det.doc).toFixed(2)),
-            }
-          })()),
+          ...(detraccionActual && {
+            detractionType: detractionType,
+            detractionTypeName: DETRACTION_TYPES.find(t => t.code === detractionType)?.name || '',
+            detractionRate: detraccionActual.tasa,
+            // El monto que se DEPOSITA, en soles. Es el que va al XML (SUNAT lo
+            // exige en PEN) y el que se le muestra al cliente.
+            detractionAmountPEN: detraccionActual.pen,
+            // Su equivalente en la moneda del documento, solo para restarlo del
+            // total. En un comprobante en soles los dos son iguales.
+            detractionAmount: detraccionActual.doc,
+            detractionBankAccount: detractionBankAccount || null,
+            netPayable: detraccionActual.neto,
+          }),
           // Datos de retención (Régimen de Retención del IGV — cliente agente de retención).
           // Solo leyenda + cálculo informativo: el total NO cambia (el comprador retiene el 3%).
           hasRetencion: hasRetencion,
@@ -10720,9 +10729,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                     </div>
                                   </div>
                                   <div>
-                                    <label className="text-[10px] text-gray-500 mb-0.5 block">Monto Detracción</label>
+                                    <label className="text-[10px] text-gray-500 mb-0.5 block">Monto a depositar</label>
                                     <div className="px-2 py-1.5 text-xs bg-amber-100 border border-amber-300 rounded-lg text-amber-800 font-bold">
-                                      S/ {Math.round((amounts.total * (DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0)) / 100).toFixed(2)}
+                                      S/ {(detraccionActual?.pen || 0).toFixed(2)}
                                     </div>
                                   </div>
                                 </div>
@@ -10806,18 +10815,25 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                     <span>Total Factura:</span>
                                     <span className="font-medium">{formatCurrency(amounts.total, currency)}</span>
                                   </div>
+                                  {/* Cada monto en SU moneda. Antes las dos lineas usaban
+                                      formatCurrency sin moneda, asi que pintaban "S/" sobre
+                                      cifras en dolares. */}
                                   <div className="flex justify-between text-amber-700">
-                                    <span>(-) Detracción ({DETRACTION_TYPES.find(t => t.code === detractionType)?.rate}%):</span>
+                                    <span>(-) Detracción ({detraccionActual?.tasa || 0}%):</span>
                                     <span className="font-medium">
-                                      {formatCurrency(Math.round((amounts.total * (DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0)) / 100))}
+                                      {formatCurrency(detraccionActual?.doc || 0, currency)}
                                     </span>
                                   </div>
                                   <div className="flex justify-between font-bold text-green-700 border-t pt-1 mt-1">
                                     <span>Neto a Pagar:</span>
-                                    <span>
-                                      {formatCurrency(amounts.total - Math.round((amounts.total * (DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0)) / 100))}
-                                    </span>
+                                    <span>{formatCurrency(detraccionActual?.neto || 0, currency)}</span>
                                   </div>
+                                  {currency === 'USD' && (
+                                    <p className="text-[10px] text-gray-500 mt-1 pt-1 border-t">
+                                      La detracción se deposita en <strong>S/ {(detraccionActual?.pen || 0).toFixed(2)}</strong> en
+                                      el Banco de la Nación (TC {Number(exchangeRate) || 1}). El cliente paga el neto en dólares.
+                                    </p>
+                                  )}
                                 </div>
                               </>
                             )}
