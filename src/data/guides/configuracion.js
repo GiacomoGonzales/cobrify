@@ -15,7 +15,7 @@
  */
 export default {
   id: 'configuracion',
-  actualizado: '16/08/2026',
+  actualizado: '22/08/2026',
   intro:
     'Configuración es donde el sistema se adapta a tu negocio: qué comprobantes emites, qué puede tocar tu cajero, qué aparece en el menú y cómo salen tus impresiones. Esta guía recorre las once pestañas y explica qué hace cada opción y qué cambia cuando la prendes.',
 
@@ -448,14 +448,19 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'Dos interruptores para cuando no quieres que tu personal vea los números del negocio:',
+          text: 'Tres interruptores para cuando no quieres que tu personal vea los números del negocio:',
         },
         {
           type: 'pasos',
           items: [
             '**Ocultar totales y datos sensibles a usuarios secundarios**: los sub-usuarios dejan de ver las cifras del Dashboard y los totales del negocio.',
+            '**Cada usuario secundario ve solo las ventas que él registró**: en Ventas, Reportes y Dashboard cada uno ve únicamente sus propios comprobantes. Apagado, cada sub-usuario ve las ventas de todas las sucursales que le asignaste.',
             '**Ocultar "Efectivo Esperado" del cierre de caja a sub-usuarios**: el cajero cuenta lo que hay y lo ingresa, sin ver cuánto *debería* haber ni la diferencia. Tú como dueño sí lo ves.',
           ],
+        },
+        {
+          type: 'ojo',
+          text: 'El segundo se apoya en quién emitió cada comprobante, un dato que se guarda al momento de la venta. Los comprobantes viejos que no lo tengan quedan ocultos para los sub-usuarios: ante la duda de quién los hizo, el sistema prefiere no atribuirlos. Tú y los administradores los siguen viendo.',
         },
         {
           type: 'consejo',
@@ -470,6 +475,11 @@ export default {
           type: 'enlace',
           to: '/app/configuracion?tab=documentos&opcion=hideDashboardDataFromSecondary',
           label: 'Ir a "Ocultar totales a secundarios"',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=documentos&opcion=showOnlyOwnSalesToSecondary',
+          label: 'Ir a "Cada usuario ve solo sus ventas"',
         },
         { type: 'enlace', to: '/app/usuarios', label: 'Ir a Usuarios' },
       ],

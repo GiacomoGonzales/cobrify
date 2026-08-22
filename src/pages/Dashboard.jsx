@@ -32,7 +32,7 @@ import { getRecentInvoices } from '@/services/firestoreService'
 import { getInvoiceDate as getInvoiceDateShared } from '@/utils/invoiceDate'
 import { useBranding } from '@/contexts/BrandingContext'
 import { getTables } from '@/services/tableService'
-import { useLocationAccess, useSellerScope } from '@/utils/locationAccess'
+import { useLocationAccess, useSalesScope } from '@/utils/locationAccess'
 import HotelDashboard from '@/components/hotel/HotelDashboard'
 import GuideLink from '@/components/guide/GuideLink'
 
@@ -52,7 +52,7 @@ export default function Dashboard() {
   const canAccess = useLocationAccess()
   // Sub-usuario con vendedor asignado: solo ve las VENTAS de su vendedor
   // (helper compartido con Ventas/Reportes en src/utils/locationAccess.js).
-  const canSeeSale = useSellerScope()
+  const canSeeSale = useSalesScope()
   // ¿El usuario está restringido a ciertas sucursales/almacenes? (owner/admin nunca lo están)
   const restringido = !isBusinessOwner && !isAdmin && ((allowedBranches?.length > 0) || (allowedWarehouses?.length > 0))
   // ¿Restringido por vendedor asignado? Fuerza el camino client-side del gráfico

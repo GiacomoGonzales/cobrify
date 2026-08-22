@@ -526,6 +526,7 @@ export default function Settings() {
 
   // Estados para privacidad
   const [hideDashboardDataFromSecondary, setHideDashboardDataFromSecondary] = useState(false)
+  const [showOnlyOwnSalesToSecondary, setShowOnlyOwnSalesToSecondary] = useState(false)
 
   // Estados para menú personalizado
   const [hiddenMenuItems, setHiddenMenuItems] = useState([])
@@ -1353,6 +1354,7 @@ export default function Settings() {
 
         // Cargar configuración de privacidad
         setHideDashboardDataFromSecondary(businessData.hideDashboardDataFromSecondary || false)
+        setShowOnlyOwnSalesToSecondary(businessData.showOnlyOwnSalesToSecondary || false)
 
         // Cargar menú personalizado
         if (businessData.hiddenMenuItems && Array.isArray(businessData.hiddenMenuItems)) {
@@ -6731,6 +6733,24 @@ export default function Settings() {
                     </div>
                   </SettingToggle>
 
+                  {/* Cada usuario ve solo sus ventas */}
+                  <SettingToggle
+                    id="opcion-showOnlyOwnSalesToSecondary"
+                    checked={showOnlyOwnSalesToSecondary}
+                    onChange={e => setShowOnlyOwnSalesToSecondary(e.target.checked)}
+                    title="Cada usuario secundario ve solo las ventas que él registró"
+                    description={showOnlyOwnSalesToSecondary
+                      ? '✓ Habilitado: En Ventas, Reportes y Dashboard, cada sub-usuario ve únicamente los comprobantes que emitió él. Tú como dueño y los administradores siguen viendo todo.'
+                      : '✗ Deshabilitado: Cada sub-usuario ve las ventas de todas las sucursales que le asignaste, sin importar quién las registró.'}
+                  >
+                    <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
+                      <Info className="w-4 h-4 text-blue-600" />
+                      <span className="text-xs text-blue-700 font-medium">
+                        Los comprobantes emitidos antes de que existiera el registro de autor quedan ocultos para los sub-usuarios
+                      </span>
+                    </div>
+                  </SettingToggle>
+
                   {/* Ocultar efectivo esperado a cajeros en cierre de caja */}
                   <SettingToggle
                     id="opcion-hideCashExpectedFromCashier"
@@ -6865,6 +6885,7 @@ export default function Settings() {
                       allowDeleteInvoices: allowDeleteInvoices,
                       allowCustomEmissionDate: allowCustomEmissionDate,
                       hideDashboardDataFromSecondary: hideDashboardDataFromSecondary,
+                      showOnlyOwnSalesToSecondary: showOnlyOwnSalesToSecondary,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
                     setTicketQrImageFile(null) // Limpia archivo temporal

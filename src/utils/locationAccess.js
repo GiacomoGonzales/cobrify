@@ -96,3 +96,54 @@ export function useSellerScope() {
   const restrict = !isBusinessOwner && !isAdmin && !!assignedSellerId
   return (record) => !restrict || record?.sellerId === assignedSellerId
 }
+
+/**
+ * Hook de visibilidad por USUARIO que registró la venta.
+ *
+ * Cuando el negocio activa "Cada usuario ve solo sus ventas" (Configuración >
+ * Documentos), un sub-usuario deja de ver los comprobantes que registró otro,
+ * aunque compartan sucursal. Apagado, sigue viendo todo lo de las sucursales
+ * que tenga asignadas — que es el comportamiento de siempre.
+ *
+ * Se compara contra `createdBy`, el uid que graba el POS al emitir. Es distinto
+ * de useSellerScope: ese filtra por el VENDEDOR asignado (una entidad del
+ * negocio, que puede estar compartida o no configurarse nunca); este filtra por
+ * quién estuvo sentado en la caja. Los dos se pueden usar juntos.
+ *
+ * OJO: aplicar SOLO a ventas/comprobantes. Un registro sin `createdBy` (los
+ * emitidos antes de que el campo existiera) queda OCULTO para el sub-usuario a
+ * propósito: ante la duda de quién lo hizo, no atribuirlo.
+ *
+ * Es filtro de UI (igual que el de sucursal); la seguridad dura está en las
+ * reglas de Firestore.
+ *
+ * Uso:
+ *   const canSeeOwnSale = useOwnSalesScope()
+ *   const visibles = ventas.filter(canSeeOwnSale)
+ */
+/**
+ * Quién puede ver una venta: el criterio COMPLETO, y el único que deberían
+ * usar las pantallas.
+ *
+ * Junta las dos restricciones que existen sobre comprobantes — el vendedor
+ * asignado y el "cada uno ve solo lo suyo" de Configuración > Documentos — para
+ * que Ventas, Reportes y Dashboard no puedan responder distinto. Que una
+ * pantalla muestre una venta que otra esconde es peor que cualquiera de las
+ * dos reglas por separado.
+ *
+ * Uso:
+ *   const canSeeSale = useSalesScope()
+ *   const visibles = ventas.filter(canSeeSale)
+ */
+export function useSalesScope() {
+  const porVendedor = useSellerScope()
+  const porUsuario = useOwnSalesScope()
+  return (record) => porVendedor(record) && porUsuario(record)
+}
+
+export function useOwnSalesScope() {
+  const { isBusinessOwner, isAdmin, isDemoMode, user, businessSettings } = useAppContext()
+  const restrict = !isDemoMode && !isBusinessOwner && !isAdmin
+    && !!businessSettings?.showOnlyOwnSalesToSecondary
+  return (record) => !restrict || (!!record?.createdBy && record.createdBy === user?.uid)
+}

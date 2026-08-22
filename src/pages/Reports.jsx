@@ -35,7 +35,7 @@ import { getInvoices, getRecentInvoices, getCustomersWithStats, getProducts, get
 import { getRecipes } from '@/services/recipeService'
 import { getActiveBranches } from '@/services/branchService'
 import { getWarehouses } from '@/services/warehouseService'
-import { useLocationAccess, useSellerScope } from '@/utils/locationAccess'
+import { useLocationAccess, useSalesScope } from '@/utils/locationAccess'
 import {
   exportGeneralReport,
   exportSalesReport,
@@ -220,7 +220,7 @@ export default function Reports() {
   const canAccess = useLocationAccess()
   // Sub-usuario con vendedor asignado: solo ve las VENTAS de su vendedor.
   // Solo se aplica a facturas (las compras/gastos/movimientos no tienen sellerId).
-  const canSeeSale = useSellerScope()
+  const canSeeSale = useSalesScope()
 
   // Si estamos en modo inmobiliaria, renderizar el componente especializado
   if (businessMode === 'real_estate') {

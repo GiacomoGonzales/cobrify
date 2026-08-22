@@ -76,7 +76,7 @@ import { Share } from '@capacitor/share'
 import { printInvoiceTicket, connectPrinter, getPrinterConfig } from '@/services/thermalPrinterService'
 import { shortenUrl } from '@/services/urlShortenerService'
 import { getActiveBranches } from '@/services/branchService'
-import { useLocationAccess, useSellerScope } from '@/utils/locationAccess'
+import { useLocationAccess, useSalesScope } from '@/utils/locationAccess'
 import { getVisiblePaymentMethods } from '@/utils/paymentMethods'
 import { getSaleSeller, matchesSaleSeller, listSaleSellers } from '@/utils/saleSeller'
 import { getNoteReasonLabel, getReferencedDocTypeLabel } from '@/data/noteReasons'
@@ -753,7 +753,7 @@ Gracias por tu preferencia.`
   // Filtro de visibilidad por vendedor: un usuario secundario con un VENDEDOR
   // asignado (assignedSellerId) solo ve SUS ventas (helper compartido con
   // Reportes/Dashboard en src/utils/locationAccess.js).
-  const canAccessInvoiceBySeller = useSellerScope()
+  const canSeeSale = useSalesScope()
 
   // Métodos de pago REALES de un comprobante (para mostrar y filtrar).
   // Prioriza paymentHistory: en ventas al crédito/parciales, los pagos hechos
@@ -841,7 +841,7 @@ Gracias por tu preferencia.`
         // Filtrar por sucursales/almacenes permitidos del usuario (seguridad de usuarios secundarios).
         // Sanea el estado base, por lo que tabla, totales, exportación y selección lo respetan.
         // Además, sub-usuario con vendedor asignado solo ve las ventas de su vendedor.
-        setInvoices(accumulated.filter(canAccessInvoice).filter(canAccessInvoiceBySeller))
+        setInvoices(accumulated.filter(canAccessInvoice).filter(canSeeSale))
 
         if (firstBatch) {
           // Con el primer lote ya se puede usar la página
@@ -2502,7 +2502,7 @@ Gracias por tu preferencia.`
   // Filtrar facturas
   const filteredInvoices = invoices
     .filter(canAccessInvoice) // Seguridad: respetar sucursal/almacén permitido (defensa adicional al saneo de carga)
-    .filter(canAccessInvoiceBySeller) // Sub-usuario con vendedor asignado: solo sus ventas (defensa adicional)
+    .filter(canSeeSale) // Vendedor asignado y/o "solo mis ventas" (defensa adicional)
     .filter(inv => showArchived ? inv.archived === true : inv.archived !== true)
     .filter(filterByDateRange) // Primero filtrar por período
     .filter(invoice => {
@@ -5269,7 +5269,7 @@ Gracias por tu preferencia.`
         onClose={() => setShowPendingReport(false)}
         businessId={isDemoMode ? null : getBusinessId()}
         demoInvoices={isDemoMode ? (demoData?.invoices || []) : null}
-        canAccess={(inv) => canAccessInvoice(inv) && canAccessInvoiceBySeller(inv)}
+        canAccess={(inv) => canAccessInvoice(inv) && canSeeSale(inv)}
         companySettings={companySettings}
         currentUser={user}
         onPaymentsRegistered={loadInvoices}
