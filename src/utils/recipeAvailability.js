@@ -1,10 +1,15 @@
 /**
  * recipeAvailability.js
  *
- * Calcula qué productos con receta NO tienen insumos suficientes para
- * preparar al menos 1 unidad. Pensado para mostrar un badge "Sin insumos"
- * en la grilla del POS, Mesas y Órdenes del modo restaurante, ANTES de que
- * el mozo arme la venta y se entere al cobrar.
+ * Calcula el estado de los insumos de cada plato con receta, para avisarlo
+ * en la grilla del POS y al tomar una orden ANTES de que el mozo arme la
+ * venta y se entere al cobrar. Dos niveles:
+ *
+ *   - "Sin insumos": no alcanza para preparar ni 1 unidad. Bloquea.
+ *   - "Stock bajo":  alcanza, pero algún insumo llegó a su mínimo. Sólo avisa.
+ *
+ * El segundo existe porque los platos normalmente no llevan stock propio: el
+ * pollo se está acabando y en la carta no se nota hasta que ya no hay.
  *
  * Lazy por diseño: la carga se hace UNA vez en background después de pintar
  * la página. Si el negocio no tiene recetas configuradas, no se hace nada
@@ -14,7 +19,7 @@
  */
 import { collection, getDocs, query, limit } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { convertUnit } from '@/services/ingredientService'
+import { convertUnit, insumoEstaBajo } from '@/services/ingredientService'
 
 /**
  * Lee la primera receta del negocio. Si no hay ninguna, devuelve false sin
@@ -35,37 +40,36 @@ export const hasAnyRecipe = async (businessId) => {
 }
 
 /**
- * Devuelve el conjunto de productIds que NO tienen suficientes insumos para
- * preparar AL MENOS 1 unidad. Lee recetas + ingredientes en paralelo y hace
- * todo el cálculo en memoria (sin queries adicionales).
+ * Estado de insumos de todos los platos con receta. Lee recetas + insumos en
+ * paralelo y hace el resto en memoria (sin queries por producto).
  *
  * @param {string} businessId
- * @param {string|null} warehouseId  Si se especifica, valida contra el stock
- *                                   de ESE almacén (los `warehouseStocks` del
- *                                   ingrediente). Si no, usa `currentStock`.
- * @returns {Promise<Set<string>>} productIds sin insumos suficientes.
+ * @param {string|null} warehouseId  Si se especifica, valida contra el stock de
+ *                                   ESE almacén (`warehouseStocks` del insumo);
+ *                                   si no, usa `currentStock`.
+ * @returns {Promise<{sinInsumos: Set<string>, stockBajo: Set<string>, motivos: Map<string, string>}>}
+ *          `motivos` trae el texto para el tooltip: qué insumo y cuánto queda.
  */
-export const computeProductsWithoutIngredients = async (businessId, warehouseId = null) => {
-  const empty = new Set()
-  if (!businessId) return empty
+export const computeRecipeStockAlerts = async (businessId, warehouseId = null) => {
+  const vacio = { sinInsumos: new Set(), stockBajo: new Set(), motivos: new Map() }
+  if (!businessId) return vacio
   try {
     const [recipesSnap, ingredientsSnap] = await Promise.all([
       getDocs(collection(db, 'businesses', businessId, 'recipes')),
       getDocs(collection(db, 'businesses', businessId, 'ingredients')),
     ])
 
-    if (recipesSnap.empty) return empty
+    if (recipesSnap.empty) return vacio
 
-    // Mapa por id de insumo: { stock, unit }. Si hay warehouseId, tomamos el
-    // stock SÓLO de ese almacén; si no, usamos currentStock (suma global).
-    // Guardamos también la unidad de compra (`purchaseUnit`) para poder
-    // convertir la cantidad de la receta a la unidad en que se guarda el stock.
+    // Mapa por id de insumo. Si hay warehouseId tomamos el stock SÓLO de ese
+    // almacén; si no, `currentStock` (suma global). Guardamos la unidad de
+    // compra para convertir la cantidad de la receta antes de comparar.
     const infoById = new Map()
     ingredientsSnap.forEach(d => {
       const data = d.data()
       if (data.trackStock === false) {
-        // Insumos que no manejan stock no bloquean nunca: stock infinito.
-        infoById.set(d.id, { stock: Infinity, unit: null })
+        // Insumos que no manejan stock no bloquean ni avisan nunca.
+        infoById.set(d.id, { stock: Infinity, unit: null, minimo: 0, nombre: data.name || '' })
         return
       }
       let stock
@@ -75,19 +79,31 @@ export const computeProductsWithoutIngredients = async (businessId, warehouseId 
       } else {
         stock = data.currentStock || 0
       }
-      infoById.set(d.id, { stock, unit: data.purchaseUnit || null })
+      infoById.set(d.id, {
+        stock,
+        unit: data.purchaseUnit || null,
+        minimo: Number(data.minimumStock) || 0,
+        nombre: data.name || '',
+      })
     })
 
     // Para insumos de tipo "producto terminado", no precargamos porque sería
     // un query extra grande; los tratamos como "stock infinito" en el badge
     // (el bloqueo real al cobrar sigue siendo correcto). En la práctica las
     // recetas de restaurante usan ingredientes crudos, no productos.
-    const result = new Set()
+    const sinInsumos = new Set()
+    const stockBajo = new Set()
+    const motivos = new Map()
+
     recipesSnap.forEach(d => {
       const recipe = d.data()
       if (!recipe.productId) return
       const ingredients = Array.isArray(recipe.ingredients) ? recipe.ingredients : []
       if (ingredients.length === 0) return
+
+      const bajos = []
+      let falta = false
+
       for (const ing of ingredients) {
         if (ing.ingredientType === 'product') continue // no se valida en badge
         const info = infoById.get(ing.ingredientId)
@@ -99,14 +115,37 @@ export const computeProductsWithoutIngredients = async (businessId, warehouseId 
         const need = convertUnit(Number(ing.quantity) || 0, ing.unit, info?.unit)
         if (!(need > 0)) continue
         if (have < need) {
-          result.add(recipe.productId)
+          // No alcanza para 1 unidad: gana sobre cualquier aviso de mínimo.
+          falta = true
           break
         }
+        if (info && insumoEstaBajo(have, info.minimo)) bajos.push(info)
+      }
+
+      if (falta) {
+        sinInsumos.add(recipe.productId)
+        return
+      }
+      if (bajos.length > 0) {
+        stockBajo.add(recipe.productId)
+        motivos.set(recipe.productId, textoDeMotivos(bajos))
       }
     })
-    return result
+
+    return { sinInsumos, stockBajo, motivos }
   } catch (e) {
     console.warn('Error calculando disponibilidad de insumos:', e)
-    return empty
+    return vacio
   }
+}
+
+/** "Pollo: quedan 6 kg (mínimo 8)" — hasta 3 insumos, el resto se resume. */
+const textoDeMotivos = (bajos) => {
+  const partes = bajos.slice(0, 3).map(i => {
+    const queda = Number.isInteger(i.stock) ? i.stock : parseFloat(Number(i.stock).toFixed(2))
+    const unidad = i.unit ? ` ${i.unit}` : ''
+    return `${i.nombre}: quedan ${queda}${unidad} (mínimo ${i.minimo})`
+  })
+  if (bajos.length > 3) partes.push(`y ${bajos.length - 3} insumo(s) más`)
+  return `Insumos por acabarse — ${partes.join(' · ')}`
 }

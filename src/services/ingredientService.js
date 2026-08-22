@@ -67,6 +67,21 @@ export const getIngredientStockInWarehouse = (ingredient, warehouseId) => {
 }
 
 /**
+ * ¿Este insumo está bajo de stock?
+ *
+ * Criterio ÚNICO del sistema: lo usan la página de Insumos (contador y badge)
+ * y el aviso "Stock bajo" que sale en el POS y al tomar una orden sobre los
+ * platos que llevan ese insumo. Si el mínimo no está configurado queda en 0,
+ * así que el aviso es opt-in: sólo avisa de los insumos a los que alguien les
+ * puso un mínimo.
+ *
+ * @param {number} stock         stock disponible, ya resuelto por almacén/sucursal
+ * @param {number} minimumStock  mínimo configurado en el insumo
+ */
+export const insumoEstaBajo = (stock, minimumStock) =>
+  Number(stock) <= (Number(minimumStock) || 0)
+
+/**
  * Helper: Obtener stock total de un ingrediente para una sucursal
  */
 export const getIngredientStockForBranch = (ingredient, warehouses, branchFilter) => {

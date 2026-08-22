@@ -11,7 +11,7 @@ import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
 import ModifierSelectorModal from '@/components/restaurant/ModifierSelectorModal'
 import VariantSelectorModal from '@/components/product/VariantSelectorModal'
 import PresentationSelectorModal from '@/components/product/PresentationSelectorModal'
-import { computeProductsWithoutIngredients, hasAnyRecipe } from '@/utils/recipeAvailability'
+import { computeRecipeStockAlerts, hasAnyRecipe } from '@/utils/recipeAvailability'
 import { filterProductsForBranch } from '@/utils/branchCatalog'
 import { cn } from '@/lib/utils'
 
@@ -49,6 +49,9 @@ export default function OrderItemsModal({
   // al abrir el modal y sólo si `!businessSettings.allowNegativeStock` y hay
   // recetas configuradas (cero overhead si el negocio no usa insumos).
   const [productsWithoutIngredients, setProductsWithoutIngredients] = useState(() => new Set())
+  // Platos preparables pero con algún insumo en su mínimo: avisa, no bloquea.
+  const [insumosBajos, setInsumosBajos] = useState(() => new Set())
+  const [motivosInsumo, setMotivosInsumo] = useState(() => new Map())
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('Todos')
   const [categories, setCategories] = useState(['Todos'])
@@ -101,15 +104,14 @@ export default function OrderItemsModal({
     // la carta se recarga para la sede correcta.
   }, [isOpen, orderBranchId])
 
-  // Lazy: calcular productos sin insumos en background después de pintar el
-  // modal. Solo si `allowNegativeStock` está DESACTIVADO y hay recetas. En
-  // modo demo no se hace nada (los demos no tienen recetas reales).
+  // Lazy: calcular el estado de los insumos en background después de pintar
+  // el modal, sólo si hay recetas. En modo demo no se hace nada (los demos no
+  // tienen recetas reales).
+  //
+  // Corre aunque `allowNegativeStock` esté activo: ese ajuste evita el bloqueo,
+  // pero el mozo igual necesita ver que un insumo se está acabando.
   useEffect(() => {
     if (!isOpen || isDemoMode) return
-    if (businessSettings?.allowNegativeStock) {
-      setProductsWithoutIngredients(prev => (prev.size === 0 ? prev : new Set()))
-      return
-    }
     const businessId = getBusinessId()
     if (!businessId) return
     let cancelled = false
@@ -117,9 +119,11 @@ export default function OrderItemsModal({
       if (cancelled) return
       const has = await hasAnyRecipe(businessId)
       if (cancelled || !has) return
-      const result = await computeProductsWithoutIngredients(businessId, null)
+      const { sinInsumos, stockBajo, motivos } = await computeRecipeStockAlerts(businessId, null)
       if (cancelled) return
-      setProductsWithoutIngredients(result)
+      setProductsWithoutIngredients(sinInsumos)
+      setInsumosBajos(stockBajo)
+      setMotivosInsumo(motivos)
     }, 0)
     return () => { cancelled = true; clearTimeout(handle) }
   }, [isOpen, isDemoMode, businessSettings?.allowNegativeStock, getBusinessId])
@@ -810,6 +814,7 @@ export default function OrderItemsModal({
                   // Plato con receta cuyos insumos no alcanzan para 1 unidad.
                   // Sólo aplica cuando el negocio NO permite vender en negativo.
                   const noIngredients = !businessSettings?.allowNegativeStock && productsWithoutIngredients.has(product.id)
+                  const lowIngredients = !noIngredients && insumosBajos.has(product.id)
                   return (
                     <button
                       type="button"
@@ -831,6 +836,14 @@ export default function OrderItemsModal({
                       {noIngredients && (
                         <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-orange-500 text-white z-10 shadow-sm">
                           Sin insumos
+                        </div>
+                      )}
+                      {lowIngredients && (
+                        <div
+                          title={motivosInsumo.get(product.id) || 'Algún insumo llegó a su mínimo'}
+                          className="absolute top-1 right-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-yellow-500 text-white z-10 shadow-sm"
+                        >
+                          Stock bajo
                         </div>
                       )}
                       <p className="font-semibold text-xs sm:text-sm leading-tight line-clamp-2 text-gray-900 min-h-[2.2em]">

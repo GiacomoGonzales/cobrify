@@ -20,7 +20,7 @@ import {
   updateIngredient,
   updateIngredientWithWarehouseStock,
   deleteIngredient,
-  getIngredientStockForBranch
+  getIngredientStockForBranch, insumoEstaBajo
 } from '@/services/ingredientService'
 import { getActiveBranches } from '@/services/branchService'
 import { getWarehouses } from '@/services/warehouseService'
@@ -909,7 +909,7 @@ export default function Ingredients() {
       total: ingredients.length,
       lowStock: ingredients.filter(i => {
         const stock = getStockForBranch(i)
-        return stock <= (i.minimumStock || 0)
+        return insumoEstaBajo(stock, i.minimumStock)
       }).length,
       totalValue: ingredients.reduce((sum, i) => {
         const stock = getStockForBranch(i)
@@ -935,7 +935,7 @@ export default function Ingredients() {
     if (stock <= 0) {
       return <Badge variant="danger">Sin stock</Badge>
     }
-    if (stock <= (ingredient.minimumStock || 0)) {
+    if (insumoEstaBajo(stock, ingredient.minimumStock)) {
       return <Badge variant="warning">Stock bajo</Badge>
     }
     return <Badge variant="success">Stock OK</Badge>

@@ -9,7 +9,7 @@
  */
 export default {
   id: 'recetas',
-  actualizado: '12/08/2026',
+  actualizado: '22/08/2026',
   intro:
     'Una receta conecta lo que vendes con lo que consumes: dice cuánto insumo lleva cada producto. Es lo que permite que venderlo descuente automáticamente sus insumos y que sepas cuánto te cuesta de verdad. En restaurante se llama **Recetas**; en los demás rubros, **Composición**.',
 
@@ -63,12 +63,47 @@ export default {
         },
       ],
     },
+
+    {
+      id: 'avisos',
+      title: 'Avisos de insumos al vender',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Un plato normalmente no lleva stock propio: lo que se acaba son sus insumos, y eso no se ve en la carta. Por eso, en el **Punto de Venta** y al **tomar una orden**, los productos con receta muestran un aviso según cómo estén sus insumos.',
+        },
+        {
+          type: 'tabla',
+          encabezados: ['Aviso', 'Qué significa'],
+          filas: [
+            ['**Stock bajo** (amarillo)', 'Todavía se puede preparar, pero algún insumo llegó a su mínimo. Es solo un aviso: el producto se vende normal. Pasa el cursor por encima y te dice qué insumo es y cuánto queda.'],
+            ['**Sin insumos** (naranja)', 'No alcanza ni para una unidad. Ahí sí el producto queda deshabilitado hasta que repongas.'],
+          ],
+        },
+        {
+          type: 'ojo',
+          text: 'El aviso amarillo depende del **Stock mínimo** que le pusiste al insumo en la página de Insumos. Si un insumo tiene el mínimo en cero, nunca va a avisar: el sistema no puede adivinar cuándo es poco para tu negocio.',
+        },
+        {
+          type: 'consejo',
+          text: 'Ponle mínimo a los insumos que no consigues el mismo día o que te dejan sin vender un plato entero. Es la diferencia entre enterarte en la mañana y enterarte cuando el mozo ya tomó el pedido.',
+        },
+      ],
+    },
   ],
 
   preguntas: [
     {
       q: 'Vendo el producto pero los insumos no bajan.',
       a: 'Revisa que la receta tenga la opción **Descontar insumos al vender** activada, y que los insumos tengan control de stock (los marcados como "solo para costos" no se descuentan a propósito).',
+    },
+    {
+      q: 'Un plato dice "Stock bajo" pero el insumo me parece suficiente.',
+      a: 'El aviso compara contra el **Stock mínimo** que tiene configurado ese insumo, no contra lo que lleva la receta. Si te avisa antes de tiempo, bájale el mínimo al insumo en la página de Insumos.',
+    },
+    {
+      q: 'No me avisa nada aunque un insumo esté por acabarse.',
+      a: 'Casi siempre es porque ese insumo tiene el **Stock mínimo** en cero. Entrá a Insumos, ponle el mínimo con el que querés que te avise, y el aviso aparece solo.',
     },
     {
       q: '¿Tengo que definirla para todo?',

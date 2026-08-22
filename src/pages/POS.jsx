@@ -108,7 +108,7 @@ import VariantSelectorModal from '@/components/product/VariantSelectorModal'
 import { consultarDNI, consultarRUC, consultarEstablecimientos } from '@/services/documentLookupService'
 import { deductIngredients } from '@/services/ingredientService'
 import { getRecipeByProductId, checkRecipeStock, shouldDeductIngredients, getRecipes } from '@/services/recipeService'
-import { computeProductsWithoutIngredients, hasAnyRecipe } from '@/utils/recipeAvailability'
+import { computeRecipeStockAlerts, hasAnyRecipe } from '@/utils/recipeAvailability'
 import { getWarehouses, getDefaultWarehouse, updateWarehouseStock, getStockInWarehouse, getTotalAvailableStock, getOrphanStock, createStockMovement } from '@/services/warehouseService'
 import { getActiveBranches, getDefaultBranch } from '@/services/branchService'
 import { shortenUrl } from '@/services/urlShortenerService'
@@ -360,6 +360,10 @@ export default function POS() {
   // Se calcula lazy (después del primer paint) y sólo si `!allowNegativeStock`.
   // El badge "Sin insumos" se renderiza con base en este set.
   const [productsWithoutIngredients, setProductsWithoutIngredients] = useState(() => new Set())
+  // Platos que SÍ se pueden preparar pero con algún insumo en su mínimo.
+  // Sólo avisa (badge amarillo), no bloquea.
+  const [insumosBajos, setInsumosBajos] = useState(() => new Set())
+  const [motivosInsumo, setMotivosInsumo] = useState(() => new Map())
   // Map<productId, totalCost> de recetas. Se usa para congelar el costo del
   // plato al vender (costAtSale en comprobantes). Se carga lazy y SOLO si la
   // cuenta tiene recetas → cero overhead para las cuentas retail.
@@ -3123,19 +3127,17 @@ export default function POS() {
     }
   }, [isLoading]) // Se ejecuta cuando termina de cargar
 
-  // Lazy: calcular en background qué productos con receta no tienen insumos
-  // suficientes para preparar 1 unidad. Sólo cuando: (a) terminó la carga,
-  // (b) `allowNegativeStock` está DESACTIVADO (si está activo, el dueño
-  // aceptó vender sin stock, no hace falta el aviso), y (c) hay al menos
-  // una receta configurada. Si el negocio no usa recetas, este efecto sale
-  // sin hacer nada (cero overhead para el 80% de las cuentas).
+  // Lazy: calcular en background el estado de los insumos de cada plato con
+  // receta — "Sin insumos" (no alcanza para 1 unidad) y "Stock bajo" (alcanza,
+  // pero un insumo llegó a su mínimo). Sólo cuando terminó la carga y hay al
+  // menos una receta configurada; si el negocio no usa recetas este efecto
+  // sale sin hacer nada (cero overhead para el 80% de las cuentas).
+  //
+  // Ya no se salta cuando `allowNegativeStock` está activo: ese ajuste dice
+  // "no me bloquees la venta", no "no me avises". El bloqueo se decide abajo,
+  // al renderizar.
   React.useEffect(() => {
     if (isLoading) return
-    if (companySettings?.allowNegativeStock) {
-      // Sin avisos cuando se permite vender en negativo.
-      setProductsWithoutIngredients(prev => (prev.size === 0 ? prev : new Set()))
-      return
-    }
     const businessId = getBusinessId()
     if (!businessId || isDemoMode) return
     let cancelled = false
@@ -3146,9 +3148,11 @@ export default function POS() {
       const has = await hasAnyRecipe(businessId)
       if (cancelled || !has) return
       const warehouseId = selectedWarehouse?.id || null
-      const result = await computeProductsWithoutIngredients(businessId, warehouseId)
+      const { sinInsumos, stockBajo, motivos } = await computeRecipeStockAlerts(businessId, warehouseId)
       if (cancelled) return
-      setProductsWithoutIngredients(result)
+      setProductsWithoutIngredients(sinInsumos)
+      setInsumosBajos(stockBajo)
+      setMotivosInsumo(motivos)
     }, 0)
     return () => { cancelled = true; clearTimeout(handle) }
   }, [isLoading, companySettings?.allowNegativeStock, getBusinessId, isDemoMode, selectedWarehouse?.id, saleCompleted])
@@ -9449,6 +9453,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   const expirationStatus = getProductExpirationStatus(product)
                   const isExpired = expirationStatus && !expirationStatus.canSell
                   const noIngredients = !companySettings?.allowNegativeStock && productsWithoutIngredients.has(product.id)
+                  // Alcanza para prepararlo, pero un insumo llegó a su mínimo.
+                  // Avisa siempre: aunque el dueño permita vender en negativo,
+                  // querer saber que se acaba el pollo no es lo mismo que
+                  // querer que lo bloqueen.
+                  const lowIngredients = !noIngredients && insumosBajos.has(product.id)
                   const isDisabled = isOutOfStock || isExpired || noIngredients
                   const quantityInCart = cart
                     .filter(item => item.id === product.id)
@@ -9508,6 +9517,14 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           {noIngredients && (
                             <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium bg-orange-500 text-white">
                               Sin insumos
+                            </span>
+                          )}
+                          {lowIngredients && (
+                            <span
+                              title={motivosInsumo.get(product.id) || 'Algún insumo llegó a su mínimo'}
+                              className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium bg-yellow-500 text-white"
+                            >
+                              Stock bajo
                             </span>
                           )}
                         </div>
@@ -9582,6 +9599,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   // que no se entere recién al cobrar. Sólo aplica cuando el dueño
                   // NO permitió vender sin stock (en ese modo no avisamos).
                   const noIngredients = !companySettings?.allowNegativeStock && productsWithoutIngredients.has(product.id)
+                  // Alcanza para prepararlo, pero un insumo llegó a su mínimo.
+                  // Avisa siempre: aunque el dueño permita vender en negativo,
+                  // querer saber que se acaba el pollo no es lo mismo que
+                  // querer que lo bloqueen.
+                  const lowIngredients = !noIngredients && insumosBajos.has(product.id)
                   const isDisabled = isOutOfStock || isExpired || noIngredients
 
                   // Calcular cantidad en carrito (suma de todas las variantes/lotes del producto)
@@ -9635,8 +9657,20 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     </div>
                   )}
 
+                  {/* Badge "Stock bajo" — se puede preparar, pero un insumo
+                      llegó a su mínimo. Mismo lugar que "Sin insumos" porque
+                      son excluyentes. */}
+                  {lowIngredients && (
+                    <div
+                      title={motivosInsumo.get(product.id) || 'Algún insumo llegó a su mínimo'}
+                      className="absolute top-1 right-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-500 text-white z-10 shadow-sm"
+                    >
+                      Stock bajo
+                    </div>
+                  )}
+
                   {/* Badge de vencimiento */}
-                  {!noIngredients && expirationStatus && expirationStatus.status !== 'ok' && (
+                  {!noIngredients && !lowIngredients && expirationStatus && expirationStatus.status !== 'ok' && (
                     <div className={`absolute top-1 right-1 px-2 py-0.5 rounded-full text-xs font-medium z-10 ${
                       isExpired
                         ? 'bg-red-600 text-white'
