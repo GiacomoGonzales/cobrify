@@ -58,7 +58,7 @@ import Select from '@/components/ui/Select'
 import Input from '@/components/ui/Input'
 import { formatCurrency, formatDate, formatDateTime, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import { getDocumentTotalInBase, getReportsCurrency, resolveReportsRate, convertBaseToDisplay } from '@/utils/currency'
-import { getInvoiceDate } from '@/utils/invoiceDate'
+import { getInvoiceDate, getInvoiceTimeInfo } from '@/utils/invoiceDate'
 import { toDateString } from '@/utils/emissionDate'
 import { getInvoicesPage, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat, updateProductStockTransaction } from '@/services/firestoreService'
 import { getCashRegisterSession, addCashMovement } from '@/services/firestoreService'
@@ -3175,6 +3175,15 @@ Gracias por tu preferencia.`
                       </span>
                       <span className="text-xs text-gray-500">
                         {getInvoiceDate(invoice) ? formatDate(getInvoiceDate(invoice)) : 'N/A'}
+                        {(() => {
+                          const t = getInvoiceTimeInfo(invoice)
+                          if (!t) return null
+                          return (
+                            <span className="text-gray-400">
+                              {t.mismoDia ? ` · ${t.hora}` : ` · reg. ${t.fechaRegistro} ${t.hora}`}
+                            </span>
+                          )
+                        })()}
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -3324,11 +3333,36 @@ Gracias por tu preferencia.`
                       </TableCell>
                     )}
                     <TableCell className="py-2.5 px-3">
-                      <span className="text-sm whitespace-nowrap">
-                        {getInvoiceDate(invoice)
-                          ? formatDate(getInvoiceDate(invoice))
-                          : 'N/A'}
-                      </span>
+                      {/* La hora va debajo de la fecha y no en una columna
+                          propia: la tabla ya viene justa y una columna mas
+                          apretaba el resto.
+
+                          Si la venta se cargo con fecha retroactiva, la hora NO
+                          pertenece a la fecha de al lado —es la del momento en
+                          que se registro— y se dice explicitamente. Ponerlas
+                          juntas y calladas se leeria como un solo instante. */}
+                      {(() => {
+                        const t = getInvoiceTimeInfo(invoice)
+                        return (
+                          <div className="flex flex-col leading-tight">
+                            <span className="text-sm whitespace-nowrap">
+                              {getInvoiceDate(invoice)
+                                ? formatDate(getInvoiceDate(invoice))
+                                : 'N/A'}
+                            </span>
+                            {t && (
+                              <span
+                                className="text-[11px] text-gray-400 whitespace-nowrap"
+                                title={t.mismoDia
+                                  ? `Registrada a las ${t.hora}`
+                                  : `Emitida con fecha anterior. Se registro en el sistema el ${t.fechaRegistro} a las ${t.hora}.`}
+                              >
+                                {t.mismoDia ? t.hora : `reg. ${t.fechaRegistro} ${t.hora}`}
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })()}
                     </TableCell>
                     <TableCell className="py-2.5 px-3">
                       <div className="flex flex-col gap-0.5">
