@@ -22,10 +22,13 @@ const IGNORED_DOMAINS = [
   'cobrify.com',
 ]
 
+// Espejo de public/manifest.json, que es el manifiesto real del dominio propio.
+// Solo se usa como respaldo: el middleware no manda los dominios de Cobrify acá.
+// Si se edita aquel, actualizar esto.
 const MANIFIESTO_COBRIFY = {
   name: 'Cobrify - Sistema de Facturación Electrónica SUNAT',
   short_name: 'Cobrify',
-  description: 'Sistema completo de facturación electrónica homologado con SUNAT para negocios en Perú.',
+  description: 'Sistema completo de facturación electrónica homologado con SUNAT para negocios en Perú. Gestiona facturas, boletas, notas de crédito/débito, clientes, productos e inventario.',
   theme_color: '#2563eb',
   background_color: '#0a0e27',
   logoUrl: '/logo.png',

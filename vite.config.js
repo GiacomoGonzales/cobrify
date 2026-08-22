@@ -66,56 +66,19 @@ export default defineConfig(({ mode }) => ({
           }
         ]
       },
-      manifest: {
-        name: 'Cobrify - Sistema de Facturación Electrónica SUNAT',
-        short_name: 'Cobrify',
-        description: 'Sistema completo de facturación electrónica homologado con SUNAT para negocios en Perú.',
-        start_url: '/',
-        display: 'standalone',
-        background_color: '#0a0e27',
-        theme_color: '#2563eb',
-        orientation: 'any',
-        scope: '/',
-        lang: 'es-PE',
-        categories: ['business', 'finance', 'productivity'],
-        icons: [
-          {
-            src: '/logo.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'any'
-          },
-          {
-            src: '/logo.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'maskable'
-          }
-        ],
-        shortcuts: [
-          {
-            name: 'Punto de Venta',
-            short_name: 'POS',
-            description: 'Abrir punto de venta rápidamente',
-            url: '/app/pos',
-            icons: [{ src: '/logo.png', sizes: '512x512', type: 'image/png' }]
-          },
-          {
-            name: 'Nueva Venta',
-            short_name: 'Venta',
-            description: 'Crear nueva venta',
-            url: '/app/pos',
-            icons: [{ src: '/logo.png', sizes: '512x512', type: 'image/png' }]
-          },
-          {
-            name: 'Clientes',
-            short_name: 'Clientes',
-            description: 'Ver lista de clientes',
-            url: '/app/clientes',
-            icons: [{ src: '/logo.png', sizes: '512x512', type: 'image/png' }]
-          }
-        ]
-      },
+      // El manifiesto NO lo genera el plugin: vive a mano en public/manifest.json.
+      //
+      // Antes se generaban los DOS y el <head> quedaba con dos <link rel="manifest">.
+      // El navegador usa el primero —el manual—, asi que el generado no se leia
+      // nunca: era una copia mas pobre (sin screenshots, sin el icono maskable de
+      // 1024, con la descripcion corta) esperando a que alguien reordenara el head
+      // para cambiar el comportamiento en silencio.
+      //
+      // Ademas el generado SI lo precachea el service worker, y el manual no
+      // (globPatterns no incluye json). Eso importa: en los dominios de resellers
+      // el manifiesto lo sirve api/manifest.js con su marca, y para llegar ahi la
+      // peticion tiene que salir a la red en vez de resolverse desde la cache.
+      manifest: false,
       devOptions: {
         enabled: false // No activar SW en desarrollo
       }

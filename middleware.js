@@ -48,12 +48,13 @@ export default function middleware(request) {
   // "Instalar aplicación" — nombre, descripción e ícono — y estaba horneado en
   // el build, así que un reseller con dominio propio veía la marca de Cobrify.
   //
-  // OJO con cuál se intercepta: index.html declara DOS <link rel="manifest">,
-  // el manual /manifest.json y el que inyecta vite-plugin-pwa
-  // (/manifest.webmanifest). El navegador usa el PRIMERO, o sea /manifest.json
-  // — que ademas NO esta precacheado por el service worker (globPatterns no
-  // incluye json), asi que la peticion llega de verdad hasta acá. Se atienden
-  // los dos por si alguna vez cambia el orden.
+  // El manifiesto vivo es /manifest.json (public/manifest.json). No esta
+  // precacheado por el service worker —globPatterns no incluye json— asi que la
+  // peticion sale a la red y llega hasta acá; si estuviera cacheado, el reseller
+  // veria para siempre la copia de Cobrify.
+  //
+  // /manifest.webmanifest ya no se genera, pero se sigue atendiendo: los que
+  // tengan el build viejo en cache lo van a pedir un rato mas.
   //
   // Solo se desvía en dominios de resellers: el dominio propio de Cobrify sigue
   // sirviendo el archivo estático, sin pagar una función por request.
