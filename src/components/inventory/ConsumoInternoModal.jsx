@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react'
-import { Minus, Plus, Search, Trash2, X } from 'lucide-react'
+import { Check, Minus, Plus, Search, X } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
+import Select from '@/components/ui/Select'
 import { useToast } from '@/contexts/ToastContext'
 import { buildProductHaystack } from '@/utils/productSearch'
 import { matchesPrebuilt } from '@/lib/utils'
@@ -46,14 +47,17 @@ export default function ConsumoInternoModal({
 
   const motivoActual = motivoPorId(motivo)
 
-  // Mismo criterio de búsqueda que el resto del sistema, para que no diverjan.
+  // La lista arranca mostrando los productos, no vacía: la mayoría de las veces
+  // el que consume el personal está a la vista y no hace falta escribir nada.
+  // El buscador usa el mismo criterio que el resto del sistema.
   const resultados = useMemo(() => {
-    if (busqueda.trim().length < 2) return []
-    return productos
-      .filter((p) => p.trackStock !== false)
-      .filter((p) => matchesPrebuilt(busqueda, buildProductHaystack(p)))
-      .slice(0, 6)
+    const conStock = productos.filter((p) => p.trackStock !== false)
+    const q = busqueda.trim()
+    if (!q) return conStock.slice(0, 50)
+    return conStock.filter((p) => matchesPrebuilt(q, buildProductHaystack(p))).slice(0, 50)
   }, [productos, busqueda])
+
+  const yaElegido = (id) => carrito.some((x) => x.productId === id)
 
   /** El costo es lo que vale reponerlo, no lo que se cobra. */
   const costoDe = (p) => Number(p.cost ?? p.costPrice ?? p.purchasePrice ?? 0) || 0
@@ -139,39 +143,30 @@ export default function ConsumoInternoModal({
           una cortesía. No emite comprobante ni suma a tus ventas.
         </p>
 
-        {/* Motivo */}
-        <div className="flex flex-wrap gap-2">
-          {MOTIVOS_CONSUMO.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => setMotivo(m.id)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
-                motivo === m.id ? 'text-white' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
-              }`}
-              style={motivo === m.id ? { backgroundColor: m.color, borderColor: m.color } : {}}
-            >
-              {m.nombre}
-            </button>
-          ))}
-        </div>
-
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Select
+            label="Motivo"
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+          >
+            {MOTIVOS_CONSUMO.map((m) => (
+              <option key={m.id} value={m.id}>{m.nombre}</option>
+            ))}
+          </Select>
+
           {almacenes.length > 1 && (
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Sale del almacén</label>
-              <select
-                value={almacenId}
-                onChange={(e) => setAlmacenId(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {almacenes.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
-            </div>
+            <Select
+              label="Sale del almacén"
+              value={almacenId}
+              onChange={(e) => setAlmacenId(e.target.value)}
+            >
+              {almacenes.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </Select>
           )}
+
           {motivoActual?.pideEmpleado && (
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">
+            <div className="w-full">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 Para quién <span className="font-normal text-gray-400">(opcional)</span>
               </label>
               <input
@@ -179,40 +174,48 @@ export default function ConsumoInternoModal({
                 value={empleado}
                 onChange={(e) => setEmpleado(e.target.value)}
                 placeholder="Nombre del empleado"
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors"
               />
             </div>
           )}
         </div>
 
-        {/* Buscador */}
-        <div className="relative">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar producto por nombre o código"
-            className="w-full pl-9 pr-3 py-2.5 text-sm bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          {resultados.length > 0 && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-10 max-h-56 overflow-y-auto">
-              {resultados.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => agregar(p)}
-                  className="w-full text-left px-3.5 py-2.5 hover:bg-gray-50 flex items-center justify-between gap-3 border-b border-gray-100 last:border-0"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{p.name}</p>
-                    <p className="text-xs text-gray-400">Stock: {Number(p.stock) || 0}</p>
-                  </div>
-                  <Plus className="w-4 h-4 text-blue-600 flex-none" />
-                </button>
-              ))}
-            </div>
-          )}
+        {/* Productos: la lista está a la vista y el buscador solo la filtra */}
+        <div>
+          <div className="relative mb-2">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar producto por nombre o código"
+              className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors"
+            />
+          </div>
+
+          <div className="border border-gray-200 rounded-lg max-h-48 overflow-y-auto divide-y divide-gray-100">
+            {resultados.length === 0 && (
+              <p className="text-sm text-gray-400 px-3 py-4 text-center">
+                {busqueda ? 'Ningún producto coincide.' : 'No hay productos con control de stock.'}
+              </p>
+            )}
+            {resultados.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => agregar(p)}
+                className="w-full text-left px-3 py-2 hover:bg-gray-50 flex items-center justify-between gap-3"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm text-gray-900 truncate">{p.name}</p>
+                  <p className="text-xs text-gray-400">Stock: {Number(p.stock) || 0}</p>
+                </div>
+                {yaElegido(p.id)
+                  ? <Check className="w-4 h-4 text-primary-600 flex-none" />
+                  : <Plus className="w-4 h-4 text-gray-400 flex-none" />}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Lo elegido */}
@@ -259,7 +262,7 @@ export default function ConsumoInternoModal({
           value={nota}
           onChange={(e) => setNota(e.target.value)}
           placeholder="Comentario (opcional)"
-          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
 
         <div className="flex items-center justify-between pt-3 border-t border-gray-200">

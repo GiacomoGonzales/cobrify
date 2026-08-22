@@ -35,12 +35,12 @@ import { deductIngredients, restoreIngredients } from './ingredientService'
  */
 
 export const MOTIVOS_CONSUMO = [
-  { id: 'personal', nombre: 'Consumo del personal', color: '#1B6E4A', pideEmpleado: true },
-  { id: 'merma', nombre: 'Merma o desperdicio', color: '#A3352C' },
-  { id: 'cortesia', nombre: 'Cortesía al cliente', color: '#7C3AED' },
-  { id: 'muestra', nombre: 'Muestra o degustación', color: '#26456E' },
-  { id: 'rotura', nombre: 'Rotura o daño', color: '#96690F' },
-  { id: 'uso_interno', nombre: 'Uso interno del local', color: '#6B7280' },
+  { id: 'personal', nombre: 'Consumo del personal', pideEmpleado: true },
+  { id: 'merma', nombre: 'Merma o desperdicio' },
+  { id: 'cortesia', nombre: 'Cortesía al cliente' },
+  { id: 'muestra', nombre: 'Muestra o degustación' },
+  { id: 'rotura', nombre: 'Rotura o daño' },
+  { id: 'uso_interno', nombre: 'Uso interno del local' },
 ]
 
 export const motivoPorId = (id) => MOTIVOS_CONSUMO.find((m) => m.id === id) || null
@@ -254,7 +254,7 @@ export const resumirPorMotivo = (consumos) => {
   return {
     total,
     lineas: MOTIVOS_CONSUMO
-      .map((m) => ({ ...m, monto: porMotivo[m.id] || 0 }))
+      .map((m) => ({ id: m.id, nombre: m.nombre, monto: porMotivo[m.id] || 0 }))
       .filter((l) => l.monto > 0)
       .sort((a, b) => b.monto - a.monto),
   }
