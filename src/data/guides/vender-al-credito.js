@@ -8,7 +8,7 @@
  */
 export default {
   id: 'vender-al-credito',
-  actualizado: '16/08/2026',
+  actualizado: '22/08/2026',
   intro:
     'Vender hoy y cobrar después es normal en el negocio peruano — lo peligroso es perderle el rastro a quién te debe. Este recorrido cubre el circuito completo: emitir al crédito, registrar los cobros y vigilar la deuda.',
 
@@ -29,6 +29,14 @@ export default {
         {
           type: 'ojo',
           text: 'Ponle SIEMPRE una fecha de vencimiento real, la que acordaste de palabra. Es la fecha que después separa "deuda normal" de "deuda vencida" — sin ella, todo parece estar bien para siempre.',
+        },
+        {
+          type: 'ojo',
+          text: 'Toda venta que queda debiendo pide el **nombre del cliente**: sin él no deja cobrar. No es un capricho — la deuda sin nombre se junta con la de todos los demás anónimos en una sola fila del reporte de cobranzas, y ya no hay forma de saber a quién reclamarle.',
+        },
+        {
+          type: 'consejo',
+          text: 'Si el cliente ya está en **Clientes**, elígelo de la lista en vez de escribir el nombre a mano. Escrito distinto cada vez ("Rosa", "Sra. Rosa") sale como si fueran personas diferentes; elegido de la lista, toda su deuda queda junta.',
         },
         { type: 'enlace', to: '/app/pos', label: 'Ir al Punto de Venta' },
       ],

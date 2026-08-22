@@ -6371,6 +6371,29 @@ export default function POS() {
     const isCreditSale = (enablePartialPayment && amountToPay === 0) ||
       ((documentType === 'factura' || documentType === 'boleta') && paymentType === 'credito')
 
+    // Toda venta que queda debiendo necesita a quién cobrarle. Sin nombre, la
+    // deuda cae en la fila "Cliente sin nombre" del reporte de cobranzas —
+    // junto con la de todos los demás anónimos, en un solo montón. Queda
+    // registrada pero es incobrable: nadie sabe a quién reclamarle.
+    //
+    // Al contado no se exige nada (el cliente pagó y se fue, no hay pendiente).
+    // La factura ya viene cubierta por el RUC obligatorio; esto tapa los dos
+    // caminos que faltaban: la nota de venta al crédito o con pago parcial, y
+    // la boleta al crédito de menos de S/ 700 (que SUNAT no obliga a nombrar).
+    //
+    // El espejo de esta condición está al guardar (isCreditSaleForInvoice /
+    // isPartialPayment): si cambia una, tiene que cambiar la otra.
+    const quedaSaldoPendiente =
+      ((documentType === 'factura' || documentType === 'boleta') && paymentType === 'credito') ||
+      (documentType === 'nota_venta' && enablePartialPayment && amountToPay < amounts.total)
+    if (quedaSaldoPendiente) {
+      const nombreDeudor = (customerData.name || '').trim() || (customerData.businessName || '').trim()
+      if (!nombreDeudor) {
+        abortCheckout('Esta venta queda con saldo pendiente. Escribe al menos el nombre del cliente para saber a quién cobrarle.')
+        return
+      }
+    }
+
     // Si hidePaymentMethods está activo, usar efectivo automáticamente
     const isHidePaymentMethods = hasFeature('hidePaymentMethods')
 
