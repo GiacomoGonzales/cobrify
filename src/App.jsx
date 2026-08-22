@@ -72,6 +72,7 @@ const Quotations = lazy(() => import('./pages/Quotations'))
 const BulkEmission = lazy(() => import('./pages/BulkEmission'))
 const CreateQuotation = lazy(() => import('./pages/CreateQuotation'))
 const StockMovements = lazy(() => import('./pages/StockMovements'))
+const InternalConsumption = lazy(() => import('./pages/InternalConsumption'))
 const Demo = lazy(() => import('./pages/Demo'))
 import DemoLayout from './layouts/DemoLayout'
 const DemoRestaurant = lazy(() => import('./pages/DemoRestaurant'))
@@ -283,6 +284,7 @@ function App() {
               <Route path="inventario" element={<Inventory />} />
               <Route path="almacenes" element={<Warehouses />} />
               <Route path="movimientos" element={<StockMovements />} />
+              <Route path="consumo-interno" element={<InternalConsumption />} />
               <Route path="proveedores" element={<Suppliers />} />
               <Route path="compras" element={<Purchases />} />
               <Route path="compras/nueva" element={<CreatePurchase />} />

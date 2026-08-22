@@ -258,6 +258,16 @@ export const GUIDES = [
     load: () => import('./almacenes.js'),
   },
   {
+    id: 'consumo-interno',
+    route: '/app/consumo-interno',
+    title: 'Consumo Interno',
+    category: 'Inventario',
+    description: 'Descontar lo que sale sin venderse: consumo del personal, merma, cortesías, muestras. Con su costo y su motivo.',
+    keywords: 'consumo interno personal empleados almuerzo comida merma desperdicio malogrado vencido cortesia regalo invitacion muestra degustacion rotura daño uso interno costo salida sin venta retiro de bienes autoconsumo',
+    modos: null,
+    load: () => import('./consumo-interno.js'),
+  },
+  {
     id: 'movimientos',
     route: '/app/movimientos',
     title: 'Movimientos de Inventario',

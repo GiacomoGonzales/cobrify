@@ -340,6 +340,13 @@ function Sidebar() {
           menuId: 'stock-movements',
         },
         {
+          path: '/consumo-interno',
+          icon: UtensilsCrossed,
+          label: 'Consumo Interno',
+          pageId: 'internal-consumption',
+          menuId: 'internal-consumption',
+        },
+        {
           path: '/control-lotes',
           icon: Package,
           label: 'Control de Lotes',
@@ -967,6 +974,13 @@ function Sidebar() {
           pageId: 'stock-movements',
           menuId: 'stock-movements',
         },
+        {
+          path: '/consumo-interno',
+          icon: UtensilsCrossed,
+          label: 'Consumo Interno',
+          pageId: 'internal-consumption',
+          menuId: 'internal-consumption',
+        },
       ],
     },
 
@@ -1514,6 +1528,13 @@ function Sidebar() {
       menuId: 'stock-movements',
     },
     {
+      path: '/consumo-interno',
+      icon: UtensilsCrossed,
+      label: 'Consumo Interno',
+      pageId: 'internal-consumption',
+      menuId: 'internal-consumption',
+    },
+    {
       path: '/guias-remision',
       icon: Truck,
       label: 'Guías de Remisión',
@@ -1737,6 +1758,13 @@ function Sidebar() {
           label: 'Movimientos',
           pageId: 'stock-movements',
           menuId: 'stock-movements',
+        },
+        {
+          path: '/consumo-interno',
+          icon: UtensilsCrossed,
+          label: 'Consumo Interno',
+          pageId: 'internal-consumption',
+          menuId: 'internal-consumption',
         },
       ],
     },
