@@ -1,4 +1,11 @@
-import admin from 'firebase-admin'
+// firebase-admin v14 ELIMINO la API con namespace: `admin.firestore()` y
+// `admin.messaging()` ya no existen en el export por defecto. Este modulo era
+// el ultimo que la usaba, asi que al reconstruirse contra v14 empezo a tirar
+// "admin.firestore is not a function" y se cayo TODO el push del sistema —
+// ventas, ordenes, Yape, stock y vencimientos — sin una sola alerta, porque
+// cada llamador atrapa el error y sigue.
+import { getFirestore } from 'firebase-admin/firestore'
+import { getMessaging } from 'firebase-admin/messaging'
 
 /**
  * Enviar notificación push a un usuario
@@ -28,7 +35,7 @@ export async function sendPushNotification(userId, title, body, data = {}, optio
     // empleados — esos pasan { allowSecondaryUsers: true } para saltarse el
     // check.
     if (!allowSecondaryUsers) {
-      const userSnap = await admin.firestore().collection('users').doc(userId).get()
+      const userSnap = await getFirestore().collection('users').doc(userId).get()
       if (userSnap.exists && userSnap.data()?.ownerId) {
         console.log(`🔕 Skipping push: ${userId} es usuario secundario (ownerId=${userSnap.data().ownerId})`)
         return { success: false, skipped: 'secondary_user' }
@@ -36,7 +43,7 @@ export async function sendPushNotification(userId, title, body, data = {}, optio
     }
 
     // Obtener todos los tokens FCM del usuario
-    const tokensSnapshot = await admin.firestore()
+    const tokensSnapshot = await getFirestore()
       .collection('users')
       .doc(userId)
       .collection('fcmTokens')
@@ -94,7 +101,7 @@ export async function sendPushNotification(userId, title, body, data = {}, optio
     console.log('📤 Sending notification to', tokens.length, 'tokens')
 
     try {
-      const response = await admin.messaging().sendEachForMulticast(message)
+      const response = await getMessaging().sendEachForMulticast(message)
       console.log('📊 Success count:', response.successCount)
       console.log('📊 Failure count:', response.failureCount)
 
@@ -125,7 +132,7 @@ export async function sendPushNotification(userId, title, body, data = {}, optio
     if (failedTokens.length > 0) {
       console.log('🗑️ Cleaning up invalid tokens:', failedTokens.length)
       for (const token of failedTokens) {
-        await admin.firestore()
+        await getFirestore()
           .collection('users')
           .doc(userId)
           .collection('fcmTokens')

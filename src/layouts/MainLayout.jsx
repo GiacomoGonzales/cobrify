@@ -342,6 +342,37 @@ export default function MainLayout() {
     [subscription, isBusinessOwner, isAdmin]
   )
 
+  /**
+   * El banner de vencimiento se puede cerrar POR EL DÍA.
+   *
+   * Antes era permanente y estaba en todas las pantallas: cuatro días seguidos
+   * sin poder sacarlo de encima. Un aviso que no se puede cerrar deja de ser un
+   * aviso y pasa a ser presión — el reclamo textual de un cliente fue "les pido
+   * un poquito de prudencia".
+   *
+   * Vuelve solo al día siguiente, así que nadie se entera tarde. Lo único que
+   * NO se puede cerrar es el aviso de "ya venció": ahí el servicio está por
+   * cortarse y esconderlo sería hacerle un flaco favor al usuario.
+   */
+  const claveAvisoCerrado = avisoVencimiento
+    ? `avisoVenc_${user?.uid || ''}_${new Date().toISOString().slice(0, 10)}`
+    : null
+  const [avisoCerrado, setAvisoCerrado] = useState(false)
+  useEffect(() => {
+    if (!claveAvisoCerrado) return
+    try {
+      setAvisoCerrado(localStorage.getItem(claveAvisoCerrado) === '1')
+    } catch { /* sin localStorage: se muestra, que es el lado seguro */ }
+  }, [claveAvisoCerrado])
+
+  const cerrarAviso = () => {
+    setAvisoCerrado(true)
+    try { localStorage.setItem(claveAvisoCerrado, '1') } catch { /* no pasa nada */ }
+  }
+
+  const mostrarAviso = !!avisoVencimiento
+    && (avisoVencimiento.nivel === 'vencido' || !avisoCerrado)
+
   // A quién escribe el cliente desde los banners de vencimiento y de límite.
   //
   // Orden: su RESELLER primero (si lo tiene, es su proveedor y quien le cobra),
@@ -539,8 +570,8 @@ export default function MainLayout() {
           Antes solo aparecia DESPUES de vencer (isInGracePeriod), asi que
           nadie tenia aviso previo — y los clientes de reseller, que no tienen
           periodo de gracia, no veian NADA nunca. Ver subscriptionWarning.js. */}
-      {avisoVencimiento && (
-        <div className={`${ESTILO_AVISO[avisoVencimiento.nivel]} text-white px-4 py-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 flex-shrink-0 text-sm ${sidebarCollapsed ? 'md:pl-16' : 'md:pl-64'}`}>
+      {mostrarAviso && (
+        <div className={`${ESTILO_AVISO[avisoVencimiento.nivel]} text-white px-4 py-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 flex-shrink-0 text-sm relative ${sidebarCollapsed ? 'md:pl-16' : 'md:pl-64'}`}>
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 flex-shrink-0" />
             <span className={avisoVencimiento.nivel === 'info' ? 'font-medium' : 'font-semibold'}>
@@ -556,6 +587,17 @@ export default function MainLayout() {
             <MessageCircle className="w-3.5 h-3.5" />
             Renovar ahora
           </a>
+          {avisoVencimiento.nivel !== 'vencido' && (
+            <button
+              type="button"
+              onClick={cerrarAviso}
+              title="Ocultar por hoy"
+              aria-label="Ocultar por hoy"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-white/20 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
       )}
 

@@ -9521,7 +9521,17 @@ export const checkSubscriptionExpirations = onSchedule(
           ? 'Al vencer, el servicio se suspende de inmediato.'
           : 'Renueva para no interrumpir tus ventas.'
 
-        if (daysUntilExpiry >= 2 && daysUntilExpiry <= 4) {
+        // Solo los dias 4, 1 y 0. Antes avisaba los CINCO dias seguidos, y cada
+        // aviso sale por cada dispositivo del usuario: con 4 equipos eran 20
+        // notificaciones en 5 dias. Reclamo real (KYOMU, 22-ago): "62
+        // notificaciones en 3 dias, les pido un poquito de prudencia".
+        //
+        // Los dias 3 y 2 no agregaban nada: quien vio el aviso del dia 4 ya
+        // esta enterado, y el que decide sobre la hora se entera igual el 1 y
+        // el 0. Repetir a diario no acelera el pago, solo gasta la paciencia
+        // del que ya sabe — y a esa altura el banner del sistema tampoco se ha
+        // ido de la pantalla.
+        if (daysUntilExpiry === 4) {
           notifTitle = `Tu suscripción vence en ${daysUntilExpiry} días`
           notifMessage = `Tu plan vence el ${fechaTexto}. ${avisoCorte}`
         } else if (daysUntilExpiry === 1) {
