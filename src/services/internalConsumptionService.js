@@ -56,7 +56,7 @@ const coleccion = (businessId) => collection(db, 'businesses', businessId, 'inte
  * vez de stock descontado sin rastro de por qué.
  *
  * @param {Object} datos
- * @param {Array}  datos.items      [{ productId, nombre, cantidad, costoUnitario, variantSku?, unidad? }]
+ * @param {Array}  datos.items      [{ productId, nombre, cantidad, costoUnitario, variantSku?, unidad?, controlaStock? }]
  * @param {string} datos.motivo     id de MOTIVOS_CONSUMO
  * @param {Date}   datos.fecha      cuándo se consumió (puede ser anterior a hoy)
  * @param {string} [datos.empleadoNombre]
@@ -89,6 +89,7 @@ export const createInternalConsumption = async (businessId, datos) => {
         subtotal: (Number(i.costoUnitario) || 0) * Number(i.cantidad),
         ...(i.variantSku ? { variantSku: i.variantSku } : {}),
         ...(i.unidad ? { unidad: i.unidad } : {}),
+        ...(i.controlaStock === false ? { controlaStock: false } : {}),
       })),
       total,
       empleadoNombre: datos.empleadoNombre || null,
@@ -120,6 +121,13 @@ export const createInternalConsumption = async (businessId, datos) => {
           )
           continue
         }
+
+        // Sin receta y sin control de stock (un plato del menú, un servicio):
+        // no hay nada que descontar. Queda en el documento como registro de lo
+        // consumido, pero NO se crea un movimiento: anotar una salida de stock
+        // que nunca ocurrió es peor que no anotar nada — después nadie entiende
+        // por qué el historial no cuadra con las existencias.
+        if (item.controlaStock === false) continue
 
         await updateProductStockTransaction(
           businessId, item.productId, datos.warehouseId || null,
@@ -199,6 +207,9 @@ export const voidInternalConsumption = async (businessId, consumoId, usuario) =>
           await restoreIngredients(businessId, insumos, consumo.warehouseId || null)
           continue
         }
+
+        // Nunca se descontó: tampoco hay nada que devolver.
+        if (item.controlaStock === false) continue
 
         await updateProductStockTransaction(
           businessId, item.productId, consumo.warehouseId || null,

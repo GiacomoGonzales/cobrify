@@ -51,10 +51,9 @@ export default function ConsumoInternoModal({
   // el que consume el personal está a la vista y no hace falta escribir nada.
   // El buscador usa el mismo criterio que el resto del sistema.
   const resultados = useMemo(() => {
-    const conStock = productos.filter((p) => p.trackStock !== false)
     const q = busqueda.trim()
-    if (!q) return conStock.slice(0, 50)
-    return conStock.filter((p) => matchesPrebuilt(q, buildProductHaystack(p))).slice(0, 50)
+    if (!q) return productos.slice(0, 50)
+    return productos.filter((p) => matchesPrebuilt(q, buildProductHaystack(p))).slice(0, 50)
   }, [productos, busqueda])
 
   const yaElegido = (id) => carrito.some((x) => x.productId === id)
@@ -76,6 +75,9 @@ export default function ConsumoInternoModal({
         cantidad: 1,
         costoUnitario: costoDe(p),
         stockActual: Number(p.stock) || 0,
+        // Un plato del menú suele no llevar stock propio: lo que se descuenta
+        // son sus insumos, por la receta.
+        controlaStock: p.trackStock !== false,
       }]
     })
     setBusqueda('')
@@ -196,7 +198,7 @@ export default function ConsumoInternoModal({
           <div className="border border-gray-200 rounded-lg max-h-48 overflow-y-auto divide-y divide-gray-100">
             {resultados.length === 0 && (
               <p className="text-sm text-gray-400 px-3 py-4 text-center">
-                {busqueda ? 'Ningún producto coincide.' : 'No hay productos con control de stock.'}
+                {busqueda ? 'Ningún producto coincide.' : 'No hay productos cargados.'}
               </p>
             )}
             {resultados.map((p) => (
@@ -208,7 +210,11 @@ export default function ConsumoInternoModal({
               >
                 <div className="min-w-0">
                   <p className="text-sm text-gray-900 truncate">{p.name}</p>
-                  <p className="text-xs text-gray-400">Stock: {Number(p.stock) || 0}</p>
+                  <p className="text-xs text-gray-400">
+                    {p.trackStock === false
+                      ? 'Sin stock propio — descuenta sus insumos'
+                      : `Stock: ${Number(p.stock) || 0}`}
+                  </p>
                 </div>
                 {yaElegido(p.id)
                   ? <Check className="w-4 h-4 text-primary-600 flex-none" />
@@ -225,7 +231,7 @@ export default function ConsumoInternoModal({
               <div key={x.productId} className="flex items-center gap-2 bg-gray-50 rounded-lg p-2.5">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-gray-900 truncate">{x.nombre}</p>
-                  {x.cantidad > x.stockActual && (
+                  {x.controlaStock && x.cantidad > x.stockActual && (
                     <p className="text-[11px] text-amber-600">Solo hay {x.stockActual} en stock</p>
                   )}
                 </div>

@@ -52,6 +52,10 @@ export default {
           type: 'texto',
           text: 'En modo restaurante, registrar **2 lomo saltado** descuenta la carne, la papa y la cebolla de tus insumos — no un producto llamado "lomo saltado". Es exactamente lo mismo que hace una venta en el punto de venta.',
         },
+        {
+          type: 'texto',
+          text: 'Por eso la lista incluye también los productos **sin control de stock propio**, como los platos del menú: aunque el plato no lleve stock, sus insumos sí se descuentan. En la lista aparecen marcados como *Sin stock propio*.',
+        },
       ],
     },
     {
