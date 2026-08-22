@@ -4,6 +4,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useHidePrivateData } from '@/hooks/useHidePrivateData'
 import { useToast } from '@/contexts/ToastContext'
 import { getActiveBranches } from '@/services/branchService'
+import { getTables } from '@/services/tableService'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -95,7 +96,7 @@ function CountRow({ label, hint, value, onChange, expected, currency = 'PEN', re
 }
 
 export default function CashRegister() {
-  const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess, allowedBranches, userPermissions, independentCashRegister, isAdmin, isBusinessOwner, businessSettings } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess, allowedBranches, userPermissions, independentCashRegister, isAdmin, isBusinessOwner, businessSettings, businessMode } = useAppContext()
   // Si está activado el toggle "ocultar efectivo esperado a cajeros" y el usuario actual
   // no es dueño/admin, escondemos el monto esperado y la diferencia para que el cajero
   // no lo vea — solo cuente y reporte. El dueño podrá comparar después.
@@ -175,6 +176,11 @@ export default function CashRegister() {
   // Modal states
   const [showOpenModal, setShowOpenModal] = useState(false)
   const [showCloseModal, setShowCloseModal] = useState(false)
+  // Mesas que siguen ocupadas al ir a cerrar caja. Con contenido, se muestra
+  // el aviso previo; vacío, no hay nada que advertir.
+  const [mesasAbiertas, setMesasAbiertas] = useState([])
+
+  const isRestaurantMode = businessMode === 'restaurant'
   // Throttle del refresco de sesión + ref a la última versión de la función
   // (el listener de foco vive entre renders; sin el ref capturaría un closure viejo)
   const lastSessionRefreshRef = useRef(0)
@@ -1439,6 +1445,51 @@ export default function CashRegister() {
     }
   }
 
+
+  /**
+   * Antes de contar la plata, avisar si quedaron mesas ocupadas.
+   *
+   * El orden importa: el aviso va ANTES del modal de conteo, no después. Si la
+   * cajera cobra una mesa olvidada recién después de contar, el monto esperado
+   * cambia y el arqueo queda mal. Acá todavía está a tiempo de ir a cobrarla.
+   *
+   * Solo avisa: cerrar con mesas abiertas es legítimo (turnos que se cruzan,
+   * mesas que quedan para el turno noche). Por eso deja continuar.
+   */
+  const irACerrarCaja = async () => {
+    // Refrescar en background: el esperado que ve la cajera al contar debe
+    // incluir anulaciones/ventas de otras máquinas.
+    refreshSessionData(true)
+
+    if (!isRestaurantMode || isDemoMode) {
+      setShowCloseModal(true)
+      return
+    }
+
+    try {
+      const result = await getTables(getBusinessId())
+      const abiertas = (result.data || []).filter(t => {
+        if (t.status !== 'occupied') return false
+        // Mismo criterio de sede que la pantalla de Mesas: sin branchId = Principal.
+        if ((t.branchId || null) !== (selectedBranch?.id || null)) return false
+        // Mesas fusionadas: TODAS las del grupo llevan el monto combinado, así
+        // que listar las secundarias sumaría la misma cuenta varias veces. La
+        // principal ya representa al grupo entero.
+        if (t.groupId && t.isGroupPrimary === false) return false
+        return true
+      })
+      if (abiertas.length > 0) {
+        setMesasAbiertas(abiertas)
+        return
+      }
+    } catch (error) {
+      // Si no se pudieron leer las mesas, no bloquear el cierre por eso.
+      console.warn('No se pudieron revisar las mesas abiertas:', error)
+    }
+
+    setShowCloseModal(true)
+  }
+
   const handleFinishClosing = () => {
     // Cerrar modal y limpiar estados
     setShowCloseModal(false)
@@ -2242,12 +2293,7 @@ export default function CashRegister() {
                 </Button>
                 <Button
                   variant="danger"
-                  onClick={() => {
-                    setShowCloseModal(true)
-                    // Refrescar en background: el esperado que ve la cajera al
-                    // contar debe incluir anulaciones/ventas de otras máquinas.
-                    refreshSessionData(true)
-                  }}
+                  onClick={irACerrarCaja}
                   className="flex-1 sm:flex-initial"
                 >
                   <Lock className="w-4 h-4 mr-2" />
@@ -4142,6 +4188,55 @@ export default function CashRegister() {
                   Abrir Caja
                 </>
               )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Aviso previo: mesas que siguen ocupadas. Solo restaurante. */}
+      <Modal
+        isOpen={mesasAbiertas.length > 0}
+        onClose={() => setMesasAbiertas([])}
+        title="Hay mesas sin cerrar"
+        size="md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            {mesasAbiertas.length === 1
+              ? 'Todavía queda una mesa ocupada. Si ya consumió, conviene cobrarla antes de contar la caja: después del conteo el monto esperado ya no cuadra.'
+              : `Todavía quedan ${mesasAbiertas.length} mesas ocupadas. Si ya consumieron, conviene cobrarlas antes de contar la caja: después del conteo el monto esperado ya no cuadra.`}
+          </p>
+
+          <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-56 overflow-y-auto">
+            {mesasAbiertas.map((mesa) => (
+              <div key={mesa.id} className="flex items-center justify-between px-3 py-2">
+                <div className="min-w-0">
+                  {/* En una cuenta de barra, `number` ES el nombre del cliente. */}
+                  <p className="text-sm text-gray-900 truncate">
+                    {mesa.isBarTab ? mesa.number : `Mesa ${mesa.number}`}
+                  </p>
+                  {mesa.waiter && (
+                    <p className="text-xs text-gray-400 truncate">{mesa.waiter}</p>
+                  )}
+                </div>
+                {Number(mesa.amount) > 0 && (
+                  <span className="text-sm font-semibold text-gray-900 flex-none">
+                    {formatCurrency(mesa.amount)}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-gray-200">
+            <Button variant="outline" onClick={() => setMesasAbiertas([])}>
+              Volver a cobrarlas
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => { setMesasAbiertas([]); setShowCloseModal(true) }}
+            >
+              Cerrar caja igual
             </Button>
           </div>
         </div>

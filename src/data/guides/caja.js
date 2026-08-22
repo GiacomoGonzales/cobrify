@@ -17,7 +17,7 @@
  */
 export default {
   id: 'caja',
-  actualizado: '16/08/2026',
+  actualizado: '22/08/2026',
   intro:
     'Control de Caja es el ritual de apertura y cierre del turno: con cuánto empezaste, qué entró y salió por fuera de las ventas, y si al final el dinero cuadra con lo que el sistema esperaba. No arquea solo el efectivo: cada medio de pago se cuadra por su cuenta.',
 
@@ -105,6 +105,14 @@ export default {
         {
           type: 'texto',
           text: 'Si creaste **métodos de pago propios**, también aparecen con su casilla. Y si vendes en dólares, cada fondo tiene su versión en dólares aparte, para que no se mezclen las monedas.',
+        },
+        {
+          type: 'ojo',
+          text: 'En **modo restaurante**, si quedan mesas ocupadas al presionar Cerrar Caja, el sistema avisa y las lista antes de que empieces a contar. Puedes ir a cobrarlas o cerrar igual — el aviso no bloquea, solo te da la oportunidad de no pasar una por alto.',
+        },
+        {
+          type: 'consejo',
+          text: 'Si una mesa se te pasó, cóbrala **antes** de contar. Si la cobras después, el efectivo esperado ya cambió y el arqueo te va a marcar una diferencia que no existe.',
         },
       ],
     },
