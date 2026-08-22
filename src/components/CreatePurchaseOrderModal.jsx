@@ -14,20 +14,11 @@ import { formatCurrency } from '@/lib/utils'
 import { consultarRUC } from '@/services/documentLookupService'
 import { isMultiCurrencyEnabled, getDefaultCurrency, normalizeCurrency, BASE_CURRENCY } from '@/utils/currency'
 import { getRateForDate } from '@/services/exchangeRateService'
+import { UNIDADES_SELECT } from '@/data/sunatUnits'
 
-// Unidades de medida comunes
-const UNITS = [
-  { value: 'NIU', label: 'Unidad' },
-  { value: 'KGM', label: 'Kilogramo' },
-  { value: 'LTR', label: 'Litro' },
-  { value: 'MTR', label: 'Metro' },
-  { value: 'BX', label: 'Caja' },
-  { value: 'DISPLAY', label: 'Display' },
-  { value: 'PK', label: 'Paquete' },
-  { value: 'DZN', label: 'Docena' },
-  { value: 'MIL', label: 'Millar' },
-  { value: 'ZZ', label: 'Servicio' },
-]
+// Unidades de medida: el catálogo compartido del sistema. Antes acá vivía una
+// lista propia de 10, así que el proveedor pedía "saco" o "rollo" y no estaba.
+const UNITS = UNIDADES_SELECT
 
 // Condiciones de pago
 const PAYMENT_CONDITIONS = [

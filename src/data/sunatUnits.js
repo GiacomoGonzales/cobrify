@@ -206,4 +206,105 @@ export function unitDisplayName(input) {
   return CODE_TO_NAME[upper] || upper
 }
 
+/**
+ * Unidades para los DESPLEGABLES del sistema (productos, cotizaciones, órdenes
+ * de compra). Etiqueta simple, sin el código adelante: acá el usuario elige
+ * "Caja", no "BX - Caja".
+ *
+ * Es la UNIÓN de las listas que vivían sueltas en cada pantalla. Cada una se
+ * había armado por su cuenta y a todas les faltaban cosas distintas: la orden
+ * de compra ofrecía 10 unidades, productos 64, cotizaciones 68 — y ninguna las
+ * tenía todas. El usuario que pedía una unidad la encontraba en una pantalla y
+ * no en la otra.
+ *
+ * OJO: incluye 5 códigos que NO están en el catálogo 03 de arriba (marcados
+ * abajo). Se conservan porque ya hay productos guardados con ellos; sacarlos
+ * dejaría esos productos con la unidad en blanco. Al emitir, `normalizeSunatUnit`
+ * resuelve DISPLAY → BX (caja) por alias, y los otros cuatro → NIU.
+ *
+ * ⚠️ PENDIENTE: HT (media hora), RD (varilla), RL (carrete) y SEC (segundo)
+ * parecen códigos legítimos de UN/ECE Rec 20, que es la base del catálogo 03.
+ * Si lo son, deberían sumarse a SUNAT_UNITS para que al emitir viajen tal cual
+ * en vez de degradarse a "unidad". No se agregaron acá porque meter un código
+ * inválido en la lista que arma el XML se paga con comprobantes rechazados:
+ * hay que confirmarlos contra el anexo de SUNAT antes.
+ */
+export const UNIDADES_SELECT = [
+  { value: 'BJ',     label: 'Balde' },
+  { value: 'BLL',    label: 'Barril' },
+  { value: '4B',     label: 'Barriles' },
+  { value: 'BG',     label: 'Bolsa' },
+  { value: 'BO',     label: 'Botellas' },
+  { value: 'BX',     label: 'Caja' },
+  { value: 'RL',     label: 'Carrete' },  // no es codigo SUNAT
+  { value: 'CT',     label: 'Cartones' },
+  { value: 'CMK',    label: 'Centímetro cuadrado' },
+  { value: 'CMQ',    label: 'Centímetro cúbico' },
+  { value: 'CMT',    label: 'Centímetro lineal' },
+  { value: 'CEN',    label: 'Ciento de unidades' },
+  { value: 'CY',     label: 'Cilindro' },
+  { value: 'SET',    label: 'Conjunto' },
+  { value: 'QD',     label: 'Cuarto de docena' },
+  { value: 'AV',     label: 'Cápsula' },
+  { value: 'DISPLAY',label: 'Display' },  // no es codigo SUNAT
+  { value: 'DZN',    label: 'Docena' },
+  { value: 'DZP',    label: 'Docena por 10⁶' },
+  { value: 'CH',     label: 'Envase' },
+  { value: 'BE',     label: 'Fardo' },
+  { value: 'JR',     label: 'Frasco' },
+  { value: 'GLL',    label: 'Galón (3.785 dm³)' },
+  { value: 'GLI',    label: 'Galón inglés (4.545 dm³)' },
+  { value: 'GRM',    label: 'Gramo' },
+  { value: 'GRO',    label: 'Gruesa' },
+  { value: 'ST',     label: 'Hoja' },
+  { value: 'LEF',    label: 'Hoja' },
+  { value: 'HUR',    label: 'Hora' },
+  { value: 'JG',     label: 'Jarra' },
+  { value: 'KGM',    label: 'Kilogramo' },
+  { value: 'KWH',    label: 'Kilovatio hora' },
+  { value: 'KTM',    label: 'Kilómetro' },
+  { value: 'KT',     label: 'Kit' },
+  { value: 'CA',     label: 'Lata' },
+  { value: 'LBR',    label: 'Libra' },
+  { value: 'LTR',    label: 'Litro' },
+  { value: 'HD',     label: 'Media docena' },
+  { value: 'HT',     label: 'Media hora' },  // no es codigo SUNAT
+  { value: 'MWH',    label: 'Megavatio hora' },
+  { value: 'MTR',    label: 'Metro' },
+  { value: 'MTK',    label: 'Metro cuadrado' },
+  { value: 'MTQ',    label: 'Metro cúbico' },
+  { value: 'MGM',    label: 'Miligramo' },
+  { value: 'MLT',    label: 'Mililitro' },
+  { value: 'MIL',    label: 'Millar' },
+  { value: 'UM',     label: 'Millón de unidades' },
+  { value: 'MMT',    label: 'Milímetro' },
+  { value: 'MMK',    label: 'Milímetro cuadrado' },
+  { value: 'MMQ',    label: 'Milímetro cúbico' },
+  { value: 'ONZ',    label: 'Onza' },
+  { value: 'PF',     label: 'Palet' },
+  { value: 'PK',     label: 'Paquete' },
+  { value: 'PR',     label: 'Par' },
+  { value: 'FOT',    label: 'Pie' },
+  { value: 'FTK',    label: 'Pie cuadrado' },
+  { value: 'FT3',    label: 'Pie cúbico' },
+  { value: 'FTQ',    label: 'Pie cúbico' },
+  { value: 'C62',    label: 'Pieza' },
+  { value: 'PG',     label: 'Placa' },
+  { value: 'INH',    label: 'Pulgada' },
+  { value: 'RM',     label: 'Resma' },
+  { value: 'RO',     label: 'Rollo' },
+  { value: 'SA',     label: 'Saco' },
+  { value: 'SEC',    label: 'Segundo' },  // no es codigo SUNAT
+  { value: 'ZZ',     label: 'Servicios' },
+  { value: 'U2',     label: 'Tableta/Blister' },
+  { value: 'DR',     label: 'Tambor' },
+  { value: 'STN',    label: 'Tonelada corta (2000 lb)' },
+  { value: 'TNE',    label: 'Tonelada métrica' },
+  { value: 'BT',     label: 'Tornillo' },
+  { value: 'TU',     label: 'Tubo' },
+  { value: 'NIU',    label: 'Unidad' },
+  { value: 'RD',     label: 'Varilla' },  // no es codigo SUNAT
+  { value: 'YRD',    label: 'Yarda' },
+]
+
 export default SUNAT_UNITS

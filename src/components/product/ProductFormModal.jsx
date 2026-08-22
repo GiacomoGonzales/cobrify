@@ -20,74 +20,12 @@ import { uploadProductImage, deleteProductImage, createImagePreview, revokeImage
 import { getNextSkuNumber } from '@/services/firestoreService'
 import ProductImagesManager, { productToImageItems, resolveImageUrls } from '@/components/product/ProductImagesManager'
 import { getPresentationCostInfo } from '@/utils/presentationCost'
+import { UNIDADES_SELECT } from '@/data/sunatUnits'
 
 // Unidades de medida SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
-export const UNITS = [
-  { value: 'NIU', label: 'Unidad' },
-  { value: 'ZZ', label: 'Servicio' },
-  { value: 'KGM', label: 'Kilogramo' },
-  { value: 'GRM', label: 'Gramo' },
-  { value: 'LTR', label: 'Litro' },
-  { value: 'MTR', label: 'Metro' },
-  { value: 'MTK', label: 'Metro cuadrado' },
-  { value: 'MTQ', label: 'Metro cúbico' },
-  { value: 'BX', label: 'Caja' },
-  { value: 'DISPLAY', label: 'Display' },
-  { value: 'PK', label: 'Paquete' },
-  { value: 'SET', label: 'Juego' },
-  { value: 'HUR', label: 'Hora' },
-  { value: 'DZN', label: 'Docena' },
-  { value: 'PR', label: 'Par' },
-  { value: 'MIL', label: 'Millar' },
-  { value: 'TNE', label: 'Tonelada' },
-  { value: 'BJ', label: 'Balde' },
-  { value: 'BLL', label: 'Barril' },
-  { value: 'BG', label: 'Bolsa' },
-  { value: 'BO', label: 'Botella' },
-  { value: 'CT', label: 'Cartón' },
-  { value: 'CMK', label: 'Centímetro cuadrado' },
-  { value: 'CMQ', label: 'Centímetro cúbico' },
-  { value: 'CMT', label: 'Centímetro' },
-  { value: 'CEN', label: 'Ciento de unidades' },
-  { value: 'CY', label: 'Cilindro' },
-  { value: 'BE', label: 'Fardo' },
-  { value: 'GLL', label: 'Galón' },
-  { value: 'GLI', label: 'Galón inglés' },
-  { value: 'LEF', label: 'Hoja' },
-  { value: 'KTM', label: 'Kilómetro' },
-  { value: 'KWH', label: 'Kilovatio hora' },
-  { value: 'KT', label: 'Kit' },
-  { value: 'CA', label: 'Lata' },
-  { value: 'LBR', label: 'Libra' },
-  { value: 'MWH', label: 'Megavatio hora' },
-  { value: 'MGM', label: 'Miligramo' },
-  { value: 'MLT', label: 'Mililitro' },
-  { value: 'MMT', label: 'Milímetro' },
-  { value: 'MMK', label: 'Milímetro cuadrado' },
-  { value: 'MMQ', label: 'Milímetro cúbico' },
-  { value: 'UM', label: 'Millón de unidades' },
-  { value: 'ONZ', label: 'Onza' },
-  { value: 'PF', label: 'Paleta' },
-  { value: 'FOT', label: 'Pie' },
-  { value: 'FTK', label: 'Pie cuadrado' },
-  { value: 'FTQ', label: 'Pie cúbico' },
-  { value: 'C62', label: 'Pieza' },
-  { value: 'PG', label: 'Placa' },
-  { value: 'ST', label: 'Pliego' },
-  { value: 'INH', label: 'Pulgada' },
-  { value: 'TU', label: 'Tubo' },
-  { value: 'YRD', label: 'Yarda' },
-  { value: 'QD', label: 'Cuarto de docena' },
-  { value: 'HD', label: 'Media docena' },
-  { value: 'JG', label: 'Jarra' },
-  { value: 'JR', label: 'Frasco' },
-  { value: 'CH', label: 'Envase' },
-  { value: 'AV', label: 'Cápsula' },
-  { value: 'SA', label: 'Saco' },
-  { value: 'BT', label: 'Tornillo' },
-  { value: 'U2', label: 'Tableta/Blister' },
-  { value: 'DZP', label: 'Docena de paquetes' },
-]
+// Unidades: catálogo compartido del sistema (ver src/data/sunatUnits.js).
+// Se sigue exportando con el mismo nombre para no tocar a quien lo importe.
+export const UNITS = UNIDADES_SELECT
 
 // Helper functions for categories
 const migrateLegacyCategories = (cats) => {
