@@ -60,7 +60,6 @@ export const RETAIL_PAGES = [
   { id: 'inventory', name: 'Inventario', path: '/inventario', category: 'inventario' },
   { id: 'warehouses', name: 'Almacenes', path: '/almacenes', category: 'inventario' },
   { id: 'stock-movements', name: 'Movimientos de Stock', path: '/movimientos', category: 'inventario' },
-  { id: 'internal-consumption', name: 'Consumo Interno', path: '/consumo-interno', category: 'inventario' },
   // Compras y Proveedores
   { id: 'purchases', name: 'Compras', path: '/compras', category: 'compras' },
   { id: 'purchase-orders', name: 'Órdenes de Compra', path: '/ordenes-compra', category: 'compras' },
@@ -113,7 +112,6 @@ export const PHARMACY_PAGES = [
   { id: 'inventory', name: 'Inventario', path: '/inventario', category: 'inventario' },
   { id: 'warehouses', name: 'Almacenes', path: '/almacenes', category: 'inventario' },
   { id: 'stock-movements', name: 'Movimientos de Stock', path: '/movimientos', category: 'inventario' },
-  { id: 'internal-consumption', name: 'Consumo Interno', path: '/consumo-interno', category: 'inventario' },
   { id: 'batch-control', name: 'Control de Lotes', path: '/control-lotes', category: 'inventario' },
   { id: 'expiry-alerts', name: 'Alertas de Vencimiento', path: '/alertas-vencimiento', category: 'inventario' },
   { id: 'laboratories', name: 'Laboratorios', path: '/laboratorios', category: 'inventario' },
@@ -175,7 +173,6 @@ export const HOTEL_PAGES = [
   { id: 'inventory', name: 'Inventario', path: '/inventario', category: 'inventario' },
   { id: 'warehouses', name: 'Almacenes', path: '/almacenes', category: 'inventario' },
   { id: 'stock-movements', name: 'Movimientos de Stock', path: '/movimientos', category: 'inventario' },
-  { id: 'internal-consumption', name: 'Consumo Interno', path: '/consumo-interno', category: 'inventario' },
   // Compras
   { id: 'purchases', name: 'Compras', path: '/compras', category: 'compras' },
   { id: 'suppliers', name: 'Proveedores', path: '/proveedores', category: 'compras' },
@@ -192,7 +189,6 @@ export const LOGISTICS_PAGES = [
   { id: 'inventory', name: 'Inventario', path: '/inventario', category: 'inventario' },
   { id: 'warehouses', name: 'Almacenes', path: '/almacenes', category: 'inventario' },
   { id: 'stock-movements', name: 'Movimientos de Stock', path: '/movimientos', category: 'inventario' },
-  { id: 'internal-consumption', name: 'Consumo Interno', path: '/consumo-interno', category: 'inventario' },
   // Documentos
   { id: 'dispatch-guides', name: 'Guías de Remisión', path: '/guias-remision', category: 'documentos' },
   // Compras
@@ -212,7 +208,6 @@ export const TRANSPORT_PAGES = [
   { id: 'inventory', name: 'Inventario', path: '/inventario', category: 'inventario' },
   { id: 'warehouses', name: 'Almacenes', path: '/almacenes', category: 'inventario' },
   { id: 'stock-movements', name: 'Movimientos de Stock', path: '/movimientos', category: 'inventario' },
-  { id: 'internal-consumption', name: 'Consumo Interno', path: '/consumo-interno', category: 'inventario' },
   // Compras y Proveedores
   { id: 'purchases', name: 'Compras', path: '/compras', category: 'compras' },
   { id: 'purchase-orders', name: 'Órdenes de Compra', path: '/ordenes-compra', category: 'compras' },

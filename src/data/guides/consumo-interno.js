@@ -8,7 +8,7 @@ export default {
   id: 'consumo-interno',
   actualizado: '21/08/2026',
   intro:
-    'Todo lo que sale de tu stock sin venderse: el almuerzo del personal, lo que se echó a perder, el postre que regalaste por la demora. Se descuenta igual que una venta, pero no emite comprobante ni suma a tus ingresos: queda como costo.',
+    'Descontar stock sin cobrar nada: lo que consumió el personal, lo que se echó a perder, una cortesía. Es como registrar una merma, pero diciendo por qué. Lo encuentras en **Inventario → Opciones → Consumo interno**.',
 
   sections: [
     {
@@ -17,7 +17,7 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'Antes, cuando el personal comía o algo se malograba, quedaban dos opciones malas: descontar el stock a mano con un ajuste (sin decir por qué) o dejarlo sin descontar (y que el inventario nunca cuadre). Esta pantalla resuelve las dos: **descuenta el stock y deja registrado el motivo**.',
+          text: 'Antes, cuando el personal comía o algo se malograba, quedaban dos opciones malas: descontar el stock a mano con un ajuste (sin decir por qué) o dejarlo sin descontar (y que el inventario nunca cuadre). Esto resuelve las dos: **descuenta el stock y deja registrado el motivo**. Funciona en cualquier modo de negocio y con cualquier producto.',
         },
         {
           type: 'texto',
@@ -32,15 +32,15 @@ export default {
         {
           type: 'pasos',
           items: [
-            'Elige el **motivo** entre los seis de arriba. Si eliges *Consumo del personal* aparece un campo extra para anotar de quién fue.',
-            'Ajusta la **fecha** si el consumo fue un día anterior, y el **almacén** del que sale.',
-            'Busca los productos por nombre o código y agrégalos, igual que armarías un pedido.',
-            'Revisa las **cantidades** y el **costo** de cada uno, y registra.',
+            'En **Inventario**, abre **Opciones** y elige **Consumo interno**.',
+            'Elige el **motivo**. Si eliges *Consumo del personal* aparece un campo para anotar de quién fue.',
+            'Busca los productos por nombre o código y ajusta las cantidades.',
+            'Si quieres, deja un comentario, y presiona **Descontar del stock**.',
           ],
         },
         {
           type: 'ojo',
-          text: 'El monto que ves es el **costo**, no el precio de venta. Lo que el personal come no es una venta que perdiste: es lo que te costó reponerlo. Si un producto no tiene costo cargado, el sistema te avisa — el stock se descuenta igual, pero el total no reflejará lo que realmente costó.',
+          text: 'El monto que ves es el **costo**, no el precio de venta. Lo que el personal come no es una venta que perdiste: es lo que te costó reponerlo. Es informativo — lo importante es que el stock baje.',
         },
       ],
     },
@@ -55,41 +55,12 @@ export default {
       ],
     },
     {
-      id: 'restaurante',
-      title: 'En restaurante: la comanda de personal',
-      blocks: [
-        {
-          type: 'texto',
-          text: 'La comida del personal hay que cocinarla, así que no alcanza con descontarla: la cocina tiene que verla. En **Órdenes** hay un botón **Comanda de personal** que arma el pedido como cualquier otro — elige los platos, entra a cocina, se prepara.',
-        },
-        {
-          type: 'texto',
-          text: 'La diferencia está al cerrarla: donde una orden normal dice **Cobrar**, esta dice **Registrar consumo**. No emite comprobante ni suma a las ventas: descuenta los insumos al costo y queda en el historial de consumo interno.',
-        },
-        { type: 'ui', kind: 'boton', label: 'Comanda de personal' },
-        {
-          type: 'ojo',
-          text: 'La tarjeta de la orden se marca en azul como **Consumo interno** y muestra el total en cero, para que nadie la confunda con un pedido que hay que cobrar.',
-        },
-      ],
-    },
-    {
-      id: 'corregir',
-      title: 'Si te equivocaste',
-      blocks: [
-        {
-          type: 'texto',
-          text: 'Cada registro del historial tiene **Anular**. Al anularlo, el stock vuelve y el registro queda marcado como anulado — no se borra, para que el historial siga siendo fiel a lo que pasó.',
-        },
-      ],
-    },
-    {
       id: 'donde-aparece',
       title: 'Dónde se ve después',
       blocks: [
         {
           type: 'texto',
-          text: 'En esta misma pantalla tienes el **resumen del mes por motivo**, que es el número que conviene mirar. Y cada salida deja su rastro en **Movimientos de Inventario**, junto con el resto del historial de tu stock.',
+          text: 'Cada salida queda en **Movimientos de Inventario**, con su motivo y quién la registró, junto al resto del historial de tu stock.',
         },
         {
           type: 'ojo',

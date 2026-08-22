@@ -20,6 +20,7 @@ import {
   ArrowUp,
   ArrowDown,
   ClipboardCheck,
+  UtensilsCrossed,
   History,
   ArrowUpCircle,
   ArrowDownCircle,
@@ -44,6 +45,7 @@ import { Capacitor } from '@capacitor/core'
 import { scanBarcode, scannerDisponible } from '@/utils/scanBarcode'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useAuth } from '@/contexts/AuthContext'
+import ConsumoInternoModal from '@/components/inventory/ConsumoInternoModal'
 import { useHidePrivateData } from '@/hooks/useHidePrivateData'
 import { useToast } from '@/contexts/ToastContext'
 import { recalculateProductCostsFromPurchases } from '@/services/inventoryCostService'
@@ -257,6 +259,7 @@ export default function Inventory() {
 
   // Warehouses, sucursales y transferencias
   const [warehouses, setWarehouses] = useState([])
+  const [showConsumoInternoModal, setShowConsumoInternoModal] = useState(false)
   const [allWarehouses, setAllWarehouses] = useState([]) // Todos los almacenes (para transferencias entre sucursales)
   const [branches, setBranches] = useState([])
   // La sucursal sale del selector del HEADER (branchScope), igual que en
@@ -2172,6 +2175,15 @@ export default function Inventory() {
                   >
                     <ClipboardCheck className="w-4 h-4 text-gray-500 flex-shrink-0" />
                     Recuento físico
+                  </button>
+                  <button
+                    onClick={() => { setOptionsMenuOpen(false); setShowConsumoInternoModal(true) }}
+                    disabled={isDemoMode}
+                    className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={isDemoMode ? 'No disponible en modo demo' : 'Descontar stock sin cobrar: consumo del personal, merma, cortesías'}
+                  >
+                    <UtensilsCrossed className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                    Consumo interno
                   </button>
                   {!hidePrivateData && (
                     <button
@@ -5303,6 +5315,18 @@ export default function Inventory() {
         onExport={handleExportWithOptions}
         isExporting={isExporting}
         hasIngredients={ingredients.length > 0}
+      />
+
+      <ConsumoInternoModal
+        isOpen={showConsumoInternoModal}
+        onClose={() => setShowConsumoInternoModal(false)}
+        productos={products}
+        almacenes={warehouses}
+        businessMode={businessMode}
+        permitirNegativo={!!businessSettings?.allowNegativeStock}
+        businessId={getBusinessId()}
+        usuario={{ uid: user?.uid, email: user?.email, nombre: user?.displayName }}
+        onRegistrado={loadProducts}
       />
 
       <InventoryCountModal

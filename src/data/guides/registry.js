@@ -259,7 +259,7 @@ export const GUIDES = [
   },
   {
     id: 'consumo-interno',
-    route: '/app/consumo-interno',
+    route: '/app/inventario',
     title: 'Consumo Interno',
     category: 'Inventario',
     description: 'Descontar lo que sale sin venderse: consumo del personal, merma, cortesías, muestras. Con su costo y su motivo.',
