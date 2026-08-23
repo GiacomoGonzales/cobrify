@@ -670,6 +670,9 @@ export default function Settings() {
     showVehiclePlateField: false, // Mostrar campo "Placa de Vehículo" en el POS
     showLicenseNumberField: false, // Mostrar campo "Licencia / Resolución" en el POS
     showPropertyCardField: false, // Mostrar campo "Tarjeta de Propiedad" en el POS
+    // Ficha de atención en el CLIENTE (no en el POS): último procedimiento,
+    // fecha de la última atención, tratamiento y quién lo recomendó.
+    showServiceCardFields: false,
     // Campos para transporte de carga
     showOriginAddressField: false, // Dirección de origen
     showDestinationAddressField: false, // Dirección de destino
@@ -5576,6 +5579,15 @@ export default function Settings() {
                     onChange={(e) => setPosCustomFields({ ...posCustomFields, showPropertyCardField: e.target.checked })}
                     title={'Campo "Tarjeta de Propiedad"'}
                     description="Muestra un campo para ingresar la tarjeta de propiedad del vehículo en el POS y comprobantes"
+                  />
+                  <SettingToggle
+                    id="opcion-showServiceCardFields"
+                    checked={posCustomFields.showServiceCardFields}
+                    onChange={(e) => setPosCustomFields({ ...posCustomFields, showServiceCardFields: e.target.checked })}
+                    title="Ficha de atención en el cliente"
+                    description={posCustomFields.showServiceCardFields
+                      ? '✓ Habilitado: La ficha del cliente suma último procedimiento, fecha de la última atención, tratamiento y quién lo recomendó. Para consultorios, clínicas, salones y todo el que atienda a la misma persona cada tanto.'
+                      : '✗ Deshabilitado: La ficha del cliente muestra solo los datos básicos.'}
                   />
 
                   <SettingToggle

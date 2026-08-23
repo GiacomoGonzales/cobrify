@@ -56,6 +56,19 @@ export const customerSchema = z.object({
   petAge: z.string().optional().or(z.literal('')),
   petWeight: z.string().optional().or(z.literal('')),
   petNotes: z.string().optional().or(z.literal('')),
+  // FICHA DE ATENCIÓN — datos del cliente que NO viajan al comprobante.
+  //
+  // Ojo con la diferencia: los campos de `posCustomFields` (alumno, placa,
+  // licencia...) se imprimen en la boleta y por eso hay que cablearlos en el
+  // POS, el ticket, el PDF y las impresoras. Estos NO: viven solo en la ficha,
+  // así que se agregan acá y en Clientes, y nada más.
+  //
+  // Nacieron de una podóloga que llevaba esto en un Excel aparte (referido,
+  // procedimiento, medicación, última atención) y no tenía dónde ponerlo.
+  referredBy: z.string().optional().or(z.literal('')),
+  lastService: z.string().optional().or(z.literal('')),
+  lastServiceDate: z.string().optional().or(z.literal('')),
+  treatment: z.string().optional().or(z.literal('')),
   // Múltiples mascotas (nuevo)
   pets: z.array(z.object({
     id: z.string(),

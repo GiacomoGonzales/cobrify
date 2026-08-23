@@ -768,6 +768,12 @@ export default function Customers() {
       subscriptionPlan: '',
       subscriptionPrice: '',
       subscriptionExpiry: '',
+      // Ficha de atención (consultorios/clínicas)
+      birthDate: '',
+      lastService: '',
+      lastServiceDate: '',
+      treatment: '',
+      referredBy: '',
       // Campos para mascota (veterinaria)
       petName: '',
       petSpecies: '',
@@ -842,6 +848,12 @@ export default function Customers() {
       studentName: '',
       studentSchedule: '',
       birthDate: '',
+      // Sin esto, al abrir "Nuevo cliente" despues de editar a otro, la ficha
+      // de atencion quedaba con los datos del anterior.
+      lastService: '',
+      lastServiceDate: '',
+      treatment: '',
+      referredBy: '',
     })
     // Inicializar con una mascota vacía en veterinaria
     if (businessMode === 'veterinary') {
@@ -872,6 +884,11 @@ export default function Customers() {
       subscriptionPrice: customer.subscriptionPrice || '',
       subscriptionExpiry: customer.subscriptionExpiry || '',
       birthDate: customer.birthDate || '',
+      // Ficha de atención
+      lastService: customer.lastService || '',
+      lastServiceDate: customer.lastServiceDate || '',
+      treatment: customer.treatment || '',
+      referredBy: customer.referredBy || '',
       // Campos de mascota legacy (se mantienen para compatibilidad)
       petName: customer.petName || '',
       petSpecies: customer.petSpecies || '',
@@ -1977,6 +1994,49 @@ export default function Customers() {
             error={errors.birthDate?.message}
             {...register('birthDate')}
           />
+
+          {/* FICHA DE ATENCIÓN — para consultorios, clínicas, salones y todo el
+              que atienda a la misma persona cada tanto.
+
+              Estos campos NO viajan al comprobante, a diferencia de los de
+              `posCustomFields` (alumno, placa, licencia). Por eso se agregan
+              acá y en el esquema, y nada más: nadie tiene que tocarlos en el
+              POS, el ticket, el PDF ni las impresoras. */}
+          {businessSettings?.posCustomFields?.showServiceCardFields && (
+            <div className="border border-gray-200 rounded-lg p-3 space-y-3">
+              <p className="text-sm font-semibold text-gray-900">Ficha de atención</p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Input
+                  label="Último procedimiento"
+                  placeholder="Ej: Profilaxis"
+                  error={errors.lastService?.message}
+                  {...register('lastService')}
+                />
+                <Input
+                  label="Fecha de la última atención"
+                  type="date"
+                  error={errors.lastServiceDate?.message}
+                  {...register('lastServiceDate')}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Input
+                  label="Tratamiento / medicación"
+                  placeholder="Ej: Tritri amorolfina"
+                  error={errors.treatment?.message}
+                  {...register('treatment')}
+                />
+                <Input
+                  label="Recomendado por"
+                  placeholder="Quién lo trajo o lo refirió"
+                  error={errors.referredBy?.message}
+                  {...register('referredBy')}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Campos Alumno y Horario - solo si está habilitado en configuración */}
           {businessSettings?.posCustomFields?.showStudentField && (
