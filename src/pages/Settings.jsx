@@ -3783,40 +3783,6 @@ export default function Settings() {
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
 
-              {/* Agenda de citas (solo modo General). Seccion propia y no un toggle
-                  perdido dentro de "Catalogo y productos": la primera usuaria que
-                  lo busco marco el checkbox del menu lateral, no vio el toggle, y
-                  la agenda nunca aparecio. Al activarla se destapa sola del menu
-                  lateral, para que no haga falta tocar dos controles. */}
-              {businessMode === 'retail' && (
-                <>
-                  <div>
-                    <h3 className="text-base font-semibold text-gray-900 mb-1">Agenda de citas</h3>
-                    <p className="text-sm text-gray-600 mb-4">
-                      Para negocios que atienden con cita: consultorios, podología, estética, talleres, asesorías.
-                    </p>
-                    <SettingToggle
-                      id="opcion-appointmentsEnabled"
-                      checked={appointmentsEnabled}
-                      onChange={(e) => {
-                        const on = e.target.checked
-                        setAppointmentsEnabled(on)
-                        // Si la encendio, que el item del menu no quede oculto por
-                        // un "Personalizar Menu Lateral" anterior.
-                        if (on) setHiddenMenuItems(prev => prev.filter(i => i !== 'vet-agenda'))
-                      }}
-                      title="Activar la agenda de citas"
-                      description={appointmentsEnabled
-                        ? 'Habilitado: "Agenda de Citas" aparece en el menú lateral. Podrás programar citas por fecha y hora, ver quién está en atención y cobrar cada atención desde el Punto de Venta.'
-                        : 'Agrega una página "Agenda de Citas" al menú lateral para programar citas de tus clientes y cobrarlas desde el Punto de Venta.'}
-                    />
-                  </div>
-
-                  {/* Divider */}
-                  <div className="border-t border-gray-200"></div>
-                </>
-              )}
-
               {/* Catálogo y productos */}
               <div>
                 <h3 className="text-base font-semibold text-gray-900 mb-1">Catálogo y productos</h3>
@@ -3980,6 +3946,41 @@ export default function Settings() {
               <div className="border-t border-gray-200"></div>
 
               {/* Personalización del Menú Lateral */}
+              {/* Agenda de citas (solo modo General). Va PEGADA a "Personalizar Menu
+                  Lateral" porque ahi es donde la gente busca que paginas tiene: la
+                  primera usuaria marco el checkbox del menu, no vio el toggle (que
+                  estaba arriba del todo, fuera de pantalla), y la agenda nunca
+                  aparecio. Al activarla se destapa sola del menu
+                  lateral, para que no haga falta tocar dos controles. */}
+              {businessMode === 'retail' && (
+                <>
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900 mb-1">Agenda de citas</h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Para negocios que atienden con cita: consultorios, podología, estética, talleres, asesorías.
+                    </p>
+                    <SettingToggle
+                      id="opcion-appointmentsEnabled"
+                      checked={appointmentsEnabled}
+                      onChange={(e) => {
+                        const on = e.target.checked
+                        setAppointmentsEnabled(on)
+                        // Si la encendio, que el item del menu no quede oculto por
+                        // un "Personalizar Menu Lateral" anterior.
+                        if (on) setHiddenMenuItems(prev => prev.filter(i => i !== 'vet-agenda'))
+                      }}
+                      title="Activar la agenda de citas"
+                      description={appointmentsEnabled
+                        ? 'Habilitado: "Agenda de Citas" aparece en el menú lateral. Podrás programar citas por fecha y hora, ver quién está en atención y cobrar cada atención desde el Punto de Venta.'
+                        : 'Agrega una página "Agenda de Citas" al menú lateral para programar citas de tus clientes y cobrarlas desde el Punto de Venta.'}
+                    />
+                  </div>
+
+                  {/* Divider */}
+                  <div className="border-t border-gray-200"></div>
+                </>
+              )}
+
               <div>
                 <h3 className="text-base font-semibold text-gray-900 mb-1">Personalizar Menú Lateral</h3>
                 <p className="text-sm text-gray-600 mb-4">
@@ -3994,7 +3995,7 @@ export default function Settings() {
                           { id: 'public-catalog', label: 'Mi Catálogo Online', description: 'Catálogo digital para compartir con tus clientes y recibir pedidos' },
                           { id: 'online-orders', label: 'Pedidos Online', description: 'Bandeja de pedidos que llegan desde tu catálogo digital' },
                           { id: 'cash-register', label: 'Control de Caja', description: 'Apertura y cierre de caja diario' },
-                          { id: 'vet-agenda', label: 'Agenda de Citas', description: appointmentsEnabled ? 'Citas programadas y atenciones del día' : 'Apagada. Actívala más arriba, en la sección "Agenda de citas" de esta misma pestaña.' },
+                          { id: 'vet-agenda', label: 'Agenda de Citas', description: appointmentsEnabled ? 'Citas programadas y atenciones del día' : 'Apagada. Actívala en la sección "Agenda de citas", justo encima de esta lista.' },
                           { id: 'quotations', label: 'Cotizaciones', description: 'Presupuestos y proformas' },
                           { id: 'sellers', label: 'Vendedores', description: 'Gestión de vendedores y comisiones' },
                         { id: 'promotions', label: 'Promociones', description: 'Tarjeta de sellos, combos y cupones de descuento' },
