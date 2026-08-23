@@ -57,7 +57,7 @@ import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import Select from '@/components/ui/Select'
 import Input from '@/components/ui/Input'
 import { formatCurrency, formatDate, formatDateTime, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
-import { getDocumentTotalInBase, getReportsCurrency, resolveReportsRate, convertBaseToDisplay } from '@/utils/currency'
+import { getDocumentTotalInBase, getDocumentRate, getReportsCurrency, resolveReportsRate, convertBaseToDisplay } from '@/utils/currency'
 import { getInvoiceDate, getInvoiceTimeInfo } from '@/utils/invoiceDate'
 import { toDateString } from '@/utils/emissionDate'
 import { getInvoicesPage, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat, updateProductStockTransaction } from '@/services/firestoreService'
@@ -777,6 +777,48 @@ Gracias por tu preferencia.`
     // el campo `payments`; para esos seguimos usando su paymentMethod histórico.
     if (Array.isArray(invoice.payments)) return ['—']
     return [invoice.paymentMethod || 'Efectivo']
+  }
+
+  /**
+   * Cuánto de este comprobante se cobró con UN método, en soles base.
+   *
+   * Hace falta porque un comprobante puede pagarse con varios métodos a la vez.
+   * Al filtrar Ventas por "Efectivo", el total sumaba el importe COMPLETO del
+   * documento aunque solo una parte hubiera sido efectivo: una venta de S/71.50
+   * pagada con S/1 en efectivo y S/70.50 por Yape sumaba los 71.50 al efectivo
+   * y descuadraba la caja (reporte de DHANY, 21-ago).
+   *
+   * Sigue la MISMA prioridad que getRealPaymentMethods —paymentHistory primero,
+   * después payments, después el método histórico— para que el monto y la
+   * etiqueta que se muestran al lado no puedan contradecirse.
+   *
+   * Los comprobantes viejos no tienen desglose: si su único método es el que se
+   * está filtrando, cuenta por su total, que es lo que se venía mostrando.
+   */
+  const getAmountByMethodInBase = (invoice, metodo) => {
+    const buscado = String(metodo || '').toLowerCase()
+    const totalBase = getDocumentTotalInBase(invoice)
+    // Los importes de cada pago están en la moneda del documento; el total del
+    // reporte va en soles. Se convierte con el TC congelado del propio doc.
+    const aBase = (monto) => {
+      const tc = getDocumentRate(invoice)
+      return (Number(monto) || 0) * (tc > 0 ? tc : 1)
+    }
+    const sumar = (lista) => lista
+      .filter(pago => String(pago.method || 'Efectivo').toLowerCase() === buscado)
+      .reduce((suma, pago) => suma + aBase(pago.amount), 0)
+
+    if (Array.isArray(invoice.paymentHistory) && invoice.paymentHistory.length > 0) {
+      return sumar(invoice.paymentHistory)
+    }
+    if (invoice.paymentStatus === 'pending') {
+      return buscado === 'crédito' ? totalBase : 0
+    }
+    if (Array.isArray(invoice.payments) && invoice.payments.length > 0) {
+      return sumar(invoice.payments)
+    }
+    const metodos = getRealPaymentMethods(invoice)
+    return metodos.length === 1 && metodos[0].toLowerCase() === buscado ? totalBase : 0
   }
 
   // Carga PROGRESIVA por lotes (cuentas con miles de comprobantes): el primer
@@ -3060,9 +3102,29 @@ Gracias por tu preferencia.`
               <span className="font-semibold text-gray-900">{tableSales.length}</span> comprobante{tableSales.length !== 1 ? 's' : ''}
             </span>
             <span className="text-gray-300">|</span>
-            <span className="text-gray-600">
-              Total: <span className="font-semibold text-gray-900">{formatCurrency(toDisp(tableSales.reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0)), reportsCcy)}</span>
-            </span>
+            {/* Con un filtro de método activo, el numero grande es lo COBRADO
+                con ese metodo, no el total de los documentos: una venta pagada
+                mitad en efectivo y mitad por Yape aparece en los dos filtros, y
+                sumar su total completo en ambos descuadra la caja. El total del
+                documento se sigue mostrando al lado para no esconder nada. */}
+            {filterPaymentMethod !== 'all' ? (
+              <>
+                <span className="text-gray-600">
+                  Cobrado en {filterPaymentMethod}:{' '}
+                  <span className="font-semibold text-gray-900">
+                    {formatCurrency(toDisp(tableSales.reduce((sum, inv) => sum + getAmountByMethodInBase(inv, filterPaymentMethod), 0)), reportsCcy)}
+                  </span>
+                </span>
+                <span className="text-gray-300">|</span>
+                <span className="text-gray-500 text-xs">
+                  Total de los comprobantes: {formatCurrency(toDisp(tableSales.reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0)), reportsCcy)}
+                </span>
+              </>
+            ) : (
+              <span className="text-gray-600">
+                Total: <span className="font-semibold text-gray-900">{formatCurrency(toDisp(tableSales.reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0)), reportsCcy)}</span>
+              </span>
+            )}
             {dateFilter !== 'all' && (
               <>
                 <span className="text-gray-300">|</span>
