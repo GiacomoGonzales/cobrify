@@ -10,6 +10,7 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  onSnapshot,
   getDocs,
   getDoc,
   query,
@@ -59,6 +60,33 @@ export const getAppointmentsByDateRange = async (businessId, startDate, endDate)
 
   const snapshot = await getDocs(q)
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+}
+
+/**
+ * Citas de un rango, EN TIEMPO REAL.
+ *
+ * Misma query que getAppointmentsByDateRange, pero con onSnapshot: la agenda
+ * es una pantalla que dos personas miran a la vez (quien agenda por telefono y
+ * quien atiende en el mostrador), y un boton "actualizar" es confesar que no
+ * se entera sola de los cambios. Con esto, la cita que agenda una termina
+ * apareciendo en la pantalla de la otra sin que nadie toque nada.
+ *
+ * @returns {() => void} funcion para desuscribirse (llamarla al desmontar o al
+ *                       cambiar de mes, si no quedan escuchas colgadas).
+ */
+export const subscribeAppointmentsByDateRange = (businessId, startDate, endDate, onData, onError) => {
+  const ref = collection(db, 'businesses', businessId, 'appointments')
+  const q = query(
+    ref,
+    where('scheduledDate', '>=', Timestamp.fromDate(startDate)),
+    where('scheduledDate', '<=', Timestamp.fromDate(endDate)),
+    orderBy('scheduledDate', 'asc')
+  )
+  return onSnapshot(
+    q,
+    (snapshot) => onData(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))),
+    (error) => { console.error('Error escuchando citas:', error); onError?.(error) }
+  )
 }
 
 /**

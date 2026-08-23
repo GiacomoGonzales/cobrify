@@ -10,6 +10,7 @@ import { useToast } from '@/contexts/ToastContext'
 import {
   getAppointmentsByDate,
   getAppointmentsByDateRange,
+  subscribeAppointmentsByDateRange,
   updateAppointment,
   cancelAppointment,
   completeAppointment,
@@ -45,7 +46,6 @@ import {
   XCircle,
   Ban,
   Loader2,
-  RefreshCw,
   ShoppingCart,
   MessageCircle,
   MoreVertical,
@@ -115,34 +115,36 @@ export default function VeterinaryAgenda() {
   const [activeSvcIdx, setActiveSvcIdx] = useState(null)
   const [savingWalkIn, setSavingWalkIn] = useState(false)
 
-  // Cargar citas del mes para el calendario
+  // Citas del mes EN TIEMPO REAL. La agenda la miran dos personas a la vez
+  // (quien agenda por telefono y quien atiende en el mostrador): con una
+  // suscripcion, lo que una agenda aparece en la pantalla de la otra sin tocar
+  // nada. Antes habia un boton "actualizar" que era confesar que la pantalla no
+  // se enteraba sola.
+  //
+  // La suscripcion se rehace al cambiar de mes y se corta al desmontar: sin el
+  // cleanup quedarian escuchas colgadas acumulando lecturas.
   useEffect(() => {
-    loadMonthAppointments()
-  }, [user, currentMonth])
-
-  const loadMonthAppointments = async () => {
     if (!user?.uid || isDemoMode) {
       setIsLoading(false)
       return
     }
     setIsLoading(true)
-    try {
-      const businessId = getBusinessId()
-      const start = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1, 0, 0, 0)
-      const end = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59)
-      const appts = await getAppointmentsByDateRange(businessId, start, end)
-      setMonthAppointments(appts)
-    } catch (error) {
-      console.error('Error al cargar citas del mes:', error)
-      toast.error('Error al cargar las citas')
-    } finally {
-      setIsLoading(false)
-    }
-  }
+    const businessId = getBusinessId()
+    const start = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1, 0, 0, 0)
+    const end = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59)
+    const unsubscribe = subscribeAppointmentsByDateRange(
+      businessId, start, end,
+      (appts) => { setMonthAppointments(appts); setIsLoading(false) },
+      () => { toast.error('Error al cargar las citas'); setIsLoading(false) },
+    )
+    return () => unsubscribe()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid, currentMonth, isDemoMode])
 
-  const loadAppointments = () => {
-    loadMonthAppointments()
-  }
+  // Las acciones (agendar, cancelar, completar) siguen llamando a esto por
+  // costumbre; ya no hace falta porque el snapshot se entera solo. Se deja
+  // como no-op para no tocar seis llamadas que no rompen nada.
+  const loadAppointments = () => {}
 
   // Agrupar citas por día del mes
   const appointmentsByDay = {}
@@ -743,9 +745,6 @@ export default function VeterinaryAgenda() {
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={goToToday}>Hoy</Button>
-          <Button variant="outline" size="sm" onClick={loadAppointments}>
-            <RefreshCw className="w-4 h-4" />
-          </Button>
           <Button variant="outline" size="sm" onClick={() => openWalkIn('schedule')}>
             <Plus className="w-4 h-4 mr-1" /> Agendar cita
           </Button>
