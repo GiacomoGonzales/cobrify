@@ -1,5 +1,5 @@
 /**
- * GUÍA DE USO: Agenda de Citas (modo veterinaria)
+ * GUÍA DE USO: Agenda de Citas (veterinaria y modo General con la agenda activada)
  *
  * Auditada contra src/pages/VeterinaryAgenda.jsx el 17/08/2026, el mismo día
  * que se agregó "Agendar cita" desde la propia agenda (antes solo se podía
@@ -11,9 +11,26 @@ export default {
   id: 'agenda-citas',
   actualizado: '17/08/2026',
   intro:
-    'La Agenda es el calendario de la clínica: qué mascotas vienen hoy, cuáles están siendo atendidas y cuáles ya se cobraron. Desde acá se agenda una cita nueva, se atiende al que llega sin cita y se termina cada atención cobrándola en el Punto de Venta.',
+    'La Agenda es el calendario de tu negocio: quién viene hoy, quién está siendo atendido y quién ya pagó. Desde acá se agenda una cita nueva, se atiende al que llega sin cita y se termina cada atención cobrándola en el Punto de Venta. En veterinaria la cita es de la mascota; en los demás rubros, del cliente.',
 
   sections: [
+    {
+      id: 'activar',
+      title: 'Activarla en modo General',
+      requiereOpcion: {
+        flag: 'appointmentsEnabled',
+        nombre: 'Agenda de citas',
+        donde: 'Configuración > Preferencias',
+        ruta: '/app/configuracion?tab=preferencias&opcion=appointmentsEnabled',
+        defaultOn: false,
+      },
+      blocks: [
+        {
+          type: 'texto',
+          text: 'En veterinaria la agenda viene de fábrica. En los demás rubros está apagada, porque la mayoría de los negocios no atiende con cita. Si el tuyo sí (consultorio, podología, estética, taller, asesoría), actívala y aparece como una página más en el menú.',
+        },
+      ],
+    },
     // ─────────────────────────────────────────────────────────────────────
     {
       id: 'agendar',
@@ -24,18 +41,18 @@ export default {
           items: [
             'Haz clic en el día en el calendario: sus horas aparecen en el panel del costado, con las citas ya tomadas puestas en su horario.',
             'Toca una hora libre (las casillas punteadas). Se abre el formulario con la fecha y la hora ya puestas — puedes cambiarlas ahí mismo si hace falta.',
-            'Busca al cliente por nombre, documento, teléfono o el nombre de su mascota. Si es nuevo, usa la pestaña "Cliente nuevo": con el DNI o RUC la lupa completa el nombre sola.',
-            'Elige la mascota (o agrégala si no está registrada) y los servicios con su precio.',
+            'Busca al cliente por nombre, documento o teléfono (en veterinaria, también por el nombre de su mascota). Si es nuevo, usa la pestaña "Cliente nuevo": con el DNI o RUC la lupa completa el nombre sola.',
+            'Elige los servicios con su precio. En veterinaria, antes eliges la mascota (o la agregas si no está registrada).',
             'Presiona "Agendar cita". La cita queda como Programada, en su hora, en el panel del día.',
           ],
         },
         {
           type: 'consejo',
-          text: 'Si dos clientes piden la misma hora, el sistema te avisa pero no te bloquea: tú decides si tu equipo puede atender dos mascotas a la vez.',
+          text: 'Si dos clientes piden la misma hora, el sistema te avisa pero no te bloquea: tú decides si tu equipo puede atender a dos a la vez.',
         },
         {
           type: 'texto',
-          text: 'También puedes agendar desde la historia clínica del paciente (Pacientes → ver mascota), útil cuando terminas una consulta y dejas programado el control siguiente.',
+          text: 'En veterinaria también puedes agendar desde la historia clínica del paciente (Pacientes → ver mascota), útil cuando terminas una consulta y dejas programado el control siguiente.',
         },
         { type: 'enlace', to: '/app/pacientes', label: 'Ver Pacientes' },
       ],
@@ -52,7 +69,7 @@ export default {
           filas: [
             ['Programada', 'Agendada, sin confirmar', 'Confirmar (check verde)'],
             ['Confirmada', 'El cliente confirmó que viene', 'Iniciar atención (play)'],
-            ['En atención', 'La mascota está siendo atendida', 'Finalizar y Cobrar'],
+            ['En atención', 'El cliente (o la mascota) está siendo atendido', 'Finalizar y Cobrar'],
             ['Completada', 'Atendida y cobrada', '—'],
           ],
         },
@@ -74,11 +91,11 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'Para el cliente que llega sin cita: en la pestaña "En atención", presiona "Atender ahora". Es el mismo formulario de agendar, pero sin fecha ni hora — la atención arranca de inmediato y la mascota aparece en el tablero.',
+          text: 'Para el cliente que llega sin cita: en la pestaña "En atención", presiona "Atender ahora". Es el mismo formulario de agendar, pero sin fecha ni hora — la atención arranca de inmediato y aparece en el tablero.',
         },
         {
           type: 'consejo',
-          text: 'La pestaña "En atención" es el tablero del día: cada tarjeta es una mascota siendo atendida ahora mismo. Cuando terminas con ella, "Finalizar y Cobrar" desde la misma tarjeta.',
+          text: 'La pestaña "En atención" es el tablero del día: cada tarjeta es alguien siendo atendido ahora mismo. Cuando terminas, "Finalizar y Cobrar" desde la misma tarjeta.',
         },
       ],
     },
@@ -90,7 +107,7 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'El botón verde de WhatsApp en cada cita abre un mensaje listo con la mascota, el servicio, el día y la hora, pidiendo confirmación. Solo aparece si el cliente tiene teléfono registrado.',
+          text: 'El botón verde de WhatsApp en cada cita abre un mensaje listo con el servicio, el día y la hora (y la mascota, en veterinaria), pidiendo confirmación. Solo aparece si el cliente tiene teléfono registrado.',
         },
         {
           type: 'consejo',

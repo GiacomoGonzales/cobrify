@@ -49,6 +49,7 @@ export const COMMON_PAGES = [
 // ============ PÁGINAS MODO RETAIL ============
 export const RETAIL_PAGES = [
   { id: 'promotions', name: 'Promociones', path: '/promociones', category: 'ventas' },
+  { id: 'vet-agenda', name: 'Agenda de Citas', path: '/agenda-veterinaria', category: 'ventas' },
   // Operaciones
   { id: 'online-orders', name: 'Pedidos Online', path: '/pedidos-online', category: 'ventas' },
   // Documentos

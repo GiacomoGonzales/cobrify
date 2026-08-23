@@ -56,7 +56,19 @@ import {
 
 export default function VeterinaryAgenda() {
   const navigate = useNavigate()
-  const { user, getBusinessId, isDemoMode } = useAppContext()
+  const { user, getBusinessId, isDemoMode, businessMode } = useAppContext()
+
+  /**
+   * La agenda nació para veterinarias, pero cualquier negocio que atienda con
+   * cita la necesita: consultorios, podología, estética, talleres. En los demás
+   * rubros el mismo tablero funciona igual, solo que sin mascota — ahí el que
+   * viene a la cita ES el cliente.
+   *
+   * Todo lo de mascotas queda detrás de esta bandera en vez de duplicar la
+   * pantalla: una segunda copia se desincroniza en el primer arreglo que se
+   * haga en una sola de las dos.
+   */
+  const esVeterinaria = businessMode === 'veterinary'
   const toast = useToast()
 
   const [selectedDate, setSelectedDate] = useState(new Date())
@@ -399,7 +411,7 @@ export default function VeterinaryAgenda() {
         name: r?.success ? (nombre || '') : '',
         phone: '',
       })
-      if (r?.success && nombre) toast.success('Datos encontrados. Completa teléfono y mascota.')
+      if (r?.success && nombre) toast.success(esVeterinaria ? 'Datos encontrados. Completa teléfono y mascota.' : 'Datos encontrados. Completa el teléfono.')
       else toast.info('No figura en el padrón. Completa los datos a mano.')
     } catch (e) {
       setWalkInMode('new')
@@ -468,11 +480,11 @@ export default function VeterinaryAgenda() {
     // Validación según modo
     if (walkInMode === 'new') {
       if (!newClient.documentNumber.trim() || !newClient.name.trim()) { toast.error('Completa documento y nombre del cliente'); return }
-      if (!newPet.name.trim()) { toast.error('Indica el nombre de la mascota'); return }
+      if (esVeterinaria && !newPet.name.trim()) { toast.error('Indica el nombre de la mascota'); return }
     } else {
       if (!walkInCustomer) { toast.error('Selecciona un cliente'); return }
       const usingExistingPet = walkInPetIdx >= 0 && normalizePets(walkInCustomer)[walkInPetIdx]
-      if (!usingExistingPet && !newPet.name.trim()) { toast.error('Indica la mascota'); return }
+      if (esVeterinaria && !usingExistingPet && !newPet.name.trim()) { toast.error('Indica la mascota'); return }
     }
     if (isSchedule) {
       if (!schedDate) { toast.error('Elige la fecha de la cita'); return }
@@ -490,9 +502,13 @@ export default function VeterinaryAgenda() {
           documentNumber: newClient.documentNumber.trim(),
           name: newClient.name.trim(),
           phone: newClient.phone.trim(),
-          pets: [{ name: newPet.name.trim(), species: newPet.species.trim() }],
-          petName: newPet.name.trim(),
-          petSpecies: newPet.species.trim(),
+          // Fuera de veterinaria no hay mascota: no se inventa una ficha vacia
+          // que despues aparece como "mascota sin nombre" en el cliente.
+          ...(esVeterinaria && {
+            pets: [{ name: newPet.name.trim(), species: newPet.species.trim() }],
+            petName: newPet.name.trim(),
+            petSpecies: newPet.species.trim(),
+          }),
         })
         if (!res.success) { toast.error(res.error || 'No se pudo crear el cliente'); setSavingWalkIn(false); return }
         customerId = res.id
@@ -622,7 +638,9 @@ export default function VeterinaryAgenda() {
     const timeStr = formatTime(appointment.scheduledDate)
     const dateStr = date.toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long' })
 
-    const message = `Hola! Le recordamos su cita para ${appointment.petName}: ${appointment.serviceName} programada para el ${dateStr} a las ${timeStr}. ¿Confirma su asistencia?`
+    const message = (esVeterinaria && appointment.petName)
+      ? `Hola! Le recordamos su cita para ${appointment.petName}: ${appointment.serviceName} programada para el ${dateStr} a las ${timeStr}. ¿Confirma su asistencia?`
+      : `Hola ${appointment.customerName || ''}! Le recordamos su cita: ${appointment.serviceName} programada para el ${dateStr} a las ${timeStr}. ¿Confirma su asistencia?`
 
     window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank')
   }
@@ -758,8 +776,10 @@ export default function VeterinaryAgenda() {
           {inProgress.length === 0 ? (
             <Card>
               <CardContent className="p-8 text-center text-gray-500">
-                <PawPrint className="w-10 h-10 mx-auto mb-2 text-gray-300" />
-                <p>No hay mascotas en atención ahora.</p>
+                {esVeterinaria
+                  ? <PawPrint className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+                  : <User className="w-10 h-10 mx-auto mb-2 text-gray-300" />}
+                <p>{esVeterinaria ? 'No hay mascotas en atención ahora.' : 'No hay nadie en atención ahora.'}</p>
                 <p className="text-sm mt-1">Inicia una atención desde una cita o usa &quot;Atender ahora&quot;.</p>
               </CardContent>
             </Card>
@@ -772,12 +792,20 @@ export default function VeterinaryAgenda() {
                       <span className="font-semibold text-gray-900 truncate">{appt.serviceName}</span>
                       <Badge variant="warning" className="ml-auto flex-shrink-0">En atención</Badge>
                     </div>
-                    <p className="text-sm text-gray-800 flex items-center gap-1">
-                      <PawPrint className="w-4 h-4 text-gray-400 flex-shrink-0" /> <strong className="truncate">{appt.petName || 'Mascota'}</strong>
-                    </p>
-                    <p className="text-sm text-gray-500 flex items-center gap-1">
-                      <User className="w-4 h-4 text-gray-400 flex-shrink-0" /> <span className="truncate">{appt.customerName}</span>
-                    </p>
+                    {esVeterinaria ? (
+                      <>
+                        <p className="text-sm text-gray-800 flex items-center gap-1">
+                          <PawPrint className="w-4 h-4 text-gray-400 flex-shrink-0" /> <strong className="truncate">{appt.petName || 'Mascota'}</strong>
+                        </p>
+                        <p className="text-sm text-gray-500 flex items-center gap-1">
+                          <User className="w-4 h-4 text-gray-400 flex-shrink-0" /> <span className="truncate">{appt.customerName}</span>
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-gray-800 flex items-center gap-1">
+                        <User className="w-4 h-4 text-gray-400 flex-shrink-0" /> <strong className="truncate">{appt.customerName}</strong>
+                      </p>
+                    )}
                     {appt.servicePrice > 0 && (
                       <p className="text-sm font-semibold text-primary-600 mt-1">S/ {appt.servicePrice.toFixed(2)}</p>
                     )}
@@ -906,7 +934,7 @@ export default function VeterinaryAgenda() {
       >
         <div className="space-y-4">
           <p className="text-gray-600">
-            ¿Cancelar la cita de <strong>{cancelModal?.petName}</strong> para{' '}
+            ¿Cancelar la cita de <strong>{(esVeterinaria && cancelModal?.petName) || cancelModal?.customerName}</strong> para{' '}
             <strong>{cancelModal?.serviceName}</strong>?
           </p>
 
@@ -1089,8 +1117,8 @@ export default function VeterinaryAgenda() {
                 )}
               </div>
 
-              {/* Mascota: seleccionar de las del cliente */}
-              {walkInCustomer && (() => {
+              {/* Mascota: seleccionar de las del cliente (solo veterinaria) */}
+              {esVeterinaria && walkInCustomer && (() => {
                 const pets = normalizePets(walkInCustomer)
                 return (
                 <div>
@@ -1162,16 +1190,18 @@ export default function VeterinaryAgenda() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono <span className="text-gray-400 font-normal">(opcional)</span></label>
                 <input type="text" value={newClient.phone} onChange={(e) => setNewClient(c => ({ ...c, phone: e.target.value }))} placeholder="Teléfono" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Mascota</label>
-                  <input type="text" value={newPet.name} onChange={(e) => setNewPet(p => ({ ...p, name: e.target.value }))} placeholder="Nombre de la mascota" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+              {esVeterinaria && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Mascota</label>
+                    <input type="text" value={newPet.name} onChange={(e) => setNewPet(p => ({ ...p, name: e.target.value }))} placeholder="Nombre de la mascota" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Especie</label>
+                    <input type="text" value={newPet.species} onChange={(e) => setNewPet(p => ({ ...p, species: e.target.value }))} placeholder="Perro, gato..." className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Especie</label>
-                  <input type="text" value={newPet.species} onChange={(e) => setNewPet(p => ({ ...p, species: e.target.value }))} placeholder="Perro, gato..." className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-                </div>
-              </div>
+              )}
             </>
           )}
 

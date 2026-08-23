@@ -163,6 +163,17 @@ function Sidebar() {
       pageId: 'cash-register',
       menuId: 'cash-register',
     },
+    // Agenda de citas en modo General. Es la misma pantalla de veterinaria, que
+    // fuera de ese rubro se muestra sin mascota (el que viene a la cita es el
+    // cliente). Apagada por defecto: la enciende Configuracion > Preferencias.
+    {
+      path: '/agenda-veterinaria',
+      icon: Calendar,
+      label: 'Agenda de Citas',
+      pageId: 'vet-agenda',
+      menuId: 'vet-agenda',
+      requiresAppointments: true,
+    },
     {
       path: '/facturas',
       icon: FileText,
@@ -2039,6 +2050,10 @@ function Sidebar() {
       const rappiEnabled = businessSettings?.rappiEnabled === true
       if (!rappiEnabled) return false
       if (isDemoMode) return false
+    }
+    if (item.requiresAppointments) {
+      const appointmentsEnabled = businessSettings?.appointmentsEnabled === true
+      if (!appointmentsEnabled && !isDemoMode) return false
     }
     if (item.businessOwnerOnly && !isBusinessOwner) return false
     if (item.hideInDemo && isDemoMode) return false

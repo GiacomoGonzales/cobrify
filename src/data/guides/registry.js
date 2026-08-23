@@ -323,8 +323,8 @@ export const GUIDES = [
     title: 'Agenda de Citas',
     category: 'Operación',
     description: 'Agendar citas viendo la disponibilidad del día, atender walk-ins y cobrar cada atención en el POS.',
-    keywords: 'agenda cita citas agendar programar calendario disponibilidad horario mascota paciente veterinaria confirmar no asistio walk-in atender ahora en atencion finalizar y cobrar recordatorio whatsapp',
-    modos: ['veterinary'],
+    keywords: 'agenda cita citas agendar programar calendario disponibilidad horario mascota paciente veterinaria consultorio podologia estetica taller confirmar no asistio walk-in atender ahora en atencion finalizar y cobrar recordatorio whatsapp',
+    modos: ['veterinary', 'retail'],
     load: () => import('./agenda-citas.js'),
   },
   {

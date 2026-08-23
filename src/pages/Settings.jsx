@@ -435,6 +435,7 @@ export default function Settings() {
   const [autoSku, setAutoSku] = useState(false)
   const [enableProductImages, setEnableProductImages] = useState(false)
   const [enableProductLocation, setEnableProductLocation] = useState(false)
+  const [appointmentsEnabled, setAppointmentsEnabled] = useState(false)
   const [enableManualStockEdit, setEnableManualStockEdit] = useState(false)
   const [stockDischargeEnabled, setStockDischargeEnabled] = useState(false)
   const [notaVentaCreditTerms, setNotaVentaCreditTerms] = useState(false)
@@ -1291,6 +1292,7 @@ export default function Settings() {
         setAutoSku(businessData.autoSku || false)
         setEnableProductImages(businessData.enableProductImages || false)
         setEnableProductLocation(businessData.enableProductLocation || false)
+        setAppointmentsEnabled(businessData.appointmentsEnabled || false)
         setEnableManualStockEdit(businessData.enableManualStockEdit || false)
         setStockDischargeEnabled(businessData.stockDischargeEnabled || false)
         setNotaVentaCreditTerms(businessData.notaVentaCreditTerms || false)
@@ -3862,6 +3864,21 @@ export default function Settings() {
                       ? 'Habilitado: en el punto de venta aparece un selector para emitir esa venta como gravada o exonerada. La elección manda sobre lo que diga cada producto: si eliges Gravado, va gravado todo el comprobante aunque haya productos marcados exonerados. El total no cambia — solo cambia cómo se declara a SUNAT. No aplica al Nuevo RUS, que por su régimen no cobra IGV.'
                       : 'Agrega un selector en el punto de venta para decidir, venta por venta, si el comprobante sale gravado o exonerado, sin importar cómo esté configurado cada producto. Pensado para negocios de la Amazonía (Ley 27037): están exonerados por lo que se consume en la región, pero cuando venden fuera la operación sí lleva IGV.'}
                   />
+
+                  {/* Agenda de citas en modo General. La pantalla es la misma de
+                      veterinaria pero sin mascota; apagada por defecto porque la
+                      mayoria de los negocios retail no atiende con cita. */}
+                  {businessMode === 'retail' && (
+                    <SettingToggle
+                      id="opcion-appointmentsEnabled"
+                      checked={appointmentsEnabled}
+                      onChange={(e) => setAppointmentsEnabled(e.target.checked)}
+                      title="Agenda de citas"
+                      description={appointmentsEnabled
+                        ? 'Habilitado: aparece "Agenda de Citas" en el menu. Podras programar citas por fecha y hora, ver quien esta en atencion y cobrar cada atencion desde el punto de venta. Pensado para consultorios, podologia, estetica, talleres y cualquier negocio que atienda con cita.'
+                        : 'Agrega una agenda para programar citas de tus clientes y cobrarlas desde el punto de venta. Se muestra como una pagina mas en el menu.'}
+                    />
+                  )}
                 </div>
               </div>
 
@@ -3957,6 +3974,7 @@ export default function Settings() {
                           { id: 'public-catalog', label: 'Mi Catálogo Online', description: 'Catálogo digital para compartir con tus clientes y recibir pedidos' },
                           { id: 'online-orders', label: 'Pedidos Online', description: 'Bandeja de pedidos que llegan desde tu catálogo digital' },
                           { id: 'cash-register', label: 'Control de Caja', description: 'Apertura y cierre de caja diario' },
+                          { id: 'vet-agenda', label: 'Agenda de Citas', description: 'Citas programadas y atenciones del dia (requiere activarla en Preferencias)' },
                           { id: 'quotations', label: 'Cotizaciones', description: 'Presupuestos y proformas' },
                           { id: 'sellers', label: 'Vendedores', description: 'Gestión de vendedores y comisiones' },
                         { id: 'promotions', label: 'Promociones', description: 'Tarjeta de sellos, combos y cupones de descuento' },
@@ -4537,6 +4555,7 @@ export default function Settings() {
                       posCustomFields: posCustomFields,
                       enableProductImages: enableProductImages,
                       enableProductLocation: enableProductLocation,
+                      appointmentsEnabled: appointmentsEnabled,
                       enableManualStockEdit: enableManualStockEdit,
                       defaultTaxAffectation: defaultTaxAffectation,
                       allowManualTaxAffectation: allowManualTaxAffectation,
