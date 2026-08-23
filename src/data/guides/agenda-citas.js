@@ -19,15 +19,23 @@ export default {
       title: 'Activarla en modo General',
       requiereOpcion: {
         flag: 'appointmentsEnabled',
-        nombre: 'Agenda de citas',
-        donde: 'Configuración > Preferencias',
-        ruta: '/app/configuracion?tab=preferencias&opcion=appointmentsEnabled',
+        nombre: 'Agenda de Citas',
+        donde: 'Configuración > Preferencias > Personalizar Menú Lateral',
+        ruta: '/app/configuracion?tab=preferencias',
         defaultOn: false,
       },
       blocks: [
         {
           type: 'texto',
-          text: 'En veterinaria la agenda viene de fábrica. En los demás rubros está apagada, porque la mayoría de los negocios no atiende con cita. Si el tuyo sí (consultorio, podología, estética, taller, asesoría), actívala y aparece como una página más en el menú.',
+          text: 'En veterinaria la agenda viene de fábrica. En los demás rubros está apagada, porque la mayoría de los negocios no atiende con cita. Si el tuyo sí (consultorio, podología, estética, taller, asesoría), enciéndela y aparece como una página más en el menú.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Entra a **Configuración > Preferencias**.',
+            'Baja hasta **Personalizar Menú Lateral**, en el grupo "Ventas y cobro".',
+            'Marca **Agenda de Citas** y guarda. Aparece en el menú al instante.',
+          ],
         },
       ],
     },
