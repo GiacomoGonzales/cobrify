@@ -49,6 +49,17 @@ export const CATALOG_THEMES = {
       },
       effects: { darkMode: false, headerBlur: false },
     },
+    // Chrome (Fase 2): header y hero del tema. Estilo "minimal" de
+    // shopifree: nombre fino, carrito fantasma, portada en tarjeta redondeada
+    // sin texto encima y hero tipografico limpio cuando no hay portada.
+    chrome: {
+      headerName: 'font-medium tracking-tight',
+      headerNameAccent: false,
+      headerCart: 'ghost',
+      headerScrollFx: 'shadow',
+      heroCover: 'card',
+      heroEmpty: 'clean',
+    },
     // Motor v2 (A3): fuentes por tema (googleFontsUrl se inyecta como <link>;
     // heading/body son font-family CSS). null = usar las fuentes del bundle.
     fonts: { heading: null, body: null, googleFontsUrl: null },
@@ -115,6 +126,17 @@ export const CATALOG_THEMES = {
       },
       effects: { darkMode: false, headerBlur: true },
     },
+    // Chrome (Fase 2): serif elegante, carrito en burbuja rosada, portada
+    // con velo oscuro suave y nombre serif; sin portada, hero romantico.
+    chrome: {
+      headerName: 'font-serif tracking-wide font-medium',
+      headerNameAccent: false,
+      headerCart: 'bubble',
+      headerLogoRound: true,
+      headerScrollFx: 'shadow',
+      heroCover: 'overlay',
+      heroEmpty: 'romantic',
+    },
     // Motor v2 (A3): fuentes por tema (googleFontsUrl se inyecta como <link>;
     // heading/body son font-family CSS). null = usar las fuentes del bundle.
     fonts: { heading: null, body: null, googleFontsUrl: null },
@@ -172,13 +194,24 @@ export const CATALOG_THEMES = {
         text: '#FFFFFF', textMuted: '#9CA3AF', textInverted: '#0F0F12',
         border: '#26262E', badge: 'rgba(26,26,32,0.9)', badgeText: '#F97316',
       },
-      radius: { sm: '0.25rem', md: '0.375rem', lg: '0.375rem', xl: '0.5rem', full: '9999px' },
+      radius: { sm: '0', md: '0', lg: '0', xl: '0', full: '9999px' },
       shadows: {
         sm: '0 1px 2px 0 rgb(0 0 0 / 0.4)',
         md: '0 10px 15px -3px rgb(0 0 0 / 0.4)',
         lg: '0 25px 50px -12px rgb(0 0 0 / 0.5)',
       },
       effects: { darkMode: true, headerBlur: false },
+    },
+    // Chrome (Fase 2): brutalista — nombre display en el acento, carrito
+    // CUADRADO relleno, filete del acento al scrollear, portada con degradado
+    // del acento y nombre gigante; sin portada, hero tipografico con glow.
+    chrome: {
+      headerName: 'font-black uppercase tracking-tight',
+      headerNameAccent: true,
+      headerCart: 'square',
+      headerScrollFx: 'accent-border',
+      heroCover: 'impact',
+      heroEmpty: 'impact',
     },
     // Motor v2 (A3): fuentes por tema (googleFontsUrl se inyecta como <link>;
     // heading/body son font-family CSS). null = usar las fuentes del bundle.

@@ -60,7 +60,8 @@ import { BedDouble, CalendarDays,
   Mail,
   User,
   LogOut,
-  Menu
+  Menu,
+  Heart
 } from 'lucide-react'
 
 // Estilos de animacion para fade-in escalonado
@@ -246,6 +247,14 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // mostraban en el orden en que Firestore los devuelve (por ID), que para el
   // cliente se ve aleatorio.
   const [sortBy, setSortBy] = useState('name_asc') // name_asc | name_desc | price_asc | price_desc
+  // Fase 2 (port shopifree): el header reacciona al scroll — sombra que
+  // aparece, o filete del acento en el tema bold.
+  const [headerScrolled, setHeaderScrolled] = useState(false)
+  useEffect(() => {
+    const onScroll = () => setHeaderScrolled(window.scrollY > 24)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
   // Diseño de grilla (F2.3 + motor v2): la config del negocio manda; si no
   // eligió, el TEMA propone su grilla; fallback 'masonry'. Se resuelve más
   // abajo (catalogLayout) porque depende del tema efectivo.
@@ -704,6 +713,23 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // Fase 1 del port shopifree: variables CSS del tema en la raiz. Inertes
   // hasta que una pieza las consuma (var(--ct-*)) — hoy no cambian ni un pixel.
   const themeCssVars = buildCatalogCssVars(themeFull, getCatalogAccent(business, effectiveTheme))
+  // Chrome del tema (Fase 2): header/hero propios. {} = tema sin chrome →
+  // todas las ramas caen al markup clasico original.
+  const themeChrome = themeFull.chrome || {}
+  const themeAccent = getCatalogAccent(business, effectiveTheme)
+  // Guardas de contraste (caso real: CAPITAN BLACK con acento #1F2937 casi
+  // negro). Si el acento es muy oscuro, el texto pintado con el en un tema
+  // oscuro seria invisible → se cae al blanco. Y el icono del carrito
+  // cuadrado elige blanco/negro segun la luminancia del acento.
+  const accentLuma = (() => {
+    const h = (themeAccent || '').replace('#', '')
+    if (h.length < 6) return 255
+    const [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16))
+    return 0.299 * r + 0.587 * g + 0.114 * b
+  })()
+  const themeIsDark = !!themeFull.tokens?.effects?.darkMode
+  const themeAccentText = themeIsDark && accentLuma < 90 ? '#FFFFFF' : themeAccent
+  const accentIconColor = accentLuma < 140 ? '#FFFFFF' : '#0F0F12'
   // Variante de las píldoras de categorías: 'pills' (default) | 'underline' | 'circles'
   // Default 'underline': las pastillas rellenas se veian pesadas con muchas
   // categorias (reporte del 24-ago) — texto plano y subrayado en la activa.
@@ -1107,6 +1133,23 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     cardVariant: themeLayout.card || 'classic',
   }
 
+  // Barra de busqueda que acompana al hero (Fase 2): una sola definicion
+  // para las variantes nuevas; las ramas clasicas conservan su copia.
+  const searchBarRow = (
+    <div className={`${themeClasses.bg} px-4 py-3 ${sidebarNav ? 'md:px-0 md:pt-5' : ''}`}>
+      <div className={`relative ${sidebarNav ? '' : 'max-w-7xl mx-auto'}`}>
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+        <input
+          type="text"
+          placeholder="Buscar productos..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className={`w-full pl-12 pr-4 py-3 rounded-xl shadow-sm focus:outline-none focus:ring-2 ${thSearchBanner}`}
+        />
+      </div>
+    </div>
+  )
+
   return (
     <CatalogThemeProvider business={business} themeId={effectiveTheme}>
     <div
@@ -1158,8 +1201,13 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         </div>
       )}
 
-      {/* Header */}
-      <header className={`${thHeaderBg} shadow-sm sticky ${isRestaurantMenu && tableFromUrl ? 'top-[41px]' : 'top-0'} z-40`}>
+      {/* Header — chrome por tema (Fase 2): sombra que aparece al scrollear
+          (o filete del acento en bold), nombre con la voz tipografica del
+          tema y carrito en la forma que el tema pide. */}
+      <header
+        className={`${thHeaderBg} sticky ${isRestaurantMenu && tableFromUrl ? 'top-[41px]' : 'top-0'} z-40 transition-shadow duration-300 ${headerScrolled ? 'shadow-md' : 'shadow-sm'}`}
+        style={themeChrome.headerScrollFx === 'accent-border' ? { borderBottom: `2px solid ${headerScrolled ? themeAccent : 'transparent'}` } : undefined}
+      >
         {/* Con menú lateral el header usa el MISMO contenedor que el layout de
             dos columnas, para que el logo quede alineado con la columna de
             categorías (como en menus.pe) y no flotando al centro. */}
@@ -1196,8 +1244,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 />
               ) : (
                 <div
-                  className="w-9 h-9 md:w-12 md:h-12 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ backgroundColor: getCatalogAccent(business) }}
+                  className="w-9 h-9 md:w-12 md:h-12 flex items-center justify-center flex-shrink-0"
+                  style={{ backgroundColor: themeAccent, borderRadius: themeChrome.headerLogoRound ? '9999px' : 'var(--ct-radius-lg, 0.75rem)' }}
                 >
                   {isRestaurantMenu ? (
                     <UtensilsCrossed className="w-5 h-5 md:w-6 md:h-6 text-white" />
@@ -1209,7 +1257,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               {/* Si el logo es horizontal (incluye el nombre), ocultar texto */}
               {!headerIsLandscape && (
               <div className="min-w-0">
-                <h1 className={`font-bold text-base md:text-xl truncate ${thText}`}>
+                <h1
+                  className={`${themeChrome.headerName || 'font-bold'} text-base md:text-xl truncate ${thText}`}
+                  style={themeChrome.headerNameAccent ? { color: themeAccentText } : undefined}
+                >
                   {business?.name || business?.businessName}
                 </h1>
                 {business?.catalogTagline && (
@@ -1221,22 +1272,73 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               )
             })()}
 
-            {/* Carrito */}
-            <button
-              onClick={() => setCartOpen(true)}
-              className="relative flex items-center gap-2 px-4 py-2 rounded-full transition-opacity text-white hover:opacity-80"
-              style={{ backgroundColor: getCatalogAccent(business) }}
-            >
-              <ShoppingBag className="w-5 h-5" />
-              <span className="hidden md:inline font-medium">{isRestaurantMenu ? 'Pedido' : 'Carrito'}</span>
-              {cartItemsCount > 0 && (
-                <span className="absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold text-white"
-                  style={{ backgroundColor: thCartBadgeBg, color: thCartBadgeColor }}
-                >
-                  {cartItemsCount}
-                </span>
-              )}
-            </button>
+            {/* Carrito — la forma la decide el chrome del tema. Todas las
+                variantes disparan el mismo setCartOpen; solo cambia la piel. */}
+            {themeChrome.headerCart === 'square' ? (
+              <button
+                onClick={() => setCartOpen(true)}
+                className="relative w-11 h-11 md:w-12 md:h-12 flex items-center justify-center flex-shrink-0 transition-transform hover:scale-105"
+                style={{ backgroundColor: themeAccent }}
+                aria-label={isRestaurantMenu ? 'Ver pedido' : 'Ver carrito'}
+              >
+                <ShoppingBag className="w-5 h-5 md:w-6 md:h-6" style={{ color: accentIconColor }} />
+                {cartItemsCount > 0 && (
+                  <span className="absolute -top-2 -right-2 w-6 h-6 bg-white text-black text-xs font-black flex items-center justify-center">
+                    {cartItemsCount}
+                  </span>
+                )}
+              </button>
+            ) : themeChrome.headerCart === 'bubble' ? (
+              <button
+                onClick={() => setCartOpen(true)}
+                className="relative w-11 h-11 md:w-12 md:h-12 rounded-full flex items-center justify-center flex-shrink-0 transition-transform hover:scale-105"
+                style={{ backgroundColor: 'var(--ct-surface-hover, #FCE7F0)' }}
+                aria-label={isRestaurantMenu ? 'Ver pedido' : 'Ver carrito'}
+              >
+                <ShoppingBag className="w-5 h-5" style={{ color: themeAccent }} />
+                {cartItemsCount > 0 && (
+                  <span
+                    className="absolute -top-1 -right-1 w-5 h-5 text-white text-[11px] font-bold rounded-full flex items-center justify-center"
+                    style={{ backgroundColor: themeAccent }}
+                  >
+                    {cartItemsCount}
+                  </span>
+                )}
+              </button>
+            ) : themeChrome.headerCart === 'ghost' ? (
+              <button
+                onClick={() => setCartOpen(true)}
+                className={`relative w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${thViewHover}`}
+                aria-label={isRestaurantMenu ? 'Ver pedido' : 'Ver carrito'}
+              >
+                <ShoppingBag className={`w-[22px] h-[22px] ${thText}`} />
+                {cartItemsCount > 0 && (
+                  <span
+                    className="absolute top-0 right-0 w-5 h-5 text-[11px] font-semibold rounded-full flex items-center justify-center"
+                    style={{ backgroundColor: thCartBadgeBg, color: thCartBadgeColor }}
+                  >
+                    {cartItemsCount}
+                  </span>
+                )}
+              </button>
+            ) : (
+              /* pastilla clasica: fallback para un tema sin chrome */
+              <button
+                onClick={() => setCartOpen(true)}
+                className="relative flex items-center gap-2 px-4 py-2 rounded-full transition-opacity text-white hover:opacity-80"
+                style={{ backgroundColor: getCatalogAccent(business) }}
+              >
+                <ShoppingBag className="w-5 h-5" />
+                <span className="hidden md:inline font-medium">{isRestaurantMenu ? 'Pedido' : 'Carrito'}</span>
+                {cartItemsCount > 0 && (
+                  <span className="absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold text-white"
+                    style={{ backgroundColor: thCartBadgeBg, color: thCartBadgeColor }}
+                  >
+                    {cartItemsCount}
+                  </span>
+                )}
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -1402,6 +1504,108 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           </div>
         </div>
       ) : business?.catalogCoverImage ? (
+        themeChrome.heroCover === 'card' && heroVariant !== 'full-bleed' ? (
+          /* === PORTADA EN TARJETA (tema claro, estilo minimal): imagen limpia
+              con esquinas redondeadas y SIN texto encima — el nombre ya vive
+              en el header. La bienvenida va debajo, alineada a la izquierda. === */
+          <div className={sidebarNav ? 'relative md:pt-6' : 'relative'}>
+            <div className={sidebarNav ? '' : 'max-w-7xl mx-auto px-4 pt-4'}>
+              <div className="relative h-44 md:h-72 overflow-hidden rounded-2xl md:rounded-3xl shadow-sm">
+                <picture>
+                  <source
+                    media="(max-width: 767px)"
+                    srcSet={optimizeImageUrl(business.catalogCoverImageMobile || business.catalogCoverImage, 'cover_mobile')}
+                  />
+                  <img
+                    src={optimizeImageUrl(business.catalogCoverImage, 'cover_desktop')}
+                    alt=""
+                    className="absolute inset-0 w-full h-full object-cover"
+                    // eslint-disable-next-line react/no-unknown-property -- minuscula a proposito (React 18 la pasa tal cual al DOM)
+                    fetchpriority="high"
+                    decoding="async"
+                  />
+                </picture>
+              </div>
+              {business?.catalogWelcome && (
+                <p className={`pt-3 text-sm md:text-base ${thTextMuted}`}>{business.catalogWelcome}</p>
+              )}
+            </div>
+            {searchBarRow}
+          </div>
+        ) : themeChrome.heroCover === 'overlay' && heroVariant !== 'full-bleed' ? (
+          /* === PORTADA CON VELO (boutique): degradado oscuro suave y nombre
+              serif abajo a la izquierda, sin chip de logo. === */
+          <div className={sidebarNav ? 'relative md:pt-6' : 'relative overflow-hidden'}>
+            <div className={`relative h-48 md:h-72 ${sidebarNav ? 'overflow-hidden md:rounded-2xl md:shadow-sm' : ''}`}>
+              <picture>
+                  <source
+                    media="(max-width: 767px)"
+                    srcSet={optimizeImageUrl(business.catalogCoverImageMobile || business.catalogCoverImage, 'cover_mobile')}
+                  />
+                  <img
+                    src={optimizeImageUrl(business.catalogCoverImage, 'cover_desktop')}
+                    alt=""
+                    className="absolute inset-0 w-full h-full object-cover"
+                    // eslint-disable-next-line react/no-unknown-property -- minuscula a proposito (React 18 la pasa tal cual al DOM)
+                    fetchpriority="high"
+                    decoding="async"
+                  />
+                </picture>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent pointer-events-none" />
+              <div className="absolute bottom-0 left-0 right-0 p-5 md:p-8">
+                <div className={sidebarNav ? '' : 'max-w-7xl mx-auto'}>
+                  <h2 className="font-serif text-white text-3xl md:text-5xl drop-shadow-lg">
+                    {business?.name || business?.businessName}
+                  </h2>
+                  {(business?.catalogWelcome || business?.catalogTagline) && (
+                    <p className="text-white/90 text-sm md:text-lg font-light mt-1.5 truncate drop-shadow">
+                      {business?.catalogWelcome || business?.catalogTagline}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+            {searchBarRow}
+          </div>
+        ) : themeChrome.heroCover === 'impact' && heroVariant !== 'full-bleed' ? (
+          /* === PORTADA DE IMPACTO (bold): degradado 135° del acento al negro
+              y nombre display gigante en mayusculas. === */
+          <div className={sidebarNav ? 'relative md:pt-6' : 'relative overflow-hidden'}>
+            <div className={`relative h-48 md:h-80 ${sidebarNav ? 'overflow-hidden md:rounded-2xl md:shadow-sm' : ''}`}>
+              <picture>
+                  <source
+                    media="(max-width: 767px)"
+                    srcSet={optimizeImageUrl(business.catalogCoverImageMobile || business.catalogCoverImage, 'cover_mobile')}
+                  />
+                  <img
+                    src={optimizeImageUrl(business.catalogCoverImage, 'cover_desktop')}
+                    alt=""
+                    className="absolute inset-0 w-full h-full object-cover"
+                    // eslint-disable-next-line react/no-unknown-property -- minuscula a proposito (React 18 la pasa tal cual al DOM)
+                    fetchpriority="high"
+                    decoding="async"
+                  />
+                </picture>
+              <div
+                className="absolute inset-0 pointer-events-none"
+                style={{ background: `linear-gradient(135deg, ${themeAccent}B3 0%, transparent 45%, rgba(0,0,0,0.9) 100%)` }}
+              />
+              <div className="absolute bottom-0 left-0 right-0 p-5 md:p-8">
+                <div className={sidebarNav ? '' : 'max-w-7xl mx-auto'}>
+                  <h2 className="text-white font-black uppercase tracking-tighter leading-none text-3xl md:text-6xl drop-shadow-lg">
+                    {business?.name || business?.businessName}
+                  </h2>
+                  {(business?.catalogWelcome || business?.catalogTagline) && (
+                    <p className="text-white/80 uppercase tracking-wide font-medium text-xs md:text-base mt-2 truncate">
+                      {business?.catalogWelcome || business?.catalogTagline}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+            {searchBarRow}
+          </div>
+        ) : (
         /* === ESTILO BANNER: imagen hero. Variante 'full-bleed' (motor v2):
             más alta, overlay más oscuro y contenido CENTRADO (restaurantes). === */
         <div className={sidebarNav ? 'relative md:pt-6' : 'relative overflow-hidden'}>
@@ -1490,6 +1694,69 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               />
             </div>
           </div>
+        </div>
+        )
+      ) : themeChrome.heroEmpty === 'clean' ? (
+        /* === SIN PORTADA, tema claro: hero tipografico limpio. El gradiente
+            generico de color se va — era lo que se veia "de plantilla". === */
+        <div className={sidebarNav ? 'md:mt-6' : ''}>
+          <div className="max-w-7xl mx-auto px-4 pt-10 pb-4 md:pt-16 md:pb-8 text-center">
+            <h2 className={`font-light tracking-tight text-3xl md:text-5xl ${thText}`}>
+              {business?.name || business?.businessName}
+            </h2>
+            {(business?.catalogWelcome || business?.catalogTagline) && (
+              <p className={`mt-3 text-base md:text-lg max-w-2xl mx-auto ${thTextMuted}`}>
+                {business?.catalogWelcome || business?.catalogTagline}
+              </p>
+            )}
+          </div>
+          {searchBarRow}
+        </div>
+      ) : themeChrome.heroEmpty === 'romantic' ? (
+        /* === SIN PORTADA, boutique: pastilla con corazon, nombre serif y
+            lema en italica entre comillas. === */
+        <div className={sidebarNav ? 'md:mt-6' : ''}>
+          <div className="pt-10 pb-4 md:pt-16 md:pb-8 text-center" style={{ background: 'linear-gradient(to bottom, var(--ct-surface, #fff), var(--ct-bg, #FFF7F8))' }}>
+            <div className="max-w-3xl mx-auto px-6">
+              <div
+                className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm mb-5"
+                style={{ backgroundColor: 'var(--ct-surface-hover, #FCE7F0)', color: themeAccent }}
+              >
+                <Heart className="w-4 h-4" fill="currentColor" />
+                {business?.catalogWelcome || 'Bienvenidos'}
+              </div>
+              <h2 className={`font-serif text-4xl md:text-6xl ${thText}`}>
+                {business?.name || business?.businessName}
+              </h2>
+              {business?.catalogTagline && (
+                <p className={`mt-4 text-lg md:text-xl font-light italic ${thTextMuted}`}>
+                  "{business.catalogTagline}"
+                </p>
+              )}
+            </div>
+          </div>
+          {searchBarRow}
+        </div>
+      ) : themeChrome.heroEmpty === 'impact' ? (
+        /* === SIN PORTADA, bold: nombre display gigante en el acento sobre
+            fondo oscuro con glow — el hero tipografico de shopifree. === */
+        <div className={`relative overflow-hidden ${sidebarNav ? 'md:mt-6 md:rounded-2xl' : ''}`}>
+          <div
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 blur-[100px] opacity-25 pointer-events-none"
+            style={{ backgroundColor: themeAccentText }}
+          />
+          <div className="relative max-w-7xl mx-auto px-4 pt-12 pb-4 md:pt-20 md:pb-8 text-center">
+            <h2 className="font-black uppercase tracking-tighter leading-none text-4xl md:text-7xl break-words" style={{ color: themeAccentText }}>
+              {business?.name || business?.businessName}
+            </h2>
+            {(business?.catalogWelcome || business?.catalogTagline) && (
+              <p className={`mt-4 text-sm md:text-lg uppercase tracking-[0.2em] ${thTextMuted}`}>
+                {business?.catalogWelcome || business?.catalogTagline}
+              </p>
+            )}
+            <div className="w-24 h-1 mx-auto mt-6" style={{ backgroundColor: themeAccentText }} />
+          </div>
+          {searchBarRow}
         </div>
       ) : (
         /* === ESTILO CLÁSICO: solo cuando NO hay portada (gradient sólido) === */
