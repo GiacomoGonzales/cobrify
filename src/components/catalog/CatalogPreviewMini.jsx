@@ -27,6 +27,17 @@ export default function CatalogPreviewMini({ name = 'Tu negocio', config = {} })
   const cardVariant = theme.layout?.card || 'classic'
   const layout = config.layout || theme.layout?.grid || 'masonry'
 
+  // Tema oscuro: se detecta por la luminancia del fondo del swatch, no por id,
+  // para que un tema oscuro nuevo herede los placeholders correctos sin tocar esto.
+  const esOscuro = (() => {
+    const hex = (theme.swatch?.bg || '#ffffff').replace('#', '')
+    if (hex.length < 6) return false
+    const [r, g, b] = [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16))
+    return (0.299 * r + 0.587 * g + 0.114 * b) < 128
+  })()
+  const placeholderBar = esOscuro ? 'bg-gray-600' : 'bg-gray-200'
+  const bordeSuave = esOscuro ? 'border-gray-700' : 'border-gray-200'
+
   // Tipografías del tema: se inyecta el <link> de Google Fonts para que la
   // vista previa muestre la letra real del tema (clave para elegir uno).
   useEffect(() => {
@@ -65,7 +76,7 @@ export default function CatalogPreviewMini({ name = 'Tu negocio', config = {} })
       </div>
       {cardVariant !== 'overlay' && (
         <div className="p-1.5 space-y-1">
-          <div className={`h-1.5 w-3/4 rounded ${config.theme === 'nocturno' ? 'bg-gray-600' : 'bg-gray-200'}`} />
+          <div className={`h-1.5 w-3/4 rounded ${placeholderBar}`} />
           <div className="h-2 w-1/3 rounded" style={{ backgroundColor: accent }} />
         </div>
       )}
@@ -154,7 +165,7 @@ export default function CatalogPreviewMini({ name = 'Tu negocio', config = {} })
 
           <div className="p-2 space-y-2">
             {/* Buscador decorativo */}
-            <div className={`flex items-center gap-1 px-2 py-1 rounded-lg ${t.card || 'bg-white'} border ${config.theme === 'nocturno' ? 'border-gray-700' : 'border-gray-200'}`}>
+            <div className={`flex items-center gap-1 px-2 py-1 rounded-lg ${t.card || 'bg-white'} border ${bordeSuave}`}>
               <Search className={`w-2.5 h-2.5 ${t.textMuted || 'text-gray-400'}`} />
               <span className={`text-[9px] ${t.textMuted || 'text-gray-400'}`}>Buscar productos...</span>
             </div>
@@ -206,7 +217,7 @@ export default function CatalogPreviewMini({ name = 'Tu negocio', config = {} })
                   <div key={i} className={`${t.card || 'bg-white'} ${t.cardRadius || 'rounded-xl'} p-1.5 flex items-center gap-2 shadow-sm`}>
                     <div className="w-8 h-8 rounded-lg flex-none" style={{ backgroundColor: `${accent}18` }} />
                     <div className="flex-1 space-y-1">
-                      <div className={`h-1.5 w-2/3 rounded ${config.theme === 'nocturno' ? 'bg-gray-600' : 'bg-gray-200'}`} />
+                      <div className={`h-1.5 w-2/3 rounded ${placeholderBar}`} />
                       <div className="h-2 w-1/4 rounded" style={{ backgroundColor: accent }} />
                     </div>
                   </div>
