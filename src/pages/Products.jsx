@@ -1604,8 +1604,16 @@ export default function Products() {
             variantPriceUSD = Number.isFinite(usdVal) && usdVal > 0 ? usdVal : null
           }
 
+          // Se PRESERVA la variante entera y solo se pisan los campos que este
+          // formulario calcula. Antes se armaba un objeto literal con siete
+          // campos, asi que todo lo demas se borraba al guardar: el CODIGO DE
+          // BARRAS de la variante desaparecia apenas se tocaba el producto
+          // (reporte del 24-ago-2026), y con el `legacyBarcode` y cualquier
+          // campo que otro flujo hubiera dejado (series, imagen...).
           return {
+            ...v,
             sku: v.sku,
+            barcode: (v.barcode || '').trim() || null,
             attributes: v.attributes,
             price: typeof v.price === 'string' ? parseFloat(v.price) : v.price,
             price2: v.price2 || null,
