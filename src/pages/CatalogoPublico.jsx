@@ -2487,24 +2487,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           Online). Vive en su propio componente y se pinta con tokens. */}
       <CatalogFooter business={business} sidebarNav={sidebarNav} />
 
-      {/* Floating cart button (mobile) */}
-      {cartItemsCount > 0 && (
-        <div className="fixed bottom-6 left-4 right-4 md:hidden z-40">
-          <button
-            onClick={() => setCartOpen(true)}
-            className="w-full py-4 rounded-2xl font-semibold shadow-2xl flex items-center justify-center gap-3 text-white transition-opacity hover:opacity-90"
-            style={{ backgroundColor: getCatalogAccent(business) }}
-          >
-            {isRestaurantMenu ? <UtensilsCrossed className="w-5 h-5" /> : <ShoppingBag className="w-5 h-5" />}
-            {isRestaurantMenu ? `Ver pedido (${cartItemsCount})` : `Ver carrito (${cartItemsCount})`}
-            {showPrices && (
-              <span className="bg-white/20 px-3 py-1 rounded-full">
-                S/ {cart.reduce((sum, item) => sum + ((item.unitPrice || item.price) * item.quantity), 0).toFixed(2)}
-              </span>
-            )}
-          </button>
-        </div>
-      )}
+      {/* Sin barra flotante de carrito en movil: tapaba la ultima fila de
+          productos justo cuando el cliente sigue comprando, y el carrito ya
+          vive en el header, que es pegajoso. shopifree tambien la elimino
+          (su CartBar devuelve null). */}
 
       {/* Product Modal */}
       <ProductModal
