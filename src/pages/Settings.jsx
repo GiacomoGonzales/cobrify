@@ -13,6 +13,7 @@ import { uploadImage } from '@/services/imageUploadService'
 import BranchInfoSettings from '@/components/settings/BranchInfoSettings'
 import { CATALOG_THEMES, getCatalogThemesList } from '@/themes/catalogThemes'
 import CatalogThemePreview from '@/components/CatalogThemePreview'
+import CatalogPreviewMini from '@/components/catalog/CatalogPreviewMini'
 import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
 import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth'
@@ -6975,7 +6976,9 @@ export default function Settings() {
 
       {/* Tab Content - Catálogo Público */}
       {activeTab === 'catalogo' && (
-        <div className="space-y-6">
+        <div className="xl:flex xl:items-start xl:gap-6">
+          {/* Columna izquierda: el formulario completo, sin tocar */}
+          <div className="flex-1 min-w-0 space-y-6">
           {/* ===== CATÁLOGO ===== */}
           <>
               {/* Descripción + Toggle */}
@@ -9024,6 +9027,32 @@ export default function Settings() {
                 </Button>
               </div>
             </>
+
+          </div>
+
+          {/* Columna derecha (solo desktop xl+): la vista previa EN VIVO.
+              Se pinta con los estados del formulario, no con lo guardado —
+              cambias el color o el tema y lo ves al instante. En pantallas
+              chicas no aparece: alli el formulario necesita todo el ancho
+              y el boton "Ver catálogo" cumple ese rol. */}
+          <div className="hidden xl:block w-[300px] flex-none sticky top-4">
+            <CatalogPreviewMini
+              name={businessSettings?.name || businessSettings?.businessName || 'Tu negocio'}
+              config={{
+                theme: catalogTheme,
+                color: catalogColor,
+                logoUrl: catalogLogoUrl,
+                logoLandscape: catalogLogoLandscape,
+                welcome: catalogWelcome,
+                tagline: catalogTagline,
+                announcement: catalogAnnouncement,
+                flashSale: catalogFlashSale,
+                coverImage: catalogCoverImage,
+                hero: catalogHero,
+                layout: catalogLayout,
+              }}
+            />
+          </div>
 
         </div>
       )}
