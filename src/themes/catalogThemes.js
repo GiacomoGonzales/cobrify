@@ -33,6 +33,22 @@ export const CATALOG_THEMES = {
     isNew: false,
     swatch: { bg: '#F9FAFB', card: '#FFFFFF', accent: '#10B981' },
     accent: '#10B981',
+    // Tokens de VALORES CSS (Fase 1 del port shopifree): espejo del look
+    // actual. primary NO va aqui — siempre es el acento resuelto en runtime.
+    tokens: {
+      colors: {
+        background: '#F9FAFB', surface: '#FFFFFF', surfaceHover: '#F3F4F6',
+        text: '#111827', textMuted: '#6B7280', textInverted: '#FFFFFF',
+        border: '#E5E7EB', badge: 'rgba(255,255,255,0.9)', badgeText: '#4B5563',
+      },
+      radius: { sm: '0.5rem', md: '0.75rem', lg: '0.75rem', xl: '1rem', full: '9999px' },
+      shadows: {
+        sm: '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+        md: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+        lg: '0 20px 25px -5px rgb(0 0 0 / 0.1)',
+      },
+      effects: { darkMode: false, headerBlur: false },
+    },
     // Motor v2 (A3): fuentes por tema (googleFontsUrl se inyecta como <link>;
     // heading/body son font-family CSS). null = usar las fuentes del bundle.
     fonts: { heading: null, body: null, googleFontsUrl: null },
@@ -84,6 +100,21 @@ export const CATALOG_THEMES = {
     isNew: false,
     swatch: { bg: '#FFF7F8', card: '#FFFFFF', accent: '#DB2777' },
     accent: '#DB2777',
+    // Tokens de VALORES CSS (Fase 1 del port shopifree): espejo del look actual.
+    tokens: {
+      colors: {
+        background: '#FFF7F8', surface: '#FFFFFF', surfaceHover: '#FCE7F0',
+        text: '#2A0F1C', textMuted: '#8C5266', textInverted: '#FFFFFF',
+        border: '#F8D2E0', badge: 'rgba(255,255,255,0.9)', badgeText: '#8C2A4E',
+      },
+      radius: { sm: '0.5rem', md: '0.75rem', lg: '1rem', xl: '1.5rem', full: '9999px' },
+      shadows: {
+        sm: '0 1px 2px 0 rgb(136 19 55 / 0.05)',
+        md: '0 4px 6px -1px rgb(136 19 55 / 0.1)',
+        lg: '0 20px 25px -5px rgb(136 19 55 / 0.15)',
+      },
+      effects: { darkMode: false, headerBlur: true },
+    },
     // Motor v2 (A3): fuentes por tema (googleFontsUrl se inyecta como <link>;
     // heading/body son font-family CSS). null = usar las fuentes del bundle.
     fonts: { heading: null, body: null, googleFontsUrl: null },
@@ -134,6 +165,21 @@ export const CATALOG_THEMES = {
     isNew: false,
     swatch: { bg: '#0F0F12', card: '#1A1A20', accent: '#F97316' },
     accent: '#F97316',
+    // Tokens de VALORES CSS (Fase 1 del port shopifree): espejo del look actual.
+    tokens: {
+      colors: {
+        background: '#0F0F12', surface: '#1A1A20', surfaceHover: '#26262E',
+        text: '#FFFFFF', textMuted: '#9CA3AF', textInverted: '#0F0F12',
+        border: '#26262E', badge: 'rgba(26,26,32,0.9)', badgeText: '#F97316',
+      },
+      radius: { sm: '0.25rem', md: '0.375rem', lg: '0.375rem', xl: '0.5rem', full: '9999px' },
+      shadows: {
+        sm: '0 1px 2px 0 rgb(0 0 0 / 0.4)',
+        md: '0 10px 15px -3px rgb(0 0 0 / 0.4)',
+        lg: '0 25px 50px -12px rgb(0 0 0 / 0.5)',
+      },
+      effects: { darkMode: true, headerBlur: false },
+    },
     // Motor v2 (A3): fuentes por tema (googleFontsUrl se inyecta como <link>;
     // heading/body son font-family CSS). null = usar las fuentes del bundle.
     fonts: { heading: null, body: null, googleFontsUrl: null },

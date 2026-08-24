@@ -24,6 +24,7 @@ import {
 } from '@/components/catalog/catalogHelpers'
 import { DEMO_CATALOG_DATA, DEMO_RESTAURANT_DATA } from '@/components/catalog/catalogDemoData'
 import { getCatalogThemeClasses, getCatalogAccent, getCatalogTheme } from '@/themes/catalogThemes'
+import { CatalogThemeProvider, buildCatalogCssVars } from '@/components/catalog/CatalogThemeProvider'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { collection, query, where, getDocs, doc, getDoc, orderBy, limit, startAfter, documentId } from 'firebase/firestore'
 // CATALOGO = catalogDb (SIN cache persistente), a proposito (14-ago-2026):
@@ -700,6 +701,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const themeFull = getCatalogTheme(effectiveTheme)
   const themeFonts = themeFull.fonts || {}
   const themeLayout = themeFull.layout || {}
+  // Fase 1 del port shopifree: variables CSS del tema en la raiz. Inertes
+  // hasta que una pieza las consuma (var(--ct-*)) — hoy no cambian ni un pixel.
+  const themeCssVars = buildCatalogCssVars(themeFull, getCatalogAccent(business, effectiveTheme))
   // Variante de las píldoras de categorías: 'pills' (default) | 'underline' | 'circles'
   // Default 'underline': las pastillas rellenas se veian pesadas con muchas
   // categorias (reporte del 24-ago) — texto plano y subrayado en la activa.
@@ -1104,9 +1108,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   }
 
   return (
+    <CatalogThemeProvider business={business} themeId={effectiveTheme}>
     <div
       className={`min-h-screen ${thBg} ${thFontWrapper}`}
-      style={themeFonts.body ? { fontFamily: themeFonts.body } : undefined}
+      style={themeFonts.body ? { ...themeCssVars, fontFamily: themeFonts.body } : themeCssVars}
     >
       <style>{fadeInStyle}</style>
       {/* Fuentes Google del tema (motor v2): solo si el tema las define.
@@ -2289,5 +2294,6 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         onAddMore={() => {}}
       />
     </div>
+    </CatalogThemeProvider>
   )
 }
