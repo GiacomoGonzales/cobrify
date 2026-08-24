@@ -44,6 +44,10 @@ export default {
         },
         {
           type: 'texto',
+          text: 'La página se divide en tres pestañas: **Configuración** (tu enlace, textos, pedidos, contacto y qué se muestra), **Apariencia** (tema, color, logo, portada, diseño y promociones) y **Avanzado** (dominio propio y reservas). Todo se guarda con el mismo botón, desde cualquier pestaña.',
+        },
+        {
+          type: 'texto',
           text: 'Cuando hay muchos productos puedes elegir cómo se cargan en **Paginación de productos** (tarjeta "Así se ve tu tienda"): mostrar todo de una, botón de **Cargar más**, **scroll infinito** (recomendado) o **páginas numeradas**.',
         },
         {
