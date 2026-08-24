@@ -1290,7 +1290,13 @@ export default function CreateQuotation() {
           code: productCatalog?.code || '',
           sku: itemSku,
           name: item.name,
-          description: item.description || '',
+          // Igual que `sku`, `code` e `imageUrl`: si el item no la trae, se saca
+          // del catálogo. La descripción no tiene campo en el formulario, viaja
+          // escondida dentro del item, y hay caminos que la pierden — convertir
+          // un pedido online en cotización, o abrir una cotización vieja para
+          // editarla o duplicarla. En esos casos el PDF salía sin descripción
+          // aunque el producto sí la tuviera y la opción estuviera activada.
+          description: item.description || productCatalog?.description || '',
           quantity: parseFloat(item.quantity),
           unitPrice: parseFloat(item.unitPrice),
           // Multi-divisa: si la cotización es USD, persistir basePrice (PEN
