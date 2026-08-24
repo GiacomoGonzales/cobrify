@@ -28,6 +28,7 @@ import { Capacitor } from '@capacitor/core'
 import { printKitchenOrder, connectPrinter, getPrinterConfig, printToAllStations, printPreBill as printPreBillThermal } from '@/services/thermalPrinterService'
 import { printPreBill, printAllSplitPreBills } from '@/utils/printPreBill'
 import { getActiveMotoristas, createDeliveryRecord, updateOperationalStatus } from '@/services/motoristaService'
+import { resumirItemsParaEnvio } from '@/utils/deliveryShare'
 import { stationsForOrder } from '@/utils/kitchenComandaFormat'
 import GuideLink from '@/components/guide/GuideLink'
 
@@ -1268,7 +1269,11 @@ export default function Orders() {
             orderId: orderId,
             orderNumber: order.orderNumber || '',
             customerName: order.customerName || '',
+            // Telefono y contenido viajan con el envio para que el repartidor
+            // los reciba completos al compartirle los datos por WhatsApp.
+            customerPhone: order.customerPhone || '',
             customerAddress: order.customerAddress || '',
+            items: resumirItemsParaEnvio(order.items),
             amount: order.total || 0,
             deliveryFee: order.deliveryFee || 0,
             paymentMethod: order.paymentMethod || 'cash',

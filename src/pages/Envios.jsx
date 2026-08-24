@@ -3,6 +3,7 @@ import {
   Truck, Plus, Edit, Trash2, UserCheck, DollarSign, TrendingUp,
   Loader2, Search, Package, Clock, CheckCircle, XCircle, Filter,
   CircleDot, Coffee, WifiOff, X, FileText, ArrowRight, Bike, Receipt, MapPin,
+  MessageCircle,
 } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import GuideLink from '@/components/guide/GuideLink'
@@ -25,6 +26,9 @@ import DeliveryTicket from '@/components/DeliveryTicket'
 import { useToast } from '@/contexts/ToastContext'
 import MotoristaFormModal from '@/components/restaurant/MotoristaFormModal'
 import { matchesSearchQuery } from '@/lib/utils'
+import {
+  PAYMENT_METHOD_LABELS, enlaceMapaEntrega, enlaceWhatsAppEnvio, resumirItemsParaEnvio,
+} from '@/utils/deliveryShare'
 
 const OPERATIONAL_STATUS_CONFIG = {
   available: { label: 'Disponible', color: 'success', icon: CheckCircle },
@@ -54,30 +58,10 @@ const DELIVERY_STATUS_FLOW = {
   cancelled: [],
 }
 
-const PAYMENT_METHOD_LABELS = {
-  cash: 'Efectivo',
-  efectivo: 'Efectivo',
-  card: 'Tarjeta',
-  tarjeta: 'Tarjeta',
-  transfer: 'Transferencia',
-  transferencia: 'Transferencia',
-  yape: 'Yape',
-  plin: 'Plin',
-}
-
-/**
- * Enlace al mapa para una entrega. Con la ubicación que el comprador marcó en
- * el catálogo apunta al punto EXACTO; si no la hay, busca la dirección escrita.
- * Devuelve null cuando no hay ni una ni otra.
- */
-const enlaceMapa = (delivery) => {
-  const c = delivery?.customerCoords
-  if (c && Number.isFinite(Number(c.lat)) && Number.isFinite(Number(c.lng))) {
-    return `https://www.google.com/maps?q=${c.lat},${c.lng}`
-  }
-  const dir = String(delivery?.customerAddress || '').trim()
-  return dir ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(dir)}` : null
-}
+// El enlace del mapa y las etiquetas de pago viven en @/utils/deliveryShare:
+// los comparte el mensaje de WhatsApp, que tiene que apuntar al mismo sitio que
+// la dirección de la tabla.
+const enlaceMapa = enlaceMapaEntrega
 
 export default function Envios() {
   const { getBusinessId, isDemoMode, branchScope, assignedMotoristaId } = useAppContext()
@@ -316,6 +300,21 @@ export default function Envios() {
     loadMotoristas() // refresh stats
   }
 
+  /**
+   * Abre WhatsApp con los datos del envío ya escritos, para mandárselos al
+   * repartidor: a dónde va con su enlace de Google Maps, qué lleva y cuánto
+   * tiene que cobrar. Si el repartidor no tiene teléfono cargado, WhatsApp
+   * pregunta a quién enviárselo.
+   */
+  const handleShareWhatsApp = (delivery) => {
+    const motorista = motoristasAll.find(m => m.id === delivery.motoristaId)
+    const url = enlaceWhatsAppEnvio(delivery, {
+      nombreNegocio: companySettings?.tradeName || companySettings?.businessName || '',
+      telefono: motorista?.phone || '',
+    })
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
   const handlePrintPDF = async (delivery) => {
     try {
       await previewDeliveryPDF(delivery, companySettings)
@@ -508,6 +507,7 @@ export default function Envios() {
           onMarkAsPaid={handleMarkAsPaid}
           onPrintPDF={handlePrintPDF}
           onPrintTicket={handlePrintTicket}
+          onShareWhatsApp={handleShareWhatsApp}
           stats={stats}
         />
       )}
@@ -667,8 +667,13 @@ function NewDeliveryModal({ isOpen, onClose, motoristas, onSuccess }) {
         orderId: inv.id,
         orderNumber: inv.serie ? `${inv.serie}-${inv.number}` : (inv.number || ''),
         customerName: inv.customer?.name || inv.customerName || '',
+        // Sin el teléfono, el repartidor no puede avisar que ya llegó.
+        customerPhone: inv.customer?.phone || inv.customerPhone || '',
         customerAddress: deliveryAddress,
         customerCoords: coordsDelComprobante(inv),
+        // Qué lleva, congelado: si después editan la venta, el repartidor ya
+        // salió con esta lista.
+        items: resumirItemsParaEnvio(inv.items),
         amount: inv.total || inv.amount || 0,
         deliveryFee: parseFloat(deliveryFee) || 0,
         paymentMethod: inv.paymentMethod || inv.metodoPago || 'cash',
@@ -887,7 +892,7 @@ function NewDeliveryModal({ isOpen, onClose, motoristas, onSuccess }) {
 // ============================================================
 // Tab 1: Envíos (Principal)
 // ============================================================
-function TabEnvios({ deliveries, loading, filters, setFilters, motoristas, onSearch, onStatusChange, onMarkAsPaid, onPrintPDF, onPrintTicket, stats }) {
+function TabEnvios({ deliveries, loading, filters, setFilters, motoristas, onSearch, onStatusChange, onMarkAsPaid, onPrintPDF, onPrintTicket, onShareWhatsApp, stats }) {
   const handleFilterChange = (e) => {
     const { name, value } = e.target
     setFilters(prev => ({ ...prev, [name]: value }))
@@ -1008,102 +1013,80 @@ function TabEnvios({ deliveries, loading, filters, setFilters, motoristas, onSea
             </div>
           ) : (
             <>
-              {/* Vista de tarjetas para móvil */}
-              <div className="lg:hidden divide-y divide-gray-100">
+              {/* Vista de tarjetas para móvil y tablet */}
+              <div className="xl:hidden divide-y divide-gray-100">
                 {deliveries.map((d) => {
                   const nextStatuses = DELIVERY_STATUS_FLOW[d.status] || []
+                  const urlMapa = enlaceMapa(d)
                   return (
-                    <div key={d.id} className="py-3">
-                      {/* Fila 1: Factura + Monto + Imprimir */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-medium text-primary-600">{d.orderNumber || '-'}</span>
-                          <Badge variant="default" className="text-xs">
-                            {PAYMENT_METHOD_LABELS[d.paymentMethod] || d.paymentMethod}
-                          </Badge>
-                          {d.paymentStatus === 'pending' ? (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); onMarkAsPaid(d) }}
-                              title="Marcar como cobrado"
-                            >
-                              <Badge variant="warning" className="text-xs cursor-pointer hover:bg-green-100 hover:text-green-700 transition-colors">
-                                $ Por cobrar
-                              </Badge>
-                            </button>
-                          ) : (
-                            <Badge variant="success" className="text-xs">
-                              Pagado
-                            </Badge>
-                          )}
+                    <div key={d.id} className="py-4 space-y-3">
+                      {/* Cabecera: qué envío es y cuánto */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-mono font-medium text-primary-600 truncate">{d.orderNumber || '-'}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {d.createdAt?.toDate
+                              ? d.createdAt.toDate().toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })
+                              : '-'}
+                          </p>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <span className="font-semibold mr-1">S/ {(d.amount || 0).toFixed(2)}</span>
-                          <button
-                            onClick={() => onPrintPDF(d)}
-                            className="p-1.5 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors"
-                            title="Descargar PDF"
-                          >
-                            <FileText className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => onPrintTicket(d)}
-                            className="p-1.5 text-gray-500 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors"
-                            title="Imprimir ticket"
-                          >
-                            <Receipt className="w-4 h-4" />
-                          </button>
+                        <div className="text-right shrink-0">
+                          <p className="font-semibold text-gray-900">S/ {(d.amount || 0).toFixed(2)}</p>
+                          <div className="flex items-center justify-end gap-1.5 mt-1">
+                            <span className="text-xs text-gray-500">
+                              {PAYMENT_METHOD_LABELS[d.paymentMethod] || d.paymentMethod}
+                            </span>
+                            {d.paymentStatus === 'pending' ? (
+                              <button onClick={(e) => { e.stopPropagation(); onMarkAsPaid(d) }} title="Marcar como cobrado">
+                                <Badge variant="warning" className="text-xs cursor-pointer hover:bg-green-100 hover:text-green-700 transition-colors">
+                                  Por cobrar
+                                </Badge>
+                              </button>
+                            ) : (
+                              <Badge variant="success" className="text-xs">Pagado</Badge>
+                            )}
+                          </div>
                         </div>
                       </div>
 
-                      {/* Fila 2: Cliente + Motorista */}
-                      <div className="flex items-center gap-3 mt-1.5 text-sm text-gray-600">
-                        <span className="truncate flex-1">{d.customerName || 'Sin cliente'}</span>
-                        <span className="flex items-center gap-1 text-blue-600 flex-shrink-0">
-                          <Bike className="w-3.5 h-3.5" />
-                          {d.motoristaName || '-'}
-                        </span>
-                      </div>
-
-                      {/* Fila 2b: Dirección — se toca y abre el mapa. Es lo que
-                          el repartidor necesita del celular. */}
-                      {(d.customerAddress || d.customerCoords) && (() => {
-                        const url = enlaceMapa(d)
-                        return url ? (
+                      {/* A dónde va y con quién */}
+                      <div className="space-y-1.5 text-sm">
+                        <p className="text-gray-900 truncate">{d.customerName || 'Sin cliente'}</p>
+                        {urlMapa && (
                           <a
-                            href={url}
+                            href={urlMapa}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="mt-1.5 flex items-start gap-1.5 text-sm text-primary-600 hover:underline"
+                            className="flex items-start gap-1.5 text-primary-600 hover:underline"
                           >
-                            <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                            <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
                             <span className="break-words">
                               {d.customerAddress || 'Ver ubicación en el mapa'}
                               {d.customerCoords && <span className="text-xs text-gray-500"> · ubicación exacta</span>}
                             </span>
                           </a>
-                        ) : null
-                      })()}
+                        )}
+                        <p className="flex items-center gap-1.5 text-blue-600">
+                          <Bike className="w-4 h-4 shrink-0" />
+                          <span className="truncate">{d.motoristaName || 'Sin repartidor'}</span>
+                        </p>
+                      </div>
 
-                      {/* Fila 3: Fecha + Estado */}
-                      <div className="flex items-center justify-between mt-2">
-                        <span className="text-xs text-gray-500">
-                          {d.createdAt?.toDate
-                            ? d.createdAt.toDate().toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })
-                            : '-'}
-                        </span>
+                      {/* Estado y acciones, con espacio para el dedo */}
+                      <div className="flex items-center justify-between gap-2">
                         {nextStatuses.length > 0 ? (
                           <select
                             value={d.status}
                             onChange={(e) => onStatusChange(d, e.target.value)}
-                            className={`text-xs px-2 py-1 border rounded font-medium cursor-pointer ${
+                            className={`text-sm px-2.5 py-1.5 border rounded font-medium cursor-pointer ${
                               d.status === 'assigned' ? 'border-yellow-300 bg-yellow-50 text-yellow-700'
                               : d.status === 'in_transit' ? 'border-blue-300 bg-blue-50 text-blue-700'
                               : 'border-gray-300 bg-white text-gray-700'
                             }`}
                           >
                             <option value={d.status}>{DELIVERY_STATUS_LABELS[d.status]}</option>
-                            {nextStatuses.map(s => (
-                              <option key={s} value={s}>{DELIVERY_STATUS_LABELS[s]}</option>
+                            {nextStatuses.map(st => (
+                              <option key={st} value={st}>{DELIVERY_STATUS_LABELS[st]}</option>
                             ))}
                           </select>
                         ) : (
@@ -1113,30 +1096,50 @@ function TabEnvios({ deliveries, loading, filters, setFilters, motoristas, onSea
                               : d.status === 'cancelled' ? 'destructive'
                               : 'default'
                             }
-                            className="text-xs"
                           >
                             {DELIVERY_STATUS_LABELS[d.status] || d.status}
                           </Badge>
                         )}
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => onShareWhatsApp(d)}
+                            className="p-2 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                            title="Enviar los datos por WhatsApp"
+                          >
+                            <MessageCircle className="w-5 h-5" />
+                          </button>
+                          <button
+                            onClick={() => onPrintPDF(d)}
+                            className="p-2 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                            title="Descargar PDF"
+                          >
+                            <FileText className="w-5 h-5" />
+                          </button>
+                          <button
+                            onClick={() => onPrintTicket(d)}
+                            className="p-2 text-gray-500 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                            title="Imprimir ticket"
+                          >
+                            <Receipt className="w-5 h-5" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )
                 })}
               </div>
 
-              {/* Tabla para desktop */}
-              <div className="hidden lg:block overflow-x-auto">
+              {/* Tabla para escritorio. Sin overflow-x-auto propio: Table ya trae
+                  el suyo, y encimarle otro era la barra de scroll que aparecia
+                  abajo aunque la fila entrara. */}
+              <div className="hidden xl:block">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Fecha/Hora</TableHead>
-                      <TableHead>Factura #</TableHead>
-                      <TableHead>Motorista</TableHead>
-                      <TableHead>Cliente</TableHead>
-                      <TableHead>Dirección</TableHead>
+                      <TableHead>Envío</TableHead>
+                      <TableHead>Cliente y dirección</TableHead>
+                      <TableHead>Repartidor</TableHead>
                       <TableHead className="text-right">Monto</TableHead>
-                      <TableHead>Método Pago</TableHead>
-                      <TableHead>Pago</TableHead>
                       <TableHead>Estado</TableHead>
                       <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
@@ -1144,58 +1147,66 @@ function TabEnvios({ deliveries, loading, filters, setFilters, motoristas, onSea
                   <TableBody>
                     {deliveries.map((d) => {
                       const nextStatuses = DELIVERY_STATUS_FLOW[d.status] || []
+                      const urlMapa = enlaceMapa(d)
                       return (
                         <TableRow key={d.id}>
-                          <TableCell className="text-sm text-gray-600">
-                            {d.createdAt?.toDate
-                              ? d.createdAt.toDate().toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })
-                              : '-'}
-                          </TableCell>
-                          <TableCell className="font-mono">{d.orderNumber || '-'}</TableCell>
-                          <TableCell className="font-medium">{d.motoristaName || '-'}</TableCell>
-                          <TableCell>{d.customerName || '-'}</TableCell>
-                          <TableCell className="max-w-xs">
-                            {(() => {
-                              const url = enlaceMapa(d)
-                              if (!url) return <span className="text-gray-400">-</span>
-                              return (
-                                <a
-                                  href={url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex items-start gap-1.5 text-sm text-primary-600 hover:underline"
-                                  title={d.customerCoords ? 'Abrir la ubicación exacta en Google Maps' : 'Buscar la dirección en Google Maps'}
-                                >
-                                  <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                                  <span className="truncate">{d.customerAddress || 'Ver ubicación'}</span>
-                                </a>
-                              )
-                            })()}
-                          </TableCell>
-                          <TableCell className="text-right font-semibold">
-                            S/ {(d.amount || 0).toFixed(2)}
-                          </TableCell>
+                          {/* Número y fecha: se leen juntos, ocupaban dos columnas */}
                           <TableCell>
-                            <Badge variant="default" className="w-fit">
-                              {PAYMENT_METHOD_LABELS[d.paymentMethod] || d.paymentMethod}
-                            </Badge>
+                            <p className="font-mono font-medium text-gray-900">{d.orderNumber || '-'}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {d.createdAt?.toDate
+                                ? d.createdAt.toDate().toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })
+                                : '-'}
+                            </p>
                           </TableCell>
-                          <TableCell>
-                            {d.paymentStatus === 'pending' ? (
-                              <button
-                                onClick={() => onMarkAsPaid(d)}
-                                title="Marcar como cobrado"
+
+                          {/* Cliente con su dirección debajo: es un solo dato para
+                              quien despacha, no dos columnas separadas */}
+                          <TableCell className="max-w-sm">
+                            <p className="text-gray-900 truncate">{d.customerName || '-'}</p>
+                            {urlMapa ? (
+                              <a
+                                href={urlMapa}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-start gap-1.5 text-xs text-primary-600 hover:underline mt-0.5"
+                                title={d.customerCoords ? 'Abrir la ubicación exacta en Google Maps' : 'Buscar la dirección en Google Maps'}
                               >
-                                <Badge variant="warning" className="w-fit cursor-pointer hover:bg-green-100 hover:text-green-700 transition-colors">
-                                  $ Por cobrar
-                                </Badge>
-                              </button>
+                                <MapPin className="w-3.5 h-3.5 mt-px shrink-0" />
+                                <span className="truncate">{d.customerAddress || 'Ver ubicación'}</span>
+                              </a>
                             ) : (
-                              <Badge variant="success" className="w-fit">
-                                Pagado
-                              </Badge>
+                              <span className="text-xs text-gray-400">Sin dirección</span>
                             )}
                           </TableCell>
+
+                          <TableCell>
+                            <span className="flex items-center gap-1.5 text-sm text-gray-700">
+                              <Bike className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                              <span className="truncate">{d.motoristaName || '-'}</span>
+                            </span>
+                          </TableCell>
+
+                          {/* Cuánto, cómo se paga y si ya está cobrado: eran tres
+                              columnas para responder una sola pregunta */}
+                          <TableCell className="text-right whitespace-nowrap">
+                            <p className="font-semibold text-gray-900">S/ {(d.amount || 0).toFixed(2)}</p>
+                            <div className="flex items-center justify-end gap-1.5 mt-1">
+                              <span className="text-xs text-gray-500">
+                                {PAYMENT_METHOD_LABELS[d.paymentMethod] || d.paymentMethod}
+                              </span>
+                              {d.paymentStatus === 'pending' ? (
+                                <button onClick={() => onMarkAsPaid(d)} title="Marcar como cobrado">
+                                  <Badge variant="warning" className="text-xs cursor-pointer hover:bg-green-100 hover:text-green-700 transition-colors">
+                                    Por cobrar
+                                  </Badge>
+                                </button>
+                              ) : (
+                                <Badge variant="success" className="text-xs">Pagado</Badge>
+                              )}
+                            </div>
+                          </TableCell>
+
                           <TableCell>
                             {nextStatuses.length > 0 ? (
                               <select
@@ -1208,8 +1219,8 @@ function TabEnvios({ deliveries, loading, filters, setFilters, motoristas, onSea
                                 }`}
                               >
                                 <option value={d.status}>{DELIVERY_STATUS_LABELS[d.status]}</option>
-                                {nextStatuses.map(s => (
-                                  <option key={s} value={s}>{DELIVERY_STATUS_LABELS[s]}</option>
+                                {nextStatuses.map(st => (
+                                  <option key={st} value={st}>{DELIVERY_STATUS_LABELS[st]}</option>
                                 ))}
                               </select>
                             ) : (
@@ -1225,8 +1236,16 @@ function TabEnvios({ deliveries, loading, filters, setFilters, motoristas, onSea
                               </Badge>
                             )}
                           </TableCell>
+
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => onShareWhatsApp(d)}
+                                className="p-1.5 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
+                                title="Enviar los datos por WhatsApp"
+                              >
+                                <MessageCircle className="w-4 h-4" />
+                              </button>
                               <button
                                 onClick={() => onPrintPDF(d)}
                                 className="p-1.5 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors"

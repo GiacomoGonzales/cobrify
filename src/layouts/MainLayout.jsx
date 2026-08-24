@@ -9,6 +9,7 @@ import { db } from '@/lib/firebase'
 import { getVendedor } from '@/services/vendedorService'
 import { getCompanySettings } from '@/services/firestoreService'
 import { createDeliveryRecord } from '@/services/motoristaService'
+import { resumirItemsParaEnvio } from '@/utils/deliveryShare'
 import Sidebar from '@/components/Sidebar'
 import Navbar from '@/components/Navbar'
 import UpdateBanner from '@/components/UpdateBanner'
@@ -200,6 +201,7 @@ export default function MainLayout() {
               customerName: order.customerName || '',
               customerAddress: order.customerAddress || '',
               customerPhone: order.customerPhone || '',
+              items: resumirItemsParaEnvio(order.items),
               amount: (order.items || []).reduce((sum, i) => sum + (i.price || 0) * (i.quantity || 1), 0),
               deliveryFee: order.deliveryFee || 0,
               paymentMethod: order.paymentMethod || 'cash',

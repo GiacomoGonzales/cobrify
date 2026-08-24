@@ -6,7 +6,7 @@
  */
 export default {
   id: 'envios',
-  actualizado: '19/08/2026',
+  actualizado: '24/08/2026',
   intro:
     'Acá se reparte: a quién le tocó cada entrega, dónde queda, cuánto tiene que cobrar y cuánto rindió al final del día.',
 
@@ -57,6 +57,29 @@ export default {
         {
           type: 'ojo',
           text: 'La ubicación exacta solo viaja en las ventas que **nacieron de un pedido del catálogo**. Las ventas cargadas a mano en el Punto de Venta llevan la dirección escrita, no el punto en el mapa.',
+        },
+      ],
+    },
+
+    {
+      id: 'whatsapp',
+      title: 'Mandarle el envío al repartidor por WhatsApp',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'En cada envío de la lista hay un botón de **WhatsApp**. Lo tocas y se abre el chat con el mensaje ya escrito: a nombre de quién va, su teléfono, la dirección con el **enlace de Google Maps**, qué lleva el pedido y cuánto tiene que cobrar.',
+        },
+        {
+          type: 'texto',
+          text: 'El mensaje sale dirigido al **repartidor asignado**, usando el teléfono de su ficha en la pestaña Motoristas. Si no tiene teléfono cargado, WhatsApp te pregunta a quién mandárselo — así también puedes reenviárselo al cliente o a otra persona.',
+        },
+        {
+          type: 'consejo',
+          text: 'El repartidor toca el enlace del mapa desde su celular y le arranca la navegación. No necesita entrar al sistema ni tener usuario.',
+        },
+        {
+          type: 'ojo',
+          text: 'Lo que lleva el pedido se guarda **al crear el envío**. Si después editas la venta, el envío conserva la lista con la que salió el repartidor. Los envíos creados antes de esta función no tienen el detalle: el mensaje sale igual, pero sin la lista de productos.',
         },
       ],
     },

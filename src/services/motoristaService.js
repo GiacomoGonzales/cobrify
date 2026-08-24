@@ -250,8 +250,14 @@ export const createDeliveryRecord = async (businessId, data) => {
     const newDelivery = {
       motoristaId: data.motoristaId,
       motoristaName: data.motoristaName || '',
+      // La página de Envíos ya lo enviaba, pero se descartaba acá: la guía en
+      // PDF imprime el código del repartidor y salía siempre vacío.
+      motoristaCode: data.motoristaCode || '',
       orderId: data.orderId || '',
       orderNumber: data.orderNumber || '',
+      // Qué lleva el pedido, congelado al asignarlo: es lo que se le comparte
+      // al repartidor por WhatsApp. [{ name, quantity }]
+      items: Array.isArray(data.items) ? data.items : [],
       customerName: data.customerName || '',
       customerPhone: data.customerPhone || '',
       customerAddress: data.customerAddress || '',
