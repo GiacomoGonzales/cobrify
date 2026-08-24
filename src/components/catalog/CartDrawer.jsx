@@ -40,6 +40,8 @@ import {
   AlertCircle,
   Info,
   Mail,
+  ArrowLeft,
+  ArrowRight,
 } from 'lucide-react'
 
 // Tipos de orden para restaurante
@@ -222,6 +224,11 @@ export default function CartDrawer({
       .catalog-cart-dark .bg-red-50 { background-color: rgba(239,68,68,0.12); }
     `}</style>
   ) : null
+  // Paso del drawer (port shopifree): 'carrito' (items + total + cupon) ->
+  // 'datos' (formulario del pedido con resumen compacto). El paso 3 es la
+  // pantalla de exito de siempre, ahora con la lista de lo pedido.
+  const [paso, setPaso] = useState('carrito')
+  useEffect(() => { if (isOpen) setPaso('carrito') }, [isOpen])
   const [couponInput, setCouponInput] = useState('')
   const [appliedCoupon, setAppliedCoupon] = useState(null)
   const [validatingCoupon, setValidatingCoupon] = useState(false)
@@ -769,6 +776,16 @@ export default function CartDrawer({
               {activeTableOrder && orderType === 'dine_in' ? 'Los productos se agregaron a la orden de tu mesa' : 'Tu pedido ha sido recibido'}
             </p>
             <div className="text-4xl font-bold mb-6" style={{ color: getCatalogAccent(business) }}>{orderNumber}</div>
+            {/* Resumen de lo pedido (paso 3 del flujo carrito -> pedir -> resumen) */}
+            {orderConfirmItems.length > 0 && (
+              <div className="w-full max-w-xs mx-auto text-left rounded-xl p-4 mb-6 space-y-1 max-h-48 overflow-y-auto catalog-scrollbar" style={{ backgroundColor: 'var(--ct-surface-hover, #F9FAFB)' }}>
+                {orderConfirmItems.map((item, idx) => (
+                  <p key={idx} className="text-sm text-gray-600 truncate">
+                    {formatQty(item.quantity)} × {item.name}
+                  </p>
+                ))}
+              </div>
+            )}
             <p className="text-sm text-gray-500 mb-8">
               {orderType === 'dine_in'
                 ? `Mesa ${tableNumber} - Te llevaremos tu pedido pronto`
@@ -877,12 +894,26 @@ export default function CartDrawer({
         <div className="flex flex-col h-full">
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b">
-            <div className="flex items-center gap-3">
-              <ShoppingBag className="w-6 h-6" />
-              <h2 className="text-xl font-bold">{isRestaurantMenu ? 'Tu pedido' : 'Tu carrito'}</h2>
-              <span className="bg-gray-100 px-2 py-0.5 rounded-full text-sm">
-                {cart.reduce((sum, item) => sum + item.quantity, 0)}
-              </span>
+            <div className="flex items-center gap-3 min-w-0">
+              {paso === 'datos' ? (
+                <button
+                  onClick={() => setPaso('carrito')}
+                  className="w-10 h-10 -ml-2 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors flex-shrink-0"
+                  aria-label="Volver al carrito"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+              ) : (
+                <ShoppingBag className="w-6 h-6" />
+              )}
+              <h2 className="text-xl font-bold truncate">
+                {paso === 'datos' ? 'Completa tu pedido' : (isRestaurantMenu ? 'Tu pedido' : 'Tu carrito')}
+              </h2>
+              {paso === 'carrito' && (
+                <span className="bg-gray-100 px-2 py-0.5 rounded-full text-sm">
+                  {cart.reduce((sum, item) => sum + item.quantity, 0)}
+                </span>
+              )}
             </div>
             <button
               onClick={onClose}
@@ -892,7 +923,8 @@ export default function CartDrawer({
             </button>
           </div>
 
-          {/* Items */}
+          {/* Items (solo en el paso carrito) */}
+          {paso === 'carrito' && (
           <div className="flex-1 overflow-y-auto catalog-scrollbar p-6">
             {cart.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-gray-400">
@@ -985,9 +1017,10 @@ export default function CartDrawer({
               </div>
             )}
           </div>
+          )}
 
           {/* Footer */}
-          {cart.length > 0 && (
+          {cart.length > 0 && paso === 'carrito' && (
             <div className="border-t flex flex-col max-h-[60vh]">
             <div className="flex-1 overflow-y-auto catalog-scrollbar p-6 pb-2 space-y-4">
               {showPrices && (
@@ -1049,6 +1082,60 @@ export default function CartDrawer({
                   </div>
                 )
               )}
+
+            </div>
+
+              {/* CTA del paso carrito: continuar al formulario del pedido
+                  (o WhatsApp directo si el negocio no recibe pedidos online) */}
+              <div className="px-6 pb-6 pt-3 space-y-3 flex-shrink-0">
+                {(isRestaurantMenu || business?.catalogOnlineOrders !== false) ? (
+                  <button
+                    onClick={() => setPaso('datos')}
+                    className="w-full py-4 text-white rounded-2xl font-semibold text-lg transition-opacity hover:opacity-80 flex items-center justify-center gap-2"
+                    style={{ backgroundColor: getCatalogAccent(business) }}
+                  >
+                    Continuar con el pedido
+                    <ArrowRight className="w-5 h-5" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => onCheckout(appliedCoupon ? { ...appliedCoupon, discount: couponDiscountInCcy } : null)}
+                    className="w-full py-4 text-white rounded-2xl font-semibold text-lg transition-opacity hover:opacity-80 flex items-center justify-center gap-2"
+                    style={{ backgroundColor: getCatalogAccent(business) }}
+                  >
+                    <MessageCircle className="w-5 h-5" />
+                    Hacer pedido por WhatsApp
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ===== PASO DATOS (port shopifree: carrito -> pedir -> resumen).
+              El formulario ocupa todo el alto del drawer, con un resumen
+              compacto arriba y el boton de enviar fijo abajo. ===== */}
+          {cart.length > 0 && paso === 'datos' && (
+            <>
+              <div className="flex-1 overflow-y-auto catalog-scrollbar p-6 space-y-4">
+                {/* Resumen compacto: que y cuanto; para editar se vuelve con
+                    la flecha de la cabecera */}
+                <div className="rounded-xl p-4 space-y-1" style={{ backgroundColor: 'var(--ct-surface-hover, #F9FAFB)' }}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm text-gray-600">
+                      {cart.reduce((sum, item) => sum + item.quantity, 0)} producto(s)
+                    </span>
+                    {showPrices && (
+                      <span className="font-bold">
+                        {formatCurrency(appliedCoupon ? totalConCupon : totalInCatalogCcy, catalogCurrency)}
+                      </span>
+                    )}
+                  </div>
+                  {appliedCoupon && (
+                    <p className="text-xs text-green-600">
+                      Cupón {appliedCoupon.id} aplicado (− {formatCurrency(couponDiscountInCcy, catalogCurrency)})
+                    </p>
+                  )}
+                </div>
 
               {/* Opciones de pedido (restaurante o tienda virtual retail) */}
               {(isRestaurantMenu || business?.catalogOnlineOrders !== false) && (
@@ -1269,12 +1356,10 @@ export default function CartDrawer({
                   )}
                 </div>
               )}
+              </div>
 
-            </div>
-
-              {/* Botón de checkout - fijo abajo */}
-              <div className="px-6 pb-6 pt-3 space-y-3 flex-shrink-0">
-              {(isRestaurantMenu || business?.catalogOnlineOrders !== false) ? (
+              {/* Boton de enviar, fijo abajo */}
+              <div className="px-6 pb-6 pt-3 space-y-3 flex-shrink-0 border-t">
                 <button
                   onClick={handleRestaurantOrder}
                   disabled={submitting}
@@ -1293,24 +1378,13 @@ export default function CartDrawer({
                     </>
                   )}
                 </button>
-              ) : (
-                <button
-                  onClick={() => onCheckout(appliedCoupon ? { ...appliedCoupon, discount: couponDiscountInCcy } : null)}
-                  className="w-full py-4 text-white rounded-2xl font-semibold text-lg transition-opacity hover:opacity-80 flex items-center justify-center gap-2"
-                  style={{ backgroundColor: getCatalogAccent(business) }}
-                >
-                  <MessageCircle className="w-5 h-5" />
-                  Hacer pedido por WhatsApp
-                </button>
-              )}
-
-              <p className="text-center text-sm text-gray-500">
-                {isRestaurantMenu
-                  ? 'Tu pedido llegará directamente a cocina'
-                  : 'Tu pedido llegará a la tienda. Te contactaremos para confirmar.'}
-              </p>
+                <p className="text-center text-sm text-gray-500">
+                  {isRestaurantMenu
+                    ? 'Tu pedido llegará directamente a cocina'
+                    : 'Tu pedido llegará a la tienda. Te contactaremos para confirmar.'}
+                </p>
               </div>
-            </div>
+            </>
           )}
         </div>
       </div>
