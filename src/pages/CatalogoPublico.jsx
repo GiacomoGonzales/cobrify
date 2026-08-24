@@ -746,13 +746,25 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // 'sections' (diseño estilo carta de restaurante) agrupa por categoría. El
   // flag viejo catalogGroupByCategory se sigue respetando: 40 tiendas lo
   // tenían activo antes de que esto fuera un diseño más del selector.
-  const groupByCategory = business?.catalogLayout === 'sections'
+  // Agrupar por categoria solo tiene sentido si HAY categorias con productos.
+  // Sin esta guarda, un negocio sin categorias que elegia un diseno agrupado
+  // veia su tienda VACIA: las secciones no pintaban (no hay categorias) y la
+  // lista completa quedaba oculta por onlyCarousels. Le paso a COCISEL, que
+  // tiene 13 productos y ninguna categoria (24-ago-2026).
+  const hayCategoriasConProductos = rootCategories.length > 0 && rootCategories.some(raiz => {
+    // Cuentan los productos de la raiz y los de sus subcategorias, que es lo
+    // mismo que agrupa la vista de secciones.
+    const idsDeLaRama = [raiz.id, ...categories.filter(c => c.parentId === raiz.id).map(c => c.id)]
+    return filteredProducts.some(p => idsDeLaRama.includes(p.category))
+  })
+  const pideAgrupar = business?.catalogLayout === 'sections'
     || business?.catalogLayout === 'sections-grid'
     || business?.catalogGroupByCategory === true
+  const groupByCategory = pideAgrupar && hayCategoriasConProductos
   // 'sections-grid': cada categoria muestra TODOS sus productos en grilla,
   // una debajo de otra — sin scroll horizontal y sin la lista repetida al
   // final. 'sections' (con carrusel) sigue existiendo.
-  const seccionesEnGrilla = business?.catalogLayout === 'sections-grid'
+  const seccionesEnGrilla = groupByCategory && business?.catalogLayout === 'sections-grid'
   // Solo aplica si también está activo groupByCategory.
   // Oculta el botón "Todos" y la lista flat al final → fuerza a entrar por categoría.
   // Sin lista completa al final: en 'sections-grid' ya se mostraron todos los
