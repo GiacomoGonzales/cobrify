@@ -247,8 +247,9 @@ export const CATALOG_THEMES = {
       cardShadowEffect: 'shadow-xl hover:shadow-2xl shadow-black/40',
       productNameClass: 'font-display text-base tracking-wider uppercase',
       priceClass: 'inline-block px-2.5 py-0.5 rounded-full bg-white text-black text-xs font-bold tracking-wide',
-      detailNameClass: 'font-display text-2xl tracking-wider uppercase text-gray-900',
-      detailPriceClass: 'text-3xl font-bold text-gray-900',
+      // Drawer OSCURO (port shopifree): el detalle vive sobre surface #1A1A20
+      detailNameClass: 'font-display text-2xl tracking-wider uppercase text-white',
+      detailPriceClass: 'text-3xl font-bold text-white',
       fontWrapper: 'font-sans',
     },
   },

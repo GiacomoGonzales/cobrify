@@ -8,6 +8,7 @@ import { getCatalogMinQty, formatCurrency } from '@/lib/utils'
 import { convertFromBase } from '@/utils/currency'
 import { CatalogDetailImage } from '@/components/catalog/CatalogImages'
 import { getCatalogAccent } from '@/themes/catalogThemes'
+import { useCatalogTheme } from '@/components/catalog/CatalogThemeProvider'
 import {
   getShortUnitLabel,
   formatQty,
@@ -41,6 +42,16 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
     return Number(convertFromBase(n, 'USD', catalogExchangeRate || 1).toFixed(2))
   }
   const fmtCatalog = (priceInPen) => formatCurrency(toCatalogDisplay(priceInPen), catalogCurrency)
+
+  // Tokens del tema (port shopifree): el drawer se pinta con la superficie
+  // del tema — en bold es OSCURO como el resto del catalogo (antes era blanco
+  // fijo). OJO: hook ANTES del early return de abajo (regla de hooks).
+  const { tokens } = useCatalogTheme()
+  const esOscuro = !!tokens.effects.darkMode
+  const bordeOpcion = esOscuro ? 'border-gray-700 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'
+  const bordeRadio = esOscuro ? 'border-gray-600' : 'border-gray-300'
+  const hoverSuave = esOscuro ? 'hover:bg-white/5' : 'hover:bg-gray-50'
+  const grisDeshab = esOscuro ? '#4B5563' : '#D1D5DB'
   // Función original con firma inalterada para minimizar diff (ver llamadas
   // existentes `S/ X.toFixed(2)` → fmtCatalog(X)).
   const showPrices = globalShowPrices && !product?.catalogHidePrice
@@ -175,6 +186,16 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
   }
 
   const hasVariants = product.hasVariants && product.variants?.length > 0
+  // Badge -N% sobre la galeria (paridad shopifree): mismo criterio que las
+  // tarjetas (comparacion > precio, sin variantes, >=5%).
+  const discountPct = (() => {
+    if (!showPrices) return null
+    const compare = Number(product?.catalogComparePrice) || 0
+    const price = Number(product?.price) || 0
+    if (!(compare > 0) || !(price > 0) || compare <= price || hasVariants) return null
+    const pct = Math.round((1 - price / compare) * 100)
+    return pct >= 5 ? pct : null
+  })()
 
   // Precios disponibles (mayorista, VIP, etc.) — para variantes, mostrar precios de la variante seleccionada
   const availablePrices = (hasVariants && selectedVariant)
@@ -328,14 +349,17 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
       {/* Drawer de producto (A2 del rediseño): pantalla completa en móvil,
           panel lateral derecho en desktop. El contenido scrollea adentro y el
           CTA queda siempre visible abajo. */}
-      <div className="catalog-drawer-panel absolute inset-0 md:inset-y-0 md:left-auto md:right-0 w-full md:max-w-md bg-white shadow-2xl flex flex-col">
+      <div
+        className="catalog-drawer-panel absolute inset-0 md:inset-y-0 md:left-auto md:right-0 w-full md:max-w-md shadow-2xl flex flex-col"
+        style={{ backgroundColor: tokens.colors.surface, color: tokens.colors.text }}
+      >
         {/* Botón cerrar flotante (fijo al panel: no se va con el scroll) */}
         <button
           onClick={onClose}
-          className="absolute right-4 z-10 w-10 h-10 bg-white/90 backdrop-blur rounded-full flex items-center justify-center shadow-lg hover:bg-white transition-colors"
-          style={{ top: 'calc(env(safe-area-inset-top, 0px) + 1rem)' }}
+          className="absolute right-4 z-10 w-10 h-10 backdrop-blur rounded-full flex items-center justify-center shadow-lg transition-opacity hover:opacity-90"
+          style={{ top: 'calc(env(safe-area-inset-top, 0px) + 1rem)', backgroundColor: esOscuro ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.9)' }}
         >
-          <X className="w-5 h-5" />
+          <X className="w-5 h-5" style={{ color: esOscuro ? '#E5E7EB' : '#4B5563' }} />
         </button>
         {cartQuantity > 0 && (
           <div className="absolute left-4 z-10 text-white px-3 py-1 rounded-full text-sm font-medium" style={{ top: 'calc(env(safe-area-inset-top, 0px) + 1rem)', backgroundColor: getCatalogAccent(business) }}>
@@ -346,7 +370,7 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
         {/* Zona scrolleable: galería + información */}
         <div className="flex-1 overflow-y-auto catalog-scrollbar">
         {/* Galería (tipo Amazon): imagen grande + thumbnails */}
-        <div className="bg-gray-100">
+        <div style={{ backgroundColor: tokens.colors.surfaceHover }}>
           {/* Imagen principal cuadrada 1:1 */}
           <div className="relative aspect-square">
             {productImages.length > 0 ? (
@@ -359,20 +383,28 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
               />
             ) : (
               <div className={`w-full h-full flex items-center justify-center ${outOfStock ? 'opacity-50' : ''}`}>
-                <Package className="w-24 h-24 text-gray-300" />
+                <Package className="w-24 h-24" style={{ color: tokens.colors.border }} />
               </div>
             )}
             {outOfStock && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg tracking-wide">
-                  AGOTADO
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                <span className="px-3 py-1.5 bg-white/90 text-gray-900 text-sm font-semibold rounded-full shadow-sm">
+                  Agotado
                 </span>
               </div>
+            )}
+            {discountPct && !outOfStock && (
+              <span
+                className="absolute bottom-3 left-3 px-2.5 py-1 rounded-full text-sm font-semibold text-white shadow-sm"
+                style={{ backgroundColor: getCatalogAccent(business) }}
+              >
+                -{discountPct}%
+              </span>
             )}
           </div>
           {/* Thumbnails (solo si hay más de una) */}
           {productImages.length > 1 && (
-            <div className="px-4 py-3 flex gap-2 overflow-x-auto catalog-scrollbar bg-white">
+            <div className="px-4 py-3 flex gap-2 overflow-x-auto catalog-scrollbar" style={{ backgroundColor: tokens.colors.surface }}>
               {productImages.map((url, idx) => {
                 const isActive = idx === activeImageIdx
                 return (
@@ -383,7 +415,7 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                     className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
                       isActive
                         ? 'ring-2 ring-offset-1'
-                        : 'border-gray-200 hover:border-gray-400 opacity-70 hover:opacity-100'
+                        : `${esOscuro ? 'border-gray-700 hover:border-gray-500' : 'border-gray-200 hover:border-gray-400'} opacity-70 hover:opacity-100`
                     }`}
                     style={isActive ? { borderColor: getCatalogAccent(business) } : undefined}
                     aria-label={`Ver imagen ${idx + 1}`}
@@ -405,16 +437,13 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
           <div className="mb-4">
             <h2 className={`${detailNameClass} mb-2`}>{product.name}</h2>
             {product.description && (
-              <p className="text-gray-600 whitespace-pre-line">{product.description}</p>
+              <p className="whitespace-pre-line" style={{ color: tokens.colors.textMuted }}>{product.description}</p>
             )}
           </div>
 
           <div className="flex items-center justify-between mb-6">
             {showPrices ? (
               <div>
-                {product.catalogComparePrice > 0 && (
-                  <span className="text-sm line-through block text-gray-400">{fmtCatalog(product.catalogComparePrice)}</span>
-                )}
                 {(() => {
                   const showAllPrices = business?.catalogShowAllPrices !== false
                   // Si hay múltiples precios con selección activa (botones radio abajo), solo mostrar el precio seleccionado
@@ -423,7 +452,7 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                     return (
                       <div className="flex items-baseline gap-2">
                         <span className={detailPriceClass}>{fmtCatalog(selected.value)}</span>
-                        <span className="text-sm text-gray-500">{selected.label}</span>
+                        <span className="text-sm" style={{ color: tokens.colors.textMuted }}>{selected.label}</span>
                       </div>
                     )
                   }
@@ -434,8 +463,8 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                           const min = getCatalogMinQty(business, p.key, product)
                           return (
                             <div key={p.key} className="flex items-baseline gap-2">
-                              <span className="text-xl font-bold text-gray-900">{fmtCatalog(p.value)}</span>
-                              <span className="text-sm text-gray-500">
+                              <span className="text-xl font-bold" style={{ color: tokens.colors.text }}>{fmtCatalog(p.value)}</span>
+                              <span className="text-sm" style={{ color: tokens.colors.textMuted }}>
                                 {p.label}
                                 {p.key !== 'price1' && min > 1 && (
                                   <span className="text-xs text-gray-400 ml-1">(min. {min} un.)</span>
@@ -448,14 +477,21 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                     )
                   }
                   return (
-                    <div className={detailPriceClass}>
-                      {fmtCatalog(unitPrice)}
+                    <div className="flex items-baseline gap-3 flex-wrap">
+                      <div className={detailPriceClass}>
+                        {fmtCatalog(unitPrice)}
+                      </div>
+                      {product.catalogComparePrice > 0 && (
+                        <span className="text-xl line-through" style={{ color: tokens.colors.textMuted }}>
+                          {fmtCatalog(product.catalogComparePrice)}
+                        </span>
+                      )}
                     </div>
                   )
                 })()}
               </div>
             ) : (
-              <div className="text-lg text-gray-500">Consultar precio</div>
+              <div className="text-lg" style={{ color: tokens.colors.textMuted }}>Consultar precio</div>
             )}
             {!hasVariants && product.stock !== undefined && product.stock !== null && product.trackStock !== false && product.stock <= 0 && (
               <span className="text-sm text-red-600 bg-red-50 px-3 py-1 rounded-full font-medium">
@@ -467,7 +503,7 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
           {/* Tabla de precios por mayor — productos SIN variantes */}
           {!hasVariants && hasMultiplePrices && showPrices && business?.catalogShowAllPrices !== false && (
             <div className="mb-6">
-              <div className="rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-200">
+              <div className={`rounded-xl border overflow-hidden divide-y ${esOscuro ? 'border-white/10 divide-white/10' : 'border-gray-200 divide-gray-200'}`}>
                 {availablePrices.map((priceItem) => {
                   const isSelected = selectedPriceLevel === priceItem.key
                   return (
@@ -481,13 +517,13 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                         }
                       }}
                       className={`w-full flex items-center justify-between px-4 py-3 transition-colors ${
-                        isSelected ? '' : 'hover:bg-gray-50'
+                        isSelected ? '' : hoverSuave
                       }`}
                       style={isSelected ? { backgroundColor: `${getCatalogAccent(business)}10` } : {}}
                     >
                       <div className="flex items-center gap-3">
                         <div
-                          className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${!isSelected ? 'border-gray-300' : ''}`}
+                          className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${!isSelected ? bordeRadio : ''}`}
                           style={isSelected ? { borderColor: getCatalogAccent(business), backgroundColor: getCatalogAccent(business) } : {}}
                         >
                           {isSelected && (
@@ -496,14 +532,14 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                             </svg>
                           )}
                         </div>
-                        <span className="font-medium" style={isSelected ? { color: getCatalogAccent(business) } : { color: '#374151' }}>
+                        <span className="font-medium" style={isSelected ? { color: getCatalogAccent(business) } : { color: tokens.colors.text }}>
                           {priceItem.label}
                           {priceItem.key !== 'price1' && getCatalogMinQty(business, priceItem.key, product) > 1 && (
                             <span className="text-xs text-gray-400 ml-1.5">(desde {getCatalogMinQty(business, priceItem.key, product)} un.)</span>
                           )}
                         </span>
                       </div>
-                      <span className="font-bold" style={isSelected ? { color: getCatalogAccent(business) } : { color: '#111827' }}>
+                      <span className="font-bold" style={isSelected ? { color: getCatalogAccent(business) } : { color: tokens.colors.text }}>
                         {fmtCatalog(priceItem.value)}
                       </span>
                     </button>
@@ -523,7 +559,7 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
           {hasVariants && (
             <div className="mb-6">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-gray-900">
+                <h3 className="font-semibold" style={{ color: tokens.colors.text }}>
                   {product.variantAttributes?.map(a => a.charAt(0).toUpperCase() + a.slice(1)).join(' / ')}
                 </h3>
                 {variantError && (
@@ -550,25 +586,25 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                       disabled={outOfStock}
                       className={`flex items-center justify-between p-3 rounded-lg border-2 transition-colors ${
                         outOfStock
-                          ? 'border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed'
+                          ? (esOscuro ? 'border-white/10 bg-white/5 opacity-40 cursor-not-allowed' : 'border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed')
                           : isSelected
                             ? ''
-                            : 'border-gray-200 hover:border-gray-300'
+                            : bordeOpcion
                       }`}
                       style={isSelected && !outOfStock ? { borderColor: getCatalogAccent(business), backgroundColor: `${getCatalogAccent(business)}10` } : {}}
                     >
-                      <span className="font-medium" style={isSelected ? { color: getCatalogAccent(business) } : { color: '#374151' }}>
+                      <span className="font-medium" style={isSelected ? { color: getCatalogAccent(business) } : { color: tokens.colors.text }}>
                         {attrsLabel}
                         {outOfStock && <span className="ml-2 text-xs text-gray-400">(Agotado)</span>}
                       </span>
                       <div className="flex items-center gap-2">
                         {showPrices && (
-                          <span className="text-sm font-medium text-gray-600">
+                          <span className="text-sm font-medium" style={{ color: tokens.colors.textMuted }}>
                             {fmtCatalog(variant.price)}
                           </span>
                         )}
                         <div
-                          className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${!isSelected ? 'border-gray-300' : ''}`}
+                          className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${!isSelected ? bordeRadio : ''}`}
                           style={isSelected ? { borderColor: getCatalogAccent(business), backgroundColor: getCatalogAccent(business) } : {}}
                         >
                           {isSelected && (
@@ -589,8 +625,8 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
           {/* Tabla de precios por mayor — variantes (aparece después de seleccionar variante) */}
           {hasVariants && selectedVariant && availablePrices.length > 1 && showPrices && business?.catalogShowAllPrices !== false && (
             <div className="mb-6">
-              <h3 className="font-semibold text-gray-900 mb-3">Precios disponibles</h3>
-              <div className="rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-200">
+              <h3 className="font-semibold mb-3" style={{ color: tokens.colors.text }}>Precios disponibles</h3>
+              <div className={`rounded-xl border overflow-hidden divide-y ${esOscuro ? 'border-white/10 divide-white/10' : 'border-gray-200 divide-gray-200'}`}>
                 {availablePrices.map((priceItem) => {
                   const isSelected = selectedPriceLevel === priceItem.key
                   return (
@@ -604,13 +640,13 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                         }
                       }}
                       className={`w-full flex items-center justify-between px-4 py-3 transition-colors ${
-                        isSelected ? '' : 'hover:bg-gray-50'
+                        isSelected ? '' : hoverSuave
                       }`}
                       style={isSelected ? { backgroundColor: `${getCatalogAccent(business)}10` } : {}}
                     >
                       <div className="flex items-center gap-3">
                         <div
-                          className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${!isSelected ? 'border-gray-300' : ''}`}
+                          className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${!isSelected ? bordeRadio : ''}`}
                           style={isSelected ? { borderColor: getCatalogAccent(business), backgroundColor: getCatalogAccent(business) } : {}}
                         >
                           {isSelected && (
@@ -619,14 +655,14 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                             </svg>
                           )}
                         </div>
-                        <span className="font-medium" style={isSelected ? { color: getCatalogAccent(business) } : { color: '#374151' }}>
+                        <span className="font-medium" style={isSelected ? { color: getCatalogAccent(business) } : { color: tokens.colors.text }}>
                           {priceItem.label}
                           {priceItem.key !== 'price1' && getCatalogMinQty(business, priceItem.key, product) > 1 && (
                             <span className="text-xs text-gray-400 ml-1.5">(desde {getCatalogMinQty(business, priceItem.key, product)} un.)</span>
                           )}
                         </span>
                       </div>
-                      <span className="font-bold" style={isSelected ? { color: getCatalogAccent(business) } : { color: '#111827' }}>
+                      <span className="font-bold" style={isSelected ? { color: getCatalogAccent(business) } : { color: tokens.colors.text }}>
                         {fmtCatalog(priceItem.value)}
                       </span>
                     </button>
@@ -649,11 +685,11 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                 const modSelCount = getModSelectedCount(modifier)
                 const accentColor = getCatalogAccent(business)
                 return (
-                <div key={modifier.id} className="border rounded-xl p-4">
+                <div key={modifier.id} className="border rounded-xl p-4" style={{ borderColor: tokens.colors.border }}>
                   <div className="flex items-center justify-between mb-3">
                     <div>
-                      <h3 className="font-semibold text-gray-900">{modifier.name}</h3>
-                      <p className="text-sm text-gray-500">
+                      <h3 className="font-semibold" style={{ color: tokens.colors.text }}>{modifier.name}</h3>
+                      <p className="text-sm" style={{ color: tokens.colors.textMuted }}>
                         {modifier.required ? 'Obligatorio' : 'Opcional'}
                         {modifier.maxSelection > 1 && ` - Máx. ${modifier.maxSelection}`}
                         {modifier.allowRepeat && ' (puedes repetir)'}
@@ -679,15 +715,15 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                         return (
                           <div
                             key={option.id}
-                            className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-colors ${count > 0 ? '' : 'border-gray-200'}`}
+                            className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-colors ${count > 0 ? '' : (esOscuro ? 'border-gray-700' : 'border-gray-200')}`}
                             style={count > 0 ? { borderColor: accentColor, backgroundColor: `${accentColor}10` } : {}}
                           >
                             <div className="flex-1 min-w-0">
-                              <span className="font-medium text-sm" style={count > 0 ? { color: accentColor } : { color: '#374151' }}>
+                              <span className="font-medium text-sm" style={count > 0 ? { color: accentColor } : { color: tokens.colors.text }}>
                                 {option.name}
                               </span>
                               {showPrices && option.priceAdjustment > 0 && (
-                                <span className="text-xs text-gray-500 block">+{fmtCatalog(option.priceAdjustment)} c/u</span>
+                                <span className="text-xs block" style={{ color: tokens.colors.textMuted }}>+{fmtCatalog(option.priceAdjustment)} c/u</span>
                               )}
                             </div>
                             <div className="flex items-center gap-2 flex-shrink-0">
@@ -701,11 +737,11 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                                 onClick={() => handleRepeatDecrement(modifier.id, option.id)}
                                 disabled={count === 0}
                                 className="w-7 h-7 rounded-full flex items-center justify-center border-2 transition-all"
-                                style={count > 0 ? { borderColor: accentColor, color: accentColor } : { borderColor: '#D1D5DB', color: '#D1D5DB' }}
+                                style={count > 0 ? { borderColor: accentColor, color: accentColor } : { borderColor: grisDeshab, color: grisDeshab }}
                               >
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M5 12h14" /></svg>
                               </button>
-                              <span className="w-6 text-center text-sm font-bold" style={{ color: count > 0 ? accentColor : '#9CA3AF' }}>
+                              <span className="w-6 text-center text-sm font-bold" style={{ color: count > 0 ? accentColor : (esOscuro ? '#6B7280' : '#9CA3AF') }}>
                                 {count}
                               </span>
                               <button
@@ -713,7 +749,7 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                                 onClick={() => handleRepeatIncrement(modifier.id, option.id)}
                                 disabled={!canIncrement}
                                 className="w-7 h-7 rounded-full flex items-center justify-center border-2 transition-all"
-                                style={canIncrement ? { borderColor: accentColor, color: accentColor } : { borderColor: '#D1D5DB', color: '#D1D5DB' }}
+                                style={canIncrement ? { borderColor: accentColor, color: accentColor } : { borderColor: grisDeshab, color: grisDeshab }}
                               >
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
                               </button>
@@ -729,21 +765,21 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                           key={option.id}
                           onClick={() => handleOptionToggle(modifier.id, option.id)}
                           className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-colors ${
-                            isSelected ? '' : 'border-gray-200 hover:border-gray-300'
+                            isSelected ? '' : bordeOpcion
                           }`}
                           style={isSelected ? { borderColor: accentColor, backgroundColor: `${accentColor}10` } : {}}
                         >
                           <div className="flex-1 min-w-0">
-                            <span className="font-medium text-sm" style={isSelected ? { color: accentColor } : { color: '#374151' }}>
+                            <span className="font-medium text-sm" style={isSelected ? { color: accentColor } : { color: tokens.colors.text }}>
                               {option.name}
                             </span>
                             {showPrices && option.priceAdjustment > 0 && (
-                              <span className="text-xs text-gray-500 block">+{fmtCatalog(option.priceAdjustment)}</span>
+                              <span className="text-xs block" style={{ color: tokens.colors.textMuted }}>+{fmtCatalog(option.priceAdjustment)}</span>
                             )}
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0">
                             <div
-                              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${!isSelected ? 'border-gray-300' : ''}`}
+                              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${!isSelected ? bordeRadio : ''}`}
                               style={isSelected ? { borderColor: accentColor, backgroundColor: accentColor } : {}}
                             >
                               {isSelected && (
@@ -767,7 +803,10 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
         </div>
 
         {/* CTA fijo abajo (patrón drawer): cantidad + agregar siempre visibles */}
-        <div className="flex-shrink-0 border-t border-gray-100 bg-white px-6 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div
+          className="flex-shrink-0 border-t px-6 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+          style={{ borderColor: tokens.colors.border, backgroundColor: tokens.colors.surface }}
+        >
           {/* Selector de cantidad */}
           {(() => {
             // Productos con `allowDecimalQuantity` (ej. avena por kilo, pollo por kilo)
@@ -797,11 +836,11 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
 
             return (
               <div className="flex items-center gap-4 mb-6">
-                <span className="text-gray-600">Cantidad:</span>
+                <span style={{ color: tokens.colors.textMuted }}>Cantidad:</span>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => applyQty(quantity - step)}
-                    className="w-10 h-10 rounded-full border-2 border-gray-200 flex items-center justify-center hover:border-gray-300 transition-colors"
+                    className={`w-10 h-10 rounded-full border-2 flex items-center justify-center transition-colors ${bordeOpcion}`}
                   >
                     <Minus className="w-4 h-4" />
                   </button>
@@ -831,14 +870,14 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                         // Si quedó en 0 o vacío al perder foco, restaurar mínimo.
                         if (!quantity || quantity < minQty) applyQty(minQty)
                       }}
-                      className="w-20 text-center text-xl font-semibold border-2 border-gray-200 rounded-lg py-1 focus:border-primary-500 focus:outline-none"
+                      className={`w-20 text-center text-xl font-semibold border-2 rounded-lg py-1 focus:outline-none bg-transparent ${esOscuro ? 'border-gray-700' : 'border-gray-200'}`}
                     />
                   ) : (
                     <span className="w-12 text-center text-xl font-semibold">{quantity}</span>
                   )}
                   <button
                     onClick={() => applyQty(quantity + step)}
-                    className="w-10 h-10 rounded-full border-2 border-gray-200 flex items-center justify-center hover:border-gray-300 transition-colors"
+                    className={`w-10 h-10 rounded-full border-2 flex items-center justify-center transition-colors ${bordeOpcion}`}
                   >
                     <Plus className="w-4 h-4" />
                   </button>
