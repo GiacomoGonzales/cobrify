@@ -4,7 +4,7 @@ import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import {
+import { Check,
   Plus,
   Search,
   Edit,
@@ -73,6 +73,11 @@ const reservationSchema = z.object({
 })
 
 const STATUS_CONFIG = {
+  // Solicitud del catalogo publico: NO bloquea la habitacion hasta que el
+  // hotel la confirme. Todo el sistema (solape, ocupacion, auditoria) filtra
+  // por confirmed/checked_in, asi que una solicitud es invisible para la
+  // operacion hasta que alguien la acepta.
+  requested: { label: 'Solicitud', variant: 'warning' },
   confirmed: { label: 'Confirmada', variant: 'info' },
   checked_in: { label: 'Check-in', variant: 'success' },
   checked_out: { label: 'Check-out', variant: 'default' },
@@ -82,6 +87,7 @@ const STATUS_CONFIG = {
 
 const TABS = [
   { key: 'all', label: 'Todas' },
+  { key: 'requested', label: 'Solicitudes' },
   { key: 'confirmed', label: 'Confirmadas' },
   { key: 'checked_in', label: 'Check-in' },
   { key: 'checked_out', label: 'Check-out' },
@@ -656,6 +662,67 @@ export default function HotelReservations() {
   }
 
   // Check-in
+  /**
+   * Confirmar una solicitud llegada del catalogo. Recien ACA corre el chequeo
+   * de solape — la solicitud no bloqueo nada, asi que puede haber quedado
+   * obsoleta si el hotel reservo la habitacion por su cuenta mientras tanto.
+   * Mismo criterio que el chequeo al crear a mano (confirmed/checked_in, sin
+   * huerfanas con checkout pasado).
+   */
+  const handleConfirmRequest = async (reservation) => {
+    const todayStr = new Date().toISOString().split('T')[0]
+    const nIn = reservation.checkInDate || reservation.checkIn
+    const nOut = reservation.checkOutDate || reservation.checkOut
+    const overlap = reservations.find(r => {
+      if (r.roomId !== reservation.roomId) return false
+      if (r.status !== 'confirmed' && r.status !== 'checked_in') return false
+      if (r.pricingMode === 'hourly') return false
+      const exIn = r.checkInDate || r.checkIn
+      const exOut = r.checkOutDate || r.checkOut
+      if (!exIn || !exOut) return false
+      if (r.status === 'confirmed' && exOut < todayStr) return false
+      return nIn < exOut && nOut > exIn
+    })
+    if (overlap) {
+      toast.error(`La habitación ya está reservada del ${formatDate(overlap.checkInDate || overlap.checkIn)} al ${formatDate(overlap.checkOutDate || overlap.checkOut)}. Rechaza la solicitud o coordina otras fechas con el huésped.`)
+      return
+    }
+    setProcessingId(reservation.id)
+    try {
+      const result = await updateReservation(getBusinessId(), reservation.id, { status: 'confirmed' })
+      if (result.success) {
+        setReservations(prev => prev.map(r => r.id === reservation.id ? { ...r, status: 'confirmed' } : r))
+        toast.success(`Reserva confirmada: ${reservation.guestName}. Avísale por WhatsApp.`)
+      } else {
+        toast.error(result.error || 'No se pudo confirmar')
+      }
+    } catch (error) {
+      toast.error('No se pudo confirmar')
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
+  const handleRejectRequest = async (reservation) => {
+    setProcessingId(reservation.id)
+    try {
+      const result = await updateReservation(getBusinessId(), reservation.id, {
+        status: 'cancelled',
+        cancellationReason: 'Solicitud del catálogo rechazada por el hotel',
+      })
+      if (result.success) {
+        setReservations(prev => prev.map(r => r.id === reservation.id ? { ...r, status: 'cancelled' } : r))
+        toast.success('Solicitud rechazada')
+      } else {
+        toast.error(result.error || 'No se pudo rechazar')
+      }
+    } catch (error) {
+      toast.error('No se pudo rechazar')
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
   const handleCheckIn = async (reservation) => {
     if (isDemoMode) {
       // Simular check-in en demo
@@ -1282,6 +1349,25 @@ export default function HotelReservations() {
                         {' - '}{formatCurrency(reservation.total || 0)}
                       </span>
                       <div className="flex items-center gap-1.5">
+                        {reservation.status === 'requested' && (
+                          <>
+                            <Button
+                              size="sm"
+                              onClick={() => handleConfirmRequest(reservation)}
+                              disabled={processingId === reservation.id}
+                            >
+                              <Check className="w-3 h-3" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleRejectRequest(reservation)}
+                              disabled={processingId === reservation.id}
+                            >
+                              <X className="w-3 h-3" />
+                            </Button>
+                          </>
+                        )}
                         {reservation.status === 'confirmed' && (
                           <Button
                             size="sm"
@@ -1379,6 +1465,29 @@ export default function HotelReservations() {
                         <TableCell>
                           <div className="flex items-center gap-1.5">
                             {/* Acción primaria según estado */}
+                            {reservation.status === 'requested' && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleConfirmRequest(reservation)}
+                                  disabled={processingId === reservation.id}
+                                >
+                                  {processingId === reservation.id ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <><Check className="w-3 h-3 mr-1" /> Confirmar</>
+                                  )}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleRejectRequest(reservation)}
+                                  disabled={processingId === reservation.id}
+                                >
+                                  <X className="w-3 h-3 mr-1" /> Rechazar
+                                </Button>
+                              </>
+                            )}
                             {reservation.status === 'confirmed' && (
                               <Button
                                 size="sm"

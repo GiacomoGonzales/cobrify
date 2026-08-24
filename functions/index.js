@@ -7322,6 +7322,11 @@ export { onNewAppointment } from './notifications/onNewAppointment.js'
 // datos personales y las reglas no filtran campos) y candado anti doble
 // reserva. Ver functions/booking/publicAgenda.js.
 export { getPublicAgenda, bookPublicAppointment } from './booking/publicAgenda.js'
+export { onNewHotelReservation } from './notifications/onNewHotelReservation.js'
+// Reservas de habitaciones desde el catalogo (modo hotel). A diferencia de
+// las citas, lo que entra es una SOLICITUD que no bloquea la habitacion: el
+// hotel la confirma o rechaza desde Reservas. Ver functions/booking/publicHotel.js.
+export { getPublicHotelRooms, requestPublicHotelReservation } from './booking/publicHotel.js'
 export { onPaymentNotification } from './notifications/onPaymentNotification.js'
 
 // Import and re-export migration function

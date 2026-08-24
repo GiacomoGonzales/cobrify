@@ -75,6 +75,33 @@ export default {
         },
       ],
     },
+
+    {
+      id: 'reservas',
+      title: 'Citas y habitaciones: que reserven solos',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Además de vender productos, el catálogo puede recibir **reservas**. Ambas opciones viven en Configuración > Catálogo y están apagadas por defecto.',
+        },
+        {
+          type: 'tabla',
+          encabezados: ['Rubro', 'Qué hace', 'Cómo llega'],
+          filas: [
+            ['Veterinaria / General con agenda', 'El cliente elige un día y una hora libre y deja su nombre y teléfono.', 'La cita aparece sola en tu Agenda, ya reservada, con notificación.'],
+            ['Hotel', 'El huésped elige fechas, ve las habitaciones libres con su tarifa y pide una.', 'Te llega como SOLICITUD: no bloquea la habitación hasta que la confirmes o rechaces en Reservas.'],
+          ],
+        },
+        {
+          type: 'ojo',
+          text: 'La diferencia es a propósito: una cita ocupa media hora, pero una habitación bloqueada por alguien que nunca llega cuesta una noche entera. Por eso las citas se reservan solas y las habitaciones las apruebas tú.',
+        },
+        {
+          type: 'consejo',
+          text: 'En ningún caso el visitante ve datos de otros clientes: solo horas libres u ocupadas, y habitaciones con su tarifa.',
+        },
+      ],
+    },
   ],
 
   preguntas: [

@@ -555,6 +555,8 @@ export default function Settings() {
   const [appointmentsBooking, setAppointmentsBooking] = useState({
     enabled: false, days: [1, 2, 3, 4, 5, 6], startHour: 9, endHour: 19, stepMinutes: 30,
   })
+  // Solicitudes de reserva de habitaciones desde el catalogo (modo hotel)
+  const [hotelBooking, setHotelBooking] = useState({ enabled: false })
   const [catalogSlug, setCatalogSlug] = useState('')
   const [catalogCustomDomain, setCatalogCustomDomain] = useState('')
 
@@ -1379,6 +1381,9 @@ export default function Settings() {
         setCatalogEnabled(businessData.catalogEnabled || false)
         if (businessData.appointmentsBooking) {
           setAppointmentsBooking(prev => ({ ...prev, ...businessData.appointmentsBooking }))
+        }
+        if (businessData.hotelBooking) {
+          setHotelBooking(prev => ({ ...prev, ...businessData.hotelBooking }))
         }
         setCatalogSlug(businessData.catalogSlug || '')
         setCatalogCustomDomain(businessData.customDomain || '')
@@ -8752,6 +8757,27 @@ export default function Settings() {
                 </div>
               )}
 
+              {/* Solicitudes de reserva (modo hotel). Lo que llega del catalogo
+                  NO bloquea la habitacion: es una solicitud que se confirma o
+                  rechaza en la pantalla de Reservas. */}
+              {businessMode === 'hotel' && (
+                <div className="border-t border-gray-200 pt-6">
+                  <h3 className="text-base font-semibold text-gray-900 mb-1">Reservas de habitaciones</h3>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Deja que tus huéspedes pidan una habitación desde el catálogo, viendo fechas y tarifas. Cada solicitud te llega con una notificación y la confirmas o rechazas desde Reservas — nada se bloquea solo.
+                  </p>
+                  <SettingToggle
+                    id="opcion-hotelBookingEnabled"
+                    checked={hotelBooking.enabled}
+                    onChange={e => setHotelBooking(prev => ({ ...prev, enabled: e.target.checked }))}
+                    title="Recibir solicitudes de reserva desde el catálogo"
+                    description={hotelBooking.enabled
+                      ? 'Habilitado: en tu catálogo aparece el botón "Reservar una habitación". El huésped ve solo habitaciones y tarifas — nunca los datos de otros huéspedes. Solo tarifas por noche.'
+                      : 'Deshabilitado: las reservas solo se crean desde tu pantalla de Reservas.'}
+                  />
+                </div>
+              )}
+
               <div className="flex justify-end pt-4 border-t border-gray-200">
                 <Button
                   onClick={async () => {
@@ -8771,6 +8797,7 @@ export default function Settings() {
                       await setDoc(businessRef, {
                         catalogEnabled,
                         appointmentsBooking,
+                        hotelBooking,
                         catalogSlug: catalogSlug.toLowerCase().trim(),
                         customDomain: catalogCustomDomain.toLowerCase().trim().replace(/^www\./, '') || null,
                         catalogColor,

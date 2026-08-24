@@ -12,6 +12,7 @@ import HeroCarousel from '@/components/catalog/HeroCarousel'
 import FlashSaleBar from '@/components/catalog/FlashSaleBar'
 import TrustBadges from '@/components/catalog/TrustBadges'
 import ReservarCitaModal from '@/components/catalog/ReservarCitaModal'
+import ReservarHabitacionModal from '@/components/catalog/ReservarHabitacionModal'
 import { ProductSkeleton } from '@/components/catalog/CatalogImages'
 import {
   DAY_SHORT,
@@ -39,7 +40,7 @@ import { catalogDb as db } from '@/lib/firebase'
 import { getCatalogMinQty, formatCurrency } from '@/lib/utils'
 import { isMultiCurrencyEnabled, convertFromBase, normalizeCurrency, BASE_CURRENCY } from '@/utils/currency'
 import { getRateForDate } from '@/services/exchangeRateService'
-import { CalendarDays,
+import { BedDouble, CalendarDays,
   Search,
   ShoppingBag,
   X,
@@ -197,6 +198,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const [searchQuery, setSearchQuery] = useState('')
   // Reservas de citas desde el catalogo (veterinaria / General con agenda).
   const [showReservarCita, setShowReservarCita] = useState(false)
+  const [showReservarHabitacion, setShowReservarHabitacion] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState(null)
   const [selectedSubcategory, setSelectedSubcategory] = useState(null)
   // Menú lateral de categorías (móvil): árbol completo de categorías/subcategorías
@@ -1537,6 +1539,22 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         </div>
       )}
 
+      {/* Reservar habitacion (modo hotel). Lo que se envia es una SOLICITUD
+          que el hotel confirma — el modal lo dice sin rodeos. */}
+      {!isRestaurantMenu && business?.businessMode === 'hotel' && business?.hotelBooking?.enabled === true && (
+        <div className="max-w-7xl mx-auto px-4 mt-4">
+          <button
+            type="button"
+            onClick={() => setShowReservarHabitacion(true)}
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity"
+            style={{ backgroundColor: getCatalogAccent(business) }}
+          >
+            <BedDouble className="w-5 h-5" />
+            Reservar una habitación
+          </button>
+        </div>
+      )}
+
       {/* Observaciones del catálogo */}
       {business?.catalogObservations && (
         <div className="max-w-7xl mx-auto px-4 mt-4">
@@ -2201,6 +2219,13 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         accent={getCatalogAccent(business)}
         isOpen={showReservarCita}
         onClose={() => setShowReservarCita(false)}
+      />
+
+      <ReservarHabitacionModal
+        business={business}
+        accent={getCatalogAccent(business)}
+        isOpen={showReservarHabitacion}
+        onClose={() => setShowReservarHabitacion(false)}
       />
 
       <CartDrawer
