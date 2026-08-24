@@ -1482,9 +1482,24 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       {/* Hero / Búsqueda — carrusel (F2.2) si está activado, banner cuando hay
           portada única, clásico (gradient) si no hay nada */}
       {business?.catalogHero?.enabled && (business?.catalogHero?.slides || []).filter(s => s.imageUrl).length > 0 ? (
-        /* === CARRUSEL HERO: slides promocionales con autoplay ===
-            Con menú lateral la portada va "en tarjeta": esquinas redondeadas y
-            separada de los bordes, como en las tiendas modernas. */
+        /* === CARRUSEL HERO: slides promocionales con autoplay. Es una
+            portada con mas fotos, asi que recibe el MISMO trato que la
+            portada del tema: en 'card' (Estandar) va dentro de la tarjeta
+            redondeada con margenes; en los demas temas, a pantalla completa
+            como su portada. === */
+        themeChrome.heroCover === 'card' ? (
+          <div className={sidebarNav ? 'relative md:pt-6' : 'relative'}>
+            <div className={sidebarNav ? '' : 'max-w-7xl mx-auto px-4 pt-4'}>
+              <div className="overflow-hidden rounded-2xl md:rounded-3xl shadow-sm">
+                <HeroCarousel slides={business.catalogHero.slides.filter(s => s.imageUrl)} />
+              </div>
+              {business?.catalogWelcome && (
+                <p className={`pt-3 text-sm md:text-base ${thTextMuted}`}>{business.catalogWelcome}</p>
+              )}
+            </div>
+            {searchBarRow}
+          </div>
+        ) : (
         <div className={sidebarNav ? 'relative md:pt-6' : 'relative overflow-hidden'}>
           <div className={sidebarNav ? 'md:rounded-2xl md:overflow-hidden md:shadow-sm' : ''}>
             <HeroCarousel slides={business.catalogHero.slides.filter(s => s.imageUrl)} />
@@ -1503,6 +1518,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             </div>
           </div>
         </div>
+        )
       ) : business?.catalogCoverImage ? (
         themeChrome.heroCover === 'card' && heroVariant !== 'full-bleed' ? (
           /* === PORTADA EN TARJETA (tema claro, estilo minimal): imagen limpia
