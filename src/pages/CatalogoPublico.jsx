@@ -701,7 +701,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const themeFonts = themeFull.fonts || {}
   const themeLayout = themeFull.layout || {}
   // Variante de las píldoras de categorías: 'pills' (default) | 'underline' | 'circles'
-  const categoriesVariant = themeLayout.categories || 'pills'
+  // Default 'underline': las pastillas rellenas se veian pesadas con muchas
+  // categorias (reporte del 24-ago) — texto plano y subrayado en la activa.
+  // 'pills' sigue existiendo como variante por si un tema la pide.
+  const categoriesVariant = themeLayout.categories || 'underline'
   // Variante del hero: 'classic' | 'full-bleed' (portada alta con contenido centrado)
   const heroVariant = themeLayout.hero || 'classic'
   // Navegación en ESCRITORIO: 'top' (barra de categorías arriba, clásico) o
@@ -1670,16 +1673,16 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 que las raíz (el árbol completo vive en el menú lateral móvil). */}
             {activeSubcategories.length > 0 && (
               <CategoryScroller className="-mx-4 px-4 md:mx-0 md:px-0" innerClassName="gap-2 pb-3">
-                {/* Subcategorías con el color del catálogo (antes: azul fijo
-                    bg-primary-* que rompía la estética). Seleccionada = fondo
-                    sólido del acento + texto blanco; inactiva = tinte claro del
-                    mismo acento (~8%) con el acento como texto. */}
+                {/* Subcategorias con el MISMO lenguaje que la fila principal:
+                    texto plano y subrayado en la activa. Antes eran pastillas
+                    rellenas, y una fila de tabs sobre una fila de pastillas se
+                    veia como dos componentes distintos peleandose. */}
                 <button
                   onClick={() => setSelectedSubcategory(null)}
-                  className="px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap flex-shrink-0"
+                  className={`px-2 py-1.5 text-xs font-medium whitespace-nowrap flex-shrink-0 border-b-2 transition-colors bg-transparent ${!selectedSubcategory ? 'font-semibold' : `border-transparent ${thTextMuted}`}`}
                   style={!selectedSubcategory
-                    ? { backgroundColor: getCatalogAccent(business), color: '#fff' }
-                    : { backgroundColor: `${getCatalogAccent(business)}15`, color: getCatalogAccent(business) }}
+                    ? { borderColor: getCatalogAccent(business), color: getCatalogAccent(business) }
+                    : {}}
                 >
                   Todas
                 </button>
@@ -1687,10 +1690,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                   <button
                     key={sub.id}
                     onClick={() => setSelectedSubcategory(sub.id)}
-                    className="px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap flex-shrink-0"
+                    className={`px-2 py-1.5 text-xs font-medium whitespace-nowrap flex-shrink-0 border-b-2 transition-colors bg-transparent ${selectedSubcategory === sub.id ? 'font-semibold' : `border-transparent ${thTextMuted}`}`}
                     style={selectedSubcategory === sub.id
-                      ? { backgroundColor: getCatalogAccent(business), color: '#fff' }
-                      : { backgroundColor: `${getCatalogAccent(business)}15`, color: getCatalogAccent(business) }}
+                      ? { borderColor: getCatalogAccent(business), color: getCatalogAccent(business) }
+                      : {}}
                   >
                     {sub.name}
                   </button>

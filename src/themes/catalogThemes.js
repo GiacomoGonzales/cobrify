@@ -31,8 +31,8 @@ export const CATALOG_THEMES = {
     // heading/body son font-family CSS). null = usar las fuentes del bundle.
     fonts: { heading: null, body: null, googleFontsUrl: null },
     // Variantes de layout por sección. grid null = respeta la config del negocio.
-    // categories: 'pills' | 'underline'. card: 'classic' | 'overlay'.
-    layout: { hero: 'classic', categories: 'pills', grid: null, card: 'classic' },
+    // categories: 'underline' | 'underline'. card: 'classic' | 'overlay'.
+    layout: { hero: 'classic', categories: 'underline', grid: null, card: 'classic' },
     classes: {
       // Color base
       bg: 'bg-gray-50',
@@ -82,8 +82,8 @@ export const CATALOG_THEMES = {
     // heading/body son font-family CSS). null = usar las fuentes del bundle.
     fonts: { heading: null, body: null, googleFontsUrl: null },
     // Variantes de layout por sección. grid null = respeta la config del negocio.
-    // categories: 'pills' | 'underline'. card: 'classic' | 'overlay'.
-    layout: { hero: 'classic', categories: 'pills', grid: null, card: 'classic' },
+    // categories: 'underline' | 'underline'. card: 'classic' | 'overlay'.
+    layout: { hero: 'classic', categories: 'underline', grid: null, card: 'classic' },
     classes: {
       // Color base
       bg: 'bg-[#FFF7F8]',
@@ -132,8 +132,8 @@ export const CATALOG_THEMES = {
     // heading/body son font-family CSS). null = usar las fuentes del bundle.
     fonts: { heading: null, body: null, googleFontsUrl: null },
     // Variantes de layout por sección. grid null = respeta la config del negocio.
-    // categories: 'pills' | 'underline'. card: 'classic' | 'overlay'.
-    layout: { hero: 'classic', categories: 'pills', grid: null, card: 'classic' },
+    // categories: 'underline' | 'underline'. card: 'classic' | 'overlay'.
+    layout: { hero: 'classic', categories: 'underline', grid: null, card: 'classic' },
     classes: {
       // Color base
       bg: 'bg-[#0F0F12]',
@@ -232,7 +232,7 @@ export const CATALOG_THEMES = {
       body: "'Space Grotesk', system-ui, sans-serif",
       googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap',
     },
-    layout: { hero: 'classic', categories: 'pills', grid: null, card: 'overlay' },
+    layout: { hero: 'classic', categories: 'underline', grid: null, card: 'overlay' },
     classes: {
       bg: 'bg-[#0B0D1A]',
       card: 'bg-[#131628]',
