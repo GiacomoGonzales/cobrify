@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Edit, MapPin, Plus, Bell, Bike, ShoppingBag, RefreshCw, Wrench, Monitor, Trash2, ChevronDown, ChevronUp, DollarSign } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Edit, MapPin, Plus, Bell, Bike, ShoppingBag, RefreshCw, Wrench, Monitor, Trash2, ChevronDown, ChevronUp, DollarSign, LayoutGrid, ArrowDown, Clock, ChevronsUpDown } from 'lucide-react'
 import QRCode from 'qrcode'
 import { QRCodeSVG } from 'qrcode.react'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -601,6 +601,8 @@ export default function Settings() {
   const [uploadingHeroSlide, setUploadingHeroSlide] = useState(null) // índice del slide subiendo
   // Diseño de la grilla de productos (F2.3): masonry | grid | list
   const [catalogLayout, setCatalogLayout] = useState('masonry')
+  // Paginacion del catalogo (port shopifree): none | load-more | infinite | pages
+  const [catalogPagination, setCatalogPagination] = useState('infinite')
   // Navegación en escritorio del catálogo: 'top' (barra arriba) | 'sidebar'
   const [catalogDesktopNav, setCatalogDesktopNav] = useState('top')
   // Oferta con countdown (F2.5)
@@ -1416,6 +1418,7 @@ export default function Settings() {
         setCatalogShowStock(businessData.catalogShowStock || false)
         setCatalogCustomerAccounts(businessData.catalogCustomerAccounts !== false)
         setCatalogWhatsapp(businessData.catalogWhatsapp || '')
+        setCatalogPagination(businessData.catalogPagination || 'infinite')
         setCatalogSocial({ instagram: '', facebook: '', tiktok: '', ...(businessData.catalogSocial || {}) })
         setCatalogObservations(businessData.catalogObservations || '')
         setCatalogAnnouncement({
@@ -7963,6 +7966,50 @@ export default function Settings() {
                         </div>
                       </div>
 
+
+{/* Paginación de productos (port shopifree) */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Paginación de productos
+                        </label>
+                        <p className="text-xs text-gray-500 mb-3">
+                          Elige cómo se cargan los productos cuando hay muchos.
+                        </p>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          {[
+                            { id: 'none', label: 'Sin paginación', desc: 'Muestra todos los productos', Icon: LayoutGrid },
+                            { id: 'load-more', label: 'Cargar más', desc: 'Botón para cargar más', Icon: ArrowDown },
+                            { id: 'infinite', label: 'Scroll infinito', desc: 'Carga automática al scroll', Icon: Clock },
+                            { id: 'pages', label: 'Páginas', desc: 'Navegación numerada', Icon: ChevronsUpDown },
+                          ].map(opt => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => setCatalogPagination(opt.id)}
+                              className={`relative p-4 rounded-xl border-2 transition-all text-left ${
+                                catalogPagination === opt.id
+                                  ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/40'
+                                  : 'border-gray-200 hover:border-gray-300'
+                              }`}
+                            >
+                              {catalogPagination === opt.id && (
+                                <span className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center">
+                                  <Check className="w-3.5 h-3.5 text-white" />
+                                </span>
+                              )}
+                              <opt.Icon className="w-5 h-5 text-gray-400 mb-2" />
+                              <p className="text-sm font-semibold text-gray-900">{opt.label}</p>
+                              <p className="text-xs text-gray-500 mt-0.5">{opt.desc}</p>
+                            </button>
+                          ))}
+                        </div>
+                        {catalogPagination === 'none' && (
+                          <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg mt-2">
+                            Con catálogos grandes (cientos de productos), "Sin paginación" puede hacer lenta la primera carga.
+                          </p>
+                        )}
+                      </div>
+
 {/* Navegación en escritorio: barra superior vs menú lateral */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -8992,6 +9039,7 @@ export default function Settings() {
                         catalogShowStock,
                         catalogCustomerAccounts,
                         catalogWhatsapp: catalogWhatsapp.trim(),
+                        catalogPagination,
                         catalogSocial: {
                           instagram: (catalogSocial.instagram || '').trim(),
                           facebook: (catalogSocial.facebook || '').trim(),

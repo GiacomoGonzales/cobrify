@@ -61,7 +61,9 @@ import { BedDouble, CalendarDays,
   User,
   LogOut,
   Menu,
-  Heart
+  Heart,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 
 // Estilos de animacion para fade-in escalonado
@@ -195,6 +197,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // Render incremental: cuántas tarjetas se pintan (crece con el scroll). Con
   // catálogos de cientos de productos, pintar todo de una congela el móvil.
   const [visibleCount, setVisibleCount] = useState(40)
+  // Paginacion 'pages' (numerada): pagina actual. Los otros modos usan
+  // visibleCount (incremental) o muestran todo.
+  const [currentPage, setCurrentPage] = useState(1)
   const loadMoreSentinelRef = useRef(null)
   const [categories, setCategories] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
@@ -639,18 +644,36 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     return filteredProducts.filter(p => p.isFeatured)
   }, [filteredProducts])
 
-  // Render incremental: solo se pintan `visibleCount` tarjetas; al llegar al
-  // final (sentinel) se suman 40 más. Reset al cambiar búsqueda/categoría.
-  const displayedProducts = useMemo(
-    () => filteredProducts.slice(0, visibleCount),
-    [filteredProducts, visibleCount]
-  )
+  // Paginacion configurable (port shopifree): 'infinite' (sentinel, default
+  // = comportamiento historico), 'load-more' (solo boton), 'pages' (numerada)
+  // y 'none' (todo de una — ojo con catalogos grandes).
+  const paginationMode = ['none', 'load-more', 'infinite', 'pages'].includes(business?.catalogPagination)
+    ? business.catalogPagination
+    : 'infinite'
+  const PAGE_SIZE = 24
+  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE))
+  const displayedProducts = useMemo(() => {
+    if (paginationMode === 'none') return filteredProducts
+    if (paginationMode === 'pages') {
+      const start = (currentPage - 1) * PAGE_SIZE
+      return filteredProducts.slice(start, start + PAGE_SIZE)
+    }
+    return filteredProducts.slice(0, visibleCount)
+  }, [filteredProducts, visibleCount, paginationMode, currentPage])
+
+  const goToPage = (p) => {
+    const clamped = Math.min(Math.max(1, p), totalPages)
+    setCurrentPage(clamped)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   useEffect(() => {
     setVisibleCount(40)
+    setCurrentPage(1)
   }, [searchQuery, selectedCategory, selectedSubcategory, viewMode])
 
   useEffect(() => {
+    if (paginationMode !== 'infinite') return
     const sentinel = loadMoreSentinelRef.current
     if (!sentinel) return
     if (visibleCount >= filteredProducts.length) return
@@ -661,7 +684,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     }, { rootMargin: '600px' }) // empezar a cargar antes de que el usuario llegue al final
     observer.observe(sentinel)
     return () => observer.disconnect()
-  }, [visibleCount, filteredProducts.length, viewMode])
+  }, [visibleCount, filteredProducts.length, viewMode, paginationMode])
 
   // Configuración de visibilidad de precios
   const showPrices = business?.catalogShowPrices !== false
@@ -2298,13 +2321,62 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         {/* Sentinel del scroll infinito + fallback "Ver más" (por si el
             IntersectionObserver no dispara en algún navegador antiguo).
             Solo cuando la grilla/lista está visible (no en modo solo-carruseles). */}
-        {!(onlyCarousels && groupByCategory && !selectedCategory && !searchQuery) && displayedProducts.length < filteredProducts.length && (
-          <div ref={loadMoreSentinelRef} className="text-center py-6">
+        {/* Paginacion (port shopifree): boton "Ver mas" para infinite (con
+            sentinel que auto-carga) y load-more (solo boton); numerada 1..n
+            para pages; en none no hay nada que paginar. */}
+        {!(onlyCarousels && groupByCategory && !selectedCategory && !searchQuery) && paginationMode !== 'pages' && displayedProducts.length < filteredProducts.length && (
+          <div ref={paginationMode === 'infinite' ? loadMoreSentinelRef : undefined} className="text-center py-6">
             <button
               onClick={() => setVisibleCount(prev => prev + 40)}
               className={`px-5 py-2.5 rounded-full text-sm font-medium ${thCatInactive}`}
             >
               Ver más productos ({filteredProducts.length - displayedProducts.length} restantes)
+            </button>
+          </div>
+        )}
+        {!(onlyCarousels && groupByCategory && !selectedCategory && !searchQuery) && paginationMode === 'pages' && totalPages > 1 && (
+          <div className="flex items-center justify-center gap-1.5 py-6">
+            <button
+              onClick={() => goToPage(currentPage - 1)}
+              disabled={currentPage === 1}
+              className={`p-2 rounded-lg transition-colors disabled:opacity-30 ${thText}`}
+              aria-label="Página anterior"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter(page => {
+                if (totalPages <= 7) return true
+                if (page === 1 || page === totalPages) return true
+                if (Math.abs(page - currentPage) <= 1) return true
+                return false
+              })
+              .reduce((acc, page, idx, arr) => {
+                if (idx > 0 && page - arr[idx - 1] > 1) acc.push('dots')
+                acc.push(page)
+                return acc
+              }, [])
+              .map((item, idx) =>
+                item === 'dots' ? (
+                  <span key={`dots-${idx}`} className={`px-1 ${thTextMuted}`}>...</span>
+                ) : (
+                  <button
+                    key={item}
+                    onClick={() => goToPage(item)}
+                    className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${item === currentPage ? 'text-white' : thText}`}
+                    style={item === currentPage ? { backgroundColor: getCatalogAccent(business) } : undefined}
+                  >
+                    {item}
+                  </button>
+                )
+              )}
+            <button
+              onClick={() => goToPage(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className={`p-2 rounded-lg transition-colors disabled:opacity-30 ${thText}`}
+              aria-label="Página siguiente"
+            >
+              <ChevronRight className="w-5 h-5" />
             </button>
           </div>
         )}

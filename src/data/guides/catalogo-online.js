@@ -44,6 +44,10 @@ export default {
         },
         {
           type: 'texto',
+          text: 'Cuando hay muchos productos puedes elegir cómo se cargan en **Paginación de productos** (tarjeta "Así se ve tu tienda"): mostrar todo de una, botón de **Cargar más**, **scroll infinito** (recomendado) o **páginas numeradas**.',
+        },
+        {
+          type: 'texto',
           text: 'Al pie del catálogo va tu **información de contacto** (WhatsApp, teléfono, dirección y horario) y tus **redes sociales**. Configura Instagram, Facebook y TikTok en Configuración > Mi Catálogo Online > Cómo te compran > **Redes sociales**: escribe el usuario o pega el enlace.',
         },
         {
