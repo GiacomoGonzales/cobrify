@@ -25,6 +25,7 @@ import {
 import { DEMO_CATALOG_DATA, DEMO_RESTAURANT_DATA } from '@/components/catalog/catalogDemoData'
 import { getCatalogThemeClasses, getCatalogAccent, getCatalogTheme } from '@/themes/catalogThemes'
 import { CatalogThemeProvider, buildCatalogCssVars } from '@/components/catalog/CatalogThemeProvider'
+import CatalogSearchModal from '@/components/catalog/CatalogSearchModal'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { collection, query, where, getDocs, doc, getDoc, orderBy, limit, startAfter, documentId } from 'firebase/firestore'
 // CATALOGO = catalogDb (SIN cache persistente), a proposito (14-ago-2026):
@@ -198,6 +199,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const loadMoreSentinelRef = useRef(null)
   const [categories, setCategories] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
+  // Panel de busqueda (port shopifree): la lupa junto a las categorias lo
+  // abre; la barra ancha bajo el hero ya no existe.
+  const [searchOpen, setSearchOpen] = useState(false)
   // Reservas de citas desde el catalogo (veterinaria / General con agenda).
   const [showReservarCita, setShowReservarCita] = useState(false)
   const [showReservarHabitacion, setShowReservarHabitacion] = useState(false)
@@ -1133,23 +1137,6 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     cardVariant: themeLayout.card || 'classic',
   }
 
-  // Barra de busqueda que acompana al hero (Fase 2): una sola definicion
-  // para las variantes nuevas; las ramas clasicas conservan su copia.
-  const searchBarRow = (
-    <div className={`${themeClasses.bg} px-4 py-3 ${sidebarNav ? 'md:px-0 md:pt-5' : ''}`}>
-      <div className={`relative ${sidebarNav ? '' : 'max-w-7xl mx-auto'}`}>
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-        <input
-          type="text"
-          placeholder="Buscar productos..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className={`w-full pl-12 pr-4 py-3 rounded-xl shadow-sm focus:outline-none focus:ring-2 ${thSearchBanner}`}
-        />
-      </div>
-    </div>
-  )
-
   return (
     <CatalogThemeProvider business={business} themeId={effectiveTheme}>
     <div
@@ -1497,25 +1484,11 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 <p className={`pt-3 text-sm md:text-base ${thTextMuted}`}>{business.catalogWelcome}</p>
               )}
             </div>
-            {searchBarRow}
           </div>
         ) : (
         <div className={sidebarNav ? 'relative md:pt-6' : 'relative overflow-hidden'}>
           <div className={sidebarNav ? 'md:rounded-2xl md:overflow-hidden md:shadow-sm' : ''}>
             <HeroCarousel slides={business.catalogHero.slides.filter(s => s.imageUrl)} />
-          </div>
-          {/* Barra de búsqueda debajo del carrusel (mismo estilo que el banner) */}
-          <div className={`${themeClasses.bg} px-4 py-3 ${sidebarNav ? 'md:px-0 md:pt-5' : ''}`}>
-            <div className={`relative ${sidebarNav ? '' : 'max-w-7xl mx-auto'}`}>
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Buscar productos..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className={`w-full pl-12 pr-4 py-3 rounded-xl shadow-sm focus:outline-none focus:ring-2 ${thSearchBanner}`}
-              />
-            </div>
           </div>
         </div>
         )
@@ -1546,7 +1519,6 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 <p className={`pt-3 text-sm md:text-base ${thTextMuted}`}>{business.catalogWelcome}</p>
               )}
             </div>
-            {searchBarRow}
           </div>
         ) : themeChrome.heroCover === 'overlay' && heroVariant !== 'full-bleed' ? (
           /* === PORTADA CON VELO (boutique): degradado oscuro suave y nombre
@@ -1581,7 +1553,6 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 </div>
               </div>
             </div>
-            {searchBarRow}
           </div>
         ) : themeChrome.heroCover === 'impact' && heroVariant !== 'full-bleed' ? (
           /* === PORTADA DE IMPACTO (bold): degradado 135° del acento al negro
@@ -1619,7 +1590,6 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 </div>
               </div>
             </div>
-            {searchBarRow}
           </div>
         ) : (
         /* === ESTILO BANNER: imagen hero. Variante 'full-bleed' (motor v2):
@@ -1726,7 +1696,6 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               </p>
             )}
           </div>
-          {searchBarRow}
         </div>
       ) : themeChrome.heroEmpty === 'romantic' ? (
         /* === SIN PORTADA, boutique: pastilla con corazon, nombre serif y
@@ -1751,7 +1720,6 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               )}
             </div>
           </div>
-          {searchBarRow}
         </div>
       ) : themeChrome.heroEmpty === 'impact' ? (
         /* === SIN PORTADA, bold: nombre display gigante en el acento sobre
@@ -1772,7 +1740,6 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             )}
             <div className="w-24 h-1 mx-auto mt-6" style={{ backgroundColor: themeAccentText }} />
           </div>
-          {searchBarRow}
         </div>
       ) : (
         /* === ESTILO CLÁSICO: solo cuando NO hay portada (gradient sólido) === */
@@ -1865,14 +1832,25 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       )}
 
       {/* Categorías — barra superior. Con navegación lateral (sidebar) se oculta
-          en escritorio: las categorías viven en la columna izquierda. */}
-      {rootCategories.length > 0 && (
+          en escritorio: las categorías viven en la columna izquierda. La fila
+          existe aunque no haya categorías: la LUPA vive aquí (port shopifree). */}
+      {(rootCategories.length > 0 || products.length > 0) && (
         <div className={`${thCard} ${thBorderColor} border-b sticky top-16 md:top-20 z-30 ${sidebarNav ? 'md:bg-transparent md:border-0 md:static' : ''}`}>
           <div className={sidebarNav ? 'px-4 md:px-0' : 'max-w-7xl mx-auto px-4'}>
             {/* Categorías raíz — SIEMPRE una fila con scroll horizontal (A1 del
                 rediseño): en desktop el wrap multilínea comía media pantalla con
                 muchas categorías. Flechas + fade en bordes via CategoryScroller. */}
             <CategoryScroller className="-mx-4 px-4 md:mx-0 md:px-0" innerClassName="gap-2 py-3">
+              {/* Lupa (port shopifree): abre el panel de busqueda. Vive al
+                  inicio de la fila de categorias, donde antes habia una barra
+                  ancha que empujaba todo hacia abajo. */}
+              <button
+                onClick={() => setSearchOpen(true)}
+                className={`flex-shrink-0 rounded-full flex items-center justify-center transition-colors ${thViewHover} ${categoriesVariant === 'circles' ? 'w-14 h-14 self-start' : 'w-9 h-9 self-center'}`}
+                aria-label="Buscar productos"
+              >
+                <Search className={`w-[18px] h-[18px] ${thTextMuted}`} />
+              </button>
               {/* Botón "Todos": oculto en modo onlyCarousels cuando estamos en la vista principal,
                   para forzar al cliente a entrar a una categoría. Dentro de una categoría sí se muestra. */}
               {categoriesVariant === 'circles' ? (
@@ -2567,6 +2545,17 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           }
         }}
       />
+
+      {/* Panel de busqueda (lupa junto a las categorias) */}
+      {searchOpen && (
+        <CatalogSearchModal
+          products={products}
+          showPrices={showPrices}
+          formatPrice={fmtCatalog}
+          onSelectProduct={(p) => setSelectedProduct(p)}
+          onClose={() => { setSearchOpen(false); setSearchQuery('') }}
+        />
+      )}
 
       {/* Modal de cuenta de la mesa */}
       <TableAccountModal
