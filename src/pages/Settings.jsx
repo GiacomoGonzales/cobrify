@@ -6980,7 +6980,7 @@ export default function Settings() {
 
       {/* Tab Content - Catálogo Público */}
       {activeTab === 'catalogo' && (
-        <div className="space-y-6">
+        <div className="space-y-6 pb-20">
           {/* ===== CATÁLOGO ===== */}
           <>
               {/* Cabecera + interruptor, con el mismo lenguaje visual del resto
@@ -8968,11 +8968,16 @@ export default function Settings() {
               )}
 
               {/* Save Button for Catalogo — ancho completo */}
-                            {/* Barra de guardado FIJA: el boton viajaba al fondo de un
-                  formulario de 15 pantallas — era facil irse creyendo que se
-                  guardo. Pegada abajo, siempre a la vista. */}
-              <div className="sticky bottom-0 z-20 bg-white/95 backdrop-blur border-t border-gray-200 py-3 flex justify-end">
+              {/* Boton de guardar FLOTANTE: antes era una barra blanca de ancho
+                  completo pegada abajo, y con formularios largos tapaba el campo
+                  que se estaba escribiendo. Ahora es solo el boton, fijo en la
+                  esquina; el contenido lleva padding para que nunca lo cubra. */}
+              <div
+                className="fixed right-4 md:right-8 z-30"
+                style={{ bottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+              >
                 <Button
+                  className="shadow-xl shadow-gray-900/20"
                   onClick={async () => {
                     if (isDemoMode) {
                       toast.error('No se pueden guardar cambios en modo demo.')
