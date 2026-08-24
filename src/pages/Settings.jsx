@@ -642,9 +642,11 @@ export default function Settings() {
   // Secciones colapsables del tab "Mi Catálogo Online"
   const [openSections, setOpenSections] = useState({
     url: true,
-    identity: false,
-    appearance: false,
-    options: false,
+    diseno: false,
+    textos: false,
+    productos: false,
+    compra: false,
+    avanzado: false,
   })
   const toggleSection = (id) => setOpenSections(prev => ({ ...prev, [id]: !prev[id] }))
 
@@ -7021,10 +7023,10 @@ export default function Settings() {
               {/* Configuración del catálogo (solo si está habilitado) */}
               {catalogEnabled && (
                 <>
-                  {/* === 4 TARJETAS COLAPSABLES === */}
+                  {/* === TARJETAS POR TAREA: cada una responde una pregunta que el
+                      usuario ya se hace (¿como se ve? ¿que muestro? ¿como me compran?),
+                      no una categoria de diseñador. Reorganizadas el 24-ago-2026. === */}
                   <div className="space-y-4">
-
-                    {/* CARD 1: URL Y COMPARTIR */}
                     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                       <button
                         type="button"
@@ -7036,8 +7038,8 @@ export default function Settings() {
                             <Globe className="w-5 h-5 text-emerald-600" />
                           </div>
                           <div className="text-left">
-                            <h3 className="font-semibold text-gray-900">URL y compartir</h3>
-                            <p className="text-xs text-gray-500">Configura el enlace público y comparte tu catálogo</p>
+                            <h3 className="font-semibold text-gray-900">Tu dirección y compartir</h3>
+                            <p className="text-xs text-gray-500">El enlace de tu tienda, el código QR y cómo difundirlo</p>
                           </div>
                         </div>
                         <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${openSections.url ? 'rotate-180' : ''}`} />
@@ -7045,7 +7047,7 @@ export default function Settings() {
                       {openSections.url && (
                         <div className="px-5 pb-5 pt-4 border-t border-gray-100 space-y-5">
 
-                      {/* URL del catálogo */}
+{/* URL del catálogo */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           {businessMode === 'restaurant' ? 'URL de tu carta digital' : 'URL de tu catálogo'}
@@ -7081,7 +7083,7 @@ export default function Settings() {
                         </p>
                       </div>
 
-                      {/* Vista previa del enlace */}
+{/* Vista previa del enlace */}
                       {catalogSlug && (
                         <div className="p-4 bg-gray-50 rounded-xl">
                           <div className="flex items-center justify-between gap-3">
@@ -7107,7 +7109,7 @@ export default function Settings() {
                         </div>
                       )}
 
-                      {/* Código QR */}
+{/* Código QR */}
                       {catalogSlug && catalogQrDataUrl && (
                         <div className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl border border-emerald-200">
                           <div className="flex items-center gap-2 mb-3">
@@ -7152,7 +7154,7 @@ export default function Settings() {
                         </div>
                       )}
 
-                      {/* QR por Mesa — solo restaurantes */}
+{/* QR por Mesa — solo restaurantes */}
                       {businessMode === 'restaurant' && catalogSlug && (
                         <div className="p-4 bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl border border-orange-200">
                           <div className="border-t border-orange-200 pt-4 mt-4">
@@ -7284,89 +7286,157 @@ export default function Settings() {
                           </div>
                         </div>
                       )}
-
-                      {/* Dominio personalizado */}
-                      {catalogSlug && (
-                        <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
-                          <div className="flex items-center gap-2 mb-3">
-                            <Globe className="w-5 h-5 text-blue-600" />
-                            <h4 className="font-medium text-gray-900">Dominio personalizado</h4>
-                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Opcional</span>
-                          </div>
-                          <p className="text-sm text-gray-600 mb-3">
-                            Conecta tu propio dominio para que tus clientes accedan a tu {businessMode === 'restaurant' ? 'carta digital' : 'catálogo'} desde tu propia dirección web.
-                          </p>
-                          <input
-                            type="text"
-                            value={catalogCustomDomain}
-                            onChange={(e) => setCatalogCustomDomain(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
-                            placeholder="mitienda.com"
-                            className="w-full px-4 py-2.5 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                          />
-                          {catalogCustomDomain && (
-                            <div className="mt-3 p-3 bg-white rounded-lg border border-blue-100">
-                              <p className="text-xs font-medium text-gray-700 mb-2">Para activar tu dominio, configura estos registros DNS:</p>
-                              <div className="space-y-1.5 text-xs font-mono">
-                                <div className="flex items-center gap-2">
-                                  <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-600">CNAME</span>
-                                  <span className="text-gray-500">www</span>
-                                  <span className="text-gray-400">&rarr;</span>
-                                  <span className="text-blue-600">cname.vercel-dns.com</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-600">A</span>
-                                  <span className="text-gray-500">@</span>
-                                  <span className="text-gray-400">&rarr;</span>
-                                  <span className="text-blue-600">76.76.21.21</span>
-                                </div>
-                              </div>
-                              <p className="text-xs text-gray-500 mt-2">
-                                Contacta a soporte para que activemos tu dominio. La propagación DNS puede tardar hasta 48 horas.
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Productos en el catálogo */}
-                      <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
-                        <div className="flex items-start gap-3">
-                          <Info className="w-5 h-5 text-blue-600 mt-0.5" />
-                          <div>
-                            <h4 className="font-medium text-blue-900">¿Cómo agrego productos al catálogo?</h4>
-                            <p className="text-sm text-blue-700 mt-1">
-                              Ve a <strong>Productos</strong>, edita un producto y activa la opción <strong>"Mostrar en catálogo"</strong>. Solo los productos con esta opción activada aparecerán en tu catálogo público.
-                            </p>
-                          </div>
-                        </div>
-                      </div>
                         </div>
                       )}
                     </div>
-                    {/* FIN CARD 1: URL Y COMPARTIR */}
 
-                    {/* CARD 2: IDENTIDAD */}
                     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                       <button
                         type="button"
-                        onClick={() => toggleSection('identity')}
+                        onClick={() => toggleSection('diseno')}
                         className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
-                            <Store className="w-5 h-5 text-blue-600" />
+                          <div className="w-10 h-10 rounded-lg bg-violet-50 flex items-center justify-center flex-shrink-0">
+                            <Palette className="w-5 h-5 text-violet-600" />
                           </div>
                           <div className="text-left">
-                            <h3 className="font-semibold text-gray-900">Identidad</h3>
-                            <p className="text-xs text-gray-500">Logo, nombre, mensajes y contacto</p>
+                            <h3 className="font-semibold text-gray-900">Así se ve tu tienda</h3>
+                            <p className="text-xs text-gray-500">Tema, colores, logo, portada y diseño de los productos</p>
                           </div>
                         </div>
-                        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${openSections.identity ? 'rotate-180' : ''}`} />
+                        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${openSections.diseno ? 'rotate-180' : ''}`} />
                       </button>
-                      {openSections.identity && (
+                      {openSections.diseno && (
                         <div className="px-5 pb-5 pt-4 border-t border-gray-100 space-y-5">
 
-                      {/* Logo del catálogo — cuadrado + horizontal */}
+{/* Tema del catálogo — galería (Fase 3: los temas viven en
+                          src/themes/catalogThemes.js; agregar uno ahí lo muestra aquí solo) */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Tema visual
+                        </label>
+                        <p className="text-xs text-gray-500 mb-3">
+                          Cada tema cambia colores, tipografía y forma de tarjetas. Toca "Vista previa" para verlo con tus productos. Si eliges un color personalizado arriba, ese manda sobre el acento del tema.
+                        </p>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          {getCatalogThemesList().map((theme) => {
+                            const isSelected = catalogTheme === theme.id
+                            return (
+                              <div
+                                key={theme.id}
+                                className={`relative rounded-xl border-2 overflow-hidden transition-all ${
+                                  isSelected
+                                    ? 'border-emerald-500 ring-2 ring-emerald-500/20 shadow-md'
+                                    : 'border-gray-200 hover:border-gray-300'
+                                }`}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => setCatalogTheme(theme.id)}
+                                  className="block w-full text-left"
+                                >
+                                  {/* Mini preview card */}
+                                  <div
+                                    className="aspect-[4/3] p-3 flex flex-col gap-2"
+                                    style={{ backgroundColor: theme.swatch.bg }}
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <div className="w-8 h-1.5 rounded-full" style={{ backgroundColor: theme.swatch.accent }} />
+                                      <div className="w-4 h-4 rounded-full" style={{ backgroundColor: theme.swatch.accent }} />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-1.5 flex-1">
+                                      <div className="rounded" style={{ backgroundColor: theme.swatch.card }} />
+                                      <div className="rounded" style={{ backgroundColor: theme.swatch.card }} />
+                                    </div>
+                                    <div className="flex-1 rounded" style={{ backgroundColor: theme.swatch.card, opacity: 0.6 }} />
+                                  </div>
+                                  {/* Nombre + descripción */}
+                                  <div className="px-3 py-2.5 bg-white border-t border-gray-200/60">
+                                    <div className="text-sm font-semibold text-gray-900">{theme.name}</div>
+                                    <div className="text-xs text-gray-500 line-clamp-2 mt-0.5">{theme.description}</div>
+                                  </div>
+                                </button>
+                                {/* Botón "Vista previa" — siempre visible, fácil de tocar */}
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setPreviewThemeId(theme.id) }}
+                                  className="w-full px-3 py-2.5 bg-gray-50 hover:bg-gray-100 border-t border-gray-200/60 text-sm font-medium text-gray-700 flex items-center justify-center gap-2 transition-colors"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                  Vista previa
+                                </button>
+                                {/* Badge de tema nuevo */}
+                                {theme.isNew && !isSelected && (
+                                  <span className="absolute top-2 left-2 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-blue-600 text-white rounded shadow">
+                                    Nuevo
+                                  </span>
+                                )}
+                                {/* Check de seleccionado */}
+                                {isSelected && (
+                                  <div className="absolute top-2 right-2 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center shadow">
+                                    <Check className="w-3.5 h-3.5 text-white" />
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+
+{/* Color */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Color principal del catálogo
+                        </label>
+                        <div className="flex flex-wrap gap-3">
+                          {[
+                            { color: '#10B981', name: 'Esmeralda' },
+                            { color: '#3B82F6', name: 'Azul' },
+                            { color: '#8B5CF6', name: 'Violeta' },
+                            { color: '#F59E0B', name: 'Ámbar' },
+                            { color: '#EF4444', name: 'Rojo' },
+                            { color: '#EC4899', name: 'Rosa' },
+                            { color: '#14B8A6', name: 'Teal' },
+                            { color: '#1F2937', name: 'Oscuro' },
+                          ].map((option) => (
+                            <button
+                              key={option.color}
+                              type="button"
+                              onClick={() => setCatalogColor(option.color)}
+                              className={`flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all ${
+                                catalogColor === option.color
+                                  ? 'border-gray-900 shadow-md'
+                                  : 'border-transparent hover:border-gray-300'
+                              }`}
+                            >
+                              <div
+                                className="w-10 h-10 rounded-full shadow-sm flex items-center justify-center"
+                                style={{ backgroundColor: option.color }}
+                              >
+                                {catalogColor === option.color && (
+                                  <Check className="w-5 h-5 text-white" />
+                                )}
+                              </div>
+                              <span className="text-xs text-gray-600">{option.name}</span>
+                            </button>
+                          ))}
+                          <div className="flex flex-col items-center gap-1 p-2">
+                            <input
+                              type="color"
+                              value={catalogColor}
+                              onChange={(e) => setCatalogColor(e.target.value)}
+                              onInput={(e) => setCatalogColor(e.target.value)}
+                              onBlur={(e) => setCatalogColor(e.target.value)}
+                              className="w-10 h-10 rounded-full cursor-pointer border-2 border-gray-300"
+                            />
+                            <span className="text-xs text-gray-600">Otro</span>
+                          </div>
+                        </div>
+                      </div>
+
+{/* Logo del catálogo — cuadrado + horizontal */}
                       <div className="space-y-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700">
@@ -7496,232 +7566,7 @@ export default function Settings() {
                         </div>
                       </div>
 
-                      {/* Tagline */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Eslogan o descripción corta (opcional)
-                        </label>
-                        <input
-                          type="text"
-                          value={catalogTagline}
-                          onChange={(e) => setCatalogTagline(e.target.value)}
-                          placeholder="Los mejores productos al mejor precio"
-                          maxLength={60}
-                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">{catalogTagline.length}/60 caracteres</p>
-                      </div>
-
-                      {/* Mensaje de bienvenida */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Mensaje de bienvenida (opcional)
-                        </label>
-                        <input
-                          type="text"
-                          value={catalogWelcome}
-                          onChange={(e) => setCatalogWelcome(e.target.value)}
-                          placeholder="¡Bienvenido! Explora nuestros productos"
-                          maxLength={100}
-                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                        />
-                      </div>
-
-                      {/* WhatsApp del catálogo */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          WhatsApp para pedidos del catálogo
-                        </label>
-                        <input
-                          type="text"
-                          value={catalogWhatsapp}
-                          onChange={(e) => setCatalogWhatsapp(e.target.value.replace(/[^\d+]/g, ''))}
-                          placeholder="Ej: 51987654321"
-                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">
-                          Número con código de país (ej: 51 para Perú). Si se deja vacío se usará el teléfono de la empresa.
-                        </p>
-                      </div>
-
-                      {/* Observaciones del catálogo */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Observaciones del catálogo (opcional)
-                        </label>
-                        <textarea
-                          value={catalogObservations}
-                          onChange={(e) => setCatalogObservations(e.target.value)}
-                          placeholder="Ej: Cuentas de pago, WhatsApp de vendedores, horarios..."
-                          maxLength={500}
-                          rows={3}
-                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">{catalogObservations.length}/500 caracteres — Se muestra arriba de las categorías en el catálogo</p>
-                      </div>
-
-                      {/* Tira publicitaria (banner superior del catálogo) */}
-                      <div className="p-4 border border-gray-200 rounded-lg space-y-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <span className="text-sm font-medium text-gray-900">Tira publicitaria</span>
-                            <p className="text-xs text-gray-600 mt-0.5">
-                              Banner en la parte superior del catálogo para promociones o avisos (ej: "Envío gratis desde S/ 100").
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setCatalogAnnouncement(prev => ({ ...prev, enabled: !prev.enabled }))}
-                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
-                              catalogAnnouncement.enabled ? 'bg-primary-600' : 'bg-gray-300'
-                            }`}
-                          >
-                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                              catalogAnnouncement.enabled ? 'translate-x-6' : 'translate-x-1'
-                            }`} />
-                          </button>
-                        </div>
-                        {catalogAnnouncement.enabled && (
-                          <div className="space-y-3">
-                            <input
-                              type="text"
-                              value={catalogAnnouncement.text}
-                              onChange={(e) => setCatalogAnnouncement(prev => ({ ...prev, text: e.target.value }))}
-                              placeholder="Ej: Envío gratis en pedidos desde S/ 100"
-                              maxLength={120}
-                              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                            />
-                            <div className="flex flex-wrap items-center gap-3">
-                              <div className="flex rounded-lg border border-gray-300 overflow-hidden">
-                                <button
-                                  type="button"
-                                  onClick={() => setCatalogAnnouncement(prev => ({ ...prev, mode: 'static' }))}
-                                  className={`px-3 py-1.5 text-sm font-medium ${
-                                    catalogAnnouncement.mode !== 'marquee' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
-                                  }`}
-                                >
-                                  Fija
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setCatalogAnnouncement(prev => ({ ...prev, mode: 'marquee' }))}
-                                  className={`px-3 py-1.5 text-sm font-medium ${
-                                    catalogAnnouncement.mode === 'marquee' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
-                                  }`}
-                                >
-                                  En movimiento
-                                </button>
-                              </div>
-                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
-                                Fondo
-                                <input
-                                  type="color"
-                                  value={catalogAnnouncement.backgroundColor}
-                                  onChange={(e) => setCatalogAnnouncement(prev => ({ ...prev, backgroundColor: e.target.value }))}
-                                  className="w-8 h-8 rounded border border-gray-300 cursor-pointer"
-                                />
-                              </label>
-                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
-                                Texto
-                                <input
-                                  type="color"
-                                  value={catalogAnnouncement.textColor}
-                                  onChange={(e) => setCatalogAnnouncement(prev => ({ ...prev, textColor: e.target.value }))}
-                                  className="w-8 h-8 rounded border border-gray-300 cursor-pointer"
-                                />
-                              </label>
-                            </div>
-                            {/* Vista previa en vivo */}
-                            {catalogAnnouncement.text.trim() && (
-                              <div className="rounded-lg overflow-hidden border border-gray-200">
-                                <div className="py-2 px-4 text-center" style={{ backgroundColor: catalogAnnouncement.backgroundColor }}>
-                                  <p className="text-sm font-medium" style={{ color: catalogAnnouncement.textColor }}>
-                                    {catalogAnnouncement.text.trim()}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                        </div>
-                      )}
-                    </div>
-                    {/* FIN CARD 2: IDENTIDAD */}
-
-                    {/* CARD 3: APARIENCIA */}
-                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                      <button
-                        type="button"
-                        onClick={() => toggleSection('appearance')}
-                        className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-purple-50 flex items-center justify-center flex-shrink-0">
-                            <Palette className="w-5 h-5 text-purple-600" />
-                          </div>
-                          <div className="text-left">
-                            <h3 className="font-semibold text-gray-900">Apariencia</h3>
-                            <p className="text-xs text-gray-500">Tema, colores y portada</p>
-                          </div>
-                        </div>
-                        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${openSections.appearance ? 'rotate-180' : ''}`} />
-                      </button>
-                      {openSections.appearance && (
-                        <div className="px-5 pb-5 pt-4 border-t border-gray-100 space-y-5">
-
-                      {/* Color */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Color principal del catálogo
-                        </label>
-                        <div className="flex flex-wrap gap-3">
-                          {[
-                            { color: '#10B981', name: 'Esmeralda' },
-                            { color: '#3B82F6', name: 'Azul' },
-                            { color: '#8B5CF6', name: 'Violeta' },
-                            { color: '#F59E0B', name: 'Ámbar' },
-                            { color: '#EF4444', name: 'Rojo' },
-                            { color: '#EC4899', name: 'Rosa' },
-                            { color: '#14B8A6', name: 'Teal' },
-                            { color: '#1F2937', name: 'Oscuro' },
-                          ].map((option) => (
-                            <button
-                              key={option.color}
-                              type="button"
-                              onClick={() => setCatalogColor(option.color)}
-                              className={`flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all ${
-                                catalogColor === option.color
-                                  ? 'border-gray-900 shadow-md'
-                                  : 'border-transparent hover:border-gray-300'
-                              }`}
-                            >
-                              <div
-                                className="w-10 h-10 rounded-full shadow-sm flex items-center justify-center"
-                                style={{ backgroundColor: option.color }}
-                              >
-                                {catalogColor === option.color && (
-                                  <Check className="w-5 h-5 text-white" />
-                                )}
-                              </div>
-                              <span className="text-xs text-gray-600">{option.name}</span>
-                            </button>
-                          ))}
-                          <div className="flex flex-col items-center gap-1 p-2">
-                            <input
-                              type="color"
-                              value={catalogColor}
-                              onChange={(e) => setCatalogColor(e.target.value)}
-                              onInput={(e) => setCatalogColor(e.target.value)}
-                              onBlur={(e) => setCatalogColor(e.target.value)}
-                              className="w-10 h-10 rounded-full cursor-pointer border-2 border-gray-300"
-                            />
-                            <span className="text-xs text-gray-600">Otro</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Imagen de portada — desktop + móvil */}
+{/* Imagen de portada — desktop + móvil */}
                       <div className="space-y-3">
                         <div>
                           <label className="block text-sm font-medium text-gray-700">
@@ -7900,7 +7745,7 @@ export default function Settings() {
                         </div>
                       </div>
 
-                      {/* Carrusel de portada (F2.2): reemplaza la portada única
+{/* Carrusel de portada (F2.2): reemplaza la portada única
                           con slides promocionales (imagen + texto + enlace) */}
                       <div className="p-4 border border-gray-200 rounded-lg space-y-3">
                         <div className="flex items-center justify-between gap-3">
@@ -8056,149 +7901,7 @@ export default function Settings() {
                         )}
                       </div>
 
-                      {/* Oferta con cuenta regresiva (F2.5) */}
-                      <div className="p-4 border border-gray-200 rounded-lg space-y-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <span className="text-sm font-medium text-gray-900">Oferta con cuenta regresiva</span>
-                            <p className="text-xs text-gray-600 mt-0.5">
-                              Barra con temporizador hacia una fecha límite (crea urgencia). Al llegar a cero desaparece sola.
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setCatalogFlashSale(prev => ({ ...prev, enabled: !prev.enabled }))}
-                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${catalogFlashSale.enabled ? 'bg-primary-600' : 'bg-gray-300'}`}
-                          >
-                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${catalogFlashSale.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
-                          </button>
-                        </div>
-                        {catalogFlashSale.enabled && (
-                          <div className="space-y-3">
-                            <input
-                              type="text"
-                              value={catalogFlashSale.text}
-                              onChange={(e) => setCatalogFlashSale(prev => ({ ...prev, text: e.target.value }))}
-                              placeholder="Ej: ¡Cyber días! Hasta 40% de descuento"
-                              maxLength={80}
-                              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                            />
-                            <div className="flex flex-wrap items-center gap-3">
-                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
-                                Termina el
-                                <input
-                                  type="datetime-local"
-                                  value={catalogFlashSale.endDate}
-                                  onChange={(e) => setCatalogFlashSale(prev => ({ ...prev, endDate: e.target.value }))}
-                                  className="px-2 py-1.5 border border-gray-300 rounded-lg text-sm"
-                                />
-                              </label>
-                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
-                                Fondo
-                                <input type="color" value={catalogFlashSale.backgroundColor} onChange={(e) => setCatalogFlashSale(prev => ({ ...prev, backgroundColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-300 cursor-pointer" />
-                              </label>
-                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
-                                Texto
-                                <input type="color" value={catalogFlashSale.textColor} onChange={(e) => setCatalogFlashSale(prev => ({ ...prev, textColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-300 cursor-pointer" />
-                              </label>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Sellos de confianza (F2.6) */}
-                      <div className="p-4 border border-gray-200 rounded-lg space-y-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <span className="text-sm font-medium text-gray-900">Sellos de confianza</span>
-                            <p className="text-xs text-gray-600 mt-0.5">
-                              Fila de mensajes con ícono (envío, pago seguro, garantía…) debajo de la portada.
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setCatalogTrustBadges(prev => ({ ...prev, enabled: !prev.enabled }))}
-                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${catalogTrustBadges.enabled ? 'bg-primary-600' : 'bg-gray-300'}`}
-                          >
-                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${catalogTrustBadges.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
-                          </button>
-                        </div>
-                        {catalogTrustBadges.enabled && (
-                          <div className="space-y-2">
-                            {(catalogTrustBadges.badges || []).map((badge, idx) => (
-                              <div key={badge.id || idx} className="flex items-center gap-2">
-                                <select
-                                  value={badge.icon || 'shield'}
-                                  onChange={(e) => setCatalogTrustBadges(prev => ({ ...prev, badges: prev.badges.map((b, i) => i === idx ? { ...b, icon: e.target.value } : b) }))}
-                                  className="px-2 py-1.5 border border-gray-300 rounded-lg text-sm flex-shrink-0"
-                                >
-                                  <option value="truck">🚚 Envío</option>
-                                  <option value="shield">🛡️ Seguro</option>
-                                  <option value="card">💳 Pago</option>
-                                  <option value="return">↩️ Devolución</option>
-                                  <option value="support">🎧 Soporte</option>
-                                  <option value="quality">✅ Garantía</option>
-                                  <option value="clock">⏰ Rapidez</option>
-                                  <option value="tag">🏷️ Ofertas</option>
-                                </select>
-                                <input
-                                  type="text"
-                                  value={badge.text || ''}
-                                  onChange={(e) => setCatalogTrustBadges(prev => ({ ...prev, badges: prev.badges.map((b, i) => i === idx ? { ...b, text: e.target.value } : b) }))}
-                                  placeholder="Ej: Envío gratis desde S/ 100"
-                                  maxLength={40}
-                                  className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-emerald-500"
-                                />
-                                <button type="button" onClick={() => setCatalogTrustBadges(prev => ({ ...prev, badges: prev.badges.filter((_, i) => i !== idx) }))} className="p-1 text-red-400 hover:text-red-600 flex-shrink-0">
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            ))}
-                            {(catalogTrustBadges.badges || []).length < 4 && (
-                              <button
-                                type="button"
-                                onClick={() => setCatalogTrustBadges(prev => ({ ...prev, badges: [...(prev.badges || []), { id: `badge-${Date.now()}`, icon: 'shield', text: '' }] }))}
-                                className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:border-gray-400 hover:bg-gray-50"
-                              >
-                                + Agregar sello ({(catalogTrustBadges.badges || []).length}/4)
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Efectos del catálogo (F2.7) */}
-                      <div className="p-4 border border-gray-200 rounded-lg space-y-2.5">
-                        <span className="text-sm font-medium text-gray-900">Efectos</span>
-                        <label className="flex items-center justify-between gap-3 cursor-pointer">
-                          <span className="text-sm text-gray-700">
-                            Aparición al hacer scroll
-                            <span className="block text-xs text-gray-500">Los productos se deslizan suavemente al aparecer.</span>
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setCatalogEffects(prev => ({ ...prev, scrollReveal: !prev.scrollReveal }))}
-                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${catalogEffects.scrollReveal ? 'bg-primary-600' : 'bg-gray-300'}`}
-                          >
-                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${catalogEffects.scrollReveal ? 'translate-x-6' : 'translate-x-1'}`} />
-                          </button>
-                        </label>
-                        <label className="flex items-center justify-between gap-3 cursor-pointer">
-                          <span className="text-sm text-gray-700">
-                            Segunda foto al pasar el mouse
-                            <span className="block text-xs text-gray-500">En productos con 2+ imágenes, muestra la segunda al hover.</span>
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setCatalogEffects(prev => ({ ...prev, imageSwapOnHover: !prev.imageSwapOnHover }))}
-                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${catalogEffects.imageSwapOnHover ? 'bg-primary-600' : 'bg-gray-300'}`}
-                          >
-                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${catalogEffects.imageSwapOnHover ? 'translate-x-6' : 'translate-x-1'}`} />
-                          </button>
-                        </label>
-                      </div>
-
-                      {/* Diseño de la grilla de productos (F2.3) */}
+{/* Diseño de la grilla de productos (F2.3) */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           Diseño de los productos
@@ -8254,7 +7957,7 @@ export default function Settings() {
                         </div>
                       </div>
 
-                      {/* Navegación en escritorio: barra superior vs menú lateral */}
+{/* Navegación en escritorio: barra superior vs menú lateral */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           Navegación en computadora
@@ -8316,108 +8019,335 @@ export default function Settings() {
                         </div>
                       </div>
 
-                      {/* Tema del catálogo — galería (Fase 3: los temas viven en
-                          src/themes/catalogThemes.js; agregar uno ahí lo muestra aquí solo) */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Tema visual
+{/* Efectos del catálogo (F2.7) */}
+                      <div className="p-4 border border-gray-200 rounded-lg space-y-2.5">
+                        <span className="text-sm font-medium text-gray-900">Efectos</span>
+                        <label className="flex items-center justify-between gap-3 cursor-pointer">
+                          <span className="text-sm text-gray-700">
+                            Aparición al hacer scroll
+                            <span className="block text-xs text-gray-500">Los productos se deslizan suavemente al aparecer.</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setCatalogEffects(prev => ({ ...prev, scrollReveal: !prev.scrollReveal }))}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${catalogEffects.scrollReveal ? 'bg-primary-600' : 'bg-gray-300'}`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${catalogEffects.scrollReveal ? 'translate-x-6' : 'translate-x-1'}`} />
+                          </button>
                         </label>
-                        <p className="text-xs text-gray-500 mb-3">
-                          Cada tema cambia colores, tipografía y forma de tarjetas. Toca "Vista previa" para verlo con tus productos. Si eliges un color personalizado arriba, ese manda sobre el acento del tema.
-                        </p>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          {getCatalogThemesList().map((theme) => {
-                            const isSelected = catalogTheme === theme.id
-                            return (
-                              <div
-                                key={theme.id}
-                                className={`relative rounded-xl border-2 overflow-hidden transition-all ${
-                                  isSelected
-                                    ? 'border-emerald-500 ring-2 ring-emerald-500/20 shadow-md'
-                                    : 'border-gray-200 hover:border-gray-300'
-                                }`}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() => setCatalogTheme(theme.id)}
-                                  className="block w-full text-left"
-                                >
-                                  {/* Mini preview card */}
-                                  <div
-                                    className="aspect-[4/3] p-3 flex flex-col gap-2"
-                                    style={{ backgroundColor: theme.swatch.bg }}
-                                  >
-                                    <div className="flex items-center justify-between">
-                                      <div className="w-8 h-1.5 rounded-full" style={{ backgroundColor: theme.swatch.accent }} />
-                                      <div className="w-4 h-4 rounded-full" style={{ backgroundColor: theme.swatch.accent }} />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-1.5 flex-1">
-                                      <div className="rounded" style={{ backgroundColor: theme.swatch.card }} />
-                                      <div className="rounded" style={{ backgroundColor: theme.swatch.card }} />
-                                    </div>
-                                    <div className="flex-1 rounded" style={{ backgroundColor: theme.swatch.card, opacity: 0.6 }} />
-                                  </div>
-                                  {/* Nombre + descripción */}
-                                  <div className="px-3 py-2.5 bg-white border-t border-gray-200/60">
-                                    <div className="text-sm font-semibold text-gray-900">{theme.name}</div>
-                                    <div className="text-xs text-gray-500 line-clamp-2 mt-0.5">{theme.description}</div>
-                                  </div>
-                                </button>
-                                {/* Botón "Vista previa" — siempre visible, fácil de tocar */}
-                                <button
-                                  type="button"
-                                  onClick={(e) => { e.stopPropagation(); setPreviewThemeId(theme.id) }}
-                                  className="w-full px-3 py-2.5 bg-gray-50 hover:bg-gray-100 border-t border-gray-200/60 text-sm font-medium text-gray-700 flex items-center justify-center gap-2 transition-colors"
-                                >
-                                  <Eye className="w-4 h-4" />
-                                  Vista previa
-                                </button>
-                                {/* Badge de tema nuevo */}
-                                {theme.isNew && !isSelected && (
-                                  <span className="absolute top-2 left-2 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-blue-600 text-white rounded shadow">
-                                    Nuevo
-                                  </span>
-                                )}
-                                {/* Check de seleccionado */}
-                                {isSelected && (
-                                  <div className="absolute top-2 right-2 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center shadow">
-                                    <Check className="w-3.5 h-3.5 text-white" />
-                                  </div>
-                                )}
-                              </div>
-                            )
-                          })}
-                        </div>
+                        <label className="flex items-center justify-between gap-3 cursor-pointer">
+                          <span className="text-sm text-gray-700">
+                            Segunda foto al pasar el mouse
+                            <span className="block text-xs text-gray-500">En productos con 2+ imágenes, muestra la segunda al hover.</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setCatalogEffects(prev => ({ ...prev, imageSwapOnHover: !prev.imageSwapOnHover }))}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${catalogEffects.imageSwapOnHover ? 'bg-primary-600' : 'bg-gray-300'}`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${catalogEffects.imageSwapOnHover ? 'translate-x-6' : 'translate-x-1'}`} />
+                          </button>
+                        </label>
                       </div>
-
                         </div>
                       )}
                     </div>
-                    {/* FIN CARD 3: APARIENCIA */}
 
-                    {/* CARD 4: OPCIONES */}
                     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                       <button
                         type="button"
-                        onClick={() => toggleSection('options')}
+                        onClick={() => toggleSection('textos')}
                         className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center flex-shrink-0">
-                            <Cog className="w-5 h-5 text-gray-600" />
+                          <div className="w-10 h-10 rounded-lg bg-sky-50 flex items-center justify-center flex-shrink-0">
+                            <FileText className="w-5 h-5 text-sky-600" />
                           </div>
                           <div className="text-left">
-                            <h3 className="font-semibold text-gray-900">Opciones</h3>
-                            <p className="text-xs text-gray-500">Precios, stock, modos de pedido y horarios</p>
+                            <h3 className="font-semibold text-gray-900">Textos y promociones</h3>
+                            <p className="text-xs text-gray-500">Bienvenida, anuncios, ofertas y sellos de confianza</p>
                           </div>
                         </div>
-                        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${openSections.options ? 'rotate-180' : ''}`} />
+                        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${openSections.textos ? 'rotate-180' : ''}`} />
                       </button>
-                      {openSections.options && (
+                      {openSections.textos && (
                         <div className="px-5 pb-5 pt-4 border-t border-gray-100 space-y-5">
 
-                      {/* Opciones adicionales */}
+                      {/* Cuatro textos, cuatro lugares: sin este mapa nadie sabe
+                          cual aparece donde — era la mayor fuente de confusion. */}
+                      <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-900 leading-relaxed">
+                        Cada texto sale en un lugar distinto de tu tienda: el <strong>anuncio</strong> es la tira de color arriba de todo,
+                        la <strong>bienvenida</strong> va en la cabecera, el <strong>lema</strong> debajo del nombre de tu negocio,
+                        la <strong>oferta flash</strong> es la barra con cuenta regresiva y las <strong>observaciones</strong> aparecen
+                        al pie, antes de los productos. Deja vacío lo que no uses.
+                      </div>
+
+{/* Mensaje de bienvenida */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Mensaje de bienvenida (opcional)
+                        </label>
+                        <input
+                          type="text"
+                          value={catalogWelcome}
+                          onChange={(e) => setCatalogWelcome(e.target.value)}
+                          placeholder="¡Bienvenido! Explora nuestros productos"
+                          maxLength={100}
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        />
+                      </div>
+
+{/* Tagline */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Eslogan o descripción corta (opcional)
+                        </label>
+                        <input
+                          type="text"
+                          value={catalogTagline}
+                          onChange={(e) => setCatalogTagline(e.target.value)}
+                          placeholder="Los mejores productos al mejor precio"
+                          maxLength={60}
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">{catalogTagline.length}/60 caracteres</p>
+                      </div>
+
+{/* Tira publicitaria (banner superior del catálogo) */}
+                      <div className="p-4 border border-gray-200 rounded-lg space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <span className="text-sm font-medium text-gray-900">Tira publicitaria</span>
+                            <p className="text-xs text-gray-600 mt-0.5">
+                              Banner en la parte superior del catálogo para promociones o avisos (ej: "Envío gratis desde S/ 100").
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setCatalogAnnouncement(prev => ({ ...prev, enabled: !prev.enabled }))}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
+                              catalogAnnouncement.enabled ? 'bg-primary-600' : 'bg-gray-300'
+                            }`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                              catalogAnnouncement.enabled ? 'translate-x-6' : 'translate-x-1'
+                            }`} />
+                          </button>
+                        </div>
+                        {catalogAnnouncement.enabled && (
+                          <div className="space-y-3">
+                            <input
+                              type="text"
+                              value={catalogAnnouncement.text}
+                              onChange={(e) => setCatalogAnnouncement(prev => ({ ...prev, text: e.target.value }))}
+                              placeholder="Ej: Envío gratis en pedidos desde S/ 100"
+                              maxLength={120}
+                              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                            />
+                            <div className="flex flex-wrap items-center gap-3">
+                              <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+                                <button
+                                  type="button"
+                                  onClick={() => setCatalogAnnouncement(prev => ({ ...prev, mode: 'static' }))}
+                                  className={`px-3 py-1.5 text-sm font-medium ${
+                                    catalogAnnouncement.mode !== 'marquee' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  Fija
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setCatalogAnnouncement(prev => ({ ...prev, mode: 'marquee' }))}
+                                  className={`px-3 py-1.5 text-sm font-medium ${
+                                    catalogAnnouncement.mode === 'marquee' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  En movimiento
+                                </button>
+                              </div>
+                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                                Fondo
+                                <input
+                                  type="color"
+                                  value={catalogAnnouncement.backgroundColor}
+                                  onChange={(e) => setCatalogAnnouncement(prev => ({ ...prev, backgroundColor: e.target.value }))}
+                                  className="w-8 h-8 rounded border border-gray-300 cursor-pointer"
+                                />
+                              </label>
+                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                                Texto
+                                <input
+                                  type="color"
+                                  value={catalogAnnouncement.textColor}
+                                  onChange={(e) => setCatalogAnnouncement(prev => ({ ...prev, textColor: e.target.value }))}
+                                  className="w-8 h-8 rounded border border-gray-300 cursor-pointer"
+                                />
+                              </label>
+                            </div>
+                            {/* Vista previa en vivo */}
+                            {catalogAnnouncement.text.trim() && (
+                              <div className="rounded-lg overflow-hidden border border-gray-200">
+                                <div className="py-2 px-4 text-center" style={{ backgroundColor: catalogAnnouncement.backgroundColor }}>
+                                  <p className="text-sm font-medium" style={{ color: catalogAnnouncement.textColor }}>
+                                    {catalogAnnouncement.text.trim()}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+{/* Oferta con cuenta regresiva (F2.5) */}
+                      <div className="p-4 border border-gray-200 rounded-lg space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <span className="text-sm font-medium text-gray-900">Oferta con cuenta regresiva</span>
+                            <p className="text-xs text-gray-600 mt-0.5">
+                              Barra con temporizador hacia una fecha límite (crea urgencia). Al llegar a cero desaparece sola.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setCatalogFlashSale(prev => ({ ...prev, enabled: !prev.enabled }))}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${catalogFlashSale.enabled ? 'bg-primary-600' : 'bg-gray-300'}`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${catalogFlashSale.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                          </button>
+                        </div>
+                        {catalogFlashSale.enabled && (
+                          <div className="space-y-3">
+                            <input
+                              type="text"
+                              value={catalogFlashSale.text}
+                              onChange={(e) => setCatalogFlashSale(prev => ({ ...prev, text: e.target.value }))}
+                              placeholder="Ej: ¡Cyber días! Hasta 40% de descuento"
+                              maxLength={80}
+                              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                            />
+                            <div className="flex flex-wrap items-center gap-3">
+                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                                Termina el
+                                <input
+                                  type="datetime-local"
+                                  value={catalogFlashSale.endDate}
+                                  onChange={(e) => setCatalogFlashSale(prev => ({ ...prev, endDate: e.target.value }))}
+                                  className="px-2 py-1.5 border border-gray-300 rounded-lg text-sm"
+                                />
+                              </label>
+                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                                Fondo
+                                <input type="color" value={catalogFlashSale.backgroundColor} onChange={(e) => setCatalogFlashSale(prev => ({ ...prev, backgroundColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-300 cursor-pointer" />
+                              </label>
+                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                                Texto
+                                <input type="color" value={catalogFlashSale.textColor} onChange={(e) => setCatalogFlashSale(prev => ({ ...prev, textColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-300 cursor-pointer" />
+                              </label>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+{/* Sellos de confianza (F2.6) */}
+                      <div className="p-4 border border-gray-200 rounded-lg space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <span className="text-sm font-medium text-gray-900">Sellos de confianza</span>
+                            <p className="text-xs text-gray-600 mt-0.5">
+                              Fila de mensajes con ícono (envío, pago seguro, garantía…) debajo de la portada.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setCatalogTrustBadges(prev => ({ ...prev, enabled: !prev.enabled }))}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${catalogTrustBadges.enabled ? 'bg-primary-600' : 'bg-gray-300'}`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${catalogTrustBadges.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                          </button>
+                        </div>
+                        {catalogTrustBadges.enabled && (
+                          <div className="space-y-2">
+                            {(catalogTrustBadges.badges || []).map((badge, idx) => (
+                              <div key={badge.id || idx} className="flex items-center gap-2">
+                                <select
+                                  value={badge.icon || 'shield'}
+                                  onChange={(e) => setCatalogTrustBadges(prev => ({ ...prev, badges: prev.badges.map((b, i) => i === idx ? { ...b, icon: e.target.value } : b) }))}
+                                  className="px-2 py-1.5 border border-gray-300 rounded-lg text-sm flex-shrink-0"
+                                >
+                                  <option value="truck">🚚 Envío</option>
+                                  <option value="shield">🛡️ Seguro</option>
+                                  <option value="card">💳 Pago</option>
+                                  <option value="return">↩️ Devolución</option>
+                                  <option value="support">🎧 Soporte</option>
+                                  <option value="quality">✅ Garantía</option>
+                                  <option value="clock">⏰ Rapidez</option>
+                                  <option value="tag">🏷️ Ofertas</option>
+                                </select>
+                                <input
+                                  type="text"
+                                  value={badge.text || ''}
+                                  onChange={(e) => setCatalogTrustBadges(prev => ({ ...prev, badges: prev.badges.map((b, i) => i === idx ? { ...b, text: e.target.value } : b) }))}
+                                  placeholder="Ej: Envío gratis desde S/ 100"
+                                  maxLength={40}
+                                  className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-emerald-500"
+                                />
+                                <button type="button" onClick={() => setCatalogTrustBadges(prev => ({ ...prev, badges: prev.badges.filter((_, i) => i !== idx) }))} className="p-1 text-red-400 hover:text-red-600 flex-shrink-0">
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ))}
+                            {(catalogTrustBadges.badges || []).length < 4 && (
+                              <button
+                                type="button"
+                                onClick={() => setCatalogTrustBadges(prev => ({ ...prev, badges: [...(prev.badges || []), { id: `badge-${Date.now()}`, icon: 'shield', text: '' }] }))}
+                                className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:border-gray-400 hover:bg-gray-50"
+                              >
+                                + Agregar sello ({(catalogTrustBadges.badges || []).length}/4)
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+{/* Observaciones del catálogo */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Observaciones del catálogo (opcional)
+                        </label>
+                        <textarea
+                          value={catalogObservations}
+                          onChange={(e) => setCatalogObservations(e.target.value)}
+                          placeholder="Ej: Cuentas de pago, WhatsApp de vendedores, horarios..."
+                          maxLength={500}
+                          rows={3}
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">{catalogObservations.length}/500 caracteres — Se muestra arriba de las categorías en el catálogo</p>
+                      </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => toggleSection('productos')}
+                        className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center flex-shrink-0">
+                            <ShoppingBag className="w-5 h-5 text-amber-600" />
+                          </div>
+                          <div className="text-left">
+                            <h3 className="font-semibold text-gray-900">Tus productos y precios</h3>
+                            <p className="text-xs text-gray-500">Qué se muestra de tu inventario y cómo</p>
+                          </div>
+                        </div>
+                        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${openSections.productos ? 'rotate-180' : ''}`} />
+                      </button>
+                      {openSections.productos && (
+                        <div className="px-5 pb-5 pt-4 border-t border-gray-100 space-y-5">
+
                       <div className="space-y-3">
                         <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
                           <div className="flex-1">
@@ -8470,30 +8400,6 @@ export default function Settings() {
                         </label>
                         <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
                           <div className="flex-1">
-                            <span className="text-sm font-medium text-gray-900 block">Permitir cuentas de clientes</span>
-                            <span className="text-xs text-gray-500">Tus clientes pueden crear una cuenta con Google o correo para ver su historial de pedidos y guardar sus direcciones (el checkout se autocompleta). Siempre es opcional: quien no quiera registrarse compra igual.</span>
-                          </div>
-                          <input
-                            type="checkbox"
-                            checked={catalogCustomerAccounts}
-                            onChange={(e) => setCatalogCustomerAccounts(e.target.checked)}
-                            className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                          />
-                        </label>
-                        <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
-                          <div className="flex-1">
-                            <span className="text-sm font-medium text-gray-900 block">Mostrar todos los precios en catálogo</span>
-                            <span className="text-xs text-gray-500">Muestra precio público, mayorista, etc. en la tarjeta del producto. Si desactivas, solo se mostrará el precio público</span>
-                          </div>
-                          <input
-                            type="checkbox"
-                            checked={catalogShowAllPrices}
-                            onChange={(e) => setCatalogShowAllPrices(e.target.checked)}
-                            className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                          />
-                        </label>
-                        <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
-                          <div className="flex-1">
                             <span className="text-sm font-medium text-gray-900 block">Agrupar productos por categoría</span>
                             <span className="text-xs text-gray-500">Muestra secciones por categoría con scroll horizontal, seguido de todos los productos más abajo</span>
                           </div>
@@ -8504,10 +8410,7 @@ export default function Settings() {
                             className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                           />
                         </label>
-
-                        {/* Sub-opción: visible solo si "Agrupar por categoría" está activo */}
-                        {catalogGroupByCategory && (
-                          <label className="flex items-center justify-between cursor-pointer p-3 ml-6 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors bg-gray-50">
+                        <label className="flex items-center justify-between cursor-pointer p-3 ml-6 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors bg-gray-50">
                             <div className="flex-1">
                               <span className="text-sm font-medium text-gray-900 block">Mostrar solo carruseles</span>
                               <span className="text-xs text-gray-500">
@@ -8521,41 +8424,28 @@ export default function Settings() {
                               className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                             />
                           </label>
-                        )}
                       </div>
 
-                      {/* Tipos de pedido en menú digital (solo restaurante) */}
-                      {businessMode === 'restaurant' && (
-                        <div className="space-y-2">
-                          <p className="text-sm font-medium text-gray-700">Tipos de pedido en carta digital</p>
-                          <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
-                            <div className="flex-1">
-                              <span className="text-sm font-medium text-gray-900 block">Permitir pedidos Para Llevar</span>
-                              <span className="text-xs text-gray-500">Los clientes pueden hacer pedidos para recoger desde la carta digital</span>
-                            </div>
-                            <input
-                              type="checkbox"
-                              checked={catalogAllowTakeaway}
-                              onChange={(e) => setCatalogAllowTakeaway(e.target.checked)}
-                              className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                            />
-                          </label>
-                          <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
-                            <div className="flex-1">
-                              <span className="text-sm font-medium text-gray-900 block">Permitir pedidos Delivery</span>
-                              <span className="text-xs text-gray-500">Los clientes pueden hacer pedidos con delivery desde la carta digital</span>
-                            </div>
-                            <input
-                              type="checkbox"
-                              checked={catalogAllowDelivery}
-                              onChange={(e) => setCatalogAllowDelivery(e.target.checked)}
-                              className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                            />
-                          </label>
-                        </div>
-                      )}
-
-                      {/* Cantidad mínima por precio en catálogo */}
+                      {/* Mayorista es configuracion avanzada: plegada para que
+                          no se mezcle con los toggles del dia a dia. */}
+                      <details className="border border-gray-200 rounded-lg">
+                        <summary className="px-3 py-3 text-sm font-medium text-gray-900 cursor-pointer select-none hover:bg-gray-50">
+                          Precios mayoristas <span className="text-gray-400 font-normal">(avanzado)</span>
+                        </summary>
+                        <div className="px-3 pb-3 space-y-4">
+                        <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                          <div className="flex-1">
+                            <span className="text-sm font-medium text-gray-900 block">Mostrar todos los precios en catálogo</span>
+                            <span className="text-xs text-gray-500">Muestra precio público, mayorista, etc. en la tarjeta del producto. Si desactivas, solo se mostrará el precio público</span>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={catalogShowAllPrices}
+                            onChange={(e) => setCatalogShowAllPrices(e.target.checked)}
+                            className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                        </label>
+{/* Cantidad mínima por precio en catálogo */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Cantidad mínima por precio en catálogo
@@ -8590,8 +8480,94 @@ export default function Settings() {
                           ))}
                         </div>
                       </div>
+                        </div>
+                      </details>
 
-                      {/* Horario de atención */}
+{/* Productos en el catálogo */}
+                      <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
+                        <div className="flex items-start gap-3">
+                          <Info className="w-5 h-5 text-blue-600 mt-0.5" />
+                          <div>
+                            <h4 className="font-medium text-blue-900">¿Cómo agrego productos al catálogo?</h4>
+                            <p className="text-sm text-blue-700 mt-1">
+                              Ve a <strong>Productos</strong>, edita un producto y activa la opción <strong>"Mostrar en catálogo"</strong>. Solo los productos con esta opción activada aparecerán en tu catálogo público.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => toggleSection('compra')}
+                        className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-rose-50 flex items-center justify-center flex-shrink-0">
+                            <ShoppingCart className="w-5 h-5 text-rose-600" />
+                          </div>
+                          <div className="text-left">
+                            <h3 className="font-semibold text-gray-900">Cómo te compran</h3>
+                            <p className="text-xs text-gray-500">WhatsApp, tipos de pedido, horario y cuentas de clientes</p>
+                          </div>
+                        </div>
+                        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${openSections.compra ? 'rotate-180' : ''}`} />
+                      </button>
+                      {openSections.compra && (
+                        <div className="px-5 pb-5 pt-4 border-t border-gray-100 space-y-5">
+
+{/* WhatsApp del catálogo */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          WhatsApp para pedidos del catálogo
+                        </label>
+                        <input
+                          type="text"
+                          value={catalogWhatsapp}
+                          onChange={(e) => setCatalogWhatsapp(e.target.value.replace(/[^\d+]/g, ''))}
+                          placeholder="Ej: 51987654321"
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Número con código de país (ej: 51 para Perú). Si se deja vacío se usará el teléfono de la empresa.
+                        </p>
+                      </div>
+
+{/* Tipos de pedido en menú digital (solo restaurante) */}
+                      {businessMode === 'restaurant' && (
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium text-gray-700">Tipos de pedido en carta digital</p>
+                          <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                            <div className="flex-1">
+                              <span className="text-sm font-medium text-gray-900 block">Permitir pedidos Para Llevar</span>
+                              <span className="text-xs text-gray-500">Los clientes pueden hacer pedidos para recoger desde la carta digital</span>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={catalogAllowTakeaway}
+                              onChange={(e) => setCatalogAllowTakeaway(e.target.checked)}
+                              className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                            />
+                          </label>
+                          <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                            <div className="flex-1">
+                              <span className="text-sm font-medium text-gray-900 block">Permitir pedidos Delivery</span>
+                              <span className="text-xs text-gray-500">Los clientes pueden hacer pedidos con delivery desde la carta digital</span>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={catalogAllowDelivery}
+                              onChange={(e) => setCatalogAllowDelivery(e.target.checked)}
+                              className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                            />
+                          </label>
+                        </div>
+                      )}
+
+{/* Horario de atención */}
                       <div>
                         <div className="flex items-center justify-between mb-3">
                           <label className="block text-sm font-medium text-gray-700">
@@ -8665,13 +8641,92 @@ export default function Settings() {
                           </div>
                         )}
                       </div>
+
+                      <div className="space-y-3">
+                        <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                          <div className="flex-1">
+                            <span className="text-sm font-medium text-gray-900 block">Permitir cuentas de clientes</span>
+                            <span className="text-xs text-gray-500">Tus clientes pueden crear una cuenta con Google o correo para ver su historial de pedidos y guardar sus direcciones (el checkout se autocompleta). Siempre es opcional: quien no quiera registrarse compra igual.</span>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={catalogCustomerAccounts}
+                            onChange={(e) => setCatalogCustomerAccounts(e.target.checked)}
+                            className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                        </label>
+                      </div>
                         </div>
                       )}
                     </div>
-                    {/* FIN CARD 4: OPCIONES */}
 
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => toggleSection('avanzado')}
+                        className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                            <Cog className="w-5 h-5 text-gray-600" />
+                          </div>
+                          <div className="text-left">
+                            <h3 className="font-semibold text-gray-900">Avanzado</h3>
+                            <p className="text-xs text-gray-500">Dominio propio y opciones para usuarios con experiencia</p>
+                          </div>
+                        </div>
+                        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${openSections.avanzado ? 'rotate-180' : ''}`} />
+                      </button>
+                      {openSections.avanzado && (
+                        <div className="px-5 pb-5 pt-4 border-t border-gray-100 space-y-5">
+
+{/* Dominio personalizado */}
+                      {catalogSlug && (
+                        <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Globe className="w-5 h-5 text-blue-600" />
+                            <h4 className="font-medium text-gray-900">Dominio personalizado</h4>
+                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Opcional</span>
+                          </div>
+                          <p className="text-sm text-gray-600 mb-3">
+                            Conecta tu propio dominio para que tus clientes accedan a tu {businessMode === 'restaurant' ? 'carta digital' : 'catálogo'} desde tu propia dirección web.
+                          </p>
+                          <input
+                            type="text"
+                            value={catalogCustomDomain}
+                            onChange={(e) => setCatalogCustomDomain(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
+                            placeholder="mitienda.com"
+                            className="w-full px-4 py-2.5 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                          />
+                          {catalogCustomDomain && (
+                            <div className="mt-3 p-3 bg-white rounded-lg border border-blue-100">
+                              <p className="text-xs font-medium text-gray-700 mb-2">Para activar tu dominio, configura estos registros DNS:</p>
+                              <div className="space-y-1.5 text-xs font-mono">
+                                <div className="flex items-center gap-2">
+                                  <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-600">CNAME</span>
+                                  <span className="text-gray-500">www</span>
+                                  <span className="text-gray-400">&rarr;</span>
+                                  <span className="text-blue-600">cname.vercel-dns.com</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-600">A</span>
+                                  <span className="text-gray-500">@</span>
+                                  <span className="text-gray-400">&rarr;</span>
+                                  <span className="text-blue-600">76.76.21.21</span>
+                                </div>
+                              </div>
+                              <p className="text-xs text-gray-500 mt-2">
+                                Contacta a soporte para que activemos tu dominio. La propagación DNS puede tardar hasta 48 horas.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  {/* FIN 4 TARJETAS COLAPSABLES */}
+                  {/* FIN TARJETAS POR TAREA */}
                 </>
               )}
 
@@ -8866,7 +8921,10 @@ export default function Settings() {
                 </div>
               )}
 
-              <div className="flex justify-end pt-4 border-t border-gray-200">
+              {/* Barra de guardado FIJA: el boton viajaba al fondo de un
+                  formulario de 15 pantallas — era facil irse creyendo que se
+                  guardo. Pegada abajo, siempre a la vista. */}
+              <div className="sticky bottom-0 z-20 bg-white/95 backdrop-blur border-t border-gray-200 py-3 flex justify-end">
                 <Button
                   onClick={async () => {
                     if (isDemoMode) {
