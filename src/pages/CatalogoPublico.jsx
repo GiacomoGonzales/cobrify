@@ -11,7 +11,7 @@ import AnnouncementBar from '@/components/catalog/AnnouncementBar'
 import HeroCarousel from '@/components/catalog/HeroCarousel'
 import FlashSaleBar from '@/components/catalog/FlashSaleBar'
 import TrustBadges from '@/components/catalog/TrustBadges'
-import ReservarCitaModal from '@/components/catalog/ReservarCitaModal'
+import ReservarCitaSection from '@/components/catalog/ReservarCitaSection'
 import ReservarHabitacionModal from '@/components/catalog/ReservarHabitacionModal'
 import { ProductSkeleton } from '@/components/catalog/CatalogImages'
 import {
@@ -42,7 +42,7 @@ import { catalogDb as db } from '@/lib/firebase'
 import { getCatalogMinQty, formatCurrency } from '@/lib/utils'
 import { isMultiCurrencyEnabled, convertFromBase, normalizeCurrency, BASE_CURRENCY } from '@/utils/currency'
 import { getRateForDate } from '@/services/exchangeRateService'
-import { BedDouble, CalendarDays,
+import { BedDouble,
   Search,
   ShoppingBag,
   X,
@@ -210,7 +210,6 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // abre; la barra ancha bajo el hero ya no existe.
   const [searchOpen, setSearchOpen] = useState(false)
   // Reservas de citas desde el catalogo (veterinaria / General con agenda).
-  const [showReservarCita, setShowReservarCita] = useState(false)
   const [showReservarHabitacion, setShowReservarHabitacion] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState(null)
   const [selectedSubcategory, setSelectedSubcategory] = useState(null)
@@ -1821,21 +1820,17 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         themeClasses={{ card: thCard, border: thBorderColor, text: thText }}
       />
 
-      {/* Reservar cita: solo si el negocio lo activo en Configuracion >
-          Catalogo. La carta de restaurante no lo muestra — ahi el flujo es
-          pedir, no agendar. */}
+      {/* Reservar cita: SECCION de ancho completo (no un boton que abre un
+          modal) — servicios, calendario, horas y formulario a la vista a la
+          vez. Solo si el negocio lo activo en Configuracion > Catalogo; la
+          carta de restaurante no la muestra: ahi el flujo es pedir, no
+          agendar. */}
       {!isRestaurantMenu && business?.appointmentsBooking?.enabled === true && (
-        <div className="max-w-7xl mx-auto px-4 mt-4">
-          <button
-            type="button"
-            onClick={() => setShowReservarCita(true)}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity"
-            style={{ backgroundColor: getCatalogAccent(business) }}
-          >
-            <CalendarDays className="w-5 h-5" />
-            Reservar una cita
-          </button>
-        </div>
+        <ReservarCitaSection
+          business={business}
+          accent={getCatalogAccent(business)}
+          themeClasses={themeClasses}
+        />
       )}
 
       {/* Reservar habitacion (modo hotel). Lo que se envia es una SOLICITUD
@@ -2480,13 +2475,6 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       />}
 
       {/* Cart Drawer */}
-      <ReservarCitaModal
-        business={business}
-        accent={getCatalogAccent(business)}
-        isOpen={showReservarCita}
-        onClose={() => setShowReservarCita(false)}
-      />
-
       <ReservarHabitacionModal
         business={business}
         accent={getCatalogAccent(business)}

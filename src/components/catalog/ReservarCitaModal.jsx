@@ -22,16 +22,16 @@ import { X, Calendar, ChevronLeft, Check, Loader2 } from 'lucide-react'
  * negocio no es asunto suyo.
  */
 
-const FN_BASE = 'https://us-central1-cobrify-395fe.cloudfunctions.net'
+export const FN_BASE = 'https://us-central1-cobrify-395fe.cloudfunctions.net'
 
-const DIAS_CORTOS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
-const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+export const DIAS_CORTOS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
+export const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 
-const aYMD = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+export const aYMD = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
 // El scrollbar nativo bajo la fila de días se veía como un error de layout:
 // se oculta igual que en las filas del catálogo.
-const sinScrollbar = { scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }
+export const sinScrollbar = { scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }
 
 /**
  * Enlace "mi reserva" con boton de copiar. El enlace ES el comprobante: sin
