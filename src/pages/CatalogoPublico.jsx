@@ -737,7 +737,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     return fmtCatalog(product.price)
   }
 
-  const groupByCategory = business?.catalogGroupByCategory === true
+  // 'sections' (diseño estilo carta de restaurante) agrupa por categoría. El
+  // flag viejo catalogGroupByCategory se sigue respetando: 40 tiendas lo
+  // tenían activo antes de que esto fuera un diseño más del selector.
+  const groupByCategory = business?.catalogLayout === 'sections' || business?.catalogGroupByCategory === true
   // Solo aplica si también está activo groupByCategory.
   // Oculta el botón "Todos" y la lista flat al final → fuerza a entrar por categoría.
   const onlyCarousels = groupByCategory && business?.catalogOnlyCarousels === true
@@ -784,7 +787,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const sidebarNav = desktopNav === 'sidebar'
   // Grilla efectiva: config del negocio > propuesta del tema > masonry.
   // 'magazine' = cuadrícula uniforme donde la 1ra tarjeta ocupa 2x2 (revista).
-  const catalogLayout = business?.catalogLayout || themeLayout.grid || 'masonry'
+  const catalogLayoutRaw = business?.catalogLayout || themeLayout.grid || 'masonry'
+  // 'sections' organiza la PÁGINA (por categorías), no la tarjeta: sus grillas
+  // internas se pintan como cuadrícula.
+  const catalogLayout = catalogLayoutRaw === 'sections' ? 'grid' : catalogLayoutRaw
 
   // Clases/estilo de los botones de categoría según la variante del tema.
   // 'pills': píldora rellena (comportamiento clásico). 'underline': tabs con

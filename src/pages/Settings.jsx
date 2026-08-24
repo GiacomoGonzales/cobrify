@@ -1419,7 +1419,12 @@ export default function Settings() {
           enabled: businessData.catalogHero?.enabled === true,
           slides: Array.isArray(businessData.catalogHero?.slides) ? businessData.catalogHero.slides : [],
         })
-        setCatalogLayout(businessData.catalogLayout || 'masonry')
+        // Las tiendas que agrupaban por categoria con el flag viejo se ven
+        // en el selector como 'Secciones por categoria'.
+        setCatalogLayout(
+          businessData.catalogLayout
+          || (businessData.catalogGroupByCategory === true ? 'sections' : 'masonry')
+        )
         setCatalogDesktopNav(businessData.catalogDesktopNav || 'top')
         setCatalogFlashSale({
           enabled: false, text: '', endDate: '', backgroundColor: '#DC2626', textColor: '#FFFFFF',
@@ -7475,32 +7480,6 @@ export default function Settings() {
                             className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                           />
                         </label>
-                        <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
-                          <div className="flex-1">
-                            <span className="text-sm font-medium text-gray-900 block">Agrupar productos por categoría</span>
-                            <span className="text-xs text-gray-500">Muestra secciones por categoría con scroll horizontal, seguido de todos los productos más abajo</span>
-                          </div>
-                          <input
-                            type="checkbox"
-                            checked={catalogGroupByCategory}
-                            onChange={(e) => setCatalogGroupByCategory(e.target.checked)}
-                            className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                          />
-                        </label>
-                        <label className="flex items-center justify-between cursor-pointer p-3 ml-6 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors bg-gray-50">
-                            <div className="flex-1">
-                              <span className="text-sm font-medium text-gray-900 block">Mostrar solo carruseles</span>
-                              <span className="text-xs text-gray-500">
-                                Oculta el botón "Todos" y la lista completa de productos al final. El cliente navega únicamente entrando a cada categoría.
-                              </span>
-                            </div>
-                            <input
-                              type="checkbox"
-                              checked={catalogOnlyCarousels}
-                              onChange={(e) => setCatalogOnlyCarousels(e.target.checked)}
-                              className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                            />
-                          </label>
                       </div>
 
                       {/* Mayorista es configuracion avanzada: plegada para que
@@ -8335,62 +8314,95 @@ export default function Settings() {
                         </div>
                       </div>
                       <div className="px-5 py-5 space-y-5">
-{/* Diseño de la grilla de productos (F2.3) */}
+{/* Diseño de los productos (set de shopifree: incluye 'sections',
+    que reemplaza a los dos checkboxes de agrupar por categoria) */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1.5">
                           Diseño de los productos
                         </label>
                         <p className="text-xs text-gray-500 mb-3">
-                          Cómo se muestran los productos en el catálogo. El visitante igual puede alternar entre grilla y lista.
+                          Cómo se muestran los productos en tu tienda. El visitante igual puede alternar entre grilla y lista.
                         </p>
-                        <div className="grid grid-cols-3 gap-3 max-w-md">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                           {[
+                            { id: 'grid', label: 'Cuadrícula', desc: 'Clásico en columnas' },
                             { id: 'masonry', label: 'Mosaico', desc: 'Alturas naturales' },
-                            { id: 'grid', label: 'Cuadrícula', desc: 'Tarjetas uniformes' },
+                            { id: 'magazine', label: 'Magazine', desc: 'Producto destacado' },
                             { id: 'list', label: 'Lista', desc: 'Filas horizontales' },
+                            { id: 'sections', label: 'Secciones por categoría', desc: 'Cada categoría con su título y sus productos, estilo carta' },
                           ].map(opt => (
                             <button
                               key={opt.id}
                               type="button"
-                              onClick={() => setCatalogLayout(opt.id)}
-                              className={`p-3 rounded-xl border-2 transition-all text-center ${
+                              onClick={() => {
+                                setCatalogLayout(opt.id)
+                                // El flag viejo sigue existiendo (40 tiendas lo tenian):
+                                // se sincroniza con el selector para que nadie elija
+                                // "Cuadricula" y siga viendo secciones.
+                                setCatalogGroupByCategory(opt.id === 'sections')
+                              }}
+                              className={`relative p-4 rounded-xl border-2 transition-all text-left ${
                                 catalogLayout === opt.id
                                   ? 'border-primary-500 bg-primary-50/60'
                                   : 'border-gray-200 hover:border-gray-300'
                               }`}
                             >
-                              {/* Mini-mockup del layout */}
-                              <div className="h-14 mb-2 flex gap-1 justify-center">
+                              {catalogLayout === opt.id && (
+                                <span className="absolute top-2 right-2 w-5 h-5 rounded-full bg-primary-600 flex items-center justify-center">
+                                  <Check className="w-3 h-3 text-white" />
+                                </span>
+                              )}
+                              {/* Mini-mockup del diseño */}
+                              <div className="h-12 mb-2 flex items-center gap-1">
+                                {opt.id === 'grid' && (
+                                  <div className="grid grid-cols-2 gap-1 w-12">
+                                    {[0, 1, 2, 3].map(k => <div key={k} className="bg-gray-300 rounded-sm aspect-square" />)}
+                                  </div>
+                                )}
                                 {opt.id === 'masonry' && (
                                   <>
-                                    <div className="flex flex-col gap-1 w-4"><div className="bg-gray-300 rounded-sm h-6" /><div className="bg-gray-300 rounded-sm h-4" /></div>
-                                    <div className="flex flex-col gap-1 w-4"><div className="bg-gray-300 rounded-sm h-4" /><div className="bg-gray-300 rounded-sm h-7" /></div>
-                                    <div className="flex flex-col gap-1 w-4"><div className="bg-gray-300 rounded-sm h-7" /><div className="bg-gray-300 rounded-sm h-3" /></div>
+                                    <div className="flex flex-col gap-1 w-4"><div className="bg-gray-300 rounded-sm h-6" /><div className="bg-gray-300 rounded-sm h-3" /></div>
+                                    <div className="flex flex-col gap-1 w-4"><div className="bg-gray-300 rounded-sm h-3" /><div className="bg-gray-300 rounded-sm h-6" /></div>
+                                    <div className="flex flex-col gap-1 w-4"><div className="bg-gray-300 rounded-sm h-5" /><div className="bg-gray-300 rounded-sm h-4" /></div>
                                   </>
                                 )}
-                                {opt.id === 'grid' && (
-                                  <div className="grid grid-cols-2 gap-1 w-[3.25rem]">
-                                    <div className="bg-gray-300 rounded-sm aspect-square" />
-                                    <div className="bg-gray-300 rounded-sm aspect-square" />
-                                    <div className="bg-gray-300 rounded-sm aspect-square" />
-                                    <div className="bg-gray-300 rounded-sm aspect-square" />
+                                {opt.id === 'magazine' && (
+                                  <div className="flex gap-1">
+                                    <div className="bg-gray-300 rounded-sm w-8 h-8" />
+                                    <div className="flex flex-col gap-1"><div className="bg-gray-300 rounded-sm w-3.5 h-3.5" /><div className="bg-gray-300 rounded-sm w-3.5 h-3.5" /></div>
                                   </div>
                                 )}
                                 {opt.id === 'list' && (
-                                  <div className="flex flex-col gap-1 w-14 justify-center">
-                                    <div className="flex gap-1"><div className="bg-gray-300 rounded-sm w-4 h-4" /><div className="bg-gray-200 rounded-sm flex-1 h-4" /></div>
-                                    <div className="flex gap-1"><div className="bg-gray-300 rounded-sm w-4 h-4" /><div className="bg-gray-200 rounded-sm flex-1 h-4" /></div>
-                                    <div className="flex gap-1"><div className="bg-gray-300 rounded-sm w-4 h-4" /><div className="bg-gray-200 rounded-sm flex-1 h-4" /></div>
+                                  <div className="flex flex-col gap-1 w-12">
+                                    {[0, 1, 2].map(k => (
+                                      <div key={k} className="flex items-center gap-1">
+                                        <div className="bg-gray-300 rounded-sm w-3 h-3" />
+                                        <div className="bg-gray-200 rounded-sm h-1.5 flex-1" />
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {opt.id === 'sections' && (
+                                  <div className="flex flex-col gap-1.5 w-14">
+                                    {[0, 1].map(k => (
+                                      <div key={k} className="space-y-0.5">
+                                        <div className="bg-gray-400 rounded-sm h-1 w-6" />
+                                        <div className="flex gap-1">
+                                          <div className="bg-gray-300 rounded-sm w-3.5 h-3.5" />
+                                          <div className="bg-gray-300 rounded-sm w-3.5 h-3.5" />
+                                          <div className="bg-gray-300 rounded-sm w-3.5 h-3.5" />
+                                        </div>
+                                      </div>
+                                    ))}
                                   </div>
                                 )}
                               </div>
-                              <span className="block text-xs font-semibold text-gray-800">{opt.label}</span>
-                              <span className="block text-[10px] text-gray-500">{opt.desc}</span>
+                              <p className="text-sm font-semibold text-gray-900">{opt.label}</p>
+                              <p className="text-xs text-gray-500 mt-0.5">{opt.desc}</p>
                             </button>
                           ))}
                         </div>
                       </div>
-
 {/* Paginación de productos (port shopifree) */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1.5">
