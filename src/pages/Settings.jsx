@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Edit, MapPin, Plus, Bell, Bike, ShoppingBag, RefreshCw, Wrench, Monitor, Trash2, ChevronDown, ChevronUp, DollarSign, LayoutGrid, ArrowDown, Clock, ChevronsUpDown } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Edit, MapPin, Plus, Bell, Bike, ShoppingBag, RefreshCw, Wrench, Monitor, Trash2, ChevronDown, ChevronUp, DollarSign, LayoutGrid, ArrowDown, Clock, ChevronsUpDown, CalendarDays } from 'lucide-react'
 import QRCode from 'qrcode'
 import { QRCodeSVG } from 'qrcode.react'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -13,7 +13,6 @@ import { uploadImage } from '@/services/imageUploadService'
 import BranchInfoSettings from '@/components/settings/BranchInfoSettings'
 import { CATALOG_THEMES, getCatalogThemesList } from '@/themes/catalogThemes'
 import CatalogThemePreview from '@/components/CatalogThemePreview'
-import CatalogPreviewMini from '@/components/catalog/CatalogPreviewMini'
 import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
 import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth'
@@ -6973,63 +6972,46 @@ export default function Settings() {
 
       {/* Tab Content - Catálogo Público */}
       {activeTab === 'catalogo' && (
-        <div className="xl:flex xl:items-start xl:gap-6">
-          {/* Columna izquierda: el formulario completo, sin tocar */}
-          <div className="flex-1 min-w-0 space-y-6">
+        <div className="space-y-6">
           {/* ===== CATÁLOGO ===== */}
           <>
-              {/* Descripción + Toggle */}
-              <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-200">
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
-                    <Globe className="w-5 h-5 text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-emerald-900">
-                      {businessMode === 'restaurant'
-                        ? 'Comparte tu carta digital con tus clientes'
-                        : 'Comparte tu catálogo con tus clientes'}
+              {/* Cabecera + interruptor, con el mismo lenguaje visual del resto
+                  del sistema: tarjeta neutra, sin bloques de color. */}
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold text-gray-900">
+                      {businessMode === 'restaurant' ? 'Carta digital' : 'Catálogo online'}
                     </h3>
-                    <p className="text-sm text-emerald-700 mt-1">
+                    <p className="text-xs text-gray-500 mt-1 max-w-2xl">
                       {businessMode === 'restaurant'
-                        ? 'Crea una carta digital para que tus clientes vean el menú desde su celular y hagan pedidos directamente a cocina. Ideal con QR en cada mesa.'
-                        : 'Crea un catálogo online para que tus clientes vean tus productos, agreguen al carrito y hagan pedidos por WhatsApp. Sin necesidad de app ni registro.'}
+                        ? 'Tus clientes ven el menú desde su celular y hacen pedidos directo a cocina. Ideal con un QR en cada mesa.'
+                        : 'Tus clientes ven tus productos, arman su carrito y te hacen el pedido. Sin app ni registro.'}
                     </p>
                   </div>
+                  <label className="flex items-center gap-2 cursor-pointer flex-shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={catalogEnabled}
+                      onChange={(e) => setCatalogEnabled(e.target.checked)}
+                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <span className="text-sm font-medium text-gray-700">
+                      {catalogEnabled ? 'Activo' : 'Activar'}
+                    </span>
+                  </label>
                 </div>
               </div>
-
-              <label className="flex items-start space-x-3 cursor-pointer group p-4 border-2 rounded-xl transition-colors hover:border-emerald-300">
-                <input
-                  type="checkbox"
-                  checked={catalogEnabled}
-                  onChange={(e) => setCatalogEnabled(e.target.checked)}
-                  className="mt-1 w-5 h-5 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
-                />
-                <div className="flex-1">
-                  <span className="text-base font-semibold text-gray-900">
-                    {catalogEnabled
-                      ? (businessMode === 'restaurant' ? 'Carta digital habilitada' : 'Catálogo habilitado')
-                      : (businessMode === 'restaurant' ? 'Habilitar carta digital' : 'Habilitar catálogo público')}
-                  </span>
-                  <p className="text-sm text-gray-600 mt-1">
-                    {catalogEnabled
-                      ? (businessMode === 'restaurant' ? 'Tu carta digital está activa y visible para el público' : 'Tu catálogo está activo y visible para el público')
-                      : (businessMode === 'restaurant' ? 'Activa esta opción para crear tu carta digital' : 'Activa esta opción para crear tu catálogo online')}
-                  </p>
-                </div>
-              </label>
 
               {/* Configuración del catálogo (solo si está habilitado) */}
               {catalogEnabled && (
                 <>
-                  {/* Pestanas internas (forma de la pagina de apariencia de
-                      shopifree): lo principal primero, lo que sigue despues y
-                      AVANZADO al final — lo que casi nadie toca. Las secciones
-                      van SIEMPRE ABIERTAS: con seis acordeones cerrados nadie
-                      encontraba nada (reporte del 24-ago-2026). */}
-                  <div className="border-b border-gray-200 -mt-2">
-                    <nav className="flex gap-6 overflow-x-auto scrollbar-hide">
+                  {/* Pestanas internas: lo principal primero (identidad,
+                      apariencia, portada, enlace), luego contenido y ventas, y
+                      AVANZADO al final. Mismo lenguaje visual que Reportes y
+                      Ventas: tarjetas neutras, sin bloques de color. */}
+                  <div className="border-b border-gray-200">
+                    <nav className="-mb-px flex gap-6 overflow-x-auto scrollbar-hide">
                       {[
                         { id: 'tienda', label: 'Tu tienda' },
                         { id: 'contenido', label: 'Contenido y ventas' },
@@ -7053,398 +7035,15 @@ export default function Settings() {
 
                   {catalogTab === 'tienda' && (
                     <div className="space-y-4">
-                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                      <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
-                        <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
-                          <Globe className="w-5 h-5 text-emerald-600" />
-                        </div>
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-100">
+                        <Store className="w-4 h-4 text-gray-400 flex-shrink-0" />
                         <div>
-                          <h3 className="font-semibold text-gray-900">Tu dirección y compartir</h3>
-                          <p className="text-xs text-gray-500">El enlace de tu tienda, el código QR y cómo difundirlo</p>
+                          <h3 className="text-sm font-semibold text-gray-900">Identidad</h3>
+                          <p className="text-xs text-gray-500">Tu logo, el lema y el mensaje de bienvenida</p>
                         </div>
                       </div>
-                      <div className="px-5 pb-5 pt-4 space-y-5">
-
-{/* URL del catálogo */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          {businessMode === 'restaurant' ? 'URL de tu carta digital' : 'URL de tu catálogo'}
-                        </label>
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 flex items-center bg-gray-100 rounded-lg overflow-hidden">
-                            <span className="px-3 py-2.5 text-gray-500 text-sm bg-gray-200">
-                              {resellerCustomDomain || 'cobrifyperu.com'}/{businessMode === 'restaurant' ? 'menu' : 'catalogo'}/
-                            </span>
-                            <input
-                              type="text"
-                              value={catalogSlug}
-                              onChange={(e) => setCatalogSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                              placeholder={businessMode === 'restaurant' ? 'mi-restaurante' : 'mi-tienda'}
-                              className="flex-1 px-3 py-2.5 bg-white border-0 focus:ring-2 focus:ring-emerald-500 text-gray-900"
-                            />
-                          </div>
-                          {catalogSlug && (
-                            <button
-                              type="button"
-                              onClick={() => window.open(`${resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/${businessMode === 'restaurant' ? 'menu' : 'catalogo'}/${catalogSlug}`, '_blank')}
-                              className="p-2.5 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
-                              title={businessMode === 'restaurant' ? 'Ver carta digital' : 'Ver catálogo'}
-                            >
-                              <ExternalLink className="w-5 h-5" />
-                            </button>
-                          )}
-                        </div>
-                        <p className="text-xs text-gray-500 mt-2">
-                          {businessMode === 'restaurant'
-                            ? 'Solo letras minúsculas, números y guiones. Ejemplo: mi-restaurante, la-buena-mesa'
-                            : 'Solo letras minúsculas, números y guiones. Ejemplo: mi-tienda, ferreteria-lopez'}
-                        </p>
-                      </div>
-
-{/* Vista previa del enlace */}
-                      {catalogSlug && (
-                        <div className="p-4 bg-gray-50 rounded-xl">
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs text-gray-500 mb-1">
-                                {businessMode === 'restaurant' ? 'Enlace de tu carta digital:' : 'Enlace de tu catálogo:'}
-                              </p>
-                              <p className="text-sm font-medium text-emerald-600 truncate">
-                                {resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/{businessMode === 'restaurant' ? 'menu' : 'catalogo'}/{catalogSlug}
-                              </p>
-                            </div>
-                            <button
-                              onClick={() => {
-                                navigator.clipboard.writeText(`${resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/${businessMode === 'restaurant' ? 'menu' : 'catalogo'}/${catalogSlug}`)
-                                toast.success('Enlace copiado al portapapeles')
-                              }}
-                              className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
-                            >
-                              <Copy className="w-4 h-4" />
-                              Copiar
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-{/* Código QR */}
-                      {catalogSlug && catalogQrDataUrl && (
-                        <div className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl border border-emerald-200">
-                          <div className="flex items-center gap-2 mb-3">
-                            <QrCode className="w-5 h-5 text-emerald-600" />
-                            <h4 className="font-medium text-gray-900">
-                              {businessMode === 'restaurant' ? 'Código QR de tu Carta Digital' : 'Código QR de tu Catálogo'}
-                            </h4>
-                          </div>
-                          <div className="flex flex-col sm:flex-row items-center gap-4">
-                            <div className="bg-white p-3 rounded-xl shadow-sm">
-                              <img
-                                src={catalogQrDataUrl}
-                                alt={businessMode === 'restaurant' ? 'QR de carta digital' : 'QR del catálogo'}
-                                className="w-40 h-40"
-                              />
-                            </div>
-                            <div className="flex-1 text-center sm:text-left">
-                              <p className="text-sm text-gray-600 mb-3">
-                                Descarga este código QR para compartirlo en tu negocio, tarjetas de presentación, o redes sociales.
-                              </p>
-                              <button
-                                onClick={async () => {
-                                  try {
-                                    const filename = `${businessMode === 'restaurant' ? 'menu' : 'catalogo'}-${catalogSlug}-qr.png`
-                                    await downloadDataUrl(catalogQrDataUrl, filename, {
-                                      title: filename,
-                                      dialogTitle: businessMode === 'restaurant' ? 'Guardar QR de la carta' : 'Guardar QR del catálogo'
-                                    })
-                                    toast.success('QR descargado exitosamente')
-                                  } catch (err) {
-                                    console.error('Error descargando QR:', err)
-                                    toast.error('No se pudo descargar el QR')
-                                  }
-                                }}
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium"
-                              >
-                                <Download className="w-4 h-4" />
-                                Descargar QR
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-{/* QR por Mesa — solo restaurantes */}
-                      {businessMode === 'restaurant' && catalogSlug && (
-                        <div className="p-4 bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl border border-orange-200">
-                          <div className="border-t border-orange-200 pt-4 mt-4">
-                            <div className="flex items-center gap-2 mb-3">
-                              <QrCode className="w-5 h-5 text-orange-600" />
-                              <h5 className="font-medium text-gray-900">Códigos QR por Mesa</h5>
-                            </div>
-                            <p className="text-sm text-gray-600 mb-4">
-                              Genera códigos QR para cada mesa. Al escanear, el cliente verá la carta con su número de mesa pre-cargado.
-                            </p>
-
-                            {generatingTableQrs && (
-                              <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                                Generando QRs de mesas...
-                              </div>
-                            )}
-
-                            {!generatingTableQrs && tableQrCodes.length === 0 && (
-                              <p className="text-sm text-gray-500 italic mb-4">
-                                No hay mesas configuradas. Ve a la página de Mesas para crearlas.
-                              </p>
-                            )}
-
-                            {tableQrCodes.length > 0 && (
-                              <div className="space-y-4">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-sm text-gray-600">{tableQrCodes.length} códigos generados</span>
-                                  <button
-                                    type="button"
-                                    onClick={async () => {
-                                      try {
-                                        // Con varias sedes el nombre lleva la sucursal:
-                                        // "mesa-5-qr.png" repetido no distingue cual imprimir.
-                                        const files = tableQrCodes.map(qr => ({
-                                          dataUrl: qr.dataUrl,
-                                          filename: branches.length > 0
-                                            ? `${slugSede(qr.branchName)}-mesa-${qr.table}-qr.png`
-                                            : `mesa-${qr.table}-qr.png`
-                                        }))
-                                        const result = await saveFilesToDevice(files)
-                                        if (result.nativeFolder) {
-                                          toast.success(`${result.count} QRs guardados en ${result.nativeFolder}`)
-                                        } else {
-                                          toast.success('Descargando todos los QRs...')
-                                        }
-                                      } catch (err) {
-                                        console.error('Error descargando QRs de mesas:', err)
-                                        toast.error('No se pudieron descargar los QRs')
-                                      }
-                                    }}
-                                    className="flex items-center gap-2 px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm"
-                                  >
-                                    <Download className="w-4 h-4" />
-                                    Descargar todos
-                                  </button>
-                                </div>
-
-                                <div className="max-h-96 overflow-y-auto p-2 bg-white rounded-lg space-y-4">
-                                  {(() => {
-                                    // Agrupado por sucursal: con dos locales, una grilla plana
-                                    // con "Mesa 5" repetida no dice cual QR va en cual local.
-                                    const grupos = []
-                                    const principal = tableQrCodes.filter(q => !q.branchId)
-                                    if (principal.length > 0) {
-                                      grupos.push({ key: 'main', nombre: principal[0].branchName, qrs: principal })
-                                    }
-                                    branches.forEach(b => {
-                                      const suyos = tableQrCodes.filter(q => q.branchId === b.id)
-                                      if (suyos.length > 0) grupos.push({ key: b.id, nombre: b.name, qrs: suyos })
-                                    })
-
-                                    const tarjeta = (qr) => (
-                                      <div key={qr.id} className="flex flex-col items-center p-2 border rounded-lg hover:border-orange-300 transition-colors">
-                                        <img src={qr.dataUrl} alt={`${qr.zone ? `${qr.zone} - ` : ''}Mesa ${qr.table}`} className="w-24 h-24" />
-                                        <span className="text-sm font-semibold text-gray-900 mt-1">
-                                          {qr.zone ? `${qr.zone} - ` : ''}Mesa {qr.table}
-                                        </span>
-                                        <button
-                                          type="button"
-                                          onClick={async () => {
-                                            try {
-                                              const filename = branches.length > 0
-                                                ? `${slugSede(qr.branchName)}-mesa-${qr.table}-qr.png`
-                                                : `mesa-${qr.table}-qr.png`
-                                              await downloadDataUrl(qr.dataUrl, filename, {
-                                                title: filename,
-                                                dialogTitle: `Guardar QR de la mesa ${qr.table}`
-                                              })
-                                            } catch (err) {
-                                              console.error('Error descargando QR de mesa:', err)
-                                              toast.error('No se pudo descargar el QR')
-                                            }
-                                          }}
-                                          className="mt-1 text-xs text-orange-600 hover:text-orange-700"
-                                        >
-                                          Descargar
-                                        </button>
-                                      </div>
-                                    )
-
-                                    // Sin sucursales configuradas no hay nada que agrupar.
-                                    if (branches.length === 0) {
-                                      return (
-                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                          {tableQrCodes.map(tarjeta)}
-                                        </div>
-                                      )
-                                    }
-
-                                    return grupos.map(g => (
-                                      <div key={g.key}>
-                                        <div className="flex items-center gap-1.5 mb-2">
-                                          <Store className="w-3.5 h-3.5 text-gray-400" />
-                                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide truncate" title={g.nombre}>
-                                            {g.nombre}
-                                          </span>
-                                          <span className="text-xs text-gray-400">({g.qrs.length})</span>
-                                        </div>
-                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                          {g.qrs.map(tarjeta)}
-                                        </div>
-                                      </div>
-                                    ))
-                                  })()}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                      </div>
-                    </div>
-
-                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                      <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
-                        <div className="w-10 h-10 rounded-lg bg-violet-50 flex items-center justify-center flex-shrink-0">
-                          <Palette className="w-5 h-5 text-violet-600" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-gray-900">Así se ve tu tienda</h3>
-                          <p className="text-xs text-gray-500">Tema, colores, logo, portada y diseño de los productos</p>
-                        </div>
-                      </div>
-                      <div className="px-5 pb-5 pt-4 space-y-5">
-
-{/* Tema del catálogo — galería (Fase 3: los temas viven en
-                          src/themes/catalogThemes.js; agregar uno ahí lo muestra aquí solo) */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Tema visual
-                        </label>
-                        <p className="text-xs text-gray-500 mb-3">
-                          Cada tema cambia colores, tipografía y forma de tarjetas. Toca "Vista previa" para verlo con tus productos. Si eliges un color personalizado arriba, ese manda sobre el acento del tema.
-                        </p>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          {getCatalogThemesList().map((theme) => {
-                            const isSelected = catalogTheme === theme.id
-                            return (
-                              <div
-                                key={theme.id}
-                                className={`relative rounded-xl border-2 overflow-hidden transition-all ${
-                                  isSelected
-                                    ? 'border-emerald-500 ring-2 ring-emerald-500/20 shadow-md'
-                                    : 'border-gray-200 hover:border-gray-300'
-                                }`}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() => setCatalogTheme(theme.id)}
-                                  className="block w-full text-left"
-                                >
-                                  {/* Mini preview card */}
-                                  <div
-                                    className="aspect-[4/3] p-3 flex flex-col gap-2"
-                                    style={{ backgroundColor: theme.swatch.bg }}
-                                  >
-                                    <div className="flex items-center justify-between">
-                                      <div className="w-8 h-1.5 rounded-full" style={{ backgroundColor: theme.swatch.accent }} />
-                                      <div className="w-4 h-4 rounded-full" style={{ backgroundColor: theme.swatch.accent }} />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-1.5 flex-1">
-                                      <div className="rounded" style={{ backgroundColor: theme.swatch.card }} />
-                                      <div className="rounded" style={{ backgroundColor: theme.swatch.card }} />
-                                    </div>
-                                    <div className="flex-1 rounded" style={{ backgroundColor: theme.swatch.card, opacity: 0.6 }} />
-                                  </div>
-                                  {/* Nombre + descripción */}
-                                  <div className="px-3 py-2.5 bg-white border-t border-gray-200/60">
-                                    <div className="text-sm font-semibold text-gray-900">{theme.name}</div>
-                                    <div className="text-xs text-gray-500 line-clamp-2 mt-0.5">{theme.description}</div>
-                                  </div>
-                                </button>
-                                {/* Botón "Vista previa" — siempre visible, fácil de tocar */}
-                                <button
-                                  type="button"
-                                  onClick={(e) => { e.stopPropagation(); setPreviewThemeId(theme.id) }}
-                                  className="w-full px-3 py-2.5 bg-gray-50 hover:bg-gray-100 border-t border-gray-200/60 text-sm font-medium text-gray-700 flex items-center justify-center gap-2 transition-colors"
-                                >
-                                  <Eye className="w-4 h-4" />
-                                  Vista previa
-                                </button>
-                                {/* Badge de tema nuevo */}
-                                {theme.isNew && !isSelected && (
-                                  <span className="absolute top-2 left-2 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-blue-600 text-white rounded shadow">
-                                    Nuevo
-                                  </span>
-                                )}
-                                {/* Check de seleccionado */}
-                                {isSelected && (
-                                  <div className="absolute top-2 right-2 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center shadow">
-                                    <Check className="w-3.5 h-3.5 text-white" />
-                                  </div>
-                                )}
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-
-{/* Color */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Color principal del catálogo
-                        </label>
-                        <div className="flex flex-wrap gap-3">
-                          {[
-                            { color: '#10B981', name: 'Esmeralda' },
-                            { color: '#3B82F6', name: 'Azul' },
-                            { color: '#8B5CF6', name: 'Violeta' },
-                            { color: '#F59E0B', name: 'Ámbar' },
-                            { color: '#EF4444', name: 'Rojo' },
-                            { color: '#EC4899', name: 'Rosa' },
-                            { color: '#14B8A6', name: 'Teal' },
-                            { color: '#1F2937', name: 'Oscuro' },
-                          ].map((option) => (
-                            <button
-                              key={option.color}
-                              type="button"
-                              onClick={() => setCatalogColor(option.color)}
-                              className={`flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all ${
-                                catalogColor === option.color
-                                  ? 'border-gray-900 shadow-md'
-                                  : 'border-transparent hover:border-gray-300'
-                              }`}
-                            >
-                              <div
-                                className="w-10 h-10 rounded-full shadow-sm flex items-center justify-center"
-                                style={{ backgroundColor: option.color }}
-                              >
-                                {catalogColor === option.color && (
-                                  <Check className="w-5 h-5 text-white" />
-                                )}
-                              </div>
-                              <span className="text-xs text-gray-600">{option.name}</span>
-                            </button>
-                          ))}
-                          <div className="flex flex-col items-center gap-1 p-2">
-                            <input
-                              type="color"
-                              value={catalogColor}
-                              onChange={(e) => setCatalogColor(e.target.value)}
-                              onInput={(e) => setCatalogColor(e.target.value)}
-                              onBlur={(e) => setCatalogColor(e.target.value)}
-                              className="w-10 h-10 rounded-full cursor-pointer border-2 border-gray-300"
-                            />
-                            <span className="text-xs text-gray-600">Otro</span>
-                          </div>
-                        </div>
-                      </div>
-
+                      <div className="px-5 py-5 space-y-5">
 {/* Logo del catálogo — cuadrado + horizontal */}
                       <div className="space-y-4">
                         <div>
@@ -7471,7 +7070,7 @@ export default function Settings() {
                             <p className="text-sm font-medium text-gray-800">Logo cuadrado</p>
                             <p className="text-xs text-gray-500">Se muestra junto al nombre del negocio en el header.</p>
                             <div className="flex items-center gap-2 flex-wrap">
-                              <label className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg cursor-pointer transition-colors ${uploadingCatalogLogo ? 'bg-gray-100 text-gray-400' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'}`}>
+                              <label className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg cursor-pointer transition-colors ${uploadingCatalogLogo ? 'bg-gray-100 text-gray-400' : 'bg-gray-50 text-primary-700 hover:bg-gray-100 border border-gray-200'}`}>
                                 {uploadingCatalogLogo ? (
                                   <><Loader2 className="w-4 h-4 animate-spin" />Subiendo…</>
                                 ) : (
@@ -7529,7 +7128,7 @@ export default function Settings() {
                             <p className="text-sm font-medium text-gray-800">Logo horizontal <span className="text-xs font-normal text-gray-500">(opcional)</span></p>
                             <p className="text-xs text-gray-500">Si lo subes, reemplaza al logo cuadrado y oculta el nombre del negocio en el header.</p>
                             <div className="flex items-center gap-2 flex-wrap">
-                              <label className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg cursor-pointer transition-colors ${uploadingCatalogLogoLandscape ? 'bg-gray-100 text-gray-400' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'}`}>
+                              <label className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg cursor-pointer transition-colors ${uploadingCatalogLogoLandscape ? 'bg-gray-100 text-gray-400' : 'bg-gray-50 text-primary-700 hover:bg-gray-100 border border-gray-200'}`}>
                                 {uploadingCatalogLogoLandscape ? (
                                   <><Loader2 className="w-4 h-4 animate-spin" />Subiendo…</>
                                 ) : (
@@ -7575,6 +7174,185 @@ export default function Settings() {
                         </div>
                       </div>
 
+{/* Tagline */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Eslogan o descripción corta (opcional)
+                        </label>
+                        <input
+                          type="text"
+                          value={catalogTagline}
+                          onChange={(e) => setCatalogTagline(e.target.value)}
+                          placeholder="Los mejores productos al mejor precio"
+                          maxLength={60}
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">{catalogTagline.length}/60 caracteres</p>
+                      </div>
+
+{/* Mensaje de bienvenida */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Mensaje de bienvenida (opcional)
+                        </label>
+                        <input
+                          type="text"
+                          value={catalogWelcome}
+                          onChange={(e) => setCatalogWelcome(e.target.value)}
+                          placeholder="¡Bienvenido! Explora nuestros productos"
+                          maxLength={100}
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        />
+                      </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-100">
+                        <Palette className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-900">Apariencia</h3>
+                          <p className="text-xs text-gray-500">El tema y el color de tu tienda</p>
+                        </div>
+                      </div>
+                      <div className="px-5 py-5 space-y-5">
+{/* Tema del catálogo — galería (Fase 3: los temas viven en
+                          src/themes/catalogThemes.js; agregar uno ahí lo muestra aquí solo) */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Tema visual
+                        </label>
+                        <p className="text-xs text-gray-500 mb-3">
+                          Cada tema cambia colores, tipografía y forma de tarjetas. Toca "Vista previa" para verlo con tus productos. Si eliges un color personalizado arriba, ese manda sobre el acento del tema.
+                        </p>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          {getCatalogThemesList().map((theme) => {
+                            const isSelected = catalogTheme === theme.id
+                            return (
+                              <div
+                                key={theme.id}
+                                className={`relative rounded-xl border-2 overflow-hidden transition-all ${
+                                  isSelected
+                                    ? 'border-primary-500 shadow-md'
+                                    : 'border-gray-200 hover:border-gray-300'
+                                }`}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => setCatalogTheme(theme.id)}
+                                  className="block w-full text-left"
+                                >
+                                  {/* Mini preview card */}
+                                  <div
+                                    className="aspect-[4/3] p-3 flex flex-col gap-2"
+                                    style={{ backgroundColor: theme.swatch.bg }}
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <div className="w-8 h-1.5 rounded-full" style={{ backgroundColor: theme.swatch.accent }} />
+                                      <div className="w-4 h-4 rounded-full" style={{ backgroundColor: theme.swatch.accent }} />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-1.5 flex-1">
+                                      <div className="rounded" style={{ backgroundColor: theme.swatch.card }} />
+                                      <div className="rounded" style={{ backgroundColor: theme.swatch.card }} />
+                                    </div>
+                                    <div className="flex-1 rounded" style={{ backgroundColor: theme.swatch.card, opacity: 0.6 }} />
+                                  </div>
+                                  {/* Nombre + descripción */}
+                                  <div className="px-3 py-2.5 bg-white border-t border-gray-200/60">
+                                    <div className="text-sm font-semibold text-gray-900">{theme.name}</div>
+                                    <div className="text-xs text-gray-500 line-clamp-2 mt-0.5">{theme.description}</div>
+                                  </div>
+                                </button>
+                                {/* Botón "Vista previa" — siempre visible, fácil de tocar */}
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setPreviewThemeId(theme.id) }}
+                                  className="w-full px-3 py-2.5 bg-gray-50 hover:bg-gray-100 border-t border-gray-200/60 text-sm font-medium text-gray-700 flex items-center justify-center gap-2 transition-colors"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                  Vista previa
+                                </button>
+                                {/* Badge de tema nuevo */}
+                                {theme.isNew && !isSelected && (
+                                  <span className="absolute top-2 left-2 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-blue-600 text-white rounded shadow">
+                                    Nuevo
+                                  </span>
+                                )}
+                                {/* Check de seleccionado */}
+                                {isSelected && (
+                                  <div className="absolute top-2 right-2 w-6 h-6 bg-primary-600 rounded-full flex items-center justify-center shadow">
+                                    <Check className="w-3.5 h-3.5 text-white" />
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+
+{/* Color */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Color principal del catálogo
+                        </label>
+                        <div className="flex flex-wrap gap-3">
+                          {[
+                            { color: '#10B981', name: 'Esmeralda' },
+                            { color: '#3B82F6', name: 'Azul' },
+                            { color: '#8B5CF6', name: 'Violeta' },
+                            { color: '#F59E0B', name: 'Ámbar' },
+                            { color: '#EF4444', name: 'Rojo' },
+                            { color: '#EC4899', name: 'Rosa' },
+                            { color: '#14B8A6', name: 'Teal' },
+                            { color: '#1F2937', name: 'Oscuro' },
+                          ].map((option) => (
+                            <button
+                              key={option.color}
+                              type="button"
+                              onClick={() => setCatalogColor(option.color)}
+                              className={`flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all ${
+                                catalogColor === option.color
+                                  ? 'border-gray-900 shadow-md'
+                                  : 'border-transparent hover:border-gray-300'
+                              }`}
+                            >
+                              <div
+                                className="w-10 h-10 rounded-full shadow-sm flex items-center justify-center"
+                                style={{ backgroundColor: option.color }}
+                              >
+                                {catalogColor === option.color && (
+                                  <Check className="w-5 h-5 text-white" />
+                                )}
+                              </div>
+                              <span className="text-xs text-gray-600">{option.name}</span>
+                            </button>
+                          ))}
+                          <div className="flex flex-col items-center gap-1 p-2">
+                            <input
+                              type="color"
+                              value={catalogColor}
+                              onChange={(e) => setCatalogColor(e.target.value)}
+                              onInput={(e) => setCatalogColor(e.target.value)}
+                              onBlur={(e) => setCatalogColor(e.target.value)}
+                              className="w-10 h-10 rounded-full cursor-pointer border-2 border-gray-300"
+                            />
+                            <span className="text-xs text-gray-600">Otro</span>
+                          </div>
+                        </div>
+                      </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-100">
+                        <Image className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-900">Portada</h3>
+                          <p className="text-xs text-gray-500">La imagen grande de la cabecera</p>
+                        </div>
+                      </div>
+                      <div className="px-5 py-5 space-y-5">
 {/* Imagen de portada — desktop + móvil */}
                       <div className="space-y-3">
                         <div>
@@ -7832,7 +7610,7 @@ export default function Settings() {
                                       onChange={(e) => setCatalogHero(prev => ({ ...prev, slides: prev.slides.map((s, i) => i === idx ? { ...s, title: e.target.value } : s) }))}
                                       placeholder="Título (opcional)"
                                       maxLength={60}
-                                      className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-emerald-500"
+                                      className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-primary-500"
                                     />
                                     <input
                                       type="text"
@@ -7840,14 +7618,14 @@ export default function Settings() {
                                       onChange={(e) => setCatalogHero(prev => ({ ...prev, slides: prev.slides.map((s, i) => i === idx ? { ...s, subtitle: e.target.value } : s) }))}
                                       placeholder="Subtítulo (opcional)"
                                       maxLength={90}
-                                      className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-emerald-500"
+                                      className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-primary-500"
                                     />
                                     <input
                                       type="url"
                                       value={slide.link || ''}
                                       onChange={(e) => setCatalogHero(prev => ({ ...prev, slides: prev.slides.map((s, i) => i === idx ? { ...s, link: e.target.value } : s) }))}
                                       placeholder="Enlace al tocar el slide (opcional, ej: https://...)"
-                                      className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-emerald-500"
+                                      className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-primary-500"
                                     />
                                   </div>
                                   {/* Acciones: subir/bajar/eliminar */}
@@ -7909,10 +7687,276 @@ export default function Settings() {
                           </div>
                         )}
                       </div>
+                      </div>
+                    </div>
 
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-100">
+                        <Globe className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-900">Tu enlace</h3>
+                          <p className="text-xs text-gray-500">La dirección de tu tienda y el código QR</p>
+                        </div>
+                      </div>
+                      <div className="px-5 py-5 space-y-5">
+{/* URL del catálogo */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          {businessMode === 'restaurant' ? 'URL de tu carta digital' : 'URL de tu catálogo'}
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 flex items-center bg-gray-100 rounded-lg overflow-hidden">
+                            <span className="px-3 py-2.5 text-gray-500 text-sm bg-gray-200">
+                              {resellerCustomDomain || 'cobrifyperu.com'}/{businessMode === 'restaurant' ? 'menu' : 'catalogo'}/
+                            </span>
+                            <input
+                              type="text"
+                              value={catalogSlug}
+                              onChange={(e) => setCatalogSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                              placeholder={businessMode === 'restaurant' ? 'mi-restaurante' : 'mi-tienda'}
+                              className="flex-1 px-3 py-2.5 bg-white border-0 focus:ring-2 focus:ring-primary-500 text-gray-900"
+                            />
+                          </div>
+                          {catalogSlug && (
+                            <button
+                              type="button"
+                              onClick={() => window.open(`${resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/${businessMode === 'restaurant' ? 'menu' : 'catalogo'}/${catalogSlug}`, '_blank')}
+                              className="p-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-600 transition-colors"
+                              title={businessMode === 'restaurant' ? 'Ver carta digital' : 'Ver catálogo'}
+                            >
+                              <ExternalLink className="w-5 h-5" />
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">
+                          {businessMode === 'restaurant'
+                            ? 'Solo letras minúsculas, números y guiones. Ejemplo: mi-restaurante, la-buena-mesa'
+                            : 'Solo letras minúsculas, números y guiones. Ejemplo: mi-tienda, ferreteria-lopez'}
+                        </p>
+                      </div>
+
+{/* Vista previa del enlace */}
+                      {catalogSlug && (
+                        <div className="p-4 bg-gray-50 rounded-xl">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs text-gray-500 mb-1">
+                                {businessMode === 'restaurant' ? 'Enlace de tu carta digital:' : 'Enlace de tu catálogo:'}
+                              </p>
+                              <p className="text-sm font-medium text-primary-600 truncate">
+                                {resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/{businessMode === 'restaurant' ? 'menu' : 'catalogo'}/{catalogSlug}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(`${resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/${businessMode === 'restaurant' ? 'menu' : 'catalogo'}/${catalogSlug}`)
+                                toast.success('Enlace copiado al portapapeles')
+                              }}
+                              className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
+                            >
+                              <Copy className="w-4 h-4" />
+                              Copiar
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+{/* Código QR */}
+                      {catalogSlug && catalogQrDataUrl && (
+                        <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                          <div className="flex items-center gap-2 mb-3">
+                            <QrCode className="w-5 h-5 text-primary-600" />
+                            <h4 className="font-medium text-gray-900">
+                              {businessMode === 'restaurant' ? 'Código QR de tu Carta Digital' : 'Código QR de tu Catálogo'}
+                            </h4>
+                          </div>
+                          <div className="flex flex-col sm:flex-row items-center gap-4">
+                            <div className="bg-white p-3 rounded-xl shadow-sm">
+                              <img
+                                src={catalogQrDataUrl}
+                                alt={businessMode === 'restaurant' ? 'QR de carta digital' : 'QR del catálogo'}
+                                className="w-40 h-40"
+                              />
+                            </div>
+                            <div className="flex-1 text-center sm:text-left">
+                              <p className="text-sm text-gray-600 mb-3">
+                                Descarga este código QR para compartirlo en tu negocio, tarjetas de presentación, o redes sociales.
+                              </p>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const filename = `${businessMode === 'restaurant' ? 'menu' : 'catalogo'}-${catalogSlug}-qr.png`
+                                    await downloadDataUrl(catalogQrDataUrl, filename, {
+                                      title: filename,
+                                      dialogTitle: businessMode === 'restaurant' ? 'Guardar QR de la carta' : 'Guardar QR del catálogo'
+                                    })
+                                    toast.success('QR descargado exitosamente')
+                                  } catch (err) {
+                                    console.error('Error descargando QR:', err)
+                                    toast.error('No se pudo descargar el QR')
+                                  }
+                                }}
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
+                              >
+                                <Download className="w-4 h-4" />
+                                Descargar QR
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+{/* QR por Mesa — solo restaurantes */}
+                      {businessMode === 'restaurant' && catalogSlug && (
+                        <div className="p-4 bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl border border-orange-200">
+                          <div className="border-t border-orange-200 pt-4 mt-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <QrCode className="w-5 h-5 text-orange-600" />
+                              <h5 className="font-medium text-gray-900">Códigos QR por Mesa</h5>
+                            </div>
+                            <p className="text-sm text-gray-600 mb-4">
+                              Genera códigos QR para cada mesa. Al escanear, el cliente verá la carta con su número de mesa pre-cargado.
+                            </p>
+
+                            {generatingTableQrs && (
+                              <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Generando QRs de mesas...
+                              </div>
+                            )}
+
+                            {!generatingTableQrs && tableQrCodes.length === 0 && (
+                              <p className="text-sm text-gray-500 italic mb-4">
+                                No hay mesas configuradas. Ve a la página de Mesas para crearlas.
+                              </p>
+                            )}
+
+                            {tableQrCodes.length > 0 && (
+                              <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm text-gray-600">{tableQrCodes.length} códigos generados</span>
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      try {
+                                        // Con varias sedes el nombre lleva la sucursal:
+                                        // "mesa-5-qr.png" repetido no distingue cual imprimir.
+                                        const files = tableQrCodes.map(qr => ({
+                                          dataUrl: qr.dataUrl,
+                                          filename: branches.length > 0
+                                            ? `${slugSede(qr.branchName)}-mesa-${qr.table}-qr.png`
+                                            : `mesa-${qr.table}-qr.png`
+                                        }))
+                                        const result = await saveFilesToDevice(files)
+                                        if (result.nativeFolder) {
+                                          toast.success(`${result.count} QRs guardados en ${result.nativeFolder}`)
+                                        } else {
+                                          toast.success('Descargando todos los QRs...')
+                                        }
+                                      } catch (err) {
+                                        console.error('Error descargando QRs de mesas:', err)
+                                        toast.error('No se pudieron descargar los QRs')
+                                      }
+                                    }}
+                                    className="flex items-center gap-2 px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm"
+                                  >
+                                    <Download className="w-4 h-4" />
+                                    Descargar todos
+                                  </button>
+                                </div>
+
+                                <div className="max-h-96 overflow-y-auto p-2 bg-white rounded-lg space-y-4">
+                                  {(() => {
+                                    // Agrupado por sucursal: con dos locales, una grilla plana
+                                    // con "Mesa 5" repetida no dice cual QR va en cual local.
+                                    const grupos = []
+                                    const principal = tableQrCodes.filter(q => !q.branchId)
+                                    if (principal.length > 0) {
+                                      grupos.push({ key: 'main', nombre: principal[0].branchName, qrs: principal })
+                                    }
+                                    branches.forEach(b => {
+                                      const suyos = tableQrCodes.filter(q => q.branchId === b.id)
+                                      if (suyos.length > 0) grupos.push({ key: b.id, nombre: b.name, qrs: suyos })
+                                    })
+
+                                    const tarjeta = (qr) => (
+                                      <div key={qr.id} className="flex flex-col items-center p-2 border rounded-lg hover:border-orange-300 transition-colors">
+                                        <img src={qr.dataUrl} alt={`${qr.zone ? `${qr.zone} - ` : ''}Mesa ${qr.table}`} className="w-24 h-24" />
+                                        <span className="text-sm font-semibold text-gray-900 mt-1">
+                                          {qr.zone ? `${qr.zone} - ` : ''}Mesa {qr.table}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={async () => {
+                                            try {
+                                              const filename = branches.length > 0
+                                                ? `${slugSede(qr.branchName)}-mesa-${qr.table}-qr.png`
+                                                : `mesa-${qr.table}-qr.png`
+                                              await downloadDataUrl(qr.dataUrl, filename, {
+                                                title: filename,
+                                                dialogTitle: `Guardar QR de la mesa ${qr.table}`
+                                              })
+                                            } catch (err) {
+                                              console.error('Error descargando QR de mesa:', err)
+                                              toast.error('No se pudo descargar el QR')
+                                            }
+                                          }}
+                                          className="mt-1 text-xs text-orange-600 hover:text-orange-700"
+                                        >
+                                          Descargar
+                                        </button>
+                                      </div>
+                                    )
+
+                                    // Sin sucursales configuradas no hay nada que agrupar.
+                                    if (branches.length === 0) {
+                                      return (
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                          {tableQrCodes.map(tarjeta)}
+                                        </div>
+                                      )
+                                    }
+
+                                    return grupos.map(g => (
+                                      <div key={g.key}>
+                                        <div className="flex items-center gap-1.5 mb-2">
+                                          <Store className="w-3.5 h-3.5 text-gray-400" />
+                                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide truncate" title={g.nombre}>
+                                            {g.nombre}
+                                          </span>
+                                          <span className="text-xs text-gray-400">({g.qrs.length})</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                          {g.qrs.map(tarjeta)}
+                                        </div>
+                                      </div>
+                                    ))
+                                  })()}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      </div>
+                    </div>
+                    </div>
+                  )}
+
+                  {catalogTab === 'contenido' && (
+                    <div className="space-y-4">
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-100">
+                        <ShoppingBag className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-900">Productos</h3>
+                          <p className="text-xs text-gray-500">Cómo se muestran tus productos y sus precios</p>
+                        </div>
+                      </div>
+                      <div className="px-5 py-5 space-y-5">
 {/* Diseño de la grilla de productos (F2.3) */}
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
                           Diseño de los productos
                         </label>
                         <p className="text-xs text-gray-500 mb-3">
@@ -7930,7 +7974,7 @@ export default function Settings() {
                               onClick={() => setCatalogLayout(opt.id)}
                               className={`p-3 rounded-xl border-2 transition-all text-center ${
                                 catalogLayout === opt.id
-                                  ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/40'
+                                  ? 'border-primary-500 bg-primary-50/60'
                                   : 'border-gray-200 hover:border-gray-300'
                               }`}
                             >
@@ -7966,290 +8010,6 @@ export default function Settings() {
                         </div>
                       </div>
 
-                      </div>
-                    </div>
-                    </div>
-                  )}
-
-                  {catalogTab === 'contenido' && (
-                    <div className="space-y-4">
-                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                      <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
-                        <div className="w-10 h-10 rounded-lg bg-sky-50 flex items-center justify-center flex-shrink-0">
-                          <FileText className="w-5 h-5 text-sky-600" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-gray-900">Textos y promociones</h3>
-                          <p className="text-xs text-gray-500">Bienvenida, anuncios, ofertas y sellos de confianza</p>
-                        </div>
-                      </div>
-                      <div className="px-5 pb-5 pt-4 space-y-5">
-
-                      {/* Cuatro textos, cuatro lugares: sin este mapa nadie sabe
-                          cual aparece donde — era la mayor fuente de confusion. */}
-                      <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-900 leading-relaxed">
-                        Cada texto sale en un lugar distinto de tu tienda: el <strong>anuncio</strong> es la tira de color arriba de todo,
-                        la <strong>bienvenida</strong> va en la cabecera, el <strong>lema</strong> debajo del nombre de tu negocio,
-                        la <strong>oferta flash</strong> es la barra con cuenta regresiva y las <strong>observaciones</strong> aparecen
-                        al pie, antes de los productos. Deja vacío lo que no uses.
-                      </div>
-
-{/* Mensaje de bienvenida */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Mensaje de bienvenida (opcional)
-                        </label>
-                        <input
-                          type="text"
-                          value={catalogWelcome}
-                          onChange={(e) => setCatalogWelcome(e.target.value)}
-                          placeholder="¡Bienvenido! Explora nuestros productos"
-                          maxLength={100}
-                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                        />
-                      </div>
-
-{/* Tagline */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Eslogan o descripción corta (opcional)
-                        </label>
-                        <input
-                          type="text"
-                          value={catalogTagline}
-                          onChange={(e) => setCatalogTagline(e.target.value)}
-                          placeholder="Los mejores productos al mejor precio"
-                          maxLength={60}
-                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">{catalogTagline.length}/60 caracteres</p>
-                      </div>
-
-{/* Tira publicitaria (banner superior del catálogo) */}
-                      <div className="p-4 border border-gray-200 rounded-lg space-y-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <span className="text-sm font-medium text-gray-900">Tira publicitaria</span>
-                            <p className="text-xs text-gray-600 mt-0.5">
-                              Banner en la parte superior del catálogo para promociones o avisos (ej: "Envío gratis desde S/ 100").
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setCatalogAnnouncement(prev => ({ ...prev, enabled: !prev.enabled }))}
-                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
-                              catalogAnnouncement.enabled ? 'bg-primary-600' : 'bg-gray-300'
-                            }`}
-                          >
-                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                              catalogAnnouncement.enabled ? 'translate-x-6' : 'translate-x-1'
-                            }`} />
-                          </button>
-                        </div>
-                        {catalogAnnouncement.enabled && (
-                          <div className="space-y-3">
-                            <input
-                              type="text"
-                              value={catalogAnnouncement.text}
-                              onChange={(e) => setCatalogAnnouncement(prev => ({ ...prev, text: e.target.value }))}
-                              placeholder="Ej: Envío gratis en pedidos desde S/ 100"
-                              maxLength={120}
-                              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                            />
-                            <div className="flex flex-wrap items-center gap-3">
-                              <div className="flex rounded-lg border border-gray-300 overflow-hidden">
-                                <button
-                                  type="button"
-                                  onClick={() => setCatalogAnnouncement(prev => ({ ...prev, mode: 'static' }))}
-                                  className={`px-3 py-1.5 text-sm font-medium ${
-                                    catalogAnnouncement.mode !== 'marquee' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
-                                  }`}
-                                >
-                                  Fija
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setCatalogAnnouncement(prev => ({ ...prev, mode: 'marquee' }))}
-                                  className={`px-3 py-1.5 text-sm font-medium ${
-                                    catalogAnnouncement.mode === 'marquee' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
-                                  }`}
-                                >
-                                  En movimiento
-                                </button>
-                              </div>
-                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
-                                Fondo
-                                <input
-                                  type="color"
-                                  value={catalogAnnouncement.backgroundColor}
-                                  onChange={(e) => setCatalogAnnouncement(prev => ({ ...prev, backgroundColor: e.target.value }))}
-                                  className="w-8 h-8 rounded border border-gray-300 cursor-pointer"
-                                />
-                              </label>
-                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
-                                Texto
-                                <input
-                                  type="color"
-                                  value={catalogAnnouncement.textColor}
-                                  onChange={(e) => setCatalogAnnouncement(prev => ({ ...prev, textColor: e.target.value }))}
-                                  className="w-8 h-8 rounded border border-gray-300 cursor-pointer"
-                                />
-                              </label>
-                            </div>
-                            {/* Vista previa en vivo */}
-                            {catalogAnnouncement.text.trim() && (
-                              <div className="rounded-lg overflow-hidden border border-gray-200">
-                                <div className="py-2 px-4 text-center" style={{ backgroundColor: catalogAnnouncement.backgroundColor }}>
-                                  <p className="text-sm font-medium" style={{ color: catalogAnnouncement.textColor }}>
-                                    {catalogAnnouncement.text.trim()}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-{/* Oferta con cuenta regresiva (F2.5) */}
-                      <div className="p-4 border border-gray-200 rounded-lg space-y-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <span className="text-sm font-medium text-gray-900">Oferta con cuenta regresiva</span>
-                            <p className="text-xs text-gray-600 mt-0.5">
-                              Barra con temporizador hacia una fecha límite (crea urgencia). Al llegar a cero desaparece sola.
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setCatalogFlashSale(prev => ({ ...prev, enabled: !prev.enabled }))}
-                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${catalogFlashSale.enabled ? 'bg-primary-600' : 'bg-gray-300'}`}
-                          >
-                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${catalogFlashSale.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
-                          </button>
-                        </div>
-                        {catalogFlashSale.enabled && (
-                          <div className="space-y-3">
-                            <input
-                              type="text"
-                              value={catalogFlashSale.text}
-                              onChange={(e) => setCatalogFlashSale(prev => ({ ...prev, text: e.target.value }))}
-                              placeholder="Ej: ¡Cyber días! Hasta 40% de descuento"
-                              maxLength={80}
-                              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                            />
-                            <div className="flex flex-wrap items-center gap-3">
-                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
-                                Termina el
-                                <input
-                                  type="datetime-local"
-                                  value={catalogFlashSale.endDate}
-                                  onChange={(e) => setCatalogFlashSale(prev => ({ ...prev, endDate: e.target.value }))}
-                                  className="px-2 py-1.5 border border-gray-300 rounded-lg text-sm"
-                                />
-                              </label>
-                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
-                                Fondo
-                                <input type="color" value={catalogFlashSale.backgroundColor} onChange={(e) => setCatalogFlashSale(prev => ({ ...prev, backgroundColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-300 cursor-pointer" />
-                              </label>
-                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
-                                Texto
-                                <input type="color" value={catalogFlashSale.textColor} onChange={(e) => setCatalogFlashSale(prev => ({ ...prev, textColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-300 cursor-pointer" />
-                              </label>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-{/* Sellos de confianza (F2.6) */}
-                      <div className="p-4 border border-gray-200 rounded-lg space-y-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <span className="text-sm font-medium text-gray-900">Sellos de confianza</span>
-                            <p className="text-xs text-gray-600 mt-0.5">
-                              Fila de mensajes con ícono (envío, pago seguro, garantía…) debajo de la portada.
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setCatalogTrustBadges(prev => ({ ...prev, enabled: !prev.enabled }))}
-                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${catalogTrustBadges.enabled ? 'bg-primary-600' : 'bg-gray-300'}`}
-                          >
-                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${catalogTrustBadges.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
-                          </button>
-                        </div>
-                        {catalogTrustBadges.enabled && (
-                          <div className="space-y-2">
-                            {(catalogTrustBadges.badges || []).map((badge, idx) => (
-                              <div key={badge.id || idx} className="flex items-center gap-2">
-                                <select
-                                  value={badge.icon || 'shield'}
-                                  onChange={(e) => setCatalogTrustBadges(prev => ({ ...prev, badges: prev.badges.map((b, i) => i === idx ? { ...b, icon: e.target.value } : b) }))}
-                                  className="px-2 py-1.5 border border-gray-300 rounded-lg text-sm flex-shrink-0"
-                                >
-                                  <option value="truck">🚚 Envío</option>
-                                  <option value="shield">🛡️ Seguro</option>
-                                  <option value="card">💳 Pago</option>
-                                  <option value="return">↩️ Devolución</option>
-                                  <option value="support">🎧 Soporte</option>
-                                  <option value="quality">✅ Garantía</option>
-                                  <option value="clock">⏰ Rapidez</option>
-                                  <option value="tag">🏷️ Ofertas</option>
-                                </select>
-                                <input
-                                  type="text"
-                                  value={badge.text || ''}
-                                  onChange={(e) => setCatalogTrustBadges(prev => ({ ...prev, badges: prev.badges.map((b, i) => i === idx ? { ...b, text: e.target.value } : b) }))}
-                                  placeholder="Ej: Envío gratis desde S/ 100"
-                                  maxLength={40}
-                                  className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-emerald-500"
-                                />
-                                <button type="button" onClick={() => setCatalogTrustBadges(prev => ({ ...prev, badges: prev.badges.filter((_, i) => i !== idx) }))} className="p-1 text-red-400 hover:text-red-600 flex-shrink-0">
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            ))}
-                            {(catalogTrustBadges.badges || []).length < 4 && (
-                              <button
-                                type="button"
-                                onClick={() => setCatalogTrustBadges(prev => ({ ...prev, badges: [...(prev.badges || []), { id: `badge-${Date.now()}`, icon: 'shield', text: '' }] }))}
-                                className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:border-gray-400 hover:bg-gray-50"
-                              >
-                                + Agregar sello ({(catalogTrustBadges.badges || []).length}/4)
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-{/* Observaciones del catálogo */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Observaciones del catálogo (opcional)
-                        </label>
-                        <textarea
-                          value={catalogObservations}
-                          onChange={(e) => setCatalogObservations(e.target.value)}
-                          placeholder="Ej: Cuentas de pago, WhatsApp de vendedores, horarios..."
-                          maxLength={500}
-                          rows={3}
-                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">{catalogObservations.length}/500 caracteres — Se muestra arriba de las categorías en el catálogo</p>
-                      </div>
-                      </div>
-                    </div>
-
-                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                      <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
-                        <div className="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center flex-shrink-0">
-                          <ShoppingBag className="w-5 h-5 text-amber-600" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-gray-900">Tus productos y precios</h3>
-                          <p className="text-xs text-gray-500">Qué se muestra de tu inventario y cómo</p>
-                        </div>
-                      </div>
-                      <div className="px-5 pb-5 pt-4 space-y-5">
 
                       <div className="space-y-3">
                         <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
@@ -8348,9 +8108,10 @@ export default function Settings() {
                             className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                           />
                         </label>
+
 {/* Cantidad mínima por precio en catálogo */}
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
                           Cantidad mínima por precio en catálogo
                         </label>
                         <p className="text-xs text-gray-500 mb-3">
@@ -8377,7 +8138,7 @@ export default function Settings() {
                                   [key]: Math.max(1, parseInt(e.target.value) || 1)
                                 }))}
                                 onFocus={(e) => e.target.select()}
-                                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                               />
                             </div>
                           ))}
@@ -8401,21 +8162,248 @@ export default function Settings() {
                       </div>
                     </div>
 
-                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                      <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
-                        <div className="w-10 h-10 rounded-lg bg-rose-50 flex items-center justify-center flex-shrink-0">
-                          <ShoppingCart className="w-5 h-5 text-rose-600" />
-                        </div>
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-100">
+                        <FileText className="w-4 h-4 text-gray-400 flex-shrink-0" />
                         <div>
-                          <h3 className="font-semibold text-gray-900">Cómo te compran</h3>
-                          <p className="text-xs text-gray-500">WhatsApp, redes sociales, tipos de pedido, horario y cuentas</p>
+                          <h3 className="text-sm font-semibold text-gray-900">Promociones</h3>
+                          <p className="text-xs text-gray-500">Anuncios, ofertas, sellos y observaciones</p>
                         </div>
                       </div>
-                      <div className="px-5 pb-5 pt-4 space-y-5">
+                      <div className="px-5 py-5 space-y-5">
+                      {/* Cada promocion sale en un lugar distinto de la tienda:
+                          sin este mapa nadie sabe cual es cual. */}
+                      <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600 leading-relaxed">
+                        El <strong className="text-gray-900">anuncio</strong> es la tira de color arriba de todo, la <strong className="text-gray-900">oferta flash</strong> es la barra con cuenta regresiva,
+                        los <strong className="text-gray-900">sellos</strong> van debajo de la portada y las <strong className="text-gray-900">observaciones</strong> al pie, antes de los productos. Deja vacío lo que no uses.
+                      </div>
 
+{/* Tira publicitaria (banner superior del catálogo) */}
+                      <div className="p-4 border border-gray-200 rounded-lg space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <span className="text-sm font-medium text-gray-900">Tira publicitaria</span>
+                            <p className="text-xs text-gray-600 mt-0.5">
+                              Banner en la parte superior del catálogo para promociones o avisos (ej: "Envío gratis desde S/ 100").
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setCatalogAnnouncement(prev => ({ ...prev, enabled: !prev.enabled }))}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
+                              catalogAnnouncement.enabled ? 'bg-primary-600' : 'bg-gray-300'
+                            }`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                              catalogAnnouncement.enabled ? 'translate-x-6' : 'translate-x-1'
+                            }`} />
+                          </button>
+                        </div>
+                        {catalogAnnouncement.enabled && (
+                          <div className="space-y-3">
+                            <input
+                              type="text"
+                              value={catalogAnnouncement.text}
+                              onChange={(e) => setCatalogAnnouncement(prev => ({ ...prev, text: e.target.value }))}
+                              placeholder="Ej: Envío gratis en pedidos desde S/ 100"
+                              maxLength={120}
+                              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            />
+                            <div className="flex flex-wrap items-center gap-3">
+                              <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+                                <button
+                                  type="button"
+                                  onClick={() => setCatalogAnnouncement(prev => ({ ...prev, mode: 'static' }))}
+                                  className={`px-3 py-1.5 text-sm font-medium ${
+                                    catalogAnnouncement.mode !== 'marquee' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  Fija
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setCatalogAnnouncement(prev => ({ ...prev, mode: 'marquee' }))}
+                                  className={`px-3 py-1.5 text-sm font-medium ${
+                                    catalogAnnouncement.mode === 'marquee' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  En movimiento
+                                </button>
+                              </div>
+                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                                Fondo
+                                <input
+                                  type="color"
+                                  value={catalogAnnouncement.backgroundColor}
+                                  onChange={(e) => setCatalogAnnouncement(prev => ({ ...prev, backgroundColor: e.target.value }))}
+                                  className="w-8 h-8 rounded border border-gray-300 cursor-pointer"
+                                />
+                              </label>
+                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                                Texto
+                                <input
+                                  type="color"
+                                  value={catalogAnnouncement.textColor}
+                                  onChange={(e) => setCatalogAnnouncement(prev => ({ ...prev, textColor: e.target.value }))}
+                                  className="w-8 h-8 rounded border border-gray-300 cursor-pointer"
+                                />
+                              </label>
+                            </div>
+                            {/* Vista previa en vivo */}
+                            {catalogAnnouncement.text.trim() && (
+                              <div className="rounded-lg overflow-hidden border border-gray-200">
+                                <div className="py-2 px-4 text-center" style={{ backgroundColor: catalogAnnouncement.backgroundColor }}>
+                                  <p className="text-sm font-medium" style={{ color: catalogAnnouncement.textColor }}>
+                                    {catalogAnnouncement.text.trim()}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+{/* Oferta con cuenta regresiva (F2.5) */}
+                      <div className="p-4 border border-gray-200 rounded-lg space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <span className="text-sm font-medium text-gray-900">Oferta con cuenta regresiva</span>
+                            <p className="text-xs text-gray-600 mt-0.5">
+                              Barra con temporizador hacia una fecha límite (crea urgencia). Al llegar a cero desaparece sola.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setCatalogFlashSale(prev => ({ ...prev, enabled: !prev.enabled }))}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${catalogFlashSale.enabled ? 'bg-primary-600' : 'bg-gray-300'}`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${catalogFlashSale.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                          </button>
+                        </div>
+                        {catalogFlashSale.enabled && (
+                          <div className="space-y-3">
+                            <input
+                              type="text"
+                              value={catalogFlashSale.text}
+                              onChange={(e) => setCatalogFlashSale(prev => ({ ...prev, text: e.target.value }))}
+                              placeholder="Ej: ¡Cyber días! Hasta 40% de descuento"
+                              maxLength={80}
+                              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            />
+                            <div className="flex flex-wrap items-center gap-3">
+                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                                Termina el
+                                <input
+                                  type="datetime-local"
+                                  value={catalogFlashSale.endDate}
+                                  onChange={(e) => setCatalogFlashSale(prev => ({ ...prev, endDate: e.target.value }))}
+                                  className="px-2 py-1.5 border border-gray-300 rounded-lg text-sm"
+                                />
+                              </label>
+                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                                Fondo
+                                <input type="color" value={catalogFlashSale.backgroundColor} onChange={(e) => setCatalogFlashSale(prev => ({ ...prev, backgroundColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-300 cursor-pointer" />
+                              </label>
+                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                                Texto
+                                <input type="color" value={catalogFlashSale.textColor} onChange={(e) => setCatalogFlashSale(prev => ({ ...prev, textColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-300 cursor-pointer" />
+                              </label>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+{/* Sellos de confianza (F2.6) */}
+                      <div className="p-4 border border-gray-200 rounded-lg space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <span className="text-sm font-medium text-gray-900">Sellos de confianza</span>
+                            <p className="text-xs text-gray-600 mt-0.5">
+                              Fila de mensajes con ícono (envío, pago seguro, garantía…) debajo de la portada.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setCatalogTrustBadges(prev => ({ ...prev, enabled: !prev.enabled }))}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${catalogTrustBadges.enabled ? 'bg-primary-600' : 'bg-gray-300'}`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${catalogTrustBadges.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                          </button>
+                        </div>
+                        {catalogTrustBadges.enabled && (
+                          <div className="space-y-2">
+                            {(catalogTrustBadges.badges || []).map((badge, idx) => (
+                              <div key={badge.id || idx} className="flex items-center gap-2">
+                                <select
+                                  value={badge.icon || 'shield'}
+                                  onChange={(e) => setCatalogTrustBadges(prev => ({ ...prev, badges: prev.badges.map((b, i) => i === idx ? { ...b, icon: e.target.value } : b) }))}
+                                  className="px-2 py-1.5 border border-gray-300 rounded-lg text-sm flex-shrink-0"
+                                >
+                                  <option value="truck">🚚 Envío</option>
+                                  <option value="shield">🛡️ Seguro</option>
+                                  <option value="card">💳 Pago</option>
+                                  <option value="return">↩️ Devolución</option>
+                                  <option value="support">🎧 Soporte</option>
+                                  <option value="quality">✅ Garantía</option>
+                                  <option value="clock">⏰ Rapidez</option>
+                                  <option value="tag">🏷️ Ofertas</option>
+                                </select>
+                                <input
+                                  type="text"
+                                  value={badge.text || ''}
+                                  onChange={(e) => setCatalogTrustBadges(prev => ({ ...prev, badges: prev.badges.map((b, i) => i === idx ? { ...b, text: e.target.value } : b) }))}
+                                  placeholder="Ej: Envío gratis desde S/ 100"
+                                  maxLength={40}
+                                  className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-primary-500"
+                                />
+                                <button type="button" onClick={() => setCatalogTrustBadges(prev => ({ ...prev, badges: prev.badges.filter((_, i) => i !== idx) }))} className="p-1 text-red-400 hover:text-red-600 flex-shrink-0">
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ))}
+                            {(catalogTrustBadges.badges || []).length < 4 && (
+                              <button
+                                type="button"
+                                onClick={() => setCatalogTrustBadges(prev => ({ ...prev, badges: [...(prev.badges || []), { id: `badge-${Date.now()}`, icon: 'shield', text: '' }] }))}
+                                className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:border-gray-400 hover:bg-gray-50"
+                              >
+                                + Agregar sello ({(catalogTrustBadges.badges || []).length}/4)
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+{/* Observaciones del catálogo */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Observaciones del catálogo (opcional)
+                        </label>
+                        <textarea
+                          value={catalogObservations}
+                          onChange={(e) => setCatalogObservations(e.target.value)}
+                          placeholder="Ej: Cuentas de pago, WhatsApp de vendedores, horarios..."
+                          maxLength={500}
+                          rows={3}
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">{catalogObservations.length}/500 caracteres — Se muestra arriba de las categorías en el catálogo</p>
+                      </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-100">
+                        <ShoppingCart className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-900">Pedidos y contacto</h3>
+                          <p className="text-xs text-gray-500">WhatsApp, redes, tipos de pedido, horario y cuentas</p>
+                        </div>
+                      </div>
+                      <div className="px-5 py-5 space-y-5">
 {/* WhatsApp del catálogo */}
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
                           WhatsApp para pedidos del catálogo
                         </label>
                         <input
@@ -8423,7 +8411,7 @@ export default function Settings() {
                           value={catalogWhatsapp}
                           onChange={(e) => setCatalogWhatsapp(e.target.value.replace(/[^\d+]/g, ''))}
                           placeholder="Ej: 51987654321"
-                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                         />
                         <p className="text-xs text-gray-500 mt-1">
                           Número con código de país (ej: 51 para Perú). Si se deja vacío se usará el teléfono de la empresa.
@@ -8432,7 +8420,7 @@ export default function Settings() {
 
 {/* Redes sociales (footer "Síguenos" del catálogo) */}
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
                           Redes sociales
                         </label>
                         <p className="text-xs text-gray-500 mb-2">
@@ -8451,7 +8439,7 @@ export default function Settings() {
                                 value={catalogSocial[red.key] || ''}
                                 onChange={(e) => setCatalogSocial(prev => ({ ...prev, [red.key]: e.target.value.trim() }))}
                                 placeholder={red.key === 'tiktok' ? '@mitienda' : 'mitienda'}
-                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                               />
                             </div>
                           ))}
@@ -8500,7 +8488,7 @@ export default function Settings() {
                               type="checkbox"
                               checked={businessHours.enabled}
                               onChange={(e) => setBusinessHours(prev => ({ ...prev, enabled: e.target.checked }))}
-                              className="w-4 h-4 text-emerald-600 border-gray-300 rounded"
+                              className="w-4 h-4 text-primary-600 border-gray-300 rounded"
                             />
                             <span className="text-sm text-gray-600">Activar</span>
                           </label>
@@ -8525,7 +8513,7 @@ export default function Settings() {
                                       ...prev,
                                       days: { ...prev.days, [day.key]: { ...prev.days[day.key], open: e.target.checked } }
                                     }))}
-                                    className="w-4 h-4 text-emerald-600 border-gray-300 rounded"
+                                    className="w-4 h-4 text-primary-600 border-gray-300 rounded"
                                   />
                                   <span className={`text-sm ${businessHours.days[day.key]?.open ? 'text-gray-700 font-medium' : 'text-gray-400'}`}>
                                     {day.name}
@@ -8580,25 +8568,224 @@ export default function Settings() {
                       </div>
                       </div>
                     </div>
+
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-100">
+                        <CalendarDays className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-900">Reservas</h3>
+                          <p className="text-xs text-gray-500">Deja que te reserven desde el catálogo</p>
+                        </div>
+                      </div>
+                      <div className="px-5 py-5 space-y-5">
+                      {/* Reservas de citas desde el catalogo. Solo para los modos que
+                          tienen agenda: veterinaria (de fabrica) y General con la
+                          agenda activada en el menu. El horario que se define aca es el
+                          que el SERVIDOR usa para validar cada reserva publica — el
+                          catalogo solo lo pinta. */}
+                      {(businessMode === 'veterinary' || (businessMode === 'retail' && appointmentsEnabled)) && (
+                        <div>
+                          <h3 className="text-base font-semibold text-gray-900 mb-1">Reservas de citas</h3>
+                          <p className="text-sm text-gray-600 mb-4">
+                            Deja que tus clientes reserven su cita desde el catálogo, eligiendo un horario libre. Cada reserva aparece sola en tu Agenda de Citas y te llega una notificación.
+                          </p>
+                          <SettingToggle
+                            id="opcion-appointmentsBookingEnabled"
+                            checked={appointmentsBooking.enabled}
+                            onChange={e => setAppointmentsBooking(prev => ({ ...prev, enabled: e.target.checked }))}
+                            title="Recibir reservas desde el catálogo"
+                            description={appointmentsBooking.enabled
+                              ? 'Habilitado: en tu catálogo aparece el botón "Reservar cita". El cliente solo ve horas libres y ocupadas — nunca los datos de otros clientes.'
+                              : 'Deshabilitado: las citas solo se agendan desde tu Agenda.'}
+                          />
+                          {appointmentsBooking.enabled && (
+                            <div className="mt-4 space-y-4 pl-1">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1.5">Días que atiendes con cita</label>
+                                <div className="flex flex-wrap gap-2">
+                                  {[['D', 0], ['L', 1], ['M', 2], ['X', 3], ['J', 4], ['V', 5], ['S', 6]].map(([letra, dia]) => (
+                                    <button
+                                      key={dia}
+                                      type="button"
+                                      onClick={() => setAppointmentsBooking(prev => ({
+                                        ...prev,
+                                        days: prev.days.includes(dia)
+                                          ? prev.days.filter(d => d !== dia)
+                                          : [...prev.days, dia].sort(),
+                                      }))}
+                                      className={'w-9 h-9 rounded-lg border text-sm font-semibold transition-colors ' + (
+                    appointmentsBooking.days.includes(dia)
+                                          ? 'bg-primary-600 border-primary-600 text-white'
+                                          : 'bg-white border-gray-300 text-gray-500 hover:border-gray-400'
+                                      )}
+                                    >
+                                      {letra}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-3 gap-3 max-w-md">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Desde</label>
+                                  <select
+                                    value={appointmentsBooking.startHour}
+                                    onChange={e => setAppointmentsBooking(prev => ({ ...prev, startHour: Number(e.target.value) }))}
+                                    className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                                  >
+                                    {Array.from({ length: 17 }, (_, i) => i + 6).map(h => (
+                                      <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Hasta</label>
+                                  <select
+                                    value={appointmentsBooking.endHour}
+                                    onChange={e => setAppointmentsBooking(prev => ({ ...prev, endHour: Number(e.target.value) }))}
+                                    className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                                  >
+                                    {Array.from({ length: 17 }, (_, i) => i + 7).map(h => (
+                                      <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Cada</label>
+                                  <select
+                                    value={appointmentsBooking.stepMinutes}
+                                    onChange={e => setAppointmentsBooking(prev => ({ ...prev, stepMinutes: Number(e.target.value) }))}
+                                    className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                                  >
+                                    <option value={15}>15 min</option>
+                                    <option value={20}>20 min</option>
+                                    <option value={30}>30 min</option>
+                                    <option value={60}>1 hora</option>
+                                  </select>
+                                </div>
+                              </div>
+                              {appointmentsBooking.endHour <= appointmentsBooking.startHour && (
+                                <p className="text-xs text-red-600">La hora de cierre debe ser mayor que la de inicio.</p>
+                              )}
+
+                              {/* Servicios que se ofrecen al reservar. Se guardan como
+                                  snapshot {id, nombre, precio}: el precio que ve el
+                                  cliente es el que el negocio publico al guardar, y el
+                                  SERVIDOR usa este mismo snapshot al crear la cita —
+                                  nadie puede mandarle otro precio. */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                                  Servicios que se pueden reservar
+                                </label>
+                                <p className="text-xs text-gray-500 mb-2">
+                                  El cliente elige uno al reservar (baño, consulta, podología, masaje...). Si no agregas ninguno, la reserva llega sin servicio y lo coordinas tú.
+                                </p>
+                                {(appointmentsBooking.services || []).length > 0 && (
+                                  <div className="flex flex-wrap gap-2 mb-2">
+                                    {appointmentsBooking.services.map(svc => (
+                                      <span key={svc.id} className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 bg-gray-100 border border-gray-200 rounded-lg text-sm text-gray-800">
+                                        {svc.name}
+                                        <span className="text-gray-400 text-xs">S/ {Number(svc.price || 0).toFixed(2)}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => setAppointmentsBooking(prev => ({
+                                            ...prev,
+                                            services: (prev.services || []).filter(x => x.id !== svc.id),
+                                          }))}
+                                          className="p-0.5 text-gray-400 hover:text-red-500"
+                                        >
+                                          <X className="w-3.5 h-3.5" />
+                                        </button>
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                                <div className="relative max-w-md">
+                                  <input
+                                    type="text"
+                                    value={busquedaServicio}
+                                    onChange={e => setBusquedaServicio(e.target.value)}
+                                    placeholder={productosReservables === null ? 'Cargando productos...' : 'Buscar un producto o servicio para agregarlo'}
+                                    disabled={productosReservables === null}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                                  />
+                                  {busquedaServicio.trim().length >= 2 && productosReservables && (
+                                    <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+                                      {productosReservables
+                                        .filter(pr => (pr.name || '').toLowerCase().includes(busquedaServicio.trim().toLowerCase()))
+                                        .filter(pr => !(appointmentsBooking.services || []).some(x => x.id === pr.id))
+                                        .slice(0, 8)
+                                        .map(pr => (
+                                          <button
+                                            key={pr.id}
+                                            type="button"
+                                            onClick={() => {
+                                              setAppointmentsBooking(prev => ({
+                                                ...prev,
+                                                services: [...(prev.services || []), {
+                                                  id: pr.id,
+                                                  name: pr.name || '',
+                                                  price: Number(pr.price) || 0,
+                                                }],
+                                              }))
+                                              setBusquedaServicio('')
+                                            }}
+                                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between gap-2"
+                                          >
+                                            <span className="truncate text-gray-800">{pr.name}</span>
+                                            <span className="text-gray-400 text-xs flex-none">S/ {Number(pr.price || 0).toFixed(2)}</span>
+                                          </button>
+                                        ))}
+                                    </div>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-gray-400 mt-1.5">
+                                  El precio queda fijado al guardar: si lo cambias en Productos, vuelve a guardar acá.
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Solicitudes de reserva (modo hotel). Lo que llega del catalogo
+                          NO bloquea la habitacion: es una solicitud que se confirma o
+                          rechaza en la pantalla de Reservas. */}
+                      {businessMode === 'hotel' && (
+                        <div>
+                          <h3 className="text-base font-semibold text-gray-900 mb-1">Reservas de habitaciones</h3>
+                          <p className="text-sm text-gray-600 mb-4">
+                            Deja que tus huéspedes pidan una habitación desde el catálogo, viendo fechas y tarifas. Cada solicitud te llega con una notificación y la confirmas o rechazas desde Reservas — nada se bloquea solo.
+                          </p>
+                          <SettingToggle
+                            id="opcion-hotelBookingEnabled"
+                            checked={hotelBooking.enabled}
+                            onChange={e => setHotelBooking(prev => ({ ...prev, enabled: e.target.checked }))}
+                            title="Recibir solicitudes de reserva desde el catálogo"
+                            description={hotelBooking.enabled
+                              ? 'Habilitado: en tu catálogo aparece el botón "Reservar una habitación". El huésped ve solo habitaciones y tarifas — nunca los datos de otros huéspedes. Solo tarifas por noche.'
+                              : 'Deshabilitado: las reservas solo se crean desde tu pantalla de Reservas.'}
+                          />
+                        </div>
+                      )}
+                      </div>
+                    </div>
                     </div>
                   )}
 
                   {catalogTab === 'avanzado' && (
                     <div className="space-y-4">
-                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                      <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
-                        <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-                          <Cog className="w-5 h-5 text-gray-600" />
-                        </div>
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-100">
+                        <Cog className="w-4 h-4 text-gray-400 flex-shrink-0" />
                         <div>
-                          <h3 className="font-semibold text-gray-900">Avanzado</h3>
+                          <h3 className="text-sm font-semibold text-gray-900">Avanzado</h3>
                           <p className="text-xs text-gray-500">Paginación, navegación, efectos y dominio propio</p>
                         </div>
                       </div>
-                      <div className="px-5 pb-5 pt-4 space-y-5">
+                      <div className="px-5 py-5 space-y-5">
 {/* Paginación de productos (port shopifree) */}
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
                           Paginación de productos
                         </label>
                         <p className="text-xs text-gray-500 mb-3">
@@ -8617,12 +8804,12 @@ export default function Settings() {
                               onClick={() => setCatalogPagination(opt.id)}
                               className={`relative p-4 rounded-xl border-2 transition-all text-left ${
                                 catalogPagination === opt.id
-                                  ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/40'
+                                  ? 'border-primary-500 bg-primary-50/60'
                                   : 'border-gray-200 hover:border-gray-300'
                               }`}
                             >
                               {catalogPagination === opt.id && (
-                                <span className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center">
+                                <span className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-primary-600 flex items-center justify-center">
                                   <Check className="w-3.5 h-3.5 text-white" />
                                 </span>
                               )}
@@ -8641,7 +8828,7 @@ export default function Settings() {
 
 {/* Navegación en escritorio: barra superior vs menú lateral */}
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
                           Navegación en computadora
                         </label>
                         <p className="text-xs text-gray-500 mb-3">
@@ -8658,7 +8845,7 @@ export default function Settings() {
                               onClick={() => setCatalogDesktopNav(opt.id)}
                               className={`p-3 rounded-xl border-2 transition-all text-center ${
                                 catalogDesktopNav === opt.id
-                                  ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/40'
+                                  ? 'border-primary-500 bg-primary-50/60'
                                   : 'border-gray-200 hover:border-gray-300'
                               }`}
                             >
@@ -8732,7 +8919,6 @@ export default function Settings() {
                         </label>
                       </div>
 
-
 {/* Dominio personalizado */}
                       {catalogSlug && (
                         <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
@@ -8784,197 +8970,7 @@ export default function Settings() {
               )}
 
               {/* Save Button for Catalogo — ancho completo */}
-              {/* Reservas de citas desde el catalogo. Solo para los modos que
-                  tienen agenda: veterinaria (de fabrica) y General con la
-                  agenda activada en el menu. El horario que se define aca es el
-                  que el SERVIDOR usa para validar cada reserva publica — el
-                  catalogo solo lo pinta. */}
-              {(businessMode === 'veterinary' || (businessMode === 'retail' && appointmentsEnabled)) && (
-                <div className="border-t border-gray-200 pt-6">
-                  <h3 className="text-base font-semibold text-gray-900 mb-1">Reservas de citas</h3>
-                  <p className="text-sm text-gray-600 mb-4">
-                    Deja que tus clientes reserven su cita desde el catálogo, eligiendo un horario libre. Cada reserva aparece sola en tu Agenda de Citas y te llega una notificación.
-                  </p>
-                  <SettingToggle
-                    id="opcion-appointmentsBookingEnabled"
-                    checked={appointmentsBooking.enabled}
-                    onChange={e => setAppointmentsBooking(prev => ({ ...prev, enabled: e.target.checked }))}
-                    title="Recibir reservas desde el catálogo"
-                    description={appointmentsBooking.enabled
-                      ? 'Habilitado: en tu catálogo aparece el botón "Reservar cita". El cliente solo ve horas libres y ocupadas — nunca los datos de otros clientes.'
-                      : 'Deshabilitado: las citas solo se agendan desde tu Agenda.'}
-                  />
-                  {appointmentsBooking.enabled && (
-                    <div className="mt-4 space-y-4 pl-1">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Días que atiendes con cita</label>
-                        <div className="flex flex-wrap gap-2">
-                          {[['D', 0], ['L', 1], ['M', 2], ['X', 3], ['J', 4], ['V', 5], ['S', 6]].map(([letra, dia]) => (
-                            <button
-                              key={dia}
-                              type="button"
-                              onClick={() => setAppointmentsBooking(prev => ({
-                                ...prev,
-                                days: prev.days.includes(dia)
-                                  ? prev.days.filter(d => d !== dia)
-                                  : [...prev.days, dia].sort(),
-                              }))}
-                              className={'w-9 h-9 rounded-lg border text-sm font-semibold transition-colors ' + (
-                                appointmentsBooking.days.includes(dia)
-                                  ? 'bg-primary-600 border-primary-600 text-white'
-                                  : 'bg-white border-gray-300 text-gray-500 hover:border-gray-400'
-                              )}
-                            >
-                              {letra}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-3 gap-3 max-w-md">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Desde</label>
-                          <select
-                            value={appointmentsBooking.startHour}
-                            onChange={e => setAppointmentsBooking(prev => ({ ...prev, startHour: Number(e.target.value) }))}
-                            className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white"
-                          >
-                            {Array.from({ length: 17 }, (_, i) => i + 6).map(h => (
-                              <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Hasta</label>
-                          <select
-                            value={appointmentsBooking.endHour}
-                            onChange={e => setAppointmentsBooking(prev => ({ ...prev, endHour: Number(e.target.value) }))}
-                            className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white"
-                          >
-                            {Array.from({ length: 17 }, (_, i) => i + 7).map(h => (
-                              <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Cada</label>
-                          <select
-                            value={appointmentsBooking.stepMinutes}
-                            onChange={e => setAppointmentsBooking(prev => ({ ...prev, stepMinutes: Number(e.target.value) }))}
-                            className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white"
-                          >
-                            <option value={15}>15 min</option>
-                            <option value={20}>20 min</option>
-                            <option value={30}>30 min</option>
-                            <option value={60}>1 hora</option>
-                          </select>
-                        </div>
-                      </div>
-                      {appointmentsBooking.endHour <= appointmentsBooking.startHour && (
-                        <p className="text-xs text-red-600">La hora de cierre debe ser mayor que la de inicio.</p>
-                      )}
-
-                      {/* Servicios que se ofrecen al reservar. Se guardan como
-                          snapshot {id, nombre, precio}: el precio que ve el
-                          cliente es el que el negocio publico al guardar, y el
-                          SERVIDOR usa este mismo snapshot al crear la cita —
-                          nadie puede mandarle otro precio. */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Servicios que se pueden reservar
-                        </label>
-                        <p className="text-xs text-gray-500 mb-2">
-                          El cliente elige uno al reservar (baño, consulta, podología, masaje...). Si no agregas ninguno, la reserva llega sin servicio y lo coordinas tú.
-                        </p>
-                        {(appointmentsBooking.services || []).length > 0 && (
-                          <div className="flex flex-wrap gap-2 mb-2">
-                            {appointmentsBooking.services.map(svc => (
-                              <span key={svc.id} className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 bg-gray-100 border border-gray-200 rounded-lg text-sm text-gray-800">
-                                {svc.name}
-                                <span className="text-gray-400 text-xs">S/ {Number(svc.price || 0).toFixed(2)}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => setAppointmentsBooking(prev => ({
-                                    ...prev,
-                                    services: (prev.services || []).filter(x => x.id !== svc.id),
-                                  }))}
-                                  className="p-0.5 text-gray-400 hover:text-red-500"
-                                >
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        <div className="relative max-w-md">
-                          <input
-                            type="text"
-                            value={busquedaServicio}
-                            onChange={e => setBusquedaServicio(e.target.value)}
-                            placeholder={productosReservables === null ? 'Cargando productos...' : 'Buscar un producto o servicio para agregarlo'}
-                            disabled={productosReservables === null}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                          />
-                          {busquedaServicio.trim().length >= 2 && productosReservables && (
-                            <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
-                              {productosReservables
-                                .filter(pr => (pr.name || '').toLowerCase().includes(busquedaServicio.trim().toLowerCase()))
-                                .filter(pr => !(appointmentsBooking.services || []).some(x => x.id === pr.id))
-                                .slice(0, 8)
-                                .map(pr => (
-                                  <button
-                                    key={pr.id}
-                                    type="button"
-                                    onClick={() => {
-                                      setAppointmentsBooking(prev => ({
-                                        ...prev,
-                                        services: [...(prev.services || []), {
-                                          id: pr.id,
-                                          name: pr.name || '',
-                                          price: Number(pr.price) || 0,
-                                        }],
-                                      }))
-                                      setBusquedaServicio('')
-                                    }}
-                                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between gap-2"
-                                  >
-                                    <span className="truncate text-gray-800">{pr.name}</span>
-                                    <span className="text-gray-400 text-xs flex-none">S/ {Number(pr.price || 0).toFixed(2)}</span>
-                                  </button>
-                                ))}
-                            </div>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-gray-400 mt-1.5">
-                          El precio queda fijado al guardar: si lo cambias en Productos, vuelve a guardar acá.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Solicitudes de reserva (modo hotel). Lo que llega del catalogo
-                  NO bloquea la habitacion: es una solicitud que se confirma o
-                  rechaza en la pantalla de Reservas. */}
-              {businessMode === 'hotel' && (
-                <div className="border-t border-gray-200 pt-6">
-                  <h3 className="text-base font-semibold text-gray-900 mb-1">Reservas de habitaciones</h3>
-                  <p className="text-sm text-gray-600 mb-4">
-                    Deja que tus huéspedes pidan una habitación desde el catálogo, viendo fechas y tarifas. Cada solicitud te llega con una notificación y la confirmas o rechazas desde Reservas — nada se bloquea solo.
-                  </p>
-                  <SettingToggle
-                    id="opcion-hotelBookingEnabled"
-                    checked={hotelBooking.enabled}
-                    onChange={e => setHotelBooking(prev => ({ ...prev, enabled: e.target.checked }))}
-                    title="Recibir solicitudes de reserva desde el catálogo"
-                    description={hotelBooking.enabled
-                      ? 'Habilitado: en tu catálogo aparece el botón "Reservar una habitación". El huésped ve solo habitaciones y tarifas — nunca los datos de otros huéspedes. Solo tarifas por noche.'
-                      : 'Deshabilitado: las reservas solo se crean desde tu pantalla de Reservas.'}
-                  />
-                </div>
-              )}
-
-              {/* Barra de guardado FIJA: el boton viajaba al fondo de un
+                            {/* Barra de guardado FIJA: el boton viajaba al fondo de un
                   formulario de 15 pantallas — era facil irse creyendo que se
                   guardo. Pegada abajo, siempre a la vista. */}
               <div className="sticky bottom-0 z-20 bg-white/95 backdrop-blur border-t border-gray-200 py-3 flex justify-end">
@@ -9083,32 +9079,6 @@ export default function Settings() {
                 </Button>
               </div>
             </>
-
-          </div>
-
-          {/* Columna derecha (solo desktop xl+): la vista previa EN VIVO.
-              Se pinta con los estados del formulario, no con lo guardado —
-              cambias el color o el tema y lo ves al instante. En pantallas
-              chicas no aparece: alli el formulario necesita todo el ancho
-              y el boton "Ver catálogo" cumple ese rol. */}
-          <div className="hidden xl:block w-[300px] flex-none sticky top-4">
-            <CatalogPreviewMini
-              name={businessSettings?.name || businessSettings?.businessName || 'Tu negocio'}
-              config={{
-                theme: catalogTheme,
-                color: catalogColor,
-                logoUrl: catalogLogoUrl,
-                logoLandscape: catalogLogoLandscape,
-                welcome: catalogWelcome,
-                tagline: catalogTagline,
-                announcement: catalogAnnouncement,
-                flashSale: catalogFlashSale,
-                coverImage: catalogCoverImage,
-                hero: catalogHero,
-                layout: catalogLayout,
-              }}
-            />
-          </div>
 
         </div>
       )}
