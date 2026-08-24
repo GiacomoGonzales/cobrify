@@ -740,10 +740,20 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // 'sections' (diseño estilo carta de restaurante) agrupa por categoría. El
   // flag viejo catalogGroupByCategory se sigue respetando: 40 tiendas lo
   // tenían activo antes de que esto fuera un diseño más del selector.
-  const groupByCategory = business?.catalogLayout === 'sections' || business?.catalogGroupByCategory === true
+  const groupByCategory = business?.catalogLayout === 'sections'
+    || business?.catalogLayout === 'sections-grid'
+    || business?.catalogGroupByCategory === true
+  // 'sections-grid': cada categoria muestra TODOS sus productos en grilla,
+  // una debajo de otra — sin scroll horizontal y sin la lista repetida al
+  // final. 'sections' (con carrusel) sigue existiendo.
+  const seccionesEnGrilla = business?.catalogLayout === 'sections-grid'
   // Solo aplica si también está activo groupByCategory.
   // Oculta el botón "Todos" y la lista flat al final → fuerza a entrar por categoría.
-  const onlyCarousels = groupByCategory && business?.catalogOnlyCarousels === true
+  // Sin lista completa al final: en 'sections-grid' ya se mostraron todos los
+  // productos dentro de sus categorias, repetirlos seria duplicar el catalogo.
+  // El flag viejo catalogOnlyCarousels se sigue respetando.
+  const onlyCarousels = groupByCategory
+    && (seccionesEnGrilla || business?.catalogOnlyCarousels === true)
   // Tema del catálogo (registro centralizado en src/themes/catalogThemes.js).
   // Si la URL trae ?previewTheme=, sobrescribe lo guardado (vista previa desde Settings).
   const effectiveTheme = previewThemeFromUrl || business?.catalogTheme
@@ -790,7 +800,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const catalogLayoutRaw = business?.catalogLayout || themeLayout.grid || 'masonry'
   // 'sections' organiza la PÁGINA (por categorías), no la tarjeta: sus grillas
   // internas se pintan como cuadrícula.
-  const catalogLayout = catalogLayoutRaw === 'sections' ? 'grid' : catalogLayoutRaw
+  const catalogLayout = (catalogLayoutRaw === 'sections' || catalogLayoutRaw === 'sections-grid')
+    ? 'grid' : catalogLayoutRaw
 
   // Clases/estilo de los botones de categoría según la variante del tema.
   // 'pills': píldora rellena (comportamiento clásico). 'underline': tabs con
@@ -2248,21 +2259,35 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 <div key={category.id}>
                   <div className="flex items-center justify-between mb-3">
                     <h2 className={`text-lg font-bold ${thText}`}>{category.name}</h2>
-                    <button
-                      onClick={() => { setSelectedCategory(category.id); setSelectedSubcategory(null); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-                      className="text-sm font-medium hover:opacity-80 transition-opacity"
-                      style={{ color: getCatalogAccent(business) }}
-                    >
-                      Ver todo →
-                    </button>
+                    {/* Sin carrusel no hace falta "Ver todo": ya estan todos */}
+                    {!seccionesEnGrilla && (
+                      <button
+                        onClick={() => { setSelectedCategory(category.id); setSelectedSubcategory(null); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                        className="text-sm font-medium hover:opacity-80 transition-opacity"
+                        style={{ color: getCatalogAccent(business) }}
+                      >
+                        Ver todo →
+                      </button>
+                    )}
+                    {seccionesEnGrilla && (
+                      <span className={`text-sm ${thTextFaint}`}>{categoryProducts.length}</span>
+                    )}
                   </div>
-                  <div className="overflow-x-auto scrollbar-hide -mx-4 px-4" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
-                    <div className="flex gap-4">
-                      {categoryProducts.slice(0, 10).map(product => (
-                        <CarouselCard key={product.id} product={product} ctx={cardCtx} />
+                  {seccionesEnGrilla ? (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+                      {categoryProducts.map((product, idx) => (
+                        <GridCard key={product.id} product={product} index={idx} uniform ctx={cardCtx} />
                       ))}
                     </div>
-                  </div>
+                  ) : (
+                    <div className="overflow-x-auto scrollbar-hide -mx-4 px-4" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
+                      <div className="flex gap-4">
+                        {categoryProducts.slice(0, 10).map(product => (
+                          <CarouselCard key={product.id} product={product} ctx={cardCtx} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )
             })}

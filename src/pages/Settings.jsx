@@ -1423,7 +1423,9 @@ export default function Settings() {
         // en el selector como 'Secciones por categoria'.
         setCatalogLayout(
           businessData.catalogLayout
-          || (businessData.catalogGroupByCategory === true ? 'sections' : 'masonry')
+          || (businessData.catalogGroupByCategory === true
+            ? 'sections'
+            : 'masonry')
         )
         setCatalogDesktopNav(businessData.catalogDesktopNav || 'top')
         setCatalogFlashSale({
@@ -8330,6 +8332,7 @@ export default function Settings() {
                             { id: 'magazine', label: 'Magazine', desc: 'Producto destacado' },
                             { id: 'list', label: 'Lista', desc: 'Filas horizontales' },
                             { id: 'sections', label: 'Secciones por categoría', desc: 'Cada categoría con su título y sus productos, estilo carta' },
+                            { id: 'sections-grid', label: 'Agrupado por categoría', desc: 'Cada categoría con todos sus productos en grilla, sin carrusel' },
                           ].map(opt => (
                             <button
                               key={opt.id}
@@ -8339,7 +8342,12 @@ export default function Settings() {
                                 // El flag viejo sigue existiendo (40 tiendas lo tenian):
                                 // se sincroniza con el selector para que nadie elija
                                 // "Cuadricula" y siga viendo secciones.
-                                setCatalogGroupByCategory(opt.id === 'sections')
+                                const esSecciones = opt.id === 'sections' || opt.id === 'sections-grid'
+                                setCatalogGroupByCategory(esSecciones)
+                                // El flag viejo de "solo carruseles" solo aplica al
+                                // diseño CON carrusel: en grilla no hay carrusel que
+                                // ocultar y la lista final ya se omite sola.
+                                if (opt.id !== 'sections') setCatalogOnlyCarousels(false)
                               }}
                               className={`relative p-4 rounded-xl border-2 transition-all text-left ${
                                 catalogLayout === opt.id
@@ -8390,7 +8398,19 @@ export default function Settings() {
                                         <div className="flex gap-1">
                                           <div className="bg-gray-300 rounded-sm w-3.5 h-3.5" />
                                           <div className="bg-gray-300 rounded-sm w-3.5 h-3.5" />
-                                          <div className="bg-gray-300 rounded-sm w-3.5 h-3.5" />
+                                          <div className="bg-gray-300 rounded-sm w-3.5 h-3.5 opacity-50" />
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {opt.id === 'sections-grid' && (
+                                  <div className="flex flex-col gap-1.5 w-14">
+                                    {[0, 1].map(k => (
+                                      <div key={k} className="space-y-0.5">
+                                        <div className="bg-gray-400 rounded-sm h-1 w-6" />
+                                        <div className="grid grid-cols-4 gap-0.5">
+                                          {[0, 1, 2, 3, 4, 5, 6, 7].map(j => <div key={j} className="bg-gray-300 rounded-sm aspect-square" />)}
                                         </div>
                                       </div>
                                     ))}
