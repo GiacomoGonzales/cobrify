@@ -48,7 +48,10 @@ const SOCIAL_URLS = {
 }
 
 export default function CatalogFooter({ business, sidebarNav = false }) {
-  const { classes: th, tokens } = useCatalogTheme()
+  const { classes: th, tokens, theme } = useCatalogTheme()
+  // El logo cuadrado usa el MISMO recorte que en el header: no puede ser
+  // circular abajo y recto arriba. Boutique lo pide redondo; Bauhaus, recto.
+  const radioLogo = theme?.chrome?.headerLogoRound ? '9999px' : tokens.radius.lg
   const accent = getCatalogAccent(business)
   const social = business?.catalogSocial || {}
   const redes = ['instagram', 'facebook', 'tiktok']
@@ -70,12 +73,13 @@ export default function CatalogFooter({ business, sidebarNav = false }) {
                 <img
                   src={optimizeImageUrl(footerLogo, footerIsLandscape ? 'logo_landscape' : 'logo_square')}
                   alt={business?.name}
-                  className={`${footerIsLandscape ? 'h-11 max-w-[220px]' : 'w-12 h-12 rounded-full'} object-contain`}
+                  className={`${footerIsLandscape ? 'h-11 max-w-[220px]' : 'w-12 h-12'} object-contain`}
+                  style={footerIsLandscape ? undefined : { borderRadius: radioLogo }}
                 />
               ) : (
                 <div
-                  className="w-12 h-12 rounded-full flex items-center justify-center"
-                  style={{ backgroundColor: accent }}
+                  className="w-12 h-12 flex items-center justify-center"
+                  style={{ backgroundColor: accent, borderRadius: radioLogo }}
                 >
                   <Store className="w-6 h-6 text-white" />
                 </div>
