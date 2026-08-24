@@ -935,6 +935,22 @@ export default function POS() {
   // sucursal, guardamos su nombre para avisarlo tal cual. Decir "no registrado"
   // seria falso y empuja al cajero a crear un duplicado con el mismo EAN.
   const [unknownScanProduct, setUnknownScanProduct] = useState(null)
+  // Producto sin stock esperando confirmacion del cajero. Guarda que mostrar
+  // ({ nombre, detalle }) y que hacer si dice que si ({ confirmar }).
+  const [sinStockPendiente, setSinStockPendiente] = useState(null)
+  // "Preguntar" GANA sobre "permitir vender sin stock": si el dueno activo el
+  // aviso, lo quiere ver aunque tambien tenga habilitada la venta en negativo.
+  const preguntarSinStock = !!companySettings?.confirmSaleWithoutStock
+  // Para todas las validaciones que BLOQUEAN: con el aviso activo la venta sin
+  // stock si esta permitida, solo que se confirma antes. Si no, el cajero
+  // confirmaria el modal y al cobrar le saltaria "no hay stock suficiente".
+  const permiteSinStock = !!companySettings?.allowNegativeStock || preguntarSinStock
+
+  // Unico punto donde se abre la confirmacion: guarda que mostrar y que hacer
+  // si el cajero dice que si.
+  const pedirConfirmacionSinStock = (nombre, detalle, confirmar) => {
+    setSinStockPendiente({ nombre, detalle, confirmar })
+  }
 
   // Custom product modal
   const [showCustomProductModal, setShowCustomProductModal] = useState(false)
@@ -3480,12 +3496,15 @@ export default function POS() {
 
       if (variantMatch) {
         const { product, variant } = variantMatch
-        if (variant.stock !== null && variant.stock <= 0 && !companySettings?.allowNegativeStock) {
+        const sinStockVar = variant.stock !== null && variant.stock <= 0
+        if (sinStockVar && !permiteSinStock) {
           toast.error(`Variante de ${product.name} sin stock`)
         } else {
           addVariantToCart(product, variant)
           setSearchTerm('')
-          toast.success(`${product.name} agregado al carrito`)
+          if (!(sinStockVar && preguntarSinStock)) {
+            toast.success(`${product.name} agregado al carrito`)
+          }
         }
         return
       }
@@ -3523,7 +3542,10 @@ export default function POS() {
           ? getTotalAvailableStock(product, selectedWarehouse.id)
           : (product.stock || 0)
 
-        const hasStock = warehouseStock > 0 || !product.trackStock || product.stock === null || companySettings?.allowNegativeStock
+        const hasStock = warehouseStock > 0 || !product.trackStock || product.stock === null || permiteSinStock
+        // Si va a abrir la confirmacion, todavia no entro al carrito.
+        const preguntara = preguntarSinStock && product.stock !== null
+          && product.trackStock !== false && warehouseStock <= 0
 
         if (hasStock) {
           addToCart(product)
@@ -3533,7 +3555,7 @@ export default function POS() {
           // "agregado al carrito" ahí era mentira y confundía al cajero.
           if (product.hasVariants) {
             toast.info(`${product.name}: elige la variante`)
-          } else {
+          } else if (!preguntara) {
             toast.success(`${product.name} agregado al carrito`)
           }
         } else {
@@ -3664,20 +3686,26 @@ export default function POS() {
           if (foundVariant) {
             // Match en variante: agregar esa variante específica directo al carrito
             // (sin abrir el modal de selección — el escaneo ya identifica unívocamente).
-            if (foundVariant.stock !== null && foundVariant.stock <= 0 && !companySettings?.allowNegativeStock) {
+            const sinStockV = foundVariant.stock !== null && foundVariant.stock <= 0
+            if (sinStockV && !permiteSinStock) {
               toast.error(`${foundProduct.name} (variante) no tiene stock disponible`)
             } else {
               addVariantToCart(foundProduct, foundVariant)
-              toast.success(`${foundProduct.name} agregado al carrito`)
+              if (!(sinStockV && preguntarSinStock)) {
+                toast.success(`${foundProduct.name} agregado al carrito`)
+              }
             }
           } else {
             // Match en padre (producto sin variantes o escaneo del código del padre)
             const warehouseStock = getCurrentWarehouseStock(foundProduct)
-            if (foundProduct.stock !== null && warehouseStock <= 0 && !companySettings?.allowNegativeStock) {
+            const sinStockP = foundProduct.stock !== null && warehouseStock <= 0
+            if (sinStockP && !permiteSinStock) {
               toast.error(`${foundProduct.name} no tiene stock disponible`)
             } else {
               addToCart(foundProduct)
-              toast.success(`${foundProduct.name} agregado al carrito`)
+              if (!(sinStockP && preguntarSinStock)) {
+                toast.success(`${foundProduct.name} agregado al carrito`)
+              }
             }
           }
         } else {
@@ -3738,7 +3766,7 @@ export default function POS() {
     return d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
   }
 
-  const addToCart = (product, selectedPrice = null, selectedPresentation = null, selectedBatch = null) => {
+  const addToCart = (product, selectedPrice = null, selectedPresentation = null, selectedBatch = null, yaConfirmado = false) => {
     // Bloquear si ya se completó una venta
     if (saleCompleted) {
       toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
@@ -3816,8 +3844,18 @@ export default function POS() {
 
     // Verificar stock del almacén/lote
     const warehouseStock = batchToUse ? batchToUse.quantity : getCurrentWarehouseStock(product)
-    if (product.stock !== null && warehouseStock <= 0 && !companySettings?.allowNegativeStock) {
+    if (product.stock !== null && warehouseStock <= 0 && !permiteSinStock) {
       toast.error(`Producto sin stock en ${selectedWarehouse?.name || 'este almacén'}`)
+      return
+    }
+    // Con el ajuste de preguntar se frena aca y decide el cajero. `yaConfirmado`
+    // evita el bucle: cuando vuelve desde el modal no pregunta de nuevo.
+    if (product.stock !== null && warehouseStock <= 0 && preguntarSinStock && !yaConfirmado) {
+      pedirConfirmacionSinStock(
+        product.name,
+        `No tiene stock en ${selectedWarehouse?.name || 'este almacén'}.`,
+        () => addToCart(product, selectedPrice, selectedPresentation, selectedBatch, true)
+      )
       return
     }
 
@@ -3867,9 +3905,19 @@ export default function POS() {
     const existingItem = cart.find(item => (item.cartId || item.id) === cartItemId)
 
     if (existingItem) {
-      if (product.stock !== null && existingItem.quantity >= warehouseStock && !companySettings?.allowNegativeStock) {
-        const stockMsg = isNoLotSale ? 'stock sin lote' : batchToUse ? `lote ${batchToUse.lotNumber}` : (selectedWarehouse?.name || 'este almacén')
-        toast.warning(`Stock agotado en ${stockMsg}. Agrega el producto de nuevo para usar otro lote.`)
+      const stockMsgTope = isNoLotSale ? 'stock sin lote' : batchToUse ? `lote ${batchToUse.lotNumber}` : (selectedWarehouse?.name || 'este almacén')
+      if (product.stock !== null && existingItem.quantity >= warehouseStock && !permiteSinStock) {
+        toast.warning(`Stock agotado en ${stockMsgTope}. Agrega el producto de nuevo para usar otro lote.`)
+        return
+      }
+      // Escanear el mismo producto de mas es tan invisible como escanear uno sin
+      // stock: mismo aviso que se va solo, mismo item que falta en la venta.
+      if (product.stock !== null && existingItem.quantity >= warehouseStock && preguntarSinStock && !yaConfirmado) {
+        pedirConfirmacionSinStock(
+          product.name,
+          `Ya tienes ${existingItem.quantity} en el carrito y solo hay ${warehouseStock} en ${stockMsgTope}.`,
+          () => addToCart(product, selectedPrice, selectedPresentation, selectedBatch, true)
+        )
         return
       }
 
@@ -4381,7 +4429,7 @@ export default function POS() {
     addToCart({ ...product, presentationName: null, presentationFactor: 1 }, product.price, { name: 'base', factor: 1, price: product.price }, batchToUse)
   }
 
-  const addVariantToCart = (product, variant, selectedPrice = null) => {
+  const addVariantToCart = (product, variant, selectedPrice = null, yaConfirmado = false) => {
     // Bloquear si ya se completó una venta
     if (saleCompleted) {
       toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
@@ -4389,8 +4437,16 @@ export default function POS() {
     }
 
     // Check stock for variant solo si allowNegativeStock es false
-    if (variant.stock !== null && variant.stock <= 0 && !companySettings?.allowNegativeStock) {
+    if (variant.stock !== null && variant.stock <= 0 && !permiteSinStock) {
       toast.error('Variante sin stock disponible')
+      return
+    }
+    if (variant.stock !== null && variant.stock <= 0 && preguntarSinStock && !yaConfirmado) {
+      pedirConfirmacionSinStock(
+        `${product.name} — ${Object.values(variant.attributes || {}).join(' / ') || variant.sku}`,
+        `Esa variante no tiene stock en ${selectedWarehouse?.name || 'este almacén'}.`,
+        () => addVariantToCart(product, variant, selectedPrice, true)
+      )
       return
     }
 
@@ -4438,8 +4494,16 @@ export default function POS() {
 
     if (existingItem) {
       // Check stock solo si allowNegativeStock es false
-      if (variant.stock !== null && existingItem.quantity >= variant.stock && !companySettings?.allowNegativeStock) {
+      if (variant.stock !== null && existingItem.quantity >= variant.stock && !permiteSinStock) {
         toast.error('No hay suficiente stock disponible para esta variante')
+        return
+      }
+      if (variant.stock !== null && existingItem.quantity >= variant.stock && preguntarSinStock && !yaConfirmado) {
+        pedirConfirmacionSinStock(
+          `${product.name} — ${Object.values(variant.attributes || {}).join(' / ') || variant.sku}`,
+          `Ya tienes ${existingItem.quantity} en el carrito y solo hay ${variant.stock}.`,
+          () => addVariantToCart(product, variant, selectedPrice, true)
+        )
         return
       }
 
@@ -4743,7 +4807,7 @@ export default function POS() {
 
             // Verificar stock del almacén seleccionado (solo para productos no personalizados)
             // Si allowNegativeStock está habilitado, permitir venta sin stock
-            if (item.stock !== null && !item.isCustom && !companySettings?.allowNegativeStock) {
+            if (item.stock !== null && !item.isCustom && !permiteSinStock) {
               const info = getCartItemStockInfo(item)
               if (info) {
                 const { availableStock, stockMsg, factor } = info
@@ -4789,7 +4853,7 @@ export default function POS() {
           if (matchId === itemId) {
             // Verificar stock del almacén seleccionado (solo para productos no personalizados)
             // Si allowNegativeStock está habilitado, permitir venta sin stock
-            if (item.stock !== null && !item.isCustom && quantity > 0 && !companySettings?.allowNegativeStock) {
+            if (item.stock !== null && !item.isCustom && quantity > 0 && !permiteSinStock) {
               const info = getCartItemStockInfo(item)
               if (info) {
                 const { availableStock, stockMsg, factor } = info
@@ -5078,7 +5142,7 @@ export default function POS() {
   useEffect(() => {
     if (!pendingStockCheckRef.current) return
     if (cart.length === 0 || products.length === 0) return
-    if (companySettings?.allowNegativeStock) return
+    if (permiteSinStock) return
 
     const faltantes = getStockShortages()
     if (faltantes.length === 0) {
@@ -5095,7 +5159,7 @@ export default function POS() {
     avisoFaltantesRef.current = detalle
     toast.error(`Sin stock suficiente para: ${detalle}. Ajusta las cantidades antes de cobrar.`, 9000)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cart, products, companySettings?.allowNegativeStock, selectedWarehouse?.id])
+  }, [cart, products, permiteSinStock, selectedWarehouse?.id])
 
   const clearCart = () => {
     setCart([])
@@ -6227,7 +6291,7 @@ export default function POS() {
     // Se omite cuando `allowNegativeStock` está activo: si el dueño aceptó vender
     // sin stock de productos terminados, también aceptamos vender platos con
     // receta aunque falten insumos (los insumos se descuentan a negativo).
-    if (!companySettings?.allowNegativeStock) {
+    if (!permiteSinStock) {
       const allMissingIngredients = []
 
       // Leer TODAS las recetas en UNA sola consulta (antes era 1 query por ítem → ~N queries
@@ -7243,7 +7307,7 @@ export default function POS() {
           await import('@/services/invoiceEditStockService')
         const _editWarehouseId = editingInvoiceData.warehouseId || selectedWarehouse?.id || null
         const _stockDeltas = computeEditStockDeltas(editingInvoiceData.items || [], cart)
-        if (_stockDeltas.length > 0 && !companySettings?.allowNegativeStock) {
+        if (_stockDeltas.length > 0 && !permiteSinStock) {
           // productsRaw: la factura editada puede traer productos ocultos en la
           // sucursal activa; con la lista filtrada no se validaban ni ajustaban.
           const _faltantes = validateEditStockIncreases(_stockDeltas, productsRaw, _editWarehouseId)
@@ -7296,7 +7360,7 @@ export default function POS() {
             invoiceNumber: `${editingInvoiceData.series}-${editingInvoiceData.number}`,
             userId: user.uid,
             userName: user.displayName || user.email || 'Usuario',
-            allowNegative: companySettings?.allowNegativeStock === true,
+            allowNegative: permiteSinStock,
             // Para el FEFO de los aumentos en productos con lotes. productsRaw
             // (catalogo completo): con la lista filtrada por sucursal, un
             // producto oculto en la sede activa no se encontraba, se ajustaba el
@@ -7937,7 +8001,7 @@ export default function POS() {
                     invoiceId: bgInvoiceId || '',
                     invoiceNumber: bgNumberResult?.number || '',
                     documentType: bgDocumentType,
-                    allowNegativeStock: !!companySettings?.allowNegativeStock,
+                    allowNegativeStock: !!permiteSinStock,
                     // Sin esto el servidor grababa los movimientos de venta con userId vacío.
                     userId: bgUserUid || '',
                     items: _itemsPayload,
@@ -8048,7 +8112,7 @@ export default function POS() {
                     {},
                     firstItem.variantSku || null,
                     serialsPayload,
-                    !!companySettings?.allowNegativeStock
+                    !!permiteSinStock
                   )
                 )
               }
@@ -8183,7 +8247,7 @@ export default function POS() {
                     extraUpdates,
                     item.variantSku || null,
                     null,
-                    !!companySettings?.allowNegativeStock
+                    !!permiteSinStock
                   )
                 })
               })
@@ -8341,7 +8405,7 @@ export default function POS() {
                 let _ingFail = false
                 for (const pass of _passes) {
                   try {
-                    await deductIngredients(businessId, pass, bgInvoiceId, 'Venta (varios productos)', bgSelectedWarehouse?.id || null, 'sale', !!companySettings?.allowNegativeStock)
+                    await deductIngredients(businessId, pass, bgInvoiceId, 'Venta (varios productos)', bgSelectedWarehouse?.id || null, 'sale', !!permiteSinStock)
                   } catch (error) {
                     _ingFail = true
                     console.warn('⚠️ No se pudo descontar insumos (agregado):', error)
@@ -8968,7 +9032,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
    * decisión del dueño, no un descuido.
    */
   const getStockShortages = (cartToCheck = cart) => {
-    if (companySettings?.allowNegativeStock) return []
+    if (permiteSinStock) return []
     const shortages = []
     for (const item of cartToCheck) {
       if (item.isCustom || item.stock === null) continue
@@ -9550,10 +9614,10 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   const isOutOfStock = !product.hasVariants &&
                     product.stock !== null &&
                     warehouseStock <= 0 &&
-                    !companySettings?.allowNegativeStock
+                    !permiteSinStock
                   const expirationStatus = getProductExpirationStatus(product)
                   const isExpired = expirationStatus && !expirationStatus.canSell
-                  const noIngredients = !companySettings?.allowNegativeStock && productsWithoutIngredients.has(product.id)
+                  const noIngredients = !permiteSinStock && productsWithoutIngredients.has(product.id)
                   // Alcanza para prepararlo, pero un insumo llegó a su mínimo.
                   // Avisa siempre: aunque el dueño permita vender en negativo,
                   // querer saber que se acaba el pollo no es lo mismo que
@@ -9690,7 +9754,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   const isOutOfStock = !product.hasVariants &&
                     product.stock !== null && // Solo si tiene control de stock
                     warehouseStock <= 0 &&
-                    !companySettings?.allowNegativeStock
+                    !permiteSinStock
 
                   // FEFO: Verificar estado de vencimiento
                   const expirationStatus = getProductExpirationStatus(product)
@@ -9699,7 +9763,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   // El badge se muestra ANTES de que el mozo arme el carrito, para
                   // que no se entere recién al cobrar. Sólo aplica cuando el dueño
                   // NO permitió vender sin stock (en ese modo no avisamos).
-                  const noIngredients = !companySettings?.allowNegativeStock && productsWithoutIngredients.has(product.id)
+                  const noIngredients = !permiteSinStock && productsWithoutIngredients.has(product.id)
                   // Alcanza para prepararlo, pero un insumo llegó a su mínimo.
                   // Avisa siempre: aunque el dueño permita vender en negativo,
                   // querer saber que se acaba el pollo no es lo mismo que
@@ -13140,7 +13204,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
         product={selectedProductForVariant}
         onSelect={addVariantToCart}
         warehouse={selectedWarehouse}
-        allowNegativeStock={companySettings?.allowNegativeStock}
+        allowNegativeStock={permiteSinStock}
         formatCurrency={formatCurrency}
       />
 
@@ -13692,6 +13756,52 @@ ${companySettings?.businessName || 'Tu Empresa'}`
           <div className="flex justify-end">
             <Button onClick={() => setMissingIngredientsAlert(null)}>
               Entendido
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Producto SIN STOCK: se frena y decide el cajero (ajuste
+          "Preguntar antes de vender un producto sin stock"). Es un modal y no
+          un toast a proposito: escaneando en serie, un aviso que se va solo
+          pasa desapercibido y la venta sale sin ese item. */}
+      <Modal
+        isOpen={!!sinStockPendiente}
+        onClose={() => setSinStockPendiente(null)}
+        title="Producto sin stock"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-6 h-6 text-amber-500 flex-shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-base font-semibold text-gray-900 break-words">
+                {sinStockPendiente?.nombre}
+              </p>
+              <p className="mt-1 text-sm text-gray-600">
+                {sinStockPendiente?.detalle} Si igual lo tienes, agrégalo: el stock
+                quedará en negativo hasta que registres la compra.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => { setSinStockPendiente(null); searchInputRef.current?.focus() }}
+              className="w-full sm:w-auto"
+            >
+              No agregar
+            </Button>
+            <Button
+              onClick={() => {
+                const seguir = sinStockPendiente?.confirmar
+                setSinStockPendiente(null)
+                if (seguir) seguir()
+                searchInputRef.current?.focus()
+              }}
+              className="w-full sm:w-auto"
+            >
+              Agregar igual
             </Button>
           </div>
         </div>

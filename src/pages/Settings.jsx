@@ -430,6 +430,9 @@ export default function Settings() {
 
   // Estados para configuración de inventario
   const [allowNegativeStock, setAllowNegativeStock] = useState(false)
+  // Vender sin stock PERO preguntando antes (pedido de un usuario que escanea
+  // productos chicos en serie y no alcanzaba a leer el aviso rojo)
+  const [confirmSaleWithoutStock, setConfirmSaleWithoutStock] = useState(false)
   const [allowCustomProducts, setAllowCustomProducts] = useState(false)
   const [allowPriceEdit, setAllowPriceEdit] = useState(false)
   const [allowNameEdit, setAllowNameEdit] = useState(false)
@@ -1316,6 +1319,7 @@ export default function Settings() {
 
         // Cargar configuración de inventario
         setAllowNegativeStock(businessData.allowNegativeStock || false)
+        setConfirmSaleWithoutStock(businessData.confirmSaleWithoutStock || false)
         setAllowCustomProducts(businessData.allowCustomProducts || false)
         setAllowPriceEdit(businessData.allowPriceEdit || false)
         setAllowNameEdit(businessData.allowNameEdit || false)
@@ -5170,6 +5174,20 @@ export default function Settings() {
                       : '✗ Deshabilitado: Los productos con stock en 0 aparecerán deshabilitados en el punto de venta y no se podrán agregar al carrito. Recomendado para control estricto de inventario.'}
                   />
 
+                  {/* Punto medio entre bloquear y dejar pasar: se puede vender sin
+                      stock, pero el sistema PREGUNTA antes de agregarlo. Nace de un
+                      caso real: escanea productos pequeños en serie y el aviso rojo
+                      pasaba desapercibido, asi que terminaba cobrando sin ese item. */}
+                  <SettingToggle
+                    id="opcion-confirmSaleWithoutStock"
+                    checked={confirmSaleWithoutStock}
+                    onChange={(e) => setConfirmSaleWithoutStock(e.target.checked)}
+                    title="Preguntar antes de vender un producto sin stock"
+                    description={confirmSaleWithoutStock
+                      ? '✓ Habilitado: Al escanear o tocar un producto sin stock, el punto de venta muestra un aviso que debes confirmar para agregarlo. Ideal si escaneas rápido y no quieres que se te pase por alto.'
+                      : '✗ Deshabilitado: Los productos sin stock muestran solo un aviso pasajero y no se agregan (salvo que actives la opción de arriba).'}
+                  />
+
                   {/* Descarga de stock en el traslado masivo del inventario */}
                   <SettingToggle
                     checked={stockDischargeEnabled}
@@ -6009,6 +6027,7 @@ export default function Settings() {
                       restaurantConfig: restaurantConfig,
                       posCustomFields: posCustomFields,
                       allowNegativeStock: allowNegativeStock,
+                      confirmSaleWithoutStock: confirmSaleWithoutStock,
                       stockDischargeEnabled: stockDischargeEnabled,
                       notaVentaCreditTerms: notaVentaCreditTerms,
                       allowCustomProducts: allowCustomProducts,
