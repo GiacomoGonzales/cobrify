@@ -109,10 +109,23 @@ export const getPublicAgenda = onRequest(
       const v = await validarNegocio(db, businessId)
       if (v.error) { res.status(v.error.code).json({ error: v.error.msg }); return }
 
+      // Profesional (opcional): si el negocio publica varios, la agenda es
+      // POR PROFESIONAL — con dos doctores, las 10:00 pueden estar libres con
+      // uno y ocupadas con el otro. Sin profesional pedido, ocupa cualquier
+      // cita del negocio (comportamiento de siempre).
+      const staffId = String(req.query.staffId || req.body?.staffId || '').slice(0, 60)
+      const catalogoStaff = Array.isArray(v.business.appointmentsBooking?.staff)
+        ? v.business.appointmentsBooking.staff
+        : []
+      const staffValido = staffId && catalogoStaff.some((x) => x && x.id === staffId)
+
       const citas = await citasDelDia(db, businessId, date)
+      const delProfesional = staffValido
+        ? citas.filter((a) => (a.staffId || '') === staffId)
+        : citas
       // Set para no repetir: dos citas del negocio a la misma hora son UNA
       // hora ocupada para el público.
-      const busy = [...new Set(citas.map((a) => horaLima(a.scheduledDate)))].sort()
+      const busy = [...new Set(delProfesional.map((a) => horaLima(a.scheduledDate)))].sort()
 
       res.status(200).json({ date, config: v.config, busy })
     } catch (error) {
@@ -140,6 +153,7 @@ export const bookPublicAppointment = onRequest(
       const telefono = String(b.phone || '').replace(/\D/g, '').slice(0, 15)
       const mascota = String(b.petName || '').trim().slice(0, 60)
       const serviceId = String(b.serviceId || '').slice(0, 60)
+      const staffId = String(b.staffId || '').slice(0, 60)
       const servicioLibre = String(b.serviceName || '').trim().slice(0, 120)
       const nota = String(b.notes || '').trim().slice(0, 300)
 
@@ -213,7 +227,14 @@ export const bookPublicAppointment = onRequest(
       // Igualdad por un solo campo: sin índice compuesto.
       const mismas = await db.collection(`businesses/${businessId}/appointments`)
         .where('scheduledDate', '==', Timestamp.fromDate(slot)).get()
-      if (mismas.docs.some((d) => ESTADOS_ACTIVOS.includes(d.data().status))) {
+      // Con profesionales, solo choca lo de ESE profesional; sin ellos,
+      // cualquier cita del negocio a esa hora.
+      const chocan = mismas.docs.filter((d) => {
+        if (!ESTADOS_ACTIVOS.includes(d.data().status)) return false
+        if (!staffId) return true
+        return (d.data().staffId || '') === staffId
+      })
+      if (chocan.length > 0) {
         res.status(409).json({ error: 'Esa hora acaba de ocuparse. Elige otra.' }); return
       }
 
@@ -225,7 +246,25 @@ export const bookPublicAppointment = onRequest(
       // consulta y cancela su cita sin cuenta. URL-safe, 24 chars.
       const publicToken = randomBytes(18).toString('base64url')
 
-      const lockId = `${date}_${time.replace(':', '-')}`
+      // Profesional: el nombre lo pone el SERVIDOR desde la configuracion,
+      // igual que el servicio. Si el negocio publica profesionales, elegir uno
+      // es obligatorio; si no publica ninguno, el campo se ignora.
+      const catalogoStaff = Array.isArray(v.business.appointmentsBooking?.staff)
+        ? v.business.appointmentsBooking.staff.filter((x) => x && x.id && x.name)
+        : []
+      let profesional = null
+      if (catalogoStaff.length > 0) {
+        profesional = catalogoStaff.find((x) => x.id === staffId) || null
+        if (!profesional) {
+          res.status(400).json({ error: 'Elige con quién quieres tu cita' }); return
+        }
+      }
+
+      // El candado es por hueco Y profesional: con dos doctores, dos clientes
+      // pueden tomar las 10:00 con cada uno sin pisarse.
+      const lockId = profesional
+        ? `${date}_${time.replace(':', '-')}_${profesional.id}`
+        : `${date}_${time.replace(':', '-')}`
       const lockRef = db.doc(`businesses/${businessId}/publicAgendaSlots/${lockId}`)
       const apptRef = db.collection(`businesses/${businessId}/appointments`).doc()
 
@@ -244,6 +283,8 @@ export const bookPublicAppointment = onRequest(
         services: servicioElegido
           ? [{ name: String(servicioElegido.name || '').slice(0, 120), price: Number(servicioElegido.price) || 0 }]
           : [],
+        staffId: profesional ? profesional.id : '',
+        staffName: profesional ? String(profesional.name || '').slice(0, 80) : '',
         scheduledDate: Timestamp.fromDate(slot),
         scheduledTime: time,
         status: 'scheduled',
@@ -262,7 +303,7 @@ export const bookPublicAppointment = onRequest(
           }
         }
         t.set(apptRef, nuevaCita)
-        t.set(lockRef, { appointmentId: apptRef.id, date, time, createdAt: FieldValue.serverTimestamp() })
+        t.set(lockRef, { appointmentId: apptRef.id, date, time, staffId: profesional ? profesional.id : '', createdAt: FieldValue.serverTimestamp() })
       })
 
       console.log(`📅 Reserva pública creada: ${businessId} ${date} ${time} (${nombre})`)

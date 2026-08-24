@@ -554,6 +554,9 @@ export default function Settings() {
   // Reservas de citas desde el catalogo publico (veterinaria / General con agenda)
   const [appointmentsBooking, setAppointmentsBooking] = useState({
     enabled: false, days: [1, 2, 3, 4, 5, 6], startHour: 9, endHour: 19, stepMinutes: 30,
+    // staff: quien atiende (OPCIONAL). Vacio = el catalogo no pregunta por
+    // profesional y la agenda es una sola, como hasta ahora.
+    staff: [], staffLabel: '',
   })
   // Solicitudes de reserva de habitaciones desde el catalogo (modo hotel)
   const [hotelBooking, setHotelBooking] = useState({ enabled: false })
@@ -9062,6 +9065,67 @@ export default function Settings() {
                                   El precio queda fijado al guardar: si lo cambias en Productos, vuelve a guardar acá.
                                 </p>
                               </div>
+
+                              {/* Profesionales que atienden (OPCIONAL). Solo si el
+                                  negocio los configura aparece el selector en el
+                                  catalogo, y la agenda pasa a ser POR profesional:
+                                  dos clientes pueden tomar las 10:00 con doctores
+                                  distintos sin pisarse. */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                                  Quién atiende <span className="text-gray-400 font-normal">(opcional)</span>
+                                </label>
+                                <p className="text-xs text-gray-500 mb-2">
+                                  Si agregas personas, el cliente elige con quién quiere su cita y cada una lleva su propia agenda. Déjalo vacío si no aplica en tu negocio.
+                                </p>
+                                <div className="max-w-md space-y-2">
+                                  <input
+                                    type="text"
+                                    value={appointmentsBooking.staffLabel || ''}
+                                    onChange={(e) => setAppointmentsBooking(prev => ({ ...prev, staffLabel: e.target.value }))}
+                                    placeholder="Cómo se llama en tu rubro: Doctor, Terapeuta, Estilista..."
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                                    maxLength={30}
+                                  />
+                                  {(appointmentsBooking.staff || []).map((persona, idx) => (
+                                    <div key={persona.id} className="flex items-center gap-2">
+                                      <input
+                                        type="text"
+                                        value={persona.name}
+                                        onChange={(e) => setAppointmentsBooking(prev => {
+                                          const lista = [...(prev.staff || [])]
+                                          lista[idx] = { ...lista[idx], name: e.target.value }
+                                          return { ...prev, staff: lista }
+                                        })}
+                                        placeholder="Nombre"
+                                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                                        maxLength={60}
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => setAppointmentsBooking(prev => ({
+                                          ...prev,
+                                          staff: (prev.staff || []).filter(x => x.id !== persona.id),
+                                        }))}
+                                        className="p-2 text-gray-400 hover:text-red-500"
+                                        aria-label="Quitar"
+                                      >
+                                        <X className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  ))}
+                                  <button
+                                    type="button"
+                                    onClick={() => setAppointmentsBooking(prev => ({
+                                      ...prev,
+                                      staff: [...(prev.staff || []), { id: `st-${Date.now().toString(36)}`, name: '' }],
+                                    }))}
+                                    className="text-sm font-medium text-primary-600 hover:text-primary-700"
+                                  >
+                                    + Agregar persona
+                                  </button>
+                                </div>
+                              </div>
                             </div>
                           )}
                         </div>
@@ -9117,7 +9181,15 @@ export default function Settings() {
                       const businessRef = doc(db, 'businesses', getBusinessId())
                       await setDoc(businessRef, {
                         catalogEnabled,
-                        appointmentsBooking,
+                        // Las personas sin nombre no se publican: una fila vacia
+                        // en el catalogo seria un boton sin etiqueta.
+                        appointmentsBooking: {
+                          ...appointmentsBooking,
+                          staffLabel: (appointmentsBooking.staffLabel || '').trim(),
+                          staff: (appointmentsBooking.staff || [])
+                            .map(x => ({ ...x, name: (x.name || '').trim() }))
+                            .filter(x => x.name),
+                        },
                         hotelBooking,
                         catalogSlug: catalogSlug.toLowerCase().trim(),
                         customDomain: catalogCustomDomain.toLowerCase().trim().replace(/^www\./, '') || null,

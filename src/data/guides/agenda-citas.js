@@ -138,7 +138,7 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'Con esta opción, tu catálogo online muestra un botón **Reservar una cita**: el cliente elige un día y una hora libre, deja su nombre y su teléfono, y la cita **aparece sola en tu Agenda** al instante, con una notificación para ti.',
+          text: 'Con esta opción, tu catálogo online muestra una **sección de reservas**: el cliente ve tus servicios, un calendario del mes y las horas libres, deja su nombre y su teléfono, y la cita **aparece sola en tu Agenda** al instante, con una notificación para ti.',
         },
         {
           type: 'pasos',
@@ -146,12 +146,17 @@ export default {
             'En **Configuración > Catálogo**, activa **Recibir reservas desde el catálogo**.',
             'Define los **días** que atiendes con cita, el **horario** y cada cuántos minutos hay un turno.',
             'Agrega los **servicios que se pueden reservar** (baño, consulta, podología...) buscándolos entre tus productos. El cliente elige uno al reservar, con el precio que publicaste.',
-            'Guarda. El botón aparece en tu catálogo de inmediato.',
+            'Si en tu negocio atiende más de una persona, agrega en **Quién atiende** a cada doctor, terapeuta o estilista (y cómo se llama en tu rubro). Es opcional: si lo dejas vacío, el catálogo no lo pregunta.',
+            'Guarda. La sección aparece en tu catálogo de inmediato.',
           ],
         },
         {
           type: 'ojo',
           text: 'El cliente solo ve horas **libres** — nunca los datos de otros clientes ni cuántas citas tienes. Y una misma hora no puede reservarse dos veces desde el catálogo: el segundo recibe "esa hora acaba de ocuparse". Tú, en cambio, sí puedes sobre-agendar a mano desde tu Agenda, como siempre.',
+        },
+        {
+          type: 'texto',
+          text: 'Cuando configuras **quién atiende**, cada persona lleva su propia agenda: dos clientes pueden reservar las 10:00 con doctores distintos, y solo se bloquea la hora de quien ya está ocupado.',
         },
         {
           type: 'consejo',

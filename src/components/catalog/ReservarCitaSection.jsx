@@ -1,26 +1,34 @@
 import { useState, useEffect, useCallback } from 'react'
-import { CalendarDays, Check, Loader2 } from 'lucide-react'
-import { EnlaceReserva, FN_BASE, DIAS_CORTOS, MESES_CORTOS, aYMD, sinScrollbar } from './ReservarCitaModal'
+import { CalendarDays, Check, Loader2, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
+import { EnlaceReserva, FN_BASE, DIAS_CORTOS, MESES_CORTOS, aYMD } from './ReservarCitaModal'
 
 /**
  * RESERVAR CITA como SECCIÓN de la tienda (no un modal).
  *
- * Es un bloque de ancho completo, tipo widget: servicios, calendario, horas y
- * formulario están TODOS a la vista al mismo tiempo — el cliente ve de un
- * golpe qué puede reservar y cuándo, sin abrir nada ni avanzar por pasos.
- * En escritorio son tres columnas (qué / cuándo / quién) y en móvil se apilan
- * en ese mismo orden, que es el orden en que uno decide.
+ * Bloque de ancho completo, tipo widget: servicio, calendario, hora y datos
+ * están TODOS a la vista al mismo tiempo — el cliente ve de un golpe qué
+ * puede reservar y cuándo, sin abrir nada ni avanzar por pasos. En escritorio
+ * son tres columnas (qué / cuándo / quién) y en móvil se apilan en ese mismo
+ * orden, que es el orden en que uno decide.
+ *
+ * El calendario es de MES (no una fila de días): con una fila de 14 días el
+ * cliente no puede ver "el sábado de la otra semana" sin desplazarse a ciegas.
+ * Las horas van en un desplegable: una grilla de 20 botones ganaba la pantalla
+ * completa en móvil y competía con el resto del formulario.
  *
  * La lógica de red es la misma del modal y por los mismos motivos: todo pasa
  * por las Cloud Functions públicas (getPublicAgenda / bookPublicAppointment),
  * nunca por Firestore directo — las citas traen datos personales de otros
  * clientes y las reglas no filtran campos, así que la disponibilidad llega ya
  * desinfectada (solo horas libres). La creación corre en el servidor con un
- * candado por hueco: dos personas eligiendo las 10:00 a la vez no terminan
- * las dos con cita. Y el servicio viaja como ID: nombre y precio los pone el
- * servidor desde la configuración, así nadie reserva un "Baño a S/ 1"
- * editando el request.
+ * candado por hueco. El servicio y el profesional viajan como ID: nombre y
+ * precio los pone el SERVIDOR desde la configuración del negocio.
  */
+
+const DIAS_INICIAL = ['D', 'L', 'M', 'M', 'J', 'V', 'S']
+const MESES_LARGOS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+
 export default function ReservarCitaSection({ business, accent = '#2563eb', themeClasses = {} }) {
   const config = business?.appointmentsBooking || {}
   const days = Array.isArray(config.days) && config.days.length ? config.days : [1, 2, 3, 4, 5, 6]
@@ -29,8 +37,17 @@ export default function ReservarCitaSection({ business, accent = '#2563eb', them
   const step = Number(config.stepMinutes) || 30
   const esVeterinaria = business?.businessMode === 'veterinary'
   const servicios = Array.isArray(config.services) ? config.services.filter(s => s && s.id && s.name) : []
+  // Profesionales (opcional): si el negocio no configuró ninguno, el bloque
+  // entero no existe — la mayoría de negocios no lo necesita.
+  const staff = Array.isArray(config.staff) ? config.staff.filter(x => x && x.id && x.name) : []
+  const staffLabel = (config.staffLabel || '').trim() || 'Profesional'
 
+  // Contraida por defecto: la reserva es para quien la busca; a los demas
+  // no les come la pantalla antes de ver los productos.
+  const [abierto, setAbierto] = useState(false)
   const [servicio, setServicio] = useState(null)
+  const [profesional, setProfesional] = useState(null)
+  const [mesVista, setMesVista] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() } })
   const [fecha, setFecha] = useState(null)
   const [busy, setBusy] = useState([])
   const [cargandoHoras, setCargandoHoras] = useState(false)
@@ -40,21 +57,22 @@ export default function ReservarCitaSection({ business, accent = '#2563eb', them
   const [error, setError] = useState('')
   const [confirmada, setConfirmada] = useState(null)
 
-  // Los próximos 14 días que el negocio atiende. Se calculan en el navegador
-  // del cliente (que está en Perú, como el negocio); el servidor re-valida
-  // igual cada reserva, así que un reloj raro no puede colar nada.
-  const diasDisponibles = []
-  for (let i = 0; i < 14; i++) {
-    const d = new Date()
-    d.setDate(d.getDate() + i)
-    if (days.includes(d.getDay())) diasDisponibles.push(d)
-  }
+  const hoy = new Date()
+  hoy.setHours(0, 0, 0, 0)
+  // Se puede reservar hasta 60 días adelante: más allá el negocio ni sabe si
+  // seguirá con ese horario.
+  const limite = new Date(hoy)
+  limite.setDate(limite.getDate() + 60)
 
-  const cargarHoras = useCallback(async (ymd) => {
+  const diaReservable = (d) => d >= hoy && d <= limite && days.includes(d.getDay())
+
+  const cargarHoras = useCallback(async (ymd, staffId) => {
     setCargandoHoras(true)
     setError('')
     try {
-      const r = await fetch(`${FN_BASE}/getPublicAgenda?businessId=${encodeURIComponent(business.id)}&date=${ymd}`)
+      const qs = new URLSearchParams({ businessId: business.id, date: ymd })
+      if (staffId) qs.set('staffId', staffId)
+      const r = await fetch(`${FN_BASE}/getPublicAgenda?${qs.toString()}`)
       const data = await r.json()
       if (!r.ok) throw new Error(data.error || 'No se pudo consultar la disponibilidad')
       setBusy(data.busy || [])
@@ -66,25 +84,31 @@ export default function ReservarCitaSection({ business, accent = '#2563eb', them
     }
   }, [business?.id])
 
-  // Se precarga el primer día disponible: la sección aparece con horas reales
+  // Primer día atendible preseleccionado: la sección aparece con horas reales
   // a la vista, no con un hueco esperando un clic.
   useEffect(() => {
-    if (!fecha && diasDisponibles.length > 0) setFecha(aYMD(diasDisponibles[0]))
+    if (fecha) return
+    for (let i = 0; i < 60; i++) {
+      const d = new Date()
+      d.setHours(0, 0, 0, 0)
+      d.setDate(d.getDate() + i)
+      if (diaReservable(d)) { setFecha(aYMD(d)); setMesVista({ y: d.getFullYear(), m: d.getMonth() }); return }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // La agenda depende del profesional: con dos doctores, las 10:00 pueden
+  // estar libres con uno y ocupadas con el otro.
   useEffect(() => {
-    if (fecha) cargarHoras(fecha)
-  }, [fecha, cargarHoras])
+    // Cerrada no se consulta nada: seria una llamada al servidor por cada
+    // visita del catalogo, para un panel que nadie abrio.
+    if (abierto && fecha) cargarHoras(fecha, profesional?.id)
+  }, [abierto, fecha, profesional, cargarHoras])
 
-  // Huecos libres del día elegido: la grilla completa menos los ocupados y,
-  // si es hoy, menos los que ya pasaron (con la misma media hora de
-  // anticipación que exige el servidor — así no se ofrece un botón que va a
-  // rebotar).
   const huecosLibres = []
   if (fecha) {
     const esHoy = fecha === aYMD(new Date())
-    const limite = Date.now() + 30 * 60 * 1000
+    const corte = Date.now() + 30 * 60 * 1000
     for (let min = startHour * 60; min < endHour * 60; min += step) {
       const hh = String(Math.floor(min / 60)).padStart(2, '0')
       const mm = String(min % 60).padStart(2, '0')
@@ -92,7 +116,7 @@ export default function ReservarCitaSection({ business, accent = '#2563eb', them
       if (busy.includes(t)) continue
       if (esHoy) {
         const [y, m, d] = fecha.split('-').map(Number)
-        if (new Date(y, m - 1, d, Number(hh), Number(mm)).getTime() < limite) continue
+        if (new Date(y, m - 1, d, Number(hh), Number(mm)).getTime() < corte) continue
       }
       huecosLibres.push(t)
     }
@@ -106,10 +130,12 @@ export default function ReservarCitaSection({ business, accent = '#2563eb', them
   }
 
   const faltaServicio = servicios.length > 0 && !servicio
-  const listoParaReservar = !faltaServicio && !!fecha && !!hora
+  const faltaProfesional = staff.length > 0 && !profesional
+  const listo = !faltaServicio && !faltaProfesional && !!fecha && !!hora
 
   const reservar = async () => {
     if (faltaServicio) { setError('Elige el servicio que necesitas'); return }
+    if (faltaProfesional) { setError(`Elige con quién quieres tu cita`); return }
     if (!fecha || !hora) { setError('Elige el día y la hora de tu cita'); return }
     const nombre = form.nombre.trim()
     const telefono = form.telefono.replace(/\D/g, '')
@@ -126,6 +152,7 @@ export default function ReservarCitaSection({ business, accent = '#2563eb', them
           date: fecha,
           time: hora,
           serviceId: servicio?.id || '',
+          staffId: profesional?.id || '',
           name: nombre,
           phone: telefono,
           petName: esVeterinaria ? form.mascota.trim() : '',
@@ -134,9 +161,7 @@ export default function ReservarCitaSection({ business, accent = '#2563eb', them
       })
       const data = await r.json()
       if (!r.ok) {
-        // La hora se ocupó mientras llenaba el formulario: se refresca la
-        // lista para que no reintente contra un hueco muerto.
-        if (r.status === 409) { setHora(null); cargarHoras(fecha) }
+        if (r.status === 409) { setHora(null); cargarHoras(fecha, profesional?.id) }
         throw new Error(data.error || 'No se pudo crear la reserva')
       }
       setConfirmada({ fecha, hora, token: data.token })
@@ -151,6 +176,7 @@ export default function ReservarCitaSection({ business, accent = '#2563eb', them
   const tBorde = themeClasses.borderColor || 'border-gray-200'
   const tText = themeClasses.text || 'text-gray-900'
   const tMuted = themeClasses.textMuted || 'text-gray-500'
+  const tSuave = themeClasses.catInactive || 'bg-gray-50 text-gray-700 hover:bg-gray-100'
 
   // ---- confirmada: la sección se convierte en el comprobante ----
   if (confirmada) {
@@ -163,7 +189,8 @@ export default function ReservarCitaSection({ business, accent = '#2563eb', them
           <h3 className={`text-lg font-semibold ${tText}`}>Cita reservada</h3>
           <p className={`text-sm ${tMuted}`}>
             {servicio ? <><strong className={tText}>{servicio.name}</strong> — </> : null}
-            te esperamos el <strong className={tText}>{fechaLegible(confirmada.fecha)}</strong> a las <strong className={tText}>{confirmada.hora}</strong>.
+            te esperamos el <strong className={tText}>{fechaLegible(confirmada.fecha)}</strong> a las <strong className={tText}>{confirmada.hora}</strong>
+            {profesional ? <> con <strong className={tText}>{profesional.name}</strong></> : null}.
           </p>
           <p className={`text-xs ${tMuted}`}>El negocio te confirmará por WhatsApp al número que dejaste.</p>
           {confirmada.token && (
@@ -186,111 +213,186 @@ export default function ReservarCitaSection({ business, accent = '#2563eb', them
     )
   }
 
+  // ---- calendario del mes ----
+  const primerDia = new Date(mesVista.y, mesVista.m, 1)
+  const diasEnMes = new Date(mesVista.y, mesVista.m + 1, 0).getDate()
+  const celdas = []
+  for (let i = 0; i < primerDia.getDay(); i++) celdas.push(null)
+  for (let d = 1; d <= diasEnMes; d++) celdas.push(new Date(mesVista.y, mesVista.m, d))
+  const mesAnteriorPosible = new Date(mesVista.y, mesVista.m, 1) > new Date(hoy.getFullYear(), hoy.getMonth(), 1)
+  const mesSiguientePosible = new Date(mesVista.y, mesVista.m + 1, 1) <= limite
+  const moverMes = (delta) => setMesVista(({ y, m }) => {
+    const d = new Date(y, m + delta, 1)
+    return { y: d.getFullYear(), m: d.getMonth() }
+  })
+
   const inputCls = `w-full px-3 py-2.5 border rounded-lg text-sm bg-transparent ${tBorde} ${tText}`
+  // Numeracion de los pasos calculada de la lista real de bloques visibles:
+  // un contador que se incrementa dentro del JSX se desincroniza (React puede
+  // evaluar mas veces de las que se ven) y salta numeros.
+  const pasos = []
+  if (servicios.length > 0) pasos.push('servicio')
+  if (staff.length > 0) pasos.push('staff')
+  pasos.push('fecha', 'datos')
+  const nPaso = (id) => pasos.indexOf(id) + 1
 
   return (
-    <section className="max-w-7xl mx-auto px-4 mt-8">
+    <section className="max-w-7xl mx-auto px-4 mt-8 mb-10">
       <div className={`${tCard} ${tBorde} border rounded-2xl overflow-hidden`}>
-        {/* Cabecera del widget */}
-        <div className={`px-5 py-4 border-b ${tBorde} flex items-center gap-2.5`}>
+        <button
+          type="button"
+          onClick={() => setAbierto(v => !v)}
+          className={`w-full px-5 py-4 flex items-center gap-2.5 text-left transition-colors ${abierto ? `border-b ${tBorde}` : ''}`}
+          aria-expanded={abierto}
+        >
           <CalendarDays className="w-5 h-5 flex-shrink-0" style={{ color: accent }} />
-          <div>
+          <div className="flex-1 min-w-0">
             <h2 className={`font-semibold ${tText}`}>Reserva tu cita</h2>
             <p className={`text-xs ${tMuted}`}>Elige el servicio, el día y la hora. Te confirmamos por WhatsApp.</p>
           </div>
-        </div>
+          <ChevronDown className={`w-5 h-5 flex-shrink-0 transition-transform ${tMuted} ${abierto ? 'rotate-180' : ''}`} />
+        </button>
 
-        {/* Tres zonas a la vista: qué / cuándo / quién */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-5">
+        {abierto && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-x-8 gap-y-6 p-5">
 
-          {/* 1. Servicios */}
-          {servicios.length > 0 && (
-            <div className="space-y-2">
-              <p className={`text-sm font-medium ${tText}`}>1. ¿Qué necesitas?</p>
-              <div className="space-y-2 lg:max-h-80 lg:overflow-y-auto catalog-scrollbar">
-                {servicios.map((svc) => {
-                  const activo = servicio?.id === svc.id
-                  return (
-                    <button
-                      key={svc.id}
-                      type="button"
-                      onClick={() => { setServicio(svc); setError('') }}
-                      className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border transition-colors text-left ${activo ? '' : `${tBorde} hover:opacity-80`}`}
-                      style={activo ? { borderColor: accent, backgroundColor: `${accent}10` } : undefined}
-                    >
-                      <span className={`font-medium truncate ${activo ? '' : tText}`} style={activo ? { color: accent } : undefined}>
-                        {svc.name}
-                      </span>
-                      {Number(svc.price) > 0 && (
-                        <span className="flex-none text-sm font-semibold" style={{ color: accent }}>
-                          S/ {Number(svc.price).toFixed(2)}
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
+          {/* ---- 1. Servicio (+ profesional, si el negocio lo usa) ---- */}
+          {(servicios.length > 0 || staff.length > 0) && (
+            <div className="space-y-5">
+              {servicios.length > 0 && (
+                  <div className="space-y-2.5">
+                    <p className={`text-sm font-semibold ${tText}`}>{nPaso('servicio')}. Servicio</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2 lg:max-h-72 lg:overflow-y-auto catalog-scrollbar lg:pr-1">
+                      {servicios.map((svc) => {
+                        const activo = servicio?.id === svc.id
+                        return (
+                          <button
+                            key={svc.id}
+                            type="button"
+                            onClick={() => { setServicio(svc); setError('') }}
+                            className={`w-full text-left px-4 py-3 rounded-xl border transition-all ${activo ? 'shadow-sm' : `${tBorde} hover:opacity-80`}`}
+                            style={activo ? { borderColor: accent, backgroundColor: `${accent}0f` } : undefined}
+                          >
+                            <span className="flex items-center justify-between gap-3">
+                              <span className={`font-medium truncate ${activo ? '' : tText}`} style={activo ? { color: accent } : undefined}>
+                                {svc.name}
+                              </span>
+                              {Number(svc.price) > 0 && (
+                                <span className="flex-none text-sm font-semibold" style={{ color: accent }}>
+                                  S/ {Number(svc.price).toFixed(2)}
+                                </span>
+                              )}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+              )}
+
+              {staff.length > 0 && (
+                  <div className="space-y-2.5">
+                    <p className={`text-sm font-semibold ${tText}`}>{nPaso('staff')}. {staffLabel}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {staff.map((s) => {
+                        const activo = profesional?.id === s.id
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => { setProfesional(s); setHora(null); setError('') }}
+                            className={`px-3.5 py-2 rounded-full text-sm font-medium transition-all ${activo ? 'text-white shadow-sm' : tSuave}`}
+                            style={activo ? { backgroundColor: accent } : undefined}
+                          >
+                            {s.name}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+              )}
             </div>
           )}
 
-          {/* 2. Día y hora */}
-          <div className="space-y-4">
-            <p className={`text-sm font-medium ${tText}`}>{servicios.length > 0 ? '2.' : '1.'} ¿Cuándo?</p>
-            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide" style={sinScrollbar}>
-              {diasDisponibles.map((d) => {
-                const ymd = aYMD(d)
-                const activo = fecha === ymd
-                return (
-                  <button
-                    key={ymd}
-                    type="button"
-                    onClick={() => { setFecha(ymd); setHora(null); setError('') }}
-                    className={`flex-none w-[3.75rem] py-2.5 rounded-2xl text-center transition-all ${activo ? 'text-white shadow-sm' : `${themeClasses.catInactive || 'bg-gray-50 text-gray-700 hover:bg-gray-100'}`}`}
-                    style={activo ? { backgroundColor: accent } : {}}
-                  >
-                    <span className={`block text-[10px] uppercase tracking-wide ${activo ? 'text-white/80' : 'opacity-60'}`}>
-                      {DIAS_CORTOS[d.getDay()]}
-                    </span>
-                    <span className="block text-lg font-bold leading-tight">{d.getDate()}</span>
-                    <span className={`block text-[10px] ${activo ? 'text-white/80' : 'opacity-60'}`}>
-                      {MESES_CORTOS[d.getMonth()]}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
+          {/* ---- 2. Fecha (calendario del mes) + hora (desplegable) ---- */}
+          <div className="space-y-3">
+            <p className={`text-sm font-semibold ${tText}`}>{nPaso('fecha')}. Fecha y hora</p>
 
-            {cargandoHoras ? (
-              <div className={`flex items-center gap-2 text-sm py-6 justify-center ${tMuted}`}>
-                <Loader2 className="w-4 h-4 animate-spin" /> Consultando horarios...
+            <div className={`border ${tBorde} rounded-xl p-3`}>
+              <div className="flex items-center justify-between mb-2">
+                <button
+                  type="button" onClick={() => moverMes(-1)} disabled={!mesAnteriorPosible}
+                  className={`p-1 rounded-lg disabled:opacity-30 ${tMuted}`}
+                  aria-label="Mes anterior"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className={`text-sm font-medium capitalize ${tText}`}>
+                  {MESES_LARGOS[mesVista.m]} {mesVista.y}
+                </span>
+                <button
+                  type="button" onClick={() => moverMes(1)} disabled={!mesSiguientePosible}
+                  className={`p-1 rounded-lg disabled:opacity-30 ${tMuted}`}
+                  aria-label="Mes siguiente"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
               </div>
-            ) : huecosLibres.length === 0 ? (
-              <p className={`text-sm py-6 text-center ${tMuted}`}>
-                No quedan horas libres este día. Prueba con otro.
-              </p>
-            ) : (
-              <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-3 gap-2 lg:max-h-56 lg:overflow-y-auto catalog-scrollbar">
-                {huecosLibres.map((t) => {
-                  const activo = hora === t
+
+              <div className={`grid grid-cols-7 gap-1 text-center text-[11px] mb-1 ${tMuted}`}>
+                {DIAS_INICIAL.map((d, i) => <span key={i}>{d}</span>)}
+              </div>
+              <div className="grid grid-cols-7 gap-1">
+                {celdas.map((d, i) => {
+                  if (!d) return <span key={`v-${i}`} />
+                  const ymd = aYMD(d)
+                  const habilitado = diaReservable(d)
+                  const activo = fecha === ymd
                   return (
                     <button
-                      key={t}
+                      key={ymd}
                       type="button"
-                      onClick={() => { setHora(t); setError('') }}
-                      className={`py-2.5 rounded-xl text-sm font-medium transition-colors ${activo ? 'text-white' : (themeClasses.catInactive || 'bg-gray-50 text-gray-800 hover:bg-gray-100')}`}
-                      style={activo ? { backgroundColor: accent } : {}}
+                      disabled={!habilitado}
+                      onClick={() => { setFecha(ymd); setHora(null); setError('') }}
+                      className={`aspect-square rounded-lg text-sm font-medium transition-colors ${
+                        activo ? 'text-white' : habilitado ? tSuave : `${tMuted} opacity-30 cursor-not-allowed`
+                      }`}
+                      style={activo ? { backgroundColor: accent } : undefined}
                     >
-                      {t}
+                      {d.getDate()}
                     </button>
                   )
                 })}
               </div>
-            )}
+            </div>
+
           </div>
 
-          {/* 3. Datos */}
+          {/* ---- 3. Tus datos (la hora vive aca: el calendario queda solo en
+               su columna y las tres quedan parejas) ---- */}
           <div className="space-y-3">
-            <p className={`text-sm font-medium ${tText}`}>{servicios.length > 0 ? '3.' : '2.'} ¿Quién eres?</p>
+            <p className={`text-sm font-semibold ${tText}`}>{nPaso('datos')}. Tus datos</p>
+            <div>
+              <label className={`block text-xs mb-1.5 ${tMuted}`}>Hora disponible</label>
+              {cargandoHoras ? (
+                <div className={`flex items-center gap-2 text-sm py-3 ${tMuted}`}>
+                  <Loader2 className="w-4 h-4 animate-spin" /> Consultando horarios...
+                </div>
+              ) : !fecha ? (
+                <p className={`text-sm py-3 ${tMuted}`}>Elige primero un día del calendario.</p>
+              ) : huecosLibres.length === 0 ? (
+                <p className={`text-sm py-3 ${tMuted}`}>No quedan horas libres este día. Prueba con otro.</p>
+              ) : (
+                <select
+                  value={hora || ''}
+                  onChange={(e) => { setHora(e.target.value || null); setError('') }}
+                  className={`${inputCls} appearance-none`}
+                >
+                  <option value="">Elige una hora</option>
+                  {huecosLibres.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              )}
+            </div>
             <input
               type="text" value={form.nombre}
               onChange={(e) => setForm(f => ({ ...f, nombre: e.target.value }))}
@@ -314,9 +416,8 @@ export default function ReservarCitaSection({ business, accent = '#2563eb', them
               className={inputCls} placeholder="Comentario (opcional)" maxLength={300}
             />
 
-            {/* Resumen de lo elegido: siempre a la vista junto al botón */}
-            {(servicio || (fecha && hora)) && (
-              <div className="rounded-xl px-3 py-2.5 text-sm" style={{ backgroundColor: `${accent}0d` }}>
+            {(servicio || profesional || (fecha && hora)) && (
+              <div className="rounded-xl px-3 py-2.5 text-sm space-y-0.5" style={{ backgroundColor: `${accent}0d` }}>
                 {servicio && (
                   <p className={tText}>
                     <span className="font-semibold">{servicio.name}</span>
@@ -328,6 +429,7 @@ export default function ReservarCitaSection({ business, accent = '#2563eb', them
                     <span className={`font-medium ${tText}`}>{fechaLegible(fecha)}</span> a las <span className={`font-medium ${tText}`}>{hora}</span>
                   </p>
                 )}
+                {profesional && <p className={tMuted}>Con {profesional.name}</p>}
               </div>
             )}
 
@@ -338,17 +440,18 @@ export default function ReservarCitaSection({ business, accent = '#2563eb', them
               className="w-full py-3 rounded-xl text-white font-semibold disabled:opacity-60 flex items-center justify-center gap-2 transition-opacity hover:opacity-90"
               style={{ backgroundColor: accent }}
             >
-              {enviando
-                ? (<><Loader2 className="w-4 h-4 animate-spin" /> Reservando...</>)
-                : 'Confirmar reserva'}
+              {enviando ? (<><Loader2 className="w-4 h-4 animate-spin" /> Reservando...</>) : 'Confirmar reserva'}
             </button>
-            {!listoParaReservar && (
+            {!listo && (
               <p className={`text-xs text-center ${tMuted}`}>
-                {faltaServicio ? 'Elige un servicio para continuar' : 'Elige el día y la hora'}
+                {faltaServicio ? 'Elige un servicio para continuar'
+                  : faltaProfesional ? `Elige ${staffLabel.toLowerCase()} para continuar`
+                  : 'Elige el día y la hora'}
               </p>
             )}
           </div>
         </div>
+        )}
       </div>
     </section>
   )
