@@ -203,8 +203,15 @@ export default function CartDrawer({
   // checkout inline de una vez. Hook ANTES de cualquier return.
   const { tokens } = useCatalogTheme()
   const esOscuro = !!tokens.effects.darkMode
-  const darkCss = esOscuro ? (
+  const temaCss = (
     <style>{`
+      /* Radios del tema: en Bauhaus el carrito queda recto y en Boutique
+         redondeado, sin editar cada clase del markup. rounded-full se deja
+         intacto a proposito — steppers y badges son circulares en todos. */
+      .catalog-cart-tema .rounded-lg { border-radius: ${tokens.radius.md}; }
+      .catalog-cart-tema .rounded-xl { border-radius: ${tokens.radius.md}; }
+      .catalog-cart-tema .rounded-2xl { border-radius: ${tokens.radius.lg}; }
+      ${esOscuro ? `
       .catalog-cart-dark { background-color: ${tokens.colors.surface} !important; color: ${tokens.colors.text}; }
       .catalog-cart-dark .border-b, .catalog-cart-dark .border-t { border-color: rgba(255,255,255,0.1); }
       .catalog-cart-dark .bg-gray-50 { background-color: rgba(255,255,255,0.05); }
@@ -222,8 +229,9 @@ export default function CartDrawer({
       .catalog-cart-dark .bg-green-50 { background-color: rgba(16,185,129,0.12); }
       .catalog-cart-dark .text-green-800 { color: #6EE7B7; }
       .catalog-cart-dark .bg-red-50 { background-color: rgba(239,68,68,0.12); }
+      ` : ''}
     `}</style>
-  ) : null
+  )
   // Paso del drawer (port shopifree): 'carrito' (items + total + cupon) ->
   // 'datos' (formulario del pedido con resumen compacto). El paso 3 es la
   // pantalla de exito de siempre, ahora con la lista de lo pedido.
@@ -770,10 +778,10 @@ export default function CartDrawer({
           }`}
           onClick={onClose}
         />
-        <div className={`fixed right-0 top-0 h-full w-full max-w-md bg-white z-50 shadow-2xl transform transition-transform duration-300 ease-out ${esOscuro ? 'catalog-cart-dark' : ''} ${
+        <div className={`fixed right-0 top-0 h-full w-full max-w-md bg-white z-50 shadow-2xl transform transition-transform duration-300 ease-out catalog-cart-tema ${esOscuro ? 'catalog-cart-dark' : ''} ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}>
-          {darkCss}
+          {temaCss}
           <div className="flex flex-col h-full items-center justify-center p-8 text-center">
             <div className="w-20 h-20 rounded-full flex items-center justify-center mb-6" style={{ backgroundColor: `${getCatalogAccent(business)}20` }}>
               <CheckCircle2 className="w-10 h-10" style={{ color: getCatalogAccent(business) }} />
@@ -896,10 +904,10 @@ export default function CartDrawer({
       />
 
       {/* Drawer */}
-      <div className={`fixed right-0 top-0 h-full w-full max-w-md bg-white z-50 shadow-2xl transform transition-transform duration-300 ease-out ${esOscuro ? 'catalog-cart-dark' : ''} ${
+      <div className={`fixed right-0 top-0 h-full w-full max-w-md bg-white z-50 shadow-2xl transform transition-transform duration-300 ease-out catalog-cart-tema ${esOscuro ? 'catalog-cart-dark' : ''} ${
         isOpen ? 'translate-x-0' : 'translate-x-full'
       }`}>
-        {darkCss}
+        {temaCss}
         <div className="flex flex-col h-full">
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b">
