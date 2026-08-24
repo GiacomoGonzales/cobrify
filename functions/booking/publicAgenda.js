@@ -139,7 +139,8 @@ export const bookPublicAppointment = onRequest(
       const nombre = String(b.name || '').trim().slice(0, 80)
       const telefono = String(b.phone || '').replace(/\D/g, '').slice(0, 15)
       const mascota = String(b.petName || '').trim().slice(0, 60)
-      const servicio = String(b.serviceName || '').trim().slice(0, 120)
+      const serviceId = String(b.serviceId || '').slice(0, 60)
+      const servicioLibre = String(b.serviceName || '').trim().slice(0, 120)
       const nota = String(b.notes || '').trim().slice(0, 300)
 
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time)) {
@@ -152,6 +153,22 @@ export const bookPublicAppointment = onRequest(
       const v = await validarNegocio(db, businessId)
       if (v.error) { res.status(v.error.code).json({ error: v.error.msg }); return }
       const { config } = v
+
+      // El servicio se resuelve contra la CONFIGURACION del negocio, no contra
+      // lo que mande el cliente: el nombre y el precio que quedan en la cita
+      // son los que el negocio publico, asi nadie reserva un "Baño a S/1".
+      // Si el negocio no configuro servicios, se acepta texto libre (sin
+      // precio) como antes.
+      const catalogoServicios = Array.isArray(v.business.appointmentsBooking?.services)
+        ? v.business.appointmentsBooking.services
+        : []
+      let servicioElegido = null
+      if (catalogoServicios.length > 0) {
+        servicioElegido = catalogoServicios.find((x) => x && x.id === serviceId) || null
+        if (!servicioElegido) {
+          res.status(400).json({ error: 'Elige uno de los servicios disponibles' }); return
+        }
+      }
 
       // El hueco tiene que ser uno que el negocio ofrece: día abierto, dentro
       // del horario y alineado al paso. Sin esto, un curl reservaría a las
@@ -218,8 +235,15 @@ export const bookPublicAppointment = onRequest(
         phone: telefono,
         petName: mascota,
         petSpecies: '',
-        serviceName: servicio || 'Reserva desde el catálogo',
-        servicePrice: 0,
+        serviceName: servicioElegido
+          ? String(servicioElegido.name || '').slice(0, 120)
+          : (servicioLibre || 'Reserva desde el catálogo'),
+        servicePrice: servicioElegido ? (Number(servicioElegido.price) || 0) : 0,
+        // Mismo formato services[] que el walk-in de la agenda: el POS consume
+        // ese array al Finalizar y Cobrar (un item de carrito por servicio).
+        services: servicioElegido
+          ? [{ name: String(servicioElegido.name || '').slice(0, 120), price: Number(servicioElegido.price) || 0 }]
+          : [],
         scheduledDate: Timestamp.fromDate(slot),
         scheduledTime: time,
         status: 'scheduled',

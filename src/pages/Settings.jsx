@@ -557,6 +557,18 @@ export default function Settings() {
   })
   // Solicitudes de reserva de habitaciones desde el catalogo (modo hotel)
   const [hotelBooking, setHotelBooking] = useState({ enabled: false })
+  // Picker de servicios reservables: productos del negocio, cargados recien
+  // cuando la seccion se abre (Settings no necesita el catalogo para nada mas).
+  const [productosReservables, setProductosReservables] = useState(null) // null = sin cargar
+  const [busquedaServicio, setBusquedaServicio] = useState('')
+
+  useEffect(() => {
+    if (!appointmentsBooking.enabled || productosReservables !== null || isDemoMode) return
+    getProducts(getBusinessId()).then(r => {
+      setProductosReservables(r?.success ? (r.data || []) : [])
+    }).catch(() => setProductosReservables([]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appointmentsBooking.enabled])
   const [catalogSlug, setCatalogSlug] = useState('')
   const [catalogCustomDomain, setCatalogCustomDomain] = useState('')
 
@@ -8752,6 +8764,82 @@ export default function Settings() {
                       {appointmentsBooking.endHour <= appointmentsBooking.startHour && (
                         <p className="text-xs text-red-600">La hora de cierre debe ser mayor que la de inicio.</p>
                       )}
+
+                      {/* Servicios que se ofrecen al reservar. Se guardan como
+                          snapshot {id, nombre, precio}: el precio que ve el
+                          cliente es el que el negocio publico al guardar, y el
+                          SERVIDOR usa este mismo snapshot al crear la cita —
+                          nadie puede mandarle otro precio. */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Servicios que se pueden reservar
+                        </label>
+                        <p className="text-xs text-gray-500 mb-2">
+                          El cliente elige uno al reservar (baño, consulta, podología, masaje...). Si no agregas ninguno, la reserva llega sin servicio y lo coordinas tú.
+                        </p>
+                        {(appointmentsBooking.services || []).length > 0 && (
+                          <div className="flex flex-wrap gap-2 mb-2">
+                            {appointmentsBooking.services.map(svc => (
+                              <span key={svc.id} className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 bg-gray-100 border border-gray-200 rounded-lg text-sm text-gray-800">
+                                {svc.name}
+                                <span className="text-gray-400 text-xs">S/ {Number(svc.price || 0).toFixed(2)}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setAppointmentsBooking(prev => ({
+                                    ...prev,
+                                    services: (prev.services || []).filter(x => x.id !== svc.id),
+                                  }))}
+                                  className="p-0.5 text-gray-400 hover:text-red-500"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <div className="relative max-w-md">
+                          <input
+                            type="text"
+                            value={busquedaServicio}
+                            onChange={e => setBusquedaServicio(e.target.value)}
+                            placeholder={productosReservables === null ? 'Cargando productos...' : 'Buscar un producto o servicio para agregarlo'}
+                            disabled={productosReservables === null}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                          />
+                          {busquedaServicio.trim().length >= 2 && productosReservables && (
+                            <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+                              {productosReservables
+                                .filter(pr => (pr.name || '').toLowerCase().includes(busquedaServicio.trim().toLowerCase()))
+                                .filter(pr => !(appointmentsBooking.services || []).some(x => x.id === pr.id))
+                                .slice(0, 8)
+                                .map(pr => (
+                                  <button
+                                    key={pr.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setAppointmentsBooking(prev => ({
+                                        ...prev,
+                                        services: [...(prev.services || []), {
+                                          id: pr.id,
+                                          name: pr.name || '',
+                                          price: Number(pr.price) || 0,
+                                        }],
+                                      }))
+                                      setBusquedaServicio('')
+                                    }}
+                                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between gap-2"
+                                  >
+                                    <span className="truncate text-gray-800">{pr.name}</span>
+                                    <span className="text-gray-400 text-xs flex-none">S/ {Number(pr.price || 0).toFixed(2)}</span>
+                                  </button>
+                                ))}
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-gray-400 mt-1.5">
+                          El precio queda fijado al guardar: si lo cambias en Productos, vuelve a guardar acá.
+                        </p>
+                      </div>
                     </div>
                   )}
                 </div>

@@ -145,6 +145,7 @@ export default {
           items: [
             'En **Configuración > Catálogo**, activa **Recibir reservas desde el catálogo**.',
             'Define los **días** que atiendes con cita, el **horario** y cada cuántos minutos hay un turno.',
+            'Agrega los **servicios que se pueden reservar** (baño, consulta, podología...) buscándolos entre tus productos. El cliente elige uno al reservar, con el precio que publicaste.',
             'Guarda. El botón aparece en tu catálogo de inmediato.',
           ],
         },
