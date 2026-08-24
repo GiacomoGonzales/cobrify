@@ -27,6 +27,7 @@
 
 import { onRequest } from 'firebase-functions/v2/https'
 import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore'
+import { randomBytes } from 'crypto'
 
 const LIMA = '-05:00'
 const ESTADOS_ACTIVOS = ['scheduled', 'confirmed', 'in_progress']
@@ -203,6 +204,10 @@ export const bookPublicAppointment = onRequest(
       // hueco: el segundo create del mismo hueco entra a la transacción, ve el
       // candado vivo y sale. Si la cita del candado fue cancelada, el hueco se
       // puede volver a tomar (el candado se pisa, no se borra al cancelar).
+      // Token del enlace "mi reserva": es el secreto con el que el cliente
+      // consulta y cancela su cita sin cuenta. URL-safe, 24 chars.
+      const publicToken = randomBytes(18).toString('base64url')
+
       const lockId = `${date}_${time.replace(':', '-')}`
       const lockRef = db.doc(`businesses/${businessId}/publicAgendaSlots/${lockId}`)
       const apptRef = db.collection(`businesses/${businessId}/appointments`).doc()
@@ -219,6 +224,7 @@ export const bookPublicAppointment = onRequest(
         scheduledTime: time,
         status: 'scheduled',
         source: 'catalog',
+        publicToken,
         notes: nota,
         createdAt: Timestamp.now(),
       }
@@ -236,7 +242,7 @@ export const bookPublicAppointment = onRequest(
       })
 
       console.log(`📅 Reserva pública creada: ${businessId} ${date} ${time} (${nombre})`)
-      res.status(200).json({ success: true, appointmentId: apptRef.id, date, time })
+      res.status(200).json({ success: true, appointmentId: apptRef.id, date, time, token: publicToken })
     } catch (error) {
       if (error?.slotTaken) {
         res.status(409).json({ error: 'Esa hora acaba de ocuparse. Elige otra.' }); return

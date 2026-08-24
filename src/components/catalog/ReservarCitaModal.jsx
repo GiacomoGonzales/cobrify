@@ -29,6 +29,45 @@ const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 's
 
 const aYMD = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
+/**
+ * Enlace "mi reserva" con boton de copiar. El enlace ES el comprobante: sin
+ * cuentas ni login, quien lo tiene puede ver el estado y cancelar. Por eso se
+ * insiste en que lo guarde.
+ */
+export function EnlaceReserva({ url, accent }) {
+  const [copiado, setCopiado] = useState(false)
+  const copiar = async () => {
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopiado(true)
+      setTimeout(() => setCopiado(false), 2000)
+    } catch {
+      // Sin clipboard (http viejo): el input queda seleccionable a mano.
+    }
+  }
+  return (
+    <div className="text-left bg-gray-50 border border-gray-200 rounded-xl p-3 space-y-2">
+      <p className="text-xs font-medium text-gray-600">
+        Guarda este enlace — con él ves el estado o cancelas:
+      </p>
+      <div className="flex gap-2">
+        <input
+          type="text" readOnly value={url}
+          onFocus={(e) => e.target.select()}
+          className="flex-1 min-w-0 px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white text-gray-600"
+        />
+        <button
+          type="button" onClick={copiar}
+          className="flex-none px-3 py-1.5 rounded-lg text-xs font-semibold text-white"
+          style={{ backgroundColor: accent }}
+        >
+          {copiado ? 'Copiado' : 'Copiar'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function ReservarCitaModal({ business, accent = '#2563eb', isOpen, onClose }) {
   const config = business?.appointmentsBooking || {}
   const days = Array.isArray(config.days) && config.days.length ? config.days : [1, 2, 3, 4, 5, 6]
@@ -138,7 +177,7 @@ export default function ReservarCitaModal({ business, accent = '#2563eb', isOpen
         }
         throw new Error(data.error || 'No se pudo crear la reserva')
       }
-      setConfirmada({ fecha, hora })
+      setConfirmada({ fecha, hora, token: data.token })
       setPaso('listo')
     } catch (e) {
       setError(e.message)
@@ -306,6 +345,12 @@ export default function ReservarCitaModal({ business, accent = '#2563eb', isOpen
               <p className="text-xs text-gray-400">
                 El negocio te confirmará por WhatsApp al número que dejaste.
               </p>
+              {confirmada.token && (
+                <EnlaceReserva
+                  url={`${window.location.origin}/mi-reserva/${business.id}/${confirmada.token}`}
+                  accent={accent}
+                />
+              )}
               <button
                 type="button" onClick={onClose}
                 className="mt-2 px-6 py-2.5 rounded-xl text-white font-medium"

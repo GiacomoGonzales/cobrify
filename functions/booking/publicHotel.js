@@ -19,6 +19,7 @@
 
 import { onRequest } from 'firebase-functions/v2/https'
 import { getFirestore, Timestamp } from 'firebase-admin/firestore'
+import { randomBytes } from 'crypto'
 
 const ESTADOS_QUE_BLOQUEAN = ['confirmed', 'checked_in']
 const MAX_NOCHES = 30
@@ -210,6 +211,7 @@ export const requestPublicHotelReservation = onRequest(
         totalAmount, total: totalAmount,
         status: 'requested',
         source: 'catalog',
+        publicToken: randomBytes(18).toString('base64url'),
         notes: nota,
         extras: [],
         paymentStatus: 'pending', amountPaid: 0,
@@ -218,7 +220,7 @@ export const requestPublicHotelReservation = onRequest(
       const ref = await db.collection(`businesses/${businessId}/hotelReservations`).add(nueva)
 
       console.log(`🏨 Solicitud de reserva creada: ${businessId} ${checkIn}→${checkOut} hab ${room.name || room.number} (${nombre})`)
-      res.status(200).json({ success: true, reservationId: ref.id, noches, totalAmount })
+      res.status(200).json({ success: true, reservationId: ref.id, noches, totalAmount, token: nueva.publicToken })
     } catch (error) {
       console.error('requestPublicHotelReservation:', error)
       res.status(500).json({ error: 'No se pudo enviar la solicitud' })

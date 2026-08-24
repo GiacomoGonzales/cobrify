@@ -133,6 +133,7 @@ const VeterinaryAlerts = lazy(() => import('./pages/VeterinaryAlerts'))
 const VeterinaryAgenda = lazy(() => import('./pages/VeterinaryAgenda'))
 // Public catalog
 const CatalogoPublico = lazy(() => import('./pages/CatalogoPublico'))
+const MiReserva = lazy(() => import('./pages/MiReserva'))
 // Public complaints book
 const LibroReclamaciones = lazy(() => import('./pages/LibroReclamaciones'))
 const RegistroFidelidad = lazy(() => import('./pages/RegistroFidelidad'))
@@ -254,6 +255,9 @@ function App() {
 
             {/* Registro público de fidelización (el QR de mesa) */}
             <Route path="/registro/:negocio" element={<RegistroFidelidad />} />
+            {/* Estado y cancelacion de reservas del catalogo (cita u hotel),
+                por token. Publica: el enlace ES la credencial. */}
+            <Route path="/mi-reserva/:businessId/:token" element={<MiReserva />} />
 
             {/* Catálogo Demo */}
             <Route path="/demo/catalogo" element={<CatalogoPublico isDemo />} />

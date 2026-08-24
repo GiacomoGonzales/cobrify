@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { X, BedDouble, ChevronLeft, Check, Loader2, Users, Moon } from 'lucide-react'
+import { EnlaceReserva } from './ReservarCitaModal'
 
 /**
  * RESERVAR HABITACIÓN desde el catálogo público (modo hotel).
@@ -105,7 +106,7 @@ export default function ReservarHabitacionModal({ business, accent = '#2563eb', 
         if (r.status === 409) { setPaso('fechas'); setHabitacion(null) }
         throw new Error(data.error || 'No se pudo enviar la solicitud')
       }
-      setResumen({ noches: data.noches, total: data.totalAmount })
+      setResumen({ noches: data.noches, total: data.totalAmount, token: data.token })
       setPaso('listo')
     } catch (e) {
       setError(e.message)
@@ -296,6 +297,12 @@ export default function ReservarHabitacionModal({ business, accent = '#2563eb', 
               <p className="text-xs text-gray-400">
                 Todavía no es una reserva confirmada: el hotel la revisará y te escribirá por WhatsApp al número que dejaste.
               </p>
+              {resumen.token && (
+                <EnlaceReserva
+                  url={`${window.location.origin}/mi-reserva/${business.id}/${resumen.token}`}
+                  accent={accent}
+                />
+              )}
               <button
                 type="button" onClick={onClose}
                 className="mt-2 px-6 py-2.5 rounded-xl text-white font-medium"

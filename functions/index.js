@@ -7327,6 +7327,8 @@ export { onNewHotelReservation } from './notifications/onNewHotelReservation.js'
 // las citas, lo que entra es una SOLICITUD que no bloquea la habitacion: el
 // hotel la confirma o rechaza desde Reservas. Ver functions/booking/publicHotel.js.
 export { getPublicHotelRooms, requestPublicHotelReservation } from './booking/publicHotel.js'
+// Pagina publica 'mi reserva': estado y cancelacion por token, sin cuenta.
+export { getPublicBooking, cancelPublicBooking } from './booking/publicStatus.js'
 export { onPaymentNotification } from './notifications/onPaymentNotification.js'
 
 // Import and re-export migration function
