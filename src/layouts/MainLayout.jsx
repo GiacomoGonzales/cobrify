@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import DemoAccountBanner from '@/components/DemoAccountBanner'
 import { Outlet, Navigate, useLocation } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import { useAuth } from '@/contexts/AuthContext'
@@ -628,6 +629,8 @@ export default function MainLayout() {
         <div className={`flex-1 flex flex-col h-full overflow-hidden ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'}`}>
           {/* Navbar - Siempre fijo */}
           <Navbar />
+          {/* Aviso si la sesion abierta es la cuenta demo (compartida) */}
+          <DemoAccountBanner />
 
           {/* Banner de actualización integrado (web/PWA: reiniciar; app: tienda) */}
           <UpdateBanner />

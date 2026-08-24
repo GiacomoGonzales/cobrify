@@ -1,5 +1,8 @@
 import {
   signInWithEmailAndPassword,
+  setPersistence,
+  browserSessionPersistence,
+  browserLocalPersistence,
   createUserWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
@@ -21,9 +24,29 @@ import { createWarehouse } from './warehouseService'
 /**
  * Iniciar sesión con email y contraseña
  */
+/**
+ * Cuentas de DEMOSTRACIÓN: su sesión NO debe sobrevivir al navegador.
+ *
+ * Son cuentas compartidas que se abren en el celular de cualquiera durante una
+ * venta o una prueba. Con la persistencia normal esa sesión quedaba viva para
+ * siempre: una clienta abrió el enlace de su sistema y le apareció la cuenta
+ * demo ya iniciada, con datos que no eran suyos (reporte del 24-ago-2026).
+ * Con persistencia de sesión, al cerrar el navegador la demo se cierra sola.
+ */
+export const esCuentaDemo = (email) => /@cobrifyperu\.com$/i.test(String(email || '').trim())
+  && /^(juanperez|demo)/i.test(String(email || '').trim())
+
 export const loginWithEmail = async (email, password) => {
   try {
     console.log('🔐 Intentando login con:', email)
+    // Se fija ANTES de entrar: la persistencia se aplica a la sesión que nace.
+    try {
+      await setPersistence(auth, esCuentaDemo(email) ? browserSessionPersistence : browserLocalPersistence)
+    } catch (e) {
+      // Si el navegador no soporta cambiarla, se sigue con la de por defecto:
+      // mejor entrar que bloquear el acceso por esto.
+      console.warn('No se pudo fijar la persistencia de sesión:', e?.message)
+    }
     const userCredential = await signInWithEmailAndPassword(auth, email, password)
     console.log('✅ Login exitoso:', userCredential.user.email)
     return { success: true, user: userCredential.user }
