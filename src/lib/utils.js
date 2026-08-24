@@ -297,7 +297,12 @@ export function getCatalogMinQty(business, priceKey, product = null) {
     if (Number.isFinite(productMin) && productMin >= 1) return productMin
   }
 
-  // Prioridad 2: configuración GLOBAL del catálogo (negocio).
+  // Prioridad 2: configuración GLOBAL del catálogo (negocio). YA NO SE PUEDE
+  // CONFIGURAR desde la app (24-ago-2026): el mínimo se define por producto.
+  // La LECTURA se conserva a propósito — 25 tiendas activas tenían un mínimo
+  // global vivo (ej. mayorista desde 12 unidades) y borrarlo dejaría comprar
+  // al precio mayorista llevando una sola unidad. Para cambiarlo hoy se usa
+  // el mínimo del producto, que gana sobre este.
   const perPrice = business?.catalogWholesaleMinQtys
   if (perPrice && typeof perPrice === 'object') {
     const v = parseInt(perPrice[priceKey])

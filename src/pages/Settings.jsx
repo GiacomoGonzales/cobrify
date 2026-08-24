@@ -635,12 +635,6 @@ export default function Settings() {
       0: { open: false, from: '09:00', to: '14:00' }, // Domingo
     }
   })
-  // Cantidad mínima por precio (price2/3/4) para que aplique en el catálogo.
-  // Modelo nuevo: objeto { price2, price3, price4 }. Compat con campo legacy
-  // catalogWholesaleMinQty (single) que se migra a price2 en el load.
-  const [catalogWholesaleMinQtys, setCatalogWholesaleMinQtys] = useState({
-    price2: 1, price3: 1, price4: 1,
-  })
   const [catalogShowAllPrices, setCatalogShowAllPrices] = useState(true)
   const [catalogAllowTakeaway, setCatalogAllowTakeaway] = useState(true)
   const [catalogAllowDelivery, setCatalogAllowDelivery] = useState(true)
@@ -1441,23 +1435,6 @@ export default function Settings() {
         })
         setCatalogLogoUrl(businessData.catalogLogoUrl || '')
         setCatalogLogoLandscape(businessData.catalogLogoLandscape || '')
-        // Cargar cantidades mínimas por precio. Si solo existe el campo legacy
-        // (catalogWholesaleMinQty), copiarlo a price2 (caso histórico).
-        const perPrice = businessData.catalogWholesaleMinQtys
-        const legacy = businessData.catalogWholesaleMinQty
-        if (perPrice && typeof perPrice === 'object') {
-          setCatalogWholesaleMinQtys({
-            price2: Math.max(1, parseInt(perPrice.price2) || 1),
-            price3: Math.max(1, parseInt(perPrice.price3) || 1),
-            price4: Math.max(1, parseInt(perPrice.price4) || 1),
-          })
-        } else if (legacy) {
-          setCatalogWholesaleMinQtys({
-            price2: Math.max(1, parseInt(legacy) || 1),
-            price3: 1,
-            price4: 1,
-          })
-        }
         setCatalogShowAllPrices(businessData.catalogShowAllPrices !== false)
         setCatalogAllowTakeaway(businessData.catalogAllowTakeaway !== false)
         setCatalogAllowDelivery(businessData.catalogAllowDelivery !== false)
@@ -7546,41 +7523,6 @@ export default function Settings() {
                           />
                         </label>
 
-{/* Cantidad mínima por precio en catálogo */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                          Cantidad mínima por precio en catálogo
-                        </label>
-                        <p className="text-xs text-gray-500 mb-3">
-                          A partir de cuántas unidades aplica cada nivel de precio al comprar por catálogo.
-                          Valor 1 = sin restricción. Solo afecta al catálogo, no al POS.
-                        </p>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          {['price2', 'price3', 'price4'].map((key) => (
-                            <div key={key}>
-                              <label className="block text-xs font-medium text-gray-600 mb-1">
-                                {businessSettings?.priceLabels?.[key] || key.charAt(0).toUpperCase() + key.slice(1)}
-                              </label>
-                              <input
-                                type="number"
-                                min="1"
-                                step="1"
-                                value={catalogWholesaleMinQtys[key]}
-                                onChange={(e) => setCatalogWholesaleMinQtys(prev => ({
-                                  ...prev,
-                                  [key]: e.target.value === '' ? '' : parseInt(e.target.value) || ''
-                                }))}
-                                onBlur={(e) => setCatalogWholesaleMinQtys(prev => ({
-                                  ...prev,
-                                  [key]: Math.max(1, parseInt(e.target.value) || 1)
-                                }))}
-                                onFocus={(e) => e.target.select()}
-                                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
                         </div>
                       </details>
 
@@ -9237,13 +9179,10 @@ export default function Settings() {
                         catalogEffects,
                         catalogLogoUrl: catalogLogoUrl || null,
                         catalogLogoLandscape: catalogLogoLandscape || null,
-                        catalogWholesaleMinQtys: {
-                          price2: Math.max(1, parseInt(catalogWholesaleMinQtys.price2) || 1),
-                          price3: Math.max(1, parseInt(catalogWholesaleMinQtys.price3) || 1),
-                          price4: Math.max(1, parseInt(catalogWholesaleMinQtys.price4) || 1),
-                        },
-                        // Mantener campo legacy con price2 para retrocompat con código que aún no migró
-                        catalogWholesaleMinQty: Math.max(1, parseInt(catalogWholesaleMinQtys.price2) || 1),
+                        // La cantidad minima por nivel de precio se configura AHORA EN
+                        // CADA PRODUCTO (useAutoPriceByQty + priceMinQtys). El campo del
+                        // negocio ya no se escribe desde aca: el valor que tengan los
+                        // negocios antiguos se respeta tal cual (ver getCatalogMinQty).
                         catalogShowAllPrices,
                         catalogAllowTakeaway,
                         catalogAllowDelivery,
