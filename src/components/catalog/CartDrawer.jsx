@@ -40,8 +40,8 @@ import {
   AlertCircle,
   Info,
   Mail,
-  ArrowLeft,
   ArrowRight,
+  ChevronDown,
 } from 'lucide-react'
 
 // Tipos de orden para restaurante
@@ -229,6 +229,11 @@ export default function CartDrawer({
   // pantalla de exito de siempre, ahora con la lista de lo pedido.
   const [paso, setPaso] = useState('carrito')
   useEffect(() => { if (isOpen) setPaso('carrito') }, [isOpen])
+  // Orden de los pasos del checkout: el restaurante decide primero COMO
+  // (tipo de pedido — sus campos dependen de el) y luego QUIEN; la tienda
+  // virtual va datos -> entrega, como shopifree.
+  const pasosCheckout = isRestaurantMenu ? ['entrega', 'datos'] : ['datos', 'entrega']
+  const [resumenAbierto, setResumenAbierto] = useState(false)
   const [couponInput, setCouponInput] = useState('')
   const [appliedCoupon, setAppliedCoupon] = useState(null)
   const [validatingCoupon, setValidatingCoupon] = useState(false)
@@ -401,18 +406,22 @@ export default function CartDrawer({
 
     // Validaciones
     if (orderType === 'dine_in' && !tableNumber.trim()) {
+      setPaso('entrega')
       setOrderError('Ingresa el número de mesa')
       return
     }
     if ((orderType === 'delivery' || orderType === 'takeaway') && !customerName.trim()) {
+      setPaso('datos')
       setOrderError('Ingresa tu nombre')
       return
     }
     if (orderType === 'delivery' && !customerPhone.trim()) {
+      setPaso('datos')
       setOrderError('Ingresa tu teléfono para delivery')
       return
     }
     if (orderType === 'delivery' && !customerAddress.trim()) {
+      setPaso('entrega')
       setOrderError('Ingresa tu dirección para delivery')
       return
     }
@@ -895,19 +904,9 @@ export default function CartDrawer({
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b">
             <div className="flex items-center gap-3 min-w-0">
-              {paso === 'datos' ? (
-                <button
-                  onClick={() => setPaso('carrito')}
-                  className="w-10 h-10 -ml-2 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors flex-shrink-0"
-                  aria-label="Volver al carrito"
-                >
-                  <ArrowLeft className="w-5 h-5" />
-                </button>
-              ) : (
-                <ShoppingBag className="w-6 h-6" />
-              )}
+              {paso === 'carrito' && <ShoppingBag className="w-6 h-6" />}
               <h2 className="text-xl font-bold truncate">
-                {paso === 'datos' ? 'Completa tu pedido' : (isRestaurantMenu ? 'Tu pedido' : 'Tu carrito')}
+                {paso !== 'carrito' ? 'Finalizar pedido' : (isRestaurantMenu ? 'Tu pedido' : 'Tu carrito')}
               </h2>
               {paso === 'carrito' && (
                 <span className="bg-gray-100 px-2 py-0.5 rounded-full text-sm">
@@ -922,6 +921,21 @@ export default function CartDrawer({
               <X className="w-5 h-5" />
             </button>
           </div>
+
+          {/* Barra de progreso del checkout (port shopifree) */}
+          {paso !== 'carrito' && cart.length > 0 && (
+            <div className="px-5 py-3 border-b">
+              <div className="flex items-center gap-2">
+                {pasosCheckout.map((sPaso, i) => (
+                  <div
+                    key={sPaso}
+                    className="flex-1 h-1 rounded-full transition-all"
+                    style={{ backgroundColor: i <= pasosCheckout.indexOf(paso) ? getCatalogAccent(business) : (esOscuro ? 'rgba(255,255,255,0.12)' : '#E5E7EB') }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Items (solo en el paso carrito) */}
           {paso === 'carrito' && (
@@ -1046,7 +1060,108 @@ export default function CartDrawer({
                 </div>
               )}
 
-              {/* Cupón de descuento */}
+
+
+            </div>
+
+              {/* CTA del paso carrito: continuar al formulario del pedido
+                  (o WhatsApp directo si el negocio no recibe pedidos online) */}
+              <div className="px-6 pb-6 pt-3 space-y-3 flex-shrink-0">
+                {(isRestaurantMenu || business?.catalogOnlineOrders !== false) ? (
+                  <button
+                    onClick={() => setPaso('datos')}
+                    className="w-full py-4 text-white rounded-2xl font-semibold text-lg transition-opacity hover:opacity-80 flex items-center justify-center gap-2"
+                    style={{ backgroundColor: getCatalogAccent(business) }}
+                  >
+                    Continuar con el pedido
+                    <ArrowRight className="w-5 h-5" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => onCheckout(appliedCoupon ? { ...appliedCoupon, discount: couponDiscountInCcy } : null)}
+                    className="w-full py-4 text-white rounded-2xl font-semibold text-lg transition-opacity hover:opacity-80 flex items-center justify-center gap-2"
+                    style={{ backgroundColor: getCatalogAccent(business) }}
+                  >
+                    <MessageCircle className="w-5 h-5" />
+                    Hacer pedido por WhatsApp
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ===== CHECKOUT EN PASOS (port fiel de shopifree): resumen
+              colapsable arriba + los campos del paso + Volver/Continuar. ===== */}
+          {cart.length > 0 && paso !== 'carrito' && (
+            <>
+              <div className="flex-1 overflow-y-auto catalog-scrollbar p-5 space-y-5">
+              {/* ===== Resumen del pedido (port del OrderSummary de
+                  shopifree): colapsable, miniaturas, lineas x cantidad,
+                  cupon ADENTRO y subtotal/total. Visible en ambos pasos. ===== */}
+              <div className={`rounded-xl border overflow-hidden ${esOscuro ? 'border-white/10' : 'border-gray-200'}`}>
+                <button
+                  type="button"
+                  onClick={() => setResumenAbierto(v => !v)}
+                  className="w-full flex items-center justify-between p-4"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <ShoppingBag className="w-5 h-5 text-gray-500" />
+                    <span className="font-medium">Resumen del pedido</span>
+                    <span
+                      className="text-sm px-2 py-0.5 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: `${getCatalogAccent(business)}15`, color: getCatalogAccent(business) }}
+                    >
+                      {cart.length}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {showPrices && (
+                      <span className="font-semibold">
+                        {formatCurrency(appliedCoupon ? totalConCupon : totalInCatalogCcy, catalogCurrency)}
+                      </span>
+                    )}
+                    <ChevronDown className={`w-5 h-5 text-gray-500 transition-transform ${resumenAbierto ? 'rotate-180' : ''}`} />
+                  </div>
+                </button>
+                {resumenAbierto && (
+                  <div className={`border-t ${esOscuro ? 'border-white/10' : 'border-gray-200'}`}>
+                    {cart.map((item) => (
+                      <div key={item.cartItemId || item.id} className={`flex gap-3 p-4 border-b last:border-b-0 ${esOscuro ? 'border-white/10' : 'border-gray-100'}`}>
+                        {item.imageUrl ? (
+                          <img src={optimizeImageUrl(item.imageUrl, 'thumbnail')} alt="" className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />
+                        ) : (
+                          <span className="w-14 h-14 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'var(--ct-surface-hover, #F3F4F6)' }}>
+                            <Package className="w-5 h-5 text-gray-400" />
+                          </span>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">{item.name}</p>
+                          {item.isVariant && item.variantAttributes && (
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {Object.entries(item.variantAttributes).map(([k, v]) => `${k.charAt(0).toUpperCase() + k.slice(1)}: ${v}`).join(', ')}
+                            </p>
+                          )}
+                          {item.selectedModifiers?.length > 0 && (
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {item.selectedModifiers.map(m => m.options.map(o => o.quantity > 1 ? `${o.quantity}x ${o.optionName}` : o.optionName).join(', ')).join(' · ')}
+                            </p>
+                          )}
+                          <div className="flex items-center justify-between mt-1">
+                            <span className="text-xs text-gray-500">x{formatQty(item.quantity)}</span>
+                            {showPrices && (
+                              <span className="text-sm font-medium">
+                                {formatCurrency(itemUnitInCatalogCcy(item) * item.quantity, catalogCurrency)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* Cupon: siempre a la vista dentro del resumen */}
+                {showPrices && (
+                  <div className={`p-4 border-t ${esOscuro ? 'border-white/10' : 'border-gray-200'}`}>
               {showPrices && (
                 appliedCoupon ? (
                   <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-4 py-2.5">
@@ -1082,64 +1197,91 @@ export default function CartDrawer({
                   </div>
                 )
               )}
-
-            </div>
-
-              {/* CTA del paso carrito: continuar al formulario del pedido
-                  (o WhatsApp directo si el negocio no recibe pedidos online) */}
-              <div className="px-6 pb-6 pt-3 space-y-3 flex-shrink-0">
-                {(isRestaurantMenu || business?.catalogOnlineOrders !== false) ? (
-                  <button
-                    onClick={() => setPaso('datos')}
-                    className="w-full py-4 text-white rounded-2xl font-semibold text-lg transition-opacity hover:opacity-80 flex items-center justify-center gap-2"
-                    style={{ backgroundColor: getCatalogAccent(business) }}
-                  >
-                    Continuar con el pedido
-                    <ArrowRight className="w-5 h-5" />
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => onCheckout(appliedCoupon ? { ...appliedCoupon, discount: couponDiscountInCcy } : null)}
-                    className="w-full py-4 text-white rounded-2xl font-semibold text-lg transition-opacity hover:opacity-80 flex items-center justify-center gap-2"
-                    style={{ backgroundColor: getCatalogAccent(business) }}
-                  >
-                    <MessageCircle className="w-5 h-5" />
-                    Hacer pedido por WhatsApp
-                  </button>
+                  </div>
                 )}
-              </div>
-            </div>
-          )}
-
-          {/* ===== PASO DATOS (port shopifree: carrito -> pedir -> resumen).
-              El formulario ocupa todo el alto del drawer, con un resumen
-              compacto arriba y el boton de enviar fijo abajo. ===== */}
-          {cart.length > 0 && paso === 'datos' && (
-            <>
-              <div className="flex-1 overflow-y-auto catalog-scrollbar p-6 space-y-4">
-                {/* Resumen compacto: que y cuanto; para editar se vuelve con
-                    la flecha de la cabecera */}
-                <div className="rounded-xl p-4 space-y-1" style={{ backgroundColor: 'var(--ct-surface-hover, #F9FAFB)' }}>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm text-gray-600">
-                      {cart.reduce((sum, item) => sum + item.quantity, 0)} producto(s)
-                    </span>
-                    {showPrices && (
-                      <span className="font-bold">
+                {/* Totales */}
+                {showPrices && (
+                  <div
+                    className={`p-4 border-t ${esOscuro ? 'border-white/10' : 'border-gray-200'}`}
+                    style={{ backgroundColor: `${getCatalogAccent(business)}08` }}
+                  >
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-500">Subtotal</span>
+                      <span>{formatCurrency(totalInCatalogCcy, catalogCurrency)}</span>
+                    </div>
+                    {appliedCoupon && (
+                      <div className="flex justify-between items-center text-sm mt-1 text-green-600">
+                        <span>Descuento ({appliedCoupon.id})</span>
+                        <span>− {formatCurrency(couponDiscountInCcy, catalogCurrency)}</span>
+                      </div>
+                    )}
+                    <div className={`flex justify-between items-center mt-2 pt-2 border-t ${esOscuro ? 'border-white/10' : 'border-gray-200'}`}>
+                      <span className="font-semibold">Total</span>
+                      <span className="font-bold text-lg" style={{ color: getCatalogAccent(business) }}>
                         {formatCurrency(appliedCoupon ? totalConCupon : totalInCatalogCcy, catalogCurrency)}
                       </span>
-                    )}
+                    </div>
                   </div>
-                  {appliedCoupon && (
-                    <p className="text-xs text-green-600">
-                      Cupón {appliedCoupon.id} aplicado (− {formatCurrency(couponDiscountInCcy, catalogCurrency)})
-                    </p>
-                  )}
-                </div>
+                )}
+              </div>
 
-              {/* Opciones de pedido (restaurante o tienda virtual retail) */}
-              {(isRestaurantMenu || business?.catalogOnlineOrders !== false) && (
-                <div className="space-y-4 pt-2">
+                {paso === 'datos' && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold">Tus datos</h3>
+                  {/* Nombre (para takeaway y delivery) */}
+                  {(orderType === 'takeaway' || orderType === 'delivery') && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <User className="w-4 h-4 inline mr-1" />
+                        Tu nombre
+                      </label>
+                      <input
+                        type="text"
+                        value={customerName}
+                        onChange={(e) => setCustomerName(e.target.value)}
+                        placeholder="Nombre para el pedido"
+                        className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-gray-400 focus:border-gray-400"
+                      />
+                    </div>
+                  )}
+                  {/* Teléfono (para delivery / retail) */}
+                  {orderType === 'delivery' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <Phone className="w-4 h-4 inline mr-1" />
+                        Teléfono
+                      </label>
+                      <input
+                        type="tel"
+                        value={customerPhone}
+                        onChange={(e) => setCustomerPhone(e.target.value)}
+                        placeholder={isRestaurantMenu ? 'Para coordinar entrega' : 'Para contactarte'}
+                        className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-gray-400 focus:border-gray-400"
+                      />
+                    </div>
+                  )}
+                  {/* Email opcional (solo retail / tienda virtual) */}
+                  {!isRestaurantMenu && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <Mail className="w-4 h-4 inline mr-1" />
+                        Email <span className="text-gray-400 font-normal">(opcional)</span>
+                      </label>
+                      <input
+                        type="email"
+                        value={customerEmail}
+                        onChange={(e) => setCustomerEmail(e.target.value)}
+                        placeholder="tu@email.com"
+                        className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-gray-400 focus:border-gray-400"
+                      />
+                    </div>
+                  )}
+                  </div>
+                )}
+
+                {paso === 'entrega' && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold">Entrega</h3>
                   {/* Si viene de QR con mesa, mostrar indicador fijo (solo restaurante) */}
                   {isRestaurantMenu && initialTableNumber ? (
                     <div className="flex items-center gap-2 p-3 rounded-xl" style={{ backgroundColor: `${getCatalogAccent(business)}15`, border: `1px solid ${getCatalogAccent(business)}40` }}>
@@ -1204,58 +1346,6 @@ export default function CartDrawer({
                       )}
                     </>
                   ) : null}
-
-                  {/* Nombre (para takeaway y delivery) */}
-                  {(orderType === 'takeaway' || orderType === 'delivery') && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        <User className="w-4 h-4 inline mr-1" />
-                        Tu nombre
-                      </label>
-                      <input
-                        type="text"
-                        value={customerName}
-                        onChange={(e) => setCustomerName(e.target.value)}
-                        placeholder="Nombre para el pedido"
-                        className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-gray-400 focus:border-gray-400"
-                      />
-                    </div>
-                  )}
-
-                  {/* Teléfono (para delivery / retail) */}
-                  {orderType === 'delivery' && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        <Phone className="w-4 h-4 inline mr-1" />
-                        Teléfono
-                      </label>
-                      <input
-                        type="tel"
-                        value={customerPhone}
-                        onChange={(e) => setCustomerPhone(e.target.value)}
-                        placeholder={isRestaurantMenu ? 'Para coordinar entrega' : 'Para contactarte'}
-                        className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-gray-400 focus:border-gray-400"
-                      />
-                    </div>
-                  )}
-
-                  {/* Email opcional (solo retail / tienda virtual) */}
-                  {!isRestaurantMenu && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        <Mail className="w-4 h-4 inline mr-1" />
-                        Email <span className="text-gray-400 font-normal">(opcional)</span>
-                      </label>
-                      <input
-                        type="email"
-                        value={customerEmail}
-                        onChange={(e) => setCustomerEmail(e.target.value)}
-                        placeholder="tu@email.com"
-                        className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-gray-400 focus:border-gray-400"
-                      />
-                    </div>
-                  )}
-
                   {/* Dirección (para delivery / retail) */}
                   {orderType === 'delivery' && (
                     <div>
@@ -1332,7 +1422,6 @@ export default function CartDrawer({
                       )}
                     </div>
                   )}
-
                   {/* Notas */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1346,43 +1435,55 @@ export default function CartDrawer({
                       className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-gray-400 focus:border-gray-400 resize-none"
                     />
                   </div>
-
-                  {/* Error */}
-                  {orderError && (
-                    <div className="flex items-center gap-2 text-red-600 bg-red-50 p-3 rounded-xl">
-                      <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                      <span className="text-sm">{orderError}</span>
-                    </div>
-                  )}
-                </div>
-              )}
+                  </div>
+                )}
               </div>
 
-              {/* Boton de enviar, fijo abajo */}
-              <div className="px-6 pb-6 pt-3 space-y-3 flex-shrink-0 border-t">
-                <button
-                  onClick={handleRestaurantOrder}
-                  disabled={submitting}
-                  className="w-full py-4 text-white rounded-2xl font-semibold text-lg transition-opacity hover:opacity-80 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ backgroundColor: getCatalogAccent(business) }}
-                >
-                  {submitting ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      {activeTableOrder && orderType === 'dine_in' ? 'Agregando...' : 'Enviando...'}
-                    </>
+              {/* Footer de navegacion (estilo shopifree: Volver + Continuar) */}
+              <div className="px-5 py-4 border-t flex-shrink-0 space-y-3">
+                {orderError && (
+                  <div className="flex items-center gap-2 text-red-600 bg-red-50 p-3 rounded-xl">
+                    <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                    <span className="text-sm">{orderError}</span>
+                  </div>
+                )}
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPaso(paso === pasosCheckout[0] ? 'carrito' : pasosCheckout[0])}
+                    disabled={submitting}
+                    className={`flex-1 py-3.5 rounded-xl font-medium border transition-colors disabled:opacity-50 ${esOscuro ? 'border-gray-600 hover:bg-white/5' : 'border-gray-300 hover:bg-gray-50'}`}
+                  >
+                    Volver
+                  </button>
+                  {paso === pasosCheckout[0] ? (
+                    <button
+                      type="button"
+                      onClick={() => { setOrderError(''); setPaso(pasosCheckout[1]) }}
+                      className="flex-1 py-3.5 rounded-xl font-semibold text-white transition-opacity hover:opacity-85 flex items-center justify-center gap-2"
+                      style={{ backgroundColor: getCatalogAccent(business) }}
+                    >
+                      Continuar
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
                   ) : (
-                    <>
-                      {isRestaurantMenu ? <UtensilsCrossed className="w-5 h-5" /> : <ShoppingBag className="w-5 h-5" />}
-                      {activeTableOrder && orderType === 'dine_in' ? 'Agregar a la orden' : 'Enviar pedido'}
-                    </>
+                    <button
+                      onClick={handleRestaurantOrder}
+                      disabled={submitting}
+                      className="flex-1 py-3.5 rounded-xl font-semibold text-white transition-opacity hover:opacity-85 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{ backgroundColor: getCatalogAccent(business) }}
+                    >
+                      {submitting ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <>
+                          {isRestaurantMenu ? <UtensilsCrossed className="w-5 h-5" /> : <ShoppingBag className="w-5 h-5" />}
+                          {activeTableOrder && orderType === 'dine_in' ? 'Agregar a la orden' : 'Enviar pedido'}
+                        </>
+                      )}
+                    </button>
                   )}
-                </button>
-                <p className="text-center text-sm text-gray-500">
-                  {isRestaurantMenu
-                    ? 'Tu pedido llegará directamente a cocina'
-                    : 'Tu pedido llegará a la tienda. Te contactaremos para confirmar.'}
-                </p>
+                </div>
               </div>
             </>
           )}
