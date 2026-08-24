@@ -43,6 +43,10 @@ export default {
           text: 'Ven los productos que decidas mostrar, con su foto, precio y descripción. Puedes controlar si se muestran **todos los precios** (los niveles) o solo el público, y si el catálogo debe **ignorar el stock** o esconder lo agotado.',
         },
         {
+          type: 'texto',
+          text: 'Al pie del catálogo va tu **información de contacto** (WhatsApp, teléfono, dirección y horario) y tus **redes sociales**. Configura Instagram, Facebook y TikTok en Configuración > Mi Catálogo Online > Cómo te compran > **Redes sociales**: escribe el usuario o pega el enlace.',
+        },
+        {
           type: 'ojo',
           text: 'Los productos sin foto se ven pobres en el catálogo. Si vas a compartirlo con clientes, vale la pena subir imágenes al menos de lo que más vendes.',
         },

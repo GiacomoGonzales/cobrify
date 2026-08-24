@@ -589,6 +589,8 @@ export default function Settings() {
   // (historial y direcciones) y nunca obliga a registrarse para comprar.
   const [catalogCustomerAccounts, setCatalogCustomerAccounts] = useState(true)
   const [catalogWhatsapp, setCatalogWhatsapp] = useState('')
+  // Redes sociales del catalogo (footer "Siguenos"): usuario o URL completa
+  const [catalogSocial, setCatalogSocial] = useState({ instagram: '', facebook: '', tiktok: '' })
   const [catalogObservations, setCatalogObservations] = useState('')
   // Tira publicitaria del catálogo (F2.1): banner superior activable
   const [catalogAnnouncement, setCatalogAnnouncement] = useState({
@@ -1414,6 +1416,7 @@ export default function Settings() {
         setCatalogShowStock(businessData.catalogShowStock || false)
         setCatalogCustomerAccounts(businessData.catalogCustomerAccounts !== false)
         setCatalogWhatsapp(businessData.catalogWhatsapp || '')
+        setCatalogSocial({ instagram: '', facebook: '', tiktok: '', ...(businessData.catalogSocial || {}) })
         setCatalogObservations(businessData.catalogObservations || '')
         setCatalogAnnouncement({
           enabled: false, text: '', mode: 'static', backgroundColor: '#111827', textColor: '#FFFFFF',
@@ -8514,7 +8517,7 @@ export default function Settings() {
                           </div>
                           <div className="text-left">
                             <h3 className="font-semibold text-gray-900">Cómo te compran</h3>
-                            <p className="text-xs text-gray-500">WhatsApp, tipos de pedido, horario y cuentas de clientes</p>
+                            <p className="text-xs text-gray-500">WhatsApp, redes sociales, tipos de pedido, horario y cuentas</p>
                           </div>
                         </div>
                         <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${openSections.compra ? 'rotate-180' : ''}`} />
@@ -8537,6 +8540,34 @@ export default function Settings() {
                         <p className="text-xs text-gray-500 mt-1">
                           Número con código de país (ej: 51 para Perú). Si se deja vacío se usará el teléfono de la empresa.
                         </p>
+                      </div>
+
+{/* Redes sociales (footer "Síguenos" del catálogo) */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Redes sociales
+                        </label>
+                        <p className="text-xs text-gray-500 mb-2">
+                          Aparecen como botones al pie de tu catálogo, en la sección "Síguenos". Escribe el usuario (ej: mitienda) o pega el enlace completo. Deja vacío lo que no uses.
+                        </p>
+                        <div className="space-y-2 max-w-md">
+                          {[
+                            { key: 'instagram', label: 'Instagram' },
+                            { key: 'facebook', label: 'Facebook' },
+                            { key: 'tiktok', label: 'TikTok' },
+                          ].map(red => (
+                            <div key={red.key} className="flex items-center gap-2">
+                              <span className="w-24 text-sm text-gray-600 flex-shrink-0">{red.label}</span>
+                              <input
+                                type="text"
+                                value={catalogSocial[red.key] || ''}
+                                onChange={(e) => setCatalogSocial(prev => ({ ...prev, [red.key]: e.target.value.trim() }))}
+                                placeholder={red.key === 'tiktok' ? '@mitienda' : 'mitienda'}
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                              />
+                            </div>
+                          ))}
+                        </div>
                       </div>
 
 {/* Tipos de pedido en menú digital (solo restaurante) */}
@@ -8961,6 +8992,11 @@ export default function Settings() {
                         catalogShowStock,
                         catalogCustomerAccounts,
                         catalogWhatsapp: catalogWhatsapp.trim(),
+                        catalogSocial: {
+                          instagram: (catalogSocial.instagram || '').trim(),
+                          facebook: (catalogSocial.facebook || '').trim(),
+                          tiktok: (catalogSocial.tiktok || '').trim(),
+                        },
                         catalogObservations: catalogObservations.trim(),
                         catalogAnnouncement: { ...catalogAnnouncement, text: (catalogAnnouncement.text || '').trim() },
                         // Carrusel hero: solo slides con imagen (los vacíos no cuentan)

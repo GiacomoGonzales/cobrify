@@ -15,7 +15,6 @@ import ReservarCitaModal from '@/components/catalog/ReservarCitaModal'
 import ReservarHabitacionModal from '@/components/catalog/ReservarHabitacionModal'
 import { ProductSkeleton } from '@/components/catalog/CatalogImages'
 import {
-  DAY_SHORT,
   getShortUnitLabel,
   normalizeForSearch,
   formatQty,
@@ -26,6 +25,7 @@ import { DEMO_CATALOG_DATA, DEMO_RESTAURANT_DATA } from '@/components/catalog/ca
 import { getCatalogThemeClasses, getCatalogAccent, getCatalogTheme } from '@/themes/catalogThemes'
 import { CatalogThemeProvider, buildCatalogCssVars } from '@/components/catalog/CatalogThemeProvider'
 import CatalogSearchModal from '@/components/catalog/CatalogSearchModal'
+import CatalogFooter from '@/components/catalog/CatalogFooter'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { collection, query, where, getDocs, doc, getDoc, orderBy, limit, startAfter, documentId } from 'firebase/firestore'
 // CATALOGO = catalogDb (SIN cache persistente), a proposito (14-ago-2026):
@@ -58,7 +58,6 @@ import { BedDouble, CalendarDays,
   List,
   UtensilsCrossed,
   Info,
-  Mail,
   User,
   LogOut,
   Menu,
@@ -2324,106 +2323,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       {/* Footer con info del negocio. Con menú lateral se oculta en escritorio:
           esa info vive al pie de la columna izquierda y así el scroll de la
           derecha no "salta" al llegar abajo. En móvil se muestra siempre. */}
-      <footer className={`${thCard} ${thBorderColor} border-t mt-12 ${sidebarNav ? 'md:hidden' : ''}`}>
-        <div className="max-w-7xl mx-auto px-4 py-8">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="flex items-center gap-3">
-              {(() => {
-                const footerLogo = business?.catalogLogoLandscape || business?.catalogLogoUrl || business?.logoUrl
-                const footerIsLandscape = !!business?.catalogLogoLandscape
-                if (!footerLogo) {
-                  return (
-                    <div
-                      className="w-12 h-12 rounded-xl flex items-center justify-center"
-                      style={{ backgroundColor: getCatalogAccent(business) }}
-                    >
-                      <Store className="w-6 h-6 text-white" />
-                    </div>
-                  )
-                }
-                return (
-                  <img
-                    src={optimizeImageUrl(footerLogo, footerIsLandscape ? 'logo_landscape' : 'logo_square')}
-                    alt={business.name}
-                    className={`${footerIsLandscape ? 'h-10 max-w-[240px]' : 'h-12 max-w-[200px]'} object-contain`}
-                  />
-                )
-              })()}
-              <div>
-                <h2 className={`font-bold ${thText}`}>
-                  {business?.name || business?.businessName}
-                </h2>
-                {business?.address && (
-                  <p className={`text-sm flex items-center gap-1 ${thTextMuted}`}>
-                    <MapPin className="w-4 h-4" />
-                    {business.address}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Horario de atención */}
-            {business?.businessHours?.enabled && (
-              <div className={`w-full md:w-auto ${thTextFaint}`}>
-                <div className="flex items-center gap-2 mb-2">
-                  <Clock className="w-4 h-4" />
-                  <span className="text-sm font-semibold">Horario de atención</span>
-                  {(() => {
-                    const status = isBusinessOpen(business.businessHours)
-                    return (
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${status.open ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        {status.open ? 'Abierto' : 'Cerrado'}
-                      </span>
-                    )
-                  })()}
-                </div>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs">
-                  {[1, 2, 3, 4, 5, 6, 0].map(day => {
-                    const config = business.businessHours.days?.[day]
-                    const isToday = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Lima' })).getDay() === day
-                    return (
-                      <div key={day} className={`flex justify-between gap-2 ${isToday ? 'font-bold' : ''}`}>
-                        <span>{DAY_SHORT[day]}</span>
-                        <span className={config?.open ? '' : 'text-red-400'}>
-                          {config?.open ? `${config.from} - ${config.to}` : 'Cerrado'}
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            <div className="flex items-center gap-4">
-              {(business?.catalogWhatsapp || business?.whatsapp || business?.phone) && (
-                <a
-                  href={`https://wa.me/${(business.catalogWhatsapp || business.whatsapp || business.phone).replace(/\D/g, '')}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 px-4 py-2 text-white rounded-full transition-opacity hover:opacity-80"
-                  style={{ backgroundColor: getCatalogAccent(business) }}
-                >
-                  <MessageCircle className="w-5 h-5" />
-                  WhatsApp
-                </a>
-              )}
-              {business?.phone && (
-                <a
-                  href={`tel:${business.phone}`}
-                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200 transition-colors"
-                >
-                  <Phone className="w-5 h-5" />
-                  Llamar
-                </a>
-              )}
-            </div>
-          </div>
-
-          <div className={`mt-8 pt-6 border-t text-center text-sm ${thFooterPowered}`}>
-            Catálogo powered by <a href="https://cobrifyperu.com" className={`hover:underline ${thFooterLink}`}>Cobrify</a>
-          </div>
-        </div>
-      </footer>
+      {/* Footer (port shopifree): 3 columnas — marca, contacto+horario y
+          redes sociales (business.catalogSocial, se configuran en Mi Catalogo
+          Online). Vive en su propio componente y se pinta con tokens. */}
+      <CatalogFooter business={business} sidebarNav={sidebarNav} />
 
       {/* Floating cart button (mobile) */}
       {cartItemsCount > 0 && (
