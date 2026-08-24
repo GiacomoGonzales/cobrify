@@ -7907,182 +7907,68 @@ export default function Settings() {
                         </div>
                       </div>
                       <div className="px-5 py-5 space-y-5">
-{/* Imagen de portada — desktop + móvil */}
+{/* Imagen de portada — desktop + móvil. Mismo control que el logo:
+    tocar para cambiar, arrastrar para subir, X para quitar. */}
                       <div className="space-y-3">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">
-                            Imagen de portada
-                          </label>
-                          <p className="text-xs text-gray-500 mt-1">
-                            Se muestra como fondo en la cabecera del catálogo. Las imágenes se optimizan automáticamente.
-                          </p>
-                        </div>
+                        <p className="text-xs text-gray-500">
+                          Se muestra como fondo en la cabecera del catálogo. Toca la imagen para cambiarla o arrastra una encima.
+                        </p>
 
-                        {/* Portada desktop */}
-                        <div>
-                          <p className="text-xs font-medium text-gray-700 mb-1.5">
-                            Desktop <span className="font-normal text-gray-500">(formato ancho, recomendado 1920×600)</span>
-                          </p>
-                          {catalogCoverImage ? (
-                            <div className="relative rounded-xl overflow-hidden h-32 group">
-                              <img src={catalogCoverImage} alt="Portada desktop" className="w-full h-full object-cover" />
-                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                                <label className="px-3 py-1.5 bg-white/90 text-gray-700 rounded-lg text-sm font-medium cursor-pointer hover:bg-white">
-                                  Cambiar
-                                  <input
-                                    type="file"
-                                    accept="image/*"
-                                    className="hidden"
-                                    onChange={async (e) => {
-                                      const file = e.target.files?.[0]
-                                      if (!file) return
-                                      setUploadingCover(true)
-                                      try {
-                                        const url = await uploadImage(await compressForCoverDesktop(file), { folder: 'cobrify/branding', businessId: getBusinessId() })
-                                        setCatalogCoverImage(url)
-                                        toast.success('Portada desktop subida')
-                                      } catch (err) {
-                                        console.error('Error uploading cover desktop:', err)
-                                        toast.error('Error al subir imagen')
-                                      } finally {
-                                        setUploadingCover(false)
-                                        e.target.value = ''
-                                      }
-                                    }}
-                                  />
-                                </label>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setCatalogCoverImage('')
-                                    toast.success('Portada desktop quitada')
-                                  }}
-                                  className="px-3 py-1.5 bg-red-500/90 text-white rounded-lg text-sm font-medium hover:bg-red-600"
-                                >
-                                  Eliminar
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <label className={`flex flex-col items-center justify-center h-24 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
-                              uploadingCover ? 'border-gray-300 bg-gray-50' : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
-                            }`}>
-                              {uploadingCover ? (
-                                <span className="text-sm text-gray-500">Subiendo…</span>
-                              ) : (
-                                <>
-                                  <span className="text-sm text-gray-500">Click para subir portada desktop</span>
-                                  <span className="text-xs text-gray-400 mt-1">JPG, PNG, WebP</span>
-                                </>
-                              )}
-                              <input
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                disabled={uploadingCover}
-                                onChange={async (e) => {
-                                  const file = e.target.files?.[0]
-                                  if (!file) return
-                                  setUploadingCover(true)
-                                  try {
-                                    const url = await uploadImage(await compressForCoverDesktop(file), { folder: 'cobrify/branding', businessId: getBusinessId() })
-                                    setCatalogCoverImage(url)
-                                    toast.success('Portada desktop subida')
-                                  } catch (err) {
-                                    console.error('Error uploading cover desktop:', err)
-                                    toast.error('Error al subir imagen')
-                                  } finally {
-                                    setUploadingCover(false)
-                                    e.target.value = ''
-                                  }
-                                }}
-                              />
-                            </label>
-                          )}
-                        </div>
+                        <div className="flex flex-wrap gap-6">
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium text-gray-800">
+                              Escritorio <span className="text-xs font-normal text-gray-500">(1920×600)</span>
+                            </p>
+                            <ImageDropZone
+                              value={catalogCoverImage}
+                              uploading={uploadingCover}
+                              className="w-80 h-28"
+                              objectFit="cover"
+                              label="Toca o arrastra tu portada"
+                              onClear={() => { setCatalogCoverImage(''); toast.success('Portada de escritorio quitada') }}
+                              onFile={async (file) => {
+                                setUploadingCover(true)
+                                try {
+                                  const url = await uploadImage(await compressForCoverDesktop(file), { folder: 'cobrify/branding', businessId: getBusinessId() })
+                                  setCatalogCoverImage(url)
+                                  toast.success('Portada de escritorio subida')
+                                } catch (err) {
+                                  console.error('Error uploading cover desktop:', err)
+                                  toast.error('Error al subir imagen')
+                                } finally {
+                                  setUploadingCover(false)
+                                }
+                              }}
+                            />
+                          </div>
 
-                        {/* Portada móvil */}
-                        <div>
-                          <p className="text-xs font-medium text-gray-700 mb-1.5">
-                            Móvil <span className="font-normal text-gray-500">(opcional, formato más cuadrado)</span>
-                          </p>
-                          <p className="text-[11px] text-gray-500 mb-1.5">Si no la subes, en móvil se usará la portada desktop.</p>
-                          {catalogCoverImageMobile ? (
-                            <div className="relative rounded-xl overflow-hidden h-40 max-w-[220px] group">
-                              <img src={catalogCoverImageMobile} alt="Portada móvil" className="w-full h-full object-cover" />
-                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                                <label className="px-2.5 py-1.5 bg-white/90 text-gray-700 rounded-lg text-xs font-medium cursor-pointer hover:bg-white">
-                                  Cambiar
-                                  <input
-                                    type="file"
-                                    accept="image/*"
-                                    className="hidden"
-                                    onChange={async (e) => {
-                                      const file = e.target.files?.[0]
-                                      if (!file) return
-                                      setUploadingCoverMobile(true)
-                                      try {
-                                        const url = await uploadImage(await compressForCoverMobile(file), { folder: 'cobrify/branding', businessId: getBusinessId() })
-                                        setCatalogCoverImageMobile(url)
-                                        toast.success('Portada móvil subida')
-                                      } catch (err) {
-                                        console.error('Error uploading cover mobile:', err)
-                                        toast.error('Error al subir imagen')
-                                      } finally {
-                                        setUploadingCoverMobile(false)
-                                        e.target.value = ''
-                                      }
-                                    }}
-                                  />
-                                </label>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setCatalogCoverImageMobile('')
-                                    toast.success('Portada móvil quitada')
-                                  }}
-                                  className="px-2.5 py-1.5 bg-red-500/90 text-white rounded-lg text-xs font-medium hover:bg-red-600"
-                                >
-                                  Eliminar
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <label className={`flex flex-col items-center justify-center h-24 max-w-[220px] border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
-                              uploadingCoverMobile ? 'border-gray-300 bg-gray-50' : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
-                            }`}>
-                              {uploadingCoverMobile ? (
-                                <span className="text-sm text-gray-500">Subiendo…</span>
-                              ) : (
-                                <>
-                                  <span className="text-sm text-gray-500">Subir portada móvil</span>
-                                  <span className="text-xs text-gray-400 mt-1">JPG, PNG, WebP</span>
-                                </>
-                              )}
-                              <input
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                disabled={uploadingCoverMobile}
-                                onChange={async (e) => {
-                                  const file = e.target.files?.[0]
-                                  if (!file) return
-                                  setUploadingCoverMobile(true)
-                                  try {
-                                    const url = await uploadImage(await compressForCoverMobile(file), { folder: 'cobrify/branding', businessId: getBusinessId() })
-                                    setCatalogCoverImageMobile(url)
-                                    toast.success('Portada móvil subida')
-                                  } catch (err) {
-                                    console.error('Error uploading cover mobile:', err)
-                                    toast.error('Error al subir imagen')
-                                  } finally {
-                                    setUploadingCoverMobile(false)
-                                    e.target.value = ''
-                                  }
-                                }}
-                              />
-                            </label>
-                          )}
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium text-gray-800">
+                              Móvil <span className="text-xs font-normal text-gray-500">(opcional)</span>
+                            </p>
+                            <ImageDropZone
+                              value={catalogCoverImageMobile}
+                              uploading={uploadingCoverMobile}
+                              className="w-44 h-28"
+                              objectFit="cover"
+                              label="Toca o arrastra"
+                              hint="Si no la subes, en móvil se usa la de escritorio."
+                              onClear={() => { setCatalogCoverImageMobile(''); toast.success('Portada móvil quitada') }}
+                              onFile={async (file) => {
+                                setUploadingCoverMobile(true)
+                                try {
+                                  const url = await uploadImage(await compressForCoverMobile(file), { folder: 'cobrify/branding', businessId: getBusinessId() })
+                                  setCatalogCoverImageMobile(url)
+                                  toast.success('Portada móvil subida')
+                                } catch (err) {
+                                  console.error('Error uploading cover mobile:', err)
+                                  toast.error('Error al subir imagen')
+                                } finally {
+                                  setUploadingCoverMobile(false)
+                                }
+                              }}
+                            />
+                          </div>
                         </div>
                       </div>
 
@@ -8114,36 +8000,27 @@ export default function Settings() {
                             {(catalogHero.slides || []).map((slide, idx) => (
                               <div key={slide.id || idx} className="border border-gray-200 rounded-lg p-3 space-y-2">
                                 <div className="flex items-start gap-3">
-                                  {/* Imagen del slide */}
-                                  <label className={`relative flex-shrink-0 w-28 h-16 rounded-lg overflow-hidden border cursor-pointer group ${
-                                    slide.imageUrl ? 'border-gray-200' : 'border-2 border-dashed border-gray-300 hover:border-gray-400'
-                                  }`}>
-                                    {slide.imageUrl ? (
-                                      <>
-                                        <img src={slide.imageUrl} alt="" className="w-full h-full object-cover" />
-                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                          <span className="text-white text-[10px] font-medium">Cambiar</span>
-                                        </div>
-                                      </>
-                                    ) : (
-                                      <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-500 text-center px-1">
-                                        {uploadingHeroSlide === idx ? 'Subiendo…' : 'Subir imagen (1920×600)'}
-                                      </div>
-                                    )}
-                                    <input
-                                      type="file"
-                                      accept="image/*"
-                                      className="hidden"
-                                      disabled={uploadingHeroSlide !== null}
-                                      onChange={async (e) => {
-                                        const file = e.target.files?.[0]
-                                        if (!file) return
+                                  {/* Imagen del slide: mismo control que el logo
+                                      y la portada (tocar, arrastrar, X) */}
+                                  <div className="flex-shrink-0">
+                                    <ImageDropZone
+                                      value={slide.imageUrl || ''}
+                                      uploading={uploadingHeroSlide === idx}
+                                      disabled={uploadingHeroSlide !== null && uploadingHeroSlide !== idx}
+                                      className="w-36 h-20"
+                                      objectFit="cover"
+                                      label="Toca o arrastra (1920×600)"
+                                      onClear={() => setCatalogHero(prev => ({
+                                        ...prev,
+                                        slides: prev.slides.map((sl, i) => i === idx ? { ...sl, imageUrl: '' } : sl),
+                                      }))}
+                                      onFile={async (file) => {
                                         setUploadingHeroSlide(idx)
                                         try {
                                           const url = await uploadImage(await compressForCoverDesktop(file), { folder: 'cobrify/branding', businessId: getBusinessId() })
                                           setCatalogHero(prev => ({
                                             ...prev,
-                                            slides: prev.slides.map((s, i) => i === idx ? { ...s, imageUrl: url } : s),
+                                            slides: prev.slides.map((sl, i) => i === idx ? { ...sl, imageUrl: url } : sl),
                                           }))
                                           toast.success('Imagen del slide subida')
                                         } catch (err) {
@@ -8151,11 +8028,10 @@ export default function Settings() {
                                           toast.error('Error al subir imagen')
                                         } finally {
                                           setUploadingHeroSlide(null)
-                                          e.target.value = ''
                                         }
                                       }}
                                     />
-                                  </label>
+                                  </div>
                                   {/* Textos del slide */}
                                   <div className="flex-1 space-y-1.5 min-w-0">
                                     <input
