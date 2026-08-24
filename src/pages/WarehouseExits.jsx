@@ -1323,7 +1323,13 @@ export default function WarehouseExits() {
           )}
 
           {/* Footer */}
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t border-gray-200">
+          <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-gray-200">
+            {/* Que trae el Excel: un usuario reporto que "no aparece que
+                materiales se llevo la obra" teniendolo en la 2da hoja. */}
+            <p className="text-xs text-gray-500 sm:max-w-md">
+              El Excel trae 3 hojas: resumen, <strong className="text-gray-700">detalle de materiales por {reportView === 'simple' ? 'motivo' : 'obra'}</strong> y una fila por salida.
+            </p>
+            <div className="flex flex-col-reverse sm:flex-row gap-3">
             <Button variant="outline" onClick={() => setIsReportOpen(false)} className="w-full sm:w-auto">
               Cerrar
             </Button>
@@ -1337,6 +1343,7 @@ export default function WarehouseExits() {
                 : <FileSpreadsheet className="w-4 h-4 mr-2" />}
               Exportar a Excel
             </Button>
+            </div>
           </div>
         </div>
       </Modal>

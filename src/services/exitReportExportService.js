@@ -59,6 +59,15 @@ export const generateExitReportExcel = async (exits, products, businessData = {}
   const workbook = XLSX.utils.book_new()
 
   const metaExtra = []
+  // Aviso de navegacion: el detalle de materiales esta en la 2da pestaña del
+  // MISMO archivo. Sin este renglon la gente cree que el reporte solo trae
+  // totales por obra (reporte de ECOQORIS, 24-ago-2026).
+  metaExtra.push([
+    'Contenido:',
+    esSimple
+      ? 'Hoja 1 resumen por motivo · Hoja 2 "Detalle por Motivo" (qué productos salieron) · Hoja 3 "Salidas" (una fila por salida).'
+      : 'Hoja 1 resumen por obra · Hoja 2 "Detalle por Obra" (qué materiales se llevó cada obra) · Hoja 3 "Salidas" (una fila por salida).',
+  ])
   if (totals.estimatedLines > 0) {
     metaExtra.push([
       'Nota:',
