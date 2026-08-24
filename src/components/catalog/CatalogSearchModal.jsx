@@ -65,7 +65,9 @@ export default function CatalogSearchModal({ products, onSelectProduct, onClose,
   const resultados = useMemo(() => {
     const lista = Array.isArray(products) ? products : []
     const terms = normalizeForSearch(term).split(/\s+/).filter(Boolean)
-    if (terms.length === 0) return []
+    // Sin texto se listan los productos igual (como shopifree): el panel se
+    // abre util, no con un cartel pidiendo que escribas.
+    if (terms.length === 0) return lista.slice(0, 60)
     return lista.filter(p => {
       const variantText = (p.variants || [])
         .map(v => Object.values(v?.attributes || {}).join(' '))
@@ -122,13 +124,9 @@ export default function CatalogSearchModal({ products, onSelectProduct, onClose,
 
         {/* Resultados */}
         <div className="flex-1 overflow-y-auto overscroll-contain">
-          {term.trim() === '' ? (
+          {resultados.length === 0 ? (
             <p className="p-6 text-sm text-center" style={{ color: tokens.colors.textMuted }}>
-              Escribe para buscar en el catálogo
-            </p>
-          ) : resultados.length === 0 ? (
-            <p className="p-6 text-sm text-center" style={{ color: tokens.colors.textMuted }}>
-              Sin resultados para "{term}"
+              {term.trim() ? `Sin resultados para "${term}"` : 'Este catálogo aún no tiene productos'}
             </p>
           ) : (
             <ul>
