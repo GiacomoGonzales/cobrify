@@ -9,6 +9,7 @@ import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, s
 // persistente) para no compartir el IndexedDB multi-pestana de la app.
 import { catalogDb as db } from '@/lib/firebase'
 import { getCatalogAccent } from '@/themes/catalogThemes'
+import { useCatalogTheme } from '@/components/catalog/CatalogThemeProvider'
 import { optimizeImageUrl } from '@/utils/cloudinary'
 import { formatCurrency } from '@/lib/utils'
 import { convertFromBase, normalizeCurrency } from '@/utils/currency'
@@ -194,6 +195,33 @@ export default function CartDrawer({
   // viaja con el pedido / mensaje de WhatsApp; el descuento REAL sobre el
   // comprobante lo aplica el comercio al cobrar en el POS con el mismo
   // código (ahí se valida de nuevo y se cuenta el uso).
+  // Tokens del tema (port shopifree): el carrito se pinta con la superficie
+  // del tema — en bold es OSCURO. El modo oscuro entra por un bloque CSS
+  // scoped (.catalog-cart-dark) que re-pinta inputs/labels/grises del
+  // checkout inline de una vez. Hook ANTES de cualquier return.
+  const { tokens } = useCatalogTheme()
+  const esOscuro = !!tokens.effects.darkMode
+  const darkCss = esOscuro ? (
+    <style>{`
+      .catalog-cart-dark { background-color: ${tokens.colors.surface} !important; color: ${tokens.colors.text}; }
+      .catalog-cart-dark .border-b, .catalog-cart-dark .border-t { border-color: rgba(255,255,255,0.1); }
+      .catalog-cart-dark .bg-gray-50 { background-color: rgba(255,255,255,0.05); }
+      .catalog-cart-dark .bg-gray-100 { background-color: rgba(255,255,255,0.08); }
+      .catalog-cart-dark .bg-gray-200 { background-color: rgba(255,255,255,0.1); }
+      .catalog-cart-dark .text-gray-900 { color: #F9FAFB; }
+      .catalog-cart-dark .text-gray-700 { color: #D1D5DB; }
+      .catalog-cart-dark .text-gray-600, .catalog-cart-dark .text-gray-500 { color: #9CA3AF; }
+      .catalog-cart-dark .text-gray-400 { color: #6B7280; }
+      .catalog-cart-dark .border-gray-300 { border-color: #4B5563; }
+      .catalog-cart-dark .border-gray-200 { border-color: #374151; }
+      .catalog-cart-dark input, .catalog-cart-dark textarea { background-color: rgba(255,255,255,0.05); border-color: #4B5563; color: #F9FAFB; }
+      .catalog-cart-dark input::placeholder, .catalog-cart-dark textarea::placeholder { color: #6B7280; }
+      .catalog-cart-dark .hover\\:bg-gray-100:hover, .catalog-cart-dark .hover\\:bg-gray-50:hover { background-color: rgba(255,255,255,0.08); }
+      .catalog-cart-dark .bg-green-50 { background-color: rgba(16,185,129,0.12); }
+      .catalog-cart-dark .text-green-800 { color: #6EE7B7; }
+      .catalog-cart-dark .bg-red-50 { background-color: rgba(239,68,68,0.12); }
+    `}</style>
+  ) : null
   const [couponInput, setCouponInput] = useState('')
   const [appliedCoupon, setAppliedCoupon] = useState(null)
   const [validatingCoupon, setValidatingCoupon] = useState(false)
@@ -726,9 +754,10 @@ export default function CartDrawer({
           }`}
           onClick={onClose}
         />
-        <div className={`fixed right-0 top-0 h-full w-full max-w-md bg-white z-50 shadow-2xl transform transition-transform duration-300 ease-out ${
+        <div className={`fixed right-0 top-0 h-full w-full max-w-md bg-white z-50 shadow-2xl transform transition-transform duration-300 ease-out ${esOscuro ? 'catalog-cart-dark' : ''} ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}>
+          {darkCss}
           <div className="flex flex-col h-full items-center justify-center p-8 text-center">
             <div className="w-20 h-20 rounded-full flex items-center justify-center mb-6" style={{ backgroundColor: `${getCatalogAccent(business)}20` }}>
               <CheckCircle2 className="w-10 h-10" style={{ color: getCatalogAccent(business) }} />
@@ -841,9 +870,10 @@ export default function CartDrawer({
       />
 
       {/* Drawer */}
-      <div className={`fixed right-0 top-0 h-full w-full max-w-md bg-white z-50 shadow-2xl transform transition-transform duration-300 ease-out ${
+      <div className={`fixed right-0 top-0 h-full w-full max-w-md bg-white z-50 shadow-2xl transform transition-transform duration-300 ease-out ${esOscuro ? 'catalog-cart-dark' : ''} ${
         isOpen ? 'translate-x-0' : 'translate-x-full'
       }`}>
+        {darkCss}
         <div className="flex flex-col h-full">
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b">
@@ -873,7 +903,7 @@ export default function CartDrawer({
             ) : (
               <div className="space-y-4">
                 {cart.map((item) => (
-                  <div key={item.cartItemId || item.id} className="flex gap-4 bg-gray-50 rounded-2xl p-4">
+                  <div key={item.cartItemId || item.id} className="flex gap-4">
                     {item.imageUrl ? (
                       <img
                         src={optimizeImageUrl(item.imageUrl, 'thumbnail')}
@@ -881,7 +911,7 @@ export default function CartDrawer({
                         className="w-20 h-20 rounded-xl object-cover flex-shrink-0"
                       />
                     ) : (
-                      <div className="w-20 h-20 rounded-xl bg-gray-200 flex items-center justify-center flex-shrink-0">
+                      <div className="w-20 h-20 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'var(--ct-surface-hover, #F3F4F6)' }}>
                         <Package className="w-8 h-8 text-gray-400" />
                       </div>
                     )}
@@ -924,7 +954,7 @@ export default function CartDrawer({
                           <div className="flex items-center gap-2 mt-2">
                             <button
                               onClick={() => onUpdateQuantity(item.cartItemId || item.id, newQtyMinus)}
-                              className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-100"
+                              className="w-8 h-8 rounded-full flex items-center justify-center transition-opacity hover:opacity-75" style={{ backgroundColor: 'var(--ct-surface-hover, #F3F4F6)' }}
                             >
                               <Minus className="w-3 h-3" />
                             </button>
@@ -936,7 +966,7 @@ export default function CartDrawer({
                             </span>
                             <button
                               onClick={() => onUpdateQuantity(item.cartItemId || item.id, newQtyPlus)}
-                              className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-100"
+                              className="w-8 h-8 rounded-full flex items-center justify-center transition-opacity hover:opacity-75" style={{ backgroundColor: 'var(--ct-surface-hover, #F3F4F6)' }}
                             >
                               <Plus className="w-3 h-3" />
                             </button>
