@@ -1257,7 +1257,12 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 <img
                   src={optimizeImageUrl(headerLogoSrc, headerLogoSize)}
                   alt={business.name}
-                  className={`${headerIsLandscape ? 'h-8 md:h-10 max-w-[180px] md:max-w-[260px]' : 'h-9 md:h-12 max-w-[100px] md:max-w-[200px]'} w-auto object-contain flex-shrink-0`}
+                  /* Logo CUADRADO (port shopifree): caja cuadrada forzada +
+                     recorte con el radio del tema, para que el redondeo sea
+                     parejo aunque la imagen no sea exactamente 1:1. El logo
+                     horizontal se deja tal cual: recortarlo lo mutilaria. */
+                  className={`${headerIsLandscape ? 'h-8 md:h-10 max-w-[180px] md:max-w-[260px] w-auto' : 'h-9 w-9 md:h-12 md:w-12 overflow-hidden'} object-contain flex-shrink-0`}
+                  style={headerIsLandscape ? undefined : { borderRadius: themeChrome.headerLogoRound ? '9999px' : 'var(--ct-radius-lg, 0.75rem)' }}
                   onLoad={(e) => {
                     if (!business?.catalogLogoLandscape) {
                       const { naturalWidth, naturalHeight } = e.target
