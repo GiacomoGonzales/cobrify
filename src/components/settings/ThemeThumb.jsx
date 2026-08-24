@@ -11,7 +11,7 @@ import { getCatalogTheme, getCatalogAccent } from '@/themes/catalogThemes'
  *    fotos de sus productos. Una miniatura con rectángulos grises no deja
  *    elegir tema: lo que se juzga es cómo caen las fotos propias en ese
  *    diseño.
- * 2. El lienzo tiene un tamaño FIJO (270×420) con medidas de tienda real
+ * 2. El lienzo tiene un tamaño FIJO (270×480) con medidas de tienda real
  *    —texto de 13px, tarjetas de 100px— y luego se escala con transform para
  *    caber en la tarjeta. Maquetar directo en miniatura obliga a fuentes de
  *    6px y bloques enormes, que es justo como se veía antes: desproporcionado
@@ -22,18 +22,27 @@ import { getCatalogTheme, getCatalogAccent } from '@/themes/catalogThemes'
  */
 
 const ANCHO = 270
-const ALTO = 420
+// 480 = exactamente lo que ocupa el contenido (cabecera + portada + buscador +
+// categorias + dos filas de productos). Da 9/16, la misma proporcion que usa
+// shopifree, y hace que la miniatura CALCE con su marco: ni hueco abajo ni
+// una fila cortada por la mitad.
+const ALTO = 480
 
 export default function ThemeThumb({ themeId, colorNegocio, nombre = 'Tu tienda', logoUrl, portadaUrl, fotos = [] }) {
   // El lienzo se dibuja a 270px y se encoge al ancho real de la tarjeta.
   // scale() necesita un numero puro, asi que el factor se mide aca: en CSS
   // (calc(100%/270)) seria invalido y la miniatura saldria a tamano completo.
   const cajaRef = useRef(null)
-  // null = todavia no se midio: manda la escala CSS (container query)
+  // La escala exacta la da la container query de CSS. El calculo por JS solo
+  // se usa donde no hay soporte de cqw: teniendo los dos activos, el valor
+  // medido (que puede quedarse viejo si la columna cambia de ancho) pisaba al
+  // de CSS y el lienzo se veia mas chico que su marco.
+  const soportaCq = typeof CSS !== 'undefined' && CSS.supports?.('container-type: inline-size')
   const [escala, setEscala] = useState(null)
   // useLayoutEffect: mide con el layout ya calculado y ANTES de pintar, asi la
   // miniatura nunca aparece un frame a tamano completo.
   useLayoutEffect(() => {
+    if (soportaCq) return
     const nodo = cajaRef.current
     if (!nodo) return
     const medir = () => {
@@ -51,7 +60,7 @@ export default function ThemeThumb({ themeId, colorNegocio, nombre = 'Tu tienda'
       ro.disconnect()
       window.removeEventListener('resize', medir)
     }
-  }, [])
+  }, [soportaCq])
 
   const theme = getCatalogTheme(themeId)
   const t = theme.tokens || {}
