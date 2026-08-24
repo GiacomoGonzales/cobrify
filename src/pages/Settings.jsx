@@ -11,6 +11,7 @@ import { invalidateLogoCache } from '@/utils/pdfGenerator'
 import { downloadDataUrl, saveFilesToDevice } from '@/utils/nativeDownload'
 import { uploadImage } from '@/services/imageUploadService'
 import BranchInfoSettings from '@/components/settings/BranchInfoSettings'
+import ImageDropZone from '@/components/settings/ImageDropZone'
 import { CATALOG_THEMES, getCatalogThemesList } from '@/themes/catalogThemes'
 import CatalogThemePreview from '@/components/CatalogThemePreview'
 import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore'
@@ -7829,132 +7830,68 @@ export default function Settings() {
                         </div>
                       </div>
                       <div className="px-5 py-5 space-y-5">
-{/* Logo del catálogo — cuadrado + horizontal */}
+{/* Logo del catálogo — cuadrado + horizontal. La foto es el control:
+    se toca para cambiar, se arrastra para subir y la X (al pasar el
+    mouse) la quita. Antes eran dos botones por logo y una miniatura
+    de 80px que no dejaba ver nada. */}
                       <div className="space-y-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">
-                            Logo para {businessMode === 'restaurant' ? 'carta digital' : 'catálogo'}
-                          </label>
-                          <p className="text-xs text-gray-500 mt-1">
-                            Recomendado: PNG con fondo transparente. Las imágenes se optimizan automáticamente.
-                          </p>
-                        </div>
+                        <p className="text-xs text-gray-500">
+                          Recomendado: PNG con fondo transparente. Toca la imagen para cambiarla o arrastra una encima. Se optimizan solas.
+                        </p>
 
-                        {/* Logo cuadrado */}
-                        <div className="flex items-start gap-4">
-                          <div className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden bg-gray-50 flex-shrink-0">
-                            {catalogLogoUrl ? (
-                              <img src={catalogLogoUrl} alt="Logo cuadrado" className="w-full h-full object-contain p-1" />
-                            ) : logoUrl ? (
-                              <img src={logoUrl} alt="Logo principal" className="w-full h-full object-contain p-1 opacity-40" />
-                            ) : (
-                              <span className="text-xs text-gray-400 text-center px-1">Sin logo</span>
-                            )}
-                          </div>
-                          <div className="flex-1 space-y-1.5">
+                        <div className="flex flex-wrap gap-8">
+                          {/* Logo cuadrado */}
+                          <div className="space-y-2">
                             <p className="text-sm font-medium text-gray-800">Logo cuadrado</p>
-                            <p className="text-xs text-gray-500">Se muestra junto al nombre del negocio en el header.</p>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <label className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg cursor-pointer transition-colors ${uploadingCatalogLogo ? 'bg-gray-100 text-gray-400' : 'bg-gray-50 text-primary-700 hover:bg-gray-100 border border-gray-200'}`}>
-                                {uploadingCatalogLogo ? (
-                                  <><Loader2 className="w-4 h-4 animate-spin" />Subiendo…</>
-                                ) : (
-                                  <><Upload className="w-4 h-4" />{catalogLogoUrl ? 'Cambiar' : 'Subir'}</>
-                                )}
-                                <input
-                                  type="file"
-                                  accept="image/png,image/jpeg,image/webp"
-                                  className="hidden"
-                                  disabled={uploadingCatalogLogo}
-                                  onChange={async (e) => {
-                                    const file = e.target.files?.[0]
-                                    if (!file) return
-                                    setUploadingCatalogLogo(true)
-                                    try {
-                                      const url = await uploadImage(await compressForLogoSquare(file), { folder: 'cobrify/branding', businessId: getBusinessId() })
-                                      setCatalogLogoUrl(url)
-                                      toast.success('Logo cuadrado subido')
-                                    } catch (err) {
-                                      console.error('Error subiendo logo cuadrado:', err)
-                                      toast.error('Error al subir el logo')
-                                    } finally {
-                                      setUploadingCatalogLogo(false)
-                                      e.target.value = ''
-                                    }
-                                  }}
-                                />
-                              </label>
-                              {catalogLogoUrl && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setCatalogLogoUrl('')
-                                    toast.success('Logo cuadrado quitado')
-                                  }}
-                                  className="text-xs text-red-600 hover:underline"
-                                >
-                                  Quitar
-                                </button>
-                              )}
-                            </div>
+                            <ImageDropZone
+                              value={catalogLogoUrl || logoUrl || ''}
+                              uploading={uploadingCatalogLogo}
+                              className="w-36 h-36"
+                              label="Toca o arrastra tu logo"
+                              hint="Se muestra junto al nombre del negocio en el header."
+                              onClear={() => { setCatalogLogoUrl(''); toast.success('Logo cuadrado quitado') }}
+                              onFile={async (file) => {
+                                setUploadingCatalogLogo(true)
+                                try {
+                                  const url = await uploadImage(await compressForLogoSquare(file), { folder: 'cobrify/branding', businessId: getBusinessId() })
+                                  setCatalogLogoUrl(url)
+                                  toast.success('Logo cuadrado subido')
+                                } catch (err) {
+                                  console.error('Error subiendo logo cuadrado:', err)
+                                  toast.error('Error al subir el logo')
+                                } finally {
+                                  setUploadingCatalogLogo(false)
+                                }
+                              }}
+                            />
                           </div>
-                        </div>
 
-                        {/* Logo horizontal (opcional) */}
-                        <div className="flex items-start gap-4 pt-3 border-t border-gray-100">
-                          <div className="w-32 h-16 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden bg-gray-50 flex-shrink-0">
-                            {catalogLogoLandscape ? (
-                              <img src={catalogLogoLandscape} alt="Logo horizontal" className="w-full h-full object-contain p-1" />
-                            ) : (
-                              <span className="text-xs text-gray-400 text-center px-1">Sin logo<br/>horizontal</span>
-                            )}
-                          </div>
-                          <div className="flex-1 space-y-1.5">
-                            <p className="text-sm font-medium text-gray-800">Logo horizontal <span className="text-xs font-normal text-gray-500">(opcional)</span></p>
-                            <p className="text-xs text-gray-500">Si lo subes, reemplaza al logo cuadrado y oculta el nombre del negocio en el header.</p>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <label className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg cursor-pointer transition-colors ${uploadingCatalogLogoLandscape ? 'bg-gray-100 text-gray-400' : 'bg-gray-50 text-primary-700 hover:bg-gray-100 border border-gray-200'}`}>
-                                {uploadingCatalogLogoLandscape ? (
-                                  <><Loader2 className="w-4 h-4 animate-spin" />Subiendo…</>
-                                ) : (
-                                  <><Upload className="w-4 h-4" />{catalogLogoLandscape ? 'Cambiar' : 'Subir'}</>
-                                )}
-                                <input
-                                  type="file"
-                                  accept="image/png,image/jpeg,image/webp"
-                                  className="hidden"
-                                  disabled={uploadingCatalogLogoLandscape}
-                                  onChange={async (e) => {
-                                    const file = e.target.files?.[0]
-                                    if (!file) return
-                                    setUploadingCatalogLogoLandscape(true)
-                                    try {
-                                      const url = await uploadImage(await compressForLogoLandscape(file), { folder: 'cobrify/branding', businessId: getBusinessId() })
-                                      setCatalogLogoLandscape(url)
-                                      toast.success('Logo horizontal subido')
-                                    } catch (err) {
-                                      console.error('Error subiendo logo horizontal:', err)
-                                      toast.error('Error al subir el logo')
-                                    } finally {
-                                      setUploadingCatalogLogoLandscape(false)
-                                      e.target.value = ''
-                                    }
-                                  }}
-                                />
-                              </label>
-                              {catalogLogoLandscape && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setCatalogLogoLandscape('')
-                                    toast.success('Logo horizontal quitado')
-                                  }}
-                                  className="text-xs text-red-600 hover:underline"
-                                >
-                                  Quitar
-                                </button>
-                              )}
-                            </div>
+                          {/* Logo horizontal (opcional) */}
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium text-gray-800">
+                              Logo horizontal <span className="text-xs font-normal text-gray-500">(opcional)</span>
+                            </p>
+                            <ImageDropZone
+                              value={catalogLogoLandscape}
+                              uploading={uploadingCatalogLogoLandscape}
+                              className="w-64 h-36"
+                              label="Toca o arrastra tu logo horizontal"
+                              hint="Si lo subes, reemplaza al cuadrado y oculta el nombre del negocio en el header."
+                              onClear={() => { setCatalogLogoLandscape(''); toast.success('Logo horizontal quitado') }}
+                              onFile={async (file) => {
+                                setUploadingCatalogLogoLandscape(true)
+                                try {
+                                  const url = await uploadImage(await compressForLogoLandscape(file), { folder: 'cobrify/branding', businessId: getBusinessId() })
+                                  setCatalogLogoLandscape(url)
+                                  toast.success('Logo horizontal subido')
+                                } catch (err) {
+                                  console.error('Error subiendo logo horizontal:', err)
+                                  toast.error('Error al subir el logo')
+                                } finally {
+                                  setUploadingCatalogLogoLandscape(false)
+                                }
+                              }}
+                            />
                           </div>
                         </div>
                       </div>
