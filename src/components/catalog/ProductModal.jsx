@@ -503,7 +503,7 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
           {/* Tabla de precios por mayor — productos SIN variantes */}
           {!hasVariants && hasMultiplePrices && showPrices && business?.catalogShowAllPrices !== false && (
             <div className="mb-6">
-              <div className={`rounded-xl border overflow-hidden divide-y ${esOscuro ? 'border-white/10 divide-white/10' : 'border-gray-200 divide-gray-200'}`}>
+              <div className={`border overflow-hidden divide-y ${esOscuro ? 'border-white/10 divide-white/10' : 'border-gray-200 divide-gray-200'}`} style={{ borderRadius: tokens.radius.lg }}>
                 {availablePrices.map((priceItem) => {
                   const isSelected = selectedPriceLevel === priceItem.key
                   return (
@@ -584,14 +584,14 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                         }
                       }}
                       disabled={outOfStock}
-                      className={`flex items-center justify-between p-3 rounded-lg border-2 transition-colors ${
+                      style={{ borderRadius: tokens.radius.md, ...(isSelected && !outOfStock ? { borderColor: getCatalogAccent(business), backgroundColor: `${getCatalogAccent(business)}10` } : {}) }}
+                      className={`flex items-center justify-between p-3 border-2 transition-colors ${
                         outOfStock
                           ? (esOscuro ? 'border-white/10 bg-white/5 opacity-40 cursor-not-allowed' : 'border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed')
                           : isSelected
                             ? ''
                             : bordeOpcion
                       }`}
-                      style={isSelected && !outOfStock ? { borderColor: getCatalogAccent(business), backgroundColor: `${getCatalogAccent(business)}10` } : {}}
                     >
                       <span className="font-medium" style={isSelected ? { color: getCatalogAccent(business) } : { color: tokens.colors.text }}>
                         {attrsLabel}
@@ -626,7 +626,7 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
           {hasVariants && selectedVariant && availablePrices.length > 1 && showPrices && business?.catalogShowAllPrices !== false && (
             <div className="mb-6">
               <h3 className="font-semibold mb-3" style={{ color: tokens.colors.text }}>Precios disponibles</h3>
-              <div className={`rounded-xl border overflow-hidden divide-y ${esOscuro ? 'border-white/10 divide-white/10' : 'border-gray-200 divide-gray-200'}`}>
+              <div className={`border overflow-hidden divide-y ${esOscuro ? 'border-white/10 divide-white/10' : 'border-gray-200 divide-gray-200'}`} style={{ borderRadius: tokens.radius.lg }}>
                 {availablePrices.map((priceItem) => {
                   const isSelected = selectedPriceLevel === priceItem.key
                   return (
@@ -685,7 +685,7 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                 const modSelCount = getModSelectedCount(modifier)
                 const accentColor = getCatalogAccent(business)
                 return (
-                <div key={modifier.id} className="border rounded-xl p-4" style={{ borderColor: tokens.colors.border }}>
+                <div key={modifier.id} className="border p-4" style={{ borderColor: tokens.colors.border, borderRadius: tokens.radius.lg }}>
                   <div className="flex items-center justify-between mb-3">
                     <div>
                       <h3 className="font-semibold" style={{ color: tokens.colors.text }}>{modifier.name}</h3>
@@ -715,8 +715,8 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                         return (
                           <div
                             key={option.id}
-                            className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-colors ${count > 0 ? '' : (esOscuro ? 'border-gray-700' : 'border-gray-200')}`}
-                            style={count > 0 ? { borderColor: accentColor, backgroundColor: `${accentColor}10` } : {}}
+                            className={`w-full flex items-center gap-3 p-3 border-2 transition-colors ${count > 0 ? '' : (esOscuro ? 'border-gray-700' : 'border-gray-200')}`}
+                            style={{ borderRadius: tokens.radius.md, ...(count > 0 ? { borderColor: accentColor, backgroundColor: `${accentColor}10` } : {}) }}
                           >
                             <div className="flex-1 min-w-0">
                               <span className="font-medium text-sm" style={count > 0 ? { color: accentColor } : { color: tokens.colors.text }}>
@@ -764,10 +764,10 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                         <button
                           key={option.id}
                           onClick={() => handleOptionToggle(modifier.id, option.id)}
-                          className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-colors ${
+                          className={`w-full flex items-center gap-3 p-3 border-2 transition-colors ${
                             isSelected ? '' : bordeOpcion
                           }`}
-                          style={isSelected ? { borderColor: accentColor, backgroundColor: `${accentColor}10` } : {}}
+                          style={{ borderRadius: tokens.radius.md, ...(isSelected ? { borderColor: accentColor, backgroundColor: `${accentColor}10` } : {}) }}
                         >
                           <div className="flex-1 min-w-0">
                             <span className="font-medium text-sm" style={isSelected ? { color: accentColor } : { color: tokens.colors.text }}>
@@ -779,8 +779,13 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0">
                             <div
-                              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${!isSelected ? bordeRadio : ''}`}
-                              style={isSelected ? { borderColor: accentColor, backgroundColor: accentColor } : {}}
+                              className={`w-5 h-5 border-2 flex items-center justify-center ${!isSelected ? bordeRadio : ''}`}
+                              style={{
+                                // Como en shopifree: circulo cuando solo se puede
+                                // elegir uno, cuadrado cuando se pueden marcar varios.
+                                borderRadius: modifier.maxSelection === 1 ? '9999px' : tokens.radius.sm,
+                                ...(isSelected ? { borderColor: accentColor, backgroundColor: accentColor } : {}),
+                              }}
                             >
                               {isSelected && (
                                 <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -907,12 +912,13 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
           <button
             onClick={handleAddToCart}
             disabled={outOfStock}
-            className={`w-full py-4 rounded-2xl font-semibold text-lg flex items-center justify-center gap-2 transition-opacity ${
-              outOfStock
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                : 'text-white hover:opacity-80'
+            className={`w-full py-4 font-semibold text-lg flex items-center justify-center gap-2 transition-opacity ${
+              outOfStock ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'hover:opacity-80'
             }`}
-            style={!outOfStock ? { backgroundColor: getCatalogAccent(business) } : {}}
+            style={{
+              borderRadius: tokens.radius.lg,
+              ...(outOfStock ? {} : { backgroundColor: getCatalogAccent(business), color: tokens.colors.textInverted }),
+            }}
           >
             {outOfStock ? (
               <>
