@@ -201,6 +201,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // visibleCount (incremental) o muestran todo.
   const [currentPage, setCurrentPage] = useState(1)
   const loadMoreSentinelRef = useRef(null)
+  // Inicio de la lista de productos: al cambiar de pagina se sube HASTA AQUI,
+  // no al tope absoluto (que mostraria de nuevo portada, buscador y categorias).
+  const productsTopRef = useRef(null)
   const [categories, setCategories] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
   // Panel de busqueda (port shopifree): la lupa junto a las categorias lo
@@ -664,7 +667,18 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const goToPage = (p) => {
     const clamped = Math.min(Math.max(1, p), totalPages)
     setCurrentPage(clamped)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    // Subir al comienzo de los productos, descontando el header y la barra de
+    // categorias (ambos sticky): si no, la primera fila queda tapada.
+    const nodo = productsTopRef.current
+    if (!nodo) {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+    const header = document.querySelector('header')
+    const barraCategorias = document.querySelector('[data-catalog-categories]')
+    const offset = (header?.offsetHeight || 0) + (barraCategorias?.offsetHeight || 0) + 8
+    const top = nodo.getBoundingClientRect().top + window.scrollY - offset
+    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
   }
 
   useEffect(() => {
@@ -1857,7 +1871,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           en escritorio: las categorías viven en la columna izquierda. La fila
           existe aunque no haya categorías: la LUPA vive aquí (port shopifree). */}
       {(rootCategories.length > 0 || products.length > 0) && (
-        <div className={`${thCard} ${thBorderColor} border-b sticky top-16 md:top-20 z-30 ${sidebarNav ? 'md:bg-transparent md:border-0 md:static' : ''}`}>
+        <div data-catalog-categories className={`${thCard} ${thBorderColor} border-b sticky top-16 md:top-20 z-30 ${sidebarNav ? 'md:bg-transparent md:border-0 md:static' : ''}`}>
           <div className={sidebarNav ? 'px-4 md:px-0' : 'max-w-7xl mx-auto px-4'}>
             {/* Categorías raíz — SIEMPRE una fila con scroll horizontal (A1 del
                 rediseño): en desktop el wrap multilínea comía media pantalla con
@@ -2282,6 +2296,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             )}
           </div>
         )}
+
+        {/* Ancla del inicio de los productos (destino del cambio de pagina) */}
+        <div ref={productsTopRef} aria-hidden className="scroll-mt-32" />
 
         {/* Lista plana de productos — oculta en modo onlyCarousels cuando es vista principal.
             Al entrar a una categoría o buscar, sigue mostrándose normal. */}
