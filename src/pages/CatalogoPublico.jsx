@@ -25,6 +25,7 @@ import { DEMO_CATALOG_DATA, DEMO_RESTAURANT_DATA } from '@/components/catalog/ca
 import { getCatalogThemeClasses, getCatalogAccent, getCatalogTheme } from '@/themes/catalogThemes'
 import { CatalogThemeProvider, buildCatalogCssVars } from '@/components/catalog/CatalogThemeProvider'
 import CatalogSearchModal from '@/components/catalog/CatalogSearchModal'
+import { usePublicPageChrome } from '@/hooks/usePublicPageChrome'
 import CatalogFooter from '@/components/catalog/CatalogFooter'
 import HeroMondrian from '@/components/catalog/HeroMondrian'
 import { useParams, useSearchParams } from 'react-router-dom'
@@ -260,6 +261,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const [sortBy, setSortBy] = useState('name_asc') // name_asc | name_desc | price_asc | price_desc
   // Fase 2 (port shopifree): el header reacciona al scroll — sombra que
   // aparece, o filete del acento en el tema bold.
+  // Barra del navegador con el color del negocio + sin banner de instalar
+  // Cobrify: el visitante de una tienda no tiene nada que instalar.
+  usePublicPageChrome(business?.catalogColor || null)
+
   const [headerScrolled, setHeaderScrolled] = useState(false)
   useEffect(() => {
     const onScroll = () => setHeaderScrolled(window.scrollY > 24)

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { usePublicPageChrome } from '@/hooks/usePublicPageChrome'
 import { useParams } from 'react-router-dom'
 import { Calendar, BedDouble, Loader2, Check, X, Phone, AlertTriangle } from 'lucide-react'
 
@@ -39,6 +40,9 @@ const TONOS = {
 }
 
 export default function MiReserva() {
+  // Pagina publica: sin banner de instalar Cobrify (ver el hook)
+  usePublicPageChrome(null)
+
   const { businessId, token } = useParams()
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')

@@ -28,6 +28,18 @@ function Navbar() {
   const { branding } = useBranding()
   const { toggleMobileMenu } = useStore()
   const { isInstallable, promptInstall } = usePWAInstall()
+  // En un celular, "Instalar App" debe llevar a la tienda: la app NATIVA
+  // tiene impresion termica, escaner y notificaciones que la version web no
+  // puede dar. Instalar la PWA ahi dejaba al usuario con una app a medias
+  // creyendo que era la buena. En escritorio no hay tienda, asi que ahi si
+  // se instala la PWA.
+  const tiendaApp = (() => {
+    if (typeof navigator === 'undefined') return null
+    const ua = navigator.userAgent || ''
+    if (/android/i.test(ua)) return 'https://play.google.com/store/apps/details?id=com.factuya.cobrify'
+    if (/iPad|iPhone|iPod/.test(ua) && !window.MSStream) return 'https://apps.apple.com/pe/app/cobrify-peru/id6756195760'
+    return null
+  })()
   const navigate = useNavigate()
 
   const [showNotifications, setShowNotifications] = useState(false)
@@ -202,15 +214,19 @@ function Navbar() {
 
       {/* Right Side */}
       <div className="flex items-center space-x-2 sm:space-x-4">
-        {/* Install PWA Button - Solo visible cuando se puede instalar */}
-        {isInstallable && (
+        {/* Instalar la app: en celular va a la tienda (app nativa), en
+            escritorio instala la PWA. */}
+        {(tiendaApp || isInstallable) && (
           <button
-            onClick={promptInstall}
+            onClick={() => {
+              if (tiendaApp) window.open(tiendaApp, '_blank', 'noopener,noreferrer')
+              else promptInstall()
+            }}
             className="flex items-center gap-2 px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors"
-            title="Instalar aplicación"
+            title={tiendaApp ? 'Descargar la app' : 'Instalar aplicación'}
           >
             <Download className="w-4 h-4" />
-            <span className="hidden sm:inline">Instalar App</span>
+            <span className="hidden sm:inline">{tiendaApp ? 'Descargar App' : 'Instalar App'}</span>
           </button>
         )}
 

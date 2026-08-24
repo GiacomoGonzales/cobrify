@@ -11,6 +11,7 @@
  * llenado + tope diario); acá solo se recolectan esas señales.
  */
 import { useState, useEffect, useRef } from 'react'
+import { usePublicPageChrome } from '@/hooks/usePublicPageChrome'
 import { useParams } from 'react-router-dom'
 import {
   Stamp, Search, Loader2, CheckCircle, PartyPopper, Wallet,
@@ -35,6 +36,9 @@ const textoSobre = (hex) => {
 }
 
 export default function RegistroFidelidad() {
+  // Pagina publica: sin banner de instalar Cobrify (ver el hook)
+  usePublicPageChrome(null)
+
   const { negocio } = useParams()
 
   // info = respuesta del GET (marca del negocio). null mientras carga.
