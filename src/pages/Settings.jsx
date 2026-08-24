@@ -551,6 +551,10 @@ export default function Settings() {
 
   // Estados para catálogo público
   const [catalogEnabled, setCatalogEnabled] = useState(false)
+  // Reservas de citas desde el catalogo publico (veterinaria / General con agenda)
+  const [appointmentsBooking, setAppointmentsBooking] = useState({
+    enabled: false, days: [1, 2, 3, 4, 5, 6], startHour: 9, endHour: 19, stepMinutes: 30,
+  })
   const [catalogSlug, setCatalogSlug] = useState('')
   const [catalogCustomDomain, setCatalogCustomDomain] = useState('')
 
@@ -1373,6 +1377,9 @@ export default function Settings() {
 
         // Cargar configuración de catálogo
         setCatalogEnabled(businessData.catalogEnabled || false)
+        if (businessData.appointmentsBooking) {
+          setAppointmentsBooking(prev => ({ ...prev, ...businessData.appointmentsBooking }))
+        }
         setCatalogSlug(businessData.catalogSlug || '')
         setCatalogCustomDomain(businessData.customDomain || '')
         setCatalogColor(businessData.catalogColor || '#10B981')
@@ -8652,6 +8659,99 @@ export default function Settings() {
               )}
 
               {/* Save Button for Catalogo — ancho completo */}
+              {/* Reservas de citas desde el catalogo. Solo para los modos que
+                  tienen agenda: veterinaria (de fabrica) y General con la
+                  agenda activada en el menu. El horario que se define aca es el
+                  que el SERVIDOR usa para validar cada reserva publica — el
+                  catalogo solo lo pinta. */}
+              {(businessMode === 'veterinary' || (businessMode === 'retail' && appointmentsEnabled)) && (
+                <div className="border-t border-gray-200 pt-6">
+                  <h3 className="text-base font-semibold text-gray-900 mb-1">Reservas de citas</h3>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Deja que tus clientes reserven su cita desde el catálogo, eligiendo un horario libre. Cada reserva aparece sola en tu Agenda de Citas y te llega una notificación.
+                  </p>
+                  <SettingToggle
+                    id="opcion-appointmentsBookingEnabled"
+                    checked={appointmentsBooking.enabled}
+                    onChange={e => setAppointmentsBooking(prev => ({ ...prev, enabled: e.target.checked }))}
+                    title="Recibir reservas desde el catálogo"
+                    description={appointmentsBooking.enabled
+                      ? 'Habilitado: en tu catálogo aparece el botón "Reservar cita". El cliente solo ve horas libres y ocupadas — nunca los datos de otros clientes.'
+                      : 'Deshabilitado: las citas solo se agendan desde tu Agenda.'}
+                  />
+                  {appointmentsBooking.enabled && (
+                    <div className="mt-4 space-y-4 pl-1">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Días que atiendes con cita</label>
+                        <div className="flex flex-wrap gap-2">
+                          {[['D', 0], ['L', 1], ['M', 2], ['X', 3], ['J', 4], ['V', 5], ['S', 6]].map(([letra, dia]) => (
+                            <button
+                              key={dia}
+                              type="button"
+                              onClick={() => setAppointmentsBooking(prev => ({
+                                ...prev,
+                                days: prev.days.includes(dia)
+                                  ? prev.days.filter(d => d !== dia)
+                                  : [...prev.days, dia].sort(),
+                              }))}
+                              className={'w-9 h-9 rounded-lg border text-sm font-semibold transition-colors ' + (
+                                appointmentsBooking.days.includes(dia)
+                                  ? 'bg-primary-600 border-primary-600 text-white'
+                                  : 'bg-white border-gray-300 text-gray-500 hover:border-gray-400'
+                              )}
+                            >
+                              {letra}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3 max-w-md">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Desde</label>
+                          <select
+                            value={appointmentsBooking.startHour}
+                            onChange={e => setAppointmentsBooking(prev => ({ ...prev, startHour: Number(e.target.value) }))}
+                            className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                          >
+                            {Array.from({ length: 17 }, (_, i) => i + 6).map(h => (
+                              <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Hasta</label>
+                          <select
+                            value={appointmentsBooking.endHour}
+                            onChange={e => setAppointmentsBooking(prev => ({ ...prev, endHour: Number(e.target.value) }))}
+                            className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                          >
+                            {Array.from({ length: 17 }, (_, i) => i + 7).map(h => (
+                              <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Cada</label>
+                          <select
+                            value={appointmentsBooking.stepMinutes}
+                            onChange={e => setAppointmentsBooking(prev => ({ ...prev, stepMinutes: Number(e.target.value) }))}
+                            className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                          >
+                            <option value={15}>15 min</option>
+                            <option value={20}>20 min</option>
+                            <option value={30}>30 min</option>
+                            <option value={60}>1 hora</option>
+                          </select>
+                        </div>
+                      </div>
+                      {appointmentsBooking.endHour <= appointmentsBooking.startHour && (
+                        <p className="text-xs text-red-600">La hora de cierre debe ser mayor que la de inicio.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="flex justify-end pt-4 border-t border-gray-200">
                 <Button
                   onClick={async () => {
@@ -8670,6 +8770,7 @@ export default function Settings() {
                       const businessRef = doc(db, 'businesses', getBusinessId())
                       await setDoc(businessRef, {
                         catalogEnabled,
+                        appointmentsBooking,
                         catalogSlug: catalogSlug.toLowerCase().trim(),
                         customDomain: catalogCustomDomain.toLowerCase().trim().replace(/^www\./, '') || null,
                         catalogColor,

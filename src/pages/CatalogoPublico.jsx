@@ -11,6 +11,7 @@ import AnnouncementBar from '@/components/catalog/AnnouncementBar'
 import HeroCarousel from '@/components/catalog/HeroCarousel'
 import FlashSaleBar from '@/components/catalog/FlashSaleBar'
 import TrustBadges from '@/components/catalog/TrustBadges'
+import ReservarCitaModal from '@/components/catalog/ReservarCitaModal'
 import { ProductSkeleton } from '@/components/catalog/CatalogImages'
 import {
   DAY_SHORT,
@@ -38,7 +39,7 @@ import { catalogDb as db } from '@/lib/firebase'
 import { getCatalogMinQty, formatCurrency } from '@/lib/utils'
 import { isMultiCurrencyEnabled, convertFromBase, normalizeCurrency, BASE_CURRENCY } from '@/utils/currency'
 import { getRateForDate } from '@/services/exchangeRateService'
-import {
+import { CalendarDays,
   Search,
   ShoppingBag,
   X,
@@ -194,6 +195,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const loadMoreSentinelRef = useRef(null)
   const [categories, setCategories] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
+  // Reservas de citas desde el catalogo (veterinaria / General con agenda).
+  const [showReservarCita, setShowReservarCita] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState(null)
   const [selectedSubcategory, setSelectedSubcategory] = useState(null)
   // Menú lateral de categorías (móvil): árbol completo de categorías/subcategorías
@@ -1517,6 +1520,23 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         themeClasses={{ card: thCard, border: thBorderColor, text: thText }}
       />
 
+      {/* Reservar cita: solo si el negocio lo activo en Configuracion >
+          Catalogo. La carta de restaurante no lo muestra — ahi el flujo es
+          pedir, no agendar. */}
+      {!isRestaurantMenu && business?.appointmentsBooking?.enabled === true && (
+        <div className="max-w-7xl mx-auto px-4 mt-4">
+          <button
+            type="button"
+            onClick={() => setShowReservarCita(true)}
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity"
+            style={{ backgroundColor: getCatalogAccent(business) }}
+          >
+            <CalendarDays className="w-5 h-5" />
+            Reservar una cita
+          </button>
+        </div>
+      )}
+
       {/* Observaciones del catálogo */}
       {business?.catalogObservations && (
         <div className="max-w-7xl mx-auto px-4 mt-4">
@@ -2176,6 +2196,13 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       />}
 
       {/* Cart Drawer */}
+      <ReservarCitaModal
+        business={business}
+        accent={getCatalogAccent(business)}
+        isOpen={showReservarCita}
+        onClose={() => setShowReservarCita(false)}
+      />
+
       <CartDrawer
         isOpen={cartOpen}
         onClose={() => setCartOpen(false)}

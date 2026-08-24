@@ -123,5 +123,40 @@ export default {
         },
       ],
     },
+
+    // ─────────────────────────────────────────────────────────────────────
+    {
+      id: 'reservas-catalogo',
+      title: 'Que tus clientes reserven solos desde el catálogo',
+      requiereOpcion: {
+        flag: 'appointmentsBooking',
+        nombre: 'Recibir reservas desde el catálogo',
+        donde: 'Configuración > Catálogo > Reservas de citas',
+        ruta: '/app/configuracion?tab=catalogo',
+        defaultOn: false,
+      },
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Con esta opción, tu catálogo online muestra un botón **Reservar una cita**: el cliente elige un día y una hora libre, deja su nombre y su teléfono, y la cita **aparece sola en tu Agenda** al instante, con una notificación para ti.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'En **Configuración > Catálogo**, activa **Recibir reservas desde el catálogo**.',
+            'Define los **días** que atiendes con cita, el **horario** y cada cuántos minutos hay un turno.',
+            'Guarda. El botón aparece en tu catálogo de inmediato.',
+          ],
+        },
+        {
+          type: 'ojo',
+          text: 'El cliente solo ve horas **libres** — nunca los datos de otros clientes ni cuántas citas tienes. Y una misma hora no puede reservarse dos veces desde el catálogo: el segundo recibe "esa hora acaba de ocuparse". Tú, en cambio, sí puedes sobre-agendar a mano desde tu Agenda, como siempre.',
+        },
+        {
+          type: 'consejo',
+          text: 'La reserva llega con el teléfono del cliente: usa el botón verde de WhatsApp de la cita para confirmarle. Un mismo teléfono puede tener hasta 3 citas pendientes, para que nadie te llene la agenda por deporte.',
+        },
+      ],
+    },
   ],
 }

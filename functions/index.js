@@ -7316,6 +7316,12 @@ export { onNewOrder } from './notifications/onNewOrder.js'
 export { onProductStockChange } from './notifications/onStockLow.js'
 export { onYapePayment } from './notifications/onYapePayment.js'
 export { saveYapePaymentNative } from './notifications/saveYapePaymentNative.js'
+export { onNewAppointment } from './notifications/onNewAppointment.js'
+// Reservas de citas desde el catalogo publico (disponibilidad + creacion).
+// Van por funcion y no por Firestore directo: privacidad (las citas traen
+// datos personales y las reglas no filtran campos) y candado anti doble
+// reserva. Ver functions/booking/publicAgenda.js.
+export { getPublicAgenda, bookPublicAppointment } from './booking/publicAgenda.js'
 export { onPaymentNotification } from './notifications/onPaymentNotification.js'
 
 // Import and re-export migration function
