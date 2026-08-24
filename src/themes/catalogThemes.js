@@ -243,7 +243,7 @@ export const CATALOG_THEMES = {
       cartBadgeBg: '#F97316',
       cartBadgeColor: '#0F0F12',
       // Forma + tipografía
-      cardRadius: 'rounded-md',
+      cardRadius: 'rounded-none',
       cardShadowEffect: 'shadow-xl hover:shadow-2xl shadow-black/40',
       productNameClass: 'font-display text-base tracking-wider uppercase',
       priceClass: 'inline-block px-2.5 py-0.5 rounded-full bg-white text-black text-xs font-bold tracking-wide',
