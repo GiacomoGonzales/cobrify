@@ -2,9 +2,13 @@ import { useEffect, useMemo, useRef, useState, forwardRef } from 'react'
 import {
   Calendar, ChevronLeft, ChevronRight, ChevronDown, Plus, Loader2, Save,
   Copy, Send, Edit2, Trash2, X, Tag, Coffee, FileDown, MoveHorizontal, Store,
+  FileSpreadsheet,
 } from 'lucide-react'
 import { useToast } from '@/contexts/ToastContext'
 import { generateSchedulePDF } from '@/utils/schedulePdfGenerator'
+import { generateScheduleHistoryExcel } from '@/services/scheduleExportService'
+import { getCompanySettings } from '@/services/firestoreService'
+import Modal from '@/components/ui/Modal'
 import CollaboratorScheduleModal from '@/components/personnel/CollaboratorScheduleModal'
 import ScheduleMonthOverview from '@/components/personnel/ScheduleMonthOverview'
 import {
@@ -14,6 +18,7 @@ import {
   deleteShiftTemplate,
   getWeekScheduleAll,
   getMonthScheduleAll,
+  getScheduleRange,
   saveWeekSchedule,
   publishWeekSchedules,
   copyPreviousWeek,
@@ -411,6 +416,82 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
       toast.error('Error al copiar')
     } finally {
       setLoading(false)
+    }
+  }
+
+  // --- Exportable historico a Excel (rango libre de fechas) ---
+  const [showExcelModal, setShowExcelModal] = useState(false)
+  const [exportingExcel, setExportingExcel] = useState(false)
+  // Por defecto, del 1 del mes en curso a hoy: es el corte que se pide para
+  // pagar, y siempre tiene datos.
+  const hoyIso = () => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+  const primeroDelMesIso = () => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+  }
+  const [excelDesde, setExcelDesde] = useState(primeroDelMesIso)
+  const [excelHasta, setExcelHasta] = useState(hoyIso)
+
+  /** 'YYYY-MM-DD' → Date local (sin new Date(str), que lo lee como UTC). */
+  const isoADate = (iso) => {
+    const [a, m, d] = String(iso || '').split('-').map(Number)
+    return new Date(a, (m || 1) - 1, d || 1)
+  }
+
+  const handleExportExcel = async () => {
+    const desde = isoADate(excelDesde)
+    const hasta = isoADate(excelHasta)
+    if (!excelDesde || !excelHasta || Number.isNaN(desde.getTime()) || Number.isNaN(hasta.getTime())) {
+      toast.error('Elige las dos fechas')
+      return
+    }
+    if (hasta < desde) {
+      toast.error('La fecha final no puede ser anterior a la inicial')
+      return
+    }
+    // Un ano es el tope: mas que eso son cientos de lecturas por semana y el
+    // archivo deja de ser util para revisar.
+    const dias = Math.round((hasta - desde) / 86400000) + 1
+    if (dias > 366) {
+      toast.error('El rango máximo es de un año')
+      return
+    }
+
+    setExportingExcel(true)
+    try {
+      const [rango, settings] = await Promise.all([
+        getScheduleRange(businessId, desde, hasta),
+        getCompanySettings(businessId),
+      ])
+      if (!rango.success) {
+        toast.error('No se pudo leer el horario')
+        return
+      }
+      // Respetar el filtro de sucursal de la pantalla, igual que hace el PDF.
+      const celdas = isAllBranches
+        ? rango.data
+        : rango.data.filter(c => cellBranchId(c.cell) === selectedBranchId)
+
+      if (celdas.length === 0) {
+        toast.error('No hay horarios programados en ese rango')
+        return
+      }
+
+      const fmt = (d) => d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      await generateScheduleHistoryExcel(celdas, employees, settings?.data || {}, {
+        periodLabel: `${fmt(desde)} al ${fmt(hasta)}`,
+        branchLabel: isAllBranches ? 'Todas las sucursales' : (selectedBranchName || ''),
+      })
+      setShowExcelModal(false)
+      toast.success('Excel generado')
+    } catch (e) {
+      console.error(e)
+      toast.error('Error al generar el Excel')
+    } finally {
+      setExportingExcel(false)
     }
   }
 
@@ -846,6 +927,18 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
             </button>
           )}
 
+          {/* Excel: a diferencia del PDF (que saca la semana en pantalla),
+              este exporta un RANGO de fechas con los acumulados. */}
+          <button
+            onClick={() => setShowExcelModal(true)}
+            disabled={employees.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            title="Exportar el histórico de horarios a Excel"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            Excel
+          </button>
+
           {/* Separador: herramientas (izq.) vs. acciones principales (der.) */}
           <div className="hidden sm:block w-px h-6 bg-gray-200 mx-1" />
 
@@ -1118,6 +1211,66 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
           </div>
         </div>
       )}
+
+      {/* Modal: rango del exportable historico */}
+      <Modal
+        isOpen={showExcelModal}
+        onClose={() => !exportingExcel && setShowExcelModal(false)}
+        title="Exportar histórico de horarios"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Genera un Excel con las horas programadas por día, los días trabajados
+            y los de descanso de cada colaborador.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Desde</label>
+              <input
+                type="date"
+                value={excelDesde}
+                onChange={(e) => setExcelDesde(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Hasta</label>
+              <input
+                type="date"
+                value={excelHasta}
+                onChange={(e) => setExcelHasta(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+              />
+            </div>
+          </div>
+          <p className="text-xs text-gray-500">
+            {isAllBranches
+              ? 'Incluye todas las sucursales.'
+              : `Solo ${selectedBranchName || 'la sucursal actual'}.`}
+            {' '}Son horas programadas, no marcaciones de asistencia.
+          </p>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-1">
+            <button
+              onClick={() => setShowExcelModal(false)}
+              disabled={exportingExcel}
+              className="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleExportExcel}
+              disabled={exportingExcel}
+              className="flex items-center justify-center gap-1.5 px-4 py-2 text-sm rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {exportingExcel
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <FileSpreadsheet className="w-3.5 h-3.5" />}
+              Descargar Excel
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Modal: horario mensual de un colaborador (se abre al click en su nombre) */}
       <CollaboratorScheduleModal

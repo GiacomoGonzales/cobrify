@@ -399,6 +399,67 @@ export const getMonthScheduleAll = async (businessId, year, monthIndex) => {
 }
 
 /**
+ * Lee TODAS las celdas de horario entre dos fechas (inclusive), de todos los
+ * colaboradores, aplanadas y con su fecha real.
+ *
+ * Se recorren las semanas ISO que tocan el rango — que es como esta guardado
+ * el horario — y se descartan los dias que caen fuera. Sin tope de semanas:
+ * el limite lo pone quien llama (el exportable acota a un ano).
+ *
+ * @returns {Promise<{ success, data: Array<{ fecha: string, date: Date,
+ *   dayKey: string, userId: string, cell: object, published: boolean }> }>}
+ *   `fecha` en formato YYYY-MM-DD, ordenado por fecha.
+ */
+export const getScheduleRange = async (businessId, desde, hasta) => {
+  try {
+    const inicio = new Date(desde.getFullYear(), desde.getMonth(), desde.getDate())
+    const fin = new Date(hasta.getFullYear(), hasta.getMonth(), hasta.getDate())
+    if (fin < inicio) return { success: true, data: [] }
+
+    // Semanas ISO que cubren el rango, de la del primer dia a la del ultimo.
+    const finIso = getIsoWeek(fin)
+    const semanas = []
+    let cursor = getIsoWeek(inicio)
+    // Tope de seguridad: 5 anos de semanas. Un rango mas largo es un error de
+    // quien llama, no algo que valga la pena leer entero.
+    let guard = 0
+    while (guard++ < 260) {
+      semanas.push({ ...cursor })
+      if (cursor.isoYear === finIso.isoYear && cursor.isoWeek === finIso.isoWeek) break
+      cursor = addWeeks(cursor.isoYear, cursor.isoWeek, 1)
+    }
+
+    const resultados = await Promise.all(
+      semanas.map((w) => getWeekScheduleAll(businessId, w.isoYear, w.isoWeek))
+    )
+
+    const celdas = []
+    resultados.forEach((res, idx) => {
+      if (!res.success || !res.data) return
+      const fechasSemana = getWeekDates(semanas[idx].isoYear, semanas[idx].isoWeek)
+      res.data.forEach((docHorario) => {
+        const userId = docHorario.userId
+        if (!userId) return
+        const published = !!docHorario.publishedAt
+        DAY_KEYS.forEach((dk, i) => {
+          const d = fechasSemana[i]
+          if (d < inicio || d > fin) return
+          const cell = docHorario.days?.[dk]
+          if (!cell) return
+          celdas.push({ fecha: dateKey(d), date: d, dayKey: dk, userId, cell, published })
+        })
+      })
+    })
+
+    celdas.sort((a, b) => (a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0))
+    return { success: true, data: celdas }
+  } catch (error) {
+    console.error('Error leyendo el rango de horarios:', error)
+    return { success: false, error: error.message, data: [] }
+  }
+}
+
+/**
  * Guarda (o sobreescribe) el horario semanal de un empleado.
  * @param {object} days  { mon: {start,end,...} | { rest: true } | null, ... }
  */
