@@ -254,6 +254,80 @@ export const CATALOG_THEMES = {
     },
   },
 
+  bauhaus: {
+    id: 'bauhaus',
+    name: 'Bauhaus',
+    description: 'Geometría primaria: bloques rojo, amarillo y azul sobre blanco, sin sombras. Diseño, mobiliario y objetos de autor',
+    category: 'retail',
+    isNew: true,
+    swatch: { bg: '#FFFFFF', card: '#FAFAF8', accent: '#E63E3E' },
+    accent: '#E63E3E',
+    fonts: {
+      heading: "'Inter Tight', system-ui, sans-serif",
+      body: "'Inter', system-ui, sans-serif",
+      googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800;900&family=Inter:wght@300;400;500;600&display=swap',
+    },
+    // Colores de la composición (Bauhaus / De Stijl). Viven en el tema para
+    // que el hero y la miniatura pinten exactamente lo mismo.
+    palette: { rojo: '#E63E3E', amarillo: '#FFD500', azul: '#1A4DCC', negro: '#0E0E0E' },
+    tokens: {
+      colors: {
+        background: '#FFFFFF', surface: '#FAFAF8', surfaceHover: '#F2F2EE',
+        text: '#0E0E0E', textMuted: '#5A5A56', textInverted: '#FFFFFF',
+        border: '#0E0E0E', badge: '#FFD500', badgeText: '#0E0E0E',
+      },
+      // Todo recto: la geometria primaria no admite esquinas blandas.
+      radius: { sm: '0', md: '0', lg: '0', xl: '0', full: '9999px' },
+      shadows: { sm: 'none', md: 'none', lg: 'none' },
+      effects: { darkMode: false, headerBlur: true },
+    },
+    chrome: {
+      headerName: 'font-extrabold uppercase tracking-tight',
+      headerNameAccent: false,
+      headerCart: 'outline',       // boton rectangular con borde, invierte al hover
+      headerScrollFx: 'shadow',
+      heroCover: 'mondrian',       // composicion geometrica en vez de portada
+      heroEmpty: 'mondrian',
+      topStrip: true,              // franja numerada sobre el header
+      sectionRule: true,           // cabecera de seccion con linea y contador
+    },
+    layout: { hero: 'classic', categories: 'underline', grid: 'grid', card: 'classic' },
+    classes: {
+      bg: 'bg-white',
+      card: 'bg-[#FAFAF8]',
+      cardShadow: 'bg-[#FAFAF8]',
+      text: 'text-[#0E0E0E]',
+      textMuted: 'text-[#5A5A56]',
+      textFaint: 'text-[#8A8A86]',
+      obsText: 'text-[#2A2A28]',
+      headerBg: 'bg-white border-b-2 border-[#0E0E0E]',
+      catInactive: 'bg-transparent text-[#5A5A56] hover:text-[#0E0E0E] uppercase tracking-wider text-xs font-bold',
+      viewActive: 'bg-[#0E0E0E]/10',
+      viewHover: 'hover:bg-[#F2F2EE]',
+      catBadge: 'bg-[#FFD500] text-[#0E0E0E] uppercase tracking-wider font-bold',
+      listBadge: 'bg-[#F2F2EE] text-[#0E0E0E] uppercase tracking-wider font-bold',
+      searchBanner: 'bg-white text-[#0E0E0E] placeholder-[#8A8A86] border-2 border-[#0E0E0E] focus:ring-[#E63E3E]/30',
+      searchClassic: 'bg-white text-[#0E0E0E] placeholder-[#8A8A86] border-2 border-[#0E0E0E]',
+      borderColor: 'border-[#0E0E0E]',
+      footerPowered: 'text-[#5A5A56] border-[#0E0E0E]',
+      footerLink: 'text-[#0E0E0E]',
+      heroFallbackBg: 'bg-white',
+      cartBadgeBg: '#E63E3E',
+      cartBadgeColor: '#FFFFFF',
+      // Tarjeta enmarcada en negro, sin sombra: el borde ES el diseño.
+      cardRadius: 'rounded-none',
+      cardShadowEffect: 'border-2 border-[#0E0E0E]',
+      // Marco de la loseta de producto: el borde ES el diseno en Bauhaus. Los
+      // demas temas no lo definen y sus tarjetas siguen sin borde.
+      cardFrame: 'border-2 border-[#0E0E0E]',
+      productNameClass: 'catalog-heading text-sm font-bold uppercase tracking-tight',
+      priceClass: 'text-base font-extrabold text-[#0E0E0E]',
+      detailNameClass: 'catalog-heading text-2xl font-extrabold uppercase tracking-tight text-[#0E0E0E]',
+      detailPriceClass: 'text-3xl font-extrabold text-[#0E0E0E]',
+      fontWrapper: 'font-sans',
+    },
+  },
+
 }
 
 /**

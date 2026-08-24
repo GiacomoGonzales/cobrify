@@ -152,7 +152,7 @@ export function FeaturedCard({ product, ctx }) {
       onMouseEnter={() => preloadProductDetail(product)}
     >
       <div
-        className={`relative overflow-hidden aspect-square mb-2.5 ${th.cardRadius}`}
+        className={`relative overflow-hidden aspect-square mb-2.5 ${th.cardRadius} ${th.cardFrame || ''}`}
         style={{ backgroundColor: 'var(--ct-surface-hover, #F3F4F6)' }}
       >
         {product.imageUrl ? (
@@ -192,7 +192,7 @@ export function CarouselCard({ product, ctx }) {
       onMouseEnter={() => preloadProductDetail(product)}
     >
       <div
-        className={`relative overflow-hidden aspect-square mb-2.5 ${th.cardRadius}`}
+        className={`relative overflow-hidden aspect-square mb-2.5 ${th.cardRadius} ${th.cardFrame || ''}`}
         style={{ backgroundColor: 'var(--ct-surface-hover, #F3F4F6)' }}
       >
         {product.imageUrl ? (
@@ -349,7 +349,7 @@ export function GridCard({ product, index, uniform = false, ctx }) {
       {/* Loseta de imagen: radius del tema, fondo surfaceHover, todo lo
           accionable vive dentro (badges + quick-add al hover). */}
       <div
-        className={`relative overflow-hidden mb-3 ${th.cardRadius} ${uniform ? 'aspect-[4/5]' : ''}`}
+        className={`relative overflow-hidden mb-3 ${th.cardRadius} ${th.cardFrame || ''} ${uniform ? 'aspect-[4/5]' : ''}`}
         style={{ backgroundColor: 'var(--ct-surface-hover, #F3F4F6)' }}
       >
         {product.imageUrl ? (

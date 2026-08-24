@@ -48,6 +48,10 @@ export default {
         },
         {
           type: 'texto',
+          text: 'En **Apariencia > Tema visual** eliges el estilo: **Estándar** (limpio, sirve para todo), **Boutique** (serif elegante, moda), **Bold** (oscuro y contundente) y **Bauhaus** (geometría de bloques rojo, amarillo y azul; luce con pocas fotos pero muy buenas). La miniatura de cada tarjeta ya se dibuja con tus propias fotos y tu color.',
+        },
+        {
+          type: 'texto',
           text: 'Cuando hay muchos productos puedes elegir cómo se cargan en **Paginación de productos** (tarjeta "Así se ve tu tienda"): mostrar todo de una, botón de **Cargar más**, **scroll infinito** (recomendado) o **páginas numeradas**.',
         },
         {

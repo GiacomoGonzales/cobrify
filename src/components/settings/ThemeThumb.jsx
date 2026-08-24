@@ -69,6 +69,7 @@ export default function ThemeThumb({ themeId, colorNegocio, nombre = 'Tu tienda'
   const radio = t.radius?.lg || '0.75rem'
   const oscuro = !!t.effects?.darkMode
   const chrome = theme.chrome || {}
+  const pal = theme.palette || {}
   const fuenteTitulo = theme.fonts?.heading || undefined
 
   const bg = c.background || '#F9FAFB'
@@ -102,10 +103,26 @@ export default function ThemeThumb({ themeId, colorNegocio, nombre = 'Tu tienda'
         position: 'relative',
       }}
     >
+      {/* Franja numerada del tema, cuando la pide */}
+      {chrome.topStrip && (
+        <div
+          className="flex items-center justify-between px-3 text-[7px] font-bold uppercase tracking-widest"
+          style={{ height: 16, borderBottom: `2px solid ${borde}`, color: texto }}
+        >
+          <span>01 / 24</span>
+          <span>La forma sigue a la función</span>
+          <span>{new Date().getFullYear()}</span>
+        </div>
+      )}
+
       {/* Cabecera */}
       <div
         className="flex items-center gap-2 px-3"
-        style={{ height: 44, backgroundColor: chrome.heroCover === 'impact' ? bg : surface }}
+        style={{
+          height: 44,
+          backgroundColor: chrome.heroCover === 'impact' ? bg : surface,
+          borderBottom: chrome.topStrip ? `2px solid ${borde}` : undefined,
+        }}
       >
         {logoUrl ? (
           <img src={logoUrl} alt="" className="w-7 h-7 object-cover flex-none" style={{ borderRadius: chrome.headerLogoRound ? '999px' : radio }} />
@@ -124,6 +141,14 @@ export default function ThemeThumb({ themeId, colorNegocio, nombre = 'Tu tienda'
           {nombre}
         </span>
         {/* Carrito con la forma del tema */}
+        {chrome.headerCart === 'outline' ? (
+          <span
+            className="ml-auto flex-none flex items-center justify-center text-[8px] font-bold uppercase tracking-wider px-1.5"
+            style={{ height: 20, border: `2px solid ${borde}`, color: texto }}
+          >
+            Bolsa (2)
+          </span>
+        ) : (
         <span
           className="ml-auto flex-none flex items-center justify-center"
           style={{
@@ -136,9 +161,39 @@ export default function ThemeThumb({ themeId, colorNegocio, nombre = 'Tu tienda'
             <path d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </span>
+        )}
       </div>
 
-      {/* Portada con el nombre encima (como en la tienda real) */}
+      {/* Composicion geometrica (Bauhaus): la miniatura muestra la MISMA
+          reticula que el catalogo, en pequeno. */}
+      {chrome.heroCover === 'mondrian' ? (
+        <div className="grid grid-cols-12 grid-rows-6 gap-1 px-3 py-2.5" style={{ height: 150 }}>
+          <div className="col-span-7 row-span-3 relative flex items-end p-1.5" style={{ backgroundColor: accent }}>
+            <span className="text-[9px] font-black uppercase leading-none text-white truncate" style={{ fontFamily: fuenteTitulo }}>
+              {nombre}
+            </span>
+            <svg className="absolute top-1 right-1 w-3 h-3" viewBox="0 0 50 50"><polygon points="25,4 46,46 4,46" fill={pal.negro || '#0E0E0E'} /></svg>
+          </div>
+          <div className="col-span-5 row-span-2 flex items-center justify-center" style={{ backgroundColor: pal.amarillo || '#FFD500' }}>
+            <span className="w-2/3 aspect-square rounded-full" style={{ backgroundColor: pal.negro || '#0E0E0E' }} />
+          </div>
+          <div className="col-span-5 row-span-2 flex items-center p-1" style={{ backgroundColor: pal.negro || '#0E0E0E' }}>
+            <span className="text-[6px] uppercase leading-tight text-white line-clamp-2">Menos, pero mejor.</span>
+          </div>
+          <div className="col-span-7 row-span-3 overflow-hidden" style={{ backgroundColor: pal.azul || '#1A4DCC' }}>
+            {portadaUrl
+              ? <img src={portadaUrl} alt="" className="w-full h-full object-cover" />
+              : <svg viewBox="0 0 600 400" preserveAspectRatio="none" className="w-full h-full">
+                  <rect x="40" y="60" width="180" height="180" fill={pal.amarillo || '#FFD500'} />
+                  <circle cx="380" cy="220" r="100" fill="#fff" />
+                  <polygon points="500,60 580,200 420,200" fill={pal.negro || '#0E0E0E'} />
+                </svg>}
+          </div>
+          <div className="col-span-2 row-span-1" style={{ backgroundColor: pal.amarillo || '#FFD500' }} />
+          <div className="col-span-2 row-span-1" style={{ backgroundColor: pal.negro || '#0E0E0E' }} />
+          <div className="col-span-1 row-span-1" style={{ backgroundColor: accent }} />
+        </div>
+      ) : (
       <div className="relative" style={{ height: 116, backgroundColor: surfaceHover }}>
         {portadaUrl ? (
           <img src={portadaUrl} alt="" className="w-full h-full object-cover" />
@@ -162,6 +217,7 @@ export default function ThemeThumb({ themeId, colorNegocio, nombre = 'Tu tienda'
           </p>
         </div>
       </div>
+      )}
 
       <div className="px-3 pt-2.5 space-y-2.5">
         {/* Buscador */}

@@ -26,6 +26,7 @@ import { getCatalogThemeClasses, getCatalogAccent, getCatalogTheme } from '@/the
 import { CatalogThemeProvider, buildCatalogCssVars } from '@/components/catalog/CatalogThemeProvider'
 import CatalogSearchModal from '@/components/catalog/CatalogSearchModal'
 import CatalogFooter from '@/components/catalog/CatalogFooter'
+import HeroMondrian from '@/components/catalog/HeroMondrian'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { collection, query, where, getDocs, doc, getDoc, orderBy, limit, startAfter, documentId } from 'firebase/firestore'
 // CATALOGO = catalogDb (SIN cache persistente), a proposito (14-ago-2026):
@@ -1182,6 +1183,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     },
     th: {
       cardRadius: thCardRadius, cardShadowEffect: thCardShadowEffect, cardShadow: thCardShadow,
+      cardFrame: themeClasses.cardFrame || '',
       productName: thProductName, text: thText, textMuted: thTextMuted, price: thPrice,
       catBadge: thCatBadge, listBadge: thListBadge,
     },
@@ -1237,6 +1239,18 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               Mesa {tableFromUrl} - Haz tu pedido desde tu celular
             </div>
           )}
+        </div>
+      )}
+
+      {/* Franja numerada (Bauhaus): la referencia tipografica que encabeza la
+          composicion. Solo la piden los temas que la declaran. */}
+      {themeChrome.topStrip && (
+        <div className={`border-b-2 ${thBorderColor}`}>
+          <div className="max-w-7xl mx-auto px-4 md:px-6 py-1.5 flex items-center justify-between text-[10px] tracking-widest uppercase font-bold">
+            <span className={thText}>01 / {String(filteredProducts.length || products.length || 1).padStart(2, '0')}</span>
+            <span className={`hidden md:inline ${thTextMuted}`}>La forma sigue a la función</span>
+            <span className={thText}>{new Date().getFullYear()}</span>
+          </div>
         </div>
       )}
 
@@ -1318,7 +1332,15 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
 
             {/* Carrito — la forma la decide el chrome del tema. Todas las
                 variantes disparan el mismo setCartOpen; solo cambia la piel. */}
-            {themeChrome.headerCart === 'square' ? (
+            {themeChrome.headerCart === 'outline' ? (
+              <button
+                onClick={() => setCartOpen(true)}
+                className={`px-3 py-2 text-sm uppercase tracking-wider font-bold border-2 transition-colors flex-shrink-0 ${thBorderColor} ${thText} hover:bg-[#0E0E0E] hover:text-white`}
+                aria-label={isRestaurantMenu ? 'Ver pedido' : 'Ver carrito'}
+              >
+                {isRestaurantMenu ? 'Pedido' : 'Bolsa'} ({cartItemsCount})
+              </button>
+            ) : themeChrome.headerCart === 'square' ? (
               <button
                 onClick={() => setCartOpen(true)}
                 className="relative w-11 h-11 md:w-12 md:h-12 flex items-center justify-center flex-shrink-0 transition-transform hover:scale-105"
@@ -1525,7 +1547,24 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
 
       {/* Hero / Búsqueda — carrusel (F2.2) si está activado, banner cuando hay
           portada única, clásico (gradient) si no hay nada */}
-      {business?.catalogHero?.enabled && (business?.catalogHero?.slides || []).filter(s => s.imageUrl).length > 0 ? (
+      {themeChrome.heroCover === 'mondrian' ? (
+        /* Composicion geometrica (Bauhaus): reemplaza a portada y carrusel —
+           la foto vive DENTRO de la composicion, no encima de ella. */
+        <>
+          <HeroMondrian business={business} palette={themeFull.palette} accent={themeAccent} />
+          {/* Cabecera de seccion con linea y contador */}
+          {themeChrome.sectionRule && (
+            <div className="max-w-7xl mx-auto px-4 md:px-6 pt-2 pb-4 flex items-center gap-4">
+              <h3 className={`catalog-heading text-xl md:text-3xl uppercase tracking-tight font-extrabold ${thText}`}>
+                {isRestaurantMenu ? 'Carta' : 'Catálogo'}
+                <span className="ml-2 inline-block w-3 h-3 rounded-full align-middle" style={{ backgroundColor: themeAccent }} />
+              </h3>
+              <div className={`h-1 flex-1 ${thText.replace('text-', 'bg-')}`} />
+              <span className={`text-xs uppercase tracking-widest font-bold ${thText}`}>{filteredProducts.length}</span>
+            </div>
+          )}
+        </>
+      ) : business?.catalogHero?.enabled && (business?.catalogHero?.slides || []).filter(s => s.imageUrl).length > 0 ? (
         /* === CARRUSEL HERO: slides promocionales con autoplay. Es una
             portada con mas fotos, asi que recibe el MISMO trato que la
             portada del tema: en 'card' (Estandar) va dentro de la tarjeta
