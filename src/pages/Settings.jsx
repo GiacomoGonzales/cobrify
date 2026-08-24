@@ -603,6 +603,8 @@ export default function Settings() {
   const [catalogLayout, setCatalogLayout] = useState('masonry')
   // Paginacion del catalogo (port shopifree): none | load-more | infinite | pages
   const [catalogPagination, setCatalogPagination] = useState('infinite')
+  // Pestana interna de Mi Catalogo Online: tienda | contenido | avanzado
+  const [catalogTab, setCatalogTab] = useState('tienda')
   // Navegación en escritorio del catálogo: 'top' (barra arriba) | 'sidebar'
   const [catalogDesktopNav, setCatalogDesktopNav] = useState('top')
   // Oferta con countdown (F2.5)
@@ -643,17 +645,6 @@ export default function Settings() {
   const [catalogQrDataUrl, setCatalogQrDataUrl] = useState('')
   const [resellerCustomDomain, setResellerCustomDomain] = useState(null) // Dominio personalizado del reseller
   const qrCanvasRef = useRef(null)
-
-  // Secciones colapsables del tab "Mi Catálogo Online"
-  const [openSections, setOpenSections] = useState({
-    url: true,
-    diseno: false,
-    textos: false,
-    productos: false,
-    compra: false,
-    avanzado: false,
-  })
-  const toggleSection = (id) => setOpenSections(prev => ({ ...prev, [id]: !prev[id] }))
 
   // Estados para QR de mesas (carta digital restaurante)
   const [tableQrCodes, setTableQrCodes] = useState([])
@@ -7032,29 +7023,47 @@ export default function Settings() {
               {/* Configuración del catálogo (solo si está habilitado) */}
               {catalogEnabled && (
                 <>
-                  {/* === TARJETAS POR TAREA: cada una responde una pregunta que el
-                      usuario ya se hace (¿como se ve? ¿que muestro? ¿como me compran?),
-                      no una categoria de diseñador. Reorganizadas el 24-ago-2026. === */}
-                  <div className="space-y-4">
+                  {/* Pestanas internas (forma de la pagina de apariencia de
+                      shopifree): lo principal primero, lo que sigue despues y
+                      AVANZADO al final — lo que casi nadie toca. Las secciones
+                      van SIEMPRE ABIERTAS: con seis acordeones cerrados nadie
+                      encontraba nada (reporte del 24-ago-2026). */}
+                  <div className="border-b border-gray-200 -mt-2">
+                    <nav className="flex gap-6 overflow-x-auto scrollbar-hide">
+                      {[
+                        { id: 'tienda', label: 'Tu tienda' },
+                        { id: 'contenido', label: 'Contenido y ventas' },
+                        { id: 'avanzado', label: 'Avanzado' },
+                      ].map(sub => (
+                        <button
+                          key={sub.id}
+                          type="button"
+                          onClick={() => setCatalogTab(sub.id)}
+                          className={`py-3 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-colors ${
+                            catalogTab === sub.id
+                              ? 'border-primary-500 text-primary-600'
+                              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                          }`}
+                        >
+                          {sub.label}
+                        </button>
+                      ))}
+                    </nav>
+                  </div>
+
+                  {catalogTab === 'tienda' && (
+                    <div className="space-y-4">
                     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                      <button
-                        type="button"
-                        onClick={() => toggleSection('url')}
-                        className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
-                            <Globe className="w-5 h-5 text-emerald-600" />
-                          </div>
-                          <div className="text-left">
-                            <h3 className="font-semibold text-gray-900">Tu dirección y compartir</h3>
-                            <p className="text-xs text-gray-500">El enlace de tu tienda, el código QR y cómo difundirlo</p>
-                          </div>
+                      <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
+                        <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                          <Globe className="w-5 h-5 text-emerald-600" />
                         </div>
-                        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${openSections.url ? 'rotate-180' : ''}`} />
-                      </button>
-                      {openSections.url && (
-                        <div className="px-5 pb-5 pt-4 border-t border-gray-100 space-y-5">
+                        <div>
+                          <h3 className="font-semibold text-gray-900">Tu dirección y compartir</h3>
+                          <p className="text-xs text-gray-500">El enlace de tu tienda, el código QR y cómo difundirlo</p>
+                        </div>
+                      </div>
+                      <div className="px-5 pb-5 pt-4 space-y-5">
 
 {/* URL del catálogo */}
                       <div>
@@ -7295,29 +7304,20 @@ export default function Settings() {
                           </div>
                         </div>
                       )}
-                        </div>
-                      )}
+                      </div>
                     </div>
 
                     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                      <button
-                        type="button"
-                        onClick={() => toggleSection('diseno')}
-                        className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-violet-50 flex items-center justify-center flex-shrink-0">
-                            <Palette className="w-5 h-5 text-violet-600" />
-                          </div>
-                          <div className="text-left">
-                            <h3 className="font-semibold text-gray-900">Así se ve tu tienda</h3>
-                            <p className="text-xs text-gray-500">Tema, colores, logo, portada y diseño de los productos</p>
-                          </div>
+                      <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
+                        <div className="w-10 h-10 rounded-lg bg-violet-50 flex items-center justify-center flex-shrink-0">
+                          <Palette className="w-5 h-5 text-violet-600" />
                         </div>
-                        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${openSections.diseno ? 'rotate-180' : ''}`} />
-                      </button>
-                      {openSections.diseno && (
-                        <div className="px-5 pb-5 pt-4 border-t border-gray-100 space-y-5">
+                        <div>
+                          <h3 className="font-semibold text-gray-900">Así se ve tu tienda</h3>
+                          <p className="text-xs text-gray-500">Tema, colores, logo, portada y diseño de los productos</p>
+                        </div>
+                      </div>
+                      <div className="px-5 pb-5 pt-4 space-y-5">
 
 {/* Tema del catálogo — galería (Fase 3: los temas viven en
                           src/themes/catalogThemes.js; agregar uno ahí lo muestra aquí solo) */}
@@ -7966,165 +7966,24 @@ export default function Settings() {
                         </div>
                       </div>
 
-
-{/* Paginación de productos (port shopifree) */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Paginación de productos
-                        </label>
-                        <p className="text-xs text-gray-500 mb-3">
-                          Elige cómo se cargan los productos cuando hay muchos.
-                        </p>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                          {[
-                            { id: 'none', label: 'Sin paginación', desc: 'Muestra todos los productos', Icon: LayoutGrid },
-                            { id: 'load-more', label: 'Cargar más', desc: 'Botón para cargar más', Icon: ArrowDown },
-                            { id: 'infinite', label: 'Scroll infinito', desc: 'Carga automática al scroll', Icon: Clock },
-                            { id: 'pages', label: 'Páginas', desc: 'Navegación numerada', Icon: ChevronsUpDown },
-                          ].map(opt => (
-                            <button
-                              key={opt.id}
-                              type="button"
-                              onClick={() => setCatalogPagination(opt.id)}
-                              className={`relative p-4 rounded-xl border-2 transition-all text-left ${
-                                catalogPagination === opt.id
-                                  ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/40'
-                                  : 'border-gray-200 hover:border-gray-300'
-                              }`}
-                            >
-                              {catalogPagination === opt.id && (
-                                <span className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center">
-                                  <Check className="w-3.5 h-3.5 text-white" />
-                                </span>
-                              )}
-                              <opt.Icon className="w-5 h-5 text-gray-400 mb-2" />
-                              <p className="text-sm font-semibold text-gray-900">{opt.label}</p>
-                              <p className="text-xs text-gray-500 mt-0.5">{opt.desc}</p>
-                            </button>
-                          ))}
-                        </div>
-                        {catalogPagination === 'none' && (
-                          <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg mt-2">
-                            Con catálogos grandes (cientos de productos), "Sin paginación" puede hacer lenta la primera carga.
-                          </p>
-                        )}
                       </div>
-
-{/* Navegación en escritorio: barra superior vs menú lateral */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Navegación en computadora
-                        </label>
-                        <p className="text-xs text-gray-500 mb-3">
-                          Dónde se muestran las categorías cuando el cliente entra desde una computadora. En celular siempre van arriba.
-                        </p>
-                        <div className="grid grid-cols-2 gap-3 max-w-md">
-                          {[
-                            { id: 'top', label: 'Barra superior', desc: 'Categorías arriba, a lo ancho' },
-                            { id: 'sidebar', label: 'Menú lateral', desc: 'Categorías fijas a la izquierda' },
-                          ].map(opt => (
-                            <button
-                              key={opt.id}
-                              type="button"
-                              onClick={() => setCatalogDesktopNav(opt.id)}
-                              className={`p-3 rounded-xl border-2 transition-all text-center ${
-                                catalogDesktopNav === opt.id
-                                  ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/40'
-                                  : 'border-gray-200 hover:border-gray-300'
-                              }`}
-                            >
-                              {/* Mini-mockup */}
-                              <div className="h-14 mb-2 flex items-center justify-center">
-                                {opt.id === 'top' ? (
-                                  <div className="w-16 flex flex-col gap-1">
-                                    <div className="flex gap-1">
-                                      <div className="bg-gray-400 rounded-sm h-2 flex-1" />
-                                      <div className="bg-gray-300 rounded-sm h-2 flex-1" />
-                                      <div className="bg-gray-300 rounded-sm h-2 flex-1" />
-                                    </div>
-                                    <div className="grid grid-cols-3 gap-1">
-                                      <div className="bg-gray-200 rounded-sm aspect-square" />
-                                      <div className="bg-gray-200 rounded-sm aspect-square" />
-                                      <div className="bg-gray-200 rounded-sm aspect-square" />
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="w-16 flex gap-1">
-                                    <div className="flex flex-col gap-1 w-4">
-                                      <div className="bg-gray-400 rounded-sm h-1.5" />
-                                      <div className="bg-gray-300 rounded-sm h-1.5" />
-                                      <div className="bg-gray-300 rounded-sm h-1.5" />
-                                      <div className="bg-gray-300 rounded-sm h-1.5" />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-1 flex-1">
-                                      <div className="bg-gray-200 rounded-sm aspect-square" />
-                                      <div className="bg-gray-200 rounded-sm aspect-square" />
-                                      <div className="bg-gray-200 rounded-sm aspect-square" />
-                                      <div className="bg-gray-200 rounded-sm aspect-square" />
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                              <span className="block text-xs font-semibold text-gray-800">{opt.label}</span>
-                              <span className="block text-[10px] text-gray-500">{opt.desc}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-{/* Efectos del catálogo (F2.7) */}
-                      <div className="p-4 border border-gray-200 rounded-lg space-y-2.5">
-                        <span className="text-sm font-medium text-gray-900">Efectos</span>
-                        <label className="flex items-center justify-between gap-3 cursor-pointer">
-                          <span className="text-sm text-gray-700">
-                            Aparición al hacer scroll
-                            <span className="block text-xs text-gray-500">Los productos se deslizan suavemente al aparecer.</span>
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setCatalogEffects(prev => ({ ...prev, scrollReveal: !prev.scrollReveal }))}
-                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${catalogEffects.scrollReveal ? 'bg-primary-600' : 'bg-gray-300'}`}
-                          >
-                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${catalogEffects.scrollReveal ? 'translate-x-6' : 'translate-x-1'}`} />
-                          </button>
-                        </label>
-                        <label className="flex items-center justify-between gap-3 cursor-pointer">
-                          <span className="text-sm text-gray-700">
-                            Segunda foto al pasar el mouse
-                            <span className="block text-xs text-gray-500">En productos con 2+ imágenes, muestra la segunda al hover.</span>
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setCatalogEffects(prev => ({ ...prev, imageSwapOnHover: !prev.imageSwapOnHover }))}
-                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${catalogEffects.imageSwapOnHover ? 'bg-primary-600' : 'bg-gray-300'}`}
-                          >
-                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${catalogEffects.imageSwapOnHover ? 'translate-x-6' : 'translate-x-1'}`} />
-                          </button>
-                        </label>
-                      </div>
-                        </div>
-                      )}
                     </div>
+                    </div>
+                  )}
 
+                  {catalogTab === 'contenido' && (
+                    <div className="space-y-4">
                     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                      <button
-                        type="button"
-                        onClick={() => toggleSection('textos')}
-                        className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-sky-50 flex items-center justify-center flex-shrink-0">
-                            <FileText className="w-5 h-5 text-sky-600" />
-                          </div>
-                          <div className="text-left">
-                            <h3 className="font-semibold text-gray-900">Textos y promociones</h3>
-                            <p className="text-xs text-gray-500">Bienvenida, anuncios, ofertas y sellos de confianza</p>
-                          </div>
+                      <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
+                        <div className="w-10 h-10 rounded-lg bg-sky-50 flex items-center justify-center flex-shrink-0">
+                          <FileText className="w-5 h-5 text-sky-600" />
                         </div>
-                        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${openSections.textos ? 'rotate-180' : ''}`} />
-                      </button>
-                      {openSections.textos && (
-                        <div className="px-5 pb-5 pt-4 border-t border-gray-100 space-y-5">
+                        <div>
+                          <h3 className="font-semibold text-gray-900">Textos y promociones</h3>
+                          <p className="text-xs text-gray-500">Bienvenida, anuncios, ofertas y sellos de confianza</p>
+                        </div>
+                      </div>
+                      <div className="px-5 pb-5 pt-4 space-y-5">
 
                       {/* Cuatro textos, cuatro lugares: sin este mapa nadie sabe
                           cual aparece donde — era la mayor fuente de confusion. */}
@@ -8377,29 +8236,20 @@ export default function Settings() {
                         />
                         <p className="text-xs text-gray-500 mt-1">{catalogObservations.length}/500 caracteres — Se muestra arriba de las categorías en el catálogo</p>
                       </div>
-                        </div>
-                      )}
+                      </div>
                     </div>
 
                     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                      <button
-                        type="button"
-                        onClick={() => toggleSection('productos')}
-                        className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center flex-shrink-0">
-                            <ShoppingBag className="w-5 h-5 text-amber-600" />
-                          </div>
-                          <div className="text-left">
-                            <h3 className="font-semibold text-gray-900">Tus productos y precios</h3>
-                            <p className="text-xs text-gray-500">Qué se muestra de tu inventario y cómo</p>
-                          </div>
+                      <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
+                        <div className="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center flex-shrink-0">
+                          <ShoppingBag className="w-5 h-5 text-amber-600" />
                         </div>
-                        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${openSections.productos ? 'rotate-180' : ''}`} />
-                      </button>
-                      {openSections.productos && (
-                        <div className="px-5 pb-5 pt-4 border-t border-gray-100 space-y-5">
+                        <div>
+                          <h3 className="font-semibold text-gray-900">Tus productos y precios</h3>
+                          <p className="text-xs text-gray-500">Qué se muestra de tu inventario y cómo</p>
+                        </div>
+                      </div>
+                      <div className="px-5 pb-5 pt-4 space-y-5">
 
                       <div className="space-y-3">
                         <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
@@ -8548,29 +8398,20 @@ export default function Settings() {
                           </div>
                         </div>
                       </div>
-                        </div>
-                      )}
+                      </div>
                     </div>
 
                     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                      <button
-                        type="button"
-                        onClick={() => toggleSection('compra')}
-                        className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-rose-50 flex items-center justify-center flex-shrink-0">
-                            <ShoppingCart className="w-5 h-5 text-rose-600" />
-                          </div>
-                          <div className="text-left">
-                            <h3 className="font-semibold text-gray-900">Cómo te compran</h3>
-                            <p className="text-xs text-gray-500">WhatsApp, redes sociales, tipos de pedido, horario y cuentas</p>
-                          </div>
+                      <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
+                        <div className="w-10 h-10 rounded-lg bg-rose-50 flex items-center justify-center flex-shrink-0">
+                          <ShoppingCart className="w-5 h-5 text-rose-600" />
                         </div>
-                        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${openSections.compra ? 'rotate-180' : ''}`} />
-                      </button>
-                      {openSections.compra && (
-                        <div className="px-5 pb-5 pt-4 border-t border-gray-100 space-y-5">
+                        <div>
+                          <h3 className="font-semibold text-gray-900">Cómo te compran</h3>
+                          <p className="text-xs text-gray-500">WhatsApp, redes sociales, tipos de pedido, horario y cuentas</p>
+                        </div>
+                      </div>
+                      <div className="px-5 pb-5 pt-4 space-y-5">
 
 {/* WhatsApp del catálogo */}
                       <div>
@@ -8737,29 +8578,160 @@ export default function Settings() {
                           />
                         </label>
                       </div>
-                        </div>
-                      )}
+                      </div>
                     </div>
+                    </div>
+                  )}
 
+                  {catalogTab === 'avanzado' && (
+                    <div className="space-y-4">
                     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                      <button
-                        type="button"
-                        onClick={() => toggleSection('avanzado')}
-                        className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-                            <Cog className="w-5 h-5 text-gray-600" />
-                          </div>
-                          <div className="text-left">
-                            <h3 className="font-semibold text-gray-900">Avanzado</h3>
-                            <p className="text-xs text-gray-500">Dominio propio y opciones para usuarios con experiencia</p>
-                          </div>
+                      <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
+                        <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                          <Cog className="w-5 h-5 text-gray-600" />
                         </div>
-                        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${openSections.avanzado ? 'rotate-180' : ''}`} />
-                      </button>
-                      {openSections.avanzado && (
-                        <div className="px-5 pb-5 pt-4 border-t border-gray-100 space-y-5">
+                        <div>
+                          <h3 className="font-semibold text-gray-900">Avanzado</h3>
+                          <p className="text-xs text-gray-500">Paginación, navegación, efectos y dominio propio</p>
+                        </div>
+                      </div>
+                      <div className="px-5 pb-5 pt-4 space-y-5">
+{/* Paginación de productos (port shopifree) */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Paginación de productos
+                        </label>
+                        <p className="text-xs text-gray-500 mb-3">
+                          Elige cómo se cargan los productos cuando hay muchos.
+                        </p>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          {[
+                            { id: 'none', label: 'Sin paginación', desc: 'Muestra todos los productos', Icon: LayoutGrid },
+                            { id: 'load-more', label: 'Cargar más', desc: 'Botón para cargar más', Icon: ArrowDown },
+                            { id: 'infinite', label: 'Scroll infinito', desc: 'Carga automática al scroll', Icon: Clock },
+                            { id: 'pages', label: 'Páginas', desc: 'Navegación numerada', Icon: ChevronsUpDown },
+                          ].map(opt => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => setCatalogPagination(opt.id)}
+                              className={`relative p-4 rounded-xl border-2 transition-all text-left ${
+                                catalogPagination === opt.id
+                                  ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/40'
+                                  : 'border-gray-200 hover:border-gray-300'
+                              }`}
+                            >
+                              {catalogPagination === opt.id && (
+                                <span className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center">
+                                  <Check className="w-3.5 h-3.5 text-white" />
+                                </span>
+                              )}
+                              <opt.Icon className="w-5 h-5 text-gray-400 mb-2" />
+                              <p className="text-sm font-semibold text-gray-900">{opt.label}</p>
+                              <p className="text-xs text-gray-500 mt-0.5">{opt.desc}</p>
+                            </button>
+                          ))}
+                        </div>
+                        {catalogPagination === 'none' && (
+                          <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg mt-2">
+                            Con catálogos grandes (cientos de productos), "Sin paginación" puede hacer lenta la primera carga.
+                          </p>
+                        )}
+                      </div>
+
+{/* Navegación en escritorio: barra superior vs menú lateral */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Navegación en computadora
+                        </label>
+                        <p className="text-xs text-gray-500 mb-3">
+                          Dónde se muestran las categorías cuando el cliente entra desde una computadora. En celular siempre van arriba.
+                        </p>
+                        <div className="grid grid-cols-2 gap-3 max-w-md">
+                          {[
+                            { id: 'top', label: 'Barra superior', desc: 'Categorías arriba, a lo ancho' },
+                            { id: 'sidebar', label: 'Menú lateral', desc: 'Categorías fijas a la izquierda' },
+                          ].map(opt => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => setCatalogDesktopNav(opt.id)}
+                              className={`p-3 rounded-xl border-2 transition-all text-center ${
+                                catalogDesktopNav === opt.id
+                                  ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/40'
+                                  : 'border-gray-200 hover:border-gray-300'
+                              }`}
+                            >
+                              {/* Mini-mockup */}
+                              <div className="h-14 mb-2 flex items-center justify-center">
+                                {opt.id === 'top' ? (
+                                  <div className="w-16 flex flex-col gap-1">
+                                    <div className="flex gap-1">
+                                      <div className="bg-gray-400 rounded-sm h-2 flex-1" />
+                                      <div className="bg-gray-300 rounded-sm h-2 flex-1" />
+                                      <div className="bg-gray-300 rounded-sm h-2 flex-1" />
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-1">
+                                      <div className="bg-gray-200 rounded-sm aspect-square" />
+                                      <div className="bg-gray-200 rounded-sm aspect-square" />
+                                      <div className="bg-gray-200 rounded-sm aspect-square" />
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="w-16 flex gap-1">
+                                    <div className="flex flex-col gap-1 w-4">
+                                      <div className="bg-gray-400 rounded-sm h-1.5" />
+                                      <div className="bg-gray-300 rounded-sm h-1.5" />
+                                      <div className="bg-gray-300 rounded-sm h-1.5" />
+                                      <div className="bg-gray-300 rounded-sm h-1.5" />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-1 flex-1">
+                                      <div className="bg-gray-200 rounded-sm aspect-square" />
+                                      <div className="bg-gray-200 rounded-sm aspect-square" />
+                                      <div className="bg-gray-200 rounded-sm aspect-square" />
+                                      <div className="bg-gray-200 rounded-sm aspect-square" />
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                              <span className="block text-xs font-semibold text-gray-800">{opt.label}</span>
+                              <span className="block text-[10px] text-gray-500">{opt.desc}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+{/* Efectos del catálogo (F2.7) */}
+                      <div className="p-4 border border-gray-200 rounded-lg space-y-2.5">
+                        <span className="text-sm font-medium text-gray-900">Efectos</span>
+                        <label className="flex items-center justify-between gap-3 cursor-pointer">
+                          <span className="text-sm text-gray-700">
+                            Aparición al hacer scroll
+                            <span className="block text-xs text-gray-500">Los productos se deslizan suavemente al aparecer.</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setCatalogEffects(prev => ({ ...prev, scrollReveal: !prev.scrollReveal }))}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${catalogEffects.scrollReveal ? 'bg-primary-600' : 'bg-gray-300'}`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${catalogEffects.scrollReveal ? 'translate-x-6' : 'translate-x-1'}`} />
+                          </button>
+                        </label>
+                        <label className="flex items-center justify-between gap-3 cursor-pointer">
+                          <span className="text-sm text-gray-700">
+                            Segunda foto al pasar el mouse
+                            <span className="block text-xs text-gray-500">En productos con 2+ imágenes, muestra la segunda al hover.</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setCatalogEffects(prev => ({ ...prev, imageSwapOnHover: !prev.imageSwapOnHover }))}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${catalogEffects.imageSwapOnHover ? 'bg-primary-600' : 'bg-gray-300'}`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${catalogEffects.imageSwapOnHover ? 'translate-x-6' : 'translate-x-1'}`} />
+                          </button>
+                        </label>
+                      </div>
+
 
 {/* Dominio personalizado */}
                       {catalogSlug && (
@@ -8803,11 +8775,11 @@ export default function Settings() {
                           )}
                         </div>
                       )}
-                        </div>
-                      )}
+                      </div>
                     </div>
-                  </div>
-                  {/* FIN TARJETAS POR TAREA */}
+                    </div>
+                  )}
+                  {/* FIN PESTAÑAS DEL CATÁLOGO */}
                 </>
               )}
 
