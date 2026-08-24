@@ -12,7 +12,7 @@ import { downloadDataUrl, saveFilesToDevice } from '@/utils/nativeDownload'
 import { uploadImage } from '@/services/imageUploadService'
 import BranchInfoSettings from '@/components/settings/BranchInfoSettings'
 import ImageDropZone from '@/components/settings/ImageDropZone'
-import ThemeThumb from '@/components/settings/ThemeThumb'
+import ThemeThumb, { THUMB_W, THUMB_H } from '@/components/settings/ThemeThumb'
 import { CATALOG_THEMES, getCatalogThemesList } from '@/themes/catalogThemes'
 import CatalogThemePreview from '@/components/CatalogThemePreview'
 import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore'
@@ -611,6 +611,22 @@ export default function Settings() {
   const [catalogOnlineOrders, setCatalogOnlineOrders] = useState(true)
   // Pestana interna de Mi Catalogo Online: tienda | contenido | avanzado
   const [catalogTab, setCatalogTab] = useState('configuracion')
+  // Fotos del negocio para las miniaturas de tema: sin imagenes propias, las
+  // tarjetas son bloques grises y no dejan comparar nada. Se cargan una sola
+  // vez, recien cuando se abre Apariencia.
+  const [fotosMiniatura, setFotosMiniatura] = useState(null)
+  useEffect(() => {
+    if (catalogTab !== 'apariencia' || fotosMiniatura !== null || isDemoMode) return
+    setFotosMiniatura([])
+    getProducts(getBusinessId()).then(r => {
+      const urls = (r?.success ? (r.data || []) : [])
+        .map(pr => pr?.imageUrl)
+        .filter(Boolean)
+        .slice(0, 4)
+      setFotosMiniatura(urls)
+    }).catch(() => setFotosMiniatura([]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalogTab])
   // Navegación en escritorio del catálogo: 'top' (barra arriba) | 'sidebar'
   const [catalogDesktopNav, setCatalogDesktopNav] = useState('top')
   // Oferta con countdown (F2.5)
@@ -7724,8 +7740,20 @@ export default function Settings() {
                                   className="block w-full text-left"
                                   title={theme.description}
                                 >
-                                  <div className="aspect-[9/14] relative">
-                                    <ThemeThumb themeId={theme.id} colorNegocio={catalogColor} />
+                                  <div
+                                    className="relative overflow-hidden"
+                                    style={{
+                                      aspectRatio: `${THUMB_W} / ${THUMB_H}`,
+                                    }}
+                                  >
+                                    <ThemeThumb
+                                      themeId={theme.id}
+                                      colorNegocio={catalogColor}
+                                      nombre={businessSettings?.name || businessSettings?.businessName || 'Tu tienda'}
+                                      logoUrl={catalogLogoUrl || logoUrl || ''}
+                                      portadaUrl={catalogCoverImage || (catalogHero?.slides || []).find(sl => sl?.imageUrl)?.imageUrl || ''}
+                                      fotos={fotosMiniatura || []}
+                                    />
                                     {/* Velo con "Vista previa" al pasar el mouse */}
                                     <span className="absolute inset-0 bg-black/55 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                       <span
