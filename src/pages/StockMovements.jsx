@@ -925,6 +925,7 @@ export default function StockMovements() {
                 <FileSpreadsheet className="w-4 h-4 mr-2" />
                 Exportar Excel
               </Button>
+
             </div>
           </div>
         </CardContent>

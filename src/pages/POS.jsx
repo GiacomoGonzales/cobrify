@@ -4785,11 +4785,51 @@ export default function POS() {
     })
   }
 
-  const updateQuantity = (itemId, change) => {
+  /**
+   * Cuanto se puede llevar de un item del carrito, y como nombrarlo.
+   * Devuelve null cuando no hay nada que topar (item personalizado, sin
+   * control de stock, o sin ficha). `tope` ya viene en las unidades en que se
+   * cuenta la linea: presentaciones si el producto se vende por paquete.
+   */
+  const topeDeItem = (item) => {
+    if (!item || item.isCustom || item.stock === null) return null
+    const info = getCartItemStockInfo(item)
+    if (!info) return null
+    const { availableStock, stockMsg, factor } = info
+    return factor > 1
+      ? {
+        tope: Math.floor(availableStock / factor),
+        donde: stockMsg,
+        unidad: item.presentationName || 'presentaciones',
+      }
+      : { tope: availableStock, donde: stockMsg, unidad: null }
+  }
+
+  const updateQuantity = (itemId, change, yaConfirmado = false) => {
     if (saleCompleted) {
       toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
       return
     }
+    // Con el ajuste de preguntar, subir la cantidad por encima del stock se
+    // frena aca y decide el cajero. Tiene que ser ANTES del setCart: la
+    // validacion de mas abajo vive dentro de un .map(), que es una
+    // transformacion pura y no puede abrir un modal.
+    if (change > 0 && preguntarSinStock && !yaConfirmado) {
+      const item = cart.find(i => (i.cartId || i.id) === itemId)
+      const limite = topeDeItem(item)
+      const nueva = (parseFloat(item?.quantity) || 0) + change
+      if (limite && nueva > limite.tope) {
+        pedirConfirmacionSinStock(
+          item.name,
+          limite.unidad
+            ? `Solo alcanza para ${limite.tope} ${limite.unidad} en ${limite.donde}.`
+            : `Solo hay ${parseFloat(limite.tope.toFixed(2))} en ${limite.donde}.`,
+          () => updateQuantity(itemId, change, true)
+        )
+        return
+      }
+    }
+
     // El repricing va sobre el carrito COMPLETO: con suma por producto,
     // cambiar una variante puede mover el precio de las otras.
     setCart(applyAutoPricingToCart(
@@ -4836,10 +4876,29 @@ export default function POS() {
   }
 
   // Función para establecer cantidad directamente (para productos por peso o input manual)
-  const setQuantityDirectly = (itemId, newQuantity) => {
+  const setQuantityDirectly = (itemId, newQuantity, yaConfirmado = false) => {
     if (saleCompleted) {
       toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
       return
+    }
+    // Mismo criterio que el boton +: si la cantidad tecleada se pasa del
+    // stock, se pregunta en vez de rechazarla con un aviso que se va solo.
+    if (preguntarSinStock && !yaConfirmado) {
+      const pedida = parseFloat(newQuantity)
+      if (Number.isFinite(pedida) && pedida > 0) {
+        const item = cart.find(i => (i.cartId || i.id) === itemId)
+        const limite = topeDeItem(item)
+        if (limite && pedida > limite.tope) {
+          pedirConfirmacionSinStock(
+            item.name,
+            limite.unidad
+              ? `Solo alcanza para ${limite.tope} ${limite.unidad} en ${limite.donde}.`
+              : `Solo hay ${parseFloat(limite.tope.toFixed(2))} en ${limite.donde}.`,
+            () => setQuantityDirectly(itemId, newQuantity, true)
+          )
+          return
+        }
+      }
     }
     // Permitir string vacío o valores intermedios como "0", "0." mientras el usuario escribe
     const rawValue = newQuantity === '' || newQuantity === '0' || newQuantity === '0.' ? newQuantity : newQuantity

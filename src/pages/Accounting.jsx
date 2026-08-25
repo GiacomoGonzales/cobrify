@@ -19,6 +19,7 @@ import { generateAccountingExcel, generateAccountingExcelBuffer } from '@/servic
 import { generateInvoicePDF, getInvoicePDFBlob } from '@/utils/pdfGenerator'
 import { formatCurrency, matchesSearchQuery } from '@/lib/utils'
 import { useBranding } from '@/contexts/BrandingContext'
+import { generarFormato131 } from '@/services/sunatInventoryFormatService'
 import { downloadFromUrl, downloadBlob } from '@/utils/nativeDownload'
 
 // Nombres de meses en español
@@ -72,6 +73,58 @@ export default function Accounting() {
   // Estados para descargas masivas
   const [downloadingAll, setDownloadingAll] = useState(false)
   const [downloadProgress, setDownloadProgress] = useState('')
+  const [generando131, setGenerando131] = useState(false)
+
+  /**
+   * Formato 13.1 SUNAT — Registro de Inventario Permanente Valorizado.
+   *
+   * Va acá y no en Movimientos porque es un LIBRO que se entrega al contador,
+   * y esta pantalla ya trabaja con el período mensual que él declara. Los
+   * movimientos de inventario se leen del mes seleccionado; las compras dan el
+   * costo real de cada entrada.
+   */
+  const handleFormato131 = async () => {
+    setGenerando131(true)
+    try {
+      const businessId = getBusinessId()
+      const [
+        { getCompanySettings, getPurchases, getProducts },
+        { getStockMovements },
+      ] = await Promise.all([
+        import('@/services/firestoreService'),
+        import('@/services/warehouseService'),
+      ])
+
+      const [settingsRes, comprasRes, productosRes, movsRes] = await Promise.all([
+        getCompanySettings(businessId),
+        getPurchases(businessId),
+        getProducts(businessId),
+        getStockMovements(businessId, { startDate: dateFrom, endDate: dateTo }),
+      ])
+
+      const movimientos = movsRes?.success ? (movsRes.data || []) : []
+      if (movimientos.length === 0) {
+        toast.error('No hay movimientos de inventario en el período seleccionado')
+        return
+      }
+
+      const empresa = settingsRes?.success ? settingsRes.data : {}
+      const res = await generarFormato131({
+        movimientos,
+        productos: productosRes?.success ? (productosRes.data || []) : [],
+        compras: comprasRes?.success ? (comprasRes.data || []) : [],
+        empresa,
+        periodo: `${MONTHS.find(m => m.value === parseInt(selectedMonth))?.label || ''} ${selectedYear}`.trim(),
+        establecimiento: empresa?.address || '',
+      })
+      toast.success(`Formato 13.1 generado (${res.productos} existencias)`)
+    } catch (error) {
+      console.error('Error generando Formato 13.1:', error)
+      toast.error(error.message || 'No se pudo generar el Formato 13.1')
+    } finally {
+      setGenerando131(false)
+    }
+  }
 
   useEffect(() => {
     loadInvoices()
@@ -750,6 +803,18 @@ export default function Accounting() {
               >
                 <FileSpreadsheet className="w-4 h-4 mr-1" />
                 Excel
+              </Button>
+              <Button
+                onClick={handleFormato131}
+                variant="outline"
+                size="sm"
+                disabled={downloadingAll || generando131}
+                title="Registro de Inventario Permanente Valorizado — el kardex del mes que pide el contador"
+              >
+                {generando131
+                  ? <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                  : <FileSpreadsheet className="w-4 h-4 mr-1" />}
+                Formato 13.1
               </Button>
               <Button
                 onClick={handleDownloadAllXml}

@@ -11,7 +11,7 @@
  */
 export default {
   id: 'ordenes',
-  actualizado: '16/08/2026',
+  actualizado: '25/08/2026',
   intro:
     'Órdenes es la bandeja de todo lo que está en curso, venga de donde venga: las mesas del salón, los pedidos para llevar, los delivery y los de mostrador. Si Mesas es el mapa del salón, Órdenes es la lista de trabajo pendiente.',
 
@@ -67,6 +67,27 @@ export default {
           text: 'Con **Nueva Orden** creas cualquiera de ellos directamente, sin pasar por el salón.',
         },
         { type: 'ui', kind: 'boton', label: 'Nueva Orden' },
+      ],
+    },
+
+    // ─────────────────────────────────────────────────────────────────────
+    {
+      id: 'fuentes',
+      title: 'De dónde llegó el pedido',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Al crear una orden eliges su **fuente**: por dónde te llegó. Mostrador, teléfono, WhatsApp, las apps de delivery. No es un dato decorativo — es lo que después separa tus ventas por canal en los reportes y te deja ver cuánto te deja cada uno.',
+        },
+        {
+          type: 'texto',
+          text: 'La lista la decides tú desde **Configuración > Ventas**: desmarca las que no uses para que no te estorben al crear una orden, y agrega las tuyas si recibes pedidos por un canal que no está —Instagram, TikTok, un convenio con una empresa—. Mostrador no se puede quitar.',
+        },
+        {
+          type: 'ojo',
+          text: 'Ocultar o borrar una fuente **no toca los pedidos ya registrados**: cada orden guarda el nombre de su fuente en el momento de crearse. Tus reportes históricos quedan igual.',
+        },
+        { type: 'enlace', to: '/app/configuracion?tab=ventas', label: 'Ir a Configuración' },
       ],
     },
 

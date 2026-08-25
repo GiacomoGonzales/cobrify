@@ -57,6 +57,7 @@ import { validateShopifreeApiKey, connectShopifree, disconnectShopifree, pingSho
 import RenumberInvoicesModal from '@/components/RenumberInvoicesModal'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 import { getBuiltinPaymentMethodsForMode, getVisiblePaymentMethods } from '@/utils/paymentMethods'
+import { BUILTIN_ORDER_SOURCES } from '@/utils/orderSources'
 import GuideLink from '@/components/guide/GuideLink'
 import {
   deleteAllProducts,
@@ -459,6 +460,12 @@ export default function Settings() {
   // Métodos de pago del negocio: cuáles se ocultan y cuáles agregó el usuario.
   const [hiddenPaymentMethods, setHiddenPaymentMethods] = useState([])
   const [customPaymentMethods, setCustomPaymentMethods] = useState([])
+  // Fuentes de orden (restaurante): cuales de fabrica se ocultan y cuales
+  // propias agrego el negocio.
+  const [hiddenOrderSources, setHiddenOrderSources] = useState([])
+  const [customOrderSources, setCustomOrderSources] = useState([])
+  const [showNewOrderSourceModal, setShowNewOrderSourceModal] = useState(false)
+  const [newOrderSourceName, setNewOrderSourceName] = useState('')
   const [newPaymentName, setNewPaymentName] = useState('')
   const [newPaymentBehavior, setNewPaymentBehavior] = useState('transfer')
   const [autoResetPOS, setAutoResetPOS] = useState(false)
@@ -1345,6 +1352,8 @@ export default function Settings() {
         setDefaultPaymentMethod(businessData.defaultPaymentMethod || '')
         setHiddenPaymentMethods(businessData.hiddenPaymentMethods || [])
         setCustomPaymentMethods(businessData.customPaymentMethods || [])
+        setHiddenOrderSources(businessData.hiddenOrderSources || [])
+        setCustomOrderSources(businessData.customOrderSources || [])
         setAutoResetPOS(businessData.autoResetPOS || false)
         setAutoPrintTicket(businessData.autoPrintTicket || false)
         setShowChangeReminder(businessData.showChangeReminder || false)
@@ -4428,6 +4437,83 @@ export default function Settings() {
                 <>
                   <div className="border-t border-gray-200"></div>
                   <div>
+                    <h3 className="text-base font-semibold text-gray-900 mb-1">Fuentes de pedido</h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                      De dónde llega cada pedido. Es lo que se elige al crear una orden y lo que
+                      después separa las ventas por canal en los reportes.
+                    </p>
+                    <div className="p-4 border border-gray-200 rounded-lg">
+                      <p className="text-xs text-gray-600 mb-3 leading-relaxed">
+                        Desmarca las que no uses para que no aparezcan al crear una orden. Mostrador
+                        no se puede quitar. Con <strong>Agregar fuente</strong> creas la tuya —Instagram,
+                        TikTok, un convenio—. Esto no afecta a los pedidos ya registrados.
+                      </p>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {BUILTIN_ORDER_SOURCES.map(s => {
+                          const visible = s.fixed || !hiddenOrderSources.includes(s.key)
+                          return (
+                            <label
+                              key={s.key}
+                              className={`flex items-center gap-2 p-2 rounded-md border border-gray-200 text-sm transition-colors ${
+                                s.fixed
+                                  ? 'cursor-default bg-gray-50 text-gray-500'
+                                  : 'cursor-pointer hover:bg-gray-50 text-gray-700'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={visible}
+                                disabled={s.fixed}
+                                onChange={() => setHiddenOrderSources(prev =>
+                                  prev.includes(s.key)
+                                    ? prev.filter(x => x !== s.key)
+                                    : [...prev, s.key]
+                                )}
+                                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                              />
+                              <span className="truncate">{s.label}</span>
+                            </label>
+                          )
+                        })}
+
+                        {/* Las propias, en la MISMA grilla que las de fabrica:
+                            son fuentes igual. Se quitan con la x; no llevan
+                            casilla porque quitarlas ES desactivarlas. */}
+                        {customOrderSources.map(s => (
+                          <div
+                            key={s.id}
+                            className="flex items-center gap-2 p-2 rounded-md border border-gray-200 text-sm text-gray-700"
+                          >
+                            <span className="w-4 h-4 rounded bg-primary-600 flex items-center justify-center flex-shrink-0">
+                              <Check className="w-3 h-3 text-white" />
+                            </span>
+                            <span className="truncate flex-1">{s.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => setCustomOrderSources(prev => prev.filter(x => x.id !== s.id))}
+                              className="text-gray-400 hover:text-red-600 flex-shrink-0"
+                              aria-label={`Quitar ${s.name}`}
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+
+                        <button
+                          type="button"
+                          onClick={() => setShowNewOrderSourceModal(true)}
+                          className="flex items-center justify-center gap-1.5 p-2 rounded-md border border-dashed border-gray-300 text-sm text-gray-600 hover:border-primary-400 hover:text-primary-700 transition-colors"
+                        >
+                          <Plus className="w-4 h-4" />
+                          Agregar fuente
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-gray-200"></div>
+                  <div>
                     <h3 className="text-base font-semibold text-gray-900 mb-1">Comandas</h3>
                     <p className="text-sm text-gray-600 mb-4">
                       Qué información se imprime en las comandas (tickets de cocina).
@@ -6048,6 +6134,8 @@ export default function Settings() {
                       defaultPaymentMethod: defaultPaymentMethod || '',
                       hiddenPaymentMethods: hiddenPaymentMethods,
                       customPaymentMethods: customPaymentMethods,
+        hiddenOrderSources: hiddenOrderSources,
+        customOrderSources: customOrderSources,
                       hideRucIgvInNotaVenta: hideRucIgvInNotaVenta,
                       hideOnlyIgvInNotaVenta: hideOnlyIgvInNotaVenta,
                       hideCompanyDataInNotaVenta: hideCompanyDataInNotaVenta,
@@ -10594,6 +10682,51 @@ export default function Settings() {
                 </div>
               </div>
 
+              {/* Tamaño de letra de la COMANDA (propio). Pedido de un cliente:
+                  en cocina el ticket se lee de lejos y con las manos ocupadas,
+                  pero agrandar el ticket entero gasta papel en cada venta. */}
+              <div className="py-4 border-b border-gray-100">
+                <div className="text-sm font-medium text-gray-900 mb-1">Tamaño de letra de la comanda</div>
+                <p className="text-xs text-gray-500 mb-3">
+                  Solo la comanda de cocina, sin agrandar comprobantes ni precuentas. Aplica a
+                  todas las formas de imprimir: Bluetooth, WiFi y la impresora del equipo.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { key: '', label: 'Igual al ticket', hint: 'Sigue la opción de arriba' },
+                    { key: 'medium', label: 'Mediano', hint: 'Doble alto' },
+                    { key: 'large', label: 'Grande', hint: 'Triple alto' },
+                    { key: 'xlarge', label: 'Muy grande', hint: 'Cuádruple alto' },
+                  ].map((opt) => {
+                    const selected = (printerConfig.kitchenFontSize || '') === opt.key
+                    return (
+                      <button
+                        key={opt.key || 'auto'}
+                        type="button"
+                        onClick={async () => {
+                          const newConfig = { ...printerConfig, kitchenFontSize: opt.key }
+                          setPrinterConfig(newConfig)
+                          await savePrinterConfig(getBusinessId(), newConfig)
+                          toast.success(`Letra de la comanda: ${opt.label}`)
+                        }}
+                        className={`flex-1 min-w-[130px] py-3 px-3 rounded-lg border-2 transition-all ${
+                          selected
+                            ? 'border-primary-600 bg-primary-50 text-primary-700'
+                            : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                        }`}
+                      >
+                        <div className="font-semibold text-sm">{opt.label}</div>
+                        <div className="text-xs mt-1">{opt.hint}</div>
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="text-xs text-gray-500 mt-3">
+                  Con letra muy grande la comanda usa más papel y los nombres largos pueden
+                  cortarse en dos líneas.
+                </p>
+              </div>
+
               {/* Modo compacto para impresión web */}
               <SettingToggle
                 checked={printerConfig.compactPrint || false}
@@ -13217,6 +13350,68 @@ export default function Settings() {
           }}
         />
       )}
+
+      {/* Nueva fuente de pedido propia. Mismo formato que el de metodos de
+          pago: se crea una cada varios meses, no justifica ocupar espacio
+          permanente en la seccion. */}
+      <Modal
+        isOpen={showNewOrderSourceModal}
+        onClose={() => { setShowNewOrderSourceModal(false); setNewOrderSourceName('') }}
+        title="Nueva fuente de pedido"
+        size="md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Si recibes pedidos por un canal que no está en la lista —Instagram, TikTok, un
+            convenio con una empresa— agrégalo acá. Aparecerá al crear una orden y separará
+            esas ventas en los reportes.
+          </p>
+
+          <Input
+            label="Nombre de la fuente"
+            value={newOrderSourceName}
+            onChange={e => setNewOrderSourceName(e.target.value)}
+            placeholder="Instagram"
+            maxLength={30}
+          />
+
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => { setShowNewOrderSourceModal(false); setNewOrderSourceName('') }}
+              className="w-full sm:w-auto"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                const nombre = newOrderSourceName.trim()
+                if (!nombre) {
+                  toast.error('Escribe el nombre de la fuente')
+                  return
+                }
+                const yaExiste = [
+                  ...BUILTIN_ORDER_SOURCES.map(s => s.label),
+                  ...customOrderSources.map(s => s.name),
+                ].some(n => n.toLowerCase() === nombre.toLowerCase())
+                if (yaExiste) {
+                  toast.error('Ya existe una fuente con ese nombre')
+                  return
+                }
+                setCustomOrderSources(prev => [
+                  ...prev,
+                  { id: `os_${Date.now()}`, name: nombre },
+                ])
+                setShowNewOrderSourceModal(false)
+                setNewOrderSourceName('')
+              }}
+              className="w-full sm:w-auto"
+            >
+              Agregar
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Nuevo método de pago propio. Antes era un formulario siempre abierto
           dentro de la seccion; se crea un metodo cada varios meses, asi que no

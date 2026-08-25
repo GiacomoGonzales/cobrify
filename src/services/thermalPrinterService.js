@@ -573,6 +573,10 @@ export const savePrinterConfig = async (userId, printerConfig) => {
       enabled: printerConfig.enabled !== false,
       webPrintLegible: printerConfig.webPrintLegible || false, // Modo legible para impresión web (legacy; derivado de ticketFontSize)
       ticketFontSize: printerConfig.ticketFontSize || (printerConfig.webPrintLegible ? 'medium' : 'small'), // Tamaño de letra del ticket web: 'small' | 'medium' | 'large'
+      // Tamaño de letra propio de la COMANDA ('' = sigue al del ticket). En
+      // cocina se lee de lejos, así que suele querer letra más grande que el
+      // comprobante del cliente.
+      kitchenFontSize: printerConfig.kitchenFontSize || '',
       compactPrint: printerConfig.compactPrint || false, // Modo compacto para ahorro de papel
       printMargins: printerConfig.printMargins ?? 8, // Márgenes laterales en mm para impresión web
       simplePrint: printerConfig.simplePrint || false, // Impresión simple sin fondos negros
@@ -1568,6 +1572,24 @@ function ticketSizeScaleFromConfig() {
   }
 }
 
+/**
+ * Escala de letra de la COMANDA. Es propia: en cocina el ticket se lee de
+ * lejos y con las manos ocupadas, asi que suele querer letra mas grande que
+ * el comprobante del cliente. Cae a la escala global del ticket cuando el
+ * negocio no eligio una para la comanda, para no cambiarle nada a quien ya
+ * tenia todo agrandado.
+ */
+function kitchenSizeScaleFromConfig() {
+  try {
+    const cfg = JSON.parse(localStorage.getItem('factuya_printerConfig') || '{}');
+    const level = cfg.kitchenFontSize;
+    if (!level) return ticketSizeScaleFromConfig();
+    return level === 'xlarge' ? 3 : level === 'large' ? 2 : level === 'medium' ? 1 : 0;
+  } catch {
+    return 0;
+  }
+}
+
 // Renderiza la lista de líneas de la comanda (buildKitchenLines) usando el
 // EscPosBuilder (WiFi / interna / estación). builder.text() ya convierte acentos.
 function renderKitchenLinesEscPos(builder, lines, format) {
@@ -1589,13 +1611,22 @@ function renderKitchenLinesEscPos(builder, lines, format) {
 // Renderiza la lista de líneas de la comanda usando CapacitorThermalPrinter
 // (Bluetooth clásico Android). Aquí SÍ hay que convertir acentos manualmente.
 function renderKitchenLinesBT(printer, lines, format) {
+  // El Bluetooth clasico no pasaba por EscPosBuilder, asi que era la unica
+  // ruta que ignoraba el tamano configurado. La escala se manda como comando
+  // crudo GS ! n (nibble bajo = alto-1) antes de cada linea, porque
+  // clearFormatting() la borra al terminarla.
+  const escala = kitchenSizeScaleFromConfig();
+  const aplicarEscala = (p) => (escala > 0
+    ? p.raw(new Uint8Array([0x1D, 0x21, escala & 0x07]))
+    : p);
+
   for (const ln of lines) {
     if (ln.sep) {
       printer = printer.clearFormatting().align('left').text(format.separator + '\n');
       continue;
     }
     if (ln.blank) { printer = printer.text('\n'); continue; }
-    printer = printer.align(ln.a === 'C' ? 'center' : 'left');
+    printer = aplicarEscala(printer.align(ln.a === 'C' ? 'center' : 'left'));
     if (ln.big) printer = printer.doubleHeight();
     if (ln.b) printer = printer.bold();
     printer = printer.text(convertSpanishText(ln.t) + '\n').clearFormatting();
@@ -1606,8 +1637,8 @@ function renderKitchenLinesBT(printer, lines, format) {
 export const printKitchenOrder = async (order, table = null, paperWidth = 58, stationName = null) => {
   const isNative = Capacitor.isNativePlatform();
 
-  // Tamaño de letra de la comanda en ESC/POS (lee la config; small = sin cambios)
-  EscPosBuilder.baseSizeScale = ticketSizeScaleFromConfig();
+  // Tamaño de letra de la comanda en ESC/POS (propio de la comanda; 0 = sin cambios)
+  EscPosBuilder.baseSizeScale = kitchenSizeScaleFromConfig();
 
   console.log('🖨️ printKitchenOrder - Iniciando...');
   console.log('📱 Plataforma nativa:', isNative);
@@ -2856,7 +2887,7 @@ export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
 const printWifiKitchenOrder = async (order, table = null, paperWidth = 58, stationName = null) => {
   try {
     const format = getFormat(paperWidth);
-    EscPosBuilder.baseSizeScale = ticketSizeScaleFromConfig();
+    EscPosBuilder.baseSizeScale = kitchenSizeScaleFromConfig();
     const builder = new EscPosBuilder();
     builder.init();
 
@@ -2896,7 +2927,7 @@ export const printStationTicket = async (printerIp, order, station, items, paper
 
   try {
     const format = getFormat(paperWidth);
-    EscPosBuilder.baseSizeScale = ticketSizeScaleFromConfig();
+    EscPosBuilder.baseSizeScale = kitchenSizeScaleFromConfig();
     const builder = new EscPosBuilder();
     builder.init();
 

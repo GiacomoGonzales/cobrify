@@ -1259,6 +1259,23 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
 /**
  * Imprimir comanda de cocina via BLE
  */
+/**
+ * Escala de letra de la comanda (iOS/BLE). Mismo criterio que la ruta WiFi y
+ * la Bluetooth: propia de la comanda, y si el negocio no eligio una, cae a la
+ * escala global del ticket.
+ */
+function kitchenSizeScaleFromConfig() {
+  try {
+    const cfg = JSON.parse(localStorage.getItem('factuya_printerConfig') || '{}');
+    const level = cfg.kitchenFontSize;
+    if (level) return level === 'xlarge' ? 3 : level === 'large' ? 2 : level === 'medium' ? 1 : 0;
+    const global = cfg.ticketFontSize || (cfg.webPrintLegible ? 'medium' : 'small');
+    return global === 'large' ? 2 : global === 'medium' ? 1 : 0;
+  } catch {
+    return 0;
+  }
+}
+
 export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58) => {
   if (!isBLEPrinterConnected()) {
     return { success: false, error: 'Impresora no conectada' };
@@ -1266,6 +1283,11 @@ export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58)
 
   try {
     const commands = [ESCPOSCommands.init()];
+
+    // Tamaño de letra de la comanda: GS ! n (nibble bajo = alto-1). Va DESPUES
+    // del init, que resetea el formato. 0 = sin cambios.
+    const escala = kitchenSizeScaleFromConfig();
+    if (escala > 0) commands.push(new Uint8Array([0x1D, 0x21, escala & 0x07]));
 
     // Formato ÚNICO de comanda (mismo que Bluetooth / WiFi / estación / HTML)
     const lines = buildKitchenLines(order, table, paperWidth, null);
@@ -1277,7 +1299,10 @@ export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58)
       }
       if (ln.blank) { commands.push(ESCPOSCommands.text('\n')); continue; }
       commands.push(ESCPOSCommands.align(ln.a === 'C' ? 1 : 0));
-      commands.push(ESCPOSCommands.doubleHeight(!!ln.big));
+      // doubleHeight escribe GS ! y pisaria la escala; se recompone el byte
+      // completo: alto = escala (o 1 si la linea es "big"), sin tocar el ancho.
+      const alto = Math.max(escala, ln.big ? 1 : 0);
+      commands.push(new Uint8Array([0x1D, 0x21, alto & 0x07]));
       commands.push(ESCPOSCommands.bold(!!ln.b));
       commands.push(ESCPOSCommands.text(convertSpanishText(ln.t) + '\n'));
     }

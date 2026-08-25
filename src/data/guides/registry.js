@@ -303,7 +303,7 @@ export const GUIDES = [
     title: 'Órdenes',
     category: 'Operación',
     description: 'La bandeja de todo lo que está en curso: mesa, para llevar, delivery y en local, con sus estados y el repartidor.',
-    keywords: 'ordenes activas pendiente preparando lista despachada entregada marcar lista marcar entregada despachar estados delivery repartidor asignar para llevar en local mostrador patio de comidas barra en mesa nueva orden editar orden cerrar cuenta sin comprobante cortesia menu digital pedidos online cocina restaurante',
+    keywords: 'ordenes activas pendiente preparando lista despachada entregada marcar lista marcar entregada despachar estados delivery repartidor asignar para llevar en local mostrador patio de comidas barra en mesa nueva orden editar orden cerrar cuenta sin comprobante cortesia menu digital pedidos online cocina restaurante fuente de pedido canal origen whatsapp telefono rappi pedidosya uber eats glovo instagram tiktok agregar quitar fuentes personalizadas',
     modos: ['restaurant'],
     load: () => import('./ordenes.js'),
   },

@@ -7,18 +7,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { getCustomers } from '@/services/firestoreService'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
-
-const ORDER_SOURCES = [
-  { value: 'counter', label: 'Mostrador' },
-  { value: 'phone', label: 'Teléfono' },
-  { value: 'whatsapp', label: 'WhatsApp' },
-  { value: 'rappi', label: 'Rappi' },
-  { value: 'pedidosya', label: 'PedidosYa' },
-  { value: 'uber_eats', label: 'Uber Eats' },
-  { value: 'glovo', label: 'Glovo' },
-  { value: 'web', label: 'Página Web' },
-  { value: 'other', label: 'Otro' },
-]
+import { getVisibleOrderSources } from '@/utils/orderSources'
 
 export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = [] }) {
   const toast = useToast()
@@ -29,6 +18,12 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
   // negocio cobra después por el POS (el flujo normal), así que preguntarlo
   // acá era pedir un dato que no se usa en ningún lado.
   const cobroEnComanda = businessSettings?.showCustomerDataOnKitchenTicket === true
+  // Las fuentes las decide el negocio en Configuracion > Restaurante. La orden
+  // guarda la ETIQUETA, asi que ocultar o borrar una no altera las ya creadas.
+  const ORDER_SOURCES = getVisibleOrderSources(
+    businessSettings?.hiddenOrderSources,
+    businessSettings?.customOrderSources
+  )
   const [orderType, setOrderType] = useState('takeaway') // 'takeaway' | 'delivery' | 'counter'
   const [source, setSource] = useState('counter')
   const [customerName, setCustomerName] = useState('')
