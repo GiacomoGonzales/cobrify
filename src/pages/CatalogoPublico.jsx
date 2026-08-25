@@ -2305,17 +2305,20 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             {/* Categorías raíz — SIEMPRE una fila con scroll horizontal (A1 del
                 rediseño): en desktop el wrap multilínea comía media pantalla con
                 muchas categorías. Flechas + fade en bordes via CategoryScroller. */}
-            <CategoryScroller className="-mx-4 px-4 md:mx-0 md:px-0" innerClassName="gap-2 py-3">
-              {/* Lupa (port shopifree): abre el panel de busqueda. Vive al
-                  inicio de la fila de categorias, donde antes habia una barra
-                  ancha que empujaba todo hacia abajo. */}
+            {/* La lupa va FUERA del carrusel: dentro se desplazaba con las
+                categorias y desaparecia al deslizar a la derecha — justo cuando
+                mas se necesita, porque quien desliza buscando su categoria es
+                el que no la encuentra. */}
+            <div className="flex items-stretch gap-1">
               <button
                 onClick={() => setSearchOpen(true)}
-                className={`flex-shrink-0 rounded-full flex items-center justify-center transition-colors ${thViewHover} ${categoriesVariant === 'circles' ? 'w-14 h-14 self-start' : 'w-10 h-10 self-center'}`}
+                className={`flex-shrink-0 rounded-full flex items-center justify-center transition-colors ${thViewHover} ${categoriesVariant === 'circles' ? 'w-14 h-14 self-start mt-3' : 'w-10 h-10 self-center'}`}
                 aria-label="Buscar productos"
               >
                 <Search className={`w-[18px] h-[18px] ${thTextMuted}`} />
               </button>
+              <div className="min-w-0 flex-1">
+            <CategoryScroller className="-mx-4 px-4 md:mx-0 md:px-0" innerClassName="gap-2 py-3">
               {/* Botón "Todos": oculto en modo onlyCarousels cuando estamos en la vista principal,
                   para forzar al cliente a entrar a una categoría. Dentro de una categoría sí se muestra. */}
               {categoriesVariant === 'circles' ? (
@@ -2420,6 +2423,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 </>
               )}
             </CategoryScroller>
+              </div>
+            </div>
             {/* Subcategorías de la categoría seleccionada — misma fila deslizable
                 que las raíz (el árbol completo vive en el menú lateral móvil). */}
             {activeSubcategories.length > 0 && (

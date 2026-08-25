@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { FileText, FileDown, Download, CheckCircle, XCircle, Clock, AlertTriangle, Search, Filter, Code, Loader2, Calendar, Archive, FileSpreadsheet, FileCode, FileCheck } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { FileText, FileDown, Download, CheckCircle, XCircle, Clock, AlertTriangle, Search, Filter, Code, Loader2, Calendar, Archive, FileSpreadsheet, FileCode, FileCheck, ChevronDown } from 'lucide-react'
 import Card, { CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -74,6 +74,21 @@ export default function Accounting() {
   const [downloadingAll, setDownloadingAll] = useState(false)
   const [downloadProgress, setDownloadProgress] = useState('')
   const [generando131, setGenerando131] = useState(false)
+
+  // Menú de descargas: cinco formatos en fila ya no entraban y opacaban el
+  // selector de período, que es lo primero que toca el contador.
+  const [showDescargas, setShowDescargas] = useState(false)
+  const descargasRef = useRef(null)
+  useEffect(() => {
+    if (!showDescargas) return
+    const alClicFuera = (e) => {
+      if (descargasRef.current && !descargasRef.current.contains(e.target)) {
+        setShowDescargas(false)
+      }
+    }
+    document.addEventListener('mousedown', alClicFuera)
+    return () => document.removeEventListener('mousedown', alClicFuera)
+  }, [showDescargas])
 
   /**
    * Formato 13.1 SUNAT — Registro de Inventario Permanente Valorizado.
@@ -787,71 +802,97 @@ export default function Accounting() {
               </select>
             </div>
 
-            {/* Botones de descarga rápida */}
-            <div className="flex flex-wrap items-center gap-2 lg:ml-auto">
-              <span className="text-sm text-gray-500 hidden sm:inline">Descargar:</span>
+            {/* Descargas: un solo menú. Cada opción explica qué es el
+                archivo — algo que una fila de botones no permitía. */}
+            <div className="lg:ml-auto" ref={descargasRef}>
               {/* Contabilidad se EXCEPTÚA de "ocultar datos sensibles a usuarios
                   secundarios": el contador es un usuario secundario y necesita
                   descargar el reporte completo (igual que los XML/CDR, que
                   siempre estuvieron disponibles). El acceso a la página ya se
                   controla con el permiso 'accounting'. */}
-              <Button
-                onClick={handleExportExcel}
-                variant="outline"
-                size="sm"
-                disabled={downloadingAll || filtered.length === 0}
-              >
-                <FileSpreadsheet className="w-4 h-4 mr-1" />
-                Excel
-              </Button>
-              <Button
-                onClick={handleFormato131}
-                variant="outline"
-                size="sm"
-                disabled={downloadingAll || generando131}
-                title="Registro de Inventario Permanente Valorizado — el kardex del mes que pide el contador"
-              >
-                {generando131
-                  ? <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                  : <FileSpreadsheet className="w-4 h-4 mr-1" />}
-                Formato 13.1
-              </Button>
-              <Button
-                onClick={handleDownloadAllXml}
-                variant="outline"
-                size="sm"
-                disabled={downloadingAll || filtered.filter(i => hasXml(i)).length === 0}
-              >
-                <FileCode className="w-4 h-4 mr-1" />
-                XMLs ({filtered.filter(i => hasXml(i)).length})
-              </Button>
-              <Button
-                onClick={handleDownloadAllCdr}
-                variant="outline"
-                size="sm"
-                disabled={downloadingAll || filtered.filter(i => hasCdr(i)).length === 0}
-              >
-                <FileCheck className="w-4 h-4 mr-1" />
-                CDRs ({filtered.filter(i => hasCdr(i)).length})
-              </Button>
-              <Button
-                onClick={handleDownloadAllZip}
-                variant="primary"
-                size="sm"
-                disabled={downloadingAll || filtered.length === 0}
-              >
-                {downloadingAll ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                    {downloadProgress || 'Procesando...'}
-                  </>
-                ) : (
-                  <>
-                    <Archive className="w-4 h-4 mr-1" />
-                    Descargar Todo (ZIP)
-                  </>
+              <div className="relative">
+                <Button
+                  onClick={() => setShowDescargas(v => !v)}
+                  variant="primary"
+                  size="sm"
+                  disabled={downloadingAll || generando131}
+                  className="w-full lg:w-auto"
+                >
+                  {(downloadingAll || generando131) ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                      {downloadProgress || 'Generando...'}
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4 mr-1" />
+                      Descargar
+                      <ChevronDown className={`w-4 h-4 ml-1 transition-transform ${showDescargas ? 'rotate-180' : ''}`} />
+                    </>
+                  )}
+                </Button>
+
+                {showDescargas && (
+                  <div className="absolute right-0 z-50 mt-1 w-80 max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-lg shadow-lg py-1">
+                    {[
+                      {
+                        id: 'excel',
+                        icono: FileSpreadsheet,
+                        titulo: 'Excel de comprobantes',
+                        detalle: `${filtered.length} comprobante(s) del período, con sus totales`,
+                        onClick: handleExportExcel,
+                        disabled: filtered.length === 0,
+                      },
+                      {
+                        id: 'f131',
+                        icono: FileSpreadsheet,
+                        titulo: 'Formato 13.1 SUNAT',
+                        detalle: 'Inventario Permanente Valorizado: el kardex del mes',
+                        onClick: handleFormato131,
+                        disabled: false,
+                      },
+                      {
+                        id: 'xml',
+                        icono: FileCode,
+                        titulo: `XMLs (${filtered.filter(i => hasXml(i)).length})`,
+                        detalle: 'Los archivos que se enviaron a SUNAT',
+                        onClick: handleDownloadAllXml,
+                        disabled: filtered.filter(i => hasXml(i)).length === 0,
+                      },
+                      {
+                        id: 'cdr',
+                        icono: FileCheck,
+                        titulo: `CDRs (${filtered.filter(i => hasCdr(i)).length})`,
+                        detalle: 'Las constancias de recepción de SUNAT',
+                        onClick: handleDownloadAllCdr,
+                        disabled: filtered.filter(i => hasCdr(i)).length === 0,
+                      },
+                      {
+                        id: 'zip',
+                        icono: Archive,
+                        titulo: 'Todo en un ZIP',
+                        detalle: 'PDFs, XMLs y CDRs juntos',
+                        onClick: handleDownloadAllZip,
+                        disabled: filtered.length === 0,
+                        separador: true,
+                      },
+                    ].map(op => (
+                      <button
+                        key={op.id}
+                        onClick={() => { setShowDescargas(false); op.onClick() }}
+                        disabled={op.disabled || downloadingAll || generando131}
+                        className={`w-full flex items-start gap-2.5 px-3 py-2.5 text-left hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors ${op.separador ? 'border-t border-gray-100' : ''}`}
+                      >
+                        <op.icono className="w-4 h-4 mt-0.5 text-gray-400 flex-shrink-0" />
+                        <span className="min-w-0">
+                          <span className="block text-sm font-medium text-gray-900">{op.titulo}</span>
+                          <span className="block text-[11px] text-gray-500 leading-snug">{op.detalle}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                 )}
-              </Button>
+              </div>
             </div>
           </div>
 

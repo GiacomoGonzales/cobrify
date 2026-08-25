@@ -233,6 +233,10 @@ export default function Inventory() {
   }
   const [filterType, setFilterType] = useState('all') // 'all', 'products', 'ingredients'
   const [filterStockTracking, setFilterStockTracking] = useState('tracked') // 'all', 'tracked', 'untracked'
+  // Activo / desactivado del producto. Arranca en 'active' porque es lo que se
+  // mira a diario: un inventario mezclado con productos dados de baja infla los
+  // conteos y ensucia la busqueda. Los desactivados siguen a un clic.
+  const [filterActivo, setFilterActivo] = useState('active') // 'all' | 'active' | 'inactive'
   const [expandedProduct, setExpandedProduct] = useState(null)
   const [openMenuId, setOpenMenuId] = useState(null)
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: false })
@@ -1864,7 +1868,13 @@ export default function Inventory() {
         matchesStockTracking = item.trackStock === false || (item.stock === null && item.stock === undefined && !hasVariantStock)
       }
 
-      return matchesSearch && matchesCategory && matchesBrand && matchesStatus && matchesStockTracking && matchesBranchCatalog
+      // Activo / desactivado. `isActive !== false` porque los productos
+      // antiguos no tienen el campo y son activos.
+      let matchesActivo = true
+      if (filterActivo === 'active') matchesActivo = item.isActive !== false
+      else if (filterActivo === 'inactive') matchesActivo = item.isActive === false
+
+      return matchesSearch && matchesCategory && matchesBrand && matchesStatus && matchesStockTracking && matchesBranchCatalog && matchesActivo
     })
 
     // Ordenar productos
@@ -1909,7 +1919,7 @@ export default function Inventory() {
 
     console.log(`🔍 [Inventory] filteredProducts resultado: ${sorted.length} items`)
     return sorted
-  }, [allItems, deferredSearchTerm, itemSearchIndex, filterCategories, filterBrands, filterStatuses, filterStockTracking, productCategories, sortField, sortDirection, getStockForBranch, filterBranch, businessSettings?.branchCatalogEnabled])
+  }, [allItems, deferredSearchTerm, itemSearchIndex, filterCategories, filterBrands, filterStatuses, filterStockTracking, filterActivo, productCategories, sortField, sortDirection, getStockForBranch, filterBranch, businessSettings?.branchCatalogEnabled])
 
   // Paginación de productos filtrados (optimizado con useMemo)
   const paginationData = React.useMemo(() => {
@@ -1933,7 +1943,7 @@ export default function Inventory() {
   // Resetear a página 1 cuando cambian los filtros
   React.useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, filterCategories, filterBrands, filterStatuses, filterBranch, filterWarehouses, filterStockTracking])
+  }, [searchTerm, filterCategories, filterBrands, filterStatuses, filterBranch, filterWarehouses, filterStockTracking, filterActivo])
 
   // Obtener categorías únicas (productos + ingredientes en retail)
   const categories = React.useMemo(() => {
@@ -2699,6 +2709,21 @@ export default function Inventory() {
                   )}
                 </div>
               )}
+
+              {/* Activo / Desactivado. Pedido de un cliente: el inventario
+                  mezclaba los dados de baja con los que se venden. */}
+              <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm w-full sm:w-auto">
+                <Activity className="w-4 h-4 text-gray-500" />
+                <select
+                  value={filterActivo}
+                  onChange={e => setFilterActivo(e.target.value)}
+                  className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
+                >
+                  <option value="active">Solo activos</option>
+                  <option value="inactive">Solo desactivados</option>
+                  <option value="all">Activos y desactivados</option>
+                </select>
+              </div>
 
               {/* Stock Tracking Filter */}
               <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm w-full sm:w-auto">
