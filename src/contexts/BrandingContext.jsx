@@ -11,6 +11,30 @@ import {
   removeBrandingColors
 } from '@/services/brandingService'
 
+// Memoria local de la marca por dominio: permite pintar el splash con el
+// logo y color del reseller ANTES de que Firestore responda. Sin esto, cada
+// arranque frio mostraba un spinner neutro (y antes, el logo de Cobrify).
+const llaveMarcaCache = () => 'marcaCache:' + window.location.hostname.toLowerCase()
+
+function leerMarcaCache() {
+  try {
+    const raw = localStorage.getItem(llaveMarcaCache())
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function guardarMarcaCache(b) {
+  try {
+    localStorage.setItem(llaveMarcaCache(), JSON.stringify({
+      companyName: b.companyName || '',
+      logoUrl: b.logoUrl || null,
+      primaryColor: b.primaryColor || '#2563eb',
+    }))
+  } catch { /* almacenamiento lleno o bloqueado: el splash cae al neutro */ }
+}
+
 const BrandingContext = createContext({
   branding: DEFAULT_BRANDING,
   isLoading: true,
@@ -40,6 +64,16 @@ export function BrandingProvider({ children }) {
   useEffect(() => {
     setBrandingLoaded(false)
   }, [user?.uid])
+
+  // Al resolverse una marca REAL en dominio de reseller, se memoriza para que
+  // el proximo splash salga con ella. La por defecto no se guarda: pisar la
+  // memoria con Cobrify (p. ej. por un fallo de red) volveria a filtrar la
+  // marca equivocada en el proximo arranque.
+  useEffect(() => {
+    if (!brandingLoaded || !esDominioReseller()) return
+    const esRealDelReseller = branding.primaryColor !== DEFAULT_BRANDING.primaryColor || branding.logoUrl
+    if (esRealDelReseller) guardarMarcaCache(branding)
+  }, [branding, brandingLoaded])
 
   async function loadBranding() {
     console.log('🎨 BrandingContext loadBranding called')
@@ -211,10 +245,28 @@ export function BrandingProvider({ children }) {
   // Solo mostrar splash en apps móviles nativas, no en web
   if (!brandingLoaded && (user || isResellerDomain()) && Capacitor.isNativePlatform()) {
     // En el dominio de un reseller NO puede aparecer el logo de Cobrify: es
-    // la marca de otro. Como todavia no sabemos cual es la suya (justo eso
-    // se esta cargando), va un indicador neutro. En los dominios propios se
-    // conserva el logo de siempre.
+    // la marca de otro. Si este dispositivo ya resolvio la marca alguna vez,
+    // el splash sale con SU logo y color al instante (memoria local); solo la
+    // primera apertura de la vida de la app muestra el indicador neutro. En
+    // los dominios propios se conserva el logo de siempre.
     if (isResellerDomain()) {
+      const cache = leerMarcaCache()
+      if (cache?.primaryColor) {
+        return (
+          <div
+            className="fixed inset-0 flex items-center justify-center"
+            style={{ backgroundColor: cache.primaryColor }}
+          >
+            {cache.logoUrl ? (
+              <img src={cache.logoUrl} alt="" className="w-[140px] h-[140px] object-contain" />
+            ) : (
+              <span className="text-white text-3xl font-bold tracking-wide">
+                {cache.companyName}
+              </span>
+            )}
+          </div>
+        )
+      }
       return (
         <div className="fixed inset-0 bg-white flex items-center justify-center">
           <div className="animate-spin rounded-full h-9 w-9 border-b-2 border-gray-400" />
