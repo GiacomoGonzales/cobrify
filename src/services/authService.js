@@ -1,8 +1,10 @@
+import { Capacitor } from '@capacitor/core'
 import {
   signInWithEmailAndPassword,
   setPersistence,
   browserSessionPersistence,
   browserLocalPersistence,
+  indexedDBLocalPersistence,
   createUserWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
@@ -40,8 +42,21 @@ export const loginWithEmail = async (email, password) => {
   try {
     console.log('🔐 Intentando login con:', email)
     // Se fija ANTES de entrar: la persistencia se aplica a la sesión que nace.
+    //
+    // En la APP, una cuenta normal debe usar IndexedDB — que es con lo que se
+    // inicializa `auth` en lib/firebase.js. `browserLocalPersistence` es
+    // localStorage, y en el WebView de Android no siempre sobrevive al cierre
+    // de la app: la sesión se perdía y había que volver a entrar cada vez
+    // (reporte del 25-ago-2026). Este setPersistence estaba degradando la
+    // persistencia que firebase.js ya había elegido bien.
+    //
+    // La cuenta demo es la excepción a propósito: es compartida y tiene que
+    // morir al cerrar, en app y en web por igual.
     try {
-      await setPersistence(auth, esCuentaDemo(email) ? browserSessionPersistence : browserLocalPersistence)
+      const persistenciaNormal = Capacitor.isNativePlatform()
+        ? indexedDBLocalPersistence
+        : browserLocalPersistence
+      await setPersistence(auth, esCuentaDemo(email) ? browserSessionPersistence : persistenciaNormal)
     } catch (e) {
       // Si el navegador no soporta cambiarla, se sigue con la de por defecto:
       // mejor entrar que bloquear el acceso por esto.
