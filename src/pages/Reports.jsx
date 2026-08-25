@@ -24,7 +24,7 @@ import {
   Award,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
-import { useHidePrivateData } from '@/hooks/useHidePrivateData'
+import { useDataPermissions } from '@/hooks/useDataPermissions'
 import RealEstateReports from './RealEstateReports'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
@@ -214,7 +214,7 @@ const getInvoiceDate = (invoice) => {
 
 export default function Reports() {
   const { user, isDemoMode, demoData, getBusinessId, hasFeature, businessMode, filterBranchesByAccess, hasMainBranchAccess, allowedBranches, allowedWarehouses, isBusinessOwner, isAdmin, businessSettings, assignedSellerId, branchScope } = useAppContext()
-  const hidePrivateData = useHidePrivateData()
+  const permisos = useDataPermissions()
   // Filtro de seguridad por ubicación (sucursal/almacén) para usuarios secundarios.
   // Debe declararse antes de cualquier return condicional para no romper el orden de hooks.
   const canAccess = useLocationAccess()
@@ -2766,7 +2766,7 @@ export default function Reports() {
     }
   }
   const reportesExportables = ['overview', 'sales', 'products', 'brands', 'customers', 'sellers', 'expenses', 'profitability']
-  const puedeExportar = !hidePrivateData
+  const puedeExportar = permisos.exportar
     && reportesExportables.includes(selectedReport)
     && !(selectedReport === 'brands' && selectedBrandName)
   // Etiqueta del boton segun la pestaña activa: "Descargar Excel de Ventas",
@@ -4334,7 +4334,7 @@ export default function Reports() {
                   <option key={b.name} value={b.name}>{b.name}</option>
                 ))}
               </select>
-              {!hidePrivateData && (
+              {permisos.exportar && (
               <button
                 onClick={async () => await exportBrandDetailReport({ brandData: selectedBrandData, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })}
                 disabled={selectedBrandData.products.length === 0}
@@ -5762,7 +5762,7 @@ export default function Reports() {
                 sin compras el margen sale al 100%. Si lo que quieres saber es cuánto ganaste sobre
                 lo que vendiste —usando el costo de cada producto— ese número está en Resumen General.
               </p>
-              {!hidePrivateData && stats.totalCost > 0 && (
+              {permisos.verCostos && stats.totalCost > 0 && (
                 <p className="text-sm text-amber-900 mt-2">
                   Utilidad sobre lo vendido: <strong>{formatMoney(stats.totalProfit)}</strong>
                   {' '}({stats.profitMargin.toFixed(1)}%), y tu <strong>Ganancia Final</strong> descontando

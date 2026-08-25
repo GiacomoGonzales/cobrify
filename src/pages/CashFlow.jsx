@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useAppContext } from '@/hooks/useAppContext'
-import { useHidePrivateData } from '@/hooks/useHidePrivateData'
+import { useDataPermissions } from '@/hooks/useDataPermissions'
 import { useToast } from '@/contexts/ToastContext'
 import { getInvoices, getRecentInvoices, getPurchases, getLoans, getAllCashMovements, getFinancialMovements, createFinancialMovement, deleteFinancialMovement } from '@/services/firestoreService'
 import { getExpenses, getExpenseCategories, DEFAULT_EXPENSE_CATEGORIES } from '@/services/expenseService'
@@ -196,7 +196,7 @@ export default function CashFlow() {
   const { user, getBusinessId, isDemoMode, hasMainBranchAccess, allowedBranches, allowedWarehouses, isBusinessOwner, isAdmin, filterBranchesByAccess } = useAppContext()
   const canAccess = useLocationAccess()
   const toast = useToast()
-  const hidePrivateData = useHidePrivateData()
+  const permisos = useDataPermissions()
 
   // Estados
   const [loading, setLoading] = useState(true)
@@ -957,7 +957,7 @@ export default function CashFlow() {
             >
               <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
             </button>
-            {!hidePrivateData && (
+            {permisos.exportar && (
               <button
                 onClick={exportToExcel}
                 className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"

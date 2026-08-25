@@ -16,9 +16,10 @@ import {
   Award,
 } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
-import { doc, getDoc, collection, query, where, getAggregateFromServer, sum } from 'firebase/firestore'
+import { collection, query, where, getAggregateFromServer, sum } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useDataPermissions } from '@/hooks/useDataPermissions'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -47,6 +48,7 @@ function PendingBlock({ className = 'h-[300px]' }) {
 
 export default function Dashboard() {
   const { user, isDemoMode, demoData, getBusinessId, isAdmin, isBusinessOwner, businessMode, businessSettings, allowedBranches, allowedWarehouses, branchScope, assignedSellerId } = useAppContext()
+  const permisos = useDataPermissions()
   // Filtro de seguridad por ubicación (sucursal/almacén) para usuarios secundarios.
   // Mismo helper compartido que usa Ventas/InvoiceList — usa allowedBranches/allowedWarehouses.
   const canAccess = useLocationAccess()
@@ -366,22 +368,18 @@ export default function Dashboard() {
     setIsLoading(true)
     setMonthLoading(true)
     try {
-      // La opción "ocultar datos del dashboard" solo aplica a usuarios secundarios;
-      // para dueño/admin nos ahorramos este getDoc (un round-trip menos antes de
-      // empezar a traer facturas).
-      if (!isAdmin && !isBusinessOwner) {
-        const businessRef = doc(db, 'businesses', businessId)
-        const businessDoc = await getDoc(businessRef)
-        const businessData = businessDoc.exists() ? businessDoc.data() : {}
-
-        if (businessData.hideDashboardDataFromSecondary) {
-          if (!alive()) return
-          setInvoices([])
-          setLoadedSince(null)
-          setMonthLoading(false)
-          setIsLoading(false)
-          return
-        }
+      // El Dashboard es, entero, un tablero de totales: sin ese permiso no se
+      // trae ni una factura. Antes esto se leia del negocio con un getDoc
+      // propio; ahora sale del mismo hook que el resto del sistema, asi que
+      // los permisos por usuario aplican tambien aca (y nos ahorramos el
+      // round-trip que retrasaba la primera carga).
+      if (!permisos.verTotales) {
+        if (!alive()) return
+        setInvoices([])
+        setLoadedSince(null)
+        setMonthLoading(false)
+        setIsLoading(false)
+        return
       }
 
       // Cada tramo se filtra por sucursales/almacenes permitidos del usuario

@@ -68,7 +68,19 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'Hay ajustes pensados para que el personal opere sin ver de más: **Ocultar descuentos en POS**, **Ocultar stock en productos** y la opción de esconder los datos del Dashboard a los sub-usuarios.',
+          text: 'En la ficha de cada usuario, el bloque **Qué datos puede ver** tiene tres casillas independientes: **Ver totales de ventas** (tarjetas, Dashboard, resúmenes de caja), **Ver costos y ganancias** (costo, margen, utilidad, valor del inventario) y **Exportar a Excel**.',
+        },
+        {
+          type: 'texto',
+          text: 'Son tres cosas distintas a propósito. Puedes dejar que tu encargado vea cuánto se vendió pero no cuánto ganas, o que vea los números en pantalla pero no pueda descargarse la base de clientes en un Excel.',
+        },
+        {
+          type: 'consejo',
+          text: 'Mientras no toques ninguna casilla, el usuario **hereda** lo que tengas en Configuración → "Ocultar datos sensibles a usuarios secundarios". En cuanto marcas o desmarcas una, ese usuario pasa a tener sus propios permisos y deja de seguir la opción general.',
+        },
+        {
+          type: 'texto',
+          text: 'Hay además ajustes para que el personal opere sin ver de más en el POS: **Ocultar descuentos en POS** y **Ocultar stock en productos**.',
         },
         {
           type: 'texto',

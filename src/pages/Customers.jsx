@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet, FileText, Printer, Upload, CalendarClock, Cake, Columns3, PawPrint, ClipboardList, Eye, EyeOff, X, ChevronDown, Stamp } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
-import { useHidePrivateData } from '@/hooks/useHidePrivateData'
+import { useDataPermissions } from '@/hooks/useDataPermissions'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -703,7 +703,7 @@ function CustomerOrdersModal({ customer, businessId, businessSettings, isDemoMod
 
 export default function Customers() {
   const { user, isDemoMode, demoData, getBusinessId, businessSettings, businessMode } = useAppContext()
-  const hidePrivateData = useHidePrivateData()
+  const permisos = useDataPermissions()
   const toast = useToast()
   const [customers, setCustomers] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -1302,7 +1302,7 @@ export default function Customers() {
             <Stamp className="w-4 h-4 mr-2" />
             Fidelización
           </Button>
-          {!hidePrivateData && (
+          {permisos.exportar && (
             <Button
               variant="outline"
               onClick={handleExportToExcel}
@@ -1351,7 +1351,7 @@ export default function Customers() {
               >
                 <option value="name">Ordenar por Nombre</option>
                 <option value="orders">Ordenar por Pedidos</option>
-                {!hidePrivateData && <option value="spent">Ordenar por Total Gastado</option>}
+                {permisos.verTotales && <option value="spent">Ordenar por Total Gastado</option>}
                 {businessSettings?.posCustomFields?.showSubscriptionFields && (
                   <option value="expiry">Ordenar por Vencimiento</option>
                 )}
@@ -1402,7 +1402,7 @@ export default function Customers() {
       </Card>
 
       {/* Stats */}
-      <div className={`grid grid-cols-1 sm:grid-cols-2 ${hidePrivateData ? 'lg:grid-cols-2' : 'lg:grid-cols-4'} gap-6`}>
+      <div className={`grid grid-cols-1 sm:grid-cols-2 ${permisos.verTotales ? 'lg:grid-cols-4' : 'lg:grid-cols-2'} gap-6`}>
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -1433,7 +1433,7 @@ export default function Customers() {
             </div>
           </CardContent>
         </Card>
-        {!hidePrivateData && (
+        {permisos.verTotales && (
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -1454,7 +1454,7 @@ export default function Customers() {
             </CardContent>
           </Card>
         )}
-        {!hidePrivateData && (
+        {permisos.verTotales && (
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -1645,7 +1645,7 @@ export default function Customers() {
                       >
                         {showAmounts ? (customer.ordersCount || 0) : '•'}
                       </button>
-                      {!hidePrivateData && (
+                      {permisos.verTotales && (
                         <span className="text-xs font-semibold text-gray-900">{showAmounts ? formatCurrency(customer.totalSpent || 0) : hiddenAmount}</span>
                       )}
                     </div>
@@ -1677,7 +1677,7 @@ export default function Customers() {
                           { key: 'address', label: 'Dirección' },
                           { key: 'birthday', label: 'Cumpleaños' },
                           { key: 'orders', label: 'Pedidos' },
-                          ...(!hidePrivateData ? [{ key: 'spent', label: 'Total Gastado' }] : []),
+                          ...(permisos.verTotales ? [{ key: 'spent', label: 'Total Gastado' }] : []),
                         ].map(col => (
                           <label key={col.key} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
                             <input
@@ -1731,7 +1731,7 @@ export default function Customers() {
                   )}
                   {visibleColumns.birthday && <TableHead className="text-xs py-2">Cumple</TableHead>}
                   {visibleColumns.orders && <TableHead className="text-xs py-2 text-center">Ped.</TableHead>}
-                  {visibleColumns.spent && !hidePrivateData && <TableHead className="text-xs py-2 text-right">Gastado</TableHead>}
+                  {visibleColumns.spent && permisos.verTotales && <TableHead className="text-xs py-2 text-right">Gastado</TableHead>}
                   <TableHead className="text-xs py-2 text-right w-20"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -1871,7 +1871,7 @@ export default function Customers() {
                         </button>
                       </TableCell>
                     )}
-                    {visibleColumns.spent && !hidePrivateData && (
+                    {visibleColumns.spent && permisos.verTotales && (
                       <TableCell className="py-1.5 text-right">
                         <span className="text-xs font-semibold text-gray-900">
                           {showAmounts ? formatCurrency(customer.totalSpent || 0) : hiddenAmount}

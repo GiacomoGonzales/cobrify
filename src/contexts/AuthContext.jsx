@@ -66,6 +66,10 @@ export const AuthProvider = ({ children }) => {
   const [assignedSellerName, setAssignedSellerName] = useState(null)
   const [independentCashRegister, setIndependentCashRegister] = useState(false) // Si el sub-usuario tiene caja independiente
   const [hideStockInPOS, setHideStockInPOS] = useState(false) // Ocultar stock en tarjetas del POS
+  // Permisos de datos del sub-usuario: { verTotales, verCostos, exportar }.
+  // null = no tiene propios y hereda la opción del negocio (ver
+  // src/utils/dataPermissions.js).
+  const [dataPermissions, setDataPermissions] = useState(null)
   const [hideDiscountInPOS, setHideDiscountInPOS] = useState(false) // Ocultar descuentos en POS
   const [businessMode, setBusinessMode] = useState(null) // Modo de negocio: 'retail' | 'restaurant' | 'pharmacy' (null mientras carga)
   const [businessSettings, setBusinessSettings] = useState(null) // Configuración completa del negocio
@@ -207,6 +211,7 @@ export const AuthProvider = ({ children }) => {
                 setIndependentCashRegister(userData.independentCashRegister || false)
                 setHideStockInPOS(userData.hideStockInPOS || false)
                 setHideDiscountInPOS(userData.hideDiscountInPOS || false)
+                setDataPermissions(userData.dataPermissions || null)
                 console.log('✅ Permisos cargados:', userData.allowedPages)
                 console.log('🏪 Almacenes permitidos:', userData.allowedWarehouses || 'Todos')
                 console.log('🏢 Sucursales permitidas:', userData.allowedBranches || 'Todas')
@@ -227,6 +232,7 @@ export const AuthProvider = ({ children }) => {
                 setAssignedSellerId(null)
                 setAssignedSellerName(null)
                 setIndependentCashRegister(false)
+            setDataPermissions(null)
               }
             } catch (error) {
               console.error('Error al cargar permisos:', error)
@@ -237,6 +243,7 @@ export const AuthProvider = ({ children }) => {
               setAssignedSellerId(null)
               setAssignedSellerName(null)
               setIndependentCashRegister(false)
+            setDataPermissions(null)
             }
           } else {
             // Super Admin o Business Owner tienen acceso total
@@ -247,6 +254,7 @@ export const AuthProvider = ({ children }) => {
             setAssignedSellerId(null)
             setAssignedSellerName(null)
             setIndependentCashRegister(false)
+            setDataPermissions(null)
             console.log('👑 Business Owner o Admin - Acceso total a todos los almacenes')
           }
 
@@ -587,6 +595,7 @@ export const AuthProvider = ({ children }) => {
       setIndependentCashRegister(userData.independentCashRegister || false)
       setHideStockInPOS(userData.hideStockInPOS || false)
       setHideDiscountInPOS(userData.hideDiscountInPOS || false)
+      setDataPermissions(userData.dataPermissions || null)
     }, (error) => {
       console.warn('Error en listener de permisos (se mantienen los cargados):', error)
     })
@@ -899,6 +908,7 @@ export const AuthProvider = ({ children }) => {
     independentCashRegister, // Si el sub-usuario tiene caja independiente
     hideStockInPOS, // Ocultar stock en tarjetas del POS
     hideDiscountInPOS, // Ocultar descuentos en POS
+    dataPermissions, // Permisos de datos del sub-usuario (null = hereda del negocio)
     hasPageAccess,
     hasWarehouseAccess, // Función para verificar acceso a un almacén
     filterWarehousesByAccess, // Función para filtrar almacenes según permisos

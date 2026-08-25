@@ -260,6 +260,12 @@ service cloud.firestore {
         && request.resource.data.get('allowedWarehouses', null) == resource.data.get('allowedWarehouses', null)
         && request.resource.data.get('allowedDocumentTypes', null) == resource.data.get('allowedDocumentTypes', null)
         && request.resource.data.get('allowedPaymentMethods', null) == resource.data.get('allowedPaymentMethods', null)
+        // dataPermissions decide si ve totales, costos y si puede exportar.
+        // Sin congelarlo, el cajero se lo pone solo editando su propio doc.
+        && request.resource.data.get('dataPermissions', null) == resource.data.get('dataPermissions', null)
+        // Mismo motivo: son restricciones del POS, no preferencias del usuario.
+        && request.resource.data.get('hideStockInPOS', false) == resource.data.get('hideStockInPOS', false)
+        && request.resource.data.get('hideDiscountInPOS', false) == resource.data.get('hideDiscountInPOS', false)
         && request.resource.data.get('isPlatformAdmin', false) == resource.data.get('isPlatformAdmin', false);
 
       // Business Owners pueden actualizar usuarios que crearon

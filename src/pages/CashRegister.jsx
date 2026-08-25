@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet, History, Eye, ChevronRight, Edit2, Trash2, Store, Clock, Printer, Loader2, User, FileText, AlertTriangle } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
-import { useHidePrivateData } from '@/hooks/useHidePrivateData'
+import { useDataPermissions } from '@/hooks/useDataPermissions'
 import { useToast } from '@/contexts/ToastContext'
 import { getActiveBranches } from '@/services/branchService'
 import { getTables } from '@/services/tableService'
@@ -106,7 +106,7 @@ export default function CashRegister() {
   // NO se puede editar el monto inicial, el efectivo contado ni los movimientos de una
   // sesión cerrada (integridad del cierre diario). Aplica a todos.
   const lockHistoryEdit = !!businessSettings?.lockCashRegisterHistory
-  const hidePrivateData = useHidePrivateData()
+  const permisos = useDataPermissions()
   const toast = useToast()
   const [isLoading, setIsLoading] = useState(true)
   const [currentSession, setCurrentSession] = useState(null)
@@ -4050,7 +4050,7 @@ export default function CashRegister() {
                 <Download className="w-4 h-4 mr-1" />
                 PDF
               </Button>
-              {!hidePrivateData && (
+              {permisos.exportar && (
                 <Button
                   variant="outline"
                   onClick={async () => {
@@ -4705,7 +4705,7 @@ export default function CashRegister() {
             <div className="space-y-3">
               <p className="text-sm text-gray-600 text-center">Descarga o imprime el reporte de cierre:</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                {!hidePrivateData && (
+                {permisos.exportar && (
                   <Button
                     variant="outline"
                     onClick={handleDownloadExcel}

@@ -39,8 +39,8 @@ function PriceCell({ value, dirty, invalid, onChange, currency }) {
  * Margen formateado (bloque con dos líneas: S/X arriba, % abajo).
  * También extraído a nivel módulo por consistencia y estabilidad de tree.
  */
-function MarginCell({ cost, price, fmt, hidePrivateData }) {
-  if (!hidePrivateData && cost > 0 && price > 0) {
+function MarginCell({ cost, price, fmt, ocultarMargen }) {
+  if (!ocultarMargen && cost > 0 && price > 0) {
     const m = price - cost
     const pct = (m / price) * 100
     const below = m < 0
@@ -57,8 +57,8 @@ function MarginCell({ cost, price, fmt, hidePrivateData }) {
 }
 
 /** Margen en una sola línea (para cards de móvil). */
-function MarginInline({ cost, price, fmt, hidePrivateData }) {
-  if (hidePrivateData || !(cost > 0) || !(price > 0)) return <span className="text-gray-400">—</span>
+function MarginInline({ cost, price, fmt, ocultarMargen }) {
+  if (ocultarMargen || !(cost > 0) || !(price > 0)) return <span className="text-gray-400">—</span>
   const m = price - cost
   const pct = (m / price) * 100
   const below = m < 0
@@ -94,7 +94,7 @@ function MarginInline({ cost, price, fmt, hidePrivateData }) {
 export default function PriceUpdateTable({
   products = [],
   businessId,
-  hidePrivateData = false,
+  ocultarMargen = false,
   marginFormula = 'markup',
   baseCurrency = 'PEN',
   businessSettings = {},
@@ -510,9 +510,9 @@ export default function PriceUpdateTable({
 
   const fmt = (n, p) => formatCurrency(n, p?.currency || baseCurrency)
   const currencySymbol = (p) => ((p?.currency || baseCurrency) === 'USD' ? '$' : 'S/')
-  // Helpers que pasan el fmt/hidePrivateData a los componentes de margen estables.
-  const renderMargin = (cost, price, p) => <MarginCell cost={cost} price={price} fmt={(n) => fmt(n, p)} hidePrivateData={hidePrivateData} />
-  const renderMarginInline = (cost, price, p) => <MarginInline cost={cost} price={price} fmt={(n) => fmt(n, p)} hidePrivateData={hidePrivateData} />
+  // Helpers que pasan el fmt/ocultarMargen a los componentes de margen estables.
+  const renderMargin = (cost, price, p) => <MarginCell cost={cost} price={price} fmt={(n) => fmt(n, p)} ocultarMargen={ocultarMargen} />
+  const renderMarginInline = (cost, price, p) => <MarginInline cost={cost} price={price} fmt={(n) => fmt(n, p)} ocultarMargen={ocultarMargen} />
 
   // Renderiza la sub-zona de extras (Otros precios + Presentaciones + Variantes).
   // Se reusa en la fila expandida de la tabla (desktop) y en la card del móvil.
@@ -571,7 +571,7 @@ export default function PriceUpdateTable({
                       dirty={dirtyP} invalid={invP}
                       onChange={(v) => setPresentationPrice(p.id, idx, v)}
                     />
-                    {!hidePrivateData && hasCost && (
+                    {!ocultarMargen && hasCost && (
                       <div className="text-right basis-full sm:basis-auto sm:w-20">
                         {renderMarginInline(presCost, numericPrice, p)}
                       </div>
@@ -624,7 +624,7 @@ export default function PriceUpdateTable({
                           </div>
                         ))}
                       </div>
-                      {!hidePrivateData && hasCost && (
+                      {!ocultarMargen && hasCost && (
                         <div className="mt-1.5 text-right text-[11px]">
                           Margen: {renderMarginInline(cost, vPriceNum, p)}
                         </div>
@@ -644,7 +644,7 @@ export default function PriceUpdateTable({
                       {EXTRA_LEVELS.map(lvl => (
                         <th key={lvl} className="px-2 py-1 text-right">{labelOf(lvl)}</th>
                       ))}
-                      {!hidePrivateData && <th className="px-2 py-1 text-right">Margen</th>}
+                      {!ocultarMargen && <th className="px-2 py-1 text-right">Margen</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -678,7 +678,7 @@ export default function PriceUpdateTable({
                               />
                             </td>
                           ))}
-                          {!hidePrivateData && (
+                          {!ocultarMargen && (
                             <td className="px-2 py-1.5 text-right whitespace-nowrap">
                               {renderMargin(cost, vPriceNum, p)}
                             </td>
@@ -824,7 +824,7 @@ export default function PriceUpdateTable({
                   {/* Línea de precio principal */}
                   <div className="px-3 pb-3 flex items-center justify-between gap-3 border-t border-gray-100 pt-3">
                     <div className="text-xs text-gray-500 leading-tight">
-                      {!hidePrivateData && (
+                      {!ocultarMargen && (
                         <>
                           <div>Costo: <span className="text-gray-700 font-medium">{hasCost ? fmt(cost, p) : '—'}</span></div>
                           {!hasVariants(p) && (
@@ -886,11 +886,11 @@ export default function PriceUpdateTable({
                   <th className="px-3 py-3 w-6"></th>
                   <th className="px-3 py-3 w-12"></th>
                   <th className="px-3 py-3 min-w-[200px]">Producto</th>
-                  {!hidePrivateData && <th className="px-3 py-3 text-right whitespace-nowrap">Costo</th>}
+                  {!ocultarMargen && <th className="px-3 py-3 text-right whitespace-nowrap">Costo</th>}
                   <th className="px-3 py-3 text-right min-w-[140px]">
                     {multiPricesOn ? labelOf('price1') : 'Precio de venta'}
                   </th>
-                  {!hidePrivateData && <th className="px-3 py-3 text-right whitespace-nowrap">Margen</th>}
+                  {!ocultarMargen && <th className="px-3 py-3 text-right whitespace-nowrap">Margen</th>}
                   <th className="px-3 py-3 w-10"></th>
                 </tr>
               </thead>
@@ -952,7 +952,7 @@ export default function PriceUpdateTable({
                         </div>
                       </td>
 
-                      {!hidePrivateData && (
+                      {!ocultarMargen && (
                         <td className="px-3 py-2 align-middle text-right whitespace-nowrap">
                           {hasCost ? <span className="text-gray-700">{fmt(cost, p)}</span> : <span className="text-gray-300">—</span>}
                         </td>
@@ -977,7 +977,7 @@ export default function PriceUpdateTable({
                         )}
                       </td>
 
-                      {!hidePrivateData && (
+                      {!ocultarMargen && (
                         <td className="px-3 py-2 align-middle text-right whitespace-nowrap">
                           {hasVariants(p) ? <span className="text-gray-300">—</span> : renderMargin(cost, simplePrice || 0, p)}
                         </td>
@@ -995,7 +995,7 @@ export default function PriceUpdateTable({
                     {/* Fila expandida: extras (reusa el helper renderExtras) */}
                     {expandable && isExpanded && (
                       <tr className="bg-gray-50/50">
-                        <td colSpan={hidePrivateData ? 6 : 8} className="px-3 py-3">
+                        <td colSpan={ocultarMargen ? 6 : 8} className="px-3 py-3">
                           {renderExtras(p, { isMobile: false })}
                         </td>
                       </tr>

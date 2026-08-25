@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useDeferredValue } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search, Edit, Trash2, Package, AlertTriangle, TrendingUp, Loader2, Upload, Download, Store, MoreVertical, ArrowRight, FolderPlus, ChevronUp, ChevronDown, SortAsc, Check, X } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
-import { useHidePrivateData } from '@/hooks/useHidePrivateData'
+import { useDataPermissions } from '@/hooks/useDataPermissions'
 import { useToast } from '@/contexts/ToastContext'
 import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -97,7 +97,7 @@ export default function Ingredients() {
   const demoContext = useDemoRestaurant()
   const navigate = useNavigate()
   const toast = useToast()
-  const hidePrivateData = useHidePrivateData()
+  const permisos = useDataPermissions()
 
   // Edición manual de stock — mismo toggle que productos (businessSettings.enableManualStockEdit).
   // OFF (por defecto): el stock se bloquea al editar; se ingresa por Compras y se ajusta desde
@@ -1009,7 +1009,7 @@ export default function Ingredients() {
           {viewSwitcher && <div className="mt-3">{viewSwitcher}</div>}
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
-          {!hidePrivateData && (
+          {permisos.exportar && (
             <Button
               variant="outline"
               size="sm"

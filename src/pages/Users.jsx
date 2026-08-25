@@ -3,6 +3,7 @@ import { Users as UsersIcon, Plus, Edit2, Shield, Loader2, Eye, EyeOff, UserChec
 import { EMPLOYMENT_TYPES, HR_STATUSES } from '@/services/personnelService'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAppContext } from '@/hooks/useAppContext'
+import { EJES_DE_DATOS, IDS_DE_EJES } from '@/utils/dataPermissions'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -67,6 +68,20 @@ export default function Users() {
   const [independentCashRegister, setIndependentCashRegister] = useState(false)
   const [hideStockInPOS, setHideStockInPOS] = useState(false)
   const [hideDiscountInPOS, setHideDiscountInPOS] = useState(false)
+  // null mientras el dueño no toque nada: así un usuario que ya existía sigue
+  // heredando la opción del negocio en vez de quedar congelado en un valor.
+  const [dataPermissions, setDataPermissions] = useState(null)
+  // Mientras el negocio no oculte nada, los tres ejes se ven marcados: es lo
+  // que el usuario realmente puede hacer hoy.
+  const ocultaPorDefecto = !!businessSettings?.hideDashboardDataFromSecondary
+  const permiteEje = (id) => (dataPermissions?.[id] ?? !ocultaPorDefecto)
+  const alternarEje = (id) => {
+    // Al tocar el primero se fijan LOS TRES con su valor actual, para que el
+    // usuario deje de heredar y no cambie solo si mañana se toca la opción
+    // del negocio.
+    const base = Object.fromEntries(IDS_DE_EJES.map((k) => [k, permiteEje(k)]))
+    setDataPermissions({ ...base, [id]: !base[id] })
+  }
   const [waiters, setWaiters] = useState([])
   const [motoristas, setMotoristas] = useState([])
   const [assignedMotoristaId, setAssignedMotoristaId] = useState('')
@@ -312,6 +327,7 @@ export default function Users() {
     setIndependentCashRegister(false)
     setHideStockInPOS(false)
     setHideDiscountInPOS(false)
+    setDataPermissions(null)
     setPersonnelData(emptyPersonnel)
     setShowPersonnelSection(false)
     setNotificationPreferences({
@@ -387,6 +403,7 @@ export default function Users() {
     setIndependentCashRegister(userToEdit.independentCashRegister || false)
     setHideStockInPOS(userToEdit.hideStockInPOS || false)
     setHideDiscountInPOS(userToEdit.hideDiscountInPOS || false)
+    setDataPermissions(userToEdit.dataPermissions || null)
     // Datos de RR.HH. (vienen del sub-objeto personnel en el sub-usuario)
     const p = userToEdit.personnel || {}
     setPersonnelData({
@@ -548,6 +565,7 @@ export default function Users() {
           independentCashRegister,
           hideStockInPOS,
           hideDiscountInPOS,
+          dataPermissions,
           personnel: personnelPayload,
           notificationPreferences,
         }
@@ -591,6 +609,7 @@ export default function Users() {
           independentCashRegister,
           hideStockInPOS,
           hideDiscountInPOS,
+          dataPermissions,
           personnel: personnelPayload,
           notificationPreferences,
         }
@@ -1406,6 +1425,44 @@ export default function Users() {
                           </div>
                         </div>
                       </label>
+                    </div>
+
+                    {/* Qué datos puede ver. Va FUERA del bloque del POS: los
+                        totales, los costos y las exportaciones están en
+                        Reportes, Ventas, Inventario y Clientes, no en el POS. */}
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">Qué datos puede ver</h4>
+                      <div className="space-y-2">
+                        {EJES_DE_DATOS.map((eje) => {
+                          const permitido = permiteEje(eje.id)
+                          return (
+                            <label
+                              key={eje.id}
+                              className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer ${permitido ? 'border-primary-300 bg-primary-50/40' : 'border-gray-200 hover:bg-gray-50'}`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={permitido}
+                                onChange={() => alternarEje(eje.id)}
+                                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                              />
+                              <div className="flex-1">
+                                <div className="text-sm font-medium text-gray-900">{eje.label}</div>
+                                <div className="text-xs text-gray-500 mt-0.5">
+                                  {permitido ? eje.siPuede : eje.noPuede}
+                                </div>
+                              </div>
+                            </label>
+                          )
+                        })}
+                      </div>
+                      {!dataPermissions && (
+                        <p className="text-xs text-gray-500 mt-2">
+                          {ocultaPorDefecto
+                            ? 'Hereda la configuración del negocio: tienes activado "Ocultar datos sensibles a usuarios secundarios". Marca una casilla para darle acceso solo a este usuario.'
+                            : 'Hereda la configuración del negocio: hoy no ocultas nada a los usuarios secundarios. Desmarca una casilla para restringir solo a este usuario.'}
+                        </p>
+                      )}
                     </div>
 
                     {selectedPages.includes('pos') && (

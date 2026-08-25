@@ -10,7 +10,7 @@ import { Camera as CapacitorCamera, CameraResultType, CameraSource } from '@capa
 import { useAppContext } from '@/hooks/useAppContext'
 import { registrarCambiosDePrecio } from '@/services/priceHistoryService'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
-import { useHidePrivateData } from '@/hooks/useHidePrivateData'
+import { useDataPermissions } from '@/hooks/useDataPermissions'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -248,7 +248,7 @@ const BulkMenuGroup = ({ title }) => (
 export default function Products() {
   const { user, isDemoMode, demoData, getBusinessId, businessMode, hasFeature, businessSettings, filterWarehousesByAccess, branchScope, refreshBusinessSettings } = useAppContext()
   const appNavigate = useAppNavigate()
-  const hidePrivateData = useHidePrivateData()
+  const permisos = useDataPermissions()
   const toast = useToast()
   const [products, setProducts] = useState([])
   const [warehouses, setWarehouses] = useState([])
@@ -4964,7 +4964,7 @@ export default function Products() {
                     <Upload className="w-4 h-4 text-gray-500 flex-shrink-0" />
                     Importar productos
                   </button>
-                  {!hidePrivateData && (
+                  {permisos.exportar && (
                     <button
                       onClick={() => { setOptionsMenuOpen(false); handleExportToExcel() }}
                       className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
@@ -5068,7 +5068,7 @@ export default function Products() {
           (no despues de los filtros) porque el bloque de categorias y marcas es
           alto y empujaba los totales fuera de la vista. Mismas medidas, mismos
           colores semanticos y misma linea de contexto que alli. */}
-      <div className={`grid grid-cols-2 ${hidePrivateData ? 'lg:grid-cols-2' : 'lg:grid-cols-3'} gap-4 sm:gap-6`}>
+      <div className={`grid grid-cols-2 ${permisos.verCostos ? 'lg:grid-cols-3' : 'lg:grid-cols-2'} gap-4 sm:gap-6`}>
         <Card>
           <CardContent className="p-4 sm:p-6">
             <div className="flex items-center justify-between">
@@ -5081,7 +5081,7 @@ export default function Products() {
           </CardContent>
         </Card>
 
-        {!hidePrivateData && (
+        {permisos.verCostos && (
           <Card>
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
@@ -5333,7 +5333,7 @@ export default function Products() {
         <PriceUpdateTable
           products={filteredProducts}
           businessId={getBusinessId()}
-          hidePrivateData={hidePrivateData}
+          ocultarMargen={!permisos.verCostos}
           marginFormula={businessSettings?.marginFormula === 'margin' ? 'margin' : 'markup'}
           baseCurrency={businessSettings?.currency || 'PEN'}
           businessSettings={businessSettings}

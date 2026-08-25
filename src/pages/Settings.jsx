@@ -6886,8 +6886,8 @@ export default function Settings() {
                     onChange={e => setHideDashboardDataFromSecondary(e.target.checked)}
                     title="Ocultar totales y datos sensibles a usuarios secundarios"
                     description={hideDashboardDataFromSecondary
-                      ? '✓ Habilitado: Los usuarios secundarios no verán los datos del dashboard, ni los totales sumados en Ventas (montos, comprobantes pagados/pendientes, total de ventas) ni los valores de venta y costo del Inventario y Productos. Solo el propietario y administradores tendrán acceso a la información financiera agregada. Excepción: la página de Contabilidad no se ve afectada — quien tenga acceso a ella (tu contador) podrá descargar el reporte en Excel, los XML y los CDR.'
-                      : '✗ Deshabilitado: Todos los usuarios ven las estadísticas completas — dashboard, totales de ventas, valor de inventario, etc.'}
+                      ? '✓ Habilitado: por defecto, los usuarios secundarios no ven el dashboard, ni los totales de Ventas, ni los costos y valores de Inventario y Productos, y no pueden exportar a Excel. Puedes darle acceso a alguien en particular desde Gestión de Usuarios → Qué datos puede ver. Excepción: la página de Contabilidad no se ve afectada — quien tenga acceso a ella (tu contador) podrá descargar el reporte en Excel, los XML y los CDR.'
+                      : '✗ Deshabilitado: por defecto todos los usuarios ven las estadísticas completas — dashboard, totales de ventas, valor de inventario y exportaciones. Puedes restringir a alguien en particular desde Gestión de Usuarios → Qué datos puede ver.'}
                   >
                     <div className="mt-3 p-3 bg-purple-50 rounded-md border border-purple-200">
                       <div className="flex items-start gap-2">

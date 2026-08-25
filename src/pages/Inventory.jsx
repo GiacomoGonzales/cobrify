@@ -48,7 +48,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import ConsumoInternoModal from '@/components/inventory/ConsumoInternoModal'
 import { useUserNames } from '@/hooks/useUserNames'
 import { getPriceHistory } from '@/services/priceHistoryService'
-import { useHidePrivateData } from '@/hooks/useHidePrivateData'
+import { useDataPermissions } from '@/hooks/useDataPermissions'
 import { useToast } from '@/contexts/ToastContext'
 import { recalculateProductCostsFromPurchases } from '@/services/inventoryCostService'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -160,7 +160,7 @@ const getRealStockValue = (item) => {
 
 export default function Inventory() {
   const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings, hasMainBranchAccess, allowedWarehouses, isBusinessOwner, branchScope } = useAppContext()
-  const hidePrivateData = useHidePrivateData()
+  const permisos = useDataPermissions()
   const { filterWarehousesByAccess } = useAuth()
   const toast = useToast()
 
@@ -2206,15 +2206,13 @@ export default function Inventory() {
                     <User className="w-4 h-4 text-gray-500 flex-shrink-0" />
                     Consumo interno
                   </button>
-                  {!hidePrivateData && (
-                    <button
-                      onClick={() => { setOptionsMenuOpen(false); setShowCountHistory(true) }}
-                      className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                    >
-                      <History className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                      Historial de recuentos
-                    </button>
-                  )}
+                  <button
+                    onClick={() => { setOptionsMenuOpen(false); setShowCountHistory(true) }}
+                    className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                  >
+                    <History className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                    Historial de recuentos
+                  </button>
                   {isBusinessOwner && (
                     <>
                       <div className="border-t border-gray-100 my-1" />
@@ -2247,7 +2245,7 @@ export default function Inventory() {
             </Button>
           )}
 
-          {!hidePrivateData && (
+          {permisos.exportar && (
             <Button
               variant="outline"
               onClick={handleOpenExportModal}
@@ -2278,7 +2276,7 @@ export default function Inventory() {
           </CardContent>
         </Card>
 
-        {!hidePrivateData && (
+        {permisos.verCostos && (
           <Card>
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
@@ -4120,7 +4118,7 @@ export default function Inventory() {
               <p className="text-gray-600 mb-1">Unidades Totales</p>
               <p className="text-2xl font-bold text-gray-900">{totalUnits}</p>
             </div>
-            {!hidePrivateData && (
+            {permisos.verCostos && (
               <>
                 <div className="p-4 bg-gray-50 rounded-lg">
                   <p className="text-gray-600 mb-1">Valor Venta Inventario</p>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useLocationAccess } from '@/utils/locationAccess'
-import { useHidePrivateData } from '@/hooks/useHidePrivateData'
+import { useDataPermissions } from '@/hooks/useDataPermissions'
 import { useToast } from '@/contexts/ToastContext'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { matchesSearchQuery } from '@/lib/utils'
@@ -156,7 +156,7 @@ export default function Expenses() {
   // que se ven para TODOS los usuarios (incluido el sub-usuario con sucursales restringidas).
   // Solo los gastos asignados a una sucursal concreta respetan el filtro de acceso por sede.
   const canViewExpense = (e) => (!e?.branchId || e.branchId === 'main') ? true : canAccess(e)
-  const hidePrivateData = useHidePrivateData()
+  const permisos = useDataPermissions()
   const expenseMultiCurrencyOn = isMultiCurrencyEnabled(businessSettings)
   const toast = useToast()
   const { isOffline } = useOnlineStatus()
@@ -734,7 +734,7 @@ export default function Expenses() {
             <Tag className="w-4 h-4 sm:mr-2" />
             <span className="hidden sm:inline">Categorías</span>
           </Button>
-          {!hidePrivateData && (
+          {permisos.exportar && (
             <Button variant="success" onClick={exportToExcel} className="flex-1 sm:flex-none">
               <Download className="w-4 h-4 sm:mr-2" />
               <span className="hidden sm:inline">Excel</span>
@@ -749,7 +749,7 @@ export default function Expenses() {
 
       {/* Stats Cards — agregados financieros. Ocultos a sub-usuarios cuando el dueño
           activó "Ocultar totales y datos sensibles a usuarios secundarios". */}
-      {!hidePrivateData && (
+      {permisos.verTotales && (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
@@ -845,7 +845,7 @@ export default function Expenses() {
             <Receipt className="w-4 h-4 inline mr-1.5 -mt-0.5" />
             Lista de gastos
           </button>
-          {!hidePrivateData && (
+          {permisos.verTotales && (
           <button
             type="button"
             onClick={() => setActiveTab('summary')}
@@ -1248,7 +1248,7 @@ export default function Expenses() {
       </>)}
 
       {/* Tab: Resumen */}
-      {activeTab === 'summary' && !hidePrivateData && (
+      {activeTab === 'summary' && permisos.verTotales && (
         <div className="space-y-6">
           {/* Gráfico de torta por categoría */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">

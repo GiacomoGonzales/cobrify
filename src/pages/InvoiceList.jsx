@@ -45,7 +45,7 @@ import {
   Calendar,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
-import { useHidePrivateData } from '@/hooks/useHidePrivateData'
+import { useDataPermissions } from '@/hooks/useDataPermissions'
 import { useBranding } from '@/contexts/BrandingContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -96,7 +96,7 @@ const ORDER_TYPE_LABELS = {
 
 export default function InvoiceList() {
   const { user, isDemoMode, demoData, getBusinessId, businessSettings, businessMode, filterBranchesByAccess, hasMainBranchAccess, isBusinessOwner, isAdmin, allowedBranches, allowedWarehouses, assignedSellerId , branchScope } = useAppContext()
-  const hidePrivateData = useHidePrivateData()
+  const permisos = useDataPermissions()
   const { branding } = useBranding()
   const navigate = useNavigate()
   const appNavigate = useAppNavigate()
@@ -2826,7 +2826,7 @@ Gracias por tu preferencia.`
             <Wallet className="w-4 h-4 mr-2" />
             Pagos Pendientes
           </Button>
-          {!hidePrivateData && (
+          {permisos.exportar && (
             <Button
               variant="outline"
               onClick={() => setShowExportModal(true)}
@@ -2843,7 +2843,7 @@ Gracias por tu preferencia.`
           Mientras el historial sigue llegando por lotes (isBackgroundLoading),
           los totales muestran un spinner: números que crecen en vivo parecen
           un error. La tabla sí se usa desde el primer lote. */}
-      {!hidePrivateData && (
+      {permisos.verTotales && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
             <CardContent className="p-4 sm:p-6">
@@ -3094,7 +3094,7 @@ Gracias por tu preferencia.`
       </Card>
 
       {/* Totals Summary */}
-      {filteredInvoices.length > 0 && !hidePrivateData && (() => {
+      {filteredInvoices.length > 0 && permisos.verTotales && (() => {
         const tableSales = filteredInvoices.filter(isValidSale)
         return (
           <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 flex flex-wrap items-center gap-4 text-sm">
