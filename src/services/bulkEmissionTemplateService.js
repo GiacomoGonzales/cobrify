@@ -20,6 +20,8 @@
  * función, nunca en el bundle principal.
  */
 
+import { DETRACTION_TYPES } from '@/utils/peruUtils'
+
 /** Columnas de la hoja COMPROBANTES, en orden. `key` es el nombre técnico. */
 export const COLUMNAS_COMPROBANTES = [
   { key: 'N_OPERACION', header: 'N° OPERACIÓN', width: 13, nota: 'Mismo número = mismo comprobante. Las filas 1,1,2 generan DOS comprobantes: el primero con dos ítems.' },
@@ -30,6 +32,7 @@ export const COLUMNAS_COMPROBANTES = [
   { key: 'NUM_DOC_CLIENTE', header: 'N° DOC. CLIENTE', width: 15, nota: 'RUC: 11 dígitos. DNI: 8 dígitos. Se valida el dígito verificador.' },
   { key: 'NOMBRE_CLIENTE', header: 'NOMBRE / RAZÓN SOCIAL', width: 32, nota: 'Nombre completo o razón social del cliente.' },
   { key: 'DIRECCION_CLIENTE', header: 'DIRECCIÓN', width: 28, nota: 'Opcional. Recomendada en facturas.' },
+  { key: 'EMAIL_CLIENTE', header: 'EMAIL CLIENTE', width: 26, nota: 'Opcional. Queda guardado en el comprobante para poder enviárselo al cliente.' },
   { key: 'CODIGO_PRODUCTO', header: 'CÓDIGO PRODUCTO', width: 16, nota: 'Opcional. Si coincide con un producto de tu catálogo (SKU o código de barras), la venta DESCUENTA stock. Vacío = ítem libre sin stock.' },
   { key: 'DESCRIPCION', header: 'DESCRIPCIÓN', width: 34, nota: 'Descripción del ítem tal como saldrá en el comprobante.' },
   { key: 'CANTIDAD', header: 'CANTIDAD', width: 10, nota: 'Acepta decimales (0.5 kilos).' },
@@ -41,8 +44,19 @@ export const COLUMNAS_COMPROBANTES = [
   { key: 'FORMA_PAGO', header: 'FORMA DE PAGO', width: 13, nota: 'CONTADO o CREDITO.' },
   { key: 'FECHA_VENCIMIENTO', header: 'FECHA VENCIM.', width: 14, nota: 'Solo si es CREDITO: cuándo vence la deuda.' },
   { key: 'METODO_PAGO', header: 'MÉTODO DE PAGO', width: 15, nota: 'Solo si es CONTADO: con qué pagó.' },
+  { key: 'CUOTAS', header: 'CUOTAS', width: 30, nota: 'Opcional, solo CREDITO. Varias cuotas separadas por punto y coma: 15/09/2026:500; 15/10/2026:500. La suma debe dar el total. Si lo dejas vacío se usa FECHA VENCIM. como cuota única.' },
+  { key: 'DETRACCION', header: 'DETRACCIÓN', width: 34, nota: 'Opcional, solo FACTURA. Elige el tipo de bien o servicio del catálogo 54 de SUNAT. La tasa la pone el sistema.' },
+  { key: 'CUENTA_DETRACCION', header: 'CTA. BANCO NACIÓN', width: 20, nota: 'Solo si hay detracción. Si lo dejas vacío se usa la cuenta de detracciones configurada en Ajustes.' },
+  { key: 'VENDEDOR', header: 'VENDEDOR', width: 20, nota: 'Opcional. Código o nombre de un vendedor registrado. Sirve para las comisiones.' },
   { key: 'OBSERVACIONES', header: 'OBSERVACIONES', width: 26, nota: 'Opcional. Sale en el comprobante.' },
 ]
+
+/**
+ * Etiqueta de un tipo de detracción para el desplegable: "012 - Nombre (12%)".
+ * El parser solo mira los 3 primeros dígitos, así que el nombre y la tasa
+ * pueden cambiar sin romper archivos ya llenados.
+ */
+export const etiquetaDetraccion = (t) => `${t.code} - ${t.name} (${t.rate}%)`
 
 /** Valores admitidos por columna. El parser valida contra ESTAS listas. */
 export const VALORES_COMPROBANTES = {
@@ -52,6 +66,7 @@ export const VALORES_COMPROBANTES = {
   AFECTACION: ['GRAVADO', 'EXONERADO', 'INAFECTO', 'BONIFICACION'],
   FORMA_PAGO: ['CONTADO', 'CREDITO'],
   METODO_PAGO: ['EFECTIVO', 'TRANSFERENCIA', 'YAPE', 'PLIN', 'TARJETA'],
+  DETRACCION: DETRACTION_TYPES.map(etiquetaDetraccion),
   UNIDAD: [
     'NIU - UNIDAD', 'ZZ - SERVICIO', 'KGM - KILOGRAMO', 'GRM - GRAMO',
     'LTR - LITRO', 'MTR - METRO', 'MTK - METRO CUADRADO', 'BX - CAJA',
@@ -97,6 +112,9 @@ export async function generarPlantillaComprobantes() {
     '• El precio unitario es CON IGV incluido, como los precios de tu POS.',
     '• BONIFICACIÓN = regalo: pon en PRECIO UNITARIO el valor real de lo que regalas (SUNAT lo exige como referencia). No se cobra al cliente.',
     '• Si es CREDITO, indica la fecha de vencimiento. Si es CONTADO, el método de pago.',
+    '• CUOTAS (solo CREDITO): escribe fecha:monto separando cada cuota con punto y coma — 15/09/2026:700; 15/10/2026:550. La suma tiene que dar el total del comprobante y toda fecha debe ser POSTERIOR a la emisión. Si no pones cuotas, el vencimiento se emite como cuota única.',
+    '• DETRACCIÓN (solo FACTURA): elige el tipo del desplegable. La tasa la aplica el sistema y el depósito se calcula en soles, aunque el comprobante sea en dólares. Necesitas tu cuenta del Banco de la Nación: la del archivo o la de Ajustes > Cuentas bancarias.',
+    '• VENDEDOR: el código o el nombre de un vendedor ya registrado en Cobrify. Si no coincide con ninguno, el sistema te avisa antes de emitir.',
     '• Si CÓDIGO PRODUCTO coincide con tu catálogo, la emisión descuenta stock; si va vacío, el ítem no toca inventario.',
     '',
     'DESPUÉS DE LLENAR',
@@ -138,8 +156,11 @@ export async function generarPlantillaComprobantes() {
   // factura al crédito con 2 ítems, y boleta al contado con bonificación.
   const hoy = new Date()
   const en30dias = new Date(hoy.getTime() + 30 * 86400000)
+  const en60dias = new Date(hoy.getTime() + 60 * 86400000)
+  const dd = (n) => String(n).padStart(2, '0')
+  const fechaTexto = (f) => `${dd(f.getDate())}/${dd(f.getMonth() + 1)}/${f.getFullYear()}`
   const ejemplos = [
-    { N_OPERACION: 1, TIPO: 'FACTURA', FECHA_EMISION: hoy, MONEDA: 'PEN', TIPO_DOC_CLIENTE: 'RUC', NUM_DOC_CLIENTE: '20100047218', NOMBRE_CLIENTE: 'COMERCIAL EJEMPLO S.A.C.', DIRECCION_CLIENTE: 'Av. Ejemplo 123, Lima', CODIGO_PRODUCTO: '1000001', DESCRIPCION: 'Arroz costeño x 50 kg', CANTIDAD: 10, UNIDAD: 'SA - SACO', PRECIO_UNITARIO: 120, AFECTACION: 'GRAVADO', FORMA_PAGO: 'CREDITO', FECHA_VENCIMIENTO: en30dias },
+    { N_OPERACION: 1, TIPO: 'FACTURA', FECHA_EMISION: hoy, MONEDA: 'PEN', TIPO_DOC_CLIENTE: 'RUC', NUM_DOC_CLIENTE: '20100047218', NOMBRE_CLIENTE: 'COMERCIAL EJEMPLO S.A.C.', DIRECCION_CLIENTE: 'Av. Ejemplo 123, Lima', EMAIL_CLIENTE: 'contacto@ejemplo.com', CODIGO_PRODUCTO: '1000001', DESCRIPCION: 'Arroz costeño x 50 kg', CANTIDAD: 10, UNIDAD: 'SA - SACO', PRECIO_UNITARIO: 120, AFECTACION: 'GRAVADO', FORMA_PAGO: 'CREDITO', FECHA_VENCIMIENTO: en30dias, CUOTAS: `${fechaTexto(en30dias)}:700; ${fechaTexto(en60dias)}:550`, VENDEDOR: 'Juan Pérez' },
     { N_OPERACION: 1, CODIGO_PRODUCTO: '', DESCRIPCION: 'Flete de entrega', CANTIDAD: 1, UNIDAD: 'ZZ - SERVICIO', PRECIO_UNITARIO: 50, AFECTACION: 'GRAVADO' },
     { N_OPERACION: 2, TIPO: 'BOLETA', FECHA_EMISION: hoy, MONEDA: 'PEN', TIPO_DOC_CLIENTE: 'DNI', NUM_DOC_CLIENTE: '46997122', NOMBRE_CLIENTE: 'MARIA PEREZ TORRES', CODIGO_PRODUCTO: '', DESCRIPCION: 'Canasta de productos', CANTIDAD: 1, UNIDAD: 'NIU - UNIDAD', PRECIO_UNITARIO: 85.5, AFECTACION: 'GRAVADO', FORMA_PAGO: 'CONTADO', METODO_PAGO: 'YAPE' },
     { N_OPERACION: 2, CODIGO_PRODUCTO: '', DESCRIPCION: 'Taza de regalo', CANTIDAD: 1, UNIDAD: 'NIU - UNIDAD', PRECIO_UNITARIO: 15, AFECTACION: 'BONIFICACION' },
@@ -158,6 +179,10 @@ export async function generarPlantillaComprobantes() {
   hc.getColumn('PRECIO_UNITARIO').numFmt = '#,##0.00'
   hc.getColumn('DESCUENTO_ITEM').numFmt = '#,##0.00'
   hc.getColumn('DESCUENTO_GLOBAL').numFmt = '#,##0.00'
+  // CUOTAS y la cuenta del BN van como TEXTO: si no, Excel se come el cero
+  // inicial de la cuenta y trata "15/09/2026:700" como algo que no es.
+  hc.getColumn('CUOTAS').numFmt = '@'
+  hc.getColumn('CUENTA_DETRACCION').numFmt = '@'
 
   // ── Hoja 3: VALORES (catálogos para los desplegables) ───────────────────
   // Las listas largas no caben inline en una validación; viven acá y las

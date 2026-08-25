@@ -15,7 +15,7 @@
  * verdad de los montos que van a SUNAT.
  */
 import { COLUMNAS_COMPROBANTES, VALORES_COMPROBANTES } from './bulkEmissionTemplateService'
-import { validateDocument, ID_TYPES } from '@/utils/peruUtils'
+import { validateDocument, ID_TYPES, DETRACTION_TYPES, DETRACTION_MIN_AMOUNT, calcularDetraccion } from '@/utils/peruUtils'
 
 /** Tope de operaciones por archivo (decisión de diseño: lotes manejables). */
 export const LIMITE_OPERACIONES = 500
@@ -100,6 +100,66 @@ const numeroDe = (v) => {
   return Number.isFinite(n) ? n : null
 }
 
+/** Formato de email: deliberadamente laxo, solo descarta lo que no lo es. */
+const EMAIL_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
+
+/**
+ * Tipo de detracción desde lo que el usuario dejó en la celda.
+ *
+ * Acepta la etiqueta completa del desplegable ("012 - Intermediación..."), el
+ * código suelto ("012" o "12") o el nombre. El código manda: el nombre y la
+ * tasa del catálogo 54 cambian con el tiempo y un archivo viejo tiene que
+ * seguir funcionando.
+ */
+const detraccionDeTexto = (crudo) => {
+  const texto = String(crudo ?? '').trim()
+  if (!texto) return null
+  const codigo = texto.match(/^(\d{1,3})/)
+  if (codigo) {
+    const c = codigo[1].padStart(3, '0')
+    const porCodigo = DETRACTION_TYPES.find((t) => t.code === c)
+    if (porCodigo) return porCodigo
+  }
+  const norm = normalizar(texto)
+  return DETRACTION_TYPES.find((t) => normalizar(t.name) === norm) || null
+}
+
+/**
+ * Cuotas desde "15/09/2026:700; 15/10/2026:550".
+ *
+ * Devuelve { cuotas, errores }: los errores son de FORMATO (lo que no se pudo
+ * leer). Que las fechas y la suma sean válidas se valida afuera, donde se
+ * conocen la fecha de emisión y el total.
+ */
+const cuotasDeTexto = (crudo) => {
+  const texto = String(crudo ?? '').trim()
+  if (!texto) return { cuotas: [], errores: [] }
+  const cuotas = []
+  const errores = []
+  texto.split(/[;\n]/).forEach((parte) => {
+    const t = parte.trim()
+    if (!t) return
+    // Separador ':' o '=' — la fecha ya lleva '/' y el monto puede llevar ','
+    const corte = t.lastIndexOf(':') >= 0 ? t.lastIndexOf(':') : t.lastIndexOf('=')
+    if (corte < 0) {
+      errores.push(`"${t}" no tiene el formato fecha:monto (ejemplo 15/09/2026:500).`)
+      return
+    }
+    const dia = diaDeCelda(t.slice(0, corte).trim())
+    const monto = numeroDe(t.slice(corte + 1).trim())
+    if (!dia) {
+      errores.push(`"${t}": la fecha debe ir como dd/mm/aaaa.`)
+      return
+    }
+    if (monto === null || monto <= 0) {
+      errores.push(`"${t}": el monto de la cuota debe ser mayor a 0.`)
+      return
+    }
+    cuotas.push({ dia, monto: Number(monto.toFixed(2)) })
+  })
+  return { cuotas, errores }
+}
+
 /**
  * Índice del catálogo para cruzar CODIGO_PRODUCTO: código, SKU, código de
  * barras y códigos alternativos, del padre y de cada variante. Se arma UNA
@@ -134,13 +194,15 @@ const indexarProductos = (products) => {
  * @param {object} [ctx]
  * @param {Array}  [ctx.products] - catálogo del negocio, para cruzar códigos y avisar stock
  * @param {number} [ctx.igvRate]  - tasa IGV del negocio (18 salvo excepciones)
+ * @param {Array}  [ctx.sellers]  - vendedores registrados, para resolver la columna VENDEDOR
+ * @param {string} [ctx.cuentaDetraccion] - cuenta del Banco de la Nación configurada en Ajustes
  * @param {Date}   [ctx.hoy]      - inyectable para pruebas
  * @returns {Promise<{success:boolean, error?:string, operaciones?:Array, errores?:Array, advertencias?:Array, resumen?:object}>}
  *
  * `operaciones[n].errores` / `.advertencias`: `{ fila, columna, mensaje }`,
  * con `fila` = número REAL de fila en el Excel (para que el usuario la ubique).
  */
-export async function parsearExcelComprobantes(buffer, { products = [], igvRate = 18, hoy = new Date() } = {}) {
+export async function parsearExcelComprobantes(buffer, { products = [], igvRate = 18, sellers = [], cuentaDetraccion = '', hoy = new Date() } = {}) {
   const ExcelJS = (await import('exceljs')).default || (await import('exceljs'))
   const wb = new ExcelJS.Workbook()
   try {
@@ -280,8 +342,10 @@ export async function parsearExcelComprobantes(buffer, { products = [], igvRate 
       const diaVenc = diaDeCelda(cab.FECHA_VENCIMIENTO)
       if (!diaVenc) {
         error(primera.fila, 'FECHA VENCIM.', 'Una venta al CREDITO necesita fecha de vencimiento (dd/mm/aaaa).')
-      } else if (dia && diaANumero(diaVenc) < diaANumero(dia)) {
-        error(primera.fila, 'FECHA VENCIM.', `El vencimiento ${diaLegible(diaVenc)} es anterior a la emisión.`)
+      } else if (dia && diaANumero(diaVenc) <= diaANumero(dia)) {
+        // POSTERIOR, no "no anterior": SUNAT rechaza la cuota que vence el
+        // mismo día de la emisión (regla 2801).
+        error(primera.fila, 'FECHA VENCIM.', `El vencimiento ${diaLegible(diaVenc)} debe ser POSTERIOR a la fecha de emisión. SUNAT rechaza cuotas que vencen el mismo día.`)
       } else {
         fechaVencimiento = diaAFecha(diaVenc)
       }
@@ -421,6 +485,104 @@ export async function parsearExcelComprobantes(buffer, { products = [], igvRate 
       error(primera.fila, 'TIPO DOC. CLIENTE', `Boleta de S/ ${total.toFixed(2)}: desde S/ 700 SUNAT exige el DNI del cliente.`)
     }
 
+    // — Email del cliente —
+    const email = String(cab.EMAIL_CLIENTE ?? '').trim()
+    if (email && !EMAIL_VALIDO.test(email)) {
+      error(primera.fila, 'EMAIL CLIENTE', `"${email}" no parece un correo válido.`)
+    }
+
+    // — Vendedor —
+    // Se resuelve contra los vendedores YA registrados: inventar uno acá
+    // dejaría comisiones colgando de un nombre que no existe en ninguna parte.
+    let vendedor = null
+    const vendedorTexto = String(cab.VENDEDOR ?? '').trim()
+    if (vendedorTexto) {
+      const buscado = normalizar(vendedorTexto)
+      vendedor = sellers.find((v) => normalizar(v.code) === buscado)
+        || sellers.find((v) => normalizar(v.name) === buscado)
+        || null
+      if (!vendedor) {
+        const disponibles = sellers.slice(0, 6).map((v) => v.code ? `${v.name} (${v.code})` : v.name).join(', ')
+        error(primera.fila, 'VENDEDOR', sellers.length === 0
+          ? `No tienes vendedores registrados: quita la columna VENDEDOR o crea el vendedor en Configuración.`
+          : `El vendedor "${vendedorTexto}" no está registrado. Los que tienes son: ${disponibles}${sellers.length > 6 ? '…' : ''}.`)
+      }
+    }
+
+    // — Detracción (SPOT) —
+    let detraccion = null
+    const detraccionTexto = String(cab.DETRACCION ?? '').trim()
+    if (detraccionTexto) {
+      const tipoDetraccion = detraccionDeTexto(detraccionTexto)
+      if (!tipoDetraccion) {
+        error(primera.fila, 'DETRACCIÓN', `"${detraccionTexto}" no está en el catálogo 54 de SUNAT. Elige un valor del desplegable.`)
+      } else if (tipo === 'BOLETA') {
+        error(primera.fila, 'DETRACCIÓN', 'La detracción solo aplica a FACTURA: una boleta no puede estar sujeta al SPOT.')
+      } else {
+        // La cuenta puede venir en el archivo o de Ajustes. Sin ninguna de las
+        // dos no hay dónde depositar y SUNAT rechaza el XML.
+        const cuentaArchivo = String(cab.CUENTA_DETRACCION ?? '').trim().replace(/[\s-]/g, '')
+        const cuenta = cuentaArchivo || cuentaDetraccion || ''
+        if (!cuenta) {
+          error(primera.fila, 'CTA. BANCO NACIÓN', 'Falta la cuenta del Banco de la Nación: ponla en esta columna o configúrala en Ajustes > Cuentas bancarias (tipo "detracciones").')
+        }
+        // El mínimo general es S/ 700; el transporte de carga (027) baja a 400.
+        const minimo = tipoDetraccion.minAmount || DETRACTION_MIN_AMOUNT
+        const totalEnSoles = moneda === 'USD' ? null : total
+        if (totalEnSoles !== null && totalEnSoles < minimo) {
+          advertir(primera.fila, 'DETRACCIÓN', `El total es S/ ${total.toFixed(2)} y el mínimo para detraer es S/ ${minimo}. Se emite con detracción igual, revisa si corresponde.`)
+        }
+        detraccion = {
+          code: tipoDetraccion.code,
+          name: tipoDetraccion.name,
+          rate: tipoDetraccion.rate,
+          bankAccount: cuenta || null,
+        }
+      }
+    } else if (String(cab.CUENTA_DETRACCION ?? '').trim()) {
+      advertir(primera.fila, 'CTA. BANCO NACIÓN', 'Pusiste cuenta del Banco de la Nación pero no elegiste tipo de DETRACCIÓN: se ignora.')
+    }
+
+    // — Cuotas del crédito —
+    let cuotas = []
+    const cuotasTexto = String(cab.CUOTAS ?? '').trim()
+    if (cuotasTexto) {
+      if (formaPago !== 'CREDITO') {
+        error(primera.fila, 'CUOTAS', 'Las cuotas son solo para ventas al CREDITO. En una venta al CONTADO no van.')
+      } else {
+        const leidas = cuotasDeTexto(cuotasTexto)
+        leidas.errores.forEach((m) => error(primera.fila, 'CUOTAS', m))
+        if (leidas.errores.length === 0) {
+          leidas.cuotas.forEach((c) => {
+            if (dia && diaANumero(c.dia) <= diaANumero(dia)) {
+              error(primera.fila, 'CUOTAS', `La cuota del ${diaLegible(c.dia)} vence el mismo día de la emisión o antes. SUNAT las exige POSTERIORES.`)
+            }
+          })
+          // Lo que se reparte en cuotas es lo que el cliente PAGA: con
+          // detracción, el neto (el SPOT lo deposita él en el banco).
+          // En USD haría falta el TC del día para saber el neto; ahí la suma
+          // no se valida (más abajo se salta la comparación).
+          const aRepartir = detraccion && moneda !== 'USD'
+            ? Number((total - calcularDetraccion(total, 1, detraccion.rate).doc).toFixed(2))
+            : total
+          const suma = leidas.cuotas.reduce((a, c) => a + c.monto, 0)
+          // Tolerancia de un centavo por cuota: repartir tercios de un total
+          // impar nunca cuadra al céntimo.
+          const tolerancia = Math.max(0.01, leidas.cuotas.length * 0.01)
+          if (moneda !== 'USD' && Math.abs(suma - aRepartir) > tolerancia) {
+            error(primera.fila, 'CUOTAS', detraccion
+              ? `Las cuotas suman ${suma.toFixed(2)} y con detracción el cliente paga ${aRepartir.toFixed(2)} (el resto lo deposita en el Banco de la Nación).`
+              : `Las cuotas suman ${suma.toFixed(2)} y el total del comprobante es ${total.toFixed(2)}.`)
+          }
+          cuotas = leidas.cuotas.map((c, i) => ({
+            number: i + 1,
+            amount: c.monto,
+            dueDate: diaAFecha(c.dia),
+          }))
+        }
+      }
+    }
+
     operaciones.push({
       nOperacion: nOp,
       filaInicio: primera.fila,
@@ -432,12 +594,16 @@ export async function parsearExcelComprobantes(buffer, { products = [], igvRate 
         documentNumber: sinDocumento ? '' : numDoc,
         name: nombre || 'Cliente varios',
         address: String(cab.DIRECCION_CLIENTE ?? '').trim(),
+        email,
       },
       items,
       descuentoGlobal,
       formaPago: formaPago === 'CREDITO' ? 'credito' : 'contado',
       fechaVencimiento,
+      cuotas,
       metodoPago,
+      vendedor: vendedor ? { id: vendedor.id, name: vendedor.name, code: vendedor.code || null } : null,
+      detraccion,
       observaciones: String(cab.OBSERVACIONES ?? '').trim(),
       totales: {
         baseGravada: Number(baseGravada.toFixed(2)),
@@ -446,6 +612,13 @@ export async function parsearExcelComprobantes(buffer, { products = [], igvRate 
         inafecto: Number(totalInafecto.toFixed(2)),
         bonificaciones: Number(valorBonificaciones.toFixed(2)),
         total: Number(total.toFixed(2)),
+        // Detracción: lo que el cliente DEPOSITA en el Banco de la Nación y lo
+        // que le queda por pagarte. El total del comprobante no cambia.
+        // En USD el depósito depende del TC del día, que se resuelve al emitir.
+        ...(detraccion && moneda !== 'USD' ? (() => {
+          const d = calcularDetraccion(total, 1, detraccion.rate)
+          return { detraccionMonto: d.pen, netoAPagar: Number((total - d.doc).toFixed(2)) }
+        })() : {}),
       },
       errores,
       advertencias,

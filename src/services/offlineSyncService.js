@@ -9,91 +9,10 @@ import {
   removePendingSale,
 } from './offlineQueueService'
 import { createInvoiceWithNumber } from './firestoreService'
+import { descontarStockDeVentaGuardada } from './saleStockDeduction'
 
 let isSyncing = false
 let syncListeners = []
-
-/**
- * Descuenta el stock de una venta que acaba de sincronizarse.
- *
- * Llama a la MISMA Cloud Function atómica que usa el POS (`processSaleStock`),
- * así el criterio de descuento —lotes FEFO, series, variantes, presentaciones,
- * productos sin control de stock— vive en un solo lugar. Lo único que se arma
- * acá es el payload, porque el POS lo construye desde el carrito y este desde
- * los items ya guardados en el comprobante.
- *
- * La función del servidor es idempotente por `invoiceId`: si ya hay movimientos
- * de venta para ese comprobante, no descuenta de nuevo.
- *
- * NUNCA lanza. El comprobante ya existe y no se puede volver a crear, así que
- * un fallo de stock no debe hacer que la venta se reintente: se avisa y la
- * venta queda sincronizada igual.
- */
-async function deductStockForSyncedSale({
-  businessId, invoiceId, invoiceNumber, documentType, invoiceData, allowNegativeStock, userId,
-}) {
-  try {
-    const items = (invoiceData?.items || [])
-      // Los items personalizados (precio libre, sin producto) no mueven stock
-      .filter(it => it && it.productId)
-      .map((it, i) => ({
-        productId: it.productId,
-        name: it.name || '',
-        // La presentación multiplica: vender 1 CAJA de 12 descuenta 12 unidades
-        quantity: (Number(it.quantity) || 0) * (Number(it.presentationFactor) || 1),
-        variantSku: it.variantSku || null,
-        isNoLot: !!it.isNoLot,
-        batchNumber: it.batchNumber || null,
-        serialNumber: it.serialNumber || null,
-        cartKey: `${it.productId}-${i}`,
-        presentationName: it.presentationName || null,
-        originalQty: Number(it.quantity) || 0,
-      }))
-
-    if (items.length === 0) return { ok: true, nothingToDeduct: true }
-
-    const { httpsCallable } = await import('firebase/functions')
-    const { functions } = await import('@/lib/firebase')
-    const res = await httpsCallable(functions, 'processSaleStock')({
-      businessId,
-      warehouseId: invoiceData?.warehouseId || '',
-      invoiceId: invoiceId || '',
-      invoiceNumber: invoiceNumber || '',
-      documentType,
-      allowNegativeStock: !!allowNegativeStock,
-      userId: userId || '',
-      items,
-    })
-
-    // Desglose de lotes que asignó el servidor por FEFO: se guarda en el
-    // comprobante igual que en una venta normal, si no la farmacia pierde de
-    // qué lote salió cada unidad. Si falla, el stock ya se descontó bien.
-    const breakdown = res?.data?.batchBreakdownByCartKey || {}
-    if (Object.keys(breakdown).length > 0 && invoiceId) {
-      try {
-        const { doc, getDoc, updateDoc } = await import('firebase/firestore')
-        const { db } = await import('@/lib/firebase')
-        const ref = doc(db, 'businesses', businessId, 'invoices', invoiceId)
-        const snap = await getDoc(ref)
-        if (snap.exists()) {
-          const stored = snap.data().items || []
-          const updated = stored.map((it, i) => {
-            const b = breakdown[`${it.productId}-${i}`]
-            return b ? { ...it, batchBreakdown: b } : it
-          })
-          await updateDoc(ref, { items: updated })
-        }
-      } catch (err) {
-        console.error('Error al guardar el desglose de lotes:', err)
-      }
-    }
-
-    return { ok: true }
-  } catch (error) {
-    console.error(`⚠️ No se pudo descontar el stock de ${invoiceNumber || invoiceId}:`, error)
-    return { ok: false, error: error.message }
-  }
-}
 
 /**
  * Registra un listener para eventos de sincronización
@@ -224,7 +143,7 @@ export async function processPendingSales(currentBusinessId) {
         // idempotente, así que un reintento generaría un segundo comprobante con
         // otro número. Si el stock falla, la venta queda sincronizada igual y se
         // avisa para revisarla a mano.
-        const stockRes = await deductStockForSyncedSale({
+        const stockRes = await descontarStockDeVentaGuardada({
           businessId: targetBusinessId,
           invoiceId: result.id,
           invoiceNumber: result.number,

@@ -14,27 +14,26 @@
  * 'guia_transportista') y el envío la MISMA Cloud Function del botón
  * individual: cero caminos nuevos hacia SUNAT.
  */
-import { collection, query, where, limit, getDocs } from 'firebase/firestore'
+import { collection, query, where, getDocs } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { createCarrierDispatchGuide, sendCarrierDispatchGuideToSunat } from './firestoreService'
+import { huellaDe, huellaDeContenido } from '@/utils/bulkFingerprint'
 
 /** Pausa entre envíos a SUNAT. */
 const PAUSA_ENTRE_ENVIOS_MS = 2500
 
 /**
- * Huella corta y estable de un texto (djb2 en base36). No es criptográfica ni
- * lo necesita: solo evita que el MISMO archivo re-emita la MISMA operación.
+ * Huella de la operación: es lo que hace idempotente el reintento.
+ *
+ * Va sobre el CONTENIDO de la guía, no sobre el archivo. Si el usuario corrige
+ * una fila y vuelve a subir el mismo Excel, esa operación cambia de huella y se
+ * emite; las que no tocó conservan la suya y se omiten.
  */
-export const huellaDe = (texto) => {
-  let h = 5381
-  const s = String(texto)
-  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0
-  return h.toString(36)
-}
+export const huellaDeOperacion = (op) => huellaDeContenido({ n: op.nOperacion, guia: op.guia })
 
-/** Huella del lote: nombre del archivo + contenido normalizado de las operaciones. */
+/** Huella del archivo. Ya no manda en la idempotencia: es solo trazabilidad. */
 export const huellaDelLote = (nombreArchivo, operaciones) =>
-  huellaDe(nombreArchivo + '|' + JSON.stringify(operaciones.map((o) => [o.nOperacion, o.guia])))
+  huellaDe(`${nombreArchivo}|${operaciones.length}`)
 
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -78,21 +77,25 @@ export async function emitirLoteGreTransportista(businessId, operaciones, {
       continue
     }
 
-    const bulkKey = `gret_${loteKey}_${op.nOperacion}`
+    const bulkKey = `gret_${huellaDeOperacion(op)}`
 
     try {
       // ── Idempotencia: ¿esta operación de este archivo ya tiene guía? ──
       avisar('verificando')
-      const previa = await getDocs(query(ref, where('bulkKey', '==', bulkKey), limit(1)))
-      if (!previa.empty) {
-        const g = previa.docs[0].data()
+      // Sin limit(1): una operación re-emitida tras un rechazo deja DOS
+      // documentos con la misma clave, y hay que mirarlos todos.
+      const previa = await getDocs(query(ref, where('bulkKey', '==', bulkKey)))
+      // Una guía RECHAZADA por SUNAT no existe para SUNAT: su número quedó
+      // quemado y hay que emitir otra.
+      const viva = previa.docs.map((d) => d.data()).find((g) => g.sunatStatus !== 'rejected')
+      if (viva) {
         resultados.push({
           nOperacion: op.nOperacion,
-          numero: g.number || null,
+          numero: viva.number || null,
           estado: 'omitida',
-          mensaje: `Ya se emitió antes desde este mismo archivo (${g.number || 'sin número'}). No se duplica.`,
+          mensaje: `Ya se emitió antes con estos mismos datos (${viva.number || 'sin número'}). No se duplica.`,
         })
-        avisar('omitida', { numero: g.number })
+        avisar('omitida', { numero: viva.number })
         continue
       }
 
@@ -103,6 +106,7 @@ export async function emitirLoteGreTransportista(businessId, operaciones, {
         mtcRegistration,
         ...(branchId ? { branchId } : {}),
         bulkKey,
+        bulkLote: loteKey || null,
         bulkSource: 'excel',
       })
       if (!creacion.success) {

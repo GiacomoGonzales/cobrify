@@ -25,16 +25,27 @@ import GuideLink from '@/components/guide/GuideLink'
 import { formatCurrency } from '@/lib/utils'
 
 const ETIQUETA_ESTADO = {
+  // GRE (femenino: la guía)
   aceptada: { texto: 'Aceptada', variant: 'success' },
   rechazada: { texto: 'Rechazada', variant: 'danger' },
   error_envio: { texto: 'Creada, sin enviar', variant: 'warning' },
   error_creacion: { texto: 'No se creó', variant: 'danger' },
   omitida: { texto: 'Ya emitida antes', variant: 'default' },
   cancelada: { texto: 'Cancelada', variant: 'default' },
+  // Comprobantes (masculino: el comprobante)
+  aceptado: { texto: 'Aceptado', variant: 'success' },
+  rechazado: { texto: 'Rechazado', variant: 'danger' },
+  creado: { texto: 'Creado, sin enviar', variant: 'warning' },
+  omitido: { texto: 'Ya emitido antes', variant: 'default' },
+  cancelado: { texto: 'Cancelado', variant: 'default' },
 }
 
 export default function BulkEmission() {
-  const { getBusinessId, isDemoMode, businessSettings } = useAppContext()
+  const { getBusinessId, isDemoMode, businessSettings, user, branchScope } = useAppContext()
+  // La sucursal sale del selector del HEADER, igual que en el resto del
+  // sistema. Sin esto la emisión solo miraba las series GLOBALES y un negocio
+  // con series por sucursal fallaba con "Series no configuradas".
+  const branchIdActivo = (branchScope && branchScope !== 'all' && branchScope !== 'main') ? branchScope : null
   const toast = useToast()
   const inputRef = useRef(null)
   const cancelarRef = useRef(false)
@@ -106,11 +117,27 @@ export default function BulkEmission() {
         const { parsearExcelGreTransportista } = await import('@/services/bulkCarrierGuideParserService')
         res = await parsearExcelGreTransportista(buffer)
       } else {
-        // El catálogo solo hace falta para cruzar códigos de comprobantes.
-        const { getProducts } = await import('@/services/firestoreService')
-        const prodRes = await getProducts(getBusinessId())
+        // El catálogo hace falta para cruzar códigos; los vendedores, para
+        // resolver la columna VENDEDOR. Van en paralelo: son dos lecturas
+        // independientes y el usuario está esperando la vista previa.
+        const [{ getProducts }, { getSellers }] = await Promise.all([
+          import('@/services/firestoreService'),
+          import('@/services/sellerService'),
+        ])
+        const [prodRes, sellersRes] = await Promise.all([
+          getProducts(getBusinessId()),
+          getSellers(getBusinessId()),
+        ])
         const { parsearExcelComprobantes } = await import('@/services/bulkEmissionParserService')
-        res = await parsearExcelComprobantes(buffer, { products: prodRes.success ? prodRes.data : [], igvRate })
+        res = await parsearExcelComprobantes(buffer, {
+          products: prodRes.success ? prodRes.data : [],
+          sellers: sellersRes.success ? sellersRes.data : [],
+          // Cuenta del Banco de la Nación de Ajustes: es el respaldo cuando el
+          // Excel no trae una propia.
+          cuentaDetraccion: (businessSettings?.bankAccountsList || [])
+            .find((c) => c?.accountType === 'detracciones')?.accountNumber || '',
+          igvRate,
+        })
       }
 
       if (!res.success) {
@@ -136,17 +163,24 @@ export default function BulkEmission() {
   }
 
   const handleEmitirLote = async () => {
-    if (!resultado || tipo !== 'gre') return
+    if (!resultado) return
     const listas = resultado.operaciones.filter((o) => o.errores.length === 0)
     if (listas.length === 0) return
     if (isDemoMode) {
       toast.error('No disponible en modo demo')
       return
     }
-    // Confirmación explícita: esto emite documentos reales ante SUNAT.
+
+    // Confirmación explícita: esto emite documentos reales ante SUNAT. En
+    // comprobantes se avisa además del stock, que es lo que no se puede
+    // deshacer con un clic.
     const ok = window.confirm(
-      `Se van a emitir ${listas.length} guías de remisión transportista ante SUNAT, una por una. ` +
-      'Las operaciones con errores no se tocan. ¿Continuar?'
+      tipo === 'gre'
+        ? `Se van a emitir ${listas.length} guías de remisión transportista ante SUNAT, una por una. `
+          + 'Las operaciones con errores no se tocan. ¿Continuar?'
+        : `Se van a emitir ${listas.length} comprobantes ante SUNAT, uno por uno, por `
+          + `${formatCurrency(resultado.resumen.totalEmitible)}. Se descontará el stock igual que en una `
+          + 'venta del Punto de Venta. Las operaciones con errores no se tocan. ¿Continuar?'
     )
     if (!ok) return
 
@@ -155,22 +189,51 @@ export default function BulkEmission() {
     setEmision(null)
     setProgreso({ indice: 0, total: listas.length, etapa: 'iniciando' })
     try {
-      const { emitirLoteGreTransportista, huellaDelLote } = await import('@/services/bulkCarrierGuideEmitterService')
-      const res = await emitirLoteGreTransportista(getBusinessId(), listas, {
-        loteKey: huellaDelLote(nombreArchivo, listas),
-        mtcRegistration: businessSettings?.mtcRegistration || '',
-        onProgress: (p) => setProgreso(p),
-        debeCancelar: () => cancelarRef.current,
-      })
-      setEmision(res)
-      if (res.resumen.aceptadas === res.resumen.total) {
-        toast.success(`Lote completo: ${res.resumen.aceptadas} guías aceptadas por SUNAT`)
+      let res
+      if (tipo === 'gre') {
+        const { emitirLoteGreTransportista, huellaDelLote } = await import('@/services/bulkCarrierGuideEmitterService')
+        res = await emitirLoteGreTransportista(getBusinessId(), listas, {
+          loteKey: huellaDelLote(nombreArchivo, listas),
+          mtcRegistration: businessSettings?.mtcRegistration || '',
+          onProgress: (p) => setProgreso(p),
+          debeCancelar: () => cancelarRef.current,
+        })
       } else {
-        toast.warning(`Lote terminado: ${res.resumen.aceptadas} aceptadas, ${res.resumen.rechazadas} rechazadas, ${res.resumen.conError} con error`)
+        const { emitirLoteComprobantes, huellaDelLote } = await import('@/services/bulkInvoiceEmitterService')
+        res = await emitirLoteComprobantes(getBusinessId(), listas, {
+          loteKey: huellaDelLote(nombreArchivo, listas),
+          igvRate,
+          branchId: branchIdActivo,
+          allowNegativeStock: businessSettings?.allowNegativeStock === true,
+          autoEnvio: businessSettings?.autoSendToSunat === true,
+          userId: user?.uid || '',
+          onProgress: (p) => setProgreso(p),
+          debeCancelar: () => cancelarRef.current,
+        })
+      }
+      setEmision(res)
+
+      // Los dos motores nombran distinto por el género del documento.
+      const aceptados = res.resumen.aceptadas ?? res.resumen.aceptados ?? 0
+      const rechazados = res.resumen.rechazadas ?? res.resumen.rechazados ?? 0
+      const conError = res.resumen.conError ?? (res.resumen.erroresEnvio + res.resumen.erroresCreacion)
+      const nombre = tipo === 'gre' ? 'guías' : 'comprobantes'
+
+      if (res.resumen.creados > 0 && aceptados === 0) {
+        toast.success(`${res.resumen.creados} ${nombre} creados. No se enviaron a SUNAT porque tienes apagado el envío automático — puedes enviarlos desde Ventas.`, 9000)
+      } else if (aceptados === res.resumen.total) {
+        toast.success(`Lote completo: ${aceptados} ${nombre} aceptados por SUNAT`)
+      } else {
+        toast.warning(`Lote terminado: ${aceptados} aceptados, ${rechazados} rechazados, ${conError} con error`)
+      }
+      if (res.resumen.sinStock > 0) {
+        toast.warning(`${res.resumen.sinStock} comprobante(s) se emitieron pero su stock no se pudo descontar. Revísalos en Inventario.`, 8000)
       }
     } catch (error) {
       console.error('Error al emitir el lote:', error)
-      toast.error('El lote se interrumpió. Revisa GRE Transportista: las guías ya creadas NO se duplican al reintentar.')
+      toast.error(tipo === 'gre'
+        ? 'El lote se interrumpió. Revisa GRE Transportista: las guías ya creadas NO se duplican al reintentar.'
+        : 'El lote se interrumpió. Revisa Ventas: los comprobantes ya emitidos NO se duplican al reintentar con el mismo archivo.')
     } finally {
       setEmitiendo(false)
       setProgreso(null)
@@ -306,7 +369,7 @@ export default function BulkEmission() {
                 </p>
               </CardContent>
             </Card>
-            {tipo === 'comprobantes' ? (
+            {tipo === 'comprobantes' && !emision ? (
               <Card>
                 <CardContent className="p-4">
                   <p className="text-xs text-gray-500">Total emitible</p>
@@ -316,11 +379,18 @@ export default function BulkEmission() {
             ) : (
               <Card>
                 <CardContent className="p-4">
-                  <p className="text-xs text-gray-500">Emitidas en este lote</p>
-                  <p className="text-2xl font-bold text-gray-900">{emision ? emision.resumen.aceptadas : '—'}</p>
-                  {emision && emision.resumen.rechazadas + emision.resumen.conError > 0 && (
-                    <p className="text-xs text-red-600">{emision.resumen.rechazadas + emision.resumen.conError} con problema</p>
-                  )}
+                  <p className="text-xs text-gray-500">Emitidos en este lote</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {emision ? (emision.resumen.aceptadas ?? emision.resumen.aceptados ?? 0) : '—'}
+                  </p>
+                  {emision && (() => {
+                    const r = emision.resumen
+                    const problemas = (r.rechazadas ?? r.rechazados ?? 0)
+                      + (r.conError ?? ((r.erroresEnvio || 0) + (r.erroresCreacion || 0)))
+                    return problemas > 0
+                      ? <p className="text-xs text-red-600">{problemas} con problema</p>
+                      : null
+                  })()}
                 </CardContent>
               </Card>
             )}
@@ -340,8 +410,8 @@ export default function BulkEmission() {
             </Card>
           )}
 
-          {/* Barra de emisión (GRE) */}
-          {tipo === 'gre' && (emitiendo || emision) && (
+          {/* Barra de emisión */}
+          {(emitiendo || emision) && (
             <Card className="border-primary-200">
               <CardContent className="p-4 space-y-2">
                 {emitiendo && progreso ? (
@@ -349,7 +419,7 @@ export default function BulkEmission() {
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-sm font-medium text-gray-900 flex items-center gap-2">
                         <Loader2 className="w-4 h-4 animate-spin text-primary-600" />
-                        Emitiendo guía {Math.min(progreso.indice + 1, progreso.total)} de {progreso.total}
+                        Emitiendo {tipo === 'gre' ? 'guía' : 'comprobante'} {Math.min(progreso.indice + 1, progreso.total)} de {progreso.total}
                         {progreso.numero ? ` — ${progreso.numero}` : ''}
                       </p>
                       <Button variant="outline" size="sm" onClick={() => { cancelarRef.current = true }}>
@@ -364,20 +434,31 @@ export default function BulkEmission() {
                       />
                     </div>
                     <p className="text-xs text-gray-500">
-                      El lote va guía por guía, con pausa entre envíos. Si lo detienes, lo ya emitido queda emitido
-                      y al volver a subir el mismo archivo no se duplica nada.
+                      El lote va {tipo === 'gre' ? 'guía por guía' : 'uno por uno'}, con pausa entre envíos. Si lo detienes,
+                      lo ya emitido queda emitido y al volver a subir el mismo archivo no se duplica nada.
                     </p>
                   </>
-                ) : emision && (
-                  <p className="text-sm text-gray-900">
-                    <strong>Lote terminado:</strong> {emision.resumen.aceptadas} aceptadas
-                    {emision.resumen.rechazadas > 0 && `, ${emision.resumen.rechazadas} rechazadas`}
-                    {emision.resumen.conError > 0 && `, ${emision.resumen.conError} con error`}
-                    {emision.resumen.omitidas > 0 && `, ${emision.resumen.omitidas} omitidas (ya emitidas antes)`}
-                    {emision.resumen.canceladas > 0 && `, ${emision.resumen.canceladas} canceladas`}.
-                    {' '}El detalle está en cada guía de la lista de abajo y en la pantalla GRE Transportista.
-                  </p>
-                )}
+                ) : emision && (() => {
+                    // Los dos motores nombran distinto según el género del documento.
+                    const r = emision.resumen
+                    const aceptados = r.aceptadas ?? r.aceptados ?? 0
+                    const rechazados = r.rechazadas ?? r.rechazados ?? 0
+                    const conError = r.conError ?? ((r.erroresEnvio || 0) + (r.erroresCreacion || 0))
+                    const omitidos = r.omitidas ?? r.omitidos ?? 0
+                    const cancelados = r.canceladas ?? r.cancelados ?? 0
+                    const g = tipo === 'gre'
+                    return (
+                      <p className="text-sm text-gray-900">
+                        <strong>Lote terminado:</strong> {aceptados} {g ? 'aceptadas' : 'aceptados'}
+                        {rechazados > 0 && `, ${rechazados} ${g ? 'rechazadas' : 'rechazados'}`}
+                        {conError > 0 && `, ${conError} con error`}
+                        {omitidos > 0 && `, ${omitidos} ${g ? 'omitidas' : 'omitidos'} (ya se habían emitido)`}
+                        {cancelados > 0 && `, ${cancelados} ${g ? 'canceladas' : 'cancelados'}`}.
+                        {' '}El detalle está en cada operación de la lista de abajo y en{' '}
+                        {g ? 'la pantalla GRE Transportista' : 'Ventas'}.
+                      </p>
+                    )
+                })()}
               </CardContent>
             </Card>
           )}
@@ -387,7 +468,7 @@ export default function BulkEmission() {
             {resultado.operaciones.map((op) => {
               const conError = op.errores.length > 0
               const abierta = abiertas.has(op.nOperacion)
-              const rEmision = tipo === 'gre' ? resultadoDe(op.nOperacion) : null
+              const rEmision = resultadoDe(op.nOperacion)
               const etiqueta = rEmision ? ETIQUETA_ESTADO[rEmision.estado] : null
               return (
                 <Card key={op.nOperacion} className={conError ? 'border-red-200' : ''}>
@@ -417,6 +498,9 @@ export default function BulkEmission() {
                           <p className="text-xs text-gray-500">
                             {op.items.length} {op.items.length === 1 ? 'ítem' : 'ítems'}
                             {' · '}{op.formaPago === 'credito' ? 'Crédito' : 'Contado'}
+                            {op.cuotas?.length > 1 && ` en ${op.cuotas.length} cuotas`}
+                            {op.detraccion && ` · Detracción ${op.detraccion.rate}%`}
+                            {op.vendedor && ` · ${op.vendedor.name}`}
                             {op.advertencias.length > 0 && ` · ${op.advertencias.length} aviso${op.advertencias.length === 1 ? '' : 's'}`}
                           </p>
                         </>
@@ -427,7 +511,11 @@ export default function BulkEmission() {
                       {tipo === 'comprobantes' && (
                         <div>
                           <p className="text-sm font-bold text-gray-900">{formatCurrency(op.totales.total, monedaDe(op))}</p>
-                          {op.totales.igv > 0 && <p className="text-xs text-gray-500">IGV {formatCurrency(op.totales.igv, monedaDe(op))}</p>}
+                          {op.totales.netoAPagar != null ? (
+                            <p className="text-xs text-gray-500">Paga {formatCurrency(op.totales.netoAPagar, monedaDe(op))} · deposita S/ {op.totales.detraccionMonto}</p>
+                          ) : (
+                            op.totales.igv > 0 && <p className="text-xs text-gray-500">IGV {formatCurrency(op.totales.igv, monedaDe(op))}</p>
+                          )}
                         </div>
                       )}
                     </div>
@@ -439,7 +527,7 @@ export default function BulkEmission() {
                       {(op.errores.length > 0 || op.advertencias.length > 0 || rEmision) && (
                         <div className="space-y-1.5">
                           {rEmision && (
-                            <p className={`text-sm flex items-start gap-2 ${rEmision.estado === 'aceptada' ? 'text-green-700' : 'text-gray-700'}`}>
+                            <p className={`text-sm flex items-start gap-2 ${(rEmision.estado === 'aceptada' || rEmision.estado === 'aceptado') ? 'text-green-700' : 'text-gray-700'}`}>
                               <Send className="w-4 h-4 mt-0.5 shrink-0" />
                               <span><strong>{rEmision.numero || 'Sin número'}:</strong> {rEmision.mensaje}</span>
                             </p>
@@ -499,6 +587,26 @@ export default function BulkEmission() {
                           </tbody>
                         </table>
                       </div>
+
+                      {/* Cuotas y detracción: se revisan ANTES de emitir, no
+                          después de que SUNAT las rechace. */}
+                      {tipo === 'comprobantes' && op.cuotas?.length > 0 && (
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600">
+                          <span className="font-medium text-gray-700">Cuotas:</span>
+                          {op.cuotas.map((c) => (
+                            <span key={c.number}>
+                              {c.number}) {new Date(c.dueDate).toLocaleDateString('es-PE')} · {formatCurrency(c.amount, monedaDe(op))}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {tipo === 'comprobantes' && op.detraccion && (
+                        <p className="text-xs text-gray-600">
+                          <span className="font-medium text-gray-700">Detracción:</span>{' '}
+                          {op.detraccion.code} · {op.detraccion.name} ({op.detraccion.rate}%)
+                          {op.detraccion.bankAccount && ` · Cta. ${op.detraccion.bankAccount}`}
+                        </p>
+                      )}
                     </div>
                   )}
                 </Card>
@@ -528,16 +636,17 @@ export default function BulkEmission() {
                 <p className="text-sm text-gray-700 flex items-start gap-2">
                   <CheckCircle className="w-4 h-4 mt-0.5 text-green-600 shrink-0" />
                   Tu archivo está válido: {resultado.resumen.listas} operaciones listas por{' '}
-                  <strong>{formatCurrency(resultado.resumen.totalEmitible)}</strong>. La emisión del lote a
-                  SUNAT es la siguiente fase de esta función y está en construcción — tu archivo ya quedó
-                  listo para ese momento.
+                  <strong>{formatCurrency(resultado.resumen.totalEmitible)}</strong>. Al emitir se descontará
+                  el stock igual que en una venta del Punto de Venta.
                 </p>
               )}
-              {tipo === 'gre' && resultado.resumen.listas > 0 && !emitiendo && !emision && (
+              {resultado.resumen.listas > 0 && !emitiendo && !emision && (
                 <div className="mt-3">
                   <Button onClick={handleEmitirLote}>
                     <Send className="w-4 h-4 mr-2" />
-                    Emitir {resultado.resumen.listas} {resultado.resumen.listas === 1 ? 'guía' : 'guías'} a SUNAT
+                    {tipo === 'gre'
+                      ? `Emitir ${resultado.resumen.listas} ${resultado.resumen.listas === 1 ? 'guía' : 'guías'} a SUNAT`
+                      : `Emitir ${resultado.resumen.listas} ${resultado.resumen.listas === 1 ? 'comprobante' : 'comprobantes'} a SUNAT`}
                   </Button>
                 </div>
               )}

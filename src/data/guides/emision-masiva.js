@@ -53,6 +53,33 @@ export default {
     },
 
     {
+      id: 'detraccion-cuotas',
+      title: 'Detracción, cuotas, vendedor y correo',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'La plantilla trae las mismas opciones que usas en el POS. **DETRACCIÓN** (solo en facturas): elige el tipo de bien o servicio del desplegable y el sistema aplica la tasa del catálogo 54 de SUNAT. El depósito se calcula siempre **en soles y redondeado a soles enteros**, aunque la factura sea en dólares, porque es lo único que se puede depositar en el Banco de la Nación.',
+        },
+        {
+          type: 'texto',
+          text: 'La cuenta del Banco de la Nación puede ir en la columna **CTA. BANCO NACIÓN** o, si la dejas vacía, se usa la que tengas configurada en Ajustes → Cuentas bancarias con el tipo "detracciones". Sin ninguna de las dos, el sistema no te deja emitir.',
+        },
+        {
+          type: 'texto',
+          text: 'En ventas al **CRÉDITO** puedes repartir el pago en varias cuotas con la columna **CUOTAS**, escribiendo fecha y monto separados por dos puntos y cada cuota con punto y coma: `15/09/2026:700; 15/10/2026:550`. La suma tiene que dar el total y toda fecha debe ser **posterior** a la emisión: SUNAT rechaza una cuota que vence el mismo día. Si no pones cuotas, el vencimiento se emite como cuota única.',
+        },
+        {
+          type: 'ojo',
+          text: 'Cuando la factura tiene detracción, las cuotas reparten lo que el **cliente te paga** (el neto), no el total: el resto lo deposita él en el banco. La vista previa te muestra los dos números.',
+        },
+        {
+          type: 'texto',
+          text: '**VENDEDOR** acepta el código o el nombre de un vendedor ya registrado y sirve para las comisiones; si no coincide con ninguno, el sistema te lista los que sí tienes. **EMAIL CLIENTE** queda guardado en el comprobante para poder enviárselo después.',
+        },
+      ],
+    },
+
+    {
       id: 'stock',
       title: 'Cuándo descuenta stock',
       blocks: [
