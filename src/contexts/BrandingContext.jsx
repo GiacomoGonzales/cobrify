@@ -3,6 +3,7 @@ import { Capacitor } from '@capacitor/core'
 import { useAuth } from './AuthContext'
 import { esDominioReseller } from '@/utils/resellerDomain'
 import { leerMarcaCache, guardarMarcaCache } from '@/utils/marcaCache'
+import SplashMarca from '@/components/SplashMarca'
 import {
   DEFAULT_BRANDING,
   getBrandingForClient,
@@ -235,40 +236,9 @@ export function BrandingProvider({ children }) {
 
   // Solo mostrar splash en apps móviles nativas, no en web
   if (!brandingLoaded && (user || isResellerDomain()) && Capacitor.isNativePlatform()) {
-    // En el dominio de un reseller NO puede aparecer el logo de Cobrify: es
-    // la marca de otro. Si este dispositivo ya resolvio la marca alguna vez,
-    // el splash sale con SU logo y color al instante (memoria local); solo la
-    // primera apertura de la vida de la app muestra el indicador neutro. En
-    // los dominios propios se conserva el logo de siempre.
-    if (isResellerDomain()) {
-      const cache = leerMarcaCache()
-      if (cache?.primaryColor) {
-        return (
-          <div
-            className="fixed inset-0 flex items-center justify-center"
-            style={{ backgroundColor: cache.primaryColor }}
-          >
-            {cache.logoUrl ? (
-              <img src={cache.logoUrl} alt="" className="w-[140px] h-[140px] object-contain" />
-            ) : (
-              <span className="text-white text-3xl font-bold tracking-wide">
-                {cache.companyName}
-              </span>
-            )}
-          </div>
-        )
-      }
-      return (
-        <div className="fixed inset-0 bg-white flex items-center justify-center">
-          <div className="animate-spin rounded-full h-9 w-9 border-b-2 border-gray-400" />
-        </div>
-      )
-    }
-    return (
-      <div className="fixed inset-0 bg-[#2563EB] flex items-center justify-center">
-        <img src="/logo.png" alt="Cobrify" className="w-[140px] h-[140px] object-contain" />
-      </div>
-    )
+    // Pieza única SplashMarca: la marca del reseller en su dominio (o neutro
+    // sin memoria), el logo de Cobrify solo en los dominios propios.
+    return <SplashMarca />
   }
 
   return (

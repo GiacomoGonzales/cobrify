@@ -3,6 +3,8 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
+import SplashMarca from '@/components/SplashMarca'
+import { esDominioReseller } from '@/utils/resellerDomain'
 import { useAuth } from '@/contexts/AuthContext'
 import { loginSchema } from '@/utils/schemas'
 import { getResellerBranding, getResellerByHostname } from '@/services/brandingService'
@@ -108,12 +110,11 @@ export default function Login() {
   // Mostrar splash mientras carga el branding o auth está procesando
   const showSplash = isLoadingBranding || isAuthLoading || isAuthenticated || isLoading
 
+  // Este splash aparece DOS veces en el recorrido nativo: al montar (mientras
+  // carga la marca) y tras enviar las credenciales (mientras redirige). Era la
+  // ultima copia con Cobrify cableado — la que sobrevivio al reporte de QAMIR.
   if (showSplash && Capacitor.isNativePlatform()) {
-    return (
-      <div className="fixed inset-0 bg-[#2563EB] flex items-center justify-center">
-        <img src="/logo.png" alt="Cobrify" className="w-[140px] h-[140px] object-contain" />
-      </div>
-    )
+    return <SplashMarca />
   }
 
   // En web, esperar sin mostrar nada mientras carga
@@ -138,6 +139,16 @@ export default function Login() {
                   alt={`${customBranding.companyName} - Sistema de facturación electrónica`}
                   className="max-w-72 max-h-32 mx-auto object-contain"
                 />
+              </div>
+            ) : esDominioReseller() ? (
+              /* Reseller sin logo: la inicial de SU empresa, no el logo de Cobrify */
+              <div className="inline-block bg-white rounded-2xl p-4 shadow-lg mb-4">
+                <span
+                  className="w-24 h-24 mx-auto rounded-xl flex items-center justify-center text-4xl font-bold text-white"
+                  style={{ backgroundColor: customBranding.primaryColor || '#2563eb' }}
+                >
+                  {(customBranding.companyName || '?').charAt(0).toUpperCase()}
+                </span>
               </div>
             ) : (
               <div className="inline-block bg-white rounded-2xl p-4 shadow-lg mb-4">
