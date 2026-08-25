@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import PanelTemaCss from './PanelTemaCss'
 import { X, Loader2, MapPin, Package, User, Plus, Trash2, Check, Star } from 'lucide-react'
 import {
   getCatalogCustomerOrders,
@@ -133,7 +134,9 @@ export default function CustomerAccountDrawer({
   return (
     <div className="fixed inset-0 z-[60]">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="catalog-drawer-panel absolute inset-0 md:inset-y-0 md:left-auto md:right-0 w-full md:max-w-md bg-white shadow-2xl flex flex-col">
+      <div className="catalog-panel-cuenta catalog-drawer-panel absolute inset-0 md:inset-y-0 md:left-auto md:right-0 w-full md:max-w-md bg-white shadow-2xl flex flex-col">
+        {/* Pinta el panel con el tema del catalogo (ver PanelTemaCss) */}
+        <PanelTemaCss clase="catalog-panel-cuenta" />
         {/* Encabezado */}
         <div className="flex-shrink-0 px-5 pt-5 pb-3 border-b border-gray-100">
           <div className="flex items-start justify-between">

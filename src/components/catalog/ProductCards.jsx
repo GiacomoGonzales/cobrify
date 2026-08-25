@@ -139,91 +139,30 @@ function CardPrice({ product, ctx, compact = false }) {
 
 /* ============ tarjetas ============ */
 
-export function FeaturedCard({ product, ctx }) {
-  const { business, ignoreStock, getCartQuantity, setSelectedProduct, th } = ctx
-  const cartQty = getCartQuantity(product.id)
-  const outOfStock = isProductOutOfStock(product, ignoreStock)
-  const accent = getCatalogAccent(business)
+/**
+ * Tarjetas de las filas horizontales (Destacados y los carruseles por
+ * categoria). Son la MISMA tarjeta de la cuadricula dentro de una caja de
+ * ancho fijo — no una version recortada.
+ *
+ * Antes eran una copia con la foto cuadrada, sin boton de agregar rapido, sin
+ * el sello de descuento y sin la categoria: en la misma pagina convivian dos
+ * anatomias distintas y las de arriba se veian mas chicas. Delegando en
+ * GridCard no se pueden volver a separar.
+ */
+function FilaHorizontal({ product, index = 0, ctx }) {
   return (
-    <div
-      key={`featured-${product.id}`}
-      className="flex-shrink-0 w-40 md:w-48 cursor-pointer group"
-      onClick={() => setSelectedProduct(product)}
-      onMouseEnter={() => preloadProductDetail(product)}
-    >
-      <div
-        className={`relative overflow-hidden aspect-square mb-2.5 ${th.cardRadius} ${th.cardFrame || ''}`}
-        style={{ backgroundColor: 'var(--ct-surface-hover, #F3F4F6)' }}
-      >
-        {product.imageUrl ? (
-          <CatalogImage
-            src={product.imageUrl}
-            alt={product.name}
-            size="thumbnail"
-            className={`w-full h-full object-cover md:group-hover:scale-105 md:transition-transform md:duration-500 ${outOfStock ? 'grayscale opacity-60' : ''}`}
-          />
-        ) : (
-          <div className={`w-full h-full flex items-center justify-center ${outOfStock ? 'opacity-50' : ''}`}>
-            <Package className="w-10 h-10" style={{ color: 'var(--ct-border, #E5E7EB)' }} />
-          </div>
-        )}
-        {outOfStock && <SoldOutOverlay />}
-        {cartQty > 0 && !outOfStock && <CartQtyBadge qty={cartQty} accent={accent} />}
-      </div>
-      <h3 className={`${th.productName} line-clamp-2 leading-snug ${th.text}`}>{product.name}</h3>
-      <div className="mt-0.5">
-        <CardPrice product={product} ctx={ctx} />
-      </div>
+    <div className="flex-shrink-0 w-44 md:w-56">
+      <GridCard product={product} index={index} uniform ctx={ctx} />
     </div>
   )
 }
 
+export function FeaturedCard({ product, ctx }) {
+  return <FilaHorizontal product={product} ctx={ctx} />
+}
+
 export function CarouselCard({ product, ctx }) {
-  const { business, ignoreStock, getCartQuantity, setSelectedProduct, addToCart, th } = ctx
-  const cartQty = getCartQuantity(product.id)
-  const outOfStock = isProductOutOfStock(product, ignoreStock)
-  const priceRange = getProductPriceRange(product, business)
-  const accent = getCatalogAccent(business)
-  return (
-    <div
-      key={product.id}
-      className="flex-shrink-0 w-40 md:w-48 cursor-pointer group"
-      onClick={() => setSelectedProduct(product)}
-      onMouseEnter={() => preloadProductDetail(product)}
-    >
-      <div
-        className={`relative overflow-hidden aspect-square mb-2.5 ${th.cardRadius} ${th.cardFrame || ''}`}
-        style={{ backgroundColor: 'var(--ct-surface-hover, #F3F4F6)' }}
-      >
-        {product.imageUrl ? (
-          <CatalogImage
-            src={product.imageUrl}
-            alt={product.name}
-            size="thumbnail"
-            className={`w-full h-full object-cover md:group-hover:scale-105 md:transition-transform md:duration-500 ${outOfStock ? 'grayscale opacity-60' : ''}`}
-          />
-        ) : (
-          <div className={`w-full h-full flex items-center justify-center ${outOfStock ? 'opacity-50' : ''}`}>
-            <Package className="w-10 h-10" style={{ color: 'var(--ct-border, #E5E7EB)' }} />
-          </div>
-        )}
-        {outOfStock && <SoldOutOverlay />}
-        {cartQty > 0 && !outOfStock && <CartQtyBadge qty={cartQty} accent={accent} />}
-        {!outOfStock && (
-          <QuickAddButton
-            product={product}
-            priceRange={priceRange}
-            setSelectedProduct={setSelectedProduct}
-            addToCart={addToCart}
-          />
-        )}
-      </div>
-      <h3 className={`${th.productName} line-clamp-2 leading-snug ${th.text}`}>{product.name}</h3>
-      <div className="mt-0.5">
-        <CardPrice product={product} ctx={ctx} compact />
-      </div>
-    </div>
-  )
+  return <FilaHorizontal product={product} ctx={ctx} />
 }
 
 // uniform (F2.3): en el layout 'grid' (cuadrícula uniforme) la imagen va en

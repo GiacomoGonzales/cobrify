@@ -28,6 +28,8 @@ import CatalogSearchModal from '@/components/catalog/CatalogSearchModal'
 import { usePublicPageChrome } from '@/hooks/usePublicPageChrome'
 import CatalogFooter from '@/components/catalog/CatalogFooter'
 import HeroMondrian from '@/components/catalog/HeroMondrian'
+import HeroZine from '@/components/catalog/HeroZine'
+import CatalogAmbience from '@/components/catalog/CatalogAmbience'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { collection, query, where, getDocs, doc, getDoc, orderBy, limit, startAfter, documentId } from 'firebase/firestore'
 // CATALOGO = catalogDb (SIN cache persistente), a proposito (14-ago-2026):
@@ -65,13 +67,41 @@ import { BedDouble,
   Menu,
   Heart,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  BookOpen
 } from 'lucide-react'
 
 // Estilos de animacion para fade-in escalonado
 const fadeInStyle = `
 .catalog-fade-in {
   opacity: 1;
+}
+/* Temas oscuros (Velvet / Hologram): respiracion de los brillos y barrido del
+   espectro. Quien pidio menos movimiento las ve quietas, no apagadas. */
+@keyframes catalog-glow-pulse-kf {
+  0%, 100% { opacity: .6; }
+  50%      { opacity: 1; }
+}
+.catalog-glow-pulse { animation: catalog-glow-pulse-kf 5s ease-in-out infinite; }
+@keyframes catalog-holo-sweep-kf {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.catalog-holo-sweep { animation: catalog-holo-sweep-kf 6s ease-in-out infinite; }
+/* Texto pintado con el espectro. Sin el recorte al texto se veria una barra
+   de colores, asi que los tres prefijos van juntos a proposito. */
+.catalog-spectrum-text {
+  background-image: linear-gradient(90deg,#ff0050,#ff8800,#ffff00,#00ff66,#00bbff,#8800ff,#ff00cc,#ff0050);
+  background-size: 400% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: catalog-holo-sweep-kf 4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .catalog-glow-pulse, .catalog-holo-sweep, .catalog-spectrum-text { animation: none; }
 }
 /* Efecto "aparecer al hacer scroll" (F2.7). El catálogo ya monta las tarjetas
    de forma incremental a medida que bajas (40 en 40), así que una animación
@@ -153,6 +183,10 @@ html {
 
 
 // Componente principal
+// Ruido de fotocopia para el tema Zine. Es un SVG en linea (data URI): pesa
+// unos cientos de bytes y no agrega una peticion de red.
+const TEXTURA_PAPEL = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.95' /%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.10' /%3E%3C/svg%3E")`
+
 export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = false, customDomain = null, preloadedBusiness = null }) {
   const { slug } = useParams()
   const [searchParams] = useSearchParams()
@@ -786,6 +820,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // Chrome del tema (Fase 2): header/hero propios. {} = tema sin chrome →
   // todas las ramas caen al markup clasico original.
   const themeChrome = themeFull.chrome || {}
+  // Varias piezas se pintan distinto sobre fondo oscuro (velos, halos).
+  const themeEsOscuro = !!themeFull.tokens?.effects?.darkMode
   const themeAccent = getCatalogAccent(business, effectiveTheme)
   // Guardas de contraste (caso real: CAPITAN BLACK con acento #1F2937 casi
   // negro). Si el acento es muy oscuro, el texto pintado con el en un tema
@@ -824,14 +860,22 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // Clases/estilo de los botones de categoría según la variante del tema.
   // 'pills': píldora rellena (comportamiento clásico). 'underline': tabs con
   // subrayado del acento (estilo editorial/revista), sin fondo.
+  // Como resalta el tema la categoria ACTIVA. Tres formas, elegidas por
+  // layout.categories: un filete debajo, una pastilla redonda, o un bloque
+  // lleno con el radio del tema (los temas que hablan en bloques de color).
   const catBtnClass = (active) => {
     if (categoriesVariant === 'underline') {
       return `px-3 py-2 text-sm font-medium whitespace-nowrap flex-shrink-0 border-b-2 transition-colors bg-transparent ${
         active ? 'font-semibold' : `border-transparent ${themeClasses.textMuted}`
       }`
     }
+    if (categoriesVariant === 'solid') {
+      return `px-4 py-2 text-sm font-semibold transition-colors whitespace-nowrap flex-shrink-0 ${
+        active ? '' : themeClasses.catInactive
+      }`
+    }
     return `px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
-      active ? 'text-white' : themeClasses.catInactive
+      active ? '' : themeClasses.catInactive
     }`
   }
   const catBtnStyle = (active) => {
@@ -840,10 +884,18 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         ? { borderColor: getCatalogAccent(business), color: getCatalogAccent(business) }
         : {}
     }
-    return active ? { backgroundColor: getCatalogAccent(business) } : {}
+    if (!active) return {}
+    // El texto NO puede ser blanco fijo: sobre el amarillo de Bold o el lima
+    // de Urban no se lee. `accentIconColor` ya resuelve esto por luminancia.
+    const base = { backgroundColor: getCatalogAccent(business), color: accentIconColor }
+    return categoriesVariant === 'solid'
+      ? { ...base, borderRadius: 'var(--ct-radius-md, 0.375rem)' }
+      : base
   }
 
   const thBg = themeClasses.bg
+  // Fondo del hero cuando el negocio no subio portada (lo define cada tema).
+  const thHeroFallbackBg = themeClasses.heroFallbackBg || themeClasses.bg
   const thCard = themeClasses.card
   const thCardShadow = themeClasses.cardShadow
   const thText = themeClasses.text
@@ -1212,9 +1264,20 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     <CatalogThemeProvider business={business} themeId={effectiveTheme}>
     <div
       className={`min-h-screen ${thBg} ${thFontWrapper}`}
-      style={themeFonts.body ? { ...themeCssVars, fontFamily: themeFonts.body } : themeCssVars}
+      style={{
+        ...themeCssVars,
+        ...(themeFonts.body ? { fontFamily: themeFonts.body } : {}),
+        // Grano de fotocopia (Zine): ruido SVG en linea, sin pedir ninguna
+        // imagen al servidor. Va en la raiz para que cubra toda la tienda.
+        ...(themeChrome.pageTexture === 'paper' ? { backgroundImage: TEXTURA_PAPEL } : {}),
+      }}
     >
       <style>{fadeInStyle}</style>
+      {/* Capas decorativas de los temas oscuros. Puro adorno: si no se montan,
+          la tienda funciona igual. */}
+      {themeChrome.ambience && (
+        <CatalogAmbience variant={themeChrome.ambience} accent={themeAccent} />
+      )}
       {/* Fuentes Google del tema (motor v2): solo si el tema las define.
           Los 3 temas clásicos no cargan nada (usan las fuentes del bundle). */}
       {themeFonts.googleFontsUrl && (
@@ -1265,7 +1328,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         <div className={`border-b-2 ${thBorderColor}`}>
           <div className="max-w-7xl mx-auto px-4 md:px-6 py-1.5 flex items-center justify-between text-[10px] tracking-widest uppercase font-bold">
             <span className={thText}>01 / {String(filteredProducts.length || products.length || 1).padStart(2, '0')}</span>
-            <span className={`hidden md:inline ${thTextMuted}`}>La forma sigue a la función</span>
+            <span className={`hidden md:inline ${thTextMuted}`}>{themeChrome.topStripText || ''}</span>
             <span className={thText}>{new Date().getFullYear()}</span>
           </div>
         </div>
@@ -1282,7 +1345,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             dos columnas, para que el logo quede alineado con la columna de
             categorías (como en menus.pe) y no flotando al centro. */}
         <div className={sidebarNav ? 'max-w-[1360px] mx-auto px-4 md:px-8' : 'max-w-7xl mx-auto px-4'}>
-          <div className="flex items-center justify-between h-16 md:h-20">
+          <div className="flex items-center justify-between gap-2 md:gap-3 h-16 md:h-20">
             {/* Logo y nombre — landscape tiene prioridad y oculta el nombre */}
             {(() => {
               const headerLogoSrc = business?.catalogLogoLandscape || business?.catalogLogoUrl || business?.logoUrl
@@ -1308,7 +1371,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                      recorte con el radio del tema, para que el redondeo sea
                      parejo aunque la imagen no sea exactamente 1:1. El logo
                      horizontal se deja tal cual: recortarlo lo mutilaria. */
-                  className={`${headerIsLandscape ? 'h-8 md:h-10 max-w-[180px] md:max-w-[260px] w-auto' : 'h-9 w-9 md:h-12 md:w-12 overflow-hidden'} object-contain flex-shrink-0`}
+                  className={`${headerIsLandscape ? 'h-9 md:h-12 max-w-[200px] md:max-w-[300px] w-auto' : 'h-10 w-10 md:h-14 md:w-14 overflow-hidden'} object-contain flex-shrink-0`}
                   style={headerIsLandscape ? undefined : { borderRadius: themeChrome.headerLogoRound ? '9999px' : 'var(--ct-radius-lg, 0.75rem)' }}
                   onLoad={(e) => {
                     if (!business?.catalogLogoLandscape) {
@@ -1319,13 +1382,13 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 />
               ) : (
                 <div
-                  className="w-9 h-9 md:w-12 md:h-12 flex items-center justify-center flex-shrink-0"
+                  className="w-10 h-10 md:w-14 md:h-14 flex items-center justify-center flex-shrink-0"
                   style={{ backgroundColor: themeAccent, borderRadius: themeChrome.headerLogoRound ? '9999px' : 'var(--ct-radius-lg, 0.75rem)' }}
                 >
                   {isRestaurantMenu ? (
-                    <UtensilsCrossed className="w-5 h-5 md:w-6 md:h-6 text-white" />
+                    <UtensilsCrossed className="w-5 h-5 md:w-7 md:h-7 text-white" />
                   ) : (
-                    <Store className="w-5 h-5 md:w-6 md:h-6 text-white" />
+                    <Store className="w-5 h-5 md:w-7 md:h-7 text-white" />
                   )}
                 </div>
               )}
@@ -1333,8 +1396,21 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               {!headerIsLandscape && (
               <div className="min-w-0">
                 <h1
-                  className={`${themeChrome.headerName || 'font-bold'} text-base md:text-xl truncate ${thText}`}
-                  style={themeChrome.headerNameAccent ? { color: themeAccentText } : undefined}
+                  className={`${themeChrome.headerName || 'font-bold'} text-lg md:text-2xl truncate ${themeChrome.headerNameSpectrum ? 'catalog-spectrum-text' : (themeChrome.headerNameStamp || themeChrome.headerNameGlow) ? '' : thText}`}
+                  style={themeChrome.headerNameGlow
+                    // Halo detras del nombre: en fondo oscuro es lo que le da
+                    // cuerpo a una serif fina.
+                    ? { color: themeAccentText, textShadow: `0 0 40px ${themeAccent}66, 0 0 80px ${themeAccent}33` }
+                    : themeChrome.headerNameStamp
+                    // Recortado y pegado (Zine): tinta llena, ladeado un grado.
+                    ? {
+                      backgroundColor: 'var(--ct-text, #0A0A0A)',
+                      color: 'var(--ct-text-inverted, #EFEDE6)',
+                      padding: '2px 8px',
+                      transform: 'rotate(-1deg)',
+                      display: 'inline-block',
+                    }
+                    : (themeChrome.headerNameAccent ? { color: themeAccentText } : undefined)}
                 >
                   {business?.name || business?.businessName}
                 </h1>
@@ -1347,9 +1423,103 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               )
             })()}
 
+            {/* CUENTA DEL COMPRADOR (escritorio). En movil no va: la
+                hamburguesa ya la tiene, y dos accesos a lo mismo en una barra
+                de 360px es ruido. */}
+            {customerAccountsOn && (
+              catalogUser ? (
+                <button
+                  onClick={() => { setAccountTab('orders'); setAccountOpen(true) }}
+                  className="hidden md:flex flex-shrink-0 items-center justify-center transition-transform hover:scale-105"
+                  title={catalogProfile?.name || catalogUser.displayName || 'Mi cuenta'}
+                  aria-label="Mi cuenta"
+                >
+                  {catalogUser.photoURL ? (
+                    <img
+                      src={catalogUser.photoURL}
+                      alt=""
+                      className="w-10 h-10 object-cover"
+                      style={{ borderRadius: 'var(--ct-radius-full, 9999px)' }}
+                    />
+                  ) : (
+                    <span
+                      className="w-10 h-10 flex items-center justify-center text-sm font-bold"
+                      style={{
+                        backgroundColor: themeAccent,
+                        color: accentIconColor,
+                        borderRadius: 'var(--ct-radius-full, 9999px)',
+                      }}
+                    >
+                      {(catalogProfile?.name || catalogUser.displayName || catalogUser.email || '?').charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                </button>
+              ) : (
+                <button
+                  onClick={() => setAuthModalOpen(true)}
+                  className={`hidden md:flex flex-shrink-0 items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors ${thTextMuted} ${thViewHover}`}
+                  style={{ borderRadius: 'var(--ct-radius-md, 0.5rem)' }}
+                >
+                  <User className="w-[18px] h-[18px]" />
+                  <span className="hidden lg:inline">Iniciar sesión</span>
+                </button>
+              )
+            )}
+
             {/* Carrito — la forma la decide el chrome del tema. Todas las
                 variantes disparan el mismo setCartOpen; solo cambia la piel. */}
-            {themeChrome.headerCart === 'outline' ? (
+            {themeChrome.headerCart === 'glow' ? (
+              /* Se enciende al tener algo dentro: en fondo oscuro el halo dice
+                 "hay productos" mejor que un numerito. */
+              <button
+                onClick={() => setCartOpen(true)}
+                className="relative flex items-center gap-2 px-3 md:px-4 py-2 font-medium flex-shrink-0 transition-all hover:scale-105"
+                style={{
+                  borderRadius: 'var(--ct-radius-md, 0.625rem)',
+                  background: cartItemsCount > 0
+                    ? `linear-gradient(135deg, ${themeAccent}, ${themeAccent}AA)`
+                    : 'var(--ct-surface, rgba(255,255,255,.06))',
+                  color: cartItemsCount > 0 ? accentIconColor : 'var(--ct-text, #fff)',
+                  border: cartItemsCount > 0 ? 'none' : '1px solid var(--ct-border, rgba(255,255,255,.12))',
+                  boxShadow: cartItemsCount > 0 ? `0 0 25px ${themeAccent}80, 0 0 50px ${themeAccent}40` : 'none',
+                }}
+                aria-label={isRestaurantMenu ? 'Ver pedido' : 'Ver carrito'}
+              >
+                <ShoppingBag className="w-5 h-5" />
+                {cartItemsCount > 0 && <span className="text-sm font-semibold">{cartItemsCount}</span>}
+              </button>
+            ) : themeChrome.headerCart === 'zine' ? (
+              /* Recuadro rojo con sombra dura; se ladea al pasar el mouse. */
+              <button
+                onClick={() => setCartOpen(true)}
+                className="px-3 md:px-4 py-2 uppercase text-xs md:text-sm font-bold flex-shrink-0 transition-transform hover:rotate-1"
+                style={{
+                  backgroundColor: themeAccent,
+                  color: accentIconColor,
+                  border: '2px solid var(--ct-text, #0A0A0A)',
+                  boxShadow: '3px 3px 0 0 var(--ct-text, #0A0A0A)',
+                  letterSpacing: '0.1em',
+                }}
+                aria-label={isRestaurantMenu ? 'Ver pedido' : 'Ver carrito'}
+              >
+                {isRestaurantMenu ? 'Pedido' : 'Bolsa'} [{cartItemsCount}]
+              </button>
+            ) : themeChrome.headerCart === 'brutal' ? (
+              /* Borde grueso + sombra dura; se pinta del acento en cuanto hay
+                 algo dentro, como el original de shopifree. */
+              <button
+                onClick={() => setCartOpen(true)}
+                className="px-3 py-2 text-sm uppercase tracking-wider font-bold border-[3px] border-black flex-shrink-0 transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5"
+                style={{
+                  backgroundColor: cartItemsCount > 0 ? themeAccent : '#FFFFFF',
+                  color: cartItemsCount > 0 ? accentIconColor : '#000000',
+                  boxShadow: '3px 3px 0 #000000',
+                }}
+                aria-label={isRestaurantMenu ? 'Ver pedido' : 'Ver carrito'}
+              >
+                {isRestaurantMenu ? 'Pedido' : 'Bolsa'} ({cartItemsCount})
+              </button>
+            ) : themeChrome.headerCart === 'outline' ? (
               <button
                 onClick={() => setCartOpen(true)}
                 className={`px-3 py-2 text-sm uppercase tracking-wider font-bold border-2 transition-colors flex-shrink-0 ${thBorderColor} ${thText} hover:bg-[#0E0E0E] hover:text-white`}
@@ -1360,7 +1530,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             ) : themeChrome.headerCart === 'square' ? (
               <button
                 onClick={() => setCartOpen(true)}
-                className="relative w-11 h-11 md:w-12 md:h-12 flex items-center justify-center flex-shrink-0 transition-transform hover:scale-105"
+                className="relative w-12 h-12 md:w-14 md:h-14 flex items-center justify-center flex-shrink-0 transition-transform hover:scale-105"
                 style={{ backgroundColor: themeAccent }}
                 aria-label={isRestaurantMenu ? 'Ver pedido' : 'Ver carrito'}
               >
@@ -1374,7 +1544,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             ) : themeChrome.headerCart === 'bubble' ? (
               <button
                 onClick={() => setCartOpen(true)}
-                className="relative w-11 h-11 md:w-12 md:h-12 rounded-full flex items-center justify-center flex-shrink-0 transition-transform hover:scale-105"
+                className="relative w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center flex-shrink-0 transition-transform hover:scale-105"
                 style={{ backgroundColor: 'var(--ct-surface-hover, #FCE7F0)' }}
                 aria-label={isRestaurantMenu ? 'Ver pedido' : 'Ver carrito'}
               >
@@ -1564,7 +1734,35 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
 
       {/* Hero / Búsqueda — carrusel (F2.2) si está activado, banner cuando hay
           portada única, clásico (gradient) si no hay nada */}
-      {themeChrome.heroCover === 'mondrian' ? (
+      {themeChrome.heroCover === 'collage' ? (
+        /* Collage de fanzine (Zine): reemplaza a portada y carrusel — la foto
+           va DENTRO del collage, recortada y pegada, no como banner. */
+        <>
+          <HeroZine
+            business={business}
+            accent={themeAccent}
+            tinta={themeFull.tokens?.colors?.text || '#0A0A0A'}
+            papel={themeFull.tokens?.colors?.textInverted || '#EFEDE6'}
+          />
+          {themeChrome.sectionRule === 'zine' && (
+            <div className="max-w-7xl mx-auto px-4 md:px-6 pt-2 pb-4 flex items-center gap-3">
+              <span
+                className="catalog-heading px-3 py-1 uppercase text-sm md:text-base font-bold inline-block"
+                style={{
+                  backgroundColor: 'var(--ct-text, #0A0A0A)',
+                  color: 'var(--ct-text-inverted, #EFEDE6)',
+                  transform: 'rotate(-1deg)',
+                }}
+              >
+                {'// '}{isRestaurantMenu ? 'La carta' : 'El botín'}
+              </span>
+              <span className={`text-[11px] truncate ${thTextMuted}`}>
+                ░░░░░░░░ {filteredProducts.length} ░░░░░░░░
+              </span>
+            </div>
+          )}
+        </>
+      ) : themeChrome.heroCover === 'mondrian' ? (
         /* Composicion geometrica (Bauhaus): reemplaza a portada y carrusel —
            la foto vive DENTRO de la composicion, no encima de ella. */
         <>
@@ -1666,6 +1864,74 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 </div>
               </div>
             </div>
+          </div>
+        ) : themeChrome.heroCover === 'fade' && heroVariant !== 'full-bleed' ? (
+          /* === PORTADA FUNDIDA (temas oscuros): la foto se apaga hacia abajo
+              hasta el color del fondo, sin borde ni recuadro. El nombre no va
+              encima: ya esta en el header y aca competiria con la imagen. === */
+          <div className={sidebarNav ? 'relative md:pt-6' : 'relative'}>
+            <div className={`relative h-52 md:h-80 overflow-hidden ${sidebarNav ? 'md:rounded-2xl' : ''}`}>
+              <picture>
+                <source
+                  media="(max-width: 767px)"
+                  srcSet={optimizeImageUrl(business.catalogCoverImageMobile || business.catalogCoverImage, 'cover_mobile')}
+                />
+                <img
+                  src={optimizeImageUrl(business.catalogCoverImage, 'cover_desktop')}
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover"
+                  style={{ filter: themeChrome.heroCoverFilter || 'brightness(0.75)' }}
+                  // eslint-disable-next-line react/no-unknown-property -- minuscula a proposito (React 18 la pasa tal cual al DOM)
+                  fetchpriority="high"
+                  decoding="async"
+                />
+              </picture>
+              <div
+                className="absolute inset-0 pointer-events-none"
+                // El velo baja hasta el color del fondo. No se le puede pegar
+                // alfa a una var() de CSS, asi que abajo cierra con el fondo
+                // del tema. Arriba solo oscurece en temas OSCUROS: sobre papel
+                // crema ese negro le ensucia la foto al negocio.
+                style={{
+                  background: `linear-gradient(180deg, ${themeEsOscuro ? 'rgba(0,0,0,.5)' : 'transparent'} 0%, transparent 35%, transparent 55%, var(--ct-bg) 100%)`,
+                }}
+              />
+            </div>
+            {business?.catalogWelcome && (
+              <div className={`px-4 pt-3 ${sidebarNav ? 'md:px-0' : 'max-w-7xl mx-auto'}`}>
+                <p className={`text-sm ${thTextMuted}`}>{business.catalogWelcome}</p>
+              </div>
+            )}
+          </div>
+        ) : themeChrome.heroCover === 'raw' && heroVariant !== 'full-bleed' ? (
+          /* === PORTADA CRUDA (brutalist): la foto tal cual, con el contraste
+              subido y un filete grueso abajo. Sin degradado ni texto encima:
+              el nombre ya vive en el header y taparlo seria "decorar". === */
+          <div className={sidebarNav ? 'relative md:pt-6' : 'relative'}>
+            <div className={`relative h-44 md:h-72 overflow-hidden border-b-[3px] border-black ${sidebarNav ? 'md:border-[3px]' : ''}`}>
+              <picture>
+                <source
+                  media="(max-width: 767px)"
+                  srcSet={optimizeImageUrl(business.catalogCoverImageMobile || business.catalogCoverImage, 'cover_mobile')}
+                />
+                <img
+                  src={optimizeImageUrl(business.catalogCoverImage, 'cover_desktop')}
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover"
+                  style={{ filter: 'contrast(110%)' }}
+                  // eslint-disable-next-line react/no-unknown-property -- minuscula a proposito (React 18 la pasa tal cual al DOM)
+                  fetchpriority="high"
+                  decoding="async"
+                />
+              </picture>
+            </div>
+            {business?.catalogWelcome && (
+              <div className={`px-4 pt-3 ${sidebarNav ? 'md:px-0' : 'max-w-7xl mx-auto'}`}>
+                <p className={`text-xs md:text-sm uppercase tracking-widest ${thTextMuted}`}>
+                  {'// '}{business.catalogWelcome}
+                </p>
+              </div>
+            )}
           </div>
         ) : themeChrome.heroCover === 'impact' && heroVariant !== 'full-bleed' ? (
           /* === PORTADA DE IMPACTO (bold): degradado 135° del acento al negro
@@ -1834,6 +2100,96 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             </div>
           </div>
         </div>
+      ) : themeChrome.heroEmpty === 'editorial' ? (
+        /* === SIN PORTADA, Libreria: portada de catalogo impreso — sello con
+            el lema, nombre en serif de imprenta y un filete de tinta. === */
+        <div className={`${sidebarNav ? 'md:mt-6' : ''} ${thHeroFallbackBg}`}>
+          <div className="max-w-4xl mx-auto px-6 py-12 md:py-20 text-center">
+            <span
+              className="inline-flex items-center gap-2 px-4 py-1.5 text-xs md:text-sm font-medium mb-6"
+              style={{ backgroundColor: themeAccent, color: accentIconColor }}
+            >
+              <BookOpen className="w-4 h-4" />
+              Lee, sueña, descubre
+            </span>
+            <h2 className={`catalog-heading text-3xl md:text-5xl font-bold break-words ${thText}`}>
+              {business?.name || business?.businessName}
+            </h2>
+            {(business?.catalogWelcome || business?.catalogTagline) && (
+              <p className="catalog-heading mt-3 text-lg md:text-xl italic" style={{ color: 'var(--ct-badge, #8B2232)' }}>
+                {business?.catalogWelcome || business?.catalogTagline}
+              </p>
+            )}
+            <span className="block w-24 h-px mx-auto mt-7" style={{ backgroundColor: themeAccent }} />
+          </div>
+        </div>
+      ) : themeChrome.heroEmpty === 'opulent' ? (
+        /* === SIN PORTADA, Velvet: el nombre en serif itálica entre dos
+            filetes con un punto de luz. La opulencia es el ESPACIO. === */
+        <div className={`relative overflow-hidden ${sidebarNav ? 'md:mt-6 md:rounded-2xl' : ''}`}>
+          <div
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[420px] h-[340px] pointer-events-none catalog-glow-pulse"
+            style={{ background: `radial-gradient(ellipse, ${themeAccent}33 0%, transparent 70%)` }}
+          />
+          <div className="relative max-w-4xl mx-auto px-6 py-16 md:py-24 text-center">
+            <div className="flex items-center justify-center gap-4 mb-7">
+              <span className="h-px w-14 md:w-20" style={{ background: `linear-gradient(90deg, transparent, ${themeAccent}66)` }} />
+              <span className="w-2 h-2 rounded-full" style={{ background: themeAccent, boxShadow: `0 0 10px ${themeAccent}99` }} />
+              <span className="h-px w-14 md:w-20" style={{ background: `linear-gradient(90deg, ${themeAccent}66, transparent)` }} />
+            </div>
+            <h2
+              className={`catalog-heading text-4xl md:text-7xl font-semibold italic break-words ${thText}`}
+              style={{ textShadow: `0 0 60px ${themeAccent}4D`, letterSpacing: '0.05em' }}
+            >
+              {business?.name || business?.businessName}
+            </h2>
+            {(business?.catalogWelcome || business?.catalogTagline) && (
+              <p className="mt-6 text-xs md:text-sm uppercase tracking-[0.4em] font-light" style={{ color: themeAccentText }}>
+                {business?.catalogWelcome || business?.catalogTagline}
+              </p>
+            )}
+          </div>
+        </div>
+      ) : themeChrome.heroEmpty === 'spectrum' ? (
+        /* === SIN PORTADA, Hologram: el nombre pintado con el espectro sobre
+            un estallido iridiscente desenfocado. === */
+        <div className={`relative overflow-hidden ${sidebarNav ? 'md:mt-6 md:rounded-2xl' : ''}`}>
+          <div
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[420px] h-[420px] rounded-full pointer-events-none catalog-holo-sweep"
+            style={{
+              background: 'conic-gradient(from 0deg, rgba(255,0,80,.10), rgba(255,165,0,.10), rgba(0,255,100,.10), rgba(0,180,255,.10), rgba(130,0,255,.10), rgba(255,0,80,.10))',
+              filter: 'blur(60px)',
+            }}
+          />
+          <div className="relative max-w-4xl mx-auto px-6 py-16 md:py-24 text-center">
+            <h2 className="catalog-heading catalog-spectrum-text text-4xl md:text-7xl font-bold uppercase tracking-[0.15em] break-words">
+              {business?.name || business?.businessName}
+            </h2>
+            {(business?.catalogWelcome || business?.catalogTagline) && (
+              <p className={`mt-6 text-xs md:text-sm uppercase tracking-[0.4em] font-light ${thTextMuted}`}>
+                {business?.catalogWelcome || business?.catalogTagline}
+              </p>
+            )}
+          </div>
+        </div>
+      ) : themeChrome.heroEmpty === 'manifiesto' ? (
+        /* === SIN PORTADA, brutalist: el nombre a tamano de cartel y el lema
+            como comentario de codigo. Fondo blanco, filete grueso abajo: la
+            pagina como manifiesto impreso. === */
+        <div className={`${sidebarNav ? 'md:mt-6' : ''} border-b-[3px] border-black`}>
+          <div className="max-w-7xl mx-auto px-4 md:px-6 py-10 md:py-16 text-center">
+            <h2
+              className={`catalog-heading font-bold uppercase tracking-tighter leading-none text-4xl md:text-7xl break-words ${thText}`}
+            >
+              {business?.name || business?.businessName}
+            </h2>
+            {(business?.catalogWelcome || business?.catalogTagline) && (
+              <p className={`mt-5 text-sm md:text-base uppercase tracking-[0.2em] ${thTextMuted}`}>
+                {'// '}{business?.catalogWelcome || business?.catalogTagline}
+              </p>
+            )}
+          </div>
+        </div>
       ) : themeChrome.heroEmpty === 'impact' ? (
         /* === SIN PORTADA, bold: nombre display gigante en el acento sobre
             fondo oscuro con glow — el hero tipografico de shopifree. === */
@@ -1955,7 +2311,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                   ancha que empujaba todo hacia abajo. */}
               <button
                 onClick={() => setSearchOpen(true)}
-                className={`flex-shrink-0 rounded-full flex items-center justify-center transition-colors ${thViewHover} ${categoriesVariant === 'circles' ? 'w-14 h-14 self-start' : 'w-9 h-9 self-center'}`}
+                className={`flex-shrink-0 rounded-full flex items-center justify-center transition-colors ${thViewHover} ${categoriesVariant === 'circles' ? 'w-14 h-14 self-start' : 'w-10 h-10 self-center'}`}
                 aria-label="Buscar productos"
               >
                 <Search className={`w-[18px] h-[18px] ${thTextMuted}`} />
@@ -1966,11 +2322,14 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 <>
                   {/* Variante CÍRCULOS (motor v2): foto de la categoría (o inicial)
                       en círculo + nombre debajo, estilo apps de delivery/mercado. */}
-                  {(!onlyCarousels || selectedCategory || searchQuery) && (
-                    <button
-                      onClick={() => { setSelectedCategory(null); setSelectedSubcategory(null) }}
-                      className="flex flex-col items-center gap-1.5 flex-shrink-0 w-16 group/cat"
-                    >
+                  {/* "Todos" SIEMPRE visible. Antes se ocultaba en el modo
+                      antiguo "solo carruseles" para empujar al cliente a entrar
+                      a una categoria, y el efecto era el contrario: desde la
+                      vista principal no habia forma de ver el catalogo entero. */}
+                  <button
+                    onClick={() => { setSelectedCategory(null); setSelectedSubcategory(null) }}
+                    className="flex flex-col items-center gap-1.5 flex-shrink-0 w-16 group/cat"
+                  >
                       <span
                         className="w-14 h-14 rounded-full flex items-center justify-center border-2 transition-all"
                         style={{
@@ -1981,9 +2340,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                       >
                         <Grid3X3 className="w-6 h-6" />
                       </span>
-                      <span className={`text-[11px] font-medium truncate w-full text-center ${!selectedCategory ? thText : thTextMuted}`}>Todos</span>
-                    </button>
-                  )}
+                    <span className={`text-[11px] font-medium truncate w-full text-center ${!selectedCategory ? thText : thTextMuted}`}>Todos</span>
+                  </button>
                   {rootCategories.map(category => {
                     const active = selectedCategory === category.id
                     const img = categoryImageMap[category.id]
@@ -2022,25 +2380,43 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 </>
               ) : (
                 <>
-                  {(!onlyCarousels || selectedCategory || searchQuery) && (
-                    <button
-                      onClick={() => { setSelectedCategory(null); setSelectedSubcategory(null) }}
-                      className={catBtnClass(!selectedCategory)}
-                      style={catBtnStyle(!selectedCategory)}
-                    >
-                      Todos
-                    </button>
-                  )}
-                  {rootCategories.map(category => (
+                  <button
+                    onClick={() => { setSelectedCategory(null); setSelectedSubcategory(null) }}
+                    className={catBtnClass(!selectedCategory)}
+                    style={catBtnStyle(!selectedCategory)}
+                  >
+                    Todos
+                  </button>
+                  {rootCategories.map(category => {
+                    const imgCat = categoryImageMap[category.id]
+                    return (
                     <button
                       key={category.id}
                       onClick={() => { setSelectedCategory(category.id); setSelectedSubcategory(null) }}
-                      className={catBtnClass(selectedCategory === category.id)}
+                      className={`${catBtnClass(selectedCategory === category.id)} ${imgCat ? 'flex items-center gap-2' : ''}`}
                       style={catBtnStyle(selectedCategory === category.id)}
                     >
+                      {/* Foto de la categoria (port shopifree): la primera foto
+                          de producto de esa rama, en circulo. Sin foto, el
+                          nombre va solo — un circulo vacio ensucia mas de lo
+                          que ayuda. */}
+                      {imgCat && (
+                        <img
+                          src={optimizeImageUrl(imgCat, 'thumbnail')}
+                          alt=""
+                          aria-hidden
+                          loading="lazy"
+                          className="w-7 h-7 object-cover flex-shrink-0"
+                          // El recorte lo manda el tema: circulo en casi
+                          // todos, cuadrado en Brutalist, donde no hay una
+                          // sola esquina redondeada en toda la tienda.
+                          style={{ borderRadius: 'var(--ct-radius-full, 9999px)' }}
+                        />
+                      )}
                       {category.name}
                     </button>
-                  ))}
+                    )
+                  })}
                 </>
               )}
             </CategoryScroller>

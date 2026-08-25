@@ -25,7 +25,10 @@ export default function TrustBadges({ config, accent, themeClasses }) {
   return (
     <div className={`border-y ${themeClasses?.border || 'border-gray-100'} ${themeClasses?.card || 'bg-white'}`}>
       <div className="max-w-7xl mx-auto px-4 py-3">
-        <div className="flex items-center justify-center md:justify-between gap-x-6 gap-y-2 flex-wrap">
+        {/* Centrados y juntos. Repartidos de borde a borde (justify-between)
+            en una pantalla ancha quedaban tan separados que no se leian como
+            un grupo, sino como tres textos sueltos. */}
+        <div className="flex items-center justify-center gap-x-8 md:gap-x-12 gap-y-2 flex-wrap">
           {badges.map((b, i) => {
             const Icon = TRUST_ICONS[b.icon] || ShieldCheck
             return (

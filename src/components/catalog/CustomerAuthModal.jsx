@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import PanelTemaCss from './PanelTemaCss'
 import { X, Loader2, Mail, Lock, User, Phone, AlertCircle } from 'lucide-react'
 import {
   catalogSignInWithGoogle,
@@ -94,7 +95,8 @@ export default function CustomerAuthModal({ isOpen, onClose, businessId, accent 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} />
-      <div className="relative bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
+      <div className="catalog-panel-auth relative bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
+        <PanelTemaCss clase="catalog-panel-auth" />
         <div className="flex items-center justify-between px-5 pt-5">
           <h2 className="text-lg font-bold text-gray-900">{title}</h2>
           <button onClick={handleClose} className="p-1.5 -mr-1.5 text-gray-400 hover:text-gray-600" aria-label="Cerrar">

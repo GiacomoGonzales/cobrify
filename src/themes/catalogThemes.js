@@ -64,7 +64,7 @@ export const CATALOG_THEMES = {
     // heading/body son font-family CSS). null = usar las fuentes del bundle.
     fonts: { heading: null, body: null, googleFontsUrl: null },
     // Variantes de layout por sección. grid null = respeta la config del negocio.
-    // categories: 'underline' | 'underline'. card: 'classic' | 'overlay'.
+    // categories: 'underline' | 'pill' | 'solid'. card: 'classic' | 'overlay'.
     layout: { hero: 'classic', categories: 'underline', grid: null, card: 'classic' },
     classes: {
       // Color base
@@ -141,7 +141,7 @@ export const CATALOG_THEMES = {
     // heading/body son font-family CSS). null = usar las fuentes del bundle.
     fonts: { heading: null, body: null, googleFontsUrl: null },
     // Variantes de layout por sección. grid null = respeta la config del negocio.
-    // categories: 'underline' | 'underline'. card: 'classic' | 'overlay'.
+    // categories: 'underline' | 'pill' | 'solid'. card: 'classic' | 'overlay'.
     layout: { hero: 'classic', categories: 'underline', grid: null, card: 'classic' },
     classes: {
       // Color base
@@ -217,8 +217,8 @@ export const CATALOG_THEMES = {
     // heading/body son font-family CSS). null = usar las fuentes del bundle.
     fonts: { heading: null, body: null, googleFontsUrl: null },
     // Variantes de layout por sección. grid null = respeta la config del negocio.
-    // categories: 'underline' | 'underline'. card: 'classic' | 'overlay'.
-    layout: { hero: 'classic', categories: 'underline', grid: null, card: 'classic' },
+    // categories: 'underline' | 'pill' | 'solid'. card: 'classic' | 'overlay'.
+    layout: { hero: 'classic', categories: 'solid', grid: null, card: 'classic' },
     classes: {
       // Color base
       bg: 'bg-[#0F0F12]',
@@ -289,9 +289,10 @@ export const CATALOG_THEMES = {
       heroCover: 'mondrian',       // composicion geometrica en vez de portada
       heroEmpty: 'mondrian',
       topStrip: true,              // franja numerada sobre el header
+      topStripText: 'La forma sigue a la función',
       sectionRule: true,           // cabecera de seccion con linea y contador
     },
-    layout: { hero: 'classic', categories: 'underline', grid: 'grid', card: 'classic' },
+    layout: { hero: 'classic', categories: 'solid', grid: 'grid', card: 'classic' },
     classes: {
       bg: 'bg-white',
       card: 'bg-[#FAFAF8]',
@@ -324,6 +325,501 @@ export const CATALOG_THEMES = {
       priceClass: 'text-base font-extrabold text-[#0E0E0E]',
       detailNameClass: 'catalog-heading text-2xl font-extrabold uppercase tracking-tight text-[#0E0E0E]',
       detailPriceClass: 'text-3xl font-extrabold text-[#0E0E0E]',
+      fontWrapper: 'font-sans',
+    },
+  },
+
+  brutalist: {
+    id: 'brutalist',
+    name: 'Brutalist',
+    description: 'Anti-diseño crudo: monoespaciada, bordes gruesos y sombras duras en rojo y negro. Marcas independientes, arte y estudios creativos',
+    category: 'retail',
+    isNew: true,
+    swatch: { bg: '#FFFFFF', card: '#FFFFFF', accent: '#FF0000' },
+    accent: '#FF0000',
+    fonts: {
+      heading: "'Space Mono', ui-monospace, 'Courier New', monospace",
+      body: "'Space Mono', ui-monospace, 'Courier New', monospace",
+      googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap',
+    },
+    tokens: {
+      colors: {
+        background: '#FFFFFF', surface: '#FFFFFF', surfaceHover: '#F5F5F5',
+        text: '#000000', textMuted: '#555555', textInverted: '#FFFFFF',
+        border: '#000000', badge: '#FF0000', badgeText: '#FFFFFF',
+      },
+      // Ni una esquina redondeada, tampoco en lo circular: es el punto del tema.
+      radius: { sm: '0', md: '0', lg: '0', xl: '0', full: '0' },
+      // Sombras DURAS: desplazadas y sin difuminar. Es lo que separa a este
+      // tema del Bauhaus, que no lleva sombra ninguna.
+      shadows: { sm: '4px 4px 0 #000000', md: '6px 6px 0 #000000', lg: '8px 8px 0 #000000' },
+      effects: { darkMode: false, headerBlur: false },
+    },
+    chrome: {
+      headerName: 'font-bold uppercase tracking-tighter',
+      headerNameAccent: false,
+      headerCart: 'brutal',        // rectangulo con borde grueso y sombra dura
+      headerScrollFx: 'none',      // el borde de 3px ya separa el header
+      heroCover: 'raw',            // la foto cruda, sin degradado encima
+      heroEmpty: 'manifiesto',     // nombre gigante y el lema como comentario
+      topStrip: true,
+      topStripText: 'Sin concesiones',
+      sectionRule: true,
+    },
+    layout: { hero: 'classic', categories: 'solid', grid: 'grid', card: 'classic' },
+    classes: {
+      bg: 'bg-white',
+      card: 'bg-white',
+      cardShadow: 'bg-white',
+      text: 'text-black',
+      textMuted: 'text-[#555555]',
+      textFaint: 'text-[#888888]',
+      obsText: 'text-[#222222]',
+      headerBg: 'bg-white border-b-[3px] border-black',
+      catInactive: 'bg-transparent text-[#555555] hover:text-black uppercase tracking-wider text-xs font-bold',
+      viewActive: 'bg-black/10',
+      viewHover: 'hover:bg-[#F5F5F5]',
+      catBadge: 'bg-[#FF0000] text-white uppercase tracking-wider font-bold',
+      listBadge: 'bg-[#F5F5F5] text-black uppercase tracking-wider font-bold',
+      searchBanner: 'bg-white text-black placeholder-[#888888] border-[3px] border-black focus:ring-[#FF0000]/30',
+      searchClassic: 'bg-white text-black placeholder-[#888888] border-[3px] border-black',
+      borderColor: 'border-black',
+      footerPowered: 'text-[#555555] border-black',
+      footerLink: 'text-black',
+      heroFallbackBg: 'bg-white',
+      cartBadgeBg: '#FF0000',
+      cartBadgeColor: '#FFFFFF',
+      cardRadius: 'rounded-none',
+      // La tarjeta entera: marco grueso y sombra dura que crece al pasar el
+      // mouse, desplazandose en diagonal (el "hover" del brutalismo).
+      cardShadowEffect: 'border-[3px] border-black shadow-[4px_4px_0_#000000] transition-all hover:shadow-[7px_7px_0_#000000] hover:-translate-x-0.5 hover:-translate-y-0.5',
+      // Marco de la loseta de la foto, dentro de la tarjeta.
+      cardFrame: 'border-[3px] border-black',
+      productNameClass: 'catalog-heading text-sm font-bold uppercase tracking-tighter',
+      priceClass: 'text-base font-bold text-black',
+      detailNameClass: 'catalog-heading text-2xl font-bold uppercase tracking-tighter text-black',
+      detailPriceClass: 'text-3xl font-bold text-[#FF0000]',
+      fontWrapper: 'font-mono',
+    },
+  },
+
+  zine: {
+    id: 'zine',
+    name: 'Zine',
+    description: 'Fanzine fotocopiado: letras recortadas, cinta adhesiva y alto contraste en blanco y negro con rojo punk. Moda independiente, merch de bandas y streetwear',
+    category: 'retail',
+    isNew: true,
+    swatch: { bg: '#EFEDE6', card: '#FFFFFF', accent: '#E11414' },
+    accent: '#E11414',
+    fonts: {
+      heading: "'Special Elite', 'Courier New', monospace",
+      body: "'Anonymous Pro', 'Courier New', monospace",
+      // Bebas Neue y Bangers no son la fuente del tema: las usan las letras
+      // recortadas del nombre (RansomText), que mezcla seis voces distintas.
+      googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Special+Elite&family=Anonymous+Pro:wght@400;700&family=Bebas+Neue&family=Bangers&display=swap',
+    },
+    tokens: {
+      colors: {
+        background: '#EFEDE6', surface: '#FFFFFF', surfaceHover: '#F4F2EB',
+        text: '#0A0A0A', textMuted: '#3A3A3A', textInverted: '#EFEDE6',
+        border: '#0A0A0A', badge: '#E11414', badgeText: '#EFEDE6',
+      },
+      // Recto como el papel cortado con tijera; lo circular se conserva
+      // (a diferencia de Brutalist) porque el collage sí admite pegatinas.
+      radius: { sm: '0', md: '0', lg: '0', xl: '0', full: '9999px' },
+      shadows: { sm: '2px 2px 0 0 #0A0A0A', md: '4px 4px 0 0 #0A0A0A', lg: '6px 6px 0 0 #0A0A0A' },
+      effects: { darkMode: false, headerBlur: true },
+    },
+    chrome: {
+      headerName: 'font-bold uppercase tracking-tight',
+      headerNameAccent: false,
+      headerNameStamp: true,       // el nombre va en un recuadro de tinta, ladeado
+      headerCart: 'zine',          // recuadro rojo con sombra dura, "$$ Bolsa [n]"
+      headerScrollFx: 'shadow',
+      heroCover: 'collage',        // el collage manda: con foto o sin ella
+      heroEmpty: 'collage',
+      pageTexture: 'paper',        // grano de fotocopia sobre todo el fondo
+      sectionRule: 'zine',
+    },
+    layout: { hero: 'classic', categories: 'solid', grid: 'grid', card: 'classic' },
+    classes: {
+      bg: 'bg-[#EFEDE6]',
+      card: 'bg-white',
+      cardShadow: 'bg-white',
+      text: 'text-[#0A0A0A]',
+      textMuted: 'text-[#3A3A3A]',
+      textFaint: 'text-[#6B6B6B]',
+      obsText: 'text-[#1A1A1A]',
+      headerBg: 'bg-[#EFEDE6] border-b-[3px] border-[#0A0A0A]',
+      catInactive: 'bg-transparent text-[#3A3A3A] hover:text-[#0A0A0A] uppercase tracking-wider text-xs font-bold',
+      viewActive: 'bg-[#0A0A0A]/10',
+      viewHover: 'hover:bg-[#F4F2EB]',
+      catBadge: 'bg-[#E11414] text-[#EFEDE6] uppercase tracking-wider font-bold',
+      listBadge: 'bg-[#F4F2EB] text-[#0A0A0A] uppercase tracking-wider font-bold',
+      searchBanner: 'bg-white text-[#0A0A0A] placeholder-[#6B6B6B] border-[3px] border-[#0A0A0A] focus:ring-[#E11414]/30',
+      searchClassic: 'bg-white text-[#0A0A0A] placeholder-[#6B6B6B] border-[3px] border-[#0A0A0A]',
+      borderColor: 'border-[#0A0A0A]',
+      footerPowered: 'text-[#3A3A3A] border-[#0A0A0A]',
+      footerLink: 'text-[#0A0A0A]',
+      heroFallbackBg: 'bg-[#EFEDE6]',
+      cartBadgeBg: '#E11414',
+      cartBadgeColor: '#EFEDE6',
+      cardRadius: 'rounded-none',
+      // Recorte pegado en la hoja: marco, sombra dura y un giro leve al pasar
+      // el mouse — el gesto de acomodar el papel con el dedo.
+      cardShadowEffect: 'border-[3px] border-[#0A0A0A] shadow-[4px_4px_0_0_#0A0A0A] transition-transform hover:rotate-1',
+      cardFrame: 'border-[3px] border-[#0A0A0A]',
+      productNameClass: 'catalog-heading text-sm font-bold uppercase tracking-tight',
+      priceClass: 'text-base font-bold text-[#0A0A0A]',
+      detailNameClass: 'catalog-heading text-2xl font-bold uppercase tracking-tight text-[#0A0A0A]',
+      detailPriceClass: 'text-3xl font-bold text-[#E11414]',
+      fontWrapper: 'font-mono',
+    },
+  },
+
+  velvet: {
+    id: 'velvet',
+    name: 'Velvet',
+    description: 'Lujo nocturno: serif itálica, brillos rosa y lavanda sobre casi negro y textura de grano. Joyería, perfumería y marcas de autor',
+    category: 'all',
+    isNew: true,
+    swatch: { bg: '#0E060C', card: '#1A1018', accent: '#E8A0C8' },
+    accent: '#E8A0C8',
+    fonts: {
+      heading: "'Playfair Display', Georgia, serif",
+      body: "'Lato', system-ui, sans-serif",
+      googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lato:wght@300;400;700&display=swap',
+    },
+    tokens: {
+      colors: {
+        background: '#0E060C', surface: '#1A1018', surfaceHover: '#241822',
+        text: '#F2E8EF', textMuted: '#A08898', textInverted: '#0E060C',
+        border: '#2E1F2A', badge: '#E8A0C8', badgeText: '#0E060C',
+      },
+      radius: { sm: '0.375rem', md: '0.625rem', lg: '0.875rem', xl: '1.25rem', full: '9999px' },
+      // Sombras que son HALOS, no sombras: en fondo oscuro lo que separa una
+      // pieza del fondo es la luz que emite, no la que tapa.
+      shadows: {
+        sm: '0 0 20px rgba(232,160,200,.10)',
+        md: '0 0 35px rgba(232,160,200,.15)',
+        lg: '0 0 60px rgba(232,160,200,.20)',
+      },
+      effects: { darkMode: true, headerBlur: true },
+    },
+    chrome: {
+      headerName: 'font-medium italic tracking-[0.1em]',
+      headerNameAccent: true,
+      headerNameGlow: true,        // halo detras del nombre
+      headerCart: 'glow',          // pildora con degradado y halo al llenarse
+      headerScrollFx: 'shadow',
+      heroCover: 'fade',           // la portada se funde con el fondo
+      heroCoverFilter: 'brightness(0.75) contrast(1.15) saturate(0.9)',
+      heroEmpty: 'opulent',        // nombre en serif itálica entre filetes
+      ambience: 'velvet',          // capas fijas: grano, brillos, ornamento
+    },
+    layout: { hero: 'classic', categories: 'pill', grid: 'grid', card: 'classic' },
+    classes: {
+      bg: 'bg-[#0E060C]',
+      card: 'bg-[#1A1018]',
+      cardShadow: 'bg-[#1A1018]',
+      text: 'text-[#F2E8EF]',
+      textMuted: 'text-[#A08898]',
+      textFaint: 'text-[#7A6470]',
+      obsText: 'text-[#D8C8D2]',
+      headerBg: 'bg-[#0E060C]/80 backdrop-blur-xl border-b border-[#2E1F2A]',
+      catInactive: 'bg-[#1A1018] text-[#A08898] hover:text-[#F2E8EF] hover:bg-[#241822]',
+      viewActive: 'bg-[#241822]',
+      viewHover: 'hover:bg-[#241822]',
+      catBadge: 'bg-[#E8A0C8] text-[#0E060C] font-semibold',
+      listBadge: 'bg-[#241822] text-[#F2E8EF]',
+      searchBanner: 'bg-[#1A1018] text-[#F2E8EF] placeholder-[#7A6470] border border-[#2E1F2A] focus:ring-[#E8A0C8]/40',
+      searchClassic: 'bg-[#1A1018] text-[#F2E8EF] placeholder-[#7A6470] border border-[#2E1F2A]',
+      borderColor: 'border-[#2E1F2A]',
+      footerPowered: 'text-[#A08898] border-[#2E1F2A]',
+      footerLink: 'text-[#F2E8EF]',
+      heroFallbackBg: 'bg-[#0E060C]',
+      cartBadgeBg: '#E8A0C8',
+      cartBadgeColor: '#0E060C',
+      cardRadius: 'rounded-xl',
+      cardShadowEffect: 'border border-[#2E1F2A] transition-all hover:border-[#E8A0C8]/40 hover:shadow-[0_0_35px_rgba(232,160,200,.15)]',
+      productNameClass: 'catalog-heading text-sm font-medium text-[#F2E8EF]',
+      priceClass: 'text-base font-semibold text-[#E8A0C8]',
+      detailNameClass: 'catalog-heading text-2xl font-semibold italic text-[#F2E8EF]',
+      detailPriceClass: 'text-3xl font-semibold text-[#E8A0C8]',
+      fontWrapper: 'font-sans',
+    },
+  },
+
+  hologram: {
+    id: 'hologram',
+    name: 'Hologram',
+    description: 'Iridiscente y futurista: un espectro que sigue al cursor sobre negro, retícula luminosa y tipografía espaciada. Tecnología, sneakers y coleccionables',
+    category: 'all',
+    isNew: true,
+    swatch: { bg: '#030305', card: '#0E0E14', accent: '#8B5CF6' },
+    accent: '#8B5CF6',
+    fonts: {
+      heading: "'Sora', system-ui, sans-serif",
+      body: "'Inter', system-ui, sans-serif",
+      googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap',
+    },
+    tokens: {
+      colors: {
+        background: '#030305', surface: '#0E0E14', surfaceHover: '#16161F',
+        text: '#E8E8F0', textMuted: '#707080', textInverted: '#030305',
+        border: '#1E1E2A', badge: '#E8E8F0', badgeText: '#030305',
+      },
+      radius: { sm: '0.5rem', md: '0.75rem', lg: '1rem', xl: '1.5rem', full: '9999px' },
+      shadows: {
+        sm: '0 0 15px rgba(180,180,200,.08)',
+        md: '0 0 30px rgba(180,180,200,.12)',
+        lg: '0 0 50px rgba(180,180,200,.15)',
+      },
+      effects: { darkMode: true, headerBlur: true },
+    },
+    chrome: {
+      headerName: 'font-semibold uppercase tracking-[0.2em]',
+      headerNameAccent: false,
+      headerNameSpectrum: true,    // el nombre pintado con el espectro, animado
+      headerCart: 'glow',
+      headerScrollFx: 'shadow',
+      heroCover: 'fade',
+      heroCoverFilter: 'brightness(0.7) grayscale(0.4) contrast(1.2)',
+      heroEmpty: 'spectrum',
+      ambience: 'hologram',
+    },
+    layout: { hero: 'classic', categories: 'pill', grid: 'grid', card: 'classic' },
+    classes: {
+      bg: 'bg-[#030305]',
+      card: 'bg-[#0E0E14]',
+      cardShadow: 'bg-[#0E0E14]',
+      text: 'text-[#E8E8F0]',
+      textMuted: 'text-[#707080]',
+      textFaint: 'text-[#55555F]',
+      obsText: 'text-[#C8C8D4]',
+      headerBg: 'bg-[#030305]/80 backdrop-blur-xl border-b border-[#1E1E2A]',
+      catInactive: 'bg-[#0E0E14] text-[#707080] hover:text-[#E8E8F0] hover:bg-[#16161F]',
+      viewActive: 'bg-[#16161F]',
+      viewHover: 'hover:bg-[#16161F]',
+      catBadge: 'bg-[#E8E8F0] text-[#030305] font-semibold',
+      listBadge: 'bg-[#16161F] text-[#E8E8F0]',
+      searchBanner: 'bg-[#0E0E14] text-[#E8E8F0] placeholder-[#55555F] border border-[#1E1E2A] focus:ring-[#8B5CF6]/40',
+      searchClassic: 'bg-[#0E0E14] text-[#E8E8F0] placeholder-[#55555F] border border-[#1E1E2A]',
+      borderColor: 'border-[#1E1E2A]',
+      footerPowered: 'text-[#707080] border-[#1E1E2A]',
+      footerLink: 'text-[#E8E8F0]',
+      heroFallbackBg: 'bg-[#030305]',
+      cartBadgeBg: '#E8E8F0',
+      cartBadgeColor: '#030305',
+      cardRadius: 'rounded-2xl',
+      cardShadowEffect: 'border border-[#1E1E2A] transition-all hover:border-[#8B5CF6]/50 hover:shadow-[0_0_30px_rgba(139,92,246,.18)]',
+      productNameClass: 'catalog-heading text-sm font-medium text-[#E8E8F0]',
+      priceClass: 'text-base font-semibold text-[#E8E8F0]',
+      detailNameClass: 'catalog-heading text-2xl font-semibold tracking-wide text-[#E8E8F0]',
+      detailPriceClass: 'text-3xl font-semibold text-[#E8E8F0]',
+      fontWrapper: 'font-sans',
+    },
+  },
+
+  urban: {
+    id: 'urban',
+    name: 'Urban',
+    description: 'Calle y neón: negro absoluto, verde lima eléctrico y titulares en mayúscula compacta. Sneakers, streetwear y moda urbana',
+    category: 'retail',
+    isNew: true,
+    swatch: { bg: '#0A0A0A', card: '#1A1A1A', accent: '#CCFF00' },
+    accent: '#CCFF00',
+    fonts: { heading: null, body: null, googleFontsUrl: null },
+    tokens: {
+      colors: {
+        background: '#0A0A0A', surface: '#1A1A1A', surfaceHover: '#2A2A2A',
+        text: '#FFFFFF', textMuted: '#888888', textInverted: '#0A0A0A',
+        border: '#2A2A2A', badge: '#CCFF00', badgeText: '#0A0A0A',
+      },
+      radius: { sm: '0', md: '0', lg: '0', xl: '0', full: '0' },
+      shadows: { sm: 'none', md: 'none', lg: '0 25px 50px -12px rgba(0,0,0,.5)' },
+      effects: { darkMode: true, headerBlur: true },
+    },
+    chrome: {
+      headerName: 'font-black uppercase tracking-tight',
+      headerNameAccent: false,
+      headerCart: 'square',        // bloque del acento, sin esquinas
+      headerScrollFx: 'shadow',
+      heroCover: 'fade',
+      heroCoverFilter: 'contrast(1.1)',
+      heroEmpty: 'impact',
+    },
+    layout: { hero: 'classic', categories: 'solid', grid: 'grid', card: 'classic' },
+    classes: {
+      bg: 'bg-[#0A0A0A]',
+      card: 'bg-[#1A1A1A]',
+      cardShadow: 'bg-[#1A1A1A]',
+      text: 'text-white',
+      textMuted: 'text-[#888888]',
+      textFaint: 'text-[#666666]',
+      obsText: 'text-[#DDDDDD]',
+      headerBg: 'bg-[#0A0A0A]/95 backdrop-blur-md border-b border-[#2A2A2A]',
+      catInactive: 'bg-[#1A1A1A] text-[#888888] hover:text-white hover:bg-[#2A2A2A] uppercase tracking-wider text-xs font-bold',
+      viewActive: 'bg-[#2A2A2A]',
+      viewHover: 'hover:bg-[#2A2A2A]',
+      catBadge: 'bg-[#CCFF00] text-[#0A0A0A] uppercase tracking-wider font-black',
+      listBadge: 'bg-[#2A2A2A] text-white uppercase tracking-wider font-bold',
+      searchBanner: 'bg-[#1A1A1A] text-white placeholder-[#666666] border border-[#2A2A2A] focus:ring-[#CCFF00]/40',
+      searchClassic: 'bg-[#1A1A1A] text-white placeholder-[#666666] border border-[#2A2A2A]',
+      borderColor: 'border-[#2A2A2A]',
+      footerPowered: 'text-[#888888] border-[#2A2A2A]',
+      footerLink: 'text-white',
+      heroFallbackBg: 'bg-[#0A0A0A]',
+      cartBadgeBg: '#CCFF00',
+      cartBadgeColor: '#0A0A0A',
+      cardRadius: 'rounded-none',
+      cardShadowEffect: 'border border-[#2A2A2A] transition-all hover:border-[#CCFF00]',
+      productNameClass: 'catalog-heading text-sm font-bold uppercase tracking-tight',
+      priceClass: 'text-base font-black text-[#CCFF00]',
+      detailNameClass: 'catalog-heading text-2xl font-black uppercase tracking-tight text-white',
+      detailPriceClass: 'text-3xl font-black text-[#CCFF00]',
+      fontWrapper: 'font-sans',
+    },
+  },
+
+  bistro: {
+    id: 'bistro',
+    name: 'Bistro',
+    description: 'Mantel oscuro y cobre a media luz, con serif de carta y filetes finos. Restaurantes de mantel largo, bares de vinos y cafés de autor',
+    category: 'restaurant',
+    isNew: true,
+    swatch: { bg: '#1C1917', card: '#292524', accent: '#B87333' },
+    accent: '#B87333',
+    fonts: {
+      heading: "'Playfair Display', Georgia, serif",
+      body: "'Inter', system-ui, sans-serif",
+      googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap',
+    },
+    tokens: {
+      colors: {
+        background: '#1C1917', surface: '#292524', surfaceHover: '#3D3835',
+        text: '#FAF7F2', textMuted: '#A8A29E', textInverted: '#1C1917',
+        border: '#3D3835', badge: '#B87333', badgeText: '#1C1917',
+      },
+      radius: { sm: '0.25rem', md: '0.375rem', lg: '0.5rem', xl: '0.75rem', full: '9999px' },
+      shadows: {
+        sm: '0 2px 4px 0 rgba(0,0,0,.3)',
+        md: '0 4px 12px -2px rgba(0,0,0,.4)',
+        lg: '0 20px 40px -8px rgba(0,0,0,.5)',
+      },
+      effects: { darkMode: true, headerBlur: true },
+    },
+    chrome: {
+      headerName: 'font-semibold',
+      headerNameAccent: false,
+      headerCart: 'bubble',
+      headerScrollFx: 'shadow',
+      // A sangre: el nombre y el lema van CENTRADOS sobre la portada, entre
+      // los filetes de cobre — la portada de una carta, no un banner.
+      heroCover: 'banner',
+      heroEmpty: 'opulent',
+    },
+    layout: { hero: 'full-bleed', categories: 'pill', grid: 'grid', card: 'classic' },
+    classes: {
+      bg: 'bg-[#1C1917]',
+      card: 'bg-[#292524]',
+      cardShadow: 'bg-[#292524]',
+      text: 'text-[#FAF7F2]',
+      textMuted: 'text-[#A8A29E]',
+      textFaint: 'text-[#7A736E]',
+      obsText: 'text-[#E4DDD4]',
+      headerBg: 'bg-[#1C1917]/95 backdrop-blur-xl border-b border-[#B87333]/20',
+      catInactive: 'bg-[#292524] text-[#A8A29E] hover:text-[#FAF7F2] hover:bg-[#3D3835]',
+      viewActive: 'bg-[#3D3835]',
+      viewHover: 'hover:bg-[#3D3835]',
+      catBadge: 'bg-[#B87333] text-[#1C1917] font-semibold',
+      listBadge: 'bg-[#3D3835] text-[#FAF7F2]',
+      searchBanner: 'bg-[#292524] text-[#FAF7F2] placeholder-[#7A736E] border border-[#3D3835] focus:ring-[#B87333]/40',
+      searchClassic: 'bg-[#292524] text-[#FAF7F2] placeholder-[#7A736E] border border-[#3D3835]',
+      borderColor: 'border-[#3D3835]',
+      footerPowered: 'text-[#A8A29E] border-[#3D3835]',
+      footerLink: 'text-[#FAF7F2]',
+      heroFallbackBg: 'bg-[#1C1917]',
+      cartBadgeBg: '#B87333',
+      cartBadgeColor: '#1C1917',
+      cardRadius: 'rounded-lg',
+      cardShadowEffect: 'border border-[#3D3835] transition-all hover:border-[#B87333]/50 hover:shadow-lg',
+      productNameClass: 'catalog-heading text-sm font-medium text-[#FAF7F2]',
+      priceClass: 'text-base font-semibold text-[#B87333]',
+      detailNameClass: 'catalog-heading text-2xl font-semibold text-[#FAF7F2]',
+      detailPriceClass: 'text-3xl font-semibold text-[#B87333]',
+      fontWrapper: 'font-sans',
+    },
+  },
+
+  libreria: {
+    id: 'libreria',
+    name: 'Librería',
+    description: 'Papel crema, azul noche y tinta roja con serif de imprenta. Librerías, papelerías, editoriales y tiendas de oficio',
+    category: 'retail',
+    isNew: true,
+    swatch: { bg: '#F5F0E8', card: '#FFFFFF', accent: '#1E3A5F' },
+    accent: '#1E3A5F',
+    fonts: {
+      heading: "'Libre Baskerville', Georgia, serif",
+      body: "'Source Sans 3', system-ui, sans-serif",
+      googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Source+Sans+3:wght@300;400;500;600;700&display=swap',
+    },
+    tokens: {
+      colors: {
+        background: '#F5F0E8', surface: '#FFFFFF', surfaceHover: '#EDE5D8',
+        text: '#1A1A1A', textMuted: '#6B6358', textInverted: '#F5F0E8',
+        border: '#D4CCBE', badge: '#8B2232', badgeText: '#FFFFFF',
+      },
+      // Casi rectas: el papel impreso no tiene esquinas blandas, pero tampoco
+      // el filo del brutalismo.
+      radius: { sm: '0.125rem', md: '0.25rem', lg: '0.375rem', xl: '0.5rem', full: '9999px' },
+      shadows: {
+        sm: '0 1px 3px 0 rgba(30,58,95,.08)',
+        md: '0 4px 12px -2px rgba(30,58,95,.10)',
+        lg: '0 20px 40px -8px rgba(30,58,95,.12)',
+      },
+      effects: { darkMode: false, headerBlur: true },
+    },
+    chrome: {
+      headerName: 'font-bold',
+      headerNameAccent: true,       // el nombre en azul noche
+      headerCart: 'square',
+      headerScrollFx: 'shadow',
+      heroCover: 'fade',            // la foto se funde con el papel
+      heroEmpty: 'editorial',
+    },
+    layout: { hero: 'classic', categories: 'underline', grid: 'grid', card: 'classic' },
+    classes: {
+      bg: 'bg-[#F5F0E8]',
+      card: 'bg-white',
+      cardShadow: 'bg-white',
+      text: 'text-[#1A1A1A]',
+      textMuted: 'text-[#6B6358]',
+      textFaint: 'text-[#8F8578]',
+      obsText: 'text-[#33302B]',
+      headerBg: 'bg-[#F5F0E8]/95 backdrop-blur-md border-b-2 border-[#1E3A5F]',
+      catInactive: 'bg-white text-[#6B6358] hover:text-[#1E3A5F] hover:bg-[#EDE5D8]',
+      viewActive: 'bg-[#EDE5D8]',
+      viewHover: 'hover:bg-[#EDE5D8]',
+      catBadge: 'bg-[#1E3A5F] text-[#F5F0E8] font-semibold',
+      listBadge: 'bg-[#EDE5D8] text-[#1A1A1A]',
+      searchBanner: 'bg-white text-[#1A1A1A] placeholder-[#8F8578] border border-[#D4CCBE] focus:ring-[#1E3A5F]/30',
+      searchClassic: 'bg-white text-[#1A1A1A] placeholder-[#8F8578] border border-[#D4CCBE]',
+      borderColor: 'border-[#D4CCBE]',
+      footerPowered: 'text-[#6B6358] border-[#D4CCBE]',
+      footerLink: 'text-[#1E3A5F]',
+      heroFallbackBg: 'bg-[#EDE5D8]',
+      // El sello del carrito va en tinta ROJA sobre el azul: es el segundo
+      // color del tema y el unico sitio donde aparece a plena saturacion.
+      cartBadgeBg: '#8B2232',
+      cartBadgeColor: '#FFFFFF',
+      cardRadius: 'rounded-sm',
+      cardShadowEffect: 'border border-[#D4CCBE] transition-all hover:border-[#1E3A5F] hover:shadow-md',
+      productNameClass: 'catalog-heading text-sm font-bold text-[#1A1A1A]',
+      priceClass: 'text-base font-bold text-[#1E3A5F]',
+      detailNameClass: 'catalog-heading text-2xl font-bold text-[#1E3A5F]',
+      detailPriceClass: 'text-3xl font-bold text-[#8B2232]',
       fontWrapper: 'font-sans',
     },
   },

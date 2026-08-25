@@ -137,6 +137,8 @@ export default function Settings() {
   const { user, isDemoMode, getBusinessId, refreshBusinessSettings, hasFeature, businessSettings, updateDisplayName, isBusinessOwner, isAdmin, branchScope } = useAppContext()
   // Preview de tema del catálogo
   const [previewThemeId, setPreviewThemeId] = useState(null)
+  // Galeria de temas: se muestran los primeros y el resto tras "Ver mas".
+  const [temasExpandidos, setTemasExpandidos] = useState(false)
   const toast = useToast()
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -7741,8 +7743,23 @@ export default function Settings() {
                           Cambia colores, tipografía y forma de las tarjetas. La miniatura ya usa tu color; toca "Vista previa" para verlo con tus productos.
                         </p>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                          {getCatalogThemesList().map((theme) => {
+                        {(() => {
+                        const TEMAS_VISIBLES = 6
+                        const listaTemas = getCatalogThemesList()
+                        const hayDeMas = listaTemas.length > TEMAS_VISIBLES
+                        const iActual = listaTemas.findIndex(t => t.id === catalogTheme)
+                        // Si el tema aplicado quedo fuera del corte, ocupa el
+                        // ultimo lugar visible: nadie deberia tener que abrir
+                        // "Ver mas" para saber cual esta usando.
+                        const temasMostrados = (!hayDeMas || temasExpandidos)
+                          ? listaTemas
+                          : (iActual >= TEMAS_VISIBLES
+                            ? [...listaTemas.slice(0, TEMAS_VISIBLES - 1), listaTemas[iActual]]
+                            : listaTemas.slice(0, TEMAS_VISIBLES))
+                        return (
+                        <>
+                        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2.5">
+                          {temasMostrados.map((theme) => {
                             const isSelected = catalogTheme === theme.id
                             return (
                               <div
@@ -7787,18 +7804,18 @@ export default function Settings() {
                                       </span>
                                     </span>
                                   </div>
-                                  <div className="px-2.5 py-2 bg-white border-t border-gray-200/70">
-                                    <p className="text-xs font-semibold text-gray-900 truncate">{theme.name}</p>
+                                  <div className="px-2 py-1.5 bg-white border-t border-gray-200/70">
+                                    <p className="text-[11px] font-semibold text-gray-900 truncate">{theme.name}</p>
                                   </div>
                                 </button>
 
                                 {theme.isNew && !isSelected && (
-                                  <span className="absolute top-2 left-2 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-gray-900/80 text-white rounded">
+                                  <span className="absolute top-1.5 left-1.5 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide bg-gray-900/80 text-white rounded">
                                     Nuevo
                                   </span>
                                 )}
                                 {isSelected && (
-                                  <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold text-white bg-primary-600 shadow">
+                                  <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold text-white bg-primary-600 shadow">
                                     En uso
                                   </span>
                                 )}
@@ -7806,6 +7823,20 @@ export default function Settings() {
                             )
                           })}
                         </div>
+                        {hayDeMas && (
+                          <button
+                            type="button"
+                            onClick={() => setTemasExpandidos(v => !v)}
+                            className="mt-3 w-full py-2 text-xs font-semibold text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                          >
+                            {temasExpandidos
+                              ? 'Ver menos'
+                              : `Ver ${listaTemas.length - TEMAS_VISIBLES} tema${listaTemas.length - TEMAS_VISIBLES === 1 ? '' : 's'} más`}
+                          </button>
+                        )}
+                        </>
+                        )
+                        })()}
                       </div>
 
 {/* Color */}

@@ -10,6 +10,7 @@ import { collection, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp, s
 import { catalogDb as db } from '@/lib/firebase'
 import { getCatalogAccent } from '@/themes/catalogThemes'
 import { useCatalogTheme } from '@/components/catalog/CatalogThemeProvider'
+import { construirCss } from '@/components/catalog/PanelTemaCss'
 import { optimizeImageUrl } from '@/utils/cloudinary'
 import { formatCurrency } from '@/lib/utils'
 import { convertFromBase, normalizeCurrency } from '@/utils/currency'
@@ -203,34 +204,14 @@ export default function CartDrawer({
   // checkout inline de una vez. Hook ANTES de cualquier return.
   const { tokens } = useCatalogTheme()
   const esOscuro = !!tokens.effects.darkMode
+  // Las reglas viven en PanelTemaCss, compartidas con la cuenta del comprador
+  // y el login: los tres paneles estan escritos en gris de Tailwind y los tres
+  // tienen que respetar el tema. Los nombres de clase son los de siempre.
   const temaCss = (
-    <style>{`
-      /* Radios del tema: en Bauhaus el carrito queda recto y en Boutique
-         redondeado, sin editar cada clase del markup. rounded-full se deja
-         intacto a proposito — steppers y badges son circulares en todos. */
-      .catalog-cart-tema .rounded-lg { border-radius: ${tokens.radius.md}; }
-      .catalog-cart-tema .rounded-xl { border-radius: ${tokens.radius.md}; }
-      .catalog-cart-tema .rounded-2xl { border-radius: ${tokens.radius.lg}; }
-      ${esOscuro ? `
-      .catalog-cart-dark { background-color: ${tokens.colors.surface} !important; color: ${tokens.colors.text}; }
-      .catalog-cart-dark .border-b, .catalog-cart-dark .border-t { border-color: rgba(255,255,255,0.1); }
-      .catalog-cart-dark .bg-gray-50 { background-color: rgba(255,255,255,0.05); }
-      .catalog-cart-dark .bg-gray-100 { background-color: rgba(255,255,255,0.08); }
-      .catalog-cart-dark .bg-gray-200 { background-color: rgba(255,255,255,0.1); }
-      .catalog-cart-dark .text-gray-900 { color: #F9FAFB; }
-      .catalog-cart-dark .text-gray-700 { color: #D1D5DB; }
-      .catalog-cart-dark .text-gray-600, .catalog-cart-dark .text-gray-500 { color: #9CA3AF; }
-      .catalog-cart-dark .text-gray-400 { color: #6B7280; }
-      .catalog-cart-dark .border-gray-300 { border-color: #4B5563; }
-      .catalog-cart-dark .border-gray-200 { border-color: #374151; }
-      .catalog-cart-dark input, .catalog-cart-dark textarea { background-color: rgba(255,255,255,0.05); border-color: #4B5563; color: #F9FAFB; }
-      .catalog-cart-dark input::placeholder, .catalog-cart-dark textarea::placeholder { color: #6B7280; }
-      .catalog-cart-dark .hover\\:bg-gray-100:hover, .catalog-cart-dark .hover\\:bg-gray-50:hover { background-color: rgba(255,255,255,0.08); }
-      .catalog-cart-dark .bg-green-50 { background-color: rgba(16,185,129,0.12); }
-      .catalog-cart-dark .text-green-800 { color: #6EE7B7; }
-      .catalog-cart-dark .bg-red-50 { background-color: rgba(239,68,68,0.12); }
-      ` : ''}
-    `}</style>
+    <style>{
+      construirCss('catalog-cart-tema', tokens, { radios: true, oscuro: false })
+      + construirCss('catalog-cart-dark', tokens, { radios: false, oscuro: esOscuro })
+    }</style>
   )
   // Paso del drawer (port shopifree): 'carrito' (items + total + cupon) ->
   // 'datos' (formulario del pedido con resumen compacto). El paso 3 es la

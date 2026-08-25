@@ -1,5 +1,6 @@
 import { useRef, useState, useLayoutEffect } from 'react'
 import { getCatalogTheme, getCatalogAccent } from '@/themes/catalogThemes'
+import RansomText from '@/components/catalog/RansomText'
 
 /**
  * Miniatura de un tema del catálogo, al estilo de la galería de apariencia de
@@ -27,6 +28,21 @@ const ANCHO = 270
 // shopifree, y hace que la miniatura CALCE con su marco: ni hueco abajo ni
 // una fila cortada por la mitad.
 const ALTO = 480
+
+// Grano fino (Velvet): la misma textura de la tienda, a escala de miniatura.
+// Texto pintado con el espectro (Hologram), sin animar en la miniatura.
+const ESPECTRO_TEXTO = {
+  backgroundImage: 'linear-gradient(90deg,#ff0050,#ff8800,#ffff00,#00ff66,#00bbff,#8800ff,#ff00cc)',
+  WebkitBackgroundClip: 'text',
+  backgroundClip: 'text',
+  WebkitTextFillColor: 'transparent',
+  color: 'transparent',
+}
+
+const GRANO_FINO = `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E")`
+
+// Ruido de fotocopia (Zine), en linea para no pedir ninguna imagen.
+const TEXTURA_PAPEL = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.95' /%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.10' /%3E%3C/svg%3E")`
 
 export default function ThemeThumb({ themeId, colorNegocio, nombre = 'Tu tienda', logoUrl, portadaUrl, fotos = [] }) {
   // El lienzo se dibuja a 270px y se encoge al ancho real de la tarjeta.
@@ -83,6 +99,9 @@ export default function ThemeThumb({ themeId, colorNegocio, nombre = 'Tu tienda'
   // al menos respetan el color del tema.
   const imgs = [0, 1, 2, 3].map((i) => fotos[i % Math.max(1, fotos.length)] || null)
 
+  // Los temas que enmarcan la foto del producto (Bauhaus, Brutalist) declaran
+  // classes.cardFrame. La miniatura lo refleja para no prometer otra cosa.
+  const marcoLoseta = theme.classes?.cardFrame ? `2px solid ${borde}` : undefined
   const nombreCls = chrome.headerName || 'font-bold'
   const nombreEnAcento = !!chrome.headerNameAccent
 
@@ -99,10 +118,39 @@ export default function ThemeThumb({ themeId, colorNegocio, nombre = 'Tu tienda'
         height: ALTO,
         transform: escala != null ? `scale(${escala})` : 'scale(var(--thumb-cq, 1))',
         backgroundColor: bg,
+        // Grano de fotocopia: el mismo que pinta la tienda con este tema.
+        backgroundImage: chrome.pageTexture === 'paper' ? TEXTURA_PAPEL : undefined,
         fontFamily: theme.fonts?.body || undefined,
         position: 'relative',
       }}
     >
+      {/* Ambiente de los temas oscuros, congelado (sin animacion) */}
+      {chrome.ambience === 'velvet' && (
+        <>
+          <span className="absolute inset-0 pointer-events-none" style={{ opacity: 0.07, backgroundImage: GRANO_FINO, backgroundSize: '256px' }} />
+          <span className="absolute inset-0 pointer-events-none" style={{ background: `radial-gradient(ellipse 60% 50% at 20% 25%, ${accent}30 0%, transparent 55%)` }} />
+          <span className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse 70% 50% at 50% 80%, rgba(120,20,50,.22) 0%, transparent 55%)' }} />
+        </>
+      )}
+      {chrome.ambience === 'hologram' && (
+        <>
+          <span
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              opacity: 0.8,
+              background: 'conic-gradient(from 40deg at 55% 35%, rgba(255,0,80,.14), rgba(255,165,0,.14), rgba(255,255,0,.12), rgba(0,255,100,.14), rgba(0,180,255,.14), rgba(130,0,255,.14), rgba(255,0,200,.12), rgba(255,0,80,.14))',
+            }}
+          />
+          <span
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              backgroundImage: 'linear-gradient(rgba(200,200,220,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(200,200,220,.05) 1px, transparent 1px)',
+              backgroundSize: '40px 40px',
+            }}
+          />
+        </>
+      )}
+
       {/* Franja numerada del tema, cuando la pide */}
       {chrome.topStrip && (
         <div
@@ -110,7 +158,7 @@ export default function ThemeThumb({ themeId, colorNegocio, nombre = 'Tu tienda'
           style={{ height: 16, borderBottom: `2px solid ${borde}`, color: texto }}
         >
           <span>01 / 24</span>
-          <span>La forma sigue a la función</span>
+          <span>{chrome.topStripText || ''}</span>
           <span>{new Date().getFullYear()}</span>
         </div>
       )}
@@ -136,12 +184,58 @@ export default function ThemeThumb({ themeId, colorNegocio, nombre = 'Tu tienda'
         )}
         <span
           className={`text-[13px] truncate ${nombreCls}`}
-          style={{ color: nombreEnAcento ? accent : texto, fontFamily: fuenteTitulo }}
+          style={chrome.headerNameGlow
+            ? { color: accent, textShadow: `0 0 18px ${accent}88`, fontFamily: fuenteTitulo }
+            : chrome.headerNameSpectrum
+            ? { fontFamily: fuenteTitulo, ...ESPECTRO_TEXTO }
+            : chrome.headerNameStamp
+            ? {
+              backgroundColor: texto, color: c.textInverted || '#EFEDE6',
+              padding: '1px 6px', transform: 'rotate(-1deg)', display: 'inline-block',
+              fontFamily: fuenteTitulo,
+            }
+            : { color: nombreEnAcento ? accent : texto, fontFamily: fuenteTitulo }}
         >
           {nombre}
         </span>
         {/* Carrito con la forma del tema */}
-        {chrome.headerCart === 'outline' ? (
+        {chrome.headerCart === 'glow' ? (
+          <span
+            className="ml-auto flex-none flex items-center justify-center gap-1 px-2"
+            style={{
+              height: 24, borderRadius: t.radius?.md || '0.625rem',
+              background: `linear-gradient(135deg, ${accent}, ${accent}AA)`,
+              boxShadow: `0 0 14px ${accent}80`,
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke={oscuro ? '#0F0F12' : '#fff'} strokeWidth="2">
+              <path d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span className="text-[9px] font-bold" style={{ color: oscuro ? '#0F0F12' : '#fff' }}>2</span>
+          </span>
+        ) : chrome.headerCart === 'zine' ? (
+          <span
+            className="ml-auto flex-none flex items-center justify-center text-[8px] font-bold uppercase px-1.5"
+            style={{
+              height: 20, border: `2px solid ${borde}`,
+              backgroundColor: accent, color: c.textInverted || '#EFEDE6',
+              boxShadow: `2px 2px 0 0 ${borde}`, letterSpacing: '0.1em',
+            }}
+          >
+            Bolsa [2]
+          </span>
+        ) : chrome.headerCart === 'brutal' ? (
+          <span
+            className="ml-auto flex-none flex items-center justify-center text-[8px] font-bold uppercase tracking-wider px-1.5"
+            style={{
+              height: 20, border: `2px solid ${borde}`,
+              backgroundColor: accent, color: '#FFFFFF',
+              boxShadow: `2px 2px 0 ${borde}`,
+            }}
+          >
+            Bolsa (2)
+          </span>
+        ) : chrome.headerCart === 'outline' ? (
           <span
             className="ml-auto flex-none flex items-center justify-center text-[8px] font-bold uppercase tracking-wider px-1.5"
             style={{ height: 20, border: `2px solid ${borde}`, color: texto }}
@@ -193,6 +287,109 @@ export default function ThemeThumb({ themeId, colorNegocio, nombre = 'Tu tienda'
           <div className="col-span-2 row-span-1" style={{ backgroundColor: pal.negro || '#0E0E0E' }} />
           <div className="col-span-1 row-span-1" style={{ backgroundColor: accent }} />
         </div>
+      ) : chrome.heroCover === 'fade' ? (
+        /* Temas oscuros: la foto se apaga hacia abajo hasta el fondo. Sin
+           portada queda el nombre solo, que es como se ve la tienda. */
+        <div className="relative" style={{ height: 116, backgroundColor: bg }}>
+          {portadaUrl ? (
+            <>
+              <img src={portadaUrl} alt="" className="w-full h-full object-cover" style={{ filter: chrome.heroCoverFilter || 'brightness(0.75)' }} />
+              <div
+                className="absolute inset-0"
+                // El velo de arriba solo en temas oscuros: sobre papel crema
+                // ensucia la foto (mismo criterio que la tienda).
+                style={{ background: `linear-gradient(180deg, ${oscuro ? 'rgba(0,0,0,.5)' : 'transparent'} 0%, transparent 35%, transparent 55%, ${bg} 100%)` }}
+              />
+            </>
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center px-3 text-center">
+              {/* Sin portada, cada tema pone el nombre con SU voz */}
+              <span
+                className="text-[20px] leading-tight truncate max-w-full"
+                style={(() => {
+                  const base = { fontFamily: fuenteTitulo }
+                  if (chrome.heroEmpty === 'spectrum') {
+                    return { ...base, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', ...ESPECTRO_TEXTO }
+                  }
+                  if (chrome.heroEmpty === 'impact') {
+                    return { ...base, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '-0.02em', color: accent }
+                  }
+                  if (chrome.heroEmpty === 'editorial') {
+                    return { ...base, fontWeight: 700, color: accent }
+                  }
+                  return { ...base, fontStyle: 'italic', fontWeight: 600, color: texto, textShadow: `0 0 22px ${accent}66` }
+                })()}
+              >
+                {nombre}
+              </span>
+            </div>
+          )}
+        </div>
+      ) : chrome.heroCover === 'collage' ? (
+        /* Collage de fanzine: cinta, sello, el nombre recortado y la foto en
+           blanco y negro con marco y sombra dura — igual que la tienda. */
+        <div className="relative overflow-hidden px-3 pt-3 pb-2" style={{ height: 150 }}>
+          <span
+            className="absolute w-16 h-4 pointer-events-none"
+            style={{ top: 4, left: '22%', backgroundColor: 'rgba(253,230,138,0.8)', transform: 'rotate(-12deg)' }}
+          />
+          <span
+            className="absolute w-12 h-4 pointer-events-none"
+            style={{ top: 10, right: '28%', backgroundColor: 'rgba(253,230,138,0.75)', transform: 'rotate(8deg)' }}
+          />
+          <div className="relative text-center">
+            <span
+              className="inline-block uppercase tracking-widest text-[6px] px-1.5 py-0.5"
+              style={{ backgroundColor: texto, color: c.textInverted || '#EFEDE6', transform: 'rotate(-2deg)', fontFamily: fuenteTitulo }}
+            >
+              ★ Número uno ★
+            </span>
+            <div className="mt-1.5">
+              <RansomText
+                text={(nombre || '').toUpperCase()}
+                tamano="20px"
+                colorFondo={texto}
+                colorTexto={c.textInverted || '#EFEDE6'}
+                colorNormal={texto}
+              />
+            </div>
+          </div>
+          {portadaUrl && (
+            <div className="mt-3 flex justify-center">
+              <div
+                className="overflow-hidden"
+                style={{
+                  width: 150, height: 58, border: `2px solid ${texto}`,
+                  boxShadow: `4px 4px 0 0 ${texto}`, transform: 'rotate(-1deg)',
+                  filter: 'grayscale(0.85) contrast(1.4)',
+                }}
+              >
+                <img src={portadaUrl} alt="" className="w-full h-full object-cover" />
+              </div>
+            </div>
+          )}
+        </div>
+      ) : chrome.heroCover === 'raw' ? (
+        /* Brutalist: la foto cruda con el contraste subido y filete grueso.
+           Sin portada, el nombre a tamano de cartel — el mismo manifiesto que
+           arma la tienda. */
+        <div style={{ height: 116, backgroundColor: bg, borderBottom: `3px solid ${borde}` }}>
+          {portadaUrl ? (
+            <img src={portadaUrl} alt="" className="w-full h-full object-cover" style={{ filter: 'contrast(110%)' }} />
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center px-3 text-center">
+              <span
+                className="text-[24px] font-bold uppercase leading-none truncate max-w-full"
+                style={{ color: texto, fontFamily: fuenteTitulo, letterSpacing: '-0.05em' }}
+              >
+                {nombre}
+              </span>
+              <span className="text-[8px] uppercase tracking-[0.2em] mt-2" style={{ color: textoSuave }}>
+                {'// '}{chrome.topStripText || 'Catálogo'}
+              </span>
+            </div>
+          )}
+        </div>
       ) : (
       <div className="relative" style={{ height: 116, backgroundColor: surfaceHover }}>
         {portadaUrl ? (
@@ -242,7 +439,7 @@ export default function ThemeThumb({ themeId, colorNegocio, nombre = 'Tu tienda'
         <div className="grid grid-cols-2 gap-2.5">
           {imgs.map((src, k) => (
             <div key={k}>
-              <div className="relative overflow-hidden" style={{ height: 84, backgroundColor: surfaceHover, borderRadius: radio }}>
+              <div className="relative overflow-hidden" style={{ height: 84, backgroundColor: surfaceHover, borderRadius: radio, border: marcoLoseta }}>
                 {src
                   ? <img src={src} alt="" className="w-full h-full object-cover" />
                   : <div className="w-full h-full" style={{ background: `linear-gradient(135deg, ${accent}25, ${accent}10)` }} />}
