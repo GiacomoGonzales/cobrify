@@ -1,0 +1,123 @@
+# Compila la APK de marca blanca de un reseller y la publica en su panel.
+#
+# Se dispara a mano desde Actions (o por API desde el panel de admin) con los
+# datos del reseller. Tarda ~6 minutos.
+#
+# SECRETOS que hay que configurar una vez en el repo:
+#   ANDROID_KEYSTORE_BASE64   el .keystore de release, en base64
+#   ANDROID_KEYSTORE_PASSWORD
+#   ANDROID_KEY_ALIAS
+#   ANDROID_KEY_PASSWORD
+#   FIREBASE_SERVICE_ACCOUNT  JSON de una cuenta de servicio con acceso a
+#                             Firestore y Storage (para publicar el APK)
+name: APK de reseller
+
+on:
+  workflow_dispatch:
+    inputs:
+      reseller_id:
+        description: 'ID del reseller (el docId en Firestore)'
+        required: true
+      nombre:
+        description: 'Nombre visible de la app (ej: QAMIR)'
+        required: true
+      app_id:
+        description: 'applicationId (ej: com.qamir.app)'
+        required: true
+      dominio:
+        description: 'Dominio del reseller, sin https (ej: qamir.pe)'
+        required: true
+      color:
+        description: 'Color de marca #RRGGBB'
+        required: false
+        default: '#2563EB'
+      logo_url:
+        description: 'URL del logo (si se omite, se usan los gráficos actuales)'
+        required: false
+      version:
+        description: 'Versión para mostrarle al reseller (ej: 1.0)'
+        required: false
+        default: '1.0'
+      notas:
+        description: 'Qué cambió (opcional, se le muestra al reseller)'
+        required: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Instalar dependencias
+        # Las rutas a los plugins de Capacitor son relativas a node_modules,
+        # así que el proyecto Android no compila sin esto.
+        run: npm ci
+
+      - name: Restaurar keystore de firma
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > android/cobrify-release-key.keystore
+          cat > android/key.properties <<EOF
+          storeFile=cobrify-release-key.keystore
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+
+      - name: Descargar el logo del reseller
+        id: logo
+        env:
+          LOGO_URL: ${{ github.event.inputs.logo_url }}
+        run: |
+          if [ -n "$LOGO_URL" ]; then
+            curl -sL "$LOGO_URL" -o /tmp/logo.png
+            # Un logo corrupto o un 404 dejarían un archivo basura que rompe
+            # la generación de gráficos: se valida que sea una imagen.
+            if file /tmp/logo.png | grep -qiE 'image|bitmap'; then
+              echo "ruta=/tmp/logo.png" >> "$GITHUB_OUTPUT"
+            else
+              echo "::warning::El logo no es una imagen válida; se usan los gráficos por defecto"
+            fi
+          fi
+
+      - name: Armar y compilar la cáscara
+        run: |
+          node scripts/reseller-apk/build.mjs \
+            --nombre="${{ github.event.inputs.nombre }}" \
+            --appId="${{ github.event.inputs.app_id }}" \
+            --dominio="${{ github.event.inputs.dominio }}" \
+            --color="${{ github.event.inputs.color }}" \
+            ${{ steps.logo.outputs.ruta && format('--logo={0}', steps.logo.outputs.ruta) || '' }}
+
+      - name: Publicar en el panel del reseller
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          node scripts/reseller-apk/publish.mjs \
+            --id="${{ github.event.inputs.reseller_id }}" \
+            --version="${{ github.event.inputs.version }}" \
+            --notas="${{ github.event.inputs.notas }}"
+
+      - name: Guardar el APK como artefacto
+        # Respaldo por si hay que revisarlo o repartirlo a mano.
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-${{ github.event.inputs.app_id }}
+          path: android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
