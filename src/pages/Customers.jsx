@@ -716,6 +716,9 @@ export default function Customers() {
   const [editingCustomer, setEditingCustomer] = useState(null)
   const [deletingCustomer, setDeletingCustomer] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
+  // Historial de atenciones del paciente (ficha clínica). Vive en estado
+  // propio como las mascotas y las direcciones: es una lista, no un campo.
+  const [attentions, setAttentions] = useState([])
   const [isLookingUp, setIsLookingUp] = useState(false)
   const [sortBy, setSortBy] = useState('name') // name, orders, spent, expiry
   const [subscriptionFilter, setSubscriptionFilter] = useState('all') // all, expired, expiring, active
@@ -855,6 +858,7 @@ export default function Customers() {
       treatment: '',
       referredBy: '',
     })
+    setAttentions([])
     // Inicializar con una mascota vacía en veterinaria
     if (businessMode === 'veterinary') {
       setPets([createEmptyPet()])
@@ -862,6 +866,37 @@ export default function Customers() {
     setDeliveryAddresses([])
     setIsModalOpen(true)
   }
+
+  /**
+   * Historial de atenciones de un cliente, listo para editar.
+   *
+   * Un paciente que ya tenía la ficha de atención vieja (cuatro campos con la
+   * ÚLTIMA atención) estrena su historial con esa entrada: es justo el dato
+   * que la podóloga venía cargando y no se puede perder.
+   */
+  const normalizarAtenciones = (customer) => {
+    const lista = Array.isArray(customer?.attentions) ? customer.attentions : []
+    if (lista.length > 0) return lista.map(a => ({ ...a }))
+    // Sin historial pero con ficha vieja: se convierte en la primera entrada.
+    if (customer?.lastService || customer?.lastServiceDate || customer?.treatment) {
+      return [{
+        id: `at_${Date.now()}`,
+        date: customer.lastServiceDate || '',
+        service: customer.lastService || '',
+        treatment: customer.treatment || '',
+        recommendations: '',
+      }]
+    }
+    return []
+  }
+
+  const nuevaAtencion = () => ({
+    id: `at_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    date: new Date().toISOString().slice(0, 10),
+    service: '',
+    treatment: '',
+    recommendations: '',
+  })
 
   const openEditModal = customer => {
     setEditingCustomer(customer)
@@ -897,6 +932,7 @@ export default function Customers() {
       petWeight: customer.petWeight || '',
       petNotes: customer.petNotes || '',
     })
+    setAttentions(normalizarAtenciones(customer))
     // Cargar mascotas normalizadas
     setPets(normalizePets(customer))
     setDeliveryAddresses(
@@ -1013,6 +1049,32 @@ export default function Customers() {
       // borrar la última quede registrado). limpiarDireccionesParaGuardar quita
       // los tramos temporales del selector de ubigeo y las filas sin dirección.
       data.deliveryAddresses = limpiarDireccionesParaGuardar(deliveryAddresses)
+
+      // Historial de atenciones: se descartan las filas vacías y se ordena de
+      // la más reciente a la más antigua, que es como se lee una historia
+      // clínica (lo último primero).
+      const atencionesLimpias = attentions
+        .filter(a => (a.service || '').trim() || (a.treatment || '').trim() || (a.recommendations || '').trim())
+        .map(a => ({
+          id: a.id,
+          date: a.date || '',
+          service: cleanText(a.service || ''),
+          treatment: cleanText(a.treatment || ''),
+          recommendations: cleanText(a.recommendations || ''),
+        }))
+        .sort((x, y) => String(y.date || '').localeCompare(String(x.date || '')))
+      data.attentions = atencionesLimpias
+
+      // Los cuatro campos de la ficha vieja siguen guardando la atención MÁS
+      // RECIENTE. No son un duplicado por descuido: lo que ya los lee (la
+      // importación masiva, los datos migrados de 794 fichas) sigue andando
+      // sin enterarse de que ahora hay historial.
+      const ultima = atencionesLimpias[0]
+      if (ultima) {
+        data.lastService = ultima.service
+        data.lastServiceDate = ultima.date
+        data.treatment = ultima.treatment
+      }
 
       let result
 
@@ -2006,18 +2068,104 @@ export default function Customers() {
             <div className="border border-gray-200 rounded-lg p-3 space-y-3">
               <p className="text-sm font-semibold text-gray-900">Ficha de atención</p>
 
+              {/* Historial de atenciones. Antes eran cuatro campos planos que
+                  guardaban SOLO la última: cada control nuevo pisaba el
+                  anterior, y para una podóloga eso es perder justo el dato que
+                  necesita cuando el paciente vuelve. */}
+              <div className="space-y-2">
+                {attentions.length === 0 && (
+                  <p className="text-xs text-gray-500">
+                    Sin atenciones registradas. Agrega la primera con el botón de abajo.
+                  </p>
+                )}
+
+                {attentions.map((at, idx) => (
+                  <div key={at.id} className="border border-gray-200 rounded-lg p-3 space-y-2 bg-gray-50/60">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-gray-500">
+                        Atención {attentions.length - idx}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setAttentions(prev => prev.filter(x => x.id !== at.id))}
+                        className="text-gray-400 hover:text-red-600 p-1"
+                        aria-label="Quitar atención"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Fecha</label>
+                        <input
+                          type="date"
+                          value={at.date || ''}
+                          onChange={e => setAttentions(prev => prev.map(x =>
+                            x.id === at.id ? { ...x, date: e.target.value } : x))}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Procedimiento</label>
+                        <input
+                          type="text"
+                          value={at.service || ''}
+                          onChange={e => setAttentions(prev => prev.map(x =>
+                            x.id === at.id ? { ...x, service: e.target.value } : x))}
+                          placeholder="Ej: Profilaxis"
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Tratamiento / medicación</label>
+                      <input
+                        type="text"
+                        value={at.treatment || ''}
+                        onChange={e => setAttentions(prev => prev.map(x =>
+                          x.id === at.id ? { ...x, treatment: e.target.value } : x))}
+                        placeholder="Ej: Tritri amorolfina"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Recomendaciones</label>
+                      <textarea
+                        value={at.recommendations || ''}
+                        onChange={e => setAttentions(prev => prev.map(x =>
+                          x.id === at.id ? { ...x, recommendations: e.target.value } : x))}
+                        rows={2}
+                        placeholder="Qué se le indicó al paciente para la próxima visita"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 resize-y"
+                      />
+                    </div>
+                  </div>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={() => setAttentions(prev => [nuevaAtencion(), ...prev])}
+                  className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-gray-300 text-sm text-gray-600 hover:border-primary-400 hover:text-primary-700 transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  Agregar atención
+                </button>
+
+                <p className="text-[11px] text-gray-500 leading-snug">
+                  Los productos y servicios que se llevó no van acá: ya están en su
+                  historial de comprobantes, que se abre desde la columna Pedidos.
+                </p>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Input
-                  label="Último procedimiento"
-                  placeholder="Ej: Profilaxis"
-                  error={errors.lastService?.message}
-                  {...register('lastService')}
-                />
-                <Input
-                  label="Fecha de la última atención"
-                  type="date"
-                  error={errors.lastServiceDate?.message}
-                  {...register('lastServiceDate')}
+                  label="Recomendado por"
+                  placeholder="Quién lo trajo o lo refirió"
+                  error={errors.referredBy?.message}
+                  {...register('referredBy')}
                 />
               </div>
 

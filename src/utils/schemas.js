@@ -69,6 +69,15 @@ export const customerSchema = z.object({
   lastService: z.string().optional().or(z.literal('')),
   lastServiceDate: z.string().optional().or(z.literal('')),
   treatment: z.string().optional().or(z.literal('')),
+  // Historial de atenciones. Los cuatro campos de arriba siguen guardando la
+  // MAS RECIENTE (lo que ya los lee no se entera del cambio).
+  attentions: z.array(z.object({
+    id: z.string(),
+    date: z.string().optional().or(z.literal('')),
+    service: z.string().optional().or(z.literal('')),
+    treatment: z.string().optional().or(z.literal('')),
+    recommendations: z.string().optional().or(z.literal('')),
+  })).optional(),
   // Múltiples mascotas (nuevo)
   pets: z.array(z.object({
     id: z.string(),
