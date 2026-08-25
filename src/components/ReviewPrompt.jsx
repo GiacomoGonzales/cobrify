@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Capacitor } from '@capacitor/core'
+import { esDominioReseller } from '@/utils/resellerDomain'
 import { Star, X } from 'lucide-react'
 
 const REVIEW_STORAGE_KEY = 'cobrify_review_state'
@@ -83,9 +84,13 @@ export default function ReviewPrompt() {
       const { InAppReview } = await import('@capacitor-community/in-app-review')
       await InAppReview.requestReview()
     } catch (error) {
-      // Fallback: abrir Play Store directamente
+      // Fallback: abrir Play Store directamente. En el dominio de un
+      // reseller no se abre nada — su cliente no tiene por que aterrizar en
+      // la ficha de Cobrify.
       console.error('In-app review error:', error)
-      window.open('https://play.google.com/store/apps/details?id=com.factuya.cobrify', '_blank')
+      if (!esDominioReseller()) {
+        window.open('https://play.google.com/store/apps/details?id=com.factuya.cobrify', '_blank')
+      }
     }
     saveReviewState({ lastShown: Date.now(), completed: true, snoozed: false })
     setVisible(false)

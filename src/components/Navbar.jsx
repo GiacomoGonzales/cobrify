@@ -3,6 +3,8 @@ import { Bell, User, LogOut, Menu, Download, ChevronDown, Check, Store, Utensils
 import { useNavigate } from 'react-router-dom'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useBranding } from '@/contexts/BrandingContext'
+import { Capacitor } from '@capacitor/core'
+import { esDominioReseller } from '@/utils/resellerDomain'
 import { useStore } from '@/stores/useStore'
 import { usePWAInstall } from '@/hooks/usePWAInstall'
 import { getUnreadNotifications, checkAndCreateSubscriptionNotifications } from '@/services/notificationService'
@@ -35,6 +37,12 @@ function Navbar() {
   // se instala la PWA.
   const tiendaApp = (() => {
     if (typeof navigator === 'undefined') return null
+    // Dentro de la app nativa no se ofrece descargar la app: ya la estas
+    // usando. Se veia en la cascara de marca blanca, que tambien es nativa.
+    if (Capacitor.isNativePlatform()) return null
+    // En el dominio de un reseller tampoco: la ficha de la tienda es de
+    // Cobrify, y mandar ahi al cliente de otro es regalarle la marca.
+    if (esDominioReseller()) return null
     const ua = navigator.userAgent || ''
     if (/android/i.test(ua)) return 'https://play.google.com/store/apps/details?id=com.factuya.cobrify'
     if (/iPad|iPhone|iPod/.test(ua) && !window.MSStream) return 'https://apps.apple.com/pe/app/cobrify-peru/id6756195760'

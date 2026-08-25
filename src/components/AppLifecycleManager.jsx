@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
+import { esDominioReseller } from '@/utils/resellerDomain'
 import { App as CapacitorApp } from '@capacitor/app'
 import { disableNetwork, enableNetwork } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -43,10 +44,13 @@ export default function AppLifecycleManager() {
           // Fallback a la ficha real de cada tienda (las mismas URLs que usan
           // ReviewPrompt y la landing).
           console.error('In-app review error:', error)
-          const store = Capacitor.getPlatform() === 'ios'
-            ? 'https://apps.apple.com/pe/app/cobrify-peru/id6756195760'
-            : 'https://play.google.com/store/apps/details?id=com.factuya.cobrify'
-          window.open(store, '_blank')
+          // En el dominio de un reseller no se cae a la ficha de Cobrify.
+          if (!esDominioReseller()) {
+            const store = Capacitor.getPlatform() === 'ios'
+              ? 'https://apps.apple.com/pe/app/cobrify-peru/id6756195760'
+              : 'https://play.google.com/store/apps/details?id=com.factuya.cobrify'
+            window.open(store, '_blank')
+          }
         }
         return
       }

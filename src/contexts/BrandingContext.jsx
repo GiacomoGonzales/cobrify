@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { useAuth } from './AuthContext'
+import { esDominioReseller } from '@/utils/resellerDomain'
 import {
   DEFAULT_BRANDING,
   getBrandingForClient,
@@ -205,14 +206,21 @@ export function BrandingProvider({ children }) {
 
   // Mostrar loading mientras se carga el branding (evita flash de Cobrify)
   // También mostrar loading para dominios de reseller sin usuario logueado
-  const isResellerDomain = () => {
-    const hostname = window.location.hostname.toLowerCase()
-    const ignoredDomains = ['localhost', 'vercel.app', 'firebaseapp.com', 'web.app', 'cobrifyperu.com', 'cobrify.com']
-    return !ignoredDomains.some(d => hostname.includes(d))
-  }
+  const isResellerDomain = esDominioReseller
 
   // Solo mostrar splash en apps móviles nativas, no en web
   if (!brandingLoaded && (user || isResellerDomain()) && Capacitor.isNativePlatform()) {
+    // En el dominio de un reseller NO puede aparecer el logo de Cobrify: es
+    // la marca de otro. Como todavia no sabemos cual es la suya (justo eso
+    // se esta cargando), va un indicador neutro. En los dominios propios se
+    // conserva el logo de siempre.
+    if (isResellerDomain()) {
+      return (
+        <div className="fixed inset-0 bg-white flex items-center justify-center">
+          <div className="animate-spin rounded-full h-9 w-9 border-b-2 border-gray-400" />
+        </div>
+      )
+    }
     return (
       <div className="fixed inset-0 bg-[#2563EB] flex items-center justify-center">
         <img src="/logo.png" alt="Cobrify" className="w-[140px] h-[140px] object-contain" />
