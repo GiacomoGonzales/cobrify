@@ -80,6 +80,7 @@ import {
 import { useStore } from '@/stores/useStore'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useBranding } from '@/contexts/BrandingContext'
+import { esDominioReseller } from '@/utils/resellerDomain'
 
 function Sidebar() {
   const { mobileMenuOpen, setMobileMenuOpen, sidebarCollapsed, toggleSidebar, orderAlertCount } = useStore()
@@ -2136,6 +2137,15 @@ function Sidebar() {
               height="40"
               loading="eager"
             />
+          ) : esDominioReseller() ? (
+            /* Reseller sin logo cargado: la inicial de SU empresa sobre su
+               color — caer al logo de Cobrify aqui era regalarle la marca. */
+            <span
+              className="w-10 h-10 rounded-lg flex items-center justify-center text-lg font-bold text-white flex-shrink-0"
+              style={{ backgroundColor: branding.primaryColor || '#2563eb' }}
+            >
+              {(branding.companyName || '?').charAt(0).toUpperCase()}
+            </span>
           ) : (
             <img
               src="/logo.png"

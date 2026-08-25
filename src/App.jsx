@@ -99,7 +99,6 @@ const Recipes = lazy(() => import('./pages/Recipes'))
 const RegisterPurchase = lazy(() => import('./pages/RegisterPurchase'))
 const PurchaseHistory = lazy(() => import('./pages/PurchaseHistory'))
 const Requirements = lazy(() => import('./pages/Requirements'))
-import MobileRedirect from './components/MobileRedirect'
 const DispatchGuides = lazy(() => import('./pages/DispatchGuides'))
 const CarrierDispatchGuides = lazy(() => import('./pages/CarrierDispatchGuides'))
 const TermsAndConditions = lazy(() => import('./pages/TermsAndConditions'))
