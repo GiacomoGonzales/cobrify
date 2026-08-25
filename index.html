@@ -101,6 +101,47 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Puente de marca: entre el splash nativo y React no habia NADA pintado
+         (se veia el fondo por defecto — el "Cobrify detras del dialogo de
+         permisos" del reporte de QAMIR). Si este dominio ya resolvio su marca
+         alguna vez (memoria local), se pinta un lienzo con su color y logo
+         ANTES de que cargue el bundle. Lo retira BrandingContext al resolver,
+         con un tope de 8s por si React no llega a montar. -->
+    <script>
+      (function () {
+        try {
+          var path = window.location.pathname;
+          // Solo en la app/login: en el catalogo publico y demas paginas
+          // publicas este puente no corresponde.
+          var esApp = path === '/' || path.indexOf('/app') === 0 || path.indexOf('/login') === 0;
+          if (!esApp) return;
+          var host = window.location.hostname.toLowerCase();
+          var propios = ['localhost', '127.0.0.1', 'vercel.app', 'firebaseapp.com', 'web.app', 'cobrifyperu.com', 'cobrify.com'];
+          for (var i = 0; i < propios.length; i++) { if (host.indexOf(propios[i]) !== -1) return; }
+          var raw = localStorage.getItem('marcaCache:' + host);
+          if (!raw) return;
+          var marca = JSON.parse(raw);
+          if (!marca || !marca.primaryColor) return;
+          var d = document.createElement('div');
+          d.id = 'puente-marca';
+          d.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:' + marca.primaryColor;
+          if (marca.logoUrl) {
+            var img = document.createElement('img');
+            img.src = marca.logoUrl;
+            img.alt = '';
+            img.style.cssText = 'width:140px;height:140px;object-fit:contain';
+            d.appendChild(img);
+          } else if (marca.companyName) {
+            var t = document.createElement('span');
+            t.textContent = marca.companyName;
+            t.style.cssText = 'color:#fff;font-size:28px;font-weight:700;letter-spacing:.02em';
+            d.appendChild(t);
+          }
+          document.body.appendChild(d);
+          setTimeout(function () { var e = document.getElementById('puente-marca'); if (e) e.remove(); }, 8000);
+        } catch (e) { /* sin puente: la app carga igual */ }
+      })();
+    </script>
     <!--
       Polyfill de structuredClone para WebViews antiguas de Android (< 98).
       DEBE estar inline aquí (no en main.jsx) para ejecutarse antes que el

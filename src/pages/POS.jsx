@@ -9313,13 +9313,13 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   {expandedCart ? <PanelRightClose className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
                 </button>
                 {editingInvoiceId && (
-                  <Badge variant="warning" className="bg-blue-600 text-white animate-pulse">
+                  <Badge variant="warning" className="bg-primary-600 text-white animate-pulse">
                     <Edit2 className="w-3 h-3 mr-1" />
                     Editando {editingInvoiceData?.series}-{editingInvoiceData?.number}
                   </Badge>
                 )}
                 {tableData && (
-                  <Badge variant="default" className="bg-blue-600 text-white">
+                  <Badge variant="default" className="bg-primary-600 text-white">
                     Mesa {tableData.tableNumber} - {tableData.orderNumber}
                   </Badge>
                 )}
@@ -9698,7 +9698,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             <span className="truncate">{product.sku || product.code || product.barcode}</span>
                           )}
                           {product.marca && <span className="text-purple-600 font-medium truncate">· {product.marca}</span>}
-                          {product.location && <span className="font-mono text-blue-600">· {product.location}</span>}
+                          {product.location && <span className="font-mono text-primary-600">· {product.location}</span>}
                         </div>
                       </div>
                       {/* Precio + stock a la derecha */}
@@ -9884,7 +9884,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       {product.sku && <p>SKU: {product.sku}</p>}
                       {product.code && <p>Cód: {product.code}</p>}
                       {product.barcode && <p className="font-mono">{product.barcode}</p>}
-                      {product.location && <p className="font-mono text-blue-600">{product.location}</p>}
+                      {product.location && <p className="font-mono text-primary-600">{product.location}</p>}
                     </div>
                     {/* Tablet/Desktop: código compacto en una línea */}
                     <p
@@ -9902,7 +9902,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1 sm:truncate">{product.genericName} {product.concentration}</p>
                     )}
                     {isPharmaLikeMode(businessMode) && product.laboratoryName && (
-                      <p className="text-[10px] sm:text-xs text-blue-600 font-medium mt-0.5 truncate">{product.laboratoryName}</p>
+                      <p className="text-[10px] sm:text-xs text-primary-600 font-medium mt-0.5 truncate">{product.laboratoryName}</p>
                     )}
                     {/* Product description */}
                     {businessSettings?.showDescriptionInPOS && product.description && (
@@ -10276,7 +10276,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           TC (S/ por $)
                         </label>
                         {exchangeRateSource === 'sbs' && (
-                          <span className="text-[9px] px-1 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 font-medium">SBS</span>
+                          <span className="text-[9px] px-1 py-0.5 rounded bg-primary-100 text-primary-700 border border-primary-200 font-medium">SBS</span>
                         )}
                         {exchangeRateSource === 'manual' && (
                           <span className="text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 font-medium">Manual</span>
@@ -10976,7 +10976,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         </label>
 
                         {deductAdvances && (
-                          <div className="space-y-2 bg-blue-50 p-2 rounded-lg border border-blue-200">
+                          <div className="space-y-2 bg-primary-50 p-2 rounded-lg border border-primary-200">
                             {loadingAdvances ? (
                               <div className="flex items-center gap-2 text-xs text-gray-500 py-1">
                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -10991,7 +10991,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             ) : (
                               <div className="space-y-1 max-h-28 overflow-y-auto">
                                 {candidateAdvances.map(inv => (
-                                  <label key={inv.id} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-blue-100 rounded px-1 py-0.5">
+                                  <label key={inv.id} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-primary-100 rounded px-1 py-0.5">
                                     <input
                                       type="checkbox"
                                       checked={advancesList.some(a => a.invoiceId === inv.id)}
@@ -11009,7 +11009,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             {(() => {
                               const manual = advancesList.find(a => !a.invoiceId)
                               return (
-                                <div className="grid grid-cols-2 gap-2 pt-1 border-t border-blue-200">
+                                <div className="grid grid-cols-2 gap-2 pt-1 border-t border-primary-200">
                                   <input
                                     type="text"
                                     value={manual?.fullNumber || ''}
@@ -11050,7 +11050,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                   <span>Total operación:</span>
                                   <span className="font-medium">{formatCurrency(amounts.total, currency)}</span>
                                 </div>
-                                <div className="flex justify-between text-blue-700">
+                                <div className="flex justify-between text-primary-700">
                                   <span>(-) Anticipos:</span>
                                   <span className="font-medium">{formatCurrency(advancesApplied, currency)}</span>
                                 </div>
@@ -11847,13 +11847,13 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                   {group.members.map(m => (
                                     <span
                                       key={m.cartId || m.id}
-                                      className="inline-flex items-center gap-1 pl-1.5 pr-0.5 py-0.5 bg-blue-50 text-blue-700 text-[10px] rounded-full border border-blue-200"
+                                      className="inline-flex items-center gap-1 pl-1.5 pr-0.5 py-0.5 bg-primary-50 text-primary-700 text-[10px] rounded-full border border-primary-200"
                                     >
                                       <span className="font-medium">{m.serialNumber}</span>
                                       <button
                                         type="button"
                                         onClick={() => removeFromCart(m.cartId || m.id)}
-                                        className="hover:bg-blue-200 rounded-full p-0.5 transition-colors"
+                                        className="hover:bg-primary-200 rounded-full p-0.5 transition-colors"
                                         title="Quitar esta serie"
                                       >
                                         <X className="w-2.5 h-2.5" />
@@ -11862,7 +11862,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                   ))}
                                 </div>
                               ) : item.serialNumber && (
-                                <span className="text-blue-600 truncate">S/N: {item.serialNumber}</span>
+                                <span className="text-primary-600 truncate">S/N: {item.serialNumber}</span>
                               )}
                               {item.modifiers && item.modifiers.length > 0 && (
                                 <span className="text-purple-600 truncate">
@@ -12026,7 +12026,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                     }
                                     setEditingPriceWithoutIgv(!editingPriceWithoutIgv)
                                   }}
-                                  className={`text-[10px] px-1.5 py-0.5 rounded ${editingPriceWithoutIgv ? 'bg-blue-100 text-blue-700 font-semibold' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                                  className={`text-[10px] px-1.5 py-0.5 rounded ${editingPriceWithoutIgv ? 'bg-primary-100 text-primary-700 font-semibold' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
                                 >
                                   {editingPriceWithoutIgv ? 'Sin IGV' : 'Con IGV'}
                                 </button>
@@ -12257,9 +12257,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       disabled={lastInvoiceData !== null}
                     >
                       <div className="flex items-center gap-2">
-                        <FileText className="w-5 h-5 text-blue-600" />
+                        <FileText className="w-5 h-5 text-primary-600" />
                         <span className="text-base font-medium text-gray-700">
-                          Observaciones {generalNotes && <span className="text-blue-600">(1)</span>}
+                          Observaciones {generalNotes && <span className="text-primary-600">(1)</span>}
                         </span>
                       </div>
                       {showNotesSection ? (
@@ -12346,7 +12346,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 )}
                 {/* Mostrar montos inafectos si hay productos inafectos */}
                 {amounts.inafecto?.total > 0 && (
-                  <div className="flex justify-between text-sm text-blue-700">
+                  <div className="flex justify-between text-sm text-primary-700">
                     <span>Op. Inafectas:</span>
                     <span className="font-medium">{formatCurrency(amounts.inafecto.total, currency)}</span>
                   </div>
@@ -12370,7 +12370,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       <span className="text-gray-600">Total operación:</span>
                       <span className="font-medium">{formatCurrency(amounts.total, currency)}</span>
                     </div>
-                    <div className="flex justify-between text-sm text-blue-700">
+                    <div className="flex justify-between text-sm text-primary-700">
                       <span>(-) Anticipos facturados:</span>
                       <span className="font-medium">- {formatCurrency(advancesApplied, currency)}</span>
                     </div>
@@ -12621,17 +12621,17 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       </div>
                     </div>
                   ) : (enablePartialPayment && amountToPay === 0) ? (
-                    <div className="p-4 bg-blue-50 border border-blue-300 rounded-lg">
+                    <div className="p-4 bg-primary-50 border border-primary-300 rounded-lg">
                       <div className="flex items-start gap-3">
-                        <CreditCard className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <CreditCard className="w-5 h-5 text-primary-600 flex-shrink-0 mt-0.5" />
                         <div className="flex-1">
                           <p className="text-sm font-semibold text-blue-900">
                             Venta al Crédito
                           </p>
-                          <p className="text-xs text-blue-700 mt-1">
+                          <p className="text-xs text-primary-700 mt-1">
                             No requiere pago inmediato. El cliente pagará después.
                           </p>
-                          <p className="text-xs text-blue-700 mt-2">
+                          <p className="text-xs text-primary-700 mt-2">
                             <strong>Saldo pendiente:</strong> {formatCurrency(amounts.total, currency)}
                           </p>
                         </div>
@@ -13459,8 +13459,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 </button>
               )}
             </div>
-            <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-              <p className="text-xs text-blue-700">
+            <div className="mt-4 p-3 bg-primary-50 rounded-lg">
+              <p className="text-xs text-primary-700">
                 <strong>FEFO:</strong> First Expire, First Out - Se recomienda vender primero el lote que vence más pronto.
               </p>
             </div>

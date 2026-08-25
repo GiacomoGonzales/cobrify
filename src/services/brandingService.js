@@ -1,6 +1,7 @@
 import { doc, getDoc, updateDoc, Timestamp, collection, query, where, getDocs } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { db, storage } from '@/lib/firebase'
+import { aplicarEscalaPrimary, quitarEscalaPrimary } from '@/utils/marcaCache'
 
 // Branding por defecto (Cobrify) - Azul según Tailwind primary
 export const DEFAULT_BRANDING = {
@@ -230,12 +231,17 @@ export function applyBrandingColors(branding) {
   // Calcular versiones claras para backgrounds
   root.style.setProperty('--brand-primary-light', hexToRgba(branding.primaryColor || DEFAULT_BRANDING.primaryColor, 0.1))
   root.style.setProperty('--brand-primary-medium', hexToRgba(branding.primaryColor || DEFAULT_BRANDING.primaryColor, 0.2))
+
+  // La escala primary-50..950 completa: es lo que hace que TODA la app (POS,
+  // status bar, y cada bg/text/border-primary-*) adopte el color del reseller.
+  aplicarEscalaPrimary(branding.primaryColor || DEFAULT_BRANDING.primaryColor)
 }
 
 /**
  * Remueve los colores de branding personalizados
  */
 export function removeBrandingColors() {
+  quitarEscalaPrimary()
   const root = document.documentElement
   root.style.removeProperty('--brand-primary')
   root.style.removeProperty('--brand-secondary')

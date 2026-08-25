@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { useAuth } from './AuthContext'
 import { esDominioReseller } from '@/utils/resellerDomain'
+import { leerMarcaCache, guardarMarcaCache } from '@/utils/marcaCache'
 import {
   DEFAULT_BRANDING,
   getBrandingForClient,
@@ -11,30 +12,6 @@ import {
   removeBrandingColors
 } from '@/services/brandingService'
 
-// Memoria local de la marca por dominio: permite pintar el splash con el
-// logo y color del reseller ANTES de que Firestore responda. Sin esto, cada
-// arranque frio mostraba un spinner neutro (y antes, el logo de Cobrify).
-const llaveMarcaCache = () => 'marcaCache:' + window.location.hostname.toLowerCase()
-
-function leerMarcaCache() {
-  try {
-    const raw = localStorage.getItem(llaveMarcaCache())
-    return raw ? JSON.parse(raw) : null
-  } catch {
-    return null
-  }
-}
-
-function guardarMarcaCache(b) {
-  try {
-    localStorage.setItem(llaveMarcaCache(), JSON.stringify({
-      companyName: b.companyName || '',
-      logoUrl: b.logoUrl || null,
-      primaryColor: b.primaryColor || '#2563eb',
-    }))
-  } catch { /* almacenamiento lleno o bloqueado: el splash cae al neutro */ }
-}
-
 const BrandingContext = createContext({
   branding: DEFAULT_BRANDING,
   isLoading: true,
@@ -43,7 +20,19 @@ const BrandingContext = createContext({
 
 export function BrandingProvider({ children }) {
   const { user, isReseller, isAdmin, resellerData, isLoading: authLoading, getBusinessId } = useAuth()
-  const [branding, setBranding] = useState(DEFAULT_BRANDING)
+  // ARRANCA desde la marca memorizada, no desde Cobrify: asi el login y el
+  // navbar salen con la marca del reseller desde el primer render, sin el
+  // parpadeo Cobrify->reseller mientras Firestore responde.
+  const [branding, setBranding] = useState(() => {
+    if (esDominioReseller()) {
+      const cache = leerMarcaCache()
+      if (cache?.primaryColor) {
+        try { applyBrandingColors({ ...DEFAULT_BRANDING, ...cache }) } catch { /* SSR */ }
+        return { ...DEFAULT_BRANDING, ...cache }
+      }
+    }
+    return DEFAULT_BRANDING
+  })
   const [isLoading, setIsLoading] = useState(true)
   const [brandingLoaded, setBrandingLoaded] = useState(false)
 
@@ -65,12 +54,14 @@ export function BrandingProvider({ children }) {
     setBrandingLoaded(false)
   }, [user?.uid])
 
-  // Al resolverse una marca REAL en dominio de reseller, se memoriza para que
-  // el proximo splash salga con ella. La por defecto no se guarda: pisar la
-  // memoria con Cobrify (p. ej. por un fallo de red) volveria a filtrar la
-  // marca equivocada en el proximo arranque.
+  // Al resolverse una marca REAL en dominio de reseller, se memoriza para el
+  // proximo arranque, y se retira el puente pre-React que pinta index.html.
+  // La marca por defecto no se guarda: pisar la memoria con Cobrify (p. ej.
+  // por un fallo de red) filtraria la marca equivocada al proximo arranque.
   useEffect(() => {
-    if (!brandingLoaded || !esDominioReseller()) return
+    if (!brandingLoaded) return
+    document.getElementById('puente-marca')?.remove()
+    if (!esDominioReseller()) return
     const esRealDelReseller = branding.primaryColor !== DEFAULT_BRANDING.primaryColor || branding.logoUrl
     if (esRealDelReseller) guardarMarcaCache(branding)
   }, [branding, brandingLoaded])

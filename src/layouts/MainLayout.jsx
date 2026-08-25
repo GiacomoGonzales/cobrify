@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import DemoAccountBanner from '@/components/DemoAccountBanner'
 import { Outlet, Navigate, useLocation } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
+import { esDominioReseller } from '@/utils/resellerDomain'
+import { leerMarcaCache } from '@/utils/marcaCache'
 import { useAuth } from '@/contexts/AuthContext'
 import { useBranding } from '@/contexts/BrandingContext'
 import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore'
@@ -491,8 +493,25 @@ export default function MainLayout() {
     }
   }, [user?.uid, isAuthenticated])
 
-  // Mostrar splash mientras carga autenticación (solo en móvil)
+  // Mostrar splash mientras carga autenticación (solo en móvil). En dominio
+  // de reseller sale con SU marca memorizada — este era el "Cobrify despues
+  // de iniciar sesion" del reporte de QAMIR; sin memoria aun, fondo neutro.
   if (isLoading && Capacitor.isNativePlatform()) {
+    if (esDominioReseller()) {
+      const marca = leerMarcaCache()
+      return (
+        <div
+          className="fixed inset-0 flex items-center justify-center"
+          style={{ backgroundColor: marca?.primaryColor || '#ffffff' }}
+        >
+          {marca?.logoUrl
+            ? <img src={marca.logoUrl} alt="" className="w-[140px] h-[140px] object-contain" />
+            : marca?.companyName
+              ? <span className="text-white text-3xl font-bold tracking-wide">{marca.companyName}</span>
+              : <div className="animate-spin rounded-full h-9 w-9 border-b-2 border-gray-400" />}
+        </div>
+      )
+    }
     return (
       <div className="fixed inset-0 bg-[#2563EB] flex items-center justify-center">
         <img src="/logo.png" alt="Cobrify" className="w-[140px] h-[140px] object-contain" />
@@ -690,7 +709,7 @@ export default function MainLayout() {
                         <>
                           <button
                             onClick={() => handlePrintFromAlert(alert)}
-                            className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+                            className="flex items-center gap-1 px-3 py-1 bg-primary-600 text-white text-xs font-semibold rounded-lg hover:bg-primary-700 transition-colors"
                           >
                             <Printer className="w-3.5 h-3.5" />
                             Imprimir
