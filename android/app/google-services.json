@@ -7,6 +7,50 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:685843504415:android:1c39274fbcef38a0e7642a",
+        "android_client_info": {
+          "package_name": "com.aseconttasociados.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDauolZp9BEx5Lv19j3aVihlzUSVEqGrYQ"
+        },
+        {
+          "current_key": "AIzaSyBwo1ZQisEzdehrLFATBVzQtgXI5aBJi_k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:685843504415:android:c0afe852fc429bece7642a",
+        "android_client_info": {
+          "package_name": "com.charapos.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDauolZp9BEx5Lv19j3aVihlzUSVEqGrYQ"
+        },
+        {
+          "current_key": "AIzaSyBwo1ZQisEzdehrLFATBVzQtgXI5aBJi_k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:685843504415:android:ca562cb9a6508863e7642a",
         "android_client_info": {
           "package_name": "com.cobrify.app"
@@ -15,24 +59,8 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBwo1ZQisEzdehrLFATBVzQtgXI5aBJi_k"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:685843504415:android:ca562cb9a6508863e7642a",
-        "android_client_info": {
-          "package_name": "com.cobrify.app.v2"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
+          "current_key": "AIzaSyDauolZp9BEx5Lv19j3aVihlzUSVEqGrYQ"
+        },
         {
           "current_key": "AIzaSyBwo1ZQisEzdehrLFATBVzQtgXI5aBJi_k"
         }
@@ -45,13 +73,126 @@
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:685843504415:android:ca562cb9a6508863e7642a",
+        "mobilesdk_app_id": "1:685843504415:android:c6420054cabc0c75e7642a",
         "android_client_info": {
-          "package_name": "com.factuya.cobrify"
+          "package_name": "com.ezfactu.app"
         }
       },
       "oauth_client": [],
       "api_key": [
+        {
+          "current_key": "AIzaSyDauolZp9BEx5Lv19j3aVihlzUSVEqGrYQ"
+        },
+        {
+          "current_key": "AIzaSyBwo1ZQisEzdehrLFATBVzQtgXI5aBJi_k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:685843504415:android:1fe8c24116465778e7642a",
+        "android_client_info": {
+          "package_name": "com.facturemosperu.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDauolZp9BEx5Lv19j3aVihlzUSVEqGrYQ"
+        },
+        {
+          "current_key": "AIzaSyBwo1ZQisEzdehrLFATBVzQtgXI5aBJi_k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:685843504415:android:34d93dc0847ee3d8e7642a",
+        "android_client_info": {
+          "package_name": "com.factuvip.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDauolZp9BEx5Lv19j3aVihlzUSVEqGrYQ"
+        },
+        {
+          "current_key": "AIzaSyBwo1ZQisEzdehrLFATBVzQtgXI5aBJi_k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:685843504415:android:f6dfd85b8d5cd465e7642a",
+        "android_client_info": {
+          "package_name": "com.ferreterosapp.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDauolZp9BEx5Lv19j3aVihlzUSVEqGrYQ"
+        },
+        {
+          "current_key": "AIzaSyBwo1ZQisEzdehrLFATBVzQtgXI5aBJi_k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:685843504415:android:cbb157686e8217cde7642a",
+        "android_client_info": {
+          "package_name": "com.qamir.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDauolZp9BEx5Lv19j3aVihlzUSVEqGrYQ"
+        },
+        {
+          "current_key": "AIzaSyBwo1ZQisEzdehrLFATBVzQtgXI5aBJi_k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:685843504415:android:9ce4d0006ed69878e7642a",
+        "android_client_info": {
+          "package_name": "com.wirofact.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDauolZp9BEx5Lv19j3aVihlzUSVEqGrYQ"
+        },
         {
           "current_key": "AIzaSyBwo1ZQisEzdehrLFATBVzQtgXI5aBJi_k"
         }

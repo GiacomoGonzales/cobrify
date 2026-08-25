@@ -13,6 +13,7 @@
  * Necesita GOOGLE_APPLICATION_CREDENTIALS o FIREBASE_SERVICE_ACCOUNT (JSON).
  */
 import { readFileSync, existsSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { cert, initializeApp } from 'firebase-admin/app'
@@ -61,16 +62,19 @@ const sizeMb = Math.round((bytes.length / 1048576) * 10) / 10
 
 console.log(`Subiendo ${sizeMb} MB → ${destino}`)
 
+// El bucket tiene acceso uniforme: no se puede makePublic() por objeto. Se usa
+// el token de descarga de Firebase Storage, igual que getDownloadURL() del SDK.
+const token = randomUUID()
 await bucket.upload(APK, {
   destination: destino,
-  // Sin este contentType, Storage lo sirve como octet-stream genérico y
-  // algunos navegadores de Android no ofrecen instalarlo.
-  metadata: { contentType: 'application/vnd.android.package-archive' },
+  metadata: {
+    contentType: 'application/vnd.android.package-archive',
+    metadata: { firebaseStorageDownloadTokens: token },
+  },
 })
 
-const archivo = bucket.file(destino)
-await archivo.makePublic()
-const url = `https://storage.googleapis.com/${bucket.name}/${destino}`
+const url = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}`
+  + `/o/${encodeURIComponent(destino)}?alt=media&token=${token}`
 
 await db.collection('resellers').doc(RESELLER_ID).update({
   androidApp: {
