@@ -42,7 +42,8 @@ import {
   Crown,
   Globe,
   Link2,
-  ExternalLink
+  ExternalLink,
+  Smartphone,
 } from 'lucide-react'
 
 // URL de las Cloud Functions (Cloud Run)
@@ -57,6 +58,12 @@ export default function AdminResellers() {
   const [resellers, setResellers] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
   const [showModal, setShowModal] = useState(false)
+  // APK de marca blanca: se sube por reseller y le aparece en su panel.
+  const [apkReseller, setApkReseller] = useState(null)
+  const [apkFile, setApkFile] = useState(null)
+  const [apkVersion, setApkVersion] = useState('')
+  const [apkNotas, setApkNotas] = useState('')
+  const [subiendoApk, setSubiendoApk] = useState(false)
   const [showDepositModal, setShowDepositModal] = useState(false)
   const [selectedReseller, setSelectedReseller] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -240,6 +247,50 @@ export default function AdminResellers() {
       pricingModel: reseller.pricingModel || 'legacy'
     })
     setShowModal(true)
+  }
+
+  function openApkModal(reseller) {
+    setApkReseller(reseller)
+    setApkFile(null)
+    setApkVersion(reseller.androidApp?.version || '')
+    setApkNotas(reseller.androidApp?.notas || '')
+  }
+
+  async function handleSubirApk() {
+    if (!apkFile) return
+    setSubiendoApk(true)
+    try {
+      const { subirApkReseller } = await import('@/services/resellerApkService')
+      const res = await subirApkReseller(apkReseller.id, apkFile, {
+        version: apkVersion,
+        notas: apkNotas,
+      })
+      if (res.success) {
+        setApkReseller(null)
+        loadResellers()
+      } else {
+        alert('No se pudo subir: ' + res.error)
+      }
+    } finally {
+      setSubiendoApk(false)
+    }
+  }
+
+  async function handleQuitarApk() {
+    if (!apkReseller) return
+    setSubiendoApk(true)
+    try {
+      const { quitarApkReseller } = await import('@/services/resellerApkService')
+      const res = await quitarApkReseller(apkReseller.id)
+      if (res.success) {
+        setApkReseller(null)
+        loadResellers()
+      } else {
+        alert('No se pudo quitar: ' + res.error)
+      }
+    } finally {
+      setSubiendoApk(false)
+    }
   }
 
   function openDepositModal(reseller) {
@@ -658,6 +709,19 @@ export default function AdminResellers() {
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
                           <button
+                            onClick={() => openApkModal(reseller)}
+                            className={`p-2 rounded-lg transition-colors ${
+                              reseller.androidApp?.url
+                                ? 'text-emerald-600 hover:bg-emerald-50'
+                                : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+                            }`}
+                            title={reseller.androidApp?.url
+                              ? `App publicada${reseller.androidApp.version ? ` (v${reseller.androidApp.version})` : ''}`
+                              : 'Subir app Android'}
+                          >
+                            <Smartphone className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={() => openEditModal(reseller)}
                             className="p-2 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
                           >
@@ -982,6 +1046,114 @@ export default function AdminResellers() {
       )}
 
       {/* Deposit Modal */}
+      {/* App Android de marca blanca. Se sube UNA por reseller: subir de nuevo
+          reemplaza la anterior, asi el reseller siempre reparte la ultima. */}
+      {apkReseller && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <div className="min-w-0">
+                <h2 className="text-xl font-semibold text-gray-900">App Android</h2>
+                <p className="text-sm text-gray-500 truncate">{apkReseller.companyName}</p>
+              </div>
+              <button
+                onClick={() => setApkReseller(null)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {apkReseller.androidApp?.url && (
+                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm">
+                  <p className="font-medium text-gray-900">Ya tiene una publicada</p>
+                  <p className="text-xs text-gray-600 mt-0.5">
+                    {[
+                      apkReseller.androidApp.version ? `v${apkReseller.androidApp.version}` : null,
+                      apkReseller.androidApp.sizeMb ? `${apkReseller.androidApp.sizeMb} MB` : null,
+                    ].filter(Boolean).join(' · ')}
+                  </p>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Archivo .apk
+                </label>
+                <input
+                  type="file"
+                  accept=".apk,application/vnd.android.package-archive"
+                  onChange={e => setApkFile(e.target.files?.[0] || null)}
+                  className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-sm file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200"
+                />
+                {apkFile && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {apkFile.name} · {Math.round((apkFile.size / 1048576) * 10) / 10} MB
+                  </p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Versión</label>
+                  <input
+                    type="text"
+                    value={apkVersion}
+                    onChange={e => setApkVersion(e.target.value)}
+                    placeholder="1.0"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nota (opcional)</label>
+                  <input
+                    type="text"
+                    value={apkNotas}
+                    onChange={e => setApkNotas(e.target.value)}
+                    placeholder="Qué cambió"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  />
+                </div>
+              </div>
+
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Le aparece al reseller en Configuración → App Android, con las instrucciones
+                para instalarla en el celular de sus clientes.
+              </p>
+
+              <div className="flex items-center justify-between gap-2 pt-2">
+                {apkReseller.androidApp?.url ? (
+                  <button
+                    onClick={handleQuitarApk}
+                    disabled={subiendoApk}
+                    className="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    Quitar
+                  </button>
+                ) : <span />}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setApkReseller(null)}
+                    disabled={subiendoApk}
+                    className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleSubirApk}
+                    disabled={!apkFile || subiendoApk}
+                    className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                  >
+                    {subiendoApk ? 'Subiendo...' : 'Publicar'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showDepositModal && selectedReseller && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md">

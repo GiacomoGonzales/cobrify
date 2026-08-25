@@ -35,7 +35,9 @@ import {
   Link2,
   Share2,
   FileText,
-  DollarSign
+  DollarSign,
+  Smartphone,
+  Download
 } from 'lucide-react'
 
 export default function ResellerSettings() {
@@ -43,7 +45,7 @@ export default function ResellerSettings() {
   const { refreshBranding } = useBranding()
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [activeTab, setActiveTab] = useState('empresa') // 'empresa' | 'branding'
+  const [activeTab, setActiveTab] = useState('empresa') // 'empresa' | 'branding' | 'app'
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [uploadingSocialImage, setUploadingSocialImage] = useState(false)
   const [uploadingHeroImage, setUploadingHeroImage] = useState(false)
@@ -55,6 +57,8 @@ export default function ResellerSettings() {
 
   // Obtener el ID del reseller
   const resellerId = resellerData?.docId || user?.uid
+  // APK de marca blanca publicada por el admin (undefined = todavía no hay).
+  const appAndroid = resellerData?.androidApp
 
   const [formData, setFormData] = useState({
     companyName: resellerData?.companyName || '',
@@ -534,6 +538,17 @@ export default function ResellerSettings() {
                 >
                   <Palette className="w-4 h-4 inline mr-2" />
                   Mi Marca (White-Label)
+                </button>
+                <button
+                  onClick={() => setActiveTab('app')}
+                  className={`flex-1 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === 'app'
+                      ? 'border-emerald-500 text-emerald-600 bg-emerald-50/50'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <Smartphone className="w-4 h-4 inline mr-2" />
+                  App Android
                 </button>
               </nav>
             </div>
@@ -1152,6 +1167,76 @@ export default function ResellerSettings() {
                       </p>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* ── App Android de marca blanca ────────────────────────────
+                  El reseller descarga el APK y se lo instala a sus clientes.
+                  Es la misma app de siempre pero con su nombre, su icono y su
+                  dominio: por dentro carga su sistema, asi que las mejoras le
+                  llegan solas y solo hace falta un APK nuevo cuando cambia
+                  algo del telefono (impresora, escaner, permisos). */}
+              {activeTab === 'app' && (
+                <div className="space-y-4">
+                  {appAndroid?.url ? (
+                    <>
+                      <div className="flex items-start gap-3 p-4 rounded-lg border border-emerald-200 bg-emerald-50">
+                        <Smartphone className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-gray-900">
+                            Tu app está lista
+                          </p>
+                          <p className="text-xs text-gray-600 mt-0.5">
+                            {[
+                              appAndroid.version ? `Versión ${appAndroid.version}` : null,
+                              appAndroid.sizeMb ? `${appAndroid.sizeMb} MB` : null,
+                              appAndroid.updatedAt?.toDate
+                                ? `Actualizada el ${appAndroid.updatedAt.toDate().toLocaleDateString('es-PE')}`
+                                : null,
+                            ].filter(Boolean).join(' · ')}
+                          </p>
+                          {appAndroid.notas && (
+                            <p className="text-xs text-gray-600 mt-1.5">{appAndroid.notas}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <a
+                        href={appAndroid.url}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition-colors"
+                      >
+                        <Download className="w-5 h-5" />
+                        Descargar app (.apk)
+                      </a>
+
+                      <div className="p-4 rounded-lg border border-gray-200 bg-gray-50">
+                        <p className="text-sm font-semibold text-gray-900 mb-2">
+                          Cómo instalarla en el celular de tu cliente
+                        </p>
+                        <ol className="text-xs text-gray-600 space-y-1.5 list-decimal list-inside leading-relaxed">
+                          <li>Pásale el archivo por WhatsApp, cable o Drive.</li>
+                          <li>Al abrirlo, Android le va a pedir permiso para <strong>instalar apps de orígenes desconocidos</strong>. Es normal: la app no está en Play Store.</li>
+                          <li>Play Protect va a mostrar una advertencia. Toca <strong>Instalar de todos modos</strong>.</li>
+                          <li>Listo. La app entra directo a tu sistema y se actualiza sola.</li>
+                        </ol>
+                        <p className="text-xs text-gray-500 mt-3 leading-relaxed">
+                          Solo Android. Cuando saquemos mejoras del sistema le llegan solas a tus
+                          clientes, sin reinstalar nada.
+                        </p>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center py-10">
+                      <Smartphone className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                      <p className="text-sm font-medium text-gray-700">
+                        Tu app todavía no está disponible
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1.5 max-w-sm mx-auto leading-relaxed">
+                        Se arma con el nombre, el logo y el color que cargaste en <strong>Mi Marca</strong>.
+                        Escríbenos cuando quieras tenerla y te la preparamos.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 

@@ -4,6 +4,19 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
+    // APK de marca blanca del reseller. La sube el ADMIN desde su panel y la
+    // descarga cualquiera con el enlace: el reseller se lo pasa a sus clientes
+    // para que la instalen, asi que la lectura tiene que ser publica.
+    // Storage no puede consultar Firestore, asi que el admin no se valida aca:
+    // el permiso real vive en las reglas de Firestore sobre el doc del reseller
+    // (que es donde queda anotado el enlace) y en el acceso al panel de admin.
+    match /reseller-apks/{resellerId}/{archivo} {
+      allow read: if true;
+      allow write: if request.auth != null
+                   && request.resource.size < 200 * 1024 * 1024
+                   && request.resource.contentType == 'application/vnd.android.package-archive';
+    }
+
     // Logos de resellers (marca blanca)
     match /reseller-logos/{resellerId}/{allImages=**} {
       allow read: if true; // Lectura pública para mostrar logos
