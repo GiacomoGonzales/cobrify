@@ -338,6 +338,7 @@ struct ConversationView: View {
                         } label: {
                             Image(systemName: "plus")
                                 .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(Color(.systemGray))
                                 .frame(width: 40, height: 40)
                         }
                         .vidrioCapsula()
@@ -362,6 +363,7 @@ struct ConversationView: View {
                             } label: {
                                 Image(systemName: "mic.fill")
                                     .font(.system(size: 17, weight: .semibold))
+                                    .foregroundStyle(Color(.systemGray))
                                     .frame(width: 40, height: 40)
                             }
                             .vidrioCapsula()
