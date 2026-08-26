@@ -73,9 +73,13 @@ struct Mensaje: Identifiable, Equatable {
     /// Eco optimista: el mensaje recién enviado, visible al instante con su
     /// relojito mientras el servidor lo confirma.
     init(pendiente texto: String) {
+        self.init(pendienteTipo: "text", texto: texto)
+    }
+
+    init(pendienteTipo tipo: String, texto: String) {
         id = "local-\(UUID().uuidString)"
         direccion = "saliente"
-        tipo = "text"
+        self.tipo = tipo
         self.texto = texto
         estado = "sending"
         timestamp = Date()

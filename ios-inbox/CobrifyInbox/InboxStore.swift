@@ -71,8 +71,8 @@ final class MensajesStore: ObservableObject {
                 self.mensajes = snap?.documents.map { Mensaje(id: $0.documentID, data: $0.data()) } ?? []
                 // El eco optimista se retira cuando el servidor ya guardó el
                 // mensaje de verdad (mismo texto, dirección saliente).
-                let confirmados = Set(self.mensajes.filter(\.esSaliente).map(\.texto))
-                self.pendientes.removeAll { confirmados.contains($0.texto) }
+                let confirmados = Set(self.mensajes.filter(\.esSaliente).map { "\($0.tipo)|\($0.texto)" })
+                self.pendientes.removeAll { confirmados.contains("\($0.tipo)|\($0.texto)") }
             }
     }
 
@@ -87,6 +87,22 @@ final class MensajesStore: ObservableObject {
         } catch {
             pendientes.removeAll { $0.id == eco.id }
             return (error as? ChatAPI.ErrorEnvio)?.mensaje ?? "No se pudo enviar el mensaje."
+        }
+    }
+
+    /// Envía un archivo con eco optimista. Devuelve el error o nil.
+    func enviarMedia(conversationId: String, datos: Data, mimeType: String,
+                     filename: String, caption: String, tipo: String) async -> String? {
+        let eco = Mensaje(pendienteTipo: tipo, texto: caption)
+        pendientes.append(eco)
+        do {
+            try await ChatAPI.enviarMedia(conversationId: conversationId,
+                                          base64: datos.base64EncodedString(),
+                                          mimeType: mimeType, filename: filename, caption: caption)
+            return nil
+        } catch {
+            pendientes.removeAll { $0.id == eco.id }
+            return (error as? ChatAPI.ErrorEnvio)?.mensaje ?? "No se pudo enviar el archivo."
         }
     }
 

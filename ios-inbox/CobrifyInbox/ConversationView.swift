@@ -1,4 +1,6 @@
 import SwiftUI
+import PhotosUI
+import UIKit
 
 /// Una conversación, leída en vivo. Fase 1: solo lectura — responder
 /// llega en la Fase 2.
@@ -9,6 +11,11 @@ struct ConversationView: View {
     @State private var borrador = ""
     @State private var enviando = false
     @State private var errorEnvio: String?
+    @State private var mostrarGaleria = false
+    @State private var fotoSeleccionada: PhotosPickerItem?
+    @State private var mostrarCamara = false
+    @State private var mostrarArchivos = false
+    @StateObject private var grabadora = GrabadoraNota()
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -56,6 +63,36 @@ struct ConversationView: View {
             }
         }
         .safeAreaInset(edge: .bottom) { barraDeRespuesta }
+        .photosPicker(isPresented: $mostrarGaleria, selection: $fotoSeleccionada, matching: .images)
+        .onChange(of: fotoSeleccionada) {
+            guard let item = fotoSeleccionada else { return }
+            fotoSeleccionada = nil
+            Task {
+                if let data = try? await item.loadTransferable(type: Data.self),
+                   let img = UIImage(data: data) {
+                    enviarFoto(img)
+                }
+            }
+        }
+        .fullScreenCover(isPresented: $mostrarCamara) {
+            CamaraPicker { img in enviarFoto(img) }
+                .ignoresSafeArea()
+        }
+        .fileImporter(isPresented: $mostrarArchivos, allowedContentTypes: [.pdf]) { resultado in
+            guard case .success(let url) = resultado else { return }
+            let accedio = url.startAccessingSecurityScopedResource()
+            defer { if accedio { url.stopAccessingSecurityScopedResource() } }
+            guard let datos = try? Data(contentsOf: url) else {
+                errorEnvio = "No se pudo leer el archivo."
+                return
+            }
+            guard datos.count <= 100 * 1024 * 1024 else {
+                errorEnvio = "El límite de WhatsApp para documentos es 100 MB."
+                return
+            }
+            enviarAdjunto(datos: datos, mimeType: "application/pdf",
+                          filename: url.lastPathComponent, tipo: "document")
+        }
         .onAppear {
             store.empezar(conversationId: conv.id)
             alAbrir()
@@ -133,24 +170,72 @@ struct ConversationView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.top, 6)
                     }
-                    HStack(alignment: .bottom, spacing: 10) {
+                    if grabadora.grabando {
+                        // Grabando nota de voz
+                        HStack(spacing: 12) {
+                            Circle().fill(.red).frame(width: 10, height: 10)
+                                .opacity(grabadora.segundos % 2 == 0 ? 1 : 0.3)
+                            Text(grabadora.tiempo)
+                                .font(.body.monospacedDigit())
+                            Spacer()
+                            Button("Cancelar", role: .destructive) { grabadora.cancelar() }
+                            Button {
+                                enviarNotaDeVoz()
+                            } label: {
+                                Image(systemName: "arrow.up")
+                                    .font(.system(size: 17, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 40, height: 40)
+                                    .background(.tint, in: Circle())
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .vidrioCapsula()
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 6)
+                    } else {
+                    HStack(alignment: .bottom, spacing: 8) {
+                        Menu {
+                            Button { mostrarGaleria = true } label: { Label("Foto de la galería", systemImage: "photo.on.rectangle") }
+                            Button { mostrarCamara = true } label: { Label("Tomar foto", systemImage: "camera") }
+                            Button { mostrarArchivos = true } label: { Label("Documento PDF", systemImage: "doc") }
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 17, weight: .semibold))
+                                .frame(width: 40, height: 40)
+                        }
+                        .vidrioCapsula()
+
                         TextField("Mensaje", text: $borrador, axis: .vertical)
                             .lineLimit(1...5)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
                             .vidrioCapsula()
 
-                        Button(action: enviar) {
-                            Image(systemName: "arrow.up")
-                                .font(.system(size: 17, weight: .semibold))
-                                .foregroundStyle(.white)
-                                .frame(width: 40, height: 40)
-                                .background(puedeEnviar ? AnyShapeStyle(.tint) : AnyShapeStyle(.quaternary), in: Circle())
+                        if puedeEnviar {
+                            Button(action: enviar) {
+                                Image(systemName: "arrow.up")
+                                    .font(.system(size: 17, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 40, height: 40)
+                                    .background(.tint, in: Circle())
+                            }
+                        } else {
+                            Button {
+                                Task { _ = await grabadora.empezar() }
+                            } label: {
+                                Image(systemName: "mic.fill")
+                                    .font(.system(size: 17, weight: .semibold))
+                                    .frame(width: 40, height: 40)
+                            }
+                            .vidrioCapsula()
+                            .disabled(enviando)
                         }
-                        .disabled(!puedeEnviar)
                     }
                     .padding(.horizontal, 12)
                     .padding(.bottom, 6)
+                    }
                 }
             }
         }
@@ -158,6 +243,55 @@ struct ConversationView: View {
 
     private var puedeEnviar: Bool {
         !borrador.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !enviando
+    }
+
+    /// La foto sale recomprimida (tope 2048 px, JPEG 80%): una foto de cámara
+    /// de 5 MB baja a menos de 1 MB sin que se note en el chat.
+    private func enviarFoto(_ imagen: UIImage) {
+        let maxLado: CGFloat = 2048
+        let escala = min(1, maxLado / max(imagen.size.width, imagen.size.height))
+        let tamano = CGSize(width: imagen.size.width * escala, height: imagen.size.height * escala)
+        // scale 1: sin esto el renderer usa la escala de la pantalla (3x) y la
+        // "foto de 2048" sale de 6144 px reales — y revienta el límite de 5 MB.
+        let formato = UIGraphicsImageRendererFormat()
+        formato.scale = 1
+        let r = UIGraphicsImageRenderer(size: tamano, format: formato)
+        let reducida = r.image { _ in imagen.draw(in: CGRect(origin: .zero, size: tamano)) }
+        guard let datos = reducida.jpegData(compressionQuality: 0.8) else {
+            errorEnvio = "No se pudo procesar la foto."
+            return
+        }
+        guard datos.count <= 5 * 1024 * 1024 else {
+            errorEnvio = "El límite de WhatsApp para fotos es 5 MB."
+            return
+        }
+        enviarAdjunto(datos: datos, mimeType: "image/jpeg", filename: "foto.jpg", tipo: "image")
+    }
+
+    private func enviarNotaDeVoz() {
+        guard let url = grabadora.terminar(),
+              let datos = try? Data(contentsOf: url) else {
+            errorEnvio = "No se pudo grabar la nota."
+            return
+        }
+        guard datos.count <= 16 * 1024 * 1024 else {
+            errorEnvio = "El límite de WhatsApp para audios es 16 MB."
+            return
+        }
+        enviarAdjunto(datos: datos, mimeType: "audio/mp4",
+                      filename: url.lastPathComponent, tipo: "audio")
+    }
+
+    private func enviarAdjunto(datos: Data, mimeType: String, filename: String, tipo: String) {
+        errorEnvio = nil
+        enviando = true
+        Task {
+            let error = await store.enviarMedia(conversationId: conv.id, datos: datos,
+                                                mimeType: mimeType, filename: filename,
+                                                caption: "", tipo: tipo)
+            enviando = false
+            if let error { errorEnvio = error }
+        }
     }
 
     private func enviar() {
@@ -195,6 +329,7 @@ private enum ElementoChat: Identifiable {
 /// servidor para reservar el espacio exacto (sin franjas muertas).
 private struct BurbujaMensaje: View {
     let mensaje: Mensaje
+    @State private var verAdjunto = false
 
     var body: some View {
         HStack {
@@ -211,26 +346,63 @@ private struct BurbujaMensaje: View {
     }
 
     @ViewBuilder private var contenido: some View {
-        switch mensaje.tipo {
-        case "image":
-            VStack(alignment: .leading, spacing: 6) {
-                miniatura
-                if !mensaje.texto.isEmpty {
-                    Text(mensaje.texto)
-                        .frame(maxWidth: 230, alignment: .leading)
-                }
-            }
-        case "video", "audio", "document", "sticker":
+        if mensaje.estado == "sending", mensaje.media == nil, mensaje.tipo != "text" {
+            // Eco optimista de un adjunto que aún viaja
             HStack(spacing: 8) {
-                Image(systemName: icono)
-                    .font(.title3)
-                    .foregroundStyle(.tint)
-                Text(etiquetaAdjunto)
-                    .lineLimit(2)
+                ProgressView()
+                Text(etiquetaEnviando)
+                    .foregroundStyle(.secondary)
             }
-        default:
-            Text(mensaje.texto.isEmpty ? "[\(mensaje.tipo)]" : mensaje.texto)
-                .multilineTextAlignment(.leading)
+        } else {
+            switch mensaje.tipo {
+            case "image":
+                VStack(alignment: .leading, spacing: 6) {
+                    miniatura
+                        .onTapGesture { verAdjunto = true }
+                    if !mensaje.texto.isEmpty {
+                        Text(mensaje.texto)
+                            .frame(maxWidth: 230, alignment: .leading)
+                    }
+                }
+                .fullScreenCover(isPresented: $verAdjunto) { visor }
+            case "audio":
+                if mensaje.media?.url != nil {
+                    BurbujaAudio(mensaje: mensaje)
+                } else {
+                    HStack(spacing: 8) {
+                        Image(systemName: "mic.fill").font(.title3).foregroundStyle(.tint)
+                        Text("Nota de voz")
+                    }
+                }
+            case "video", "document", "sticker":
+                HStack(spacing: 8) {
+                    Image(systemName: icono)
+                        .font(.title3)
+                        .foregroundStyle(.tint)
+                    Text(etiquetaAdjunto)
+                        .lineLimit(2)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { if mensaje.media?.url != nil { verAdjunto = true } }
+                .fullScreenCover(isPresented: $verAdjunto) { visor }
+            default:
+                Text(mensaje.texto.isEmpty ? "[\(mensaje.tipo)]" : mensaje.texto)
+                    .multilineTextAlignment(.leading)
+            }
+        }
+    }
+
+    private var visor: some View {
+        VisorAdjunto(url: mensaje.media?.url ?? mensaje.media?.thumbUrl ?? "",
+                     filename: mensaje.media?.filename)
+    }
+
+    private var etiquetaEnviando: String {
+        switch mensaje.tipo {
+        case "image": return "Enviando foto…"
+        case "audio": return "Enviando nota de voz…"
+        case "document": return "Enviando documento…"
+        default: return "Enviando…"
         }
     }
 

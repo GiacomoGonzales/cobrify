@@ -22,6 +22,10 @@
 	<string>1</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSCameraUsageDescription</key>
+	<string>Para tomar una foto y enviarla en el chat.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Para grabar y enviar notas de voz en el chat.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>
