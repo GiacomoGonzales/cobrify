@@ -16,6 +16,12 @@ struct ConversationView: View {
     @State private var mostrarCamara = false
     @State private var mostrarArchivos = false
     @StateObject private var grabadora = GrabadoraNota()
+    @ObservedObject private var catalogo = CatalogoStore.shared
+    @State private var mostrarNota = false
+    @State private var notaBorrador = ""
+    @State private var mostrarRapidas = false
+    @State private var estadoLocal: String?
+    @State private var etiquetasLocal: Set<String>?
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -61,6 +67,76 @@ struct ConversationView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Picker("Estado", selection: Binding(
+                        get: { estadoLocal ?? conv.estado },
+                        set: { nuevo in
+                            estadoLocal = nuevo
+                            catalogo.cambiarEstado(conv.id, a: nuevo)
+                        }
+                    )) {
+                        ForEach(CatalogoStore.ESTADOS, id: \.id) { e in
+                            Label(e.nombre, systemImage: e.icono).tag(e.id)
+                        }
+                    }
+                    if !catalogo.etiquetas.isEmpty {
+                        Menu("Etiquetas") {
+                            ForEach(catalogo.etiquetas) { e in
+                                Button {
+                                    let tiene = etiquetasActuales.contains(e.id)
+                                    var set = etiquetasActuales
+                                    if tiene { set.remove(e.id) } else { set.insert(e.id) }
+                                    etiquetasLocal = set
+                                    catalogo.alternarEtiqueta(conv.id, tagId: e.id, tiene: tiene)
+                                } label: {
+                                    if etiquetasActuales.contains(e.id) {
+                                        Label(e.nombre, systemImage: "checkmark")
+                                    } else {
+                                        Text(e.nombre)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Button {
+                        notaBorrador = conv.nota ?? ""
+                        mostrarNota = true
+                    } label: {
+                        Label(conv.nota == nil ? "Agregar nota interna" : "Ver nota interna", systemImage: "note.text")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+            }
+        }
+        .sheet(isPresented: $mostrarNota) {
+            NavigationStack {
+                TextEditor(text: $notaBorrador)
+                    .padding(12)
+                    .navigationTitle("Nota interna")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button("Cancelar") { mostrarNota = false }
+                        }
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Guardar") {
+                                catalogo.guardarNota(conv.id, nota: notaBorrador)
+                                mostrarNota = false
+                            }
+                            .fontWeight(.semibold)
+                        }
+                    }
+            }
+            .presentationDetents([.medium])
+        }
+        .sheet(isPresented: $mostrarRapidas) {
+            RespuestasRapidasSheet { rapida in
+                mostrarRapidas = false
+                usarRapida(rapida)
+            }
+            .presentationDetents([.medium, .large])
         }
         .safeAreaInset(edge: .bottom) { barraDeRespuesta }
         .photosPicker(isPresented: $mostrarGaleria, selection: $fotoSeleccionada, matching: .images)
@@ -200,6 +276,9 @@ struct ConversationView: View {
                             Button { mostrarGaleria = true } label: { Label("Foto de la galería", systemImage: "photo.on.rectangle") }
                             Button { mostrarCamara = true } label: { Label("Tomar foto", systemImage: "camera") }
                             Button { mostrarArchivos = true } label: { Label("Documento PDF", systemImage: "doc") }
+                            if !catalogo.respuestasRapidas.isEmpty {
+                                Button { mostrarRapidas = true } label: { Label("Respuesta rápida", systemImage: "bolt.fill") }
+                            }
                         } label: {
                             Image(systemName: "plus")
                                 .font(.system(size: 17, weight: .semibold))
@@ -291,6 +370,29 @@ struct ConversationView: View {
                                                 caption: "", tipo: tipo)
             enviando = false
             if let error { errorEnvio = error }
+        }
+    }
+
+    private var etiquetasActuales: Set<String> {
+        etiquetasLocal ?? Set(conv.etiquetas)
+    }
+
+    /// Una respuesta rápida con adjunto sale directo (el archivo ya está
+    /// guardado); una de solo texto cae al borrador para retocarla antes.
+    private func usarRapida(_ r: RespuestaRapida) {
+        if let media = r.media, media["url"] != nil {
+            errorEnvio = nil
+            enviando = true
+            Task {
+                do {
+                    try await ChatAPI.enviarMediaGuardada(conversationId: conv.id, media: media, caption: r.texto)
+                } catch {
+                    errorEnvio = (error as? ChatAPI.ErrorEnvio)?.mensaje ?? "No se pudo enviar."
+                }
+                enviando = false
+            }
+        } else {
+            borrador = r.texto
         }
     }
 

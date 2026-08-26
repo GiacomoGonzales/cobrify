@@ -47,6 +47,31 @@ enum ChatAPI {
         }
     }
 
+    /// Envía un archivo que YA está guardado (el de una respuesta rápida):
+    /// viaja solo su dirección, no el archivo — instantáneo aunque pese 15 MB.
+    static func enviarMediaGuardada(conversationId: String, media: [String: String], caption: String) async throws {
+        guard let user = Auth.auth().currentUser else {
+            throw ErrorEnvio(mensaje: "La sesión venció. Vuelve a entrar.", ventanaCerrada: false)
+        }
+        let token = try await user.getIDToken()
+        var req = URLRequest(url: urlEnvioMedia)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.httpBody = try JSONSerialization.data(withJSONObject: [
+            "conversationId": conversationId,
+            "media": media,
+            "caption": caption,
+        ])
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard status < 300 else {
+            let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            throw ErrorEnvio(mensaje: json?["error"] as? String ?? "No se pudo enviar.",
+                             ventanaCerrada: json?["ventanaCerrada"] as? Bool ?? false)
+        }
+    }
+
     /// Envía una foto, un audio o un PDF: el archivo viaja en base64 y el
     /// servidor lo guarda en nuestro almacenamiento antes de pasarlo a Meta —
     /// la MISMA ruta que la web, el historial vive en un solo lugar.

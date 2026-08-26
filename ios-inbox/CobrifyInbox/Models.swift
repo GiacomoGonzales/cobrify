@@ -13,8 +13,11 @@ struct Conversacion: Identifiable, Equatable {
     var sinLeer: Int
     var estado: String
     var linkedBusinessName: String?
+    var linkedBusinessId: String?
     var optOut: Bool
     var ventanaVenceAt: Date?
+    var etiquetas: [String]
+    var nota: String?
 
     init(id: String, data: [String: Any]) {
         self.id = id
@@ -26,6 +29,9 @@ struct Conversacion: Identifiable, Equatable {
         sinLeer = data["sinLeer"] as? Int ?? 0
         estado = data["estado"] as? String ?? "abierta"
         linkedBusinessName = data["linkedBusinessName"] as? String
+        linkedBusinessId = data["linkedBusinessId"] as? String
+        etiquetas = data["etiquetas"] as? [String] ?? []
+        nota = data["nota"] as? String
         optOut = data["optOut"] as? Bool ?? false
         ventanaVenceAt = (data["ventanaVenceAt"] as? Timestamp)?.dateValue()
     }

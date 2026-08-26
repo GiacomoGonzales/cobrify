@@ -7,6 +7,13 @@ struct ConversationListView: View {
     @ObservedObject private var navegacion = Navegacion.shared
     @State private var ruta: [String] = []
     @State private var busqueda = ""
+    @State private var filtro: Filtro = .todas
+    @ObservedObject private var catalogo = CatalogoStore.shared
+
+    enum Filtro: Equatable {
+        case todas, sinLeer, abiertas, pendientes, completadas
+        case etiqueta(String)
+    }
 
     var body: some View {
         NavigationStack(path: $ruta) {
@@ -20,13 +27,30 @@ struct ConversationListView: View {
                                            systemImage: "bubble.left.and.bubble.right",
                                            description: Text("Cuando un cliente escriba al WhatsApp del negocio, aparecerá aquí."))
                 } else {
-                    List(filtradas) { conv in
-                        NavigationLink(value: conv.id) {
-                            FilaConversacion(conv: conv)
+                    VStack(spacing: 0) {
+                        barraDeFiltros
+                        List(filtradas) { conv in
+                            NavigationLink(value: conv.id) {
+                                FilaConversacion(conv: conv, etiquetas: catalogo.etiquetas)
+                            }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                if conv.estado == "completada" {
+                                    Button { catalogo.cambiarEstado(conv.id, a: "abierta") } label: {
+                                        Label("Reabrir", systemImage: "tray.full")
+                                    }.tint(.blue)
+                                } else {
+                                    Button { catalogo.cambiarEstado(conv.id, a: "completada") } label: {
+                                        Label("Completada", systemImage: "checkmark.circle")
+                                    }.tint(.green)
+                                    Button { catalogo.cambiarEstado(conv.id, a: "pendiente") } label: {
+                                        Label("Pendiente", systemImage: "clock")
+                                    }.tint(.orange)
+                                }
+                            }
                         }
+                        .listStyle(.plain)
+                        .searchable(text: $busqueda, prompt: "Buscar chat o número")
                     }
-                    .listStyle(.plain)
-                    .searchable(text: $busqueda, prompt: "Buscar chat o número")
                 }
             }
             .navigationTitle("Chats")
@@ -38,6 +62,7 @@ struct ConversationListView: View {
         }
         .onAppear {
             inbox.empezar()
+            catalogo.empezar()
             AppDelegate.activarNotificaciones()
         }
         .onChange(of: navegacion.abrirConversacion) {
@@ -49,21 +74,79 @@ struct ConversationListView: View {
         }
     }
 
-    /// La búsqueda cruza nombre, número y último mensaje.
+    /// Primero el filtro elegido, después la búsqueda.
     private var filtradas: [Conversacion] {
+        var lista = inbox.conversaciones
+        switch filtro {
+        case .todas: break
+        case .sinLeer: lista = lista.filter { $0.sinLeer > 0 }
+        case .abiertas: lista = lista.filter { $0.estado == "abierta" }
+        case .pendientes: lista = lista.filter { $0.estado == "pendiente" }
+        case .completadas: lista = lista.filter { $0.estado == "completada" }
+        case .etiqueta(let id): lista = lista.filter { $0.etiquetas.contains(id) }
+        }
         let q = busqueda.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !q.isEmpty else { return inbox.conversaciones }
-        return inbox.conversaciones.filter {
+        guard !q.isEmpty else { return lista }
+        return lista.filter {
             $0.titulo.lowercased().contains(q)
                 || $0.waId.contains(q)
                 || $0.ultimoMensaje.lowercased().contains(q)
                 || ($0.linkedBusinessName?.lowercased().contains(q) ?? false)
         }
     }
+
+    private var barraDeFiltros: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                chip("Todas", .todas)
+                chip("Sin leer", .sinLeer)
+                chip("Abiertas", .abiertas)
+                chip("Pendientes", .pendientes)
+                chip("Completadas", .completadas)
+                ForEach(catalogo.etiquetas) { e in
+                    chipEtiqueta(e)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+        }
+    }
+
+    private func chip(_ nombre: String, _ f: Filtro) -> some View {
+        Button {
+            filtro = (filtro == f) ? .todas : f
+        } label: {
+            Text(nombre)
+                .font(.subheadline.weight(filtro == f ? .semibold : .regular))
+                .padding(.horizontal, 13)
+                .padding(.vertical, 7)
+                .background(filtro == f ? AnyShapeStyle(.tint.opacity(0.18)) : AnyShapeStyle(Color(.secondarySystemGroupedBackground)), in: Capsule())
+                .foregroundStyle(filtro == f ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func chipEtiqueta(_ e: Etiqueta) -> some View {
+        Button {
+            filtro = (filtro == .etiqueta(e.id)) ? .todas : .etiqueta(e.id)
+        } label: {
+            HStack(spacing: 6) {
+                Circle().fill(e.color).frame(width: 8, height: 8)
+                Text(e.nombre)
+                    .font(.subheadline.weight(filtro == .etiqueta(e.id) ? .semibold : .regular))
+            }
+            .padding(.horizontal, 13)
+            .padding(.vertical, 7)
+            .background(filtro == .etiqueta(e.id) ? AnyShapeStyle(e.color.opacity(0.18)) : AnyShapeStyle(Color(.secondarySystemGroupedBackground)), in: Capsule())
+            .foregroundStyle(filtro == .etiqueta(e.id) ? AnyShapeStyle(e.color) : AnyShapeStyle(.primary))
+        }
+        .buttonStyle(.plain)
+    }
 }
 
 private struct FilaConversacion: View {
     let conv: Conversacion
+    var etiquetas: [Etiqueta] = []
 
     /// Color estable por contacto: del número sale el tono, así cada quien
     /// tiene el suyo y no cambia entre aperturas.
@@ -71,6 +154,10 @@ private struct FilaConversacion: View {
         var h = 0
         for u in conv.waId.unicodeScalars { h = (h &* 31 &+ Int(u.value)) & 0xFFFF }
         return Color(hue: Double(h % 360) / 360, saturation: 0.55, brightness: 0.72)
+    }
+
+    private var puntos: [Etiqueta] {
+        etiquetas.filter { conv.etiquetas.contains($0.id) }
     }
 
     var body: some View {
@@ -84,10 +171,18 @@ private struct FilaConversacion: View {
             .frame(width: 48, height: 48)
 
             VStack(alignment: .leading, spacing: 3) {
-                HStack {
+                HStack(spacing: 5) {
                     Text(conv.titulo)
                         .font(.body.weight(conv.sinLeer > 0 ? .semibold : .regular))
                         .lineLimit(1)
+                    if conv.estado == "pendiente" {
+                        Image(systemName: "clock.fill").font(.caption2).foregroundStyle(.orange)
+                    } else if conv.estado == "completada" {
+                        Image(systemName: "checkmark.circle.fill").font(.caption2).foregroundStyle(.green)
+                    }
+                    ForEach(puntos) { e in
+                        Circle().fill(e.color).frame(width: 8, height: 8)
+                    }
                     Spacer()
                     Text(Formato.hora(conv.ultimoMensajeAt))
                         .font(.caption)
