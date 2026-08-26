@@ -13,7 +13,10 @@
  * Uso:
  *   node scripts/reseller-apk/build.mjs \
  *     --id=abc123 --nombre="QAMIR" --appId=com.qamir.app \
- *     --dominio=qamir.pe --color=#2563EB [--logo=/ruta/logo.png]
+ *     --dominio=qamir.pe --color=#2563EB
+ *
+ * El logo sale solo del panel del reseller. Se puede forzar otro con
+ * --logo=<ruta o URL>, y el fondo del ícono con --colorIcono=#RRGGBB.
  *
  * Deja el APK firmado en android/app/build/outputs/apk/release/.
  *
@@ -25,6 +28,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { acomodarParaIcono, bajarLogo, marcaDeDominio } from './marca.mjs'
 
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const ANDROID = join(RAIZ, 'android')
@@ -51,18 +55,28 @@ const NOMBRE = requerido('nombre')
 const APP_ID = requerido('appId')
 const DOMINIO = requerido('dominio').replace(/^https?:\/\//, '').replace(/\/$/, '')
 const COLOR = (args.color || '#2563EB').toUpperCase()
+// Fondo del ícono adaptativo. Blanco por defecto y no el color de marca: los
+// logos suelen traer su propio color y sobre un fondo del mismo tono el
+// contorno desaparece (el de Ezfactu es un círculo azul: azul sobre azul).
+const COLOR_ICONO = (args.colorIcono || '#FFFFFF').toUpperCase()
 const LOGO = args.logo || ''
+const SIN_LOGO = args['sin-logo'] === 'true'
 
 if (!/^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$/.test(APP_ID)) {
   console.error(`appId inválido: ${APP_ID} (debe ser tipo com.marca.app, solo minúsculas)`)
   process.exit(1)
 }
-if (!/^#[0-9A-F]{6}$/.test(COLOR)) {
-  console.error(`color inválido: ${COLOR} (debe ser #RRGGBB)`)
-  process.exit(1)
+for (const [k, v] of [['color', COLOR], ['colorIcono', COLOR_ICONO]]) {
+  if (!/^#[0-9A-F]{6}$/.test(v)) {
+    console.error(`--${k} inválido: ${v} (debe ser #RRGGBB)`)
+    process.exit(1)
+  }
 }
 
 const log = (m) => console.log(`  ${m}`)
+
+// Relativa a la raíz del repo a propósito: ver generarGraficos().
+const CARPETA_ASSETS = '.assets-reseller'
 
 // ------------------------------------------------------- host canónico
 /**
@@ -231,32 +245,108 @@ function registrarPaquete() {
   log('ok google-services (paquete registrado; push real pendiente)')
 }
 
-/** Íconos y splash desde el logo del reseller, con @capacitor/assets. */
-function generarGraficos() {
-  if (!LOGO || !existsSync(LOGO)) {
-    log('! sin logo: se conservan los gráficos actuales')
-    return
+/**
+ * De dónde sale el logo: lo que diga --logo (ruta o URL) o, si no, el que el
+ * reseller ya tiene cargado en su panel.
+ */
+async function conseguirLogo(dir) {
+  const destino = join(dir, 'logo.png')
+
+  if (LOGO && !/^https?:\/\//.test(LOGO)) {
+    if (!existsSync(LOGO)) throw new Error(`--logo apunta a un archivo que no existe: ${LOGO}`)
+    writeFileSync(destino, readFileSync(LOGO))
+    return `archivo ${LOGO}`
   }
-  const dir = join(RAIZ, '.assets-reseller')
+  if (LOGO) {
+    await bajarLogo(LOGO, destino)
+    return '--logo (URL)'
+  }
+
+  const marca = await marcaDeDominio(DOMINIO)
+  if (!marca) throw new Error(`no hay reseller con el dominio ${DOMINIO} (revisa "Dominio propio" en su panel)`)
+  if (!marca.logoUrl) throw new Error(`${marca.nombre || DOMINIO} no tiene logo cargado en su panel`)
+  await bajarLogo(marca.logoUrl, destino)
+  return `panel de ${marca.nombre || DOMINIO}`
+}
+
+/**
+ * Íconos y splash desde el logo del reseller, con @capacitor/assets.
+ *
+ * Sin logo NO sigue de largo: los siete APK de resellers salieron con el ícono
+ * de Cobrify en el cajón justamente porque antes esto era un aviso en consola
+ * que nadie leyó. Un APK de marca blanca con la marca de otro es un APK malo,
+ * no uno incompleto.
+ */
+async function generarGraficos() {
+  const dir = join(RAIZ, CARPETA_ASSETS)
   rmSync(dir, { recursive: true, force: true })
   mkdirSync(dir, { recursive: true })
+
+  let origen
+  try {
+    origen = await conseguirLogo(dir)
+    for (const aviso of await acomodarParaIcono(join(dir, 'logo.png'))) log(`! ${aviso}`)
+  } catch (e) {
+    rmSync(dir, { recursive: true, force: true })
+    if (SIN_LOGO) {
+      log(`! sin logo (${e.message}): se conservan los gráficos actuales, por --sin-logo`)
+      return
+    }
+    console.error(`\nSin logo no se compila: ${e.message}`)
+    console.error('Cárgalo en el panel del reseller, o pasa --logo=<ruta|URL>.')
+    console.error('Para compilar igual con los gráficos actuales: --sin-logo\n')
+    process.exit(1)
+  }
+
   // @capacitor/assets espera logo.png y genera ícono adaptativo y splash en
   // todas las densidades — la parte que a mano eran 26 carpetas.
-  writeFileSync(join(dir, 'logo.png'), readFileSync(LOGO))
-
+  //
+  // --assetPath RELATIVO, no absoluto: en Windows, con una ruta absoluta la
+  // herramienta no encuentra nada, no genera un solo archivo y AUN ASÍ sale
+  // con código 0. Eso fue exactamente lo que dejó a los siete resellers con
+  // el ícono de Cobrify: el paso "funcionaba" sin hacer nada.
   execFileSync('npx', [
     '@capacitor/assets', 'generate',
     '--android',
-    '--assetPath', dir,
+    '--assetPath', CARPETA_ASSETS,
     '--androidProject', 'android',
-    '--iconBackgroundColor', COLOR,
-    '--iconBackgroundColorDark', COLOR,
+    '--iconBackgroundColor', COLOR_ICONO,
+    '--iconBackgroundColorDark', COLOR_ICONO,
     '--splashBackgroundColor', COLOR,
     '--splashBackgroundColorDark', COLOR,
   ], { cwd: RAIZ, stdio: 'inherit', shell: process.platform === 'win32' })
 
   rmSync(dir, { recursive: true, force: true })
-  log('ok íconos y splash desde el logo')
+  verificarQueElIconoCambio()
+  log(`ok íconos y splash desde el logo (${origen})`)
+}
+
+/**
+ * Que el ícono ya NO sea el de Cobrify.
+ *
+ * Se compara contra el que está versionado en git, que es el de Cobrify: si
+ * después de generar sigue siendo byte por byte el mismo, el logo del reseller
+ * no entró y el APK saldría con la marca de otro. Es la única comprobación que
+ * mira el resultado en vez de confiar en que el comando anterior hizo algo.
+ */
+function verificarQueElIconoCambio() {
+  const rel = 'app/src/main/res/mipmap-xxxhdpi/ic_launcher.png'
+  const actual = readFileSync(join(ANDROID, rel))
+  let deCobrify
+  try {
+    deCobrify = execFileSync('git', ['show', `HEAD:android/${rel}`], {
+      cwd: RAIZ, maxBuffer: 32 * 1024 * 1024, encoding: 'buffer',
+    })
+  } catch {
+    log('! no se pudo leer el ícono de referencia de git; sin verificar')
+    return
+  }
+  if (actual.equals(deCobrify)) {
+    console.error('\nEl ícono siguió siendo el de Cobrify después de generarlo.')
+    console.error('El APK saldría con la marca equivocada en el cajón del teléfono.')
+    console.error('Revisa la salida de @capacitor/assets de aquí arriba.\n')
+    process.exit(1)
+  }
 }
 
 function compilar() {
@@ -280,7 +370,7 @@ sacarBundleWeb()
 configurarCapacitor(host)
 ponerIdentidad()
 registrarPaquete()
-generarGraficos()
+await generarGraficos()
 compilar()
 
 console.log(`\nListo: android/app/build/outputs/apk/release/app-release.apk\n`)
