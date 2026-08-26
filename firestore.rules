@@ -907,6 +907,15 @@ service cloud.firestore {
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
+      // Subcollection: recordatorios ya atendidos.
+      // Path: businesses/{userId}/reminderDismissals/{clave}
+      // Los recordatorios se calculan a partir de las VENTAS, así que no hay
+      // un documento que marcar como hecho: lo que se guarda es el descarte.
+      match /reminderDismissals/{claveId} {
+        allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
       // Subcollection: Attendance (Control de Asistencia del Personal)
       // Path: businesses/{userId}/attendance/{recordId}
       // Lo escriben los sub-usuarios al marcar asistencia por QR o manualmente,

@@ -8084,11 +8084,11 @@ export default function Products() {
                   <Input
                     label="Recordar servicio (días)"
                     type="number"
-                    min="1"
+                    min="0"
                     placeholder="30"
                     error={errors.reminderDays?.message}
                     {...register('reminderDays')}
-                    helperText="Al cobrar este servicio se programa solo el recordatorio de la mascota. Ej: baño 30, desparasitación 90. Vacío = no recuerda nada."
+                    helperText="Vacío = usa el plazo del negocio (Configuración > Ventas). Pon un número para darle su propio plazo (ej: desparasitación 90) o 0 para que este producto no genere recordatorio."
                   />
                 )}
 

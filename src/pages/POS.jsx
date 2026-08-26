@@ -132,6 +132,7 @@ import { useReactToPrint } from 'react-to-print'
 import { getPrimaryPet } from '@/utils/petUtils'
 import { getVisiblePaymentMethods, getPaymentLabel, getPaymentKeyByLabel } from '@/utils/paymentMethods'
 import GuideLink from '@/components/guide/GuideLink'
+import { diasDeRecordatorio } from '@/utils/vetReminders'
 
 const PAYMENT_METHODS = {
   CASH: 'Efectivo',
@@ -3248,7 +3249,9 @@ export default function POS() {
     const salida = []
     for (const item of cart) {
       if (item.isCustom) continue
-      const base = Number(fichaPorId.get(item.id)?.reminderDays) || 0
+      // Por defecto TODO lo que se vende se recuerda (30 días de fábrica); la
+      // ficha del producto solo marca las excepciones. Ver vetReminders.js.
+      const base = diasDeRecordatorio(fichaPorId.get(item.id), businessSettings)
       if (base <= 0) continue
       const elegido = diasRecordatorio[item.id]
       const dias = (elegido === undefined || elegido === '')
@@ -3257,7 +3260,7 @@ export default function POS() {
       salida.push({ productId: item.id, nombre: item.name, dias, base })
     }
     return salida
-  }, [businessMode, cart, productsRaw, diasRecordatorio])
+  }, [businessMode, cart, productsRaw, diasRecordatorio, businessSettings])
 
   // useDeferredValue mantiene el <input> responsivo aunque el filtro tarde.
   // React renderiza el input con la última tecla de inmediato, y el filter
