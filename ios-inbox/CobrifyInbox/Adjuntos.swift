@@ -116,29 +116,65 @@ final class ReproductorAudio: ObservableObject {
     }
 }
 
-/// La nota de voz en su burbuja: play/pausa + barra de avance.
+/// Duraciones ya averiguadas, para no releer el archivo en cada aparición.
+@MainActor
+final class DuracionesAudio {
+    static var cache: [String: Double] = [:]
+}
+
+/// La nota de voz en su burbuja: play/pausa, barra de avance y la duración
+/// (o el tiempo transcurrido mientras suena), como WhatsApp.
 struct BurbujaAudio: View {
     let mensaje: Mensaje
     @ObservedObject private var repro = ReproductorAudio.shared
+    @State private var duracion: Double = 0
 
-    private var esEste: Bool { repro.urlActual == mensaje.media?.url }
+    private var url: String? { mensaje.media?.url }
+    private var esEste: Bool { repro.urlActual == url }
 
     var body: some View {
         HStack(spacing: 8) {
             Button {
-                if let u = mensaje.media?.url { repro.alternar(url: u) }
+                if let u = url { repro.alternar(url: u) }
             } label: {
                 Image(systemName: esEste && repro.reproduciendo ? "pause.circle.fill" : "play.circle.fill")
                     .font(.system(size: 26))
                     .foregroundStyle(Color(.systemGray))
             }
             .buttonStyle(.plain)
-            ProgressView(value: esEste ? repro.progreso : 0)
-                .frame(width: 150)
-            Image(systemName: "mic.fill")
-                .font(.caption2)
+            VStack(alignment: .leading, spacing: 4) {
+                ProgressView(value: esEste ? repro.progreso : 0)
+                    .frame(width: 150)
+                HStack(spacing: 4) {
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 9))
+                    Text(textoDuracion)
+                        .font(.caption2.monospacedDigit())
+                }
                 .foregroundStyle(.secondary)
+            }
         }
+        .task(id: url) { await cargarDuracion() }
+    }
+
+    /// Mientras suena, el tiempo que va; quieto, cuánto dura en total.
+    private var textoDuracion: String {
+        guard duracion > 0 else { return "—:—" }
+        let segundos = (esEste && repro.progreso > 0) ? duracion * repro.progreso : duracion
+        return String(format: "%d:%02d", Int(segundos) / 60, Int(segundos) % 60)
+    }
+
+    /// La duración sale de los metadatos del archivo: AVURLAsset lee la
+    /// cabecera, no baja el audio completo.
+    private func cargarDuracion() async {
+        guard let url, let u = URL(string: url) else { return }
+        if let guardada = DuracionesAudio.cache[url] { duracion = guardada; return }
+        let asset = AVURLAsset(url: u)
+        guard let d = try? await asset.load(.duration) else { return }
+        let segundos = CMTimeGetSeconds(d)
+        guard segundos.isFinite, segundos > 0 else { return }
+        DuracionesAudio.cache[url] = segundos
+        duracion = segundos
     }
 }
 
