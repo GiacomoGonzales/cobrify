@@ -2207,6 +2207,13 @@ export default function CashRegister() {
       salesGiftCert,
       income,
       expense,
+      // Todos los métodos juntos (efectivo + Yape + Plin), para las tarjetas
+      // de resumen. Reporte de CYBY Plast: la tarjeta "Egresos" mostraba solo
+      // el efectivo y no cuadraba con el Flujo de Caja, que sí suma todo.
+      // OJO: `income`/`expense` a secas siguen siendo SOLO efectivo — son los
+      // que entran al arqueo del cajón y no deben moverse.
+      incomeAll: income + incomeYape + incomePlin,
+      expenseAll: expense + expenseYape + expensePlin,
       incomeYape,
       expenseYape,
       expected,
@@ -2468,8 +2475,15 @@ export default function CashRegister() {
                   <div>
                     <p className="text-sm text-gray-600">Otros Ingresos</p>
                     <p className="text-2xl font-bold text-blue-600">
-                      {formatCurrency(totals.income)}
+                      {formatCurrency(totals.incomeAll ?? totals.income)}
                     </p>
+                    {(totals.incomeYape > 0 || totals.incomePlin > 0) && (
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Efectivo {formatCurrency(totals.income)}
+                        {totals.incomeYape > 0 && ` · Yape ${formatCurrency(totals.incomeYape)}`}
+                        {totals.incomePlin > 0 && ` · Plin ${formatCurrency(totals.incomePlin)}`}
+                      </p>
+                    )}
                     {cashMultiCurrencyOn && totals.usd && totals.usd.income > 0 && (
                       <p className="text-xs text-emerald-700 mt-0.5 font-medium">
                         + {formatCurrency(totals.usd.income, 'USD')}
@@ -2489,8 +2503,15 @@ export default function CashRegister() {
                   <div>
                     <p className="text-sm text-gray-600">Egresos</p>
                     <p className="text-2xl font-bold text-red-600">
-                      {formatCurrency(totals.expense)}
+                      {formatCurrency(totals.expenseAll ?? totals.expense)}
                     </p>
+                    {(totals.expenseYape > 0 || totals.expensePlin > 0) && (
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Efectivo {formatCurrency(totals.expense)}
+                        {totals.expenseYape > 0 && ` · Yape ${formatCurrency(totals.expenseYape)}`}
+                        {totals.expensePlin > 0 && ` · Plin ${formatCurrency(totals.expensePlin)}`}
+                      </p>
+                    )}
                     {cashMultiCurrencyOn && totals.usd && totals.usd.expense > 0 && (
                       <p className="text-xs text-emerald-700 mt-0.5 font-medium">
                         + {formatCurrency(totals.usd.expense, 'USD')}
@@ -3481,11 +3502,27 @@ export default function CashRegister() {
               </div>
               <div className="bg-purple-50 p-4 rounded-lg">
                 <p className="text-xs text-purple-600 font-medium">Otros Ingresos</p>
-                <p className="text-xl font-bold text-purple-700">{formatCurrency(selectedHistorySession.totalIncome || 0)}</p>
+                {/* Todos los métodos, no solo efectivo: los de Yape/Plin se
+                    persisten aparte desde que las billeteras cuadran solas. */}
+                <p className="text-xl font-bold text-purple-700">{formatCurrency((selectedHistorySession.totalIncome || 0) + (selectedHistorySession.totalIncomeYape || 0) + (selectedHistorySession.totalIncomePlin || 0))}</p>
+                {((selectedHistorySession.totalIncomeYape || 0) > 0 || (selectedHistorySession.totalIncomePlin || 0) > 0) && (
+                  <p className="text-[11px] text-purple-600 mt-0.5">
+                    Efectivo {formatCurrency(selectedHistorySession.totalIncome || 0)}
+                    {(selectedHistorySession.totalIncomeYape || 0) > 0 && ` · Yape ${formatCurrency(selectedHistorySession.totalIncomeYape)}`}
+                    {(selectedHistorySession.totalIncomePlin || 0) > 0 && ` · Plin ${formatCurrency(selectedHistorySession.totalIncomePlin)}`}
+                  </p>
+                )}
               </div>
               <div className="bg-red-50 p-4 rounded-lg">
                 <p className="text-xs text-red-600 font-medium">Egresos</p>
-                <p className="text-xl font-bold text-red-700">{formatCurrency(selectedHistorySession.totalExpense || 0)}</p>
+                <p className="text-xl font-bold text-red-700">{formatCurrency((selectedHistorySession.totalExpense || 0) + (selectedHistorySession.totalExpenseYape || 0) + (selectedHistorySession.totalExpensePlin || 0))}</p>
+                {((selectedHistorySession.totalExpenseYape || 0) > 0 || (selectedHistorySession.totalExpensePlin || 0) > 0) && (
+                  <p className="text-[11px] text-red-600 mt-0.5">
+                    Efectivo {formatCurrency(selectedHistorySession.totalExpense || 0)}
+                    {(selectedHistorySession.totalExpenseYape || 0) > 0 && ` · Yape ${formatCurrency(selectedHistorySession.totalExpenseYape)}`}
+                    {(selectedHistorySession.totalExpensePlin || 0) > 0 && ` · Plin ${formatCurrency(selectedHistorySession.totalExpensePlin)}`}
+                  </p>
+                )}
               </div>
             </div>
 
