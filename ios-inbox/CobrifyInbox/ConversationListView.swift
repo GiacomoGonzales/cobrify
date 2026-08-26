@@ -27,9 +27,15 @@ struct ConversationListView: View {
                                            systemImage: "bubble.left.and.bubble.right",
                                            description: Text("Cuando un cliente escriba al WhatsApp del negocio, aparecerá aquí."))
                 } else {
-                    VStack(spacing: 0) {
+                    // Una sola List: los filtros son la primera fila, así se
+                    // van con el scroll y el título grande colapsa nativo,
+                    // como WhatsApp.
+                    List {
                         barraDeFiltros
-                        List(filtradas) { conv in
+                            .listRowInsets(EdgeInsets())
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                        ForEach(filtradas) { conv in
                             NavigationLink(value: conv.id) {
                                 FilaConversacion(conv: conv, etiquetas: catalogo.etiquetas)
                             }
@@ -48,9 +54,9 @@ struct ConversationListView: View {
                                 }
                             }
                         }
-                        .listStyle(.plain)
-                        .searchable(text: $busqueda, prompt: "Buscar chat o número")
                     }
+                    .listStyle(.plain)
+                    .searchable(text: $busqueda, prompt: "Buscar chat o número")
                 }
             }
             .navigationTitle("Chats")

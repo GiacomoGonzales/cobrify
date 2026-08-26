@@ -51,7 +51,16 @@ struct ConversationView: View {
                 .padding(.top, 8)
             }
             .defaultScrollAnchor(.bottom)
+            // Arrastrar hacia abajo va cerrando el teclado, como WhatsApp.
+            .scrollDismissesKeyboard(.interactively)
             .onChange(of: store.mensajes.count + store.pendientes.count) {
+                if let ultimo = (store.mensajes + store.pendientes).last {
+                    withAnimation { proxy.scrollTo(ultimo.id, anchor: .bottom) }
+                }
+            }
+            // Al abrir el teclado, la conversación sube sola y lo último
+            // queda a la vista — sin tener que hacer scroll a mano.
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
                 if let ultimo = (store.mensajes + store.pendientes).last {
                     withAnimation { proxy.scrollTo(ultimo.id, anchor: .bottom) }
                 }
@@ -517,7 +526,26 @@ private struct BurbujaMensaje: View {
                         Text("Nota de voz")
                     }
                 }
-            case "video", "document", "sticker":
+            case "sticker":
+                if let url = mensaje.media?.url {
+                    // El sticker es la imagen pelada (webp), sin adornos.
+                    AsyncImage(url: URL(string: url)) { fase in
+                        if case .success(let imagen) = fase {
+                            imagen.resizable().scaledToFit()
+                        } else {
+                            Image(systemName: "face.smiling")
+                                .font(.system(size: 40))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .frame(width: 130, height: 130)
+                } else {
+                    HStack(spacing: 8) {
+                        Image(systemName: "face.smiling").font(.title3).foregroundStyle(.tint)
+                        Text("Sticker")
+                    }
+                }
+            case "video", "document":
                 HStack(spacing: 8) {
                     Image(systemName: icono)
                         .font(.title3)
@@ -528,6 +556,16 @@ private struct BurbujaMensaje: View {
                 .contentShape(Rectangle())
                 .onTapGesture { if mensaje.media?.url != nil { verAdjunto = true } }
                 .fullScreenCover(isPresented: $verAdjunto) { visor }
+            case "unsupported", "unknown":
+                // Meta no entrega este contenido por la Cloud API (stickers
+                // animados, encuestas y otros). Mejor decirlo en cristiano.
+                HStack(spacing: 8) {
+                    Image(systemName: "eye.slash")
+                        .foregroundStyle(.secondary)
+                    Text("Este contenido no se puede mostrar aquí (WhatsApp no lo entrega a la API — suele ser un sticker animado).")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
             default:
                 Text(mensaje.texto.isEmpty ? "[\(mensaje.tipo)]" : mensaje.texto)
                     .multilineTextAlignment(.leading)
