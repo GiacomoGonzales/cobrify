@@ -72,7 +72,13 @@ const DEMO_SELLERS = [
 
 
 export default function Sellers() {
-  const { getBusinessId, isDemoMode, filterBranchesByAccess, user, hasMainBranchAccess, businessSettings , branchScope } = useAppContext()
+  const { getBusinessId, isDemoMode, demoData, filterBranchesByAccess, user, hasMainBranchAccess, businessSettings , branchScope } = useAppContext()
+
+  // Demo: la lista sigue al estado vivo.
+  useEffect(() => {
+    if (!isDemoMode || !demoData?.sellers) return
+    setSellers(demoData.sellers)
+  }, [isDemoMode, demoData])
   const toast = useToast()
 
   const [sellers, setSellers] = useState([])
@@ -307,8 +313,8 @@ export default function Sellers() {
     setIsLoading(true)
     try {
       if (isDemoMode) {
-        // Usar datos de ejemplo en modo demo
-        setSellers(DEMO_SELLERS)
+        // Del estado del demo: así lo que el visitante crea aparece acá.
+        setSellers(demoData?.sellers ?? DEMO_SELLERS)
         setInvoices([])
         setIsLoading(false)
         return
@@ -343,19 +349,11 @@ export default function Sellers() {
   }
 
   const handleCreate = () => {
-    if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
-      return
-    }
     setEditingSeller(null)
     setIsFormModalOpen(true)
   }
 
   const handleEdit = (seller) => {
-    if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
-      return
-    }
     setEditingSeller(seller)
     setIsFormModalOpen(true)
   }

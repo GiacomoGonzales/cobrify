@@ -163,6 +163,109 @@ export function anularVentaDemo(invoiceId, warehouseId = null) {
   return { success: true }
 }
 
+// ────────────────────────────────────────────────────────── inventario ──
+
+/** Traslado entre almacenes: sale de uno y entra al otro. */
+export function transferirStockDemo(productId, desdeId, haciaId, cantidad) {
+  const cant = Number(cantidad) || 0
+  if (cant <= 0) return { success: false, error: 'Cantidad inválida' }
+  mutarDemo((d) => ({
+    products: d.products.map((p) => {
+      if (p.id !== productId) return p
+      return aplicarStock(aplicarStock(p, desdeId, -cant), haciaId, cant)
+    }),
+  }))
+  return { success: true }
+}
+
+/** Merma, consumo interno o cualquier salida sin venta. */
+export function descontarStockDemo(productId, warehouseId, cantidad) {
+  const cant = Number(cantidad) || 0
+  if (cant <= 0) return { success: false, error: 'Cantidad inválida' }
+  mutarDemo((d) => ({
+    products: d.products.map((p) => (p.id === productId ? aplicarStock(p, warehouseId, -cant) : p)),
+  }))
+  return { success: true }
+}
+
+// ──────────────────────────────────────────────────────────── insumos ──
+
+export function crearInsumoDemo(datos) {
+  const insumo = {
+    ...datos,
+    id: nuevoId('ins'),
+    currentStock: Number(datos.currentStock) || 0,
+    minimumStock: Number(datos.minimumStock) || 0,
+    averageCost: Number(datos.averageCost) || 0,
+    createdAt: new Date(),
+  }
+  mutarDemo((d) => ({ ingredients: [insumo, ...(d.ingredients || [])] }))
+  return { success: true, id: insumo.id, data: insumo }
+}
+
+export function actualizarInsumoDemo(id, cambios) {
+  mutarDemo((d) => ({
+    ingredients: (d.ingredients || []).map((i) => (i.id === id ? { ...i, ...cambios, id: i.id } : i)),
+  }))
+  return { success: true }
+}
+
+export function eliminarInsumoDemo(id) {
+  mutarDemo((d) => ({ ingredients: (d.ingredients || []).filter((i) => i.id !== id) }))
+  return { success: true }
+}
+
+// ──────────────────────────────────────────────────────────── gastos ──
+
+export function crearGastoDemo(datos) {
+  const gasto = {
+    ...datos,
+    id: nuevoId('gas'),
+    amount: Number(datos.amount) || 0,
+    date: datos.date || new Date(),
+    createdAt: new Date(),
+  }
+  mutarDemo((d) => ({ expenses: [gasto, ...(d.expenses || [])] }))
+  return { success: true, id: gasto.id, data: gasto }
+}
+
+export function actualizarGastoDemo(id, cambios) {
+  mutarDemo((d) => ({
+    expenses: (d.expenses || []).map((g) => (g.id === id ? { ...g, ...cambios, id: g.id } : g)),
+  }))
+  return { success: true }
+}
+
+export function eliminarGastoDemo(id) {
+  mutarDemo((d) => ({ expenses: (d.expenses || []).filter((g) => g.id !== id) }))
+  return { success: true }
+}
+
+// ─────────────────────────────────────────────────── equipo del local ──
+
+/** Vendedores y mozos: misma forma, distinta clave del paquete. */
+const altaEnLista = (clave, prefijo) => (datos) => {
+  const registro = { ...datos, id: nuevoId(prefijo), status: 'active', createdAt: new Date() }
+  mutarDemo((d) => ({ [clave]: [registro, ...(d[clave] || [])] }))
+  return { success: true, id: registro.id, data: registro }
+}
+const bajaEnLista = (clave) => (id) => {
+  mutarDemo((d) => ({ [clave]: (d[clave] || []).filter((x) => x.id !== id) }))
+  return { success: true }
+}
+const cambioEnLista = (clave) => (id, cambios) => {
+  mutarDemo((d) => ({ [clave]: (d[clave] || []).map((x) => (x.id === id ? { ...x, ...cambios, id: x.id } : x)) }))
+  return { success: true }
+}
+
+export const crearVendedorDemo = altaEnLista('sellers', 'sel')
+export const actualizarVendedorDemo = cambioEnLista('sellers')
+export const eliminarVendedorDemo = bajaEnLista('sellers')
+
+export const crearMozoDemo = altaEnLista('waiters', 'moz')
+export const actualizarMozoDemo = cambioEnLista('waiters')
+export const eliminarMozoDemo = bajaEnLista('waiters')
+
 // ─────────────────────────────────────────────────────── stock directo ──
 
 /** Ajuste de inventario a mano (entrada, salida o corrección). */

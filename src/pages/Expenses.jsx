@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useAppContext } from '@/hooks/useAppContext'
+import { crearGastoDemo, actualizarGastoDemo, eliminarGastoDemo } from '@/data/demo/operaciones'
 import { useLocationAccess } from '@/utils/locationAccess'
 import { useDataPermissions } from '@/hooks/useDataPermissions'
 import { useToast } from '@/contexts/ToastContext'
@@ -570,9 +571,21 @@ export default function Expenses() {
   async function handleSubmit(e) {
     e.preventDefault()
 
-    // MODO DEMO: No permitir guardar
+    // En demo el gasto se guarda contra el estado en memoria: aparece en la
+    // lista y en los reportes de rentabilidad, que es donde se entiende para
+    // qué sirve registrarlos.
     if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
+      if (!form.amount || parseFloat(form.amount) <= 0) {
+        toast.error('El monto debe ser mayor a 0')
+        return
+      }
+      if (editingExpense) {
+        actualizarGastoDemo(editingExpense.id, { ...form, amount: parseFloat(form.amount) })
+        toast.success('Gasto actualizado')
+      } else {
+        crearGastoDemo({ ...form, amount: parseFloat(form.amount) })
+        toast.success('Gasto registrado')
+      }
       setShowModal(false)
       return
     }
@@ -629,9 +642,9 @@ export default function Expenses() {
   }
 
   async function handleDelete(expenseId) {
-    // MODO DEMO: No permitir eliminar
     if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
+      eliminarGastoDemo(expenseId)
+      toast.success('Gasto eliminado')
       setShowDeleteConfirm(null)
       return
     }

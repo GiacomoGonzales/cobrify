@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useDeferredValue } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search, Edit, Trash2, Package, AlertTriangle, TrendingUp, Loader2, Upload, Download, Store, MoreVertical, ArrowRight, FolderPlus, ChevronUp, ChevronDown, SortAsc, Check, X } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
+import { crearInsumoDemo, actualizarInsumoDemo, eliminarInsumoDemo } from '@/data/demo/operaciones'
 import { useDataPermissions } from '@/hooks/useDataPermissions'
 import { useToast } from '@/contexts/ToastContext'
 import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
@@ -93,7 +94,13 @@ const getStockConversionFactor = (fromUnit, toUnit) => {
 const cleanNumber = (x) => Math.round(x * 1e6) / 1e6
 
 export default function Ingredients() {
-  const { user, getBusinessId, isDemoMode, businessMode, hasMainBranchAccess, allowedWarehouses, filterBranchesByAccess, businessSettings , branchScope } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData, businessMode, hasMainBranchAccess, allowedWarehouses, filterBranchesByAccess, businessSettings , branchScope } = useAppContext()
+
+  // Demo: la lista sigue al estado vivo.
+  useEffect(() => {
+    if (!isDemoMode || !demoData) return
+    setIngredients(demoData.ingredients ?? [])
+  }, [isDemoMode, demoData])
   const demoContext = useDemoRestaurant()
   const navigate = useNavigate()
   const toast = useToast()
@@ -398,9 +405,14 @@ export default function Ingredients() {
   }
 
   const handleAddIngredient = async () => {
-    // Verificar si está en modo demo
     if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
+      if (!formData.name) {
+        toast.error('El nombre del ingrediente es requerido')
+        return
+      }
+      crearInsumoDemo(formData)
+      toast.success('Insumo creado')
+      setShowAddModal(false)
       return
     }
 
@@ -458,6 +470,13 @@ export default function Ingredients() {
   }
 
   const handleEditIngredient = async () => {
+    if (isDemoMode) {
+      actualizarInsumoDemo(selectedIngredient?.id, formData)
+      toast.success('Insumo actualizado')
+      setShowEditModal(false)
+      return
+    }
+
     // Verificar si está en modo demo
     if (isDemoMode) {
       toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
@@ -560,6 +579,13 @@ export default function Ingredients() {
   }
 
   const handleDeleteIngredient = async () => {
+    if (isDemoMode) {
+      eliminarInsumoDemo(selectedIngredient?.id)
+      toast.success('Insumo eliminado')
+      setShowDeleteModal(false)
+      return
+    }
+
     // Verificar si está en modo demo
     if (isDemoMode) {
       toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')

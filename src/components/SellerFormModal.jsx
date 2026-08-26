@@ -7,11 +7,12 @@ import { createSeller, updateSeller } from '@/services/sellerService'
 import { COMMISSION_TYPES, DEFAULT_COMMISSION_TYPE } from '@/utils/commissions'
 import { getActiveBranches } from '@/services/branchService'
 import { PRINCIPAL, sucursalesDelVendedor, camposDeSucursales } from '@/utils/sellerBranches'
+import { crearVendedorDemo, actualizarVendedorDemo } from '@/data/demo/operaciones'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 
 export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) {
-  const { getBusinessId, businessSettings } = useAppContext()
+  const { getBusinessId, businessSettings, isDemoMode } = useAppContext()
   const toast = useToast()
 
   const [isLoading, setIsLoading] = useState(false)
@@ -144,9 +145,13 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
         commissionEnabled: formData.commissionEnabled === true,
         commissionRate: formData.commissionEnabled ? (parseFloat(formData.commissionRate) || 0) : 0,
       }
-      const result = seller
-        ? await updateSeller(businessId, seller.id, dataToSave)
-        : await createSeller(businessId, dataToSave)
+      // En demo se guarda contra el estado en memoria, con el mismo resultado
+      // que el servicio real para no ramificar lo que sigue.
+      const result = isDemoMode
+        ? (seller ? actualizarVendedorDemo(seller.id, dataToSave) : crearVendedorDemo(dataToSave))
+        : (seller
+          ? await updateSeller(businessId, seller.id, dataToSave)
+          : await createSeller(businessId, dataToSave))
 
       if (result.success) {
         toast.success(seller ? 'Vendedor actualizado correctamente' : 'Vendedor creado correctamente')

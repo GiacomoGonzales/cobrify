@@ -44,6 +44,7 @@ import {
 import { Capacitor } from '@capacitor/core'
 import { scanBarcode, scannerDisponible } from '@/utils/scanBarcode'
 import { useAppContext } from '@/hooks/useAppContext'
+import { transferirStockDemo, descontarStockDemo } from '@/data/demo/operaciones'
 import { useAuth } from '@/contexts/AuthContext'
 import ConsumoInternoModal from '@/components/inventory/ConsumoInternoModal'
 import { useUserNames } from '@/hooks/useUserNames'
@@ -161,6 +162,14 @@ const getRealStockValue = (item) => {
 export default function Inventory() {
   const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings, hasMainBranchAccess, allowedWarehouses, isBusinessOwner, branchScope } = useAppContext()
   const permisos = useDataPermissions()
+
+  // Demo: el inventario sigue al estado vivo, así un traslado o una salida se
+  // ven de inmediato sin recargar.
+  useEffect(() => {
+    if (!isDemoMode || !demoData) return
+    setProducts(demoData.products || [])
+    setIngredients(demoData.ingredients ?? [])
+  }, [isDemoMode, demoData])
   const { filterWarehousesByAccess } = useAuth()
   const toast = useToast()
 
@@ -871,6 +880,23 @@ export default function Inventory() {
   const handleDamage = async () => {
     if (!user?.uid || !damageProduct) return
 
+    // En demo la salida se aplica al estado: el stock baja de verdad.
+    if (isDemoMode) {
+      const cant = parseFloat(damageData.quantity)
+      if (!damageData.warehouseId) {
+        toast.error('Debes seleccionar un almacén')
+        return
+      }
+      if (!cant || cant <= 0) {
+        toast.error('La cantidad debe ser mayor a 0')
+        return
+      }
+      descontarStockDemo(damageProduct.id, damageData.warehouseId, cant)
+      toast.success('Salida registrada correctamente')
+      setDamageProduct(null)
+      return
+    }
+
     // Validaciones
     if (!damageData.warehouseId) {
       toast.error('Debes seleccionar un almacén')
@@ -1512,6 +1538,28 @@ export default function Inventory() {
 
   const handleTransfer = async () => {
     if (!user?.uid || !transferProduct) return
+
+    // En demo el traslado se aplica al estado en memoria: el visitante ve el
+    // stock moverse de un almacén al otro, que es lo que quiere comprobar.
+    if (isDemoMode) {
+      const cant = parseFloat(transferData.quantity)
+      if (!transferData.fromWarehouse || !transferData.toWarehouse) {
+        toast.error('Debes seleccionar ambos almacenes')
+        return
+      }
+      if (transferData.fromWarehouse === transferData.toWarehouse) {
+        toast.error('Los almacenes de origen y destino deben ser diferentes')
+        return
+      }
+      if (!cant || cant <= 0) {
+        toast.error('La cantidad debe ser mayor a 0')
+        return
+      }
+      transferirStockDemo(transferProduct.id, transferData.fromWarehouse, transferData.toWarehouse, cant)
+      toast.success('Stock transferido correctamente')
+      setTransferProduct(null)
+      return
+    }
 
     // Validaciones
     if (!transferData.fromWarehouse || !transferData.toWarehouse) {
