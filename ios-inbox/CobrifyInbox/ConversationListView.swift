@@ -15,6 +15,32 @@ struct ConversationListView: View {
         case etiqueta(String)
     }
 
+    enum AccionMasiva { case leidas, completadas }
+    @State private var confirmarMasivo: AccionMasiva?
+
+    private var textoMasivo: String {
+        let activas = inbox.conversaciones.filter { $0.estado != "completada" }.count
+        let sinLeer = inbox.conversaciones.filter { $0.sinLeer > 0 }.count
+        return confirmarMasivo == .completadas
+            ? "Se marcarán como completadas las \(activas) conversaciones activas. Un mensaje nuevo del cliente las reabre solo."
+            : "Se pondrá en cero el contador de \(sinLeer) conversaciones sin leer."
+    }
+
+    private func ejecutarMasivo() {
+        switch confirmarMasivo {
+        case .completadas:
+            for c in inbox.conversaciones where c.estado != "completada" {
+                catalogo.cambiarEstado(c.id, a: "completada")
+            }
+        case .leidas:
+            for c in inbox.conversaciones where c.sinLeer > 0 {
+                inbox.marcarLeida(c)
+            }
+        case nil: break
+        }
+        confirmarMasivo = nil
+    }
+
     var body: some View {
         NavigationStack(path: $ruta) {
             Group {
@@ -60,6 +86,33 @@ struct ConversationListView: View {
                 }
             }
             .navigationTitle("Chats")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button {
+                            confirmarMasivo = .leidas
+                        } label: {
+                            Label("Marcar todas como leídas", systemImage: "envelope.open")
+                        }
+                        Button {
+                            confirmarMasivo = .completadas
+                        } label: {
+                            Label("Completar todas (archivar)", systemImage: "checkmark.circle")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                }
+            }
+            .confirmationDialog(textoMasivo, isPresented: Binding(
+                get: { confirmarMasivo != nil },
+                set: { if !$0 { confirmarMasivo = nil } }
+            ), titleVisibility: .visible) {
+                Button(confirmarMasivo == .completadas ? "Sí, completar todas" : "Sí, marcar leídas") {
+                    ejecutarMasivo()
+                }
+                Button("Cancelar", role: .cancel) { confirmarMasivo = nil }
+            }
             .navigationDestination(for: String.self) { id in
                 if let conv = inbox.conversaciones.first(where: { $0.id == id }) {
                     ConversationView(conv: conv, alAbrir: { inbox.marcarLeida(conv) })

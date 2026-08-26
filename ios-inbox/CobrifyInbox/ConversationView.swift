@@ -66,7 +66,7 @@ struct ConversationView: View {
                 }
             }
         }
-        .background(Color(.systemGroupedBackground))
+        .background(Apariencia.shared.fondoView())
         .navigationTitle(conv.titulo)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
@@ -511,6 +511,15 @@ private struct BurbujaMensaje: View {
                 VStack(alignment: .leading, spacing: 6) {
                     miniatura
                         .onTapGesture { verAdjunto = true }
+                        .contextMenu {
+                            Button {
+                                if let u = mensaje.media?.url ?? mensaje.media?.thumbUrl {
+                                    GuardadorFotos.guardar(url: u) { _ in }
+                                }
+                            } label: {
+                                Label("Guardar en Fotos", systemImage: "square.and.arrow.down")
+                            }
+                        }
                     if !mensaje.texto.isEmpty {
                         Text(mensaje.texto)
                             .frame(maxWidth: 230, alignment: .leading)
@@ -657,9 +666,11 @@ private struct BurbujaMensaje: View {
         }
     }
 
+    @ObservedObject private var apariencia = Apariencia.shared
+
     private var fondo: some ShapeStyle {
         mensaje.esSaliente
-            ? AnyShapeStyle(.tint.opacity(0.18))
+            ? AnyShapeStyle(apariencia.colorBurbuja.opacity(0.22))
             : AnyShapeStyle(Color(.secondarySystemGroupedBackground))
     }
 }

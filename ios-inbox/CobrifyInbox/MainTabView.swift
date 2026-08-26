@@ -55,6 +55,13 @@ struct AjustesView: View {
                 Section("Cuenta") {
                     LabeledContent("Correo", value: session.user?.email ?? "—")
                 }
+                Section("Personalización") {
+                    NavigationLink {
+                        AparienciaView()
+                    } label: {
+                        Label("Apariencia del chat", systemImage: "paintbrush")
+                    }
+                }
                 Section("Notificaciones") {
                     Label {
                         Text("Los avisos de WhatsApp llegan solo a esta app mientras esté instalada.")

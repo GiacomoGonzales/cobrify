@@ -26,6 +26,8 @@
 	<string>Para tomar una foto y enviarla en el chat.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Para grabar y enviar notas de voz en el chat.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Para guardar en tu carrete las fotos del chat.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

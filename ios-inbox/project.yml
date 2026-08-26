@@ -22,7 +22,7 @@ targets:
         DEVELOPMENT_TEAM: WAUWHRT3D6
         CODE_SIGN_STYLE: Automatic
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: 8
+        CURRENT_PROJECT_VERSION: 9
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -41,6 +41,7 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         NSMicrophoneUsageDescription: Para grabar y enviar notas de voz en el chat.
         NSCameraUsageDescription: Para tomar una foto y enviarla en el chat.
+        NSPhotoLibraryAddUsageDescription: Para guardar en tu carrete las fotos del chat.
     dependencies:
       - package: Firebase
         product: FirebaseAuth
