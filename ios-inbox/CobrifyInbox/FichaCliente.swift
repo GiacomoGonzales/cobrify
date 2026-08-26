@@ -57,6 +57,7 @@ struct FichaCliente {
     var tieneRenewalPrice: Bool
     var comprobantesUsados: Int
     var comprobantesLimite: Int
+    var registradoEl: Date?
 
     var diasParaVencer: Int? {
         guard let vence else { return nil }
@@ -101,10 +102,12 @@ final class FichaStore: ObservableObject {
                 renewalPrice: s["renewalPrice"] as? Double ?? (s["renewalPrice"] as? Int).map(Double.init),
                 accessBlocked: s["accessBlocked"] as? Bool ?? false,
                 monthlyPrice: s["monthlyPrice"] as? Double,
-                pagos: Array(((s["paymentHistory"] as? [[String: Any]]) ?? []).suffix(3).reversed()),
+                pagos: ((s["paymentHistory"] as? [[String: Any]]) ?? []).reversed(),
                 tieneRenewalPrice: s["renewalPrice"] != nil,
                 comprobantesUsados: (s["usage"] as? [String: Any])?["invoicesThisMonth"] as? Int ?? 0,
-                comprobantesLimite: (s["limits"] as? [String: Any])?["maxInvoicesPerMonth"] as? Int ?? 0
+                comprobantesLimite: (s["limits"] as? [String: Any])?["maxInvoicesPerMonth"] as? Int ?? 0,
+                registradoEl: ((s["createdAt"] as? Timestamp) ?? (s["startDate"] as? Timestamp)
+                               ?? (b["createdAt"] as? Timestamp))?.dateValue()
             )
         } catch {
             self.error = "No se pudo cargar la ficha."

@@ -47,6 +47,16 @@ struct FichaClienteView: View {
                 LabeledContent("Negocio", value: f.nombre ?? "—")
                 if let ruc = f.ruc { LabeledContent("RUC", value: ruc) }
                 if let email = f.email { LabeledContent("Correo", value: email) }
+                if let registro = f.registradoEl {
+                    LabeledContent("Cliente desde") {
+                        VStack(alignment: .trailing, spacing: 1) {
+                            Text(registro, style: .date)
+                            Text(antiguedad(registro))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
             }
             Section("Suscripción") {
                 LabeledContent("Plan", value: f.planName ?? "—")
@@ -97,22 +107,23 @@ struct FichaClienteView: View {
                     }
                 }
             }
-            if !f.pagos.isEmpty {
-                Section("Últimos pagos") {
-                    ForEach(Array(f.pagos.enumerated()), id: \.offset) { _, pg in
+            Section("Pagos") {
+                if f.pagos.isEmpty {
+                    Text("Sin pagos registrados aún. El primero quedará aquí al registrar una renovación.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(Array(f.pagos.prefix(3).enumerated()), id: \.offset) { _, pg in
+                        FilaPago(pago: pg)
+                    }
+                    NavigationLink {
+                        HistorialPagosView(pagos: f.pagos)
+                    } label: {
                         HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(pg["planName"] as? String ?? pg["plan"] as? String ?? "—")
-                                    .font(.callout)
-                                if let ts = pg["date"] as? Timestamp {
-                                    Text(ts.dateValue(), style: .date)
-                                        .font(.caption).foregroundStyle(.secondary)
-                                }
-                            }
+                            Label("Historial completo", systemImage: "clock.arrow.circlepath")
                             Spacer()
-                            let monto = pg["amount"] as? Double ?? Double(pg["amount"] as? Int ?? 0)
-                            Text(String(format: "S/ %.2f", monto))
-                                .font(.callout.weight(.semibold))
+                            Text("\(f.pagos.count) pago\(f.pagos.count == 1 ? "" : "s")")
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -142,6 +153,16 @@ struct FichaClienteView: View {
                 }
             }
         }
+    }
+
+    /// "hace 2 años y 3 meses" — la antigüedad del cliente en cristiano.
+    private func antiguedad(_ desde: Date) -> String {
+        let c = Calendar.current.dateComponents([.year, .month], from: desde, to: Date())
+        let años = c.year ?? 0, meses = c.month ?? 0
+        if años > 0 && meses > 0 { return "hace \(años) año\(años == 1 ? "" : "s") y \(meses) mes\(meses == 1 ? "" : "es")" }
+        if años > 0 { return "hace \(años) año\(años == 1 ? "" : "s")" }
+        if meses > 0 { return "hace \(meses) mes\(meses == 1 ? "" : "es")" }
+        return "este mes"
     }
 
     private func colorVencimiento(_ f: FichaCliente) -> Color {
@@ -390,5 +411,69 @@ struct AddonSheet: View {
             trabajando = false
             if let e { error = e } else { listo = true }
         }
+    }
+}
+
+
+/// Una fila del historial: plan, fecha, método y monto.
+struct FilaPago: View {
+    let pago: [String: Any]
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(pago["planName"] as? String ?? pago["plan"] as? String ?? "—")
+                    .font(.callout)
+                HStack(spacing: 6) {
+                    if let ts = pago["date"] as? Timestamp {
+                        Text(ts.dateValue(), style: .date)
+                    }
+                    if let metodo = pago["method"] as? String {
+                        Text("· \(metodo)")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                let monto = pago["amount"] as? Double ?? Double(pago["amount"] as? Int ?? 0)
+                Text(String(format: "S/ %.2f", monto))
+                    .font(.callout.weight(.semibold))
+                if let meses = pago["months"] as? Int, meses > 0 {
+                    Text("+\(meses) mes\(meses == 1 ? "" : "es")")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+}
+
+/// TODOS los pagos del cliente, del más reciente al más viejo, con el total.
+struct HistorialPagosView: View {
+    let pagos: [[String: Any]]
+
+    private var total: Double {
+        pagos.reduce(0) { $0 + ($1["amount"] as? Double ?? Double($1["amount"] as? Int ?? 0)) }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                LabeledContent("Total pagado") {
+                    Text(String(format: "S/ %.2f", total))
+                        .font(.headline)
+                }
+                LabeledContent("Pagos registrados", value: "\(pagos.count)")
+            }
+            Section("Historial") {
+                ForEach(Array(pagos.enumerated()), id: \.offset) { _, pg in
+                    FilaPago(pago: pg)
+                }
+            }
+        }
+        .navigationTitle("Historial de pagos")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
