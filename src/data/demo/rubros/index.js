@@ -54,6 +54,27 @@ export const RUBROS_DEMO = [
     modo: 'pharmacy',
     cargar: () => import('./farmacia'),
   },
+  {
+    slug: 'darkkitchen',
+    nombre: 'Dark kitchen',
+    descripcion: 'Solo delivery: comandas sin salón',
+    modo: 'restaurant',
+    cargar: () => import('./darkkitchen'),
+  },
+  {
+    slug: 'panaderia',
+    nombre: 'Panadería',
+    descripcion: 'Producción propia y venta por unidad',
+    modo: 'retail',
+    cargar: () => import('./panaderia'),
+  },
+  {
+    slug: 'lavanderia',
+    nombre: 'Lavandería',
+    descripcion: 'Servicios por kilo y por prenda',
+    modo: 'retail',
+    cargar: () => import('./lavanderia'),
+  },
 ]
 
 export const SLUGS_DEMO = RUBROS_DEMO.map((r) => r.slug)
