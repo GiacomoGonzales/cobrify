@@ -78,11 +78,11 @@ final class MensajesStore: ObservableObject {
 
     /// Envía por la Cloud Function con eco optimista. Devuelve el mensaje de
     /// error si algo salió mal (nil = enviado).
-    func enviar(texto: String, conversationId: String) async -> String? {
+    func enviar(texto: String, conversationId: String, respondeA: String? = nil) async -> String? {
         let eco = Mensaje(pendiente: texto)
         pendientes.append(eco)
         do {
-            try await ChatAPI.enviarTexto(conversationId: conversationId, texto: texto)
+            try await ChatAPI.enviarTexto(conversationId: conversationId, texto: texto, respondeA: respondeA)
             return nil
         } catch {
             pendientes.removeAll { $0.id == eco.id }

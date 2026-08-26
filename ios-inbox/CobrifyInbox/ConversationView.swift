@@ -24,6 +24,7 @@ struct ConversationView: View {
     @State private var etiquetasLocal: Set<String>?
     @State private var mostrarPlantilla = false
     @State private var mostrarFicha = false
+    @State private var respondiendoA: Mensaje?
     @State private var mostrarVincular = false
 
     var body: some View {
@@ -42,7 +43,11 @@ struct ConversationView: View {
                                 .padding(.vertical, 6)
                                 .id(id)
                         case .mensaje(let m, let cambiaDeLado):
-                            BurbujaMensaje(mensaje: m)
+                            BurbujaMensaje(mensaje: m,
+                                           citado: m.respondeA.flatMap { id in store.mensajes.first { $0.id == id } },
+                                           nombreContacto: conv.titulo,
+                                           alResponder: { respondiendoA = m },
+                                           alReaccionar: { emoji in reaccionar(m, emoji) })
                                 .padding(.top, cambiaDeLado ? 10 : 0)
                                 .id(m.id)
                         }
@@ -218,6 +223,9 @@ struct ConversationView: View {
             alAbrir()
             Navegacion.shared.conversacionVisible = conv.id
         }
+        .onChange(of: store.mensajes.last?.id) {
+            avisarLeido()
+        }
         .onDisappear {
             store.parar()
             if Navegacion.shared.conversacionVisible == conv.id {
@@ -337,6 +345,34 @@ struct ConversationView: View {
                         .padding(.horizontal, 12)
                         .padding(.bottom, 6)
                     } else {
+                    if let citado = respondiendoA {
+                        HStack(spacing: 10) {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(.tint)
+                                .frame(width: 3, height: 34)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(citado.esSaliente ? "Tú" : conv.titulo)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tint)
+                                Text(Formato.resumenMensaje(citado))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            Spacer()
+                            Button {
+                                respondiendoA = nil
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .vidrioRedondeado(16)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 2)
+                    }
                     HStack(alignment: .bottom, spacing: 8) {
                         Menu {
                             Button { mostrarGaleria = true } label: { Label("Foto de la galería", systemImage: "photo.on.rectangle") }
@@ -386,6 +422,19 @@ struct ConversationView: View {
                 }
             }
         }
+    }
+
+    /// Reaccionar (tocar el mismo emoji la quita). El servidor actualiza el
+    /// mensaje y la pantalla lo ve llegar por la suscripción.
+    private func reaccionar(_ m: Mensaje, _ emoji: String) {
+        let nuevo = (m.reaccionMia == emoji) ? "" : emoji
+        Task { try? await ChatAPI.reaccionar(conversationId: conv.id, waMessageId: m.id, emoji: nuevo) }
+    }
+
+    /// Palomitas azules para el cliente: se marca leído el último entrante.
+    private func avisarLeido() {
+        guard let ultimoEntrante = store.mensajes.last(where: { !$0.esSaliente }) else { return }
+        Task { await ChatAPI.marcarLeidoWhatsApp(conversationId: conv.id, waMessageId: ultimoEntrante.id) }
     }
 
     private var puedeEnviar: Bool {
@@ -467,11 +516,13 @@ struct ConversationView: View {
     private func enviar() {
         let texto = borrador.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !texto.isEmpty, !enviando else { return }
+        let cita = respondiendoA?.id
+        respondiendoA = nil
         borrador = ""
         errorEnvio = nil
         enviando = true
         Task {
-            let error = await store.enviar(texto: texto, conversationId: conv.id)
+            let error = await store.enviar(texto: texto, conversationId: conv.id, respondeA: cita)
             enviando = false
             if let error {
                 errorEnvio = error
@@ -499,19 +550,107 @@ private enum ElementoChat: Identifiable {
 /// servidor para reservar el espacio exacto (sin franjas muertas).
 private struct BurbujaMensaje: View {
     let mensaje: Mensaje
+    var citado: Mensaje? = nil
+    var nombreContacto: String = ""
+    var alResponder: (() -> Void)? = nil
+    var alReaccionar: ((String) -> Void)? = nil
     @State private var verAdjunto = false
+
+    // Cuatro: los que caben en una sola fila del menú.
+    private static let emojis = ["❤️", "👍", "😂", "🙏"]
+
+    /// El sticker se muestra suelto, sin burbuja, como en WhatsApp.
+    private var esStickerSuelto: Bool {
+        mensaje.tipo == "sticker" && mensaje.media?.url != nil
+    }
 
     var body: some View {
         HStack {
             if mensaje.esSaliente { Spacer(minLength: 60) }
             VStack(alignment: .trailing, spacing: 4) {
+                if let citado {
+                    bloqueCita(citado)
+                }
                 contenido
-                pieDeMensaje
+                if esStickerSuelto {
+                    // La hora del sticker va en su propia pastillita.
+                    pieDeMensaje
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(.ultraThinMaterial, in: Capsule())
+                } else {
+                    pieDeMensaje
+                }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(fondo, in: RoundedRectangle(cornerRadius: 16))
+            .padding(.horizontal, esStickerSuelto ? 0 : 12)
+            .padding(.vertical, esStickerSuelto ? 0 : 8)
+            .background(esStickerSuelto ? AnyShapeStyle(.clear) : AnyShapeStyle(fondo),
+                        in: RoundedRectangle(cornerRadius: 16))
+            .contextMenu { menuContextual }
+            .overlay(alignment: mensaje.esSaliente ? .bottomLeading : .bottomTrailing) {
+                if !chipReacciones.isEmpty {
+                    Text(chipReacciones)
+                        .font(.caption)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Color(.systemBackground), in: Capsule())
+                        .overlay(Capsule().stroke(Color(.systemGray4), lineWidth: 0.5))
+                        .offset(y: 12)
+                }
+            }
+            .padding(.bottom, chipReacciones.isEmpty ? 0 : 10)
             if !mensaje.esSaliente { Spacer(minLength: 60) }
+        }
+    }
+
+    /// El bloque de cita, como WhatsApp: barrita de color + quién + resumen.
+    private func bloqueCita(_ c: Mensaje) -> some View {
+        HStack(spacing: 8) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(c.esSaliente ? Color.accentColor : Color(.systemGray))
+                .frame(width: 3)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(c.esSaliente ? "Tú" : nombreContacto)
+                    .font(.caption.weight(.semibold))
+                Text(Formato.resumenMensaje(c))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.systemGray6).opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var chipReacciones: String {
+        [mensaje.reaccionCliente, mensaje.reaccionMia].compactMap { $0 }.joined()
+    }
+
+    @ViewBuilder private var menuContextual: some View {
+        if mensaje.estado != "sending" {
+            ControlGroup {
+                ForEach(Self.emojis, id: \.self) { e in
+                    Button(e) { alReaccionar?(e) }
+                }
+            }
+            .controlGroupStyle(.compactMenu)
+            Button {
+                alResponder?()
+            } label: {
+                Label("Responder", systemImage: "arrowshape.turn.up.left")
+            }
+            if mensaje.tipo == "image" {
+                Button {
+                    if let u = mensaje.media?.url ?? mensaje.media?.thumbUrl {
+                        GuardadorFotos.guardar(url: u) { _ in }
+                    }
+                } label: {
+                    Label("Guardar en Fotos", systemImage: "square.and.arrow.down")
+                }
+            }
         }
     }
 
@@ -529,15 +668,6 @@ private struct BurbujaMensaje: View {
                 VStack(alignment: .leading, spacing: 6) {
                     miniatura
                         .onTapGesture { verAdjunto = true }
-                        .contextMenu {
-                            Button {
-                                if let u = mensaje.media?.url ?? mensaje.media?.thumbUrl {
-                                    GuardadorFotos.guardar(url: u) { _ in }
-                                }
-                            } label: {
-                                Label("Guardar en Fotos", systemImage: "square.and.arrow.down")
-                            }
-                        }
                     if !mensaje.texto.isEmpty {
                         Text(mensaje.texto)
                             .frame(maxWidth: 230, alignment: .leading)
@@ -559,7 +689,7 @@ private struct BurbujaMensaje: View {
                     ImagenCacheada(url: url) { imagen in
                         imagen.resizable().scaledToFit()
                     }
-                    .frame(width: 130, height: 130)
+                    .frame(width: 150, height: 150)
                 } else {
                     HStack(spacing: 8) {
                         Image(systemName: "face.smiling").font(.title3).foregroundStyle(.tint)

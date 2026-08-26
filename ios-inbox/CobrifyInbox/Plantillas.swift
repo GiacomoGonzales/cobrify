@@ -115,7 +115,7 @@ final class PlantillasStore: ObservableObject {
 
 // ---------- Llamadas al servidor ----------
 extension ChatAPI {
-    private static func postFn(_ nombre: String, _ cuerpo: [String: Any]) async throws -> [String: Any] {
+    static func postFn(_ nombre: String, _ cuerpo: [String: Any]) async throws -> [String: Any] {
         guard let user = Auth.auth().currentUser else {
             throw ErrorEnvio(mensaje: "La sesión venció. Vuelve a entrar.", ventanaCerrada: false)
         }

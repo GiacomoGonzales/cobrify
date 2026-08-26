@@ -54,6 +54,9 @@ struct Mensaje: Identifiable, Equatable {
     var estado: String?
     var timestamp: Date?
     var media: MediaAdjunto?
+    var respondeA: String?
+    var reaccionMia: String?
+    var reaccionCliente: String?
 
     init(id: String, data: [String: Any]) {
         self.id = id
@@ -62,6 +65,10 @@ struct Mensaje: Identifiable, Equatable {
         texto = data["texto"] as? String ?? ""
         estado = data["estado"] as? String
         timestamp = (data["timestamp"] as? Timestamp)?.dateValue()
+        respondeA = data["respondeA"] as? String
+        let reacciones = data["reacciones"] as? [String: Any]
+        reaccionMia = reacciones?["mia"] as? String
+        reaccionCliente = reacciones?["cliente"] as? String
         if let m = data["media"] as? [String: Any] {
             media = MediaAdjunto(
                 url: m["url"] as? String,
@@ -90,6 +97,9 @@ struct Mensaje: Identifiable, Equatable {
         estado = "sending"
         timestamp = Date()
         media = nil
+        respondeA = nil
+        reaccionMia = nil
+        reaccionCliente = nil
     }
 }
 
@@ -154,6 +164,19 @@ enum Formato {
         let h = Int(s) / 3600
         let m = (Int(s) % 3600) / 60
         return h > 0 ? "\(h) h \(m) min" : "\(m) min"
+    }
+
+    /// Resumen de un mensaje para el bloque de cita ("📷 Foto", el texto…).
+    static func resumenMensaje(_ m: Mensaje) -> String {
+        if !m.texto.isEmpty { return m.texto }
+        switch m.tipo {
+        case "image": return "📷 Foto"
+        case "video": return "🎬 Video"
+        case "audio": return "🎤 Nota de voz"
+        case "document": return "📄 Documento"
+        case "sticker": return "Sticker"
+        default: return "Mensaje"
+        }
     }
 
     /// Qué se muestra en la lista cuando el último mensaje fue un adjunto.

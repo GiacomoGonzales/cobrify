@@ -15,7 +15,7 @@ enum ChatAPI {
     private static let urlEnvio = URL(string: "https://us-central1-cobrify-395fe.cloudfunctions.net/sendWhatsappMessage")!
     private static let urlEnvioMedia = URL(string: "https://us-central1-cobrify-395fe.cloudfunctions.net/sendWhatsappMediaMessage")!
 
-    static func enviarTexto(conversationId: String, texto: String) async throws {
+    static func enviarTexto(conversationId: String, texto: String, respondeA: String? = nil) async throws {
         guard let user = Auth.auth().currentUser else {
             throw ErrorEnvio(mensaje: "La sesión venció. Vuelve a entrar.", ventanaCerrada: false)
         }
@@ -25,10 +25,9 @@ enum ChatAPI {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        req.httpBody = try JSONSerialization.data(withJSONObject: [
-            "conversationId": conversationId,
-            "texto": texto,
-        ])
+        var cuerpo: [String: Any] = ["conversationId": conversationId, "texto": texto]
+        if let respondeA { cuerpo["respondeA"] = respondeA }
+        req.httpBody = try JSONSerialization.data(withJSONObject: cuerpo)
 
         let (data, resp): (Data, URLResponse)
         do {
@@ -45,6 +44,24 @@ enum ChatAPI {
                 ventanaCerrada: json?["ventanaCerrada"] as? Bool ?? false
             )
         }
+    }
+
+    /// Reaccionar a un mensaje (emoji vacío = quitar la reacción).
+    static func reaccionar(conversationId: String, waMessageId: String, emoji: String) async throws {
+        _ = try await postFn("sendWhatsappReactionFn", [
+            "conversationId": conversationId,
+            "waMessageId": waMessageId,
+            "emoji": emoji,
+        ])
+    }
+
+    /// Avisar a WhatsApp que leímos: al cliente le salen las palomitas azules.
+    /// Falla en silencio — un read receipt perdido no es grave.
+    static func marcarLeidoWhatsApp(conversationId: String, waMessageId: String) async {
+        _ = try? await postFn("markWhatsappRead", [
+            "conversationId": conversationId,
+            "waMessageId": waMessageId,
+        ])
     }
 
     /// Envía un archivo que YA está guardado (el de una respuesta rápida):

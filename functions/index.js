@@ -28,7 +28,7 @@ import {
 } from './src/services/cloudinaryAdmin.js'
 import { migrateUrlToR2, isR2Url, isFirebaseStorageUrl, putObjectToR2 } from './src/services/r2Admin.js'
 import { processSaleStock as runProcessSaleStock } from './src/services/saleStockService.js'
-import { verifyWhatsappSignature, parseWhatsappWebhook, VENTANA_24H_MS, sendWhatsappText, sendWhatsappMedia, downloadWhatsappMedia, extensionDeMime, extraerPrimeraUrl, obtenerVistaPreviaDeEnlace, listWhatsappTemplates, sendWhatsappTemplate, renderTemplateText, pareceBajaVoluntaria, getWhatsappBusinessProfile, uploadWhatsappProfilePhoto, updateWhatsappBusinessProfile, dentroDelHorario } from './src/services/whatsappService.js'
+import { verifyWhatsappSignature, parseWhatsappWebhook, VENTANA_24H_MS, sendWhatsappText, sendWhatsappReaction, markWhatsappMessageRead, sendWhatsappMedia, downloadWhatsappMedia, extensionDeMime, extraerPrimeraUrl, obtenerVistaPreviaDeEnlace, listWhatsappTemplates, sendWhatsappTemplate, renderTemplateText, pareceBajaVoluntaria, getWhatsappBusinessProfile, uploadWhatsappProfilePhoto, updateWhatsappBusinessProfile, dentroDelHorario } from './src/services/whatsappService.js'
 import {
   upsertLoyaltyClass as walletUpsertClass, upsertLoyaltyObject as walletUpsertObject,
   linkAgregarAWallet as walletSaveLink, notificarTarjeta as walletNotify,
@@ -13333,6 +13333,10 @@ export const whatsappWebhook = onRequest(
       const { mensajes, estados } = parseWhatsappWebhook(req.body)
 
       for (const m of mensajes) {
+        if (m.tipo === 'reaction') {
+          await guardarReaccionEntrante(m)
+          continue
+        }
         await guardarMensajeEntrante(m)
       }
       for (const s of estados) {
@@ -13525,6 +13529,35 @@ async function archivarMediaDeWhatsapp(convId, waMessageId, media) {
   console.log(`[WhatsApp] Adjunto archivado (${buffer.length} bytes${extra.thumbBytes ? `, miniatura ${extra.thumbBytes}` : ''}): ${url}`)
 }
 
+/**
+ * Reaccion del cliente a un mensaje: NO es un mensaje nuevo — se cuelga del
+ * mensaje reaccionado (reacciones.cliente) y la bandeja lo anuncia. Meta no
+ * abre la ventana de 24 h por una reaccion, asi que aqui tampoco se toca.
+ */
+async function guardarReaccionEntrante(m) {
+  const { phoneNumberId } = m.cuenta
+  const r = m.crudo?.reaction
+  if (!phoneNumberId || !m.waId || !r?.message_id) return
+
+  const convRef = db.collection('whatsappConversations')
+    .doc(idConversacionWa(phoneNumberId, m.waId))
+  const emoji = r.emoji || null
+
+  await convRef.collection('messages').doc(r.message_id)
+    .set({ reacciones: { cliente: emoji } }, { merge: true })
+
+  await convRef.set({
+    ultimoMensaje: emoji ? `Reaccionó ${emoji}` : 'Quitó una reacción',
+    ultimoMensajeAt: Timestamp.fromMillis(m.timestamp),
+    ultimaDireccion: 'entrante',
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true })
+
+  if (emoji) {
+    await avisarMensajeNuevoWa(phoneNumberId, { ...m, texto: `Reaccionó ${emoji} a tu mensaje` })
+  }
+}
+
 /** Actualiza enviado / entregado / leido de un mensaje que mandamos nosotros. */
 async function actualizarEstadoMensaje(s) {
   const { phoneNumberId } = s.cuenta
@@ -13673,7 +13706,7 @@ export const sendWhatsappMessage = onRequest(
       }
       const decoded = await auth.verifyIdToken(authHeader.split('Bearer ')[1])
 
-      const { conversationId, texto } = req.body || {}
+      const { conversationId, texto, respondeA = null } = req.body || {}
       if (!conversationId || !texto || !String(texto).trim()) {
         res.status(400).json({ error: 'Faltan la conversacion o el texto' }); return
       }
@@ -13752,6 +13785,7 @@ export const sendWhatsappMessage = onRequest(
           phoneNumberId: conv.phoneNumberId,
           to: conv.waId,
           texto: cuerpo,
+          contextId: respondeA,
         })
         waMessageId = r.waMessageId
       }
@@ -13768,6 +13802,7 @@ export const sendWhatsappMessage = onRequest(
         // 'enviado' es provisional: el webhook lo va a pisar con entregado y
         // leido a medida que Meta los informe.
         estado: 'enviado',
+        ...(respondeA ? { respondeA } : {}),
         enviadoPor: decoded.uid,
         timestamp: ahora,
         createdAt: FieldValue.serverTimestamp(),
@@ -13846,6 +13881,99 @@ function celularDeWaId(waId) {
  * caso raro (numero compartido entre sucursales de distinto dueno) y la
  * vinculacion manual de la pantalla lo corrige.
  */
+/**
+ * WHATSAPP — REACCIONAR A UN MENSAJE (o quitar la reaccion con emoji vacio).
+ * Actualiza reacciones.mia en el mensaje: la pantalla lo ve por la suscripcion.
+ */
+export const sendWhatsappReactionFn = onRequest(
+  { region: 'us-central1', timeoutSeconds: 30, memory: '256MiB', cors: true, secrets: ['WHATSAPP_TOKEN'] },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return }
+    try {
+      const authHeader = req.headers.authorization
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'No autorizado' }); return
+      }
+      const decoded = await auth.verifyIdToken(authHeader.split('Bearer ')[1])
+
+      const { conversationId, waMessageId, emoji = '' } = req.body || {}
+      if (!conversationId || !waMessageId) {
+        res.status(400).json({ error: 'Faltan la conversacion o el mensaje' }); return
+      }
+      const convRef = db.collection('whatsappConversations').doc(conversationId)
+      const convSnap = await convRef.get()
+      if (!convSnap.exists) { res.status(404).json({ error: 'La conversacion no existe' }); return }
+      const conv = convSnap.data()
+
+      const cuentaSnap = await db.collection('whatsappAccounts').doc(conv.phoneNumberId).get()
+      const esDueno = cuentaSnap.data()?.ownerId === decoded.uid
+      const esAdmin = (await db.collection('admins').doc(decoded.uid).get()).exists
+      if (!esDueno && !esAdmin) { res.status(403).json({ error: 'Sin acceso' }); return }
+
+      await sendWhatsappReaction({
+        token: process.env.WHATSAPP_TOKEN,
+        phoneNumberId: conv.phoneNumberId,
+        to: conv.waId,
+        messageId: waMessageId,
+        emoji,
+      })
+      await convRef.collection('messages').doc(waMessageId)
+        .set({ reacciones: { mia: emoji || null } }, { merge: true })
+
+      res.status(200).json({ success: true })
+    } catch (error) {
+      console.error('[WhatsApp] Error al reaccionar:', error.message)
+      res.status(500).json({ error: error.message || 'No se pudo reaccionar' })
+    }
+  }
+)
+
+/**
+ * WHATSAPP — MARCAR COMO LEIDO: el cliente ve sus palomitas azules.
+ */
+export const markWhatsappRead = onRequest(
+  { region: 'us-central1', timeoutSeconds: 30, memory: '256MiB', cors: true, secrets: ['WHATSAPP_TOKEN'] },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return }
+    try {
+      const authHeader = req.headers.authorization
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'No autorizado' }); return
+      }
+      const decoded = await auth.verifyIdToken(authHeader.split('Bearer ')[1])
+
+      const { conversationId, waMessageId } = req.body || {}
+      if (!conversationId || !waMessageId) {
+        res.status(400).json({ error: 'Faltan la conversacion o el mensaje' }); return
+      }
+      const convRef = db.collection('whatsappConversations').doc(conversationId)
+      const convSnap = await convRef.get()
+      if (!convSnap.exists) { res.status(404).json({ error: 'La conversacion no existe' }); return }
+      const conv = convSnap.data()
+
+      const cuentaSnap = await db.collection('whatsappAccounts').doc(conv.phoneNumberId).get()
+      const esDueno = cuentaSnap.data()?.ownerId === decoded.uid
+      const esAdmin = (await db.collection('admins').doc(decoded.uid).get()).exists
+      if (!esDueno && !esAdmin) { res.status(403).json({ error: 'Sin acceso' }); return }
+
+      await markWhatsappMessageRead({
+        token: process.env.WHATSAPP_TOKEN,
+        phoneNumberId: conv.phoneNumberId,
+        messageId: waMessageId,
+      })
+      res.status(200).json({ success: true })
+    } catch (error) {
+      // Un read receipt perdido no es grave; se responde ok igual que Meta.
+      console.warn('[WhatsApp] No se pudo marcar leido:', error.message)
+      res.status(200).json({ success: false })
+    }
+  }
+)
+
 export const rebuildWhatsappPhoneIndex = onSchedule(
   {
     schedule: '0 3 * * *', // 03:00 Lima
@@ -14033,6 +14161,7 @@ export const sendWhatsappMediaMessage = onRequest(
         texto: caption ? String(caption).trim() : '',
         media: { url, mimeType, filename: filename || null, ...(mini || {}) },
         estado: 'enviado',
+        ...(respondeA ? { respondeA } : {}),
         enviadoPor: decoded.uid,
         timestamp: ahora,
         createdAt: FieldValue.serverTimestamp(),

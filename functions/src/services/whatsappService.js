@@ -142,7 +142,7 @@ const GRAPH_VERSION = 'v26.0'
  * @param {string} p.texto
  * @returns {Promise<{waMessageId: string}>}
  */
-export async function sendWhatsappText({ token, phoneNumberId, to, texto }) {
+export async function sendWhatsappText({ token, phoneNumberId, to, texto, contextId = null }) {
   const url = `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`
   const res = await fetch(url, {
     method: 'POST',
@@ -157,6 +157,9 @@ export async function sendWhatsappText({ token, phoneNumberId, to, texto }) {
       type: 'text',
       // preview_url: que los enlaces se vean con su tarjeta, como en WhatsApp normal.
       text: { preview_url: true, body: texto },
+      // context: el "responder citando" de WhatsApp — el mensaje sale
+      // enganchado al que se contesta.
+      ...(contextId ? { context: { message_id: contextId } } : {}),
     }),
   })
 
@@ -174,6 +177,52 @@ export async function sendWhatsappText({ token, phoneNumberId, to, texto }) {
   const waMessageId = data?.messages?.[0]?.id
   if (!waMessageId) throw new Error('Meta acepto el envio pero no devolvio el id del mensaje')
   return { waMessageId }
+}
+
+/**
+ * Envia (o quita) una reaccion a un mensaje. emoji vacio = quitarla.
+ * @returns {Promise<{waMessageId: string}>}
+ */
+export async function sendWhatsappReaction({ token, phoneNumberId, to, messageId, emoji }) {
+  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: 'reaction',
+      reaction: { message_id: messageId, emoji: emoji || '' },
+    }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const err = new Error(data?.error?.message || `Error ${res.status} de Meta`)
+    err.metaCode = data?.error?.code || null
+    throw err
+  }
+  return { waMessageId: data?.messages?.[0]?.id || null }
+}
+
+/**
+ * Marca un mensaje entrante como leido: el cliente ve sus palomitas azules.
+ * Falla en silencio aguas arriba: perder un read receipt no es grave.
+ */
+export async function markWhatsappMessageRead({ token, phoneNumberId, messageId }) {
+  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messaging_product: 'whatsapp', status: 'read', message_id: messageId }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const err = new Error(data?.error?.message || `Error ${res.status} de Meta`)
+    err.metaCode = data?.error?.code || null
+    throw err
+  }
+  return { ok: true }
 }
 
 /**
