@@ -288,6 +288,11 @@ export const bookPublicAppointment = onRequest(
         scheduledDate: Timestamp.fromDate(slot),
         scheduledTime: time,
         status: 'scheduled',
+        // El catálogo público no pregunta por local (no tiene dónde: los
+        // horarios y servicios de reserva son uno solo por negocio), así que
+        // la reserva cae en la Principal, igual que cualquier cita sin
+        // sucursal. Ver src/utils/branchScope.js.
+        branchId: '',
         source: 'catalog',
         publicToken,
         notes: nota,
