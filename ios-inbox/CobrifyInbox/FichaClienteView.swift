@@ -8,6 +8,8 @@ struct FichaClienteView: View {
     @StateObject private var store = FichaStore()
     @State private var mostrarRenovar = false
     @State private var mostrarAddon = false
+    @State private var mostrarReactivar = false
+    @State private var confirmarSuspender = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -37,6 +39,11 @@ struct FichaClienteView: View {
                     AddonSheet(store: store)
                 }
             }
+            .sheet(isPresented: $mostrarReactivar) {
+                if store.ficha != nil {
+                    ReactivarSheet(store: store)
+                }
+            }
         }
         .task { await store.cargar(businessId: businessId) }
     }
@@ -59,6 +66,25 @@ struct FichaClienteView: View {
                 }
             }
             Section("Suscripción") {
+                if f.accessBlocked {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label("SUSPENDIDO", systemImage: "lock.fill")
+                            .font(.headline)
+                            .foregroundStyle(.red)
+                        if let motivo = f.blockReason {
+                            Text("Motivo: \(motivo)")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        if let desde = f.blockedAt {
+                            Text("Desde el \(desde.formatted(date: .abbreviated, time: .omitted))")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                } else if f.vencido {
+                    Label("PLAN VENCIDO", systemImage: "exclamationmark.triangle.fill")
+                        .font(.headline)
+                        .foregroundStyle(.red)
+                }
                 LabeledContent("Plan", value: f.planName ?? "—")
                 if let vence = f.vence {
                     LabeledContent("Vence") {
@@ -75,10 +101,6 @@ struct FichaClienteView: View {
                     }
                     .font(.callout.weight(.medium))
                     .foregroundStyle(colorVencimiento(f))
-                }
-                if f.accessBlocked {
-                    Label("Acceso bloqueado", systemImage: "lock.fill")
-                        .foregroundStyle(.red)
                 }
                 if let precio = f.renewalPrice {
                     LabeledContent("Precio pactado", value: String(format: "S/ %.2f", precio))
@@ -128,6 +150,28 @@ struct FichaClienteView: View {
                     }
                 }
             }
+            if f.accessBlocked {
+                Section {
+                    Button {
+                        mostrarReactivar = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "lock.open.fill")
+                            Text("Reactivar acceso")
+                        }
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 15)
+                        .background(.orange, in: RoundedRectangle(cornerRadius: 14))
+                    }
+                    .buttonStyle(.plain)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+                } footer: {
+                    Text("Reactivar da días de gracia sin cobro. Para cobrar, usa Registrar renovación: también desbloquea.")
+                }
+            }
             Section {
                 if f.mesesDeRenovacion != nil {
                     Button {
@@ -152,6 +196,22 @@ struct FichaClienteView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            if !f.accessBlocked {
+                Section {
+                    Button(role: .destructive) {
+                        confirmarSuspender = true
+                    } label: {
+                        Label("Suspender acceso", systemImage: "lock")
+                    }
+                }
+            }
+        }
+        .confirmationDialog("Se bloqueará el acceso de \(f.nombre ?? "este negocio") a Cobrify y su catálogo público quedará suspendido. Se revierte con Reactivar o registrando una renovación.",
+                            isPresented: $confirmarSuspender, titleVisibility: .visible) {
+            Button("Sí, suspender por falta de pago", role: .destructive) {
+                Task { _ = await store.suspender(motivo: "Falta de pago") }
+            }
+            Button("Cancelar", role: .cancel) {}
         }
     }
 
@@ -475,5 +535,99 @@ struct HistorialPagosView: View {
         }
         .navigationTitle("Historial de pagos")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+
+/// Reactivar el acceso con días de gracia, calcado de reactivateUser web.
+struct ReactivarSheet: View {
+    @ObservedObject var store: FichaStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var dias = 30
+    @State private var confirmando = false
+    @State private var trabajando = false
+    @State private var error: String?
+    @State private var listo: Date?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                if let listo {
+                    Section {
+                        VStack(spacing: 10) {
+                            Image(systemName: "lock.open.fill")
+                                .font(.system(size: 44)).foregroundStyle(.green)
+                            Text("Acceso reactivado").font(.headline)
+                            Text("Nuevo vencimiento: \(listo.formatted(date: .long, time: .omitted))")
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                    }
+                } else {
+                    Section("Días de gracia") {
+                        Picker("Extender", selection: $dias) {
+                            Text("7 días").tag(7)
+                            Text("15 días").tag(15)
+                            Text("30 días").tag(30)
+                            Text("60 días").tag(60)
+                        }
+                        .pickerStyle(.segmented)
+                        if let nuevo = Calendar.current.date(byAdding: .day, value: dias, to: baseFecha) {
+                            LabeledContent("Nuevo vencimiento") {
+                                Text(nuevo, style: .date).fontWeight(.semibold)
+                            }
+                        }
+                    }
+                    Section {
+                        Text("Sin cobro: son días de gracia. Para cobrar usa Registrar renovación, que también desbloquea.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let error {
+                        Section { Text(error).foregroundStyle(.red) }
+                    }
+                }
+            }
+            .navigationTitle("Reactivar acceso")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(listo == nil ? "Cancelar" : "Cerrar") { dismiss() }
+                }
+                if listo == nil {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            confirmando = true
+                        } label: {
+                            if trabajando { ProgressView() } else { Text("Reactivar").fontWeight(.semibold) }
+                        }
+                        .disabled(trabajando)
+                    }
+                }
+            }
+            .confirmationDialog("Desbloquear el acceso y extender \(dias) días sin cobro",
+                                isPresented: $confirmando, titleVisibility: .visible) {
+                Button("Sí, reactivar") { reactivar() }
+                Button("Cancelar", role: .cancel) {}
+            }
+        }
+        .interactiveDismissDisabled(trabajando)
+    }
+
+    private var baseFecha: Date {
+        if let v = store.ficha?.vence, v > Date() { return v }
+        return Date()
+    }
+
+    private func reactivar() {
+        trabajando = true
+        error = nil
+        Task {
+            let r = await store.reactivar(dias: dias)
+            trabajando = false
+            if r.ok { listo = r.nuevoVencimiento }
+            else { error = r.error }
+        }
     }
 }

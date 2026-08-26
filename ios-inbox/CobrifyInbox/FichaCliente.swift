@@ -58,6 +58,10 @@ struct FichaCliente {
     var comprobantesUsados: Int
     var comprobantesLimite: Int
     var registradoEl: Date?
+    var blockReason: String?
+    var blockedAt: Date?
+
+    var vencido: Bool { (diasParaVencer ?? 1) < 0 }
 
     var diasParaVencer: Int? {
         guard let vence else { return nil }
@@ -107,7 +111,9 @@ final class FichaStore: ObservableObject {
                 comprobantesUsados: (s["usage"] as? [String: Any])?["invoicesThisMonth"] as? Int ?? 0,
                 comprobantesLimite: (s["limits"] as? [String: Any])?["maxInvoicesPerMonth"] as? Int ?? 0,
                 registradoEl: ((s["createdAt"] as? Timestamp) ?? (s["startDate"] as? Timestamp)
-                               ?? (b["createdAt"] as? Timestamp))?.dateValue()
+                               ?? (b["createdAt"] as? Timestamp))?.dateValue(),
+                blockReason: s["blockReason"] as? String,
+                blockedAt: (s["blockedAt"] as? Timestamp)?.dateValue()
             )
         } catch {
             self.error = "No se pudo cargar la ficha."
@@ -188,6 +194,58 @@ final class FichaStore: ObservableObject {
             return (true, nuevoVence, nil)
         } catch {
             return (false, nil, "No se pudo registrar el pago. Revisa tu conexión.")
+        }
+    }
+
+    /// Reactivar el acceso, calcado de reactivateUser de la web: desbloquea y
+    /// extiende N días (desde el vencimiento si aún no pasó; si ya pasó,
+    /// desde hoy). Es cortesía/gracia — el cobro va por Registrar renovación.
+    func reactivar(dias: Int) async -> (ok: Bool, nuevoVencimiento: Date?, error: String?) {
+        guard let f = ficha else { return (false, nil, "Sin ficha.") }
+        let db = Firestore.firestore()
+        let ahora = Date()
+        let base = (f.vence != nil && f.vence! > ahora) ? f.vence! : ahora
+        guard let nuevoVence = Calendar.current.date(byAdding: .day, value: dias, to: base) else {
+            return (false, nil, "No se pudo calcular la fecha.")
+        }
+        do {
+            try await db.collection("subscriptions").document(f.businessId).updateData([
+                "status": "active",
+                "accessBlocked": false,
+                "blockReason": NSNull(),
+                "blockedAt": NSNull(),
+                "currentPeriodStart": Timestamp(date: ahora),
+                "currentPeriodEnd": Timestamp(date: nuevoVence),
+                "nextPaymentDate": Timestamp(date: nuevoVence),
+                "updatedAt": FieldValue.serverTimestamp(),
+            ])
+            try? await db.collection("businesses").document(f.businessId)
+                .updateData(["catalogSuspended": false, "updatedAt": FieldValue.serverTimestamp()])
+            await cargar(businessId: f.businessId)
+            return (true, nuevoVence, nil)
+        } catch {
+            return (false, nil, "No se pudo reactivar. Revisa tu conexión.")
+        }
+    }
+
+    /// Suspender el acceso, calcado de suspendUser de la web.
+    func suspender(motivo: String) async -> String? {
+        guard let f = ficha else { return "Sin ficha." }
+        let db = Firestore.firestore()
+        do {
+            try await db.collection("subscriptions").document(f.businessId).updateData([
+                "status": "suspended",
+                "accessBlocked": true,
+                "blockReason": motivo,
+                "blockedAt": FieldValue.serverTimestamp(),
+                "updatedAt": FieldValue.serverTimestamp(),
+            ])
+            try? await db.collection("businesses").document(f.businessId)
+                .updateData(["catalogSuspended": true, "updatedAt": FieldValue.serverTimestamp()])
+            await cargar(businessId: f.businessId)
+            return nil
+        } catch {
+            return "No se pudo suspender. Revisa tu conexión."
         }
     }
 
