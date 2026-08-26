@@ -924,7 +924,17 @@ export default function POS() {
 
   // Observaciones generales
   const [generalNotes, setGeneralNotes] = useState('')
-  const [showNotesSection, setShowNotesSection] = useState(false)
+  // Descuentos y cupones: plegados salvo que ya haya algo aplicado.
+  const [showDiscountSection, setShowDiscountSection] = useState(false)
+
+  // Se abre solo si el carrito ya trae descuento, cupón o certificado — por
+  // ejemplo al recuperar una venta aparcada o al editar un comprobante. Si no,
+  // el visitante no vería lo que ya está aplicado.
+  useEffect(() => {
+    if (discountAmount || discountPercentage || appliedCoupon || appliedGiftCert) {
+      setShowDiscountSection(true)
+    }
+  }, [discountAmount, discountPercentage, appliedCoupon, appliedGiftCert])
 
   // Variant selection modal
   const [selectedProductForVariant, setSelectedProductForVariant] = useState(null)
@@ -5349,7 +5359,7 @@ export default function POS() {
     setDiscountPercentage('')
     // Reset observaciones generales
     setGeneralNotes('')
-    setShowNotesSection(false)
+    setShowDiscountSection(false)
     // Reset forma de pago
     setPaymentType('contado')
     setPaymentDueDate('')
@@ -12231,13 +12241,36 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   <span className="font-medium">{formatCurrency(amounts.subtotal, currency)}</span>
                 </div>
 
-                {/* Descuento General */}
+                {/* Descuento General — plegado por defecto.
+                    La mayoría de las ventas no llevan descuento ni cupón: tener
+                    cuatro campos abiertos empujaba el total fuera de la vista y
+                    obligaba a hacer scroll para cobrar. Se abre solo cuando ya
+                    hay algo aplicado, para que no quede escondido. */}
                 {cart.length > 0 && !hideDiscountInPOS && (
-                  <div className="bg-green-50 border border-green-200 rounded-xl p-2.5 xl:p-4 space-y-2 xl:space-y-3 overflow-hidden min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Tag className="w-4 h-4 xl:w-5 xl:h-5 text-green-600 shrink-0" />
-                      <p className="text-sm xl:text-base text-green-800 font-semibold">Descuento General</p>
-                    </div>
+                  <div className="bg-green-50 border border-green-200 rounded-xl overflow-hidden min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => setShowDiscountSection(!showDiscountSection)}
+                      className="w-full px-2.5 xl:px-4 py-2.5 xl:py-3 flex items-center justify-between hover:bg-green-100/60 transition-colors"
+                      disabled={lastInvoiceData !== null}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Tag className="w-4 h-4 xl:w-5 xl:h-5 text-green-600 shrink-0" />
+                        <p className="text-sm xl:text-base text-green-800 font-semibold">
+                          Descuento General
+                          {(amounts.globalDiscount > 0 || appliedCoupon || appliedGiftCert) && (
+                            <span className="ml-1.5 text-green-600">(1)</span>
+                          )}
+                        </p>
+                      </div>
+                      {showDiscountSection ? (
+                        <ChevronUp className="w-5 h-5 text-green-600" />
+                      ) : (
+                        <ChevronDown className="w-5 h-5 text-green-600" />
+                      )}
+                    </button>
+                    {showDiscountSection && (
+                    <div className="px-2.5 xl:px-4 pb-2.5 xl:pb-4 space-y-2 xl:space-y-3">
                     <div className="flex items-center gap-1.5 xl:gap-3 min-w-0">
                       <div className="flex items-center gap-1 xl:gap-2 flex-1 min-w-0">
                         <span className="text-xs xl:text-sm text-green-700 font-medium shrink-0">{currency === 'USD' ? '$' : 'S/'}</span>
@@ -12307,7 +12340,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
                           onKeyDown={(e) => { if (e.key === 'Enter') aplicarCupon() }}
                           placeholder="Código de cupón"
-                          className="flex-1 min-w-0 px-2 xl:px-3 py-1.5 text-sm border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent font-mono"
+                          className="flex-1 min-w-0 px-2 xl:px-3 py-1.5 text-sm border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                           disabled={lastInvoiceData !== null}
                         />
                         <button
@@ -12349,7 +12382,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           onChange={(e) => setGiftCertInput(e.target.value.toUpperCase())}
                           onKeyDown={(e) => { if (e.key === 'Enter') aplicarCertificado() }}
                           placeholder="Certificado de regalo (GC...)"
-                          className="flex-1 min-w-0 px-2 xl:px-3 py-1.5 text-sm border border-violet-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent font-mono"
+                          className="flex-1 min-w-0 px-2 xl:px-3 py-1.5 text-sm border border-violet-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
                           disabled={lastInvoiceData !== null}
                         />
                         <button
@@ -12361,45 +12394,35 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         </button>
                       </div>
                     )}
+                    </div>
+                    )}
                   </div>
                 )}
 
-                {/* Observaciones Generales */}
+                {/* Observaciones — a la vista, sin desplegable.
+                    Es lo que más se escribe al cobrar (garantía, entrega,
+                    indicaciones), así que tenerlo detrás de un clic sobraba. */}
                 {cart.length > 0 && (
                   <div className="border border-gray-200 rounded-xl overflow-hidden">
-                    <button
-                      type="button"
-                      onClick={() => setShowNotesSection(!showNotesSection)}
-                      className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
-                      disabled={lastInvoiceData !== null}
-                    >
-                      <div className="flex items-center gap-2">
-                        <FileText className="w-5 h-5 text-primary-600" />
-                        <span className="text-base font-medium text-gray-700">
-                          Observaciones {generalNotes && <span className="text-primary-600">(1)</span>}
-                        </span>
-                      </div>
-                      {showNotesSection ? (
-                        <ChevronUp className="w-5 h-5 text-gray-500" />
-                      ) : (
-                        <ChevronDown className="w-5 h-5 text-gray-500" />
-                      )}
-                    </button>
-                    {showNotesSection && (
-                      <div className="p-4 bg-white">
-                        <textarea
-                          value={generalNotes}
-                          onChange={(e) => setGeneralNotes(e.target.value)}
-                          placeholder="Ej: Garantía 6 meses, entrega programada, instrucciones especiales..."
-                          rows={3}
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                          disabled={lastInvoiceData !== null}
-                        />
-                        <p className="text-xs text-gray-500 mt-2">
-                          Estas observaciones aparecerán en el comprobante impreso y PDF.
-                        </p>
-                      </div>
-                    )}
+                    <div className="px-4 py-2.5 flex items-center gap-2 bg-gray-50">
+                      <FileText className="w-5 h-5 text-primary-600" />
+                      <span className="text-base font-medium text-gray-700">
+                        Observaciones {generalNotes && <span className="text-primary-600">(1)</span>}
+                      </span>
+                    </div>
+                    <div className="p-3 bg-white">
+                      <textarea
+                        value={generalNotes}
+                        onChange={(e) => setGeneralNotes(e.target.value)}
+                        placeholder="Ej: Garantía 6 meses, entrega programada, instrucciones especiales..."
+                        rows={2}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                        disabled={lastInvoiceData !== null}
+                      />
+                      <p className="text-xs text-gray-500 mt-1.5">
+                        Aparecen en el comprobante impreso y en el PDF.
+                      </p>
+                    </div>
                   </div>
                 )}
 
