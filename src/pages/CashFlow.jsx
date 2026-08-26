@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, Fragment } from 'react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useDataPermissions } from '@/hooks/useDataPermissions'
 import { useToast } from '@/contexts/ToastContext'
@@ -30,6 +30,7 @@ import {
   Package,
   MoreHorizontal,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   Loader2,
   Landmark,
@@ -193,12 +194,17 @@ const PAYMENT_METHODS = [
 ]
 
 export default function CashFlow() {
-  const { user, getBusinessId, isDemoMode, hasMainBranchAccess, allowedBranches, allowedWarehouses, isBusinessOwner, isAdmin, filterBranchesByAccess } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData, hasMainBranchAccess, allowedBranches, allowedWarehouses, isBusinessOwner, isAdmin, filterBranchesByAccess } = useAppContext()
   const canAccess = useLocationAccess()
   const toast = useToast()
   const permisos = useDataPermissions()
 
   // Estados
+  // Filas de egreso abiertas. Pedido de CYBY Plast: ver A QUIÉN se le pagó
+  // dentro de cada categoría, sin salir del Flujo de Caja.
+  const [egresoAbierto, setEgresoAbierto] = useState({})
+  const alternarEgreso = (clave) => setEgresoAbierto(prev => ({ ...prev, [clave]: !prev[clave] }))
+
   const [loading, setLoading] = useState(true)
   const [invoices, setInvoices] = useState([])
   const [expenses, setExpenses] = useState([])
@@ -306,9 +312,11 @@ export default function CashFlow() {
     try {
       if (isDemoMode) {
         await new Promise(resolve => setTimeout(resolve, 500))
-        setInvoices(DEMO_DATA.invoices)
-        setExpenses(DEMO_DATA.expenses)
-        setPurchases(DEMO_DATA.purchases)
+        // Con demo POR RUBRO se usan sus datos (los proveedores y gastos de esa
+        // ferretería o esa pastelería); si no, los de ejemplo de siempre.
+        setInvoices(demoData?.invoices || DEMO_DATA.invoices)
+        setExpenses(demoData?.expenses || DEMO_DATA.expenses)
+        setPurchases(demoData?.purchases || DEMO_DATA.purchases)
         setCashMovements(DEMO_DATA.cashMovements)
         setLoans(DEMO_DATA.loans)
         setLoading(false)
@@ -794,6 +802,101 @@ export default function CashFlow() {
       style: 'currency',
       currency: 'PEN'
     }).format(amount || 0)
+  }
+
+  /**
+   * Las líneas que se ven al abrir una categoría de egreso.
+   *
+   * Cada fuente guarda el "a quién se le pagó" en un campo distinto —el
+   * proveedor de una compra, el prestamista de una cuota, la descripción de un
+   * gasto— así que se normalizan acá a { fecha, quien, referencia, monto }.
+   */
+  function lineasDeEgreso(tipo, datos) {
+    if (tipo === 'gastos') {
+      return (datos || []).map((g, i) => ({
+        id: g.id || `g${i}`,
+        fecha: g.date || g.createdAt,
+        quien: g.supplier || g.provider || g.description || 'Sin detalle',
+        referencia: g.documentNumber || g.paymentMethod || '',
+        monto: Number(g.amount) || 0,
+      }))
+    }
+    if (tipo === 'contado') {
+      return (datos || []).map((c, i) => ({
+        id: c.id || `c${i}`,
+        fecha: c.paidAt || c.invoiceDate || c.createdAt,
+        // `businessName` es lo que guarda el sistema real; `name` aparece en
+        // datos de demo y en compras viejas.
+        quien: c.supplier?.businessName || c.supplier?.name || c.supplierName || 'Proveedor',
+        referencia: c.invoiceNumber || '',
+        monto: getDocumentTotalInBase(c),
+      }))
+    }
+    if (tipo === 'abonos') {
+      return (datos || []).map((a, i) => ({
+        id: a.id || `a${i}`,
+        fecha: a.date,
+        quien: a.supplierName || 'Proveedor',
+        // El número de factura es lo que el dueño busca para cruzar el pago.
+        referencia: [a.invoiceNumber, a.notes].filter(Boolean).join(' · '),
+        monto: Number(a.amount) || 0,
+      }))
+    }
+    if (tipo === 'prestamos') {
+      return (datos || []).map((l, i) => ({
+        id: `${l.loanId}-${l.number}-${i}`,
+        fecha: l.paidAt,
+        quien: l.lenderName || 'Prestamista',
+        referencia: `Cuota ${l.number}${l.isPartial ? ' (parcial)' : ''}`,
+        monto: Number(l.paidAmount) || Number(l.amount) || 0,
+      }))
+    }
+    return []
+  }
+
+  /** Filas hijas del acordeón, en la tabla de escritorio. */
+  function FilasDetalle({ tipo, datos }) {
+    const lineas = lineasDeEgreso(tipo, datos)
+    if (lineas.length === 0) {
+      return (
+        <tr className="bg-gray-50/70">
+          <td colSpan={4} className="py-2 px-8 text-sm text-gray-500">Sin movimientos en el período.</td>
+        </tr>
+      )
+    }
+    return lineas.map((l) => (
+      <tr key={l.id} className="bg-gray-50/70 border-b border-gray-100">
+        <td className="py-2 pl-8 text-xs text-gray-500">{formatDate(l.fecha)}</td>
+        <td className="py-2 text-sm text-gray-700" colSpan={2}>
+          <span className="font-medium">{l.quien}</span>
+          {l.referencia && <span className="text-gray-500"> · {l.referencia}</span>}
+        </td>
+        <td className="py-2 text-right text-sm text-gray-700">{formatCurrency(l.monto)}</td>
+      </tr>
+    ))
+  }
+
+  /** Lo mismo para la vista de celular, que no usa tabla. */
+  function DetalleMovil({ tipo, datos }) {
+    const lineas = lineasDeEgreso(tipo, datos)
+    if (lineas.length === 0) {
+      return <p className="text-xs text-gray-500 py-2 pl-6">Sin movimientos en el período.</p>
+    }
+    return (
+      <div className="pl-6 pb-2 space-y-1.5">
+        {lineas.map((l) => (
+          <div key={l.id} className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-gray-700 truncate">{l.quien}</p>
+              <p className="text-[11px] text-gray-500">
+                {formatDate(l.fecha)}{l.referencia ? ` · ${l.referencia}` : ''}
+              </p>
+            </div>
+            <span className="text-xs text-gray-700 shrink-0">{formatCurrency(l.monto)}</span>
+          </div>
+        ))}
+      </div>
+    )
   }
 
   // Formatear fecha
@@ -1366,67 +1469,108 @@ export default function CashFlow() {
                     const catObj = getCategoryById(category)
                     const CategoryIcon = getCategoryIcon(catObj)
                     const categoryName = catObj.name
+                    const abierto = !!egresoAbierto[`m-${category}`]
                     return (
-                      <div key={category} className="flex items-center justify-between py-3 border-b border-gray-100">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
-                            <CategoryIcon className="w-4 h-4 text-red-600" />
+                      <div key={category} className="border-b border-gray-100">
+                        <button
+                          type="button"
+                          onClick={() => alternarEgreso(`m-${category}`)}
+                          className="w-full flex items-center justify-between py-3 text-left"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            {abierto
+                              ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+                              : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
+                            <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center shrink-0">
+                              <CategoryIcon className="w-4 h-4 text-red-600" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-medium text-gray-900 truncate">{categoryName}</p>
+                              <p className="text-xs text-gray-500">{data.items.length} registros</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-medium text-gray-900">{categoryName}</p>
-                            <p className="text-xs text-gray-500">{data.items.length} registros</p>
-                          </div>
-                        </div>
-                        <span className="font-semibold text-red-600">{formatCurrency(data.amount)}</span>
+                          <span className="font-semibold text-red-600 shrink-0">{formatCurrency(data.amount)}</span>
+                        </button>
+                        {abierto && <DetalleMovil tipo="gastos" datos={data.items} />}
                       </div>
                     )
                   })}
 
                   {/* Compras al contado */}
                   {cashFlowData.cashPurchasesTotal > 0 && (
-                    <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
-                          <Package className="w-4 h-4 text-red-600" />
+                    <div className="border-b border-gray-100">
+                      <button
+                        type="button"
+                        onClick={() => alternarEgreso('m-contado')}
+                        className="w-full flex items-center justify-between py-3 text-left"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          {egresoAbierto['m-contado']
+                            ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+                            : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
+                          <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center shrink-0">
+                            <Package className="w-4 h-4 text-red-600" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium text-gray-900 truncate">Compras Contado</p>
+                            <p className="text-xs text-gray-500">{cashFlowData.paidPurchases.length} pagadas</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium text-gray-900">Compras Contado</p>
-                          <p className="text-xs text-gray-500">{cashFlowData.paidPurchases.length} pagadas</p>
-                        </div>
-                      </div>
-                      <span className="font-semibold text-red-600">{formatCurrency(cashFlowData.cashPurchasesTotal)}</span>
+                        <span className="font-semibold text-red-600 shrink-0">{formatCurrency(cashFlowData.cashPurchasesTotal)}</span>
+                      </button>
+                      {egresoAbierto['m-contado'] && <DetalleMovil tipo="contado" datos={cashFlowData.paidPurchases} />}
                     </div>
                   )}
 
                   {/* Abonos a compras a crédito */}
                   {cashFlowData.purchasePaymentsTotal > 0 && (
-                    <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
-                          <DollarSign className="w-4 h-4 text-red-600" />
+                    <div className="border-b border-gray-100">
+                      <button
+                        type="button"
+                        onClick={() => alternarEgreso('m-abonos')}
+                        className="w-full flex items-center justify-between py-3 text-left"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          {egresoAbierto['m-abonos']
+                            ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+                            : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
+                          <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center shrink-0">
+                            <DollarSign className="w-4 h-4 text-red-600" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium text-gray-900 truncate">Abonos Compras</p>
+                            <p className="text-xs text-gray-500">{cashFlowData.purchasePayments.length} pago(s)</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium text-gray-900">Abonos Compras</p>
-                          <p className="text-xs text-gray-500">{cashFlowData.purchasePayments.length} pago(s)</p>
-                        </div>
-                      </div>
-                      <span className="font-semibold text-red-600">{formatCurrency(cashFlowData.purchasePaymentsTotal)}</span>
+                        <span className="font-semibold text-red-600 shrink-0">{formatCurrency(cashFlowData.purchasePaymentsTotal)}</span>
+                      </button>
+                      {egresoAbierto['m-abonos'] && <DetalleMovil tipo="abonos" datos={cashFlowData.purchasePayments} />}
                     </div>
                   )}
 
                   {/* Cuotas de préstamos */}
                   {cashFlowData.loanInstallmentsTotal > 0 && (
-                    <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
-                          <Landmark className="w-4 h-4 text-red-600" />
+                    <div className="border-b border-gray-100">
+                      <button
+                        type="button"
+                        onClick={() => alternarEgreso('m-prestamos')}
+                        className="w-full flex items-center justify-between py-3 text-left"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          {egresoAbierto['m-prestamos']
+                            ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+                            : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
+                          <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center shrink-0">
+                            <Landmark className="w-4 h-4 text-red-600" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium text-gray-900 truncate">Préstamos</p>
+                            <p className="text-xs text-gray-500">{cashFlowData.paidLoanInstallments.length} abono(s)</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium text-gray-900">Préstamos</p>
-                          <p className="text-xs text-gray-500">{cashFlowData.paidLoanInstallments.length} abono(s)</p>
-                        </div>
-                      </div>
-                      <span className="font-semibold text-red-600">{formatCurrency(cashFlowData.loanInstallmentsTotal)}</span>
+                        <span className="font-semibold text-red-600 shrink-0">{formatCurrency(cashFlowData.loanInstallmentsTotal)}</span>
+                      </button>
+                      {egresoAbierto['m-prestamos'] && <DetalleMovil tipo="prestamos" datos={cashFlowData.paidLoanInstallments} />}
                     </div>
                   )}
 
@@ -1495,64 +1639,101 @@ export default function CashFlow() {
                       const catObj = getCategoryById(category)
                       const CategoryIcon = getCategoryIcon(catObj)
                       const categoryName = catObj.name
+                      const abierto = !!egresoAbierto[category]
                       return (
-                        <tr key={category} className="border-b border-gray-100">
-                          <td className="py-3 text-sm text-gray-500">-</td>
-                          <td className="py-3">
-                            <div className="flex items-center gap-2">
-                              <CategoryIcon className="w-4 h-4 text-red-600" />
-                              <span className="font-medium">{categoryName}</span>
-                            </div>
-                          </td>
-                          <td className="py-3 text-gray-600">{data.items.length} registros</td>
-                          <td className="py-3 text-right font-semibold text-red-600">{formatCurrency(data.amount)}</td>
-                        </tr>
+                        <Fragment key={category}>
+                          <tr
+                            className="border-b border-gray-100 cursor-pointer hover:bg-gray-50"
+                            onClick={() => alternarEgreso(category)}
+                          >
+                            <td className="py-3 text-sm text-gray-500">-</td>
+                            <td className="py-3">
+                              <div className="flex items-center gap-2">
+                                {abierto
+                                  ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+                                  : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
+                                <CategoryIcon className="w-4 h-4 text-red-600" />
+                                <span className="font-medium">{categoryName}</span>
+                              </div>
+                            </td>
+                            <td className="py-3 text-gray-600">{data.items.length} registros</td>
+                            <td className="py-3 text-right font-semibold text-red-600">{formatCurrency(data.amount)}</td>
+                          </tr>
+                          {abierto && <FilasDetalle tipo="gastos" datos={data.items} />}
+                        </Fragment>
                       )
                     })}
 
                     {/* Compras al contado */}
                     {cashFlowData.cashPurchasesTotal > 0 && (
-                      <tr className="border-b border-gray-100">
-                        <td className="py-3 text-sm text-gray-500">-</td>
-                        <td className="py-3">
-                          <div className="flex items-center gap-2">
-                            <Package className="w-4 h-4 text-red-600" />
-                            <span className="font-medium">Compras Contado</span>
-                          </div>
-                        </td>
-                        <td className="py-3 text-gray-600">{cashFlowData.paidPurchases.length} compras al contado</td>
-                        <td className="py-3 text-right font-semibold text-red-600">{formatCurrency(cashFlowData.cashPurchasesTotal)}</td>
-                      </tr>
+                      <Fragment>
+                        <tr
+                          className="border-b border-gray-100 cursor-pointer hover:bg-gray-50"
+                          onClick={() => alternarEgreso('contado')}
+                        >
+                          <td className="py-3 text-sm text-gray-500">-</td>
+                          <td className="py-3">
+                            <div className="flex items-center gap-2">
+                              {egresoAbierto['contado']
+                                ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+                                : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
+                              <Package className="w-4 h-4 text-red-600" />
+                              <span className="font-medium">Compras Contado</span>
+                            </div>
+                          </td>
+                          <td className="py-3 text-gray-600">{cashFlowData.paidPurchases.length} compras al contado</td>
+                          <td className="py-3 text-right font-semibold text-red-600">{formatCurrency(cashFlowData.cashPurchasesTotal)}</td>
+                        </tr>
+                        {egresoAbierto['contado'] && <FilasDetalle tipo="contado" datos={cashFlowData.paidPurchases} />}
+                      </Fragment>
                     )}
 
                     {/* Abonos a compras a crédito */}
                     {cashFlowData.purchasePaymentsTotal > 0 && (
-                      <tr className="border-b border-gray-100">
-                        <td className="py-3 text-sm text-gray-500">-</td>
-                        <td className="py-3">
-                          <div className="flex items-center gap-2">
-                            <DollarSign className="w-4 h-4 text-red-600" />
-                            <span className="font-medium">Abonos a Compras</span>
-                          </div>
-                        </td>
-                        <td className="py-3 text-gray-600">{cashFlowData.purchasePayments.length} pago(s) a crédito</td>
-                        <td className="py-3 text-right font-semibold text-red-600">{formatCurrency(cashFlowData.purchasePaymentsTotal)}</td>
-                      </tr>
+                      <Fragment>
+                        <tr
+                          className="border-b border-gray-100 cursor-pointer hover:bg-gray-50"
+                          onClick={() => alternarEgreso('abonos')}
+                        >
+                          <td className="py-3 text-sm text-gray-500">-</td>
+                          <td className="py-3">
+                            <div className="flex items-center gap-2">
+                              {egresoAbierto['abonos']
+                                ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+                                : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
+                              <DollarSign className="w-4 h-4 text-red-600" />
+                              <span className="font-medium">Abonos a Compras</span>
+                            </div>
+                          </td>
+                          <td className="py-3 text-gray-600">{cashFlowData.purchasePayments.length} pago(s) a crédito</td>
+                          <td className="py-3 text-right font-semibold text-red-600">{formatCurrency(cashFlowData.purchasePaymentsTotal)}</td>
+                        </tr>
+                        {egresoAbierto['abonos'] && <FilasDetalle tipo="abonos" datos={cashFlowData.purchasePayments} />}
+                      </Fragment>
                     )}
 
                     {/* Cuotas de préstamos */}
                     {cashFlowData.loanInstallmentsTotal > 0 && (
-                      <tr className="border-b border-gray-100">
-                        <td className="py-3 text-sm text-gray-500">-</td>
-                        <td className="py-3">
-                          <div className="flex items-center gap-2">
-                            <Landmark className="w-4 h-4 text-red-600" />
-                            <span className="font-medium">Pago de Préstamos</span>
-                          </div>
-                        </td>
-                        <td className="py-3 text-gray-600">{cashFlowData.paidLoanInstallments.length} abono(s) a cuota(s)</td>
-                        <td className="py-3 text-right font-semibold text-red-600">{formatCurrency(cashFlowData.loanInstallmentsTotal)}</td>
-                      </tr>
+                      <Fragment>
+                        <tr
+                          className="border-b border-gray-100 cursor-pointer hover:bg-gray-50"
+                          onClick={() => alternarEgreso('prestamos')}
+                        >
+                          <td className="py-3 text-sm text-gray-500">-</td>
+                          <td className="py-3">
+                            <div className="flex items-center gap-2">
+                              {egresoAbierto['prestamos']
+                                ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+                                : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />}
+                              <Landmark className="w-4 h-4 text-red-600" />
+                              <span className="font-medium">Pago de Préstamos</span>
+                            </div>
+                          </td>
+                          <td className="py-3 text-gray-600">{cashFlowData.paidLoanInstallments.length} abono(s) a cuota(s)</td>
+                          <td className="py-3 text-right font-semibold text-red-600">{formatCurrency(cashFlowData.loanInstallmentsTotal)}</td>
+                        </tr>
+                        {egresoAbierto['prestamos'] && <FilasDetalle tipo="prestamos" datos={cashFlowData.paidLoanInstallments} />}
+                      </Fragment>
                     )}
 
                     {/* Otros egresos */}
