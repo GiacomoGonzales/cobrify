@@ -11,6 +11,7 @@ import { buildKitchenLines, stationsForOrder } from '@/utils/kitchenComandaForma
 import { getSessionMoneyTotals } from '@/utils/cashTotals';
 import { getTicketFooterParts, justifyTicketText } from '@/utils/ticketFooter';
 import { formatQuantity } from '@/lib/utils'
+import { altoDeLinea } from '@/utils/escposCharSize';
 
 /**
  * Servicio para manejar impresoras térmicas WiFi/Bluetooth
@@ -1592,33 +1593,41 @@ function kitchenSizeScaleFromConfig() {
 
 // Renderiza la lista de líneas de la comanda (buildKitchenLines) usando el
 // EscPosBuilder (WiFi / interna / estación). builder.text() ya convierte acentos.
-function renderKitchenLinesEscPos(builder, lines, format) {
+//
+// El tamaño se recompone en CADA línea con altoDeLinea() y NO se deja puesto
+// desde init(): esta ruta usaba doubleHeight(), que emite `ESC ! n`, y ese
+// comando borra el `GS ! n` del tamaño base. Resultado: la comanda por red
+// salía siempre en letra normal por más que se eligiera "Muy grande".
+function renderKitchenLinesEscPos(builder, lines, format, escala = 0) {
   for (const ln of lines) {
     if (ln.sep) {
-      builder.alignLeft().bold(false).doubleHeight(false).text(format.separator).newLine();
+      builder.alignLeft().bold(false).charHeight(altoDeLinea(escala, false)).text(format.separator).newLine();
       continue;
     }
     if (ln.blank) { builder.newLine(); continue; }
     builder[ln.a === 'C' ? 'alignCenter' : 'alignLeft']()
-      .doubleHeight(!!ln.big)
+      .charHeight(altoDeLinea(escala, ln.big))
       .bold(!!ln.b)
       .text(ln.t)
       .newLine();
   }
-  builder.doubleHeight(false).bold(false).alignLeft();
+  // Normal otra vez antes del avance y el corte, para no arrastrar el tamaño.
+  builder.charHeight(0).bold(false).alignLeft();
 }
 
 // Renderiza la lista de líneas de la comanda usando CapacitorThermalPrinter
 // (Bluetooth clásico Android). Aquí SÍ hay que convertir acentos manualmente.
 function renderKitchenLinesBT(printer, lines, format) {
-  // El Bluetooth clasico no pasaba por EscPosBuilder, asi que era la unica
-  // ruta que ignoraba el tamano configurado. La escala se manda como comando
-  // crudo GS ! n (nibble bajo = alto-1) antes de cada linea, porque
-  // clearFormatting() la borra al terminarla.
+  // El Bluetooth clasico no pasa por EscPosBuilder. La escala se manda como
+  // comando crudo GS ! n antes de cada linea, porque clearFormatting() la
+  // borra al terminarla. El alto sale de altoDeLinea(): doubleHeight() emite
+  // `ESC ! n` y pisaria la escala, dejando el titulo MAS chico que el resto de
+  // la comanda cuando esta configurada en grande.
   const escala = kitchenSizeScaleFromConfig();
-  const aplicarEscala = (p) => (escala > 0
-    ? p.raw(new Uint8Array([0x1D, 0x21, escala & 0x07]))
-    : p);
+  const aplicarAlto = (p, big) => {
+    const alto = altoDeLinea(escala, big);
+    return alto > 0 ? p.raw(new Uint8Array([0x1D, 0x21, alto])) : p;
+  };
 
   for (const ln of lines) {
     if (ln.sep) {
@@ -1626,8 +1635,7 @@ function renderKitchenLinesBT(printer, lines, format) {
       continue;
     }
     if (ln.blank) { printer = printer.text('\n'); continue; }
-    printer = aplicarEscala(printer.align(ln.a === 'C' ? 'center' : 'left'));
-    if (ln.big) printer = printer.doubleHeight();
+    printer = aplicarAlto(printer.align(ln.a === 'C' ? 'center' : 'left'), ln.big);
     if (ln.b) printer = printer.bold();
     printer = printer.text(convertSpanishText(ln.t) + '\n').clearFormatting();
   }
@@ -1636,9 +1644,6 @@ function renderKitchenLinesBT(printer, lines, format) {
 
 export const printKitchenOrder = async (order, table = null, paperWidth = 58, stationName = null) => {
   const isNative = Capacitor.isNativePlatform();
-
-  // Tamaño de letra de la comanda en ESC/POS (propio de la comanda; 0 = sin cambios)
-  EscPosBuilder.baseSizeScale = kitchenSizeScaleFromConfig();
 
   console.log('🖨️ printKitchenOrder - Iniciando...');
   console.log('📱 Plataforma nativa:', isNative);
@@ -2372,6 +2377,15 @@ class EscPosBuilder {
     return this;
   }
 
+  // Alto de carácter explícito (GS ! n, nibble bajo = alto-1; el ancho queda
+  // en x1). A diferencia de doubleHeight(), que emite `ESC ! n` y de paso
+  // borra el tamaño base, este comando LO define: sirve para recomponer el
+  // tamaño línea por línea. Ver src/utils/escposCharSize.js.
+  charHeight(alto = 0) {
+    this.commands.push(EscPosBuilder.GS, 0x21, (alto | 0) & 0x07);
+    return this;
+  }
+
   // Limpiar formato
   clearFormatting() {
     this.commands.push(EscPosBuilder.ESC, 0x21, 0x00);
@@ -2887,13 +2901,13 @@ export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
 const printWifiKitchenOrder = async (order, table = null, paperWidth = 58, stationName = null) => {
   try {
     const format = getFormat(paperWidth);
-    EscPosBuilder.baseSizeScale = kitchenSizeScaleFromConfig();
+    const escala = kitchenSizeScaleFromConfig();
     const builder = new EscPosBuilder();
     builder.init();
 
     // Formato ÚNICO de comanda (mismo que Bluetooth / estación / BLE / HTML)
     const lines = buildKitchenLines(order, table, paperWidth, stationName);
-    renderKitchenLinesEscPos(builder, lines, format);
+    renderKitchenLinesEscPos(builder, lines, format, escala);
 
     builder.feed(getCutFeedLines())
       .cut();
@@ -2927,7 +2941,7 @@ export const printStationTicket = async (printerIp, order, station, items, paper
 
   try {
     const format = getFormat(paperWidth);
-    EscPosBuilder.baseSizeScale = kitchenSizeScaleFromConfig();
+    const escala = kitchenSizeScaleFromConfig();
     const builder = new EscPosBuilder();
     builder.init();
 
@@ -2938,7 +2952,7 @@ export const printStationTicket = async (printerIp, order, station, items, paper
       ? { number: order.tableNumber, waiter: order.waiterName || order.waiter || '' }
       : null;
     const lines = buildKitchenLines(stationOrder, stationTable, paperWidth, station.name || 'ESTACION');
-    renderKitchenLinesEscPos(builder, lines, format);
+    renderKitchenLinesEscPos(builder, lines, format, escala);
 
     builder.feed(getCutFeedLines()).cut();
 

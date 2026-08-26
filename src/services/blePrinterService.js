@@ -11,6 +11,7 @@ import { BleClient, numbersToDataView, numberToUUID } from '@capacitor-community
 import { prepareLogoForPrinting } from './imageProcessingService';
 import { buildKitchenLines } from '@/utils/kitchenComandaFormat';
 import { formatQuantity } from '@/lib/utils'
+import { altoDeLinea } from '@/utils/escposCharSize';
 
 // Estado de conexión
 let connectedDeviceId = null;
@@ -1293,20 +1294,22 @@ export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58)
     const lines = buildKitchenLines(order, table, paperWidth, null);
     for (const ln of lines) {
       if (ln.sep) {
-        commands.push(ESCPOSCommands.align(0), ESCPOSCommands.bold(false), ESCPOSCommands.doubleHeight(false));
+        commands.push(ESCPOSCommands.align(0), ESCPOSCommands.bold(false));
+        commands.push(new Uint8Array([0x1D, 0x21, altoDeLinea(escala, false)]));
         commands.push(ESCPOSCommands.text('-'.repeat(paperWidth === 58 ? 24 : 42) + '\n'));
         continue;
       }
       if (ln.blank) { commands.push(ESCPOSCommands.text('\n')); continue; }
       commands.push(ESCPOSCommands.align(ln.a === 'C' ? 1 : 0));
-      // doubleHeight escribe GS ! y pisaria la escala; se recompone el byte
-      // completo: alto = escala (o 1 si la linea es "big"), sin tocar el ancho.
-      const alto = Math.max(escala, ln.big ? 1 : 0);
-      commands.push(new Uint8Array([0x1D, 0x21, alto & 0x07]));
+      // doubleHeight escribe ESC ! y pisaria la escala; se recompone el byte
+      // completo con el criterio compartido (src/utils/escposCharSize.js).
+      commands.push(new Uint8Array([0x1D, 0x21, altoDeLinea(escala, ln.big)]));
       commands.push(ESCPOSCommands.bold(!!ln.b));
       commands.push(ESCPOSCommands.text(convertSpanishText(ln.t) + '\n'));
     }
-    commands.push(ESCPOSCommands.align(0), ESCPOSCommands.bold(false), ESCPOSCommands.doubleHeight(false));
+    // Normal otra vez antes del avance y el corte, para no arrastrar el tamano.
+    commands.push(ESCPOSCommands.align(0), ESCPOSCommands.bold(false));
+    commands.push(new Uint8Array([0x1D, 0x21, 0x00]));
 
     // En 80mm la impresora hace feed automático al cortar, menos líneas evitan margen excesivo
     commands.push(ESCPOSCommands.feed(getCutFeedLines()));
