@@ -9,7 +9,7 @@ struct MainTabView: View {
                 .tabItem { Label("Chats", systemImage: "bubble.left.and.bubble.right.fill") }
             ClientesView()
                 .tabItem { Label("Clientes", systemImage: "person.2.fill") }
-            CampanasView()
+            CampanasRealesView()
                 .tabItem { Label("Campañas", systemImage: "megaphone.fill") }
             AjustesView()
                 .tabItem { Label("Ajustes", systemImage: "gearshape.fill") }

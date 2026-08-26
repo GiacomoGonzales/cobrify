@@ -22,6 +22,7 @@ struct ConversationView: View {
     @State private var mostrarRapidas = false
     @State private var estadoLocal: String?
     @State private var etiquetasLocal: Set<String>?
+    @State private var mostrarPlantilla = false
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -131,6 +132,9 @@ struct ConversationView: View {
             }
             .presentationDetents([.medium])
         }
+        .sheet(isPresented: $mostrarPlantilla) {
+            EnviarPlantillaSheet(conversationId: conv.id)
+        }
         .sheet(isPresented: $mostrarRapidas) {
             RespuestasRapidasSheet { rapida in
                 mostrarRapidas = false
@@ -225,13 +229,21 @@ struct ConversationView: View {
                 }
                 if let vence = venceVentana, vence.timeIntervalSinceNow <= 0 {
                     // Ventana cerrada: WhatsApp ya no acepta texto libre.
-                    VStack(spacing: 4) {
+                    VStack(spacing: 8) {
                         Label("La ventana de 24 horas se cerró", systemImage: "clock.badge.exclamationmark")
                             .font(.footnote.weight(.medium))
-                        Text("Se reabre sola cuando el cliente escriba. Para escribirle tú primero hace falta una plantilla.")
+                        Text("Se reabre sola cuando el cliente escriba.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
+                        Button {
+                            mostrarPlantilla = true
+                        } label: {
+                            Label("Enviar plantilla", systemImage: "doc.text")
+                                .font(.subheadline.weight(.semibold))
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.borderedProminent)
                     }
                     .padding(14)
                     .vidrioRedondeado(22)
