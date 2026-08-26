@@ -130,7 +130,7 @@ struct BurbujaAudio: View {
             } label: {
                 Image(systemName: esEste && repro.reproduciendo ? "pause.circle.fill" : "play.circle.fill")
                     .font(.system(size: 26))
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(Color(.systemGray))
             }
             .buttonStyle(.plain)
             ProgressView(value: esEste ? repro.progreso : 0)
