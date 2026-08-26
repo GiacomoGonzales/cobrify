@@ -13,6 +13,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { collection, query, where, onSnapshot, orderBy as firestoreOrderBy, doc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import GuideLink from '@/components/guide/GuideLink'
+import { cambiarEstadoOrdenDemo } from '@/data/demo/operaciones'
 
 export default function Kitchen() {
   const { user, getBusinessId, isDemoMode, demoData, filterBranchesByAccess, allowedBranches, hasMainBranchAccess, businessSettings } = useAppContext()
@@ -242,8 +243,11 @@ export default function Kitchen() {
   }
 
   const handleStatusChange = async (orderId, newStatus) => {
+    // En demo la comanda avanza de verdad: pendiente → preparando → lista.
+    // Es el flujo que la cocina quiere ver funcionando.
     if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
+      cambiarEstadoOrdenDemo(orderId, newStatus)
+      toast.success('Estado actualizado')
       return
     }
 
