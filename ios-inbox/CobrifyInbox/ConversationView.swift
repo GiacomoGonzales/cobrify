@@ -97,21 +97,22 @@ private enum ElementoChat: Identifiable {
 }
 
 /// La burbuja: verde a la derecha lo nuestro, gris a la izquierda lo del
-/// cliente. Con hora y, en lo nuestro, el estado (✓ ✓✓ ✓✓ azul).
+/// cliente. Abraza su contenido; las fotos usan las medidas que guarda el
+/// servidor para reservar el espacio exacto (sin franjas muertas).
 private struct BurbujaMensaje: View {
     let mensaje: Mensaje
 
     var body: some View {
         HStack {
-            if mensaje.esSaliente { Spacer(minLength: 48) }
-            VStack(alignment: .leading, spacing: 4) {
+            if mensaje.esSaliente { Spacer(minLength: 60) }
+            VStack(alignment: .trailing, spacing: 4) {
                 contenido
                 pieDeMensaje
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(fondo, in: RoundedRectangle(cornerRadius: 16))
-            if !mensaje.esSaliente { Spacer(minLength: 48) }
+            if !mensaje.esSaliente { Spacer(minLength: 60) }
         }
     }
 
@@ -120,7 +121,10 @@ private struct BurbujaMensaje: View {
         case "image":
             VStack(alignment: .leading, spacing: 6) {
                 miniatura
-                if !mensaje.texto.isEmpty { Text(mensaje.texto) }
+                if !mensaje.texto.isEmpty {
+                    Text(mensaje.texto)
+                        .frame(maxWidth: 230, alignment: .leading)
+                }
             }
         case "video", "audio", "document", "sticker":
             HStack(spacing: 8) {
@@ -132,22 +136,33 @@ private struct BurbujaMensaje: View {
             }
         default:
             Text(mensaje.texto.isEmpty ? "[\(mensaje.tipo)]" : mensaje.texto)
+                .multilineTextAlignment(.leading)
         }
     }
 
+    /// La foto con su proporción real: alto = 230 / (ancho/alto guardados).
     private var miniatura: some View {
-        AsyncImage(url: URL(string: mensaje.media?.thumbUrl ?? mensaje.media?.url ?? "")) { fase in
+        let ancho = CGFloat(mensaje.media?.ancho ?? 4)
+        let alto = CGFloat(mensaje.media?.alto ?? 3)
+        let proporcion = alto > 0 ? ancho / alto : 4.0 / 3.0
+        return AsyncImage(url: URL(string: mensaje.media?.thumbUrl ?? mensaje.media?.url ?? "")) { fase in
             switch fase {
             case .success(let imagen):
-                imagen.resizable().aspectRatio(contentMode: .fit)
+                imagen.resizable().scaledToFill()
             case .failure:
-                Label("Foto", systemImage: "photo")
-                    .padding(24)
+                ZStack {
+                    Color(.tertiarySystemFill)
+                    Label("Foto", systemImage: "photo").foregroundStyle(.secondary)
+                }
             default:
-                ProgressView().padding(40)
+                ZStack {
+                    Color(.tertiarySystemFill)
+                    ProgressView()
+                }
             }
         }
-        .frame(maxWidth: 230, maxHeight: 280)
+        .aspectRatio(proporcion, contentMode: .fit)
+        .frame(width: 230)
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
@@ -190,7 +205,6 @@ private struct BurbujaMensaje: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
     private var fondo: some ShapeStyle {
