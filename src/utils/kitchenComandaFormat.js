@@ -166,10 +166,11 @@ export const buildKitchenLines = (order = {}, table = null, paperWidth = 58, sta
       } else {
         for (const modifier of item.modifiers) {
           for (const option of (modifier.options || [])) {
-            let txt = `${option.quantity > 1 ? option.quantity + 'x ' : ''}${sanitizeThermalText(option.optionName)}`;
-            if (option.priceAdjustment > 0) {
-              txt += ` (+S/${((option.priceAdjustment || 0) * (option.quantity || 1)).toFixed(2)})`;
-            }
+            // SIN precio: la comanda no lleva montos. A la cocina le importa
+            // qué preparar, no cuánto cuesta, y el importe del adicional solo
+            // ocupa lugar en un papel que se lee de lejos y apurado. Los
+            // montos van en la precuenta y en el comprobante.
+            const txt = `${option.quantity > 1 ? option.quantity + 'x ' : ''}${sanitizeThermalText(option.optionName)}`;
             wrapHanging('  > ', txt, width).forEach((t) => lines.push(line(t)));
           }
         }
