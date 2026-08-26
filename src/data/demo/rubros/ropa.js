@@ -86,52 +86,52 @@ export default {
   productos: [
     // — Mujer, con variantes de talla y color —
     conVariantes(
-      { id: 'r1', code: 'BLU-SAT-001', sku: 'BLU-SAT-001', name: 'Blusa satinada manga larga', description: 'Tela satinada, corte regular', price: 89.90, cost: 42.00, unit: 'UNIDAD', category: 'cat-polos-m', ventaTipica: 2, minStock: 6 },
+      { id: 'r1', code: 'BLU-SAT-001', imageUrl: 'https://images.unsplash.com/photo-1582719188393-bb71ca45dbb9?w=400&h=400&fit=crop', sku: 'BLU-SAT-001', name: 'Blusa satinada manga larga', description: 'Tela satinada, corte regular', price: 89.90, cost: 42.00, unit: 'UNIDAD', category: 'cat-polos-m', ventaTipica: 2, minStock: 6 },
       variantes('BLU', ['S', 'M', 'L'], ['Negro', 'Vino', 'Beige'], 89.90, 9),
     ),
     conVariantes(
-      { id: 'r2', code: 'JEA-MOM-002', sku: 'JEA-MOM-002', name: 'Jean mom fit tiro alto', description: 'Denim rígido, tiro alto', price: 129.90, cost: 62.00, unit: 'UNIDAD', category: 'cat-pantalones-m', ventaTipica: 1, minStock: 5 },
+      { id: 'r2', code: 'JEA-MOM-002', imageUrl: 'https://images.unsplash.com/photo-1614990354198-b06764dcb13c?w=400&h=400&fit=crop', sku: 'JEA-MOM-002', name: 'Jean mom fit tiro alto', description: 'Denim rígido, tiro alto', price: 129.90, cost: 62.00, unit: 'UNIDAD', category: 'cat-pantalones-m', ventaTipica: 1, minStock: 5 },
       variantes('JEA', ['26', '28', '30', '32'], ['Azul', 'Celeste'], 129.90, 8),
     ),
     conVariantes(
-      { id: 'r3', code: 'VES-FLO-003', sku: 'VES-FLO-003', name: 'Vestido midi estampado', price: 149.90, cost: 71.00, unit: 'UNIDAD', category: 'cat-mujer', ventaTipica: 1, minStock: 4 },
+      { id: 'r3', code: 'VES-FLO-003', imageUrl: 'https://images.unsplash.com/photo-1603400521630-9f2de124b33b?w=400&h=400&fit=crop', sku: 'VES-FLO-003', name: 'Vestido midi estampado', price: 149.90, cost: 71.00, unit: 'UNIDAD', category: 'cat-mujer', ventaTipica: 1, minStock: 4 },
       variantes('VES', ['S', 'M', 'L'], ['Floral', 'Negro'], 149.90, 6),
     ),
 
     // — Hombre —
     conVariantes(
-      { id: 'r4', code: 'POL-BAS-004', sku: 'POL-BAS-004', name: 'Polo básico algodón pima', description: 'Algodón pima 100%', price: 59.90, cost: 24.00, unit: 'UNIDAD', category: 'cat-polos-h', ventaTipica: 3, minStock: 10 },
+      { id: 'r4', code: 'POL-BAS-004', imageUrl: 'https://images.unsplash.com/photo-1596356453261-0d265ae2520a?w=400&h=400&fit=crop', sku: 'POL-BAS-004', name: 'Polo básico algodón pima', description: 'Algodón pima 100%', price: 59.90, cost: 24.00, unit: 'UNIDAD', category: 'cat-polos-h', ventaTipica: 3, minStock: 10 },
       variantes('POL', ['S', 'M', 'L', 'XL'], ['Blanco', 'Negro', 'Azul'], 59.90, 12),
     ),
     conVariantes(
-      { id: 'r5', code: 'CAM-OXF-005', sku: 'CAM-OXF-005', name: 'Camisa oxford manga larga', price: 119.90, cost: 55.00, unit: 'UNIDAD', category: 'cat-polos-h', ventaTipica: 1, minStock: 5 },
+      { id: 'r5', code: 'CAM-OXF-005', imageUrl: 'https://images.unsplash.com/photo-1604882767135-b41fac508fff?w=400&h=400&fit=crop', sku: 'CAM-OXF-005', name: 'Camisa oxford manga larga', price: 119.90, cost: 55.00, unit: 'UNIDAD', category: 'cat-polos-h', ventaTipica: 1, minStock: 5 },
       variantes('CAM', ['M', 'L', 'XL'], ['Celeste', 'Blanco'], 119.90, 7),
     ),
     conVariantes(
-      { id: 'r6', code: 'PAN-CHI-006', sku: 'PAN-CHI-006', name: 'Pantalón chino slim', price: 139.90, cost: 66.00, unit: 'UNIDAD', category: 'cat-pantalones-h', ventaTipica: 1, minStock: 5 },
+      { id: 'r6', code: 'PAN-CHI-006', imageUrl: 'https://images.unsplash.com/photo-1614990354198-b06764dcb13c?w=400&h=400&fit=crop', sku: 'PAN-CHI-006', name: 'Pantalón chino slim', price: 139.90, cost: 66.00, unit: 'UNIDAD', category: 'cat-pantalones-h', ventaTipica: 1, minStock: 5 },
       variantes('PAN', ['30', '32', '34', '36'], ['Beige', 'Negro'], 139.90, 7),
     ),
     conVariantes(
-      { id: 'r7', code: 'CAS-DEN-007', sku: 'CAS-DEN-007', name: 'Casaca denim clásica', price: 199.90, cost: 96.00, unit: 'UNIDAD', category: 'cat-hombre', ventaTipica: 1, minStock: 3 },
+      { id: 'r7', code: 'CAS-DEN-007', imageUrl: 'https://images.unsplash.com/photo-1614990354198-b06764dcb13c?w=400&h=400&fit=crop', sku: 'CAS-DEN-007', name: 'Casaca denim clásica', price: 199.90, cost: 96.00, unit: 'UNIDAD', category: 'cat-hombre', ventaTipica: 1, minStock: 3 },
       variantes('CAS', ['M', 'L', 'XL'], ['Azul'], 199.90, 5),
     ),
 
     // — Calzado: variantes solo de talla —
     conVariantes(
-      { id: 'r8', code: 'ZAP-URB-008', sku: 'ZAP-URB-008', name: 'Zapatilla urbana unisex', price: 179.90, cost: 88.00, unit: 'PAR', category: 'cat-calzado', ventaTipica: 1, minStock: 4 },
+      { id: 'r8', code: 'ZAP-URB-008', imageUrl: 'https://images.unsplash.com/photo-1637228393246-c38a4b3d2011?w=400&h=400&fit=crop', sku: 'ZAP-URB-008', name: 'Zapatilla urbana unisex', price: 179.90, cost: 88.00, unit: 'PAR', category: 'cat-calzado', ventaTipica: 1, minStock: 4 },
       variantes('ZAP', ['37', '38', '39', '40', '41', '42'], ['Blanco', 'Negro'], 179.90, 6),
     ),
     conVariantes(
-      { id: 'r9', code: 'BOT-CUE-009', sku: 'BOT-CUE-009', name: 'Botín de cuero mujer', price: 229.90, cost: 112.00, unit: 'PAR', category: 'cat-calzado', ventaTipica: 1, minStock: 3 },
+      { id: 'r9', code: 'BOT-CUE-009', imageUrl: 'https://images.unsplash.com/photo-1637228393246-c38a4b3d2011?w=400&h=400&fit=crop', sku: 'BOT-CUE-009', name: 'Botín de cuero mujer', price: 229.90, cost: 112.00, unit: 'PAR', category: 'cat-calzado', ventaTipica: 1, minStock: 3 },
       variantes('BOT', ['35', '36', '37', '38'], ['Camel', 'Negro'], 229.90, 4),
     ),
 
     // — Accesorios: sin variantes, alta rotación —
-    { id: 'r10', code: 'CIN-CUE-010', sku: 'CIN-CUE-010', barcode: '7751234000107', name: 'Correa de cuero clásica', price: 69.90, cost: 28.00, stock: 34, unit: 'UNIDAD', category: 'cat-accesorios', ventaTipica: 2, minStock: 8 },
-    { id: 'r11', code: 'GOR-URB-011', sku: 'GOR-URB-011', barcode: '7751234000114', name: 'Gorra urbana bordada', price: 45.00, cost: 17.00, stock: 60, unit: 'UNIDAD', category: 'cat-accesorios', ventaTipica: 3, minStock: 15 },
-    { id: 'r12', code: 'MED-PAC-012', sku: 'MED-PAC-012', barcode: '7751234000121', name: 'Pack 3 medias deportivas', price: 29.90, cost: 11.00, stock: 120, unit: 'PACK', category: 'cat-accesorios', ventaTipica: 4, minStock: 25 },
-    { id: 'r13', code: 'BIL-CUE-013', sku: 'BIL-CUE-013', name: 'Billetera de cuero', price: 79.90, cost: 34.00, stock: 28, unit: 'UNIDAD', category: 'cat-accesorios', ventaTipica: 1, minStock: 8 },
-    { id: 'r14', code: 'MOC-TEL-014', sku: 'MOC-TEL-014', barcode: '7751234000145', name: 'Mochila de tela impermeable', price: 119.90, cost: 52.00, stock: 22, unit: 'UNIDAD', category: 'cat-accesorios', ventaTipica: 1, minStock: 6 },
+    { id: 'r10', code: 'CIN-CUE-010', imageUrl: 'https://images.unsplash.com/photo-1453486030486-0a5ffcd82cd9?w=400&h=400&fit=crop', sku: 'CIN-CUE-010', barcode: '7751234000107', name: 'Correa de cuero clásica', price: 69.90, cost: 28.00, stock: 34, unit: 'UNIDAD', category: 'cat-accesorios', ventaTipica: 2, minStock: 8 },
+    { id: 'r11', code: 'GOR-URB-011', imageUrl: 'https://images.unsplash.com/photo-1453486030486-0a5ffcd82cd9?w=400&h=400&fit=crop', sku: 'GOR-URB-011', barcode: '7751234000114', name: 'Gorra urbana bordada', price: 45.00, cost: 17.00, stock: 60, unit: 'UNIDAD', category: 'cat-accesorios', ventaTipica: 3, minStock: 15 },
+    { id: 'r12', code: 'MED-PAC-012', imageUrl: 'https://images.unsplash.com/photo-1453486030486-0a5ffcd82cd9?w=400&h=400&fit=crop', sku: 'MED-PAC-012', barcode: '7751234000121', name: 'Pack 3 medias deportivas', price: 29.90, cost: 11.00, stock: 120, unit: 'PACK', category: 'cat-accesorios', ventaTipica: 4, minStock: 25 },
+    { id: 'r13', code: 'BIL-CUE-013', imageUrl: 'https://images.unsplash.com/photo-1453486030486-0a5ffcd82cd9?w=400&h=400&fit=crop', sku: 'BIL-CUE-013', name: 'Billetera de cuero', price: 79.90, cost: 34.00, stock: 28, unit: 'UNIDAD', category: 'cat-accesorios', ventaTipica: 1, minStock: 8 },
+    { id: 'r14', code: 'MOC-TEL-014', imageUrl: 'https://images.unsplash.com/photo-1453486030486-0a5ffcd82cd9?w=400&h=400&fit=crop', sku: 'MOC-TEL-014', barcode: '7751234000145', name: 'Mochila de tela impermeable', price: 119.90, cost: 52.00, stock: 22, unit: 'UNIDAD', category: 'cat-accesorios', ventaTipica: 1, minStock: 6 },
 
     // — Servicio del rubro —
     { id: 'r15', code: 'SER-BAS-015', name: 'Ajuste de basta', description: 'Servicio de sastrería', price: 15.00, cost: 0, stock: null, trackStock: false, unit: 'SERVICIO', category: 'cat-accesorios', ventaTipica: 2 },

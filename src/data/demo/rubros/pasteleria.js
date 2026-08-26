@@ -63,34 +63,34 @@ export default {
 
   productos: [
     // — Tortas por encargo (el ticket alto del rubro) —
-    { id: 'pa1', code: 'TOR-CHO-20', sku: 'TOR-CHO-20', name: 'Torta de chocolate 20 porciones', description: 'Bizcocho de cacao, manjar y fudge', price: 145.00, cost: 62.00, stock: 6, unit: 'UNIDAD', category: 'cat-encargo', ventaTipica: 1, minStock: 2 },
-    { id: 'pa2', code: 'TOR-TRE-20', sku: 'TOR-TRE-20', name: 'Torta tres leches 20 porciones', price: 155.00, cost: 68.00, stock: 5, unit: 'UNIDAD', category: 'cat-encargo', ventaTipica: 1, minStock: 2 },
-    { id: 'pa3', code: 'TOR-RED-30', sku: 'TOR-RED-30', name: 'Torta red velvet 30 porciones', price: 215.00, cost: 95.00, stock: 3, unit: 'UNIDAD', category: 'cat-encargo', ventaTipica: 1, minStock: 1 },
-    { id: 'pa4', code: 'TOR-TEM-INF', sku: 'TOR-TEM-INF', name: 'Torta temática infantil personalizada', description: 'Diseño a pedido, mínimo 48 horas', price: 280.00, cost: 118.00, stock: 2, unit: 'UNIDAD', category: 'cat-encargo', ventaTipica: 1, minStock: 1 },
+    { id: 'pa1', code: 'TOR-CHO-20', imageUrl: 'https://images.unsplash.com/photo-1626263468007-a9e0cf83f1ac?w=400&h=400&fit=crop', sku: 'TOR-CHO-20', name: 'Torta de chocolate 20 porciones', description: 'Bizcocho de cacao, manjar y fudge', price: 145.00, cost: 62.00, stock: 6, unit: 'UNIDAD', category: 'cat-encargo', ventaTipica: 1, minStock: 2 },
+    { id: 'pa2', code: 'TOR-TRE-20', imageUrl: 'https://images.unsplash.com/photo-1628661477251-7938a1a967cd?w=400&h=400&fit=crop', sku: 'TOR-TRE-20', name: 'Torta tres leches 20 porciones', price: 155.00, cost: 68.00, stock: 5, unit: 'UNIDAD', category: 'cat-encargo', ventaTipica: 1, minStock: 2 },
+    { id: 'pa3', code: 'TOR-RED-30', imageUrl: 'https://images.unsplash.com/photo-1572095755818-8fd546d228a1?w=400&h=400&fit=crop', sku: 'TOR-RED-30', name: 'Torta red velvet 30 porciones', price: 215.00, cost: 95.00, stock: 3, unit: 'UNIDAD', category: 'cat-encargo', ventaTipica: 1, minStock: 1 },
+    { id: 'pa4', code: 'TOR-TEM-INF', imageUrl: 'https://images.unsplash.com/photo-1639832899627-5d77c5ce1eb8?w=400&h=400&fit=crop', sku: 'TOR-TEM-INF', name: 'Torta temática infantil personalizada', description: 'Diseño a pedido, mínimo 48 horas', price: 280.00, cost: 118.00, stock: 2, unit: 'UNIDAD', category: 'cat-encargo', ventaTipica: 1, minStock: 1 },
 
     // — Vitrina (rotación diaria) —
-    { id: 'pa5', code: 'POR-TOR-CHO', sku: 'POR-TOR-CHO', barcode: '7753001000058', name: 'Porción de torta de chocolate', price: 12.00, cost: 4.20, stock: 40, unit: 'PORCION', category: 'cat-vitrina', ventaTipica: 3, minStock: 12 },
-    { id: 'pa6', code: 'POR-CHE-FRE', sku: 'POR-CHE-FRE', barcode: '7753001000065', name: 'Porción de cheesecake de fresa', price: 14.00, cost: 5.10, stock: 32, unit: 'PORCION', category: 'cat-vitrina', ventaTipica: 3, minStock: 10 },
-    { id: 'pa7', code: 'PIE-LIM-POR', sku: 'PIE-LIM-POR', name: 'Porción de pie de limón', price: 11.00, cost: 3.80, stock: 28, unit: 'PORCION', category: 'cat-vitrina', ventaTipica: 2, minStock: 10 },
+    { id: 'pa5', code: 'POR-TOR-CHO', imageUrl: 'https://images.unsplash.com/photo-1626263468007-a9e0cf83f1ac?w=400&h=400&fit=crop', sku: 'POR-TOR-CHO', barcode: '7753001000058', name: 'Porción de torta de chocolate', price: 12.00, cost: 4.20, stock: 40, unit: 'PORCION', category: 'cat-vitrina', ventaTipica: 3, minStock: 12 },
+    { id: 'pa6', code: 'POR-CHE-FRE', imageUrl: 'https://images.unsplash.com/photo-1583338917451-face2751d8d5?w=400&h=400&fit=crop', sku: 'POR-CHE-FRE', barcode: '7753001000065', name: 'Porción de cheesecake de fresa', price: 14.00, cost: 5.10, stock: 32, unit: 'PORCION', category: 'cat-vitrina', ventaTipica: 3, minStock: 10 },
+    { id: 'pa7', code: 'PIE-LIM-POR', imageUrl: 'https://images.unsplash.com/photo-1583338917451-face2751d8d5?w=400&h=400&fit=crop', sku: 'PIE-LIM-POR', name: 'Porción de pie de limón', price: 11.00, cost: 3.80, stock: 28, unit: 'PORCION', category: 'cat-vitrina', ventaTipica: 2, minStock: 10 },
 
     // — Postres individuales —
-    { id: 'pa8', code: 'ALF-MAI-UNI', sku: 'ALF-MAI-UNI', barcode: '7753001000089', name: 'Alfajor de maicena grande', price: 4.50, cost: 1.40, stock: 120, unit: 'UNIDAD', category: 'cat-postres', ventaTipica: 6, minStock: 30 },
-    { id: 'pa9', code: 'BRO-NUE-UNI', sku: 'BRO-NUE-UNI', barcode: '7753001000096', name: 'Brownie con nuez', price: 6.00, cost: 2.10, stock: 90, unit: 'UNIDAD', category: 'cat-postres', ventaTipica: 4, minStock: 25 },
-    { id: 'pa10', code: 'CUP-VAI-UNI', sku: 'CUP-VAI-UNI', name: 'Cupcake decorado', price: 7.50, cost: 2.60, stock: 75, unit: 'UNIDAD', category: 'cat-postres', ventaTipica: 6, minStock: 24 },
-    { id: 'pa11', code: 'SUS-LIM-VAS', sku: 'SUS-LIM-VAS', name: 'Suspiro a la limeña en vaso', price: 9.00, cost: 3.20, stock: 45, unit: 'VASO', category: 'cat-postres', ventaTipica: 3, minStock: 15 },
+    { id: 'pa8', code: 'ALF-MAI-UNI', imageUrl: 'https://images.unsplash.com/photo-1582659042116-63f96b514135?w=400&h=400&fit=crop', sku: 'ALF-MAI-UNI', barcode: '7753001000089', name: 'Alfajor de maicena grande', price: 4.50, cost: 1.40, stock: 120, unit: 'UNIDAD', category: 'cat-postres', ventaTipica: 6, minStock: 30 },
+    { id: 'pa9', code: 'BRO-NUE-UNI', imageUrl: 'https://images.unsplash.com/photo-1595144780677-6d0b5abbd089?w=400&h=400&fit=crop', sku: 'BRO-NUE-UNI', barcode: '7753001000096', name: 'Brownie con nuez', price: 6.00, cost: 2.10, stock: 90, unit: 'UNIDAD', category: 'cat-postres', ventaTipica: 4, minStock: 25 },
+    { id: 'pa10', code: 'CUP-VAI-UNI', imageUrl: 'https://images.unsplash.com/photo-1595144780677-6d0b5abbd089?w=400&h=400&fit=crop', sku: 'CUP-VAI-UNI', name: 'Cupcake decorado', price: 7.50, cost: 2.60, stock: 75, unit: 'UNIDAD', category: 'cat-postres', ventaTipica: 6, minStock: 24 },
+    { id: 'pa11', code: 'SUS-LIM-VAS', imageUrl: 'https://images.unsplash.com/photo-1551024506-0bccd828d307?w=400&h=400&fit=crop', sku: 'SUS-LIM-VAS', name: 'Suspiro a la limeña en vaso', price: 9.00, cost: 3.20, stock: 45, unit: 'VASO', category: 'cat-postres', ventaTipica: 3, minStock: 15 },
 
     // — Bocaditos (se venden por ciento: pedidos de empresa) —
-    { id: 'pa12', code: 'BOC-DUL-CTO', sku: 'BOC-DUL-CTO', name: 'Ciento de bocaditos dulces', description: 'Surtido de 100 unidades', price: 190.00, cost: 82.00, stock: 8, unit: 'CIENTO', category: 'cat-bocaditos', ventaTipica: 1, minStock: 2 },
-    { id: 'pa13', code: 'BOC-SAL-CTO', sku: 'BOC-SAL-CTO', name: 'Ciento de bocaditos salados', price: 210.00, cost: 95.00, stock: 6, unit: 'CIENTO', category: 'cat-bocaditos', ventaTipica: 1, minStock: 2 },
+    { id: 'pa12', code: 'BOC-DUL-CTO', imageUrl: 'https://images.unsplash.com/photo-1711141326113-e6b607fd78ef?w=400&h=400&fit=crop', sku: 'BOC-DUL-CTO', name: 'Ciento de bocaditos dulces', description: 'Surtido de 100 unidades', price: 190.00, cost: 82.00, stock: 8, unit: 'CIENTO', category: 'cat-bocaditos', ventaTipica: 1, minStock: 2 },
+    { id: 'pa13', code: 'BOC-SAL-CTO', imageUrl: 'https://images.unsplash.com/photo-1582659042116-63f96b514135?w=400&h=400&fit=crop', sku: 'BOC-SAL-CTO', name: 'Ciento de bocaditos salados', price: 210.00, cost: 95.00, stock: 6, unit: 'CIENTO', category: 'cat-bocaditos', ventaTipica: 1, minStock: 2 },
 
     // — Panadería —
-    { id: 'pa14', code: 'PAN-CHA-UNI', sku: 'PAN-CHA-UNI', barcode: '7753001000140', name: 'Pan chapla artesanal', price: 0.80, cost: 0.28, stock: 300, unit: 'UNIDAD', category: 'cat-panaderia', ventaTipica: 12, minStock: 80 },
-    { id: 'pa15', code: 'CRO-MAN-UNI', sku: 'CRO-MAN-UNI', barcode: '7753001000157', name: 'Croissant de mantequilla', price: 5.50, cost: 1.80, stock: 85, unit: 'UNIDAD', category: 'cat-panaderia', ventaTipica: 4, minStock: 20 },
-    { id: 'pa16', code: 'EMP-CAR-UNI', sku: 'EMP-CAR-UNI', name: 'Empanada de carne', price: 7.00, cost: 2.40, stock: 60, unit: 'UNIDAD', category: 'cat-panaderia', ventaTipica: 3, minStock: 20 },
+    { id: 'pa14', code: 'PAN-CHA-UNI', imageUrl: 'https://images.unsplash.com/photo-1591538519435-4578c3ba26d6?w=400&h=400&fit=crop', sku: 'PAN-CHA-UNI', barcode: '7753001000140', name: 'Pan chapla artesanal', price: 0.80, cost: 0.28, stock: 300, unit: 'UNIDAD', category: 'cat-panaderia', ventaTipica: 12, minStock: 80 },
+    { id: 'pa15', code: 'CRO-MAN-UNI', imageUrl: 'https://images.unsplash.com/photo-1582659042116-63f96b514135?w=400&h=400&fit=crop', sku: 'CRO-MAN-UNI', barcode: '7753001000157', name: 'Croissant de mantequilla', price: 5.50, cost: 1.80, stock: 85, unit: 'UNIDAD', category: 'cat-panaderia', ventaTipica: 4, minStock: 20 },
+    { id: 'pa16', code: 'EMP-CAR-UNI', imageUrl: 'https://images.unsplash.com/photo-1582659042116-63f96b514135?w=400&h=400&fit=crop', sku: 'EMP-CAR-UNI', name: 'Empanada de carne', price: 7.00, cost: 2.40, stock: 60, unit: 'UNIDAD', category: 'cat-panaderia', ventaTipica: 3, minStock: 20 },
 
     // — Bebidas (acompañan la vitrina) —
-    { id: 'pa17', code: 'CAF-PAS-TAZ', sku: 'CAF-PAS-TAZ', name: 'Café pasado en taza', price: 8.00, cost: 2.00, stock: null, trackStock: false, unit: 'TAZA', category: 'cat-bebidas', ventaTipica: 4 },
-    { id: 'pa18', code: 'JUG-NAR-VAS', sku: 'JUG-NAR-VAS', name: 'Jugo de naranja natural', price: 10.00, cost: 3.50, stock: null, trackStock: false, unit: 'VASO', category: 'cat-bebidas', ventaTipica: 2 },
+    { id: 'pa17', code: 'CAF-PAS-TAZ', imageUrl: 'https://images.unsplash.com/photo-1534353473418-4cfa6c56fd38?w=400&h=400&fit=crop', sku: 'CAF-PAS-TAZ', name: 'Café pasado en taza', price: 8.00, cost: 2.00, stock: null, trackStock: false, unit: 'TAZA', category: 'cat-bebidas', ventaTipica: 4 },
+    { id: 'pa18', code: 'JUG-NAR-VAS', imageUrl: 'https://images.unsplash.com/photo-1534353473418-4cfa6c56fd38?w=400&h=400&fit=crop', sku: 'JUG-NAR-VAS', name: 'Jugo de naranja natural', price: 10.00, cost: 3.50, stock: null, trackStock: false, unit: 'VASO', category: 'cat-bebidas', ventaTipica: 2 },
     { id: 'pa19', code: 'AGU-MIN-625', sku: 'AGU-MIN-625', barcode: '7753001000195', name: 'Agua mineral 625ml', price: 3.00, cost: 1.20, stock: 140, unit: 'UNIDAD', category: 'cat-bebidas', ventaTipica: 3, minStock: 40 },
 
     // — Servicio del rubro —

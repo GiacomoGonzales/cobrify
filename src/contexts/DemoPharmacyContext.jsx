@@ -84,7 +84,7 @@ const generatePharmacyDemoData = () => {
         marca: 'IBUPROFENO GENFAR',
         requiresPrescription: false,
         hasVariants: false,
-        imageUrl: 'https://images.unsplash.com/photo-1550572017-edd951aa8f72?w=400&h=400&fit=crop',
+        imageUrl: 'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=400&h=400&fit=crop',
         warehouseStocks: [
           { warehouseId: '1', warehouseName: 'Almacén Principal', stock: 100 },
           { warehouseId: '2', warehouseName: 'Mostrador', stock: 20 },
@@ -304,7 +304,7 @@ const generatePharmacyDemoData = () => {
         marca: 'RANITIDINA GENFAR',
         requiresPrescription: false,
         hasVariants: false,
-        imageUrl: 'https://images.unsplash.com/photo-1550572017-edd951aa8f72?w=400&h=400&fit=crop',
+        imageUrl: 'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=400&h=400&fit=crop',
         warehouseStocks: [
           { warehouseId: '1', warehouseName: 'Almacén Principal', stock: 50 },
           { warehouseId: '2', warehouseName: 'Mostrador', stock: 10 },
@@ -500,7 +500,7 @@ const generatePharmacyDemoData = () => {
         marca: 'ÁCIDO FÓLICO GENFAR',
         requiresPrescription: false,
         hasVariants: false,
-        imageUrl: 'https://images.unsplash.com/photo-1550572017-edd951aa8f72?w=400&h=400&fit=crop',
+        imageUrl: 'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=400&h=400&fit=crop',
         warehouseStocks: [
           { warehouseId: '1', warehouseName: 'Almacén Principal', stock: 75 },
           { warehouseId: '2', warehouseName: 'Mostrador', stock: 15 },
