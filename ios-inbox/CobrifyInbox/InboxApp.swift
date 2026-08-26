@@ -26,8 +26,8 @@ struct RootView: View {
     var body: some View {
         if !FirebaseBootstrap.isConfigured {
             SetupNeededView()
-        } else if let user = session.user {
-            HomeView(user: user)
+        } else if session.user != nil {
+            ConversationListView()
         } else {
             LoginView()
         }
