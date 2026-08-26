@@ -22,7 +22,7 @@ import { getMessaging } from 'firebase-admin/messaging'
  */
 export async function sendPushNotification(userId, title, body, data = {}, options = {}) {
   try {
-    const { allowSecondaryUsers = false } = options
+    const { allowSecondaryUsers = false, preferPlatform = null } = options
 
     console.log('📨 sendPushNotification called')
     console.log('   userId:', userId)
@@ -57,7 +57,19 @@ export async function sendPushNotification(userId, title, body, data = {}, optio
       return { success: false, error: 'No tokens' }
     }
 
-    const tokens = tokensSnapshot.docs.map(doc => doc.data().token)
+    // preferPlatform: si el usuario tiene tokens de esa plataforma, el aviso
+    // va SOLO ahí (ej: los de WhatsApp solo a la app Cobrify Chat). Si no
+    // tiene ninguno, se cae al comportamiento de siempre: a todos.
+    let tokenDocs = tokensSnapshot.docs
+    if (preferPlatform) {
+      const preferidos = tokenDocs.filter(doc => doc.data().platform === preferPlatform)
+      if (preferidos.length > 0) {
+        console.log(`🎯 preferPlatform=${preferPlatform}: ${preferidos.length}/${tokenDocs.length} tokens`)
+        tokenDocs = preferidos
+      }
+    }
+
+    const tokens = tokenDocs.map(doc => doc.data().token)
     console.log('📱 Tokens to send:', tokens)
 
     let successCount = 0

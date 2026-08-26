@@ -13625,11 +13625,14 @@ async function avisarMensajeNuevoWa(phoneNumberId, m) {
     const ownerId = cuentaSnap.data()?.ownerId
     if (!ownerId) return
 
+    // Los avisos de WhatsApp van solo a la app Cobrify Chat si esta
+    // instalada; sin ella, a todas las apps como siempre.
     await sendPushNotification(
       ownerId,
       m.nombre || m.waId,
       m.texto || 'Te envio un archivo',
-      { type: 'whatsapp', conversationId: idConversacionWa(phoneNumberId, m.waId) }
+      { type: 'whatsapp', conversationId: idConversacionWa(phoneNumberId, m.waId) },
+      { preferPlatform: 'ios-inbox' }
     )
   } catch (error) {
     // Que falle el aviso nunca debe costar el mensaje.
