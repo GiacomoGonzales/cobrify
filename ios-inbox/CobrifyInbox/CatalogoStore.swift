@@ -59,6 +59,30 @@ final class CatalogoStore: ObservableObject {
             })
     }
 
+    /// Crear una carpeta nueva = agregar una etiqueta al catálogo compartido
+    /// (whatsappSettings/etiquetas), el mismo que edita la web.
+    func crearEtiqueta(nombre: String, colorHex: String) async -> String? {
+        let limpio = nombre.trimmingCharacters(in: .whitespaces)
+        guard !limpio.isEmpty else { return "Ponle un nombre." }
+        // "Pagó - Implementación" -> "pago-implementacion"
+        let id = limpio.lowercased()
+            .folding(options: .diacriticInsensitive, locale: Locale(identifier: "es"))
+            .replacingOccurrences(of: "[^a-z0-9]+", with: "-", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        guard !id.isEmpty else { return "Ponle un nombre válido." }
+        guard !etiquetas.contains(where: { $0.id == id }) else { return "Ya existe una carpeta con ese nombre." }
+
+        let lista = (etiquetas + [Etiqueta(id: id, nombre: limpio, colorHex: colorHex)])
+            .map { ["id": $0.id, "nombre": $0.nombre, "color": $0.colorHex] }
+        do {
+            try await Firestore.firestore().collection("whatsappSettings").document("etiquetas")
+                .setData(["lista": lista, "updatedAt": FieldValue.serverTimestamp()], merge: true)
+            return nil
+        } catch {
+            return "No se pudo crear la carpeta."
+        }
+    }
+
     // ---------- Acciones sobre una conversación ----------
     // Las reglas de Firestore solo dejan tocar estos campos; los mensajes
     // siguen siendo territorio del servidor.

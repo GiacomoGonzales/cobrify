@@ -65,6 +65,24 @@ struct ConversationListView: View {
                             NavigationLink(value: conv.id) {
                                 FilaConversacion(conv: conv, etiquetas: catalogo.etiquetas)
                             }
+                            .contextMenu {
+                                Menu {
+                                    ForEach(catalogo.etiquetas) { e in
+                                        Button {
+                                            catalogo.alternarEtiqueta(conv.id, tagId: e.id,
+                                                                      tiene: conv.etiquetas.contains(e.id))
+                                        } label: {
+                                            if conv.etiquetas.contains(e.id) {
+                                                Label(e.nombre, systemImage: "checkmark")
+                                            } else {
+                                                Text(e.nombre)
+                                            }
+                                        }
+                                    }
+                                } label: {
+                                    Label("Mover a carpeta", systemImage: "folder")
+                                }
+                            }
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                 if conv.estado == "completada" {
                                     Button { catalogo.cambiarEstado(conv.id, a: "abierta") } label: {
@@ -87,6 +105,13 @@ struct ConversationListView: View {
             }
             .navigationTitle("Chats")
             .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink {
+                        CarpetasView(inbox: inbox)
+                    } label: {
+                        Image(systemName: "folder")
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button {
