@@ -133,6 +133,7 @@ import { getPrimaryPet } from '@/utils/petUtils'
 import { getVisiblePaymentMethods, getPaymentLabel, getPaymentKeyByLabel } from '@/utils/paymentMethods'
 import GuideLink from '@/components/guide/GuideLink'
 import { diasDeRecordatorio } from '@/utils/vetReminders'
+import { repreciarPorCantidad } from '@/utils/autoPriceByQty'
 
 const PAYMENT_METHODS = {
   CASH: 'Efectivo',
@@ -4231,7 +4232,7 @@ export default function POS() {
     // precio automático por cantidad. Con el automático activado ya no aparece el
     // modal para elegir precio, así que el cajero no tenía forma de saber desde
     // cuántas unidades baja: por eso se muestra en la tarjeta. Misma resolución
-    // que computeAutoPriceForQty (mínimo del producto → global → legacy global).
+    // que minimoDeNivel (mínimo del producto → global → legacy global).
     const autoByQty = product?.useAutoPriceByQty === true
     const productMins = product?.priceMinQtys || {}
     const globalMins = companySettings?.catalogWholesaleMinQtys || {}
@@ -4729,54 +4730,6 @@ export default function POS() {
    * Si el cliente del POS tiene `priceLevel` asignado, no se modifica nada
    * (esa selección tiene prioridad).
    */
-  const computeAutoPriceForQty = (productId, qty, variantSku = null) => {
-    if (selectedCustomer?.priceLevel) return null
-    const product = products.find(p => p.id === productId)
-    if (!product || product.useAutoPriceByQty !== true) return null
-
-    const productMins = product.priceMinQtys || {}
-    const globalMins = companySettings?.catalogWholesaleMinQtys || {}
-    const legacyGlobal = parseInt(companySettings?.catalogWholesaleMinQty)
-
-    const getMin = (key) => {
-      const p = parseInt(productMins[key])
-      if (Number.isFinite(p) && p >= 1) return p
-      const g = parseInt(globalMins[key])
-      if (Number.isFinite(g) && g >= 1) return g
-      if (Number.isFinite(legacyGlobal) && legacyGlobal >= 1) return legacyGlobal
-      return null
-    }
-
-    // De dónde salen los PRECIOS: de la variante si la hay, con el producto de
-    // respaldo. El umbral ("desde 50 unidades") es del producto —es una regla
-    // comercial única— pero cuánto cuesta el mayorista sí depende de la variante:
-    // el papel lustre rojo puede valer distinto que el dorado.
-    const variant = variantSku && Array.isArray(product.variants)
-      ? product.variants.find(v => v.sku === variantSku)
-      : null
-    const priceOf = (key) => {
-      const v = variant ? parseFloat(variant[key]) : NaN
-      if (Number.isFinite(v) && v > 0) return v
-      const p = parseFloat(product[key])
-      return Number.isFinite(p) && p > 0 ? p : null
-    }
-
-    const basePrice = priceOf('price') ?? (parseFloat(product.price) || 0)
-    const candidates = ['price2', 'price3', 'price4']
-      .map(key => {
-        const v = priceOf(key)
-        if (v == null) return null
-        const min = getMin(key)
-        if (min == null || min < 1) return null
-        if (qty < min) return null
-        return { value: v }
-      })
-      .filter(Boolean)
-    if (candidates.length === 0) return basePrice
-    candidates.sort((a, b) => a.value - b.value)
-    return candidates[0].value
-  }
-
   /**
    * Reprecia TODO el carrito según el precio automático por cantidad.
    *
@@ -4784,50 +4737,36 @@ export default function POS() {
    * 20 rojos + 20 azules + 20 verdes se llevó 60 hojas de papel lustre y le
    * corresponde el mayorista, aunque ningún color por separado llegue al mínimo.
    *
-   * Por eso el precio de una línea NO se puede calcular sola: depende del resto
-   * del carrito. Antes cada sitio que cambiaba una cantidad repreciaba solo esa
-   * línea; ahora los tres llaman acá y el criterio vive en un lugar.
-   *
-   * `autoPriceByTotal` marca las líneas cuyo precio bajó por la suma con OTRAS
-   * variantes, para que el cajero vea por qué cambió un renglón que no tocó.
+   * El criterio vive en `src/utils/autoPriceByQty.js` porque el catálogo online
+   * necesita EXACTAMENTE el mismo: tenía una versión propia que sumaba línea
+   * por línea y leía los precios del producto padre, así que el mismo carrito
+   * costaba distinto en el mostrador y en la tienda.
    */
   const applyAutoPricingToCart = (cartToPrice) => {
     if (selectedCustomer?.priceLevel) return cartToPrice
 
-    // Total por producto (todas las variantes juntas)
-    const totalPorProducto = {}
-    for (const item of cartToPrice) {
-      // Las bonificaciones van regaladas: no son unidades compradas y no deben
-      // empujar al cliente al siguiente nivel de precio.
-      if (!item.id || item.isCustom || item.isBonificacion) continue
-      totalPorProducto[item.id] = (totalPorProducto[item.id] || 0) + (parseFloat(item.quantity) || 0)
-    }
+    const repreciado = repreciarPorCantidad(cartToPrice, {
+      // productsRaw: si el producto está oculto en esta sede pero entró al
+      // carrito (cotización/edición), su precio por cantidad sigue aplicando.
+      productoPorId: (id) => productsRaw.find(p => p.id === id),
+      businessSettings: companySettings,
+      excluir: (item) => (
+        !item.id || item.isCustom ||
+        // Bonificación: precio 0 puesto a propósito. Comparte productId con la
+        // línea pagada, así que sin este guard el motor la habría "corregido" al
+        // precio del catálogo y el regalo pasaba a cobrarse. Tampoco empuja al
+        // siguiente nivel: no son unidades compradas.
+        item.isBonificacion || Number(item.price) === 0 ||
+        // Precio anclado en dólares: se fijó a propósito y los niveles del
+        // catálogo están en soles. Repreciarlo lo convierte en otra moneda.
+        !!item.fixedPriceUSD
+      ),
+    })
 
-    return cartToPrice.map(item => {
-      if (!item.id || item.isCustom) return item
-      // Bonificación: precio 0 puesto a propósito. Comparte productId con la
-      // línea pagada, así que sin este guard el motor la habría "corregido" al
-      // precio del catálogo y el regalo pasaba a cobrarse.
-      if (item.isBonificacion || Number(item.price) === 0) return item
-      // Precio anclado en dólares: se fijó a propósito y los niveles del catálogo
-      // están en soles. Repreciarlo lo convertiría en un número de otra moneda.
-      if (item.fixedPriceUSD) return item
-      // productsRaw: si el producto esta oculto en esta sede pero entro al
-      // carrito (cotizacion/edicion), su precio por cantidad sigue aplicando.
-      const product = productsRaw.find(p => p.id === item.id)
-      if (!product || product.useAutoPriceByQty !== true) return item
-
-      const totalProducto = totalPorProducto[item.id] || 0
-      const propia = parseFloat(item.quantity) || 0
-      const nuevoPrecio = computeAutoPriceForQty(item.id, totalProducto, item.variantSku || null)
-      if (nuevoPrecio == null) return item
-
-      // El precio bajó gracias a otras variantes, no a la cantidad de esta línea.
-      const porSuma = totalProducto > propia &&
-        nuevoPrecio !== computeAutoPriceForQty(item.id, propia, item.variantSku || null)
-
-      if (Number(item.price) === Number(nuevoPrecio) && !!item.autoPriceByTotal === porSuma) return item
-      return { ...item, price: nuevoPrecio, autoPriceByTotal: porSuma }
+    return repreciado.map(({ linea, precio, porSuma }) => {
+      if (precio == null) return linea
+      if (Number(linea.price) === Number(precio) && !!linea.autoPriceByTotal === porSuma) return linea
+      return { ...linea, price: precio, autoPriceByTotal: porSuma }
     })
   }
 

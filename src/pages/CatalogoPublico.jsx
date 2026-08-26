@@ -70,6 +70,7 @@ import { BedDouble,
   ChevronRight,
   BookOpen
 } from 'lucide-react'
+import { repreciarPorCantidad } from '@/utils/autoPriceByQty'
 
 // Estilos de animacion para fade-in escalonado
 const fadeInStyle = `
@@ -1010,11 +1011,11 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             updatedLabel = null
           }
         }
-        return prev.map(item =>
+        return repreciarCarrito(prev.map(item =>
           item.cartItemId === cartItemId
             ? { ...item, quantity: newQty, unitPrice: updatedPrice, priceLevelLabel: updatedLabel }
             : item
-        )
+        ))
       }
       // Multi-divisa: si el producto tiene priceUSD definido Y NO se aplicó
       // un nivel de precio (price2/3/4), guardamos fixedPriceUSD para que
@@ -1022,7 +1023,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       // del TC. Si se aplicó un nivel de precio, ese precio (PEN) se convierte.
       const fixedUSD = Number(product.priceUSD)
       const hasFixedUSD = !finalPriceLabel && Number.isFinite(fixedUSD) && fixedUSD > 0
-      return [...prev, {
+      // Reprecia el carrito ENTERO al sumar una talla nueva: es el caso del
+      // cliente que arma la docena juntando tallas de a una. Sin esto, cada
+      // línea se quedaba con el precio que tenía cuando entró.
+      return repreciarCarrito([...prev, {
         ...product,
         cartItemId,
         quantity,
@@ -1031,47 +1035,64 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         originalUnitPrice: unitPrice || product.price,
         priceLevelLabel: finalPriceLabel,
         ...(hasFixedUSD && { fixedPriceUSD: fixedUSD }),
-      }]
+      }])
+    })
+  }
+
+  /**
+   * Reprecia TODO el carrito con el mismo criterio que el mostrador.
+   *
+   * Antes cada línea se repreciaba sola y con los precios del producto PADRE.
+   * En un producto con variantes el padre no tiene price2/3/4 —los precios se
+   * cargan en cada talla— así que el carrito público no aplicaba el descuento
+   * NUNCA, ni con cantidad de sobra en una sola talla. Y aunque los hubiera
+   * tenido, mirar la línea sola tampoco alcanza: doce polos repartidos entre
+   * tres tallas son doce polos, y así lo cobra el POS.
+   */
+  const repreciarCarrito = (items) => {
+    if (!business?.multiplePricesEnabled) return items
+
+    // La ficha del producto viaja dentro del propio item (se agregó con
+    // ...product), así que no hace falta volver a buscarla en Firestore.
+    const fichaPorId = new Map()
+    for (const it of items) if (it?.id && !fichaPorId.has(it.id)) fichaPorId.set(it.id, it)
+
+    const repreciado = repreciarPorCantidad(items, {
+      productoPorId: (id) => fichaPorId.get(id),
+      businessSettings: business,
+      // El catálogo nunca exigió el flag por producto: hay tiendas que dan
+      // mayorista solo por el mínimo global del negocio.
+      exigirFlag: false,
+      // Precio anclado en dólares: se fijó a propósito y los niveles están en
+      // soles.
+      excluir: (it) => !!it.fixedPriceUSD,
+    })
+
+    return repreciado.map(({ linea, precio, nivel }) => {
+      if (precio == null) return linea
+      const base = linea.originalUnitPrice || linea.price
+      return {
+        ...linea,
+        unitPrice: nivel ? precio : base,
+        priceLevelLabel: nivel ? (business.priceLabels?.[nivel] || nivel) : null,
+      }
     })
   }
 
   const updateCartQuantity = (cartItemId, quantity) => {
     if (quantity <= 0) {
-      setCart(prev => prev.filter(item => (item.cartItemId || item.id) !== cartItemId))
+      // Quitar una talla puede dejar al producto por debajo del mínimo, así que
+      // el resto del carrito también se reprecia.
+      setCart(prev => repreciarCarrito(prev.filter(item => (item.cartItemId || item.id) !== cartItemId)))
     } else {
-      setCart(prev => prev.map(item => {
-        if ((item.cartItemId || item.id) !== cartItemId) return item
-        const updated = { ...item, quantity }
-
-        // Auto-cambiar precio según el nivel más barato aplicable a la nueva cantidad
-        if (business?.multiplePricesEnabled) {
-          const candidates = ['price2', 'price3', 'price4']
-            .map(key => {
-              const v = parseFloat(item[key])
-              if (!Number.isFinite(v) || v <= 0) return null
-              // item ya tiene useAutoPriceByQty y priceMinQtys porque se creó con ...product
-              const min = getCatalogMinQty(business, key, item)
-              if (min <= 1 || quantity < min) return null
-              return { key, value: v, label: business.priceLabels?.[key] || key }
-            })
-            .filter(Boolean)
-          candidates.sort((a, b) => a.value - b.value)
-          if (candidates.length > 0) {
-            updated.unitPrice = candidates[0].value
-            updated.priceLevelLabel = candidates[0].label
-          } else {
-            updated.unitPrice = item.originalUnitPrice || item.price
-            updated.priceLevelLabel = null
-          }
-        }
-
-        return updated
-      }))
+      setCart(prev => repreciarCarrito(
+        prev.map(item => ((item.cartItemId || item.id) === cartItemId ? { ...item, quantity } : item)),
+      ))
     }
   }
 
   const removeFromCart = (cartItemId) => {
-    setCart(prev => prev.filter(item => (item.cartItemId || item.id) !== cartItemId))
+    setCart(prev => repreciarCarrito(prev.filter(item => (item.cartItemId || item.id) !== cartItemId)))
   }
 
   const getCartQuantity = (productId) => {
