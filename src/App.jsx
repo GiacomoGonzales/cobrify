@@ -73,6 +73,7 @@ const BulkEmission = lazy(() => import('./pages/BulkEmission'))
 const CreateQuotation = lazy(() => import('./pages/CreateQuotation'))
 const StockMovements = lazy(() => import('./pages/StockMovements'))
 const Demo = lazy(() => import('./pages/Demo'))
+
 import DemoLayout from './layouts/DemoLayout'
 const DemoRestaurant = lazy(() => import('./pages/DemoRestaurant'))
 import DemoRestaurantLayout from './layouts/DemoRestaurantLayout'
@@ -149,6 +150,58 @@ const Projects = lazy(() => import('./pages/Projects'))
 const WarehouseExits = lazy(() => import('./pages/WarehouseExits'))
 const WarehouseReturns = lazy(() => import('./pages/WarehouseReturns'))
 const LogisticsReports = lazy(() => import('./pages/LogisticsReports'))
+
+// Páginas del demo. Se declaran una sola vez y se montan en dos lugares:
+// /demo (genérico) y /demo/:rubro (con el catálogo del rubro). Antes cada
+// demo nuevo obligaba a copiar estas 44 rutas.
+const RUTAS_DEMO = (
+  <>
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="pos" element={<POS />} />
+              <Route path="facturas" element={<InvoiceList />} />
+              <Route path="nota-credito" element={<CreateCreditNote />} />
+              <Route path="nota-debito" element={<CreateDebitNote />} />
+              <Route path="cotizaciones" element={<Quotations />} />
+              <Route path="cotizaciones/nueva" element={<CreateQuotation />} />
+              <Route path="cotizaciones/editar/:id" element={<CreateQuotation />} />
+              <Route path="guias-remision" element={<DispatchGuides />} />
+              <Route path="clientes" element={<Customers />} />
+              <Route path="promociones" element={<Promotions />} />
+              <Route path="vendedores" element={<Sellers />} />
+              <Route path="productos" element={<Products />} />
+              <Route path="inventario" element={<Inventory />} />
+              <Route path="almacenes" element={<Warehouses />} />
+              <Route path="movimientos" element={<StockMovements />} />
+              <Route path="proveedores" element={<Suppliers />} />
+              <Route path="compras" element={<Purchases />} />
+              <Route path="compras/nueva" element={<CreatePurchase />} />
+              <Route path="compras/editar/:purchaseId" element={<CreatePurchase />} />
+              <Route path="compras/migrar" element={<MigratePurchases />} />
+              <Route path="ordenes-compra" element={<PurchaseOrders />} />
+              <Route path="caja" element={<CashRegister />} />
+              <Route path="reportes" element={<Reports />} />
+              <Route path="gastos" element={<Expenses />} />
+              <Route path="flujo-caja" element={<CashFlow />} />
+              <Route path="reclamos" element={<ComplaintsList />} />
+              <Route path="configuracion" element={<Settings />} />
+              {/* Rutas de modo restaurante en demo */}
+              <Route path="mesas" element={<Tables />} />
+              <Route path="mozos" element={<Waiters />} />
+              <Route path="ordenes" element={<Orders />} />
+              <Route path="cocina" element={<Kitchen />} />
+              <Route path="ingredientes" element={<Ingredients />} />
+              <Route path="ingredientes/compra" element={<RegisterPurchase />} />
+              <Route path="ingredientes/historial" element={<PurchaseHistory />} />
+              <Route path="requerimientos" element={<Requirements />} />
+              <Route path="recetas" element={<Recipes />} />
+              <Route path="produccion" element={<Production />} />
+              <Route path="envios" element={<Envios />} />
+              <Route path="pedidos-online" element={<OnlineOrders />} />
+              <Route path="mi-horario" element={<MySchedule />} />
+              <Route path="asistencia" element={<Attendance />} />
+              <Route path="contabilidad" element={<Accounting />} />
+  </>
+)
 
 // Registro solo accesible para super admin
 /**
@@ -260,6 +313,8 @@ function App() {
 
             {/* Catálogo Demo */}
             <Route path="/demo/catalogo" element={<CatalogoPublico isDemo />} />
+            {/* Catálogo del demo POR RUBRO: /demo/ferreteria/catalogo */}
+            <Route path="/demo/:rubro/catalogo" element={<CatalogoPublico isDemo />} />
 
             {/* Menú Digital Demo */}
             <Route path="/demo/menu" element={<CatalogoPublico isDemo isRestaurantMenu />} />
@@ -269,51 +324,18 @@ function App() {
 
             {/* Rutas de demo (sin autenticación, con datos de ejemplo) */}
             <Route path="/demo" element={<Demo />} />
+            {/* /demo = demo genérico (el link de siempre, no se toca). */}
             <Route path="/demo" element={<DemoLayout />}>
-              <Route path="dashboard" element={<Dashboard />} />
-              <Route path="pos" element={<POS />} />
-              <Route path="facturas" element={<InvoiceList />} />
-              <Route path="nota-credito" element={<CreateCreditNote />} />
-              <Route path="nota-debito" element={<CreateDebitNote />} />
-              <Route path="cotizaciones" element={<Quotations />} />
-              <Route path="cotizaciones/nueva" element={<CreateQuotation />} />
-              <Route path="cotizaciones/editar/:id" element={<CreateQuotation />} />
-              <Route path="guias-remision" element={<DispatchGuides />} />
-              <Route path="clientes" element={<Customers />} />
-              <Route path="promociones" element={<Promotions />} />
-              <Route path="vendedores" element={<Sellers />} />
-              <Route path="productos" element={<Products />} />
-              <Route path="inventario" element={<Inventory />} />
-              <Route path="almacenes" element={<Warehouses />} />
-              <Route path="movimientos" element={<StockMovements />} />
-              <Route path="proveedores" element={<Suppliers />} />
-              <Route path="compras" element={<Purchases />} />
-              <Route path="compras/nueva" element={<CreatePurchase />} />
-              <Route path="compras/editar/:purchaseId" element={<CreatePurchase />} />
-              <Route path="compras/migrar" element={<MigratePurchases />} />
-              <Route path="ordenes-compra" element={<PurchaseOrders />} />
-              <Route path="caja" element={<CashRegister />} />
-              <Route path="reportes" element={<Reports />} />
-              <Route path="gastos" element={<Expenses />} />
-              <Route path="flujo-caja" element={<CashFlow />} />
-              <Route path="reclamos" element={<ComplaintsList />} />
-              <Route path="configuracion" element={<Settings />} />
-              {/* Rutas de modo restaurante en demo */}
-              <Route path="mesas" element={<Tables />} />
-              <Route path="mozos" element={<Waiters />} />
-              <Route path="ordenes" element={<Orders />} />
-              <Route path="cocina" element={<Kitchen />} />
-              <Route path="ingredientes" element={<Ingredients />} />
-              <Route path="ingredientes/compra" element={<RegisterPurchase />} />
-              <Route path="ingredientes/historial" element={<PurchaseHistory />} />
-              <Route path="requerimientos" element={<Requirements />} />
-              <Route path="recetas" element={<Recipes />} />
-              <Route path="produccion" element={<Production />} />
-              <Route path="envios" element={<Envios />} />
-              <Route path="pedidos-online" element={<OnlineOrders />} />
-              <Route path="mi-horario" element={<MySchedule />} />
-              <Route path="asistencia" element={<Attendance />} />
-              <Route path="contabilidad" element={<Accounting />} />
+              {RUTAS_DEMO}
+            </Route>
+
+            {/* /demo/:rubro = el MISMO demo con el catálogo de ese rubro
+                (ferretería, ropa...). Las mismas páginas, otros datos: por eso
+                las rutas hijas se declaran UNA vez y se reusan. Un slug que no
+                existe cae al demo genérico, no a una pantalla en blanco. */}
+            <Route path="/demo/:rubro" element={<Demo />} />
+            <Route path="/demo/:rubro" element={<DemoLayout />}>
+              {RUTAS_DEMO}
             </Route>
 
             {/* Rutas de demo restaurante (sin autenticación, con datos de ejemplo de restaurante) */}

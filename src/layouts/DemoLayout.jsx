@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet, useParams } from 'react-router-dom'
 import { DemoProvider } from '@/contexts/DemoContext'
 import Sidebar from '@/components/Sidebar'
 import Navbar from '@/components/Navbar'
@@ -7,6 +7,9 @@ import { useBranding } from '@/contexts/BrandingContext'
 import { useStore } from '@/stores/useStore'
 
 export default function DemoLayout() {
+  // /demo/:rubro → el demo se arma con el catálogo de ese rubro.
+  // /demo a secas → rubro undefined → demo genérico de siempre.
+  const { rubro } = useParams()
   const { branding } = useBranding()
   const sidebarCollapsed = useStore(state => state.sidebarCollapsed)
   // Forzar overflow hidden en body y root
@@ -29,7 +32,7 @@ export default function DemoLayout() {
   }, [])
 
   return (
-    <DemoProvider>
+    <DemoProvider rubro={rubro || null}>
       <div className="flex flex-col h-screen bg-gray-50" style={{ height: '100dvh' }}>
         {/* iOS Status Bar - Gradiente moderno */}
         <div

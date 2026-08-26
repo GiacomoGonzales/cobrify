@@ -140,10 +140,26 @@ export function useAppContext() {
       hasAccess: true,
       isDemoMode: true,
       demoData: demoContext.demoData,
-      businessMode: 'retail', // Modo por defecto en demo
-      businessSettings: { dispatchGuidesEnabled: true, enableProductImages: true, multiplePricesEnabled: true, presentationsEnabled: true }, // Habilitar guías e imágenes en demo
+      // Demo por rubro: el modo y los ajustes salen del rubro (una pastelería
+      // enciende Producción, una ferretería apaga la Agenda de Citas). El demo
+      // genérico conserva los de siempre.
+      businessMode: demoContext.demoData.business?.businessMode || 'retail',
+      businessSettings: {
+        dispatchGuidesEnabled: true,
+        enableProductImages: true,
+        multiplePricesEnabled: true,
+        presentationsEnabled: true,
+        ...(demoContext.demoData.business?.ajustesDemo || {}),
+        // Marca que este demo es de un rubro: el Sidebar la usa para aplicar
+        // los filtros normales en vez de enseñar TODOS los módulos.
+        ...(demoContext.rubroDemo ? { rubroDemo: demoContext.rubroDemo } : {}),
+      },
       userFeatures: { expenseManagement: true }, // Features habilitados en demo
-      hasFeature: (feature) => ['expenseManagement'].includes(feature), // Features disponibles en demo
+      hasFeature: (feature) => (
+        demoContext.demoData.business?.featuresDemo
+          ? demoContext.demoData.business.featuresDemo.includes(feature)
+          : ['expenseManagement'].includes(feature)
+      ),
       getBusinessId: () => demoContext.demoData.user.uid, // Retornar el ID del usuario demo
       login: async () => ({ success: false, error: 'Demo mode' }),
       logout: async () => {},
