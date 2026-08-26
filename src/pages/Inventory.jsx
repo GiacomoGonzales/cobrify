@@ -553,9 +553,12 @@ export default function Inventory() {
     if (!user?.uid && !isDemoMode) return
 
     try {
-      // MODO DEMO: Usar ingredientes de ejemplo
+      // MODO DEMO: los insumos salen de los DATOS del demo, no de una lista
+      // escrita acá. Estaban hardcodeados con cremas y aceites de belleza, así
+      // que una ferretería veía "Crema Hidratante Facial" en su inventario.
+      // Los demos que no traen la clave conservan esa lista.
       if (isDemoMode) {
-        setIngredients([
+        setIngredients(demoData?.ingredients ?? [
           { id: 'ins1', name: 'Crema Hidratante Facial', category: 'Belleza', purchaseUnit: 'unidades', currentStock: 24, minimumStock: 10, averageCost: 45.00 },
           { id: 'ins2', name: 'Aceite Esencial Lavanda', category: 'Belleza', purchaseUnit: 'unidades', currentStock: 18, minimumStock: 5, averageCost: 28.00 },
           { id: 'ins3', name: 'Mascarilla de Arcilla', category: 'Belleza', purchaseUnit: 'unidades', currentStock: 15, minimumStock: 8, averageCost: 22.00 },

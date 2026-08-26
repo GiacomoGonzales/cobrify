@@ -81,6 +81,7 @@ import { useStore } from '@/stores/useStore'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useBranding } from '@/contexts/BrandingContext'
 import { esDominioReseller } from '@/utils/resellerDomain'
+import { esRubroDemo } from '@/data/demo/rubros'
 
 function Sidebar() {
   const { mobileMenuOpen, setMobileMenuOpen, sidebarCollapsed, toggleSidebar, orderAlertCount } = useStore()
@@ -125,6 +126,13 @@ function Sidebar() {
       }
       if (location.pathname.startsWith('/demologistics')) {
         return `/demologistics${path}`
+      }
+      // Demo por rubro (/demo/ferreteria/...): el rubro tiene que viajar en
+      // TODOS los links del menú, o al primer clic el visitante vuelve al demo
+      // genérico y ve el catálogo de otro negocio.
+      const porRubro = location.pathname.match(/^\/demo\/([a-z0-9-]+)(?:\/|$)/)
+      if (porRubro && esRubroDemo(porRubro[1])) {
+        return `/demo/${porRubro[1]}${path}`
       }
       return `/demo${path}`
     }

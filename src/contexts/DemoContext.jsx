@@ -1628,12 +1628,41 @@ const generateDemoData = () => {
   }
 }
 
-export const DemoProvider = ({ children }) => {
-  const [demoData] = useState(generateDemoData())
+/**
+ * Provider del demo.
+ *
+ * Sin `rubro` sirve los datos de siempre (el demo genérico de /demo, que sigue
+ * igual). Con `rubro` arma los datos de ESE rubro con el motor compartido: el
+ * catálogo, las ventas y los clientes son los de una ferretería o los de una
+ * tienda de ropa, no los de una empresa de electrónica.
+ */
+export const DemoProvider = ({ children, rubro = null }) => {
+  // El demo genérico se arma de una y sin esperar: es el que más se visita.
+  const [demoData, setDemoData] = useState(() => (rubro ? null : generateDemoData()))
+
+  useEffect(() => {
+    if (!rubro) {
+      setDemoData(generateDemoData())
+      return
+    }
+    let vivo = true
+    // Import dinámico: el catálogo de cada rubro NO viaja en el bundle
+    // principal, solo se baja cuando alguien abre ese demo.
+    Promise.all([
+      import('@/data/demo/rubros'),
+      import('@/data/demo/motor'),
+    ]).then(([registro, motor]) => registro.cargarRubro(rubro).then((def) => {
+      if (!vivo) return
+      // Slug inexistente: se cae al demo de siempre en vez de dejar la
+      // pantalla en blanco.
+      setDemoData(def ? motor.construirDatosDemo(def) : generateDemoData())
+    })).catch(() => { if (vivo) setDemoData(generateDemoData()) })
+    return () => { vivo = false }
+  }, [rubro])
 
   // Inyectar datos de demo en window para que los servicios puedan acceder
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && demoData) {
       window.__DEMO_DATA__ = demoData
     }
     return () => {
@@ -1646,6 +1675,17 @@ export const DemoProvider = ({ children }) => {
   const value = {
     isDemoMode: true,
     demoData,
+    rubroDemo: rubro,
+  }
+
+  // Mientras baja el rubro no se monta nada: media pantalla montada con
+  // demoData en null revienta en las páginas que leen demoData.algo.
+  if (!demoData) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="w-8 h-8 border-2 border-primary-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
   }
 
   return <DemoContext.Provider value={value}>{children}</DemoContext.Provider>

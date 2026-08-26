@@ -78,7 +78,12 @@ export default function Dashboard() {
   // El filtro de sucursal del Dashboard usa el selector GLOBAL del Navbar (branchScope):
   // 'all' = Todas | 'main' = Principal | <branchId>. Ya no hay selector propio aquí.
   const filterBranch = branchScope || 'all'
-  const [showAmounts, setShowAmounts] = useState(() => localStorage.getItem('dashboard_show_amounts') === 'true')
+  // Por defecto los montos van OCULTOS (privacidad en pantalla), pero en el
+  // DEMO eso deja al visitante mirando "S/ ****" en la primera pantalla que ve
+  // del sistema. Ahí arrancan visibles; el botón sigue estando para taparlos.
+  const [showAmounts, setShowAmounts] = useState(() => (
+    isDemoMode || localStorage.getItem('dashboard_show_amounts') === 'true'
+  ))
   const [openTablesAmount, setOpenTablesAmount] = useState(0) // Suma de mesas ocupadas (modo restaurante)
   // Aggregates mensuales del gráfico de 12 meses (Fase B: server-side, no descarga
   // miles de invoices, solo 12 queries de sum).

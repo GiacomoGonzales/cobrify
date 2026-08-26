@@ -188,7 +188,7 @@ html {
 const TEXTURA_PAPEL = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.95' /%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.10' /%3E%3C/svg%3E")`
 
 export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = false, customDomain = null, preloadedBusiness = null }) {
-  const { slug } = useParams()
+  const { slug, rubro: rubroDemo } = useParams()
   const [searchParams] = useSearchParams()
   const tableFromUrl = searchParams.get('mesa') || searchParams.get('table') || ''
   // `t` = ID del documento de la mesa. Es lo unico que identifica una mesa sin
@@ -339,6 +339,23 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
 
         // Si es modo demo, usar datos estáticos
         if (isDemo) {
+          // /demo/:rubro/catalogo → el catálogo de ESE rubro. Sin rubro se
+          // mantiene el catálogo demo de siempre.
+          if (rubroDemo) {
+            const [registro, motor] = await Promise.all([
+              import('@/data/demo/rubros'),
+              import('@/data/demo/motor'),
+            ])
+            const def = await registro.cargarRubro(rubroDemo)
+            if (def) {
+              const datos = motor.construirDatosDemo(def)
+              setBusiness(applyPreviewTheme(datos.business))
+              setProducts(datos.products.map((p) => ({ ...p, catalogVisible: true })))
+              setCategories(datos.categories)
+              setLoading(false)
+              return
+            }
+          }
           const demoData = isRestaurantMenu ? DEMO_RESTAURANT_DATA : DEMO_CATALOG_DATA
           setBusiness(applyPreviewTheme(demoData.business))
           setProducts(demoData.products)
@@ -453,7 +470,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     if (slug || isDemo || customDomain) {
       loadCatalog()
     }
-  }, [slug, isDemo, isRestaurantMenu, customDomain])
+  }, [slug, isDemo, isRestaurantMenu, customDomain, rubroDemo])
 
   // Detectar mesa ocupada y cargar orden existente
   useEffect(() => {
