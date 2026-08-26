@@ -910,6 +910,26 @@ export const migrateOrphanStock = (product, targetWarehouseId, activeWarehouses 
  * @param {string} warehouseId - ID del almacén (opcional, si no se pasa devuelve stock total)
  * @returns {number} - Stock del producto
  */
+/**
+ * ¿El producto NO lleva control de stock?
+ *
+ * Hay DOS formas de decir lo mismo, según cómo se creó el producto:
+ *   - `stock: null`        (el clásico: nunca se le puso stock)
+ *   - `trackStock: false`  (el control se apagó, y el número viejo quedó ahí)
+ *
+ * El POS solo miraba la primera, así que la segunda terminaba mostrando
+ * "Stock: Infinity" — que es lo que getTotalAvailableStock devuelve para
+ * decir "ilimitado", impreso tal cual en la tarjeta.
+ *
+ * Con variantes NO aplica: ahí el stock vive en cada variante y el `stock`
+ * del padre es solo la suma.
+ */
+export const sinControlDeStock = (product) => {
+  if (!product) return false
+  if (product.hasVariants && product.variants?.length > 0) return false
+  return product.stock === null || product.trackStock === false
+}
+
 export const getTotalAvailableStock = (product, warehouseId = null) => {
   if (!product) return 0
 

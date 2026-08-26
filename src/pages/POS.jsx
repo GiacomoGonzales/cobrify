@@ -66,6 +66,8 @@ import {
   BASE_CURRENCY,
 } from '@/utils/currency'
 import { getRateForDate } from '@/services/exchangeRateService'
+import { vendedoresDeSucursal } from '@/utils/sellerBranches'
+import { stockPorSucursal } from '@/utils/branchStockView'
 import { applyBranchPricing } from '@/utils/branchPricing'
 import { filterProductsForBranch, isProductInBranch } from '@/utils/branchCatalog'
 import { getAvailableDocumentTypes, resolveDocumentType } from '@/utils/documentTypes'
@@ -109,7 +111,7 @@ import { consultarDNI, consultarRUC, consultarEstablecimientos } from '@/service
 import { deductIngredients } from '@/services/ingredientService'
 import { getRecipeByProductId, checkRecipeStock, shouldDeductIngredients, getRecipes } from '@/services/recipeService'
 import { computeRecipeStockAlerts, hasAnyRecipe } from '@/utils/recipeAvailability'
-import { getWarehouses, getDefaultWarehouse, updateWarehouseStock, getStockInWarehouse, getTotalAvailableStock, getOrphanStock, createStockMovement } from '@/services/warehouseService'
+import { getWarehouses, getDefaultWarehouse, updateWarehouseStock, getStockInWarehouse, getTotalAvailableStock, getOrphanStock, createStockMovement, sinControlDeStock } from '@/services/warehouseService'
 import { getActiveBranches, getDefaultBranch } from '@/services/branchService'
 import { shortenUrl } from '@/services/urlShortenerService'
 import { releaseTable, updateTableAmount } from '@/services/tableService'
@@ -670,6 +672,12 @@ export default function POS() {
 
   // Warehouses (para stock/inventario)
   const [warehouses, setWarehouses] = useState([])
+  // Listas SIN filtrar por permisos: solo alimentan la consulta "¿dónde más
+  // hay?". Las de arriba, que deciden de dónde sale la venta, siguen filtradas.
+  const [todosLosAlmacenes, setTodosLosAlmacenes] = useState([])
+  const [todasLasSucursales, setTodasLasSucursales] = useState([])
+  // Producto cuyo stock por sucursal se está mirando (null = modal cerrado).
+  const [stockSucursalesDe, setStockSucursalesDe] = useState(null)
   const [selectedWarehouse, setSelectedWarehouse] = useState(null)
 
   // Branches/Sucursales (para series de documentos)
@@ -3014,6 +3022,7 @@ export default function POS() {
       let warehouseList = []
       if (warehousesResult.success) {
         const allWarehouses = warehousesResult.data || []
+        setTodosLosAlmacenes(allWarehouses)
         warehouseList = filterWarehousesByAccess(allWarehouses)
         setWarehouses(warehouseList)
       }
@@ -3021,6 +3030,7 @@ export default function POS() {
       // Procesar sucursales
       if (branchesResult.success) {
         const allBranches = branchesResult.data || []
+        setTodasLasSucursales(allBranches)
         const branchList = filterBranchesByAccess(allBranches)
         setBranches(branchList)
 
@@ -3247,6 +3257,29 @@ export default function POS() {
   }, [products, categories])
 
   // Optimizar filtrado de productos con useMemo
+  // Stock del producto en la vista actual (el almacén seleccionado, o el total
+  // si no hay ninguno). Suma las variantes, que llevan su stock aparte.
+  const stockEnVista = React.useCallback((p) => {
+    if (p.hasVariants && p.variants?.length > 0) {
+      return selectedWarehouse
+        ? p.variants.reduce((suma, v) => {
+            const ws = (v.warehouseStocks || []).find(w => w.warehouseId === selectedWarehouse.id)
+            return suma + (ws?.stock || 0)
+          }, 0)
+        : p.variants.reduce((suma, v) => suma + (v.stock || 0), 0)
+    }
+    return selectedWarehouse ? getStockInWarehouse(p, selectedWarehouse.id) : (p.stock || 0)
+  }, [selectedWarehouse])
+
+  // "Agotado" solo aplica a lo que LLEVA control de stock: un servicio o un
+  // producto sin control no está agotado, no tiene stock que contar. Ojo con
+  // `stock: null`, que además vale 0 al leerlo por almacén: sin esta guarda
+  // los productos sin control se irían todos al final de la lista.
+  const agotado = React.useCallback(
+    (p) => !sinControlDeStock(p) && stockEnVista(p) <= 0,
+    [stockEnVista],
+  )
+
   const filteredProducts = React.useMemo(() => {
     return products.filter(p => {
       // Excluir productos desactivados (isActive === false).
@@ -3280,31 +3313,21 @@ export default function POS() {
       }
 
       // Filtro de stock: ocultar productos con stock 0 si está habilitado
-      if (businessSettings?.posCustomFields?.hideOutOfStockInPOS && p.trackStock !== false) {
-        let totalStock = 0
-        if (p.hasVariants && p.variants?.length > 0) {
-          if (selectedWarehouse) {
-            totalStock = p.variants.reduce((sum, v) => {
-              const ws = (v.warehouseStocks || []).find(ws => ws.warehouseId === selectedWarehouse.id)
-              return sum + (ws?.stock || 0)
-            }, 0)
-          } else {
-            totalStock = p.variants.reduce((sum, v) => sum + (v.stock || 0), 0)
-          }
-        } else {
-          totalStock = selectedWarehouse
-            ? getStockInWarehouse(p, selectedWarehouse.id)
-            : (p.stock || 0)
-        }
-        if (totalStock <= 0) return false
-      }
+      if (businessSettings?.posCustomFields?.hideOutOfStockInPOS && agotado(p)) return false
 
       return matchesSearch && matchesCategory && matchesBrand
     })
-    // Orden alfabético por nombre (mismo criterio que la página de Productos).
-    // Antes el POS respetaba el orden crudo de Firestore.
-    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' }))
-  }, [products, deferredSearchTerm, productSearchIndex, selectedCategoryFilter, selectedBrandFilter, categories, businessSettings?.posCustomFields?.hideOutOfStockInPOS, selectedWarehouse])
+    // Los agotados van al FINAL, y dentro de cada grupo alfabético (mismo
+    // criterio que la página de Productos). Antes el orden era solo
+    // alfabético y los que no se podían vender ocupaban las primeras
+    // pantallas, justo las que el cajero mira con el cliente enfrente.
+    .sort((a, b) => {
+      const va = agotado(a)
+      const vb = agotado(b)
+      if (va !== vb) return va ? 1 : -1
+      return (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' })
+    })
+  }, [products, deferredSearchTerm, productSearchIndex, selectedCategoryFilter, selectedBrandFilter, categories, businessSettings?.posCustomFields?.hideOutOfStockInPOS, selectedWarehouse, agotado])
 
   // Cap del render para que el grid no explote en pantallas con miles de
   // productos. Antes al buscar mostraba TODAS las coincidencias (con 4k
@@ -9114,28 +9137,53 @@ ${companySettings?.businessName || 'Tu Empresa'}`
     return shortages
   }
 
+  // Consulta de stock en otras sedes: se activa desde Configuración > Ventas y
+  // solo tiene sentido si el negocio tiene más de una sucursal.
+  const verStockDeOtrasSucursales = !!businessSettings?.showOtherBranchesStock
+    && !hideStockInPOS
+    && todasLasSucursales.length > 0
+
   const getStockBadge = product => {
     // Obtener stock del almacén seleccionado
     const warehouseStock = getCurrentWarehouseStock(product)
 
-    if (product.stock === null && !product.hasVariants) {
+    // Un producto sin control de stock lo dice, venga por `stock: null` o por
+    // `trackStock: false`. Antes el segundo caso caía abajo e imprimía el
+    // "Infinity" con el que getTotalAvailableStock representa lo ilimitado.
+    if (sinControlDeStock(product)) {
       return <span className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">Sin control</span>
     }
 
-    if (warehouseStock === 0) {
-      return <span className="text-[10px] sm:text-xs text-red-600 font-semibold whitespace-nowrap">Sin stock</span>
-    }
+    // El texto es el mismo de siempre; lo que cambia es que se puede tocar.
+    const contenido = warehouseStock === 0
+      ? <span className="text-[10px] sm:text-xs text-red-600 font-semibold whitespace-nowrap">Sin stock</span>
+      : (() => {
+          const displayStock = Number.isInteger(warehouseStock) ? warehouseStock : parseFloat(warehouseStock.toFixed(2))
+          const minStock = Number.isFinite(Number(product?.minStock)) && Number(product?.minStock) >= 0
+            ? Number(product.minStock)
+            : 3
+          const color = warehouseStock > minStock ? 'text-green-600' : 'text-yellow-600'
+          return (
+            <span className={`text-[10px] sm:text-xs ${color} whitespace-nowrap`}>
+              Stock: <span className="font-semibold">{displayStock}</span>
+            </span>
+          )
+        })()
 
-    const displayStock = Number.isInteger(warehouseStock) ? warehouseStock : parseFloat(warehouseStock.toFixed(2))
-    const minStock = Number.isFinite(Number(product?.minStock)) && Number(product?.minStock) >= 0
-      ? Number(product.minStock)
-      : 3
-    const color = warehouseStock > minStock ? 'text-green-600' : 'text-yellow-600'
+    if (!verStockDeOtrasSucursales) return contenido
 
+    // stopPropagation: la tarjeta entera agrega al carrito, y consultar el
+    // stock no debe vender nada.
     return (
-      <span className={`text-[10px] sm:text-xs ${color} whitespace-nowrap`}>
-        Stock: <span className="font-semibold">{displayStock}</span>
-      </span>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setStockSucursalesDe(product) }}
+        title="Ver el stock en las otras sucursales"
+        className="inline-flex items-center gap-1 hover:opacity-70"
+      >
+        <Store className="w-3 h-3 text-gray-400 shrink-0" />
+        {contenido}
+      </button>
     )
   }
 
@@ -10159,14 +10207,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               {/* 3. Vendedor - Filtrado por sucursal */}
               {(() => {
                 // Filtrar vendedores por sucursal seleccionada
-                const filteredSellers = sellers.filter(s => {
-                  if (!selectedBranch) {
-                    // Sucursal Principal: mostrar vendedores sin branchId
-                    return !s.branchId
-                  }
-                  // Sucursal específica: mostrar vendedores de esa sucursal
-                  return s.branchId === selectedBranch.id
-                })
+                // Un vendedor puede atender en varias sucursales (branchIds).
+                const filteredSellers = vendedoresDeSucursal(sellers, selectedBranch?.id)
 
                 return filteredSellers.length > 0 && (
                   <div>
@@ -13908,6 +13950,66 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Modal: stock por sucursal. SOLO CONSULTA — no mueve ni transfiere nada. */}
+      <Modal
+        isOpen={!!stockSucursalesDe}
+        onClose={() => setStockSucursalesDe(null)}
+        title="Stock por sucursal"
+        size="md"
+      >
+        {stockSucursalesDe && (() => {
+          const filas = stockPorSucursal(stockSucursalesDe, todosLosAlmacenes, todasLasSucursales, {
+            nombrePrincipal: businessSettings?.mainBranchName || 'Sucursal Principal',
+            sucursalActual: selectedBranch?.id || null,
+          })
+          const total = filas.reduce((a, f) => a + f.stock, 0)
+          return (
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm font-medium text-gray-900">{stockSucursalesDe.name}</p>
+                {stockSucursalesDe.hasVariants && (
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Este producto tiene variantes: el total suma todas.
+                  </p>
+                )}
+              </div>
+
+              {filas.length === 0 ? (
+                <p className="text-sm text-gray-500">Este producto no tiene stock registrado en ninguna sucursal.</p>
+              ) : (
+                <>
+                  <div className="rounded-lg border border-gray-200 divide-y divide-gray-100">
+                    {filas.map(f => (
+                      <div key={f.clave} className="flex items-center justify-between px-3 py-2.5">
+                        <span className="text-sm text-gray-900 flex items-center gap-2 min-w-0">
+                          <span className="truncate">{f.nombre}</span>
+                          {f.esActual && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary-100 text-primary-700 shrink-0">
+                              Aquí
+                            </span>
+                          )}
+                        </span>
+                        <span className={`text-sm font-semibold shrink-0 ${f.stock > 0 ? 'text-gray-900' : 'text-red-600'}`}>
+                          {f.stock}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between px-3 text-sm">
+                    <span className="text-gray-600">Total</span>
+                    <span className="font-semibold text-gray-900">{total}</span>
+                  </div>
+                </>
+              )}
+
+              <p className="text-xs text-gray-500">
+                Solo para consultar. La venta sigue descontando del almacén con el que estás trabajando.
+              </p>
+            </div>
+          )
+        })()}
       </Modal>
 
       {/* Modal: elegir establecimiento (anexo) cuando el RUC tiene varios locales */}

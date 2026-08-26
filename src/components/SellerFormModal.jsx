@@ -6,6 +6,7 @@ import Input from '@/components/ui/Input'
 import { createSeller, updateSeller } from '@/services/sellerService'
 import { COMMISSION_TYPES, DEFAULT_COMMISSION_TYPE } from '@/utils/commissions'
 import { getActiveBranches } from '@/services/branchService'
+import { PRINCIPAL, sucursalesDelVendedor, camposDeSucursales } from '@/utils/sellerBranches'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 
@@ -21,7 +22,7 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
     phone: '',
     email: '',
     dni: '',
-    branchId: '',
+    branchIds: [PRINCIPAL],
     salesGoal: '',
     goalPeriod: 'monthly',
     commissionEnabled: false,
@@ -55,7 +56,7 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
         phone: seller.phone || '',
         email: seller.email || '',
         dni: seller.dni || '',
-        branchId: seller.branchId || '',
+        branchIds: sucursalesDelVendedor(seller),
         salesGoal: seller.salesGoal || seller.dailyGoal || '',
         goalPeriod: seller.goalPeriod || (seller.dailyGoal ? 'daily' : 'monthly'),
         commissionEnabled: seller.commissionEnabled === true,
@@ -73,7 +74,7 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
         phone: '',
         email: '',
         dni: '',
-        branchId: '',
+        branchIds: [PRINCIPAL],
         salesGoal: '',
     goalPeriod: 'monthly',
       })
@@ -101,8 +102,27 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
       newErrors.code = 'El código es requerido'
     }
 
+    // Sin ninguna sucursal el vendedor no aparece en ningún POS, y desde la
+    // pantalla es imposible adivinar por qué.
+    if (branches.length > 0 && (formData.branchIds || []).length === 0) {
+      newErrors.branchIds = 'Marca al menos una sucursal.'
+    }
+
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
+  }
+
+  // Marcar/desmarcar una sucursal. Nunca se permite dejar cero: un vendedor
+  // sin ninguna no aparece en ningun POS y el usuario no entiende por que.
+  const alternarSucursal = (clave) => {
+    setFormData((prev) => {
+      const actuales = prev.branchIds || []
+      const nuevas = actuales.includes(clave)
+        ? actuales.filter((c) => c !== clave)
+        : [...actuales, clave]
+      return { ...prev, branchIds: nuevas }
+    })
+    if (errors.branchIds) setErrors((prev) => ({ ...prev, branchIds: '' }))
   }
 
   const handleSubmit = async (e) => {
@@ -115,6 +135,9 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
       const businessId = getBusinessId()
       const dataToSave = {
         ...formData,
+        // branchIds manda; branchId se sigue escribiendo cuando hay una sola
+        // sucursal, por si queda algun lector viejo.
+        ...camposDeSucursales(formData.branchIds),
         salesGoal: formData.salesGoal ? parseFloat(formData.salesGoal) : 0,
         // El porcentaje se guarda como NUMERO: el calculo de la comision lo
         // multiplica y un string daria NaN silencioso.
@@ -204,31 +227,48 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
           />
         </div>
 
-        {/* Sucursal */}
-        {branches.length > 0 && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <Store className="w-4 h-4 inline mr-1" />
-              Sucursal
-            </label>
-            <select
-              name="branchId"
-              value={formData.branchId}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="">{businessSettings?.mainBranchName || 'Sucursal Principal'}</option>
-              {branches.map(branch => (
-                <option key={branch.id} value={branch.id}>
-                  {branch.name}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-gray-500 mt-1">
-              Sucursal donde trabaja el vendedor
-            </p>
-          </div>
-        )}
+        {/* Sucursales: varias, porque un vendedor puede atender en más de un local */}
+        {branches.length > 0 && (() => {
+          const opciones = [
+            { clave: PRINCIPAL, nombre: businessSettings?.mainBranchName || 'Sucursal Principal' },
+            ...branches.map(b => ({ clave: b.id, nombre: b.name })),
+          ]
+          const elegidas = formData.branchIds || []
+          return (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <Store className="w-4 h-4 inline mr-1" />
+                Sucursales
+              </label>
+              <div className="space-y-1.5 max-h-44 overflow-y-auto border border-gray-200 rounded-lg p-2">
+                {opciones.map(op => {
+                  const marcada = elegidas.includes(op.clave)
+                  return (
+                    <label
+                      key={op.clave}
+                      className={`flex items-center gap-2.5 px-2 py-1.5 rounded-md cursor-pointer ${marcada ? 'bg-primary-50' : 'hover:bg-gray-50'}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={marcada}
+                        onChange={() => alternarSucursal(op.clave)}
+                        className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      />
+                      <span className="text-sm text-gray-900">{op.nombre}</span>
+                    </label>
+                  )
+                })}
+              </div>
+              {errors.branchIds ? (
+                <p className="text-xs text-red-600 mt-1">{errors.branchIds}</p>
+              ) : (
+                <p className="text-xs text-gray-500 mt-1">
+                  Aparecerá en el POS de todas las sucursales que marques.
+                </p>
+              )}
+            </div>
+          )
+        })()}
 
         {/* Meta de Ventas */}
         <div>

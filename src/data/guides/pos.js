@@ -81,6 +81,14 @@ export default {
         },
         {
           type: 'texto',
+          text: 'Si tienes varias sedes y activas **Configuración → Ventas → Ver el stock de otras sucursales en el punto de venta**, el stock de cada producto se vuelve tocable: se abre el detalle de cuánto hay en cada sucursal. Sirve para responder al momento "acá no me queda, pero en la otra tienda sí".',
+        },
+        {
+          type: 'ojo',
+          text: 'Es solo para mirar. La venta sigue descontando del almacén con el que estás trabajando: desde el POS no se vende ni se transfiere stock de otra sede.',
+        },
+        {
+          type: 'texto',
           text: 'El botón de cuadraditos junto al buscador alterna entre ver los productos en **cuadrícula** (con foto) o en **lista** (más productos por pantalla).',
         },
         {

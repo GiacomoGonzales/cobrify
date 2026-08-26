@@ -5,6 +5,7 @@ import { useNavigate, useParams, useSearchParams, useLocation } from 'react-rout
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAppContext } from '@/hooks/useAppContext'
+import { vendedoresDeSucursal } from '@/utils/sellerBranches'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -1648,11 +1649,7 @@ export default function CreateQuotation() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 >
                   <option value="">Sin vendedor asignado</option>
-                  {sellers
-                    .filter(s => {
-                      if (!selectedBranch) return !s.branchId
-                      return s.branchId === selectedBranch.id
-                    })
+                  {vendedoresDeSucursal(sellers, selectedBranch?.id)
                     .map(seller => (
                       <option key={seller.id} value={seller.id}>
                         {seller.code ? `${seller.code} - ` : ''}{seller.name}

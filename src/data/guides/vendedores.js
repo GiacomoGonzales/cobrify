@@ -34,6 +34,10 @@ export default {
           type: 'texto',
           text: 'Cada vendedor se registra con su **Nombre**, su **Código** y su **Contacto**. Puedes ponerle una **Meta** de ventas y un porcentaje de **Comisión**, y dejarlo **Activo** o inactivo cuando ya no trabaje contigo.',
         },
+        {
+          type: 'texto',
+          text: 'Si tienes varias sedes, marca en **Sucursales** todas en las que atiende: aparecerá en el punto de venta y en las cotizaciones de cada una. Alguien que cubre dos locales ya no necesita estar duplicado.',
+        },
       ],
     },
 

@@ -10,6 +10,7 @@ import MonthSelect from '@/components/MonthSelect'
 import { getDocumentTotalInBase } from '@/utils/currency'
 import { getInvoices, getRecentInvoices } from '@/services/firestoreService'
 import { useAppContext } from '@/hooks/useAppContext'
+import { sucursalesDelVendedor, etiquetaSucursales } from '@/utils/sellerBranches'
 import { useToast } from '@/contexts/ToastContext'
 import SellerFormModal from '@/components/SellerFormModal'
 import { formatCurrency, formatDate, matchesSearchQuery } from '@/lib/utils'
@@ -288,14 +289,8 @@ export default function Sellers() {
     )
 
     // Filtrar por sucursal
-    let matchesBranch = true
-    if (filterBranch !== 'all') {
-      if (filterBranch === 'main') {
-        matchesBranch = !seller.branchId
-      } else {
-        matchesBranch = seller.branchId === filterBranch
-      }
-    }
+    // 'main' = Principal, que es justo la clave que usa sellerBranches.
+    const matchesBranch = filterBranch === 'all' || sucursalesDelVendedor(seller).includes(filterBranch)
 
     return matchesSearch && matchesBranch
   })
@@ -663,9 +658,7 @@ export default function Sellers() {
                     {branches.length > 0 && (
                       <span className="text-blue-600 flex items-center gap-0.5">
                         <Store className="w-3 h-3" />
-                        {seller.branchId
-                          ? branches.find(b => b.id === seller.branchId)?.name || 'Sucursal'
-                          : 'Principal'}
+                        {etiquetaSucursales(seller, branches, businessSettings?.mainBranchName || 'Sucursal Principal')}
                       </span>
                     )}
                   </div>
@@ -741,9 +734,7 @@ export default function Sellers() {
                           {branches.length > 0 && (
                             <p className="text-xs text-blue-600 mt-0.5">
                               <Store className="w-3 h-3 inline mr-1" />
-                              {seller.branchId
-                                ? branches.find(b => b.id === seller.branchId)?.name || 'Sucursal'
-                                : (businessSettings?.mainBranchName || 'Sucursal Principal')}
+                              {etiquetaSucursales(seller, branches, businessSettings?.mainBranchName || 'Sucursal Principal')}
                             </p>
                           )}
                         </div>

@@ -433,6 +433,8 @@ export default function Settings() {
 
   // Estados para configuración de inventario
   const [allowNegativeStock, setAllowNegativeStock] = useState(false)
+  // Ver (solo ver) el stock de las demás sucursales desde el POS.
+  const [showOtherBranchesStock, setShowOtherBranchesStock] = useState(false)
   // Vender sin stock PERO preguntando antes (pedido de un usuario que escanea
   // productos chicos en serie y no alcanzaba a leer el aviso rojo)
   const [confirmSaleWithoutStock, setConfirmSaleWithoutStock] = useState(false)
@@ -1328,6 +1330,7 @@ export default function Settings() {
 
         // Cargar configuración de inventario
         setAllowNegativeStock(businessData.allowNegativeStock || false)
+        setShowOtherBranchesStock(businessData.showOtherBranchesStock === true)
         setConfirmSaleWithoutStock(businessData.confirmSaleWithoutStock || false)
         setAllowCustomProducts(businessData.allowCustomProducts || false)
         setAllowPriceEdit(businessData.allowPriceEdit || false)
@@ -5262,6 +5265,18 @@ export default function Settings() {
                       : '✗ Deshabilitado: Los productos con stock en 0 aparecerán deshabilitados en el punto de venta y no se podrán agregar al carrito. Recomendado para control estricto de inventario.'}
                   />
 
+                  {/* Consulta pura: el cajero ve dónde más hay, pero la venta
+                      sigue saliendo del almacén seleccionado. */}
+                  <SettingToggle
+                    id="opcion-showOtherBranchesStock"
+                    checked={showOtherBranchesStock}
+                    onChange={(e) => setShowOtherBranchesStock(e.target.checked)}
+                    title="Ver el stock de otras sucursales en el punto de venta"
+                    description={showOtherBranchesStock
+                      ? '✓ Habilitado: al tocar el stock de un producto en el POS se abre el detalle de cuánto hay en cada sucursal. Sirve para responderle al cliente "acá no me queda, pero en la otra tienda sí". Es solo consulta: la venta sigue descontando del almacén seleccionado.'
+                      : '✗ Deshabilitado: en el POS cada usuario solo ve el stock del almacén con el que está trabajando.'}
+                  />
+
                   {/* Punto medio entre bloquear y dejar pasar: se puede vender sin
                       stock, pero el sistema PREGUNTA antes de agregarlo. Nace de un
                       caso real: escanea productos pequeños en serie y el aviso rojo
@@ -6115,6 +6130,7 @@ export default function Settings() {
                       restaurantConfig: restaurantConfig,
                       posCustomFields: posCustomFields,
                       allowNegativeStock: allowNegativeStock,
+                      showOtherBranchesStock: showOtherBranchesStock,
                       confirmSaleWithoutStock: confirmSaleWithoutStock,
                       stockDischargeEnabled: stockDischargeEnabled,
                       notaVentaCreditTerms: notaVentaCreditTerms,
