@@ -120,8 +120,7 @@ import { clampEmissionDate, getEmissionDateLimits, validateEmissionDate } from '
 import { computeSaleCommission } from '@/utils/commissions'
 import { getSellers } from '@/services/sellerService'
 import { markOrderAsPaid, updateOrder, updateOrderStatus, claimOrderForInvoicing, releaseOrderInvoicingClaim, markOrderInvoiced } from '@/services/orderService'
-import { markQuotationAsConverted } from '@/services/quotationService'
-import { markNotaVentaAsConverted } from '@/services/firestoreService'
+import { cerrarVinculoDeOrigen } from '@/services/documentLinking'
 import { completeAppointment } from '@/services/appointmentService'
 import { programarRecordatoriosDeVenta } from '@/services/veterinaryService'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
@@ -8624,24 +8623,28 @@ export default function POS() {
               }
             }
 
-            // 6.2. Marcar cotización como convertida
+            // 6.2. Marcar la cotización como convertida. Mismo criterio que usa
+            // la sincronización de ventas offline: cuando esto vivía suelto acá,
+            // una venta sin conexión nunca marcaba su cotización.
             if (_pendingQuotation) {
-              try {
-                await markQuotationAsConverted(businessId, _pendingQuotation.id, bgInvoiceId, bgDocumentType, bgNumberResult.number)
-              } catch (error) {
-                console.error('Error al marcar cotización como convertida:', error)
-              }
+              await cerrarVinculoDeOrigen({
+                businessId,
+                convertedFrom: { type: 'quotation', id: _pendingQuotation.id },
+                documentType: bgDocumentType,
+                invoiceId: bgInvoiceId,
+                invoiceNumber: bgNumberResult.number,
+              })
             }
 
             // 6.3. Marcar nota(s) de venta como convertida(s) y verificar movimientos de stock
             if (_pendingNotaVentaIds && _pendingNotaVentaIds.length > 0) {
-              try {
-                await Promise.all(_pendingNotaVentaIds.map(notaId =>
-                  markNotaVentaAsConverted(businessId, notaId, bgDocumentType, bgInvoiceId, bgNumberResult.number)
-                ))
-              } catch (error) {
-                console.error('Error al marcar notas de venta como convertidas:', error)
-              }
+              await cerrarVinculoDeOrigen({
+                businessId,
+                convertedFrom: { type: 'nota_venta', ids: _pendingNotaVentaIds },
+                documentType: bgDocumentType,
+                invoiceId: bgInvoiceId,
+                invoiceNumber: bgNumberResult.number,
+              })
 
               // Verificar que las notas originales tengan movimientos de stock
               try {

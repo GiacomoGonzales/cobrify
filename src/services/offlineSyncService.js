@@ -10,6 +10,7 @@ import {
 } from './offlineQueueService'
 import { createInvoiceWithNumber } from './firestoreService'
 import { descontarStockDeVentaGuardada } from './saleStockDeduction'
+import { cerrarVinculoDeOrigen } from './documentLinking'
 
 let isSyncing = false
 let syncListeners = []
@@ -159,6 +160,23 @@ export async function processPendingSales(currentBusinessId) {
             invoiceNumber: result.number,
             error: stockRes.error,
           })
+        }
+
+        // Cerrar el vínculo con el documento de origen (cotización, notas de
+        // venta). Online lo hace el POS al terminar de emitir; acá no pasaba
+        // NADIE, así que una cotización cobrada sin conexión se quedaba
+        // "pendiente" para siempre y se podía volver a convertir.
+        // Igual que el stock: su resultado no decide si la venta se reintenta,
+        // porque crear el comprobante no es idempotente.
+        const linkRes = await cerrarVinculoDeOrigen({
+          businessId: targetBusinessId,
+          convertedFrom: sale.invoiceData?.convertedFrom,
+          documentType: sale.documentType || sale.invoiceData?.documentType,
+          invoiceId: result.id,
+          invoiceNumber: result.number,
+        })
+        if (!linkRes.ok) {
+          console.error(`No se pudo marcar el documento de origen de ${result.number}:`, linkRes.error)
         }
 
         // Marcar como completada y remover

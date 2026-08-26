@@ -43,7 +43,6 @@ import {
   updateQuotationStatus,
   markQuotationAsSent,
   convertToInvoice,
-  markQuotationAsConverted,
   linkQuotationToGuide,
 } from '@/services/quotationService'
 import { createInvoice, getCompanySettings, getNextDocumentNumber } from '@/services/firestoreService'
