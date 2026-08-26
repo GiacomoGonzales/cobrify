@@ -73,6 +73,25 @@
     },
     {
       "client_info": {
+        "mobilesdk_app_id": "1:685843504415:android:ca562cb9a6508863e7642a",
+        "android_client_info": {
+          "package_name": "com.cobrify.app.v2"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBwo1ZQisEzdehrLFATBVzQtgXI5aBJi_k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:685843504415:android:c6420054cabc0c75e7642a",
         "android_client_info": {
           "package_name": "com.ezfactu.app"
@@ -127,6 +146,25 @@
         {
           "current_key": "AIzaSyDauolZp9BEx5Lv19j3aVihlzUSVEqGrYQ"
         },
+        {
+          "current_key": "AIzaSyBwo1ZQisEzdehrLFATBVzQtgXI5aBJi_k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:685843504415:android:ca562cb9a6508863e7642a",
+        "android_client_info": {
+          "package_name": "com.factuya.cobrify"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
         {
           "current_key": "AIzaSyBwo1ZQisEzdehrLFATBVzQtgXI5aBJi_k"
         }
