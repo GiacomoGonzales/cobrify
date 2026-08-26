@@ -7,6 +7,10 @@ struct InboxApp: App {
     @StateObject private var session: SessionStore
 
     init() {
+        // Caché de red generoso: el visor y las descargas reaprovechan lo ya
+        // bajado (R2 sirve todo como inmutable).
+        URLCache.shared = URLCache(memoryCapacity: 32 * 1024 * 1024,
+                                   diskCapacity: 256 * 1024 * 1024)
         FirebaseBootstrap.configureIfPossible()
         _session = StateObject(wrappedValue: SessionStore())
     }

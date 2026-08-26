@@ -538,14 +538,8 @@ private struct BurbujaMensaje: View {
             case "sticker":
                 if let url = mensaje.media?.url {
                     // El sticker es la imagen pelada (webp), sin adornos.
-                    AsyncImage(url: URL(string: url)) { fase in
-                        if case .success(let imagen) = fase {
-                            imagen.resizable().scaledToFit()
-                        } else {
-                            Image(systemName: "face.smiling")
-                                .font(.system(size: 40))
-                                .foregroundStyle(.secondary)
-                        }
+                    ImagenCacheada(url: url) { imagen in
+                        imagen.resizable().scaledToFit()
                     }
                     .frame(width: 130, height: 130)
                 } else {
@@ -601,21 +595,8 @@ private struct BurbujaMensaje: View {
         let ancho = CGFloat(mensaje.media?.ancho ?? 4)
         let alto = CGFloat(mensaje.media?.alto ?? 3)
         let proporcion = alto > 0 ? ancho / alto : 4.0 / 3.0
-        return AsyncImage(url: URL(string: mensaje.media?.thumbUrl ?? mensaje.media?.url ?? "")) { fase in
-            switch fase {
-            case .success(let imagen):
-                imagen.resizable().scaledToFill()
-            case .failure:
-                ZStack {
-                    Color(.tertiarySystemFill)
-                    Label("Foto", systemImage: "photo").foregroundStyle(.secondary)
-                }
-            default:
-                ZStack {
-                    Color(.tertiarySystemFill)
-                    ProgressView()
-                }
-            }
+        return ImagenCacheada(url: mensaje.media?.thumbUrl ?? mensaje.media?.url ?? "") { imagen in
+            imagen.resizable().scaledToFill()
         }
         .aspectRatio(proporcion, contentMode: .fit)
         .frame(width: 230)
