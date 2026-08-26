@@ -77,6 +77,7 @@ import { printInvoiceTicket, connectPrinter, getPrinterConfig } from '@/services
 import { shortenUrl } from '@/services/urlShortenerService'
 import { getActiveBranches } from '@/services/branchService'
 import { useLocationAccess, useSalesScope } from '@/utils/locationAccess'
+import { anularVentaDemo } from '@/data/demo/operaciones'
 import { getVisiblePaymentMethods } from '@/utils/paymentMethods'
 import { getSaleSeller, matchesSaleSeller, listSaleSellers } from '@/utils/saleSeller'
 import { getNoteReasonLabel, getReferencedDocTypeLabel } from '@/data/noteReasons'
@@ -755,6 +756,13 @@ Gracias por tu preferencia.`
   // Reportes/Dashboard en src/utils/locationAccess.js).
   const canSeeSale = useSalesScope()
 
+  // Demo: la lista sigue al estado vivo, así lo vendido en el POS aparece acá
+  // sin recargar y una anulación se refleja al instante.
+  useEffect(() => {
+    if (!isDemoMode || !demoData) return
+    setInvoices(demoData.invoices || [])
+  }, [isDemoMode, demoData])
+
   // Métodos de pago REALES de un comprobante (para mostrar y filtrar).
   // Prioriza paymentHistory: en ventas al crédito/parciales, los pagos hechos
   // con "Registrar Pago" (ej. Yape) quedan SOLO ahí — paymentMethod/payments
@@ -955,8 +963,12 @@ Gracias por tu preferencia.`
 
   const handleVoidInvoice = async () => {
     if (!voidingInvoice || !user?.uid) return
+    // En demo la anulación se aplica de verdad y DEVUELVE EL STOCK, que es lo
+    // que el visitante quiere comprobar: que anular no deja el inventario mal.
     if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
+      anularVentaDemo(voidingInvoice.id)
+      toast.success('Comprobante anulado y stock devuelto')
+      setVoidingInvoice(null)
       return
     }
 
