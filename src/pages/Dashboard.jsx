@@ -20,6 +20,7 @@ import { collection, query, where, getAggregateFromServer, sum } from 'firebase/
 import { db } from '@/lib/firebase'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useDataPermissions } from '@/hooks/useDataPermissions'
+import { prefijoDeRuta } from '@/utils/demoRoutes'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -100,17 +101,10 @@ export default function Dashboard() {
   }
 
   // Determinar el prefijo de ruta según el contexto
-  const getRoutePrefix = () => {
-    if (isDemoMode) {
-      if (location.pathname.startsWith('/demorestaurant')) return '/demorestaurant'
-      if (location.pathname.startsWith('/demopharmacy')) return '/demopharmacy'
-      if (location.pathname.startsWith('/demohotel')) return '/demohotel'
-      if (location.pathname.startsWith('/demoveterinary')) return '/demoveterinary'
-      if (location.pathname.startsWith('/demologistics')) return '/demologistics'
-      return '/demo'
-    }
-    return '/app'
-  }
+  // Criterio compartido con el Sidebar: acá estaba copiado y no conocía los
+  // demos por rubro, así que "Punto de Venta" sacaba al visitante de
+  // /demo/ferreteria y lo mandaba al demo genérico.
+  const getRoutePrefix = () => prefijoDeRuta(location.pathname, isDemoMode)
 
   const routePrefix = getRoutePrefix()
 

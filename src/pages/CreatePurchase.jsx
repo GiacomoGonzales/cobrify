@@ -85,7 +85,7 @@ const cleanUndefined = (obj) => {
 
 export default function CreatePurchase() {
   const { user, filterWarehousesByAccess } = useAuth()
-  const { getBusinessId, businessMode, businessSettings } = useAppContext()
+  const { getBusinessId, businessMode, businessSettings, isDemoMode, demoData } = useAppContext()
   // Precios de venta en compras: habilitado para todos por defecto (ya no es una opción configurable).
   const showSalePriceInPurchase = true
   const navigate = useNavigate()
@@ -456,6 +456,12 @@ export default function CreatePurchase() {
 
       // Laboratorios: solo en rubros con ficha de medicamento
       if (isPharmaLikeMode(businessMode)) {
+        // En demo la consulta a Firestore falla con permisos: los
+        // laboratorios salen de los datos del demo.
+        if (isDemoMode) {
+          setLaboratories(demoData?.laboratories || [])
+          return
+        }
         try {
           const labsRef = collection(db, 'businesses', businessId, 'laboratories')
           const snapshot = await getDocs(labsRef)

@@ -444,7 +444,9 @@ function ExpiryAlerts() {
           <div className="divide-y divide-gray-100">
             {filteredProducts.map(product => (
               <div
-                key={product.id}
+                /* Un producto se expande en UNA FILA POR LOTE: con la key del
+                   producto, React ve hijos repetidos. */
+                key={product.batchId || product.id}
                 className={`p-4 hover:bg-gray-50 ${
                   product.expirationInfo?.status === 'expired' ? 'bg-red-50/50' : ''
                 }`}

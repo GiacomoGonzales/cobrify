@@ -43,6 +43,9 @@ export default {
     'my-schedule', 'attendance',
   ],
 
+  /** Delivery de tortas: se cobra aparte y viaja refrigerado. */
+  reparto: ['Milagros Cárdenas', 'Óscar Ruiz'],
+
   almacenes: [
     { name: 'Vitrina y mostrador', location: 'Av. Benavides 2340, Miraflores' },
     { name: 'Cámara y despensa', location: 'Av. Benavides 2340, Miraflores' },

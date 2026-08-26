@@ -64,6 +64,9 @@ export default {
     'certificates', 'carrier-dispatch-guides', 'my-schedule', 'attendance',
   ],
 
+  /** Envíos a domicilio: buena parte de la venta viene de redes. */
+  reparto: ['Diana Alarcón', 'Kevin Soto'],
+
   almacenes: [
     { name: 'Tienda La Marina', location: 'Av. La Marina 2450, San Miguel' },
     { name: 'Depósito', location: 'Jr. Castilla 180, San Miguel' },

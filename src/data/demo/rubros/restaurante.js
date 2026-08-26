@@ -45,6 +45,9 @@ export default {
     ],
   },
 
+  /** Delivery de la carta en la zona. */
+  reparto: ['Brayan Mendoza', 'Kelly Ramos'],
+
   almacenes: [
     { name: 'Cocina', location: 'Av. La Marina 1820, San Miguel' },
     { name: 'Almacén y cámara', location: 'Av. La Marina 1820, San Miguel' },

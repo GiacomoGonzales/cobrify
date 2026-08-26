@@ -52,7 +52,7 @@ import {
  * programados. Puntos NO por ahora: los sellos ya cumplen ese rol.
  */
 export default function Promotions() {
-  const { getBusinessId, isDemoMode, businessSettings, businessMode, user, branchScope } = useAppContext()
+  const { getBusinessId, isDemoMode, demoData, businessSettings, businessMode, user, branchScope } = useAppContext()
   const toast = useToast()
 
   const [tab, setTab] = useState('fidelidad') // 'fidelidad' | 'combos'
@@ -113,6 +113,23 @@ export default function Promotions() {
 
   useEffect(() => {
     if (!businessId) return
+    // En demo NO se consulta Firestore: cada llamada falla con "permisos
+    // insuficientes" y deja errores en consola. Solo el catálogo sale del
+    // demo; el resto arranca vacío, que es como se ve un negocio que todavía
+    // no creó promociones.
+    if (isDemoMode) {
+      setProducts(demoData?.products || [])
+      setTarjetas([])
+      setCupones([])
+      setCertificados([])
+      setPromos([])
+      setCargandoTarjetas(false)
+      setLoadingProducts(false)
+      setCargandoCupones(false)
+      setCargandoCerts(false)
+      setCargandoPromos(false)
+      return
+    }
     // Las tarjetas y el catálogo cargan por separado: si una falla, la otra vive.
     getLoyaltyCards(businessId)
       .then((res) => setTarjetas(res?.success ? res.data : []))
@@ -134,7 +151,7 @@ export default function Promotions() {
       .then((res) => setPromos(res?.success ? res.data : []))
       .catch(() => {})
       .finally(() => setCargandoPromos(false))
-  }, [businessId])
+  }, [businessId, isDemoMode, demoData])
 
   const categorias = useMemo(
     () => [...new Set(products.map((p) => p.category).filter(Boolean))].sort(),

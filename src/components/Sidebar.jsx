@@ -81,7 +81,7 @@ import { useStore } from '@/stores/useStore'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useBranding } from '@/contexts/BrandingContext'
 import { esDominioReseller } from '@/utils/resellerDomain'
-import { esRubroDemo } from '@/data/demo/rubros'
+import { prefijoDeRuta } from '@/utils/demoRoutes'
 
 function Sidebar() {
   const { mobileMenuOpen, setMobileMenuOpen, sidebarCollapsed, toggleSidebar, orderAlertCount } = useStore()
@@ -109,36 +109,7 @@ function Sidebar() {
 
   // Si estamos en modo demo, añadir prefijo /demo, /demorestaurant o /demopharmacy a las rutas
   // Si no, añadir prefijo /app para rutas protegidas
-  const getPath = (path) => {
-    if (isDemoMode) {
-      // Detectar qué tipo de demo estamos usando
-      if (location.pathname.startsWith('/demorestaurant')) {
-        return `/demorestaurant${path}`
-      }
-      if (location.pathname.startsWith('/demopharmacy')) {
-        return `/demopharmacy${path}`
-      }
-      if (location.pathname.startsWith('/demohotel')) {
-        return `/demohotel${path}`
-      }
-      if (location.pathname.startsWith('/demoveterinary')) {
-        return `/demoveterinary${path}`
-      }
-      if (location.pathname.startsWith('/demologistics')) {
-        return `/demologistics${path}`
-      }
-      // Demo por rubro (/demo/ferreteria/...): el rubro tiene que viajar en
-      // TODOS los links del menú, o al primer clic el visitante vuelve al demo
-      // genérico y ve el catálogo de otro negocio.
-      const porRubro = location.pathname.match(/^\/demo\/([a-z0-9-]+)(?:\/|$)/)
-      if (porRubro && esRubroDemo(porRubro[1])) {
-        return `/demo/${porRubro[1]}${path}`
-      }
-      return `/demo${path}`
-    }
-    // Para rutas normales (no demo), agregar prefijo /app
-    return `/app${path}`
-  }
+  const getPath = (path) => `${prefijoDeRuta(location.pathname, isDemoMode)}${path}`
 
   // Menú para modo RETAIL (tiendas, comercios)
   // menuId: ID para personalización del menú (hiddenMenuItems)

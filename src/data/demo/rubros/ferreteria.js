@@ -40,6 +40,9 @@ export default {
     'certificates', 'my-schedule', 'attendance',
   ],
 
+  /** Reparte a obra: la ferretería vive del despacho de material. */
+  reparto: ['Luis Quispe', 'Marco Tello'],
+
   almacenes: [
     { name: 'Almacén Principal', location: 'Av. Los Constructores 1450, Ate' },
     { name: 'Tienda Mostrador', location: 'Av. Los Constructores 1450, Ate' },
