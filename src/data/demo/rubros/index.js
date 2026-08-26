@@ -26,6 +26,20 @@ export const RUBROS_DEMO = [
     modo: 'retail',
     cargar: () => import('./ropa'),
   },
+  {
+    slug: 'tecnologia',
+    nombre: 'Tienda de tecnología',
+    descripcion: 'Equipos, accesorios y servicio técnico',
+    modo: 'retail',
+    cargar: () => import('./tecnologia'),
+  },
+  {
+    slug: 'pasteleria',
+    nombre: 'Pastelería',
+    descripcion: 'Insumos, producción y pedidos por encargo',
+    modo: 'retail',
+    cargar: () => import('./pasteleria'),
+  },
 ]
 
 export const SLUGS_DEMO = RUBROS_DEMO.map((r) => r.slug)

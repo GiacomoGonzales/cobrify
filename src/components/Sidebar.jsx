@@ -2035,24 +2035,31 @@ function Sidebar() {
   // Obtener lista de items ocultos por el usuario
   const hiddenMenuItems = businessSettings?.hiddenMenuItems || []
 
+  // El demo GENÉRICO enseña todos los módulos a propósito (es una vitrina).
+  // El demo POR RUBRO no: una ferretería que ve "Agenda de Citas" y "Recetas"
+  // entiende que el sistema es de otra cosa. Ahí los filtros normales mandan,
+  // igual que en una cuenta real.
+  const demoConRubro = isDemoMode && !!businessSettings?.rubroDemo
+  const saltarFiltros = isDemoMode && !demoConRubro
+
   // Comprueba acceso a UN item simple (no grupo)
   const itemPasses = (item) => {
-    if (item.menuId && hiddenMenuItems.includes(item.menuId) && !isDemoMode) return false
+    if (item.menuId && hiddenMenuItems.includes(item.menuId) && !saltarFiltros) return false
     if (item.requiresFeature) {
       const featureEnabled = hasFeature && hasFeature(item.requiresFeature)
-      if (!featureEnabled && !isDemoMode) return false
+      if (!featureEnabled && !saltarFiltros) return false
     }
     if (item.requiresStudentField) {
       const studentFieldEnabled = businessSettings?.posCustomFields?.showStudentField
-      if (!studentFieldEnabled && !isDemoMode) return false
+      if (!studentFieldEnabled && !saltarFiltros) return false
     }
     if (item.requiresBatchControl) {
       const batchEnabled = businessSettings?.posCustomFields?.showBatchExpiryInPurchase
-      if (!batchEnabled && !isDemoMode) return false
+      if (!batchEnabled && !saltarFiltros) return false
     }
     if (item.requiresMetaAds) {
       const metaAdsEnabled = businessSettings?.metaAdsEnabled === true
-      if (!metaAdsEnabled && !isDemoMode) return false
+      if (!metaAdsEnabled && !saltarFiltros) return false
       if (isDemoMode) return false
     }
     if (item.requiresRappi) {
@@ -2062,12 +2069,12 @@ function Sidebar() {
     }
     if (item.requiresAppointments) {
       const appointmentsEnabled = businessSettings?.appointmentsEnabled === true
-      if (!appointmentsEnabled && !isDemoMode) return false
+      if (!appointmentsEnabled && !saltarFiltros) return false
     }
     if (item.businessOwnerOnly && !isBusinessOwner) return false
     if (item.hideInDemo && isDemoMode) return false
-    if (isDemoMode) return true
-    if (isAdmin || isBusinessOwner) return true
+    if (saltarFiltros) return true
+    if (isDemoMode || isAdmin || isBusinessOwner) return true
     if (!item.pageId) return true
     return hasPageAccess && hasPageAccess(item.pageId)
   }

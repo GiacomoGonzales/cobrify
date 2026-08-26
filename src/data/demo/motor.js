@@ -327,6 +327,13 @@ export function construirDatosDemo(rubro) {
       catalogSlug: rubro.slug,
       catalogShowPrices: true,
       catalogAllowOrders: true,
+      // Ajustes del rubro: encienden o apagan módulos del menú. Una ferretería
+      // no quiere Agenda de Citas; una pastelería sí quiere Producción.
+      ajustesDemo: {
+        hiddenMenuItems: rubro.menusOcultos || [],
+        ...(rubro.ajustes || {}),
+      },
+      featuresDemo: rubro.features || ['expenseManagement'],
     },
     products: productos,
     categories: rubro.categorias,

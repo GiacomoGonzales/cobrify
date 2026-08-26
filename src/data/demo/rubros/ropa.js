@@ -53,6 +53,17 @@ export default {
     catalogWhatsapp: '51987654321',
   },
 
+  /**
+   * Sin cocina ni citas. Se queda el catálogo online y los envíos: una tienda
+   * de ropa vende por redes y despacha a provincia.
+   */
+  menusOcultos: [
+    'vet-agenda', 'tables', 'kitchen', 'orders', 'recipes', 'production',
+    'ingredients', 'purchase-history', 'requirements', 'expiry-alerts',
+    'batch-control', 'student-payments', 'loans', 'rappi-orders', 'meta-ads',
+    'certificates', 'carrier-dispatch-guides', 'my-schedule', 'attendance',
+  ],
+
   almacenes: [
     { name: 'Tienda La Marina', location: 'Av. La Marina 2450, San Miguel' },
     { name: 'Depósito', location: 'Jr. Castilla 180, San Miguel' },

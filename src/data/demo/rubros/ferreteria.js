@@ -27,6 +27,19 @@ export default {
     catalogWhatsapp: '51987654321',
   },
 
+  /**
+   * Módulos que NO tienen sentido en el rubro. Una ferretería no agenda citas
+   * ni cocina: verlos en el menú le dice al lead "esto no es para mí".
+   * Se queda todo lo demás, incluidas guías de remisión (reparto a obra) y
+   * cotizaciones, que en ferretería son el pan de cada día.
+   */
+  menusOcultos: [
+    'vet-agenda', 'tables', 'kitchen', 'orders', 'recipes', 'production',
+    'ingredients', 'purchase-history', 'requirements', 'expiry-alerts',
+    'batch-control', 'student-payments', 'loans', 'rappi-orders', 'meta-ads',
+    'certificates', 'my-schedule', 'attendance',
+  ],
+
   almacenes: [
     { name: 'Almacén Principal', location: 'Av. Los Constructores 1450, Ate' },
     { name: 'Tienda Mostrador', location: 'Av. Los Constructores 1450, Ate' },
