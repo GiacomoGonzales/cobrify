@@ -55,16 +55,17 @@ struct ConversationView: View {
             // Arrastrar hacia abajo va cerrando el teclado, como WhatsApp.
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: store.mensajes.count + store.pendientes.count) {
-                if let ultimo = (store.mensajes + store.pendientes).last {
-                    withAnimation { proxy.scrollTo(ultimo.id, anchor: .bottom) }
-                }
+                bajarAlFinal(proxy)
+                // La cura de la pantalla en blanco al llegar desde una
+                // notificación: la pila perezosa a veces no pinta hasta que
+                // algo mueve el layout. Dos pasadas más, ya asentado.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { bajarAlFinal(proxy, animado: false) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { bajarAlFinal(proxy, animado: false) }
             }
             // Al abrir el teclado, la conversación sube sola y lo último
             // queda a la vista — sin tener que hacer scroll a mano.
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
-                if let ultimo = (store.mensajes + store.pendientes).last {
-                    withAnimation { proxy.scrollTo(ultimo.id, anchor: .bottom) }
-                }
+                bajarAlFinal(proxy)
             }
         }
         .background(Apariencia.shared.fondoView())
@@ -222,6 +223,15 @@ struct ConversationView: View {
             if Navegacion.shared.conversacionVisible == conv.id {
                 Navegacion.shared.conversacionVisible = nil
             }
+        }
+    }
+
+    private func bajarAlFinal(_ proxy: ScrollViewProxy, animado: Bool = true) {
+        guard let ultimo = (store.mensajes + store.pendientes).last else { return }
+        if animado {
+            withAnimation { proxy.scrollTo(ultimo.id, anchor: .bottom) }
+        } else {
+            proxy.scrollTo(ultimo.id, anchor: .bottom)
         }
     }
 
