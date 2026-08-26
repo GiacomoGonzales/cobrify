@@ -384,6 +384,70 @@ function generarLotes(producto, hoy, azar, indice) {
 }
 
 /**
+ * Reparto: repartidores y entregas del día.
+ *
+ * Solo para los rubros que reparten (`rubro.reparto`). Sin datos, la pantalla
+ * de Envíos sale vacía y el visitante no entiende para qué sirve.
+ */
+function generarReparto(rubro, hoy, azar, facturas) {
+  const nombres = rubro.reparto
+  if (!nombres || nombres.length === 0) return { motoristas: [], deliveries: [] }
+
+  const motoristas = nombres.map((nombre, i) => ({
+    id: `mot${i + 1}`,
+    code: `REP${String(i + 1).padStart(3, '0')}`,
+    name: nombre,
+    phone: `9876543${String(20 + i)}`,
+    vehicleType: 'moto',
+    plate: `M${String(1 + i)}A-${String(100 + i * 7)}`,
+    status: 'active',
+    isActive: true,
+    createdAt: new Date(hoy.getFullYear() - 1, 5, 10),
+  }))
+
+  // Los mismos que usa el servicio real: con otros, el filtro no encuentra
+  // nada y las tarjetas cuentan cero.
+  const ESTADOS = ['delivered', 'delivered', 'in_transit', 'assigned', 'delivered']
+  const DIRECCIONES = [
+    'Av. Los Álamos 340, Dpto. 502', 'Jr. Las Gardenias 128', 'Calle Los Robles 76',
+    'Av. Central 1890, Of. 302', 'Jr. Amazonas 455', 'Av. Las Palmeras 620',
+    'Calle Los Cedros 233', 'Av. Los Próceres 1180',
+  ]
+
+  // Se arman sobre las ventas de HOY: una entrega tiene que corresponder a un
+  // pedido real, o los montos no cuadran con nada.
+  const hoyISO = hoy.toDateString()
+  const delHoy = facturas.filter((f) => f.createdAt.toDateString() === hoyISO).slice(0, 6)
+
+  const deliveries = delHoy.map((f, i) => {
+    const estado = ESTADOS[i % ESTADOS.length]
+    const mot = motoristas[i % motoristas.length]
+    const contado = f.paymentMethod === 'Efectivo'
+    return {
+      id: `del${i + 1}`,
+      orderNumber: f.number,
+      invoiceId: f.id,
+      customerName: f.customer.name,
+      customerPhone: f.customer.phone || '',
+      customerAddress: DIRECCIONES[i % DIRECCIONES.length],
+      customerCoords: null,
+      motoristaId: mot.id,
+      motoristaName: mot.name,
+      status: estado,
+      amount: f.total,
+      paymentMethod: f.paymentMethod,
+      // Cobrado solo lo ya entregado: lo que sigue en la calle todavía no
+      // llegó a la caja, que es justo lo que el arqueo del repartidor mide.
+      paymentStatus: estado === 'delivered' ? 'paid' : 'pending',
+      cashCollected: estado === 'delivered' && contado ? f.total : 0,
+      createdAt: new Date(f.createdAt.getTime() + 30 * 60000),
+    }
+  })
+
+  return { motoristas, deliveries }
+}
+
+/**
  * Arma el paquete completo de datos del demo para un rubro.
  * @param {object} rubro - definición del rubro (src/data/demo/rubros/*.js)
  */
@@ -446,6 +510,8 @@ export function construirDatosDemo(rubro) {
 
   const conProductos = { ...rubro, productos }
   const salon = generarSalon(conProductos, hoy, azar)
+  const facturas = generarVentas(conProductos, hoy, azar)
+  const reparto = generarReparto(rubro, hoy, azar, facturas)
 
   return {
     user: {
@@ -475,7 +541,7 @@ export function construirDatosDemo(rubro) {
     customers: rubro.clientes,
     suppliers: rubro.proveedores || [],
     warehouses: almacenes,
-    invoices: generarVentas(conProductos, hoy, azar),
+    invoices: facturas,
     quotations: generarCotizaciones(conProductos, hoy, azar),
     purchases: generarCompras(conProductos, hoy, azar),
     expenses: generarGastos(rubro, hoy, azar),
@@ -489,6 +555,8 @@ export function construirDatosDemo(rubro) {
     waiters: salon.waiters,
     orders: salon.orders,
     laboratories: rubro.laboratorios || [],
+    motoristas: reparto.motoristas,
+    deliveries: reparto.deliveries,
     financialMovements: [],
     onlineOrders: [],
     employees: [],

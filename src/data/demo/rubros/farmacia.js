@@ -40,6 +40,9 @@ export default {
     'carrier-dispatch-guides', 'my-schedule', 'attendance',
   ],
 
+  /** Delivery de medicamentos, que es lo que pide el barrio. */
+  reparto: ['Elmer Chávez'],
+
   almacenes: [
     { name: 'Mostrador', location: 'Av. Túpac Amaru 1450, Comas' },
     { name: 'Almacén', location: 'Av. Túpac Amaru 1450, Comas' },

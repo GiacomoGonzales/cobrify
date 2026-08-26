@@ -384,6 +384,12 @@ export default function Orders() {
   useEffect(() => {
     const loadCompanySettings = async () => {
       if (!user?.uid) return
+      // En demo la consulta falla con "permisos insuficientes": la
+      // configuración sale de los datos del demo.
+      if (isDemoMode) {
+        setCompanySettings(demoData?.business || null)
+        return
+      }
 
       try {
         const result = await getCompanySettings(getBusinessId())

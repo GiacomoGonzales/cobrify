@@ -35,6 +35,9 @@ export default {
     'certificates', 'carrier-dispatch-guides', 'my-schedule', 'attendance',
   ],
 
+  /** Despacho de equipos a domicilio y a oficina. */
+  reparto: ['Renzo Palacios'],
+
   almacenes: [
     { name: 'Tienda Wilson', location: 'Av. Wilson 1250, Cercado de Lima' },
     { name: 'Almacén Central', location: 'Av. Argentina 1820, Callao' },

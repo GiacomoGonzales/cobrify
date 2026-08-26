@@ -64,7 +64,7 @@ const DELIVERY_STATUS_FLOW = {
 const enlaceMapa = enlaceMapaEntrega
 
 export default function Envios() {
-  const { getBusinessId, isDemoMode, branchScope, assignedMotoristaId } = useAppContext()
+  const { getBusinessId, isDemoMode, demoData, branchScope, assignedMotoristaId } = useAppContext()
   const toast = useToast()
 
   const [activeTab, setActiveTab] = useState('envios')
@@ -122,6 +122,10 @@ export default function Envios() {
   }, [isDemoMode, branchScope])
 
   const loadCompanySettings = async () => {
+    if (isDemoMode) {
+      setCompanySettings(demoData?.business || null)
+      return
+    }
     try {
       const result = await getCompanySettings(getBusinessId())
       if (result.success && result.data) setCompanySettings(result.data)
@@ -136,6 +140,22 @@ export default function Envios() {
   const loadMotoristas = async () => {
     setIsLoading(true)
     try {
+      // En demo NO se consulta Firestore: la consulta falla con
+      // "permisos insuficientes" y el visitante se llena de avisos rojos,
+      // como si el sistema estuviera roto. Los datos salen del demo.
+      if (isDemoMode) {
+        const entregas = demoData?.deliveries || []
+        setMotoristasAll(demoData?.motoristas || [])
+        // Las tarjetas superiores salen de `stats`, que en producción calcula
+        // el servidor. Acá se arman de las entregas del demo: sin esto salían
+        // en cero al lado de una lista con envíos, y parece un error.
+        setStats({
+          todayDeliveries: entregas.length,
+          todayCashCollected: entregas.reduce((suma, d) => suma + (Number(d.cashCollected) || 0), 0),
+        })
+        setIsLoading(false)
+        return
+      }
       const businessId = getBusinessId()
       const [motoristasResult, statsResult] = await Promise.all([
         getMotoristas(businessId),
@@ -233,6 +253,11 @@ export default function Envios() {
   const loadDeliveries = async () => {
     setDeliveriesLoading(true)
     try {
+      if (isDemoMode) {
+        setDeliveries(demoData?.deliveries || [])
+        setDeliveriesLoading(false)
+        return
+      }
       const result = await getDeliveries(getBusinessId(), {
         ...deliveryFilters,
         // Un sub-usuario con repartidor asignado ve SOLO sus entregas. Se

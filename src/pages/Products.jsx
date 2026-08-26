@@ -8,6 +8,7 @@ import { Capacitor } from '@capacitor/core'
 import { scanBarcode, scannerDisponible } from '@/utils/scanBarcode'
 import { Camera as CapacitorCamera, CameraResultType, CameraSource } from '@capacitor/camera'
 import { useAppContext } from '@/hooks/useAppContext'
+import { crearProductoDemo, actualizarProductoDemo, eliminarProductoDemo } from '@/data/demo/operaciones'
 import { registrarCambiosDePrecio } from '@/services/priceHistoryService'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useDataPermissions } from '@/hooks/useDataPermissions'
@@ -588,6 +589,14 @@ export default function Products() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid])
 
+  // Demo: la lista sigue al estado vivo. Sin esto, crear un producto lo
+  // guardaba pero la tabla seguía mostrando la lista anterior.
+  useEffect(() => {
+    if (!isDemoMode || !demoData) return
+    setProducts(demoData.products || [])
+    setCategories(demoData.categories || [])
+  }, [isDemoMode, demoData])
+
   // Laboratorios solo en modo farmacia (businessMode se hidrata async; este
   // efecto liviano corre cuando el modo real llega, sin recargar lo demás)
   useEffect(() => {
@@ -929,10 +938,6 @@ export default function Products() {
   }
 
   const openEditModal = product => {
-    if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
-      return
-    }
     setEditingProduct(product)
     // Costo original SIN redondear: el input muestra 2 decimales, y si el
     // usuario no lo toca se vuelve a guardar este valor (ver resolveCostToSave).
@@ -1108,11 +1113,6 @@ export default function Products() {
 
   // Clonar producto - copia todos los datos pero crea uno nuevo
   const openCloneModal = product => {
-    if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
-      return
-    }
-
     // NO establecemos editingProduct para que se cree como nuevo
     setEditingProduct(null)
 
@@ -1265,8 +1265,24 @@ export default function Products() {
   }
 
   const onSubmit = async data => {
+    // En demo se guarda DE VERDAD, contra el estado en memoria: el visitante
+    // crea su producto, lo ve en la lista y lo puede vender en el POS. Antes
+    // el formulario rebotaba con "los cambios no se guardan" y el demo se
+    // sentía una maqueta.
     if (isDemoMode) {
-      toast.info('En modo demo los cambios no se guardan')
+      const limpio = {
+        ...data,
+        price: parseFloat(data.price) || 0,
+        cost: parseFloat(data.cost) || 0,
+        stock: data.stock === '' || data.stock === null ? null : (parseFloat(data.stock) || 0),
+      }
+      if (editingProduct) {
+        actualizarProductoDemo(editingProduct.id, limpio)
+        toast.success('Producto actualizado')
+      } else {
+        crearProductoDemo(limpio)
+        toast.success('Producto creado')
+      }
       closeModal()
       return
     }
@@ -2059,7 +2075,8 @@ export default function Products() {
     if (!deletingProduct || !user?.uid) return
 
     if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
+      eliminarProductoDemo(deletingProduct.id)
+      toast.success('Producto eliminado')
       setDeletingProduct(null)
       return
     }
