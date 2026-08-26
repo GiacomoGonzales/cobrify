@@ -890,12 +890,78 @@ export default function Customers() {
     return []
   }
 
+  /**
+   * Agenda en la Agenda de Citas los próximos controles de la ficha.
+   *
+   * Devuelve cuántas citas NUEVAS se crearon. Reglas:
+   *  - Atención con fecha de control y sin cita vinculada → se crea la cita y
+   *    su id se guarda en la atención (por eso el updateCustomer del final).
+   *  - Con cita ya vinculada → se le actualiza fecha/hora (mover el control
+   *    desde la ficha mueve la cita, no crea otra).
+   *  - Sin fecha de control → no se toca nada. Si borró la fecha, la cita
+   *    sigue en la agenda y se cancela desde allá, donde se ve el contexto.
+   */
+  const sincronizarProximosControles = async (businessId, customerId, data, atenciones) => {
+    const conControl = atenciones.filter(a => a.nextControlDate)
+    if (conControl.length === 0 || !customerId) return 0
+
+    const { createAppointment, updateAppointment } = await import('@/services/appointmentService')
+    let creadas = 0
+    let huboVinculosNuevos = false
+
+    for (const at of atenciones) {
+      if (!at.nextControlDate) continue
+      const hora = at.nextControlTime || '09:00'
+      if (at.nextControlAppointmentId) {
+        try {
+          await updateAppointment(businessId, at.nextControlAppointmentId, {
+            scheduledDate: at.nextControlDate,
+            scheduledTime: hora,
+          })
+        } catch (e) {
+          // La cita pudo borrarse desde la agenda: se repone.
+          console.warn('Cita del control no encontrada, se crea de nuevo:', e)
+          at.nextControlAppointmentId = null
+        }
+      }
+      if (!at.nextControlAppointmentId) {
+        at.nextControlAppointmentId = await createAppointment(businessId, {
+          customerId,
+          customerName: data.name || '',
+          phone: data.phone || '',
+          serviceName: at.service ? `Control — ${at.service}` : 'Control',
+          servicePrice: 0,
+          services: [],
+          scheduledDate: at.nextControlDate,
+          scheduledTime: hora,
+          notes: 'Agendado desde la ficha de atención',
+        })
+        creadas++
+        huboVinculosNuevos = true
+      }
+    }
+
+    // Persistir los ids de las citas en la ficha: es la marca que evita
+    // duplicar la cita en el siguiente guardado.
+    if (huboVinculosNuevos) {
+      await updateCustomer(businessId, customerId, { attentions: atenciones })
+    }
+    return creadas
+  }
+
   const nuevaAtencion = () => ({
     id: `at_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     date: new Date().toISOString().slice(0, 10),
     service: '',
     treatment: '',
     recommendations: '',
+    specialist: '',
+    // Próximo control: fecha y hora de la siguiente visita. Al guardar se
+    // agenda solo en la Agenda de Citas (pedido de Podología Vital: sin esto
+    // tenía que buscar los controles "uno por uno" en el calendario).
+    nextControlDate: '',
+    nextControlTime: '',
+    nextControlAppointmentId: null,
   })
 
   const openEditModal = customer => {
@@ -1054,13 +1120,20 @@ export default function Customers() {
       // la más reciente a la más antigua, que es como se lee una historia
       // clínica (lo último primero).
       const atencionesLimpias = attentions
-        .filter(a => (a.service || '').trim() || (a.treatment || '').trim() || (a.recommendations || '').trim())
+        .filter(a => (a.service || '').trim() || (a.treatment || '').trim() || (a.recommendations || '').trim()
+          || (a.specialist || '').trim() || (a.nextControlDate || '').trim())
         .map(a => ({
           id: a.id,
           date: a.date || '',
           service: cleanText(a.service || ''),
           treatment: cleanText(a.treatment || ''),
           recommendations: cleanText(a.recommendations || ''),
+          specialist: cleanText(a.specialist || ''),
+          nextControlDate: a.nextControlDate || '',
+          nextControlTime: a.nextControlTime || '',
+          // Conserva el vínculo con la cita ya creada: es lo que evita
+          // agendar una cita nueva en cada guardado.
+          nextControlAppointmentId: a.nextControlAppointmentId || null,
         }))
         .sort((x, y) => String(y.date || '').localeCompare(String(x.date || '')))
       data.attentions = atencionesLimpias
@@ -1087,6 +1160,21 @@ export default function Customers() {
       }
 
       if (result.success) {
+        // Próximos controles → Agenda de Citas. Cada atención con fecha de
+        // control se agenda UNA vez (el id de la cita queda guardado en la
+        // atención); si la fecha u hora cambian, la cita existente se mueve.
+        try {
+          const customerId = editingCustomer?.id || result.id
+          const citasCreadas = await sincronizarProximosControles(businessId, customerId, data, atencionesLimpias)
+          if (citasCreadas > 0) {
+            toast.success(`${citasCreadas === 1 ? 'Próximo control agendado' : `${citasCreadas} controles agendados`} en la Agenda de Citas`)
+          }
+        } catch (e) {
+          // La ficha ya se guardó: un tropiezo agendando no debe deshacerla.
+          console.error('Error al agendar próximos controles:', e)
+          toast.error('La ficha se guardó, pero no se pudo agendar el próximo control. Agéndalo desde la Agenda de Citas.')
+        }
+
         toast.success(
           editingCustomer
             ? 'Cliente actualizado exitosamente'
@@ -2119,16 +2207,29 @@ export default function Customers() {
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Tratamiento / medicación</label>
-                      <input
-                        type="text"
-                        value={at.treatment || ''}
-                        onChange={e => setAttentions(prev => prev.map(x =>
-                          x.id === at.id ? { ...x, treatment: e.target.value } : x))}
-                        placeholder="Ej: Tritri amorolfina"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
-                      />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Tratamiento / medicación</label>
+                        <input
+                          type="text"
+                          value={at.treatment || ''}
+                          onChange={e => setAttentions(prev => prev.map(x =>
+                            x.id === at.id ? { ...x, treatment: e.target.value } : x))}
+                          placeholder="Ej: Tritri amorolfina"
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Especialista</label>
+                        <input
+                          type="text"
+                          value={at.specialist || ''}
+                          onChange={e => setAttentions(prev => prev.map(x =>
+                            x.id === at.id ? { ...x, specialist: e.target.value } : x))}
+                          placeholder="Quién la atendió"
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        />
+                      </div>
                     </div>
 
                     <div>
@@ -2142,6 +2243,36 @@ export default function Customers() {
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 resize-y"
                       />
                     </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Próximo control</label>
+                        <input
+                          type="date"
+                          value={at.nextControlDate || ''}
+                          onChange={e => setAttentions(prev => prev.map(x =>
+                            x.id === at.id ? { ...x, nextControlDate: e.target.value } : x))}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Hora</label>
+                        <input
+                          type="time"
+                          value={at.nextControlTime || ''}
+                          onChange={e => setAttentions(prev => prev.map(x =>
+                            x.id === at.id ? { ...x, nextControlTime: e.target.value } : x))}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        />
+                      </div>
+                    </div>
+                    {at.nextControlDate && (
+                      <p className="text-[11px] text-primary-700">
+                        {at.nextControlAppointmentId
+                          ? 'Este control ya está en la Agenda de Citas: cambiar la fecha u hora acá mueve la cita.'
+                          : 'Al guardar, este control se agenda solo en la Agenda de Citas.'}
+                      </p>
+                    )}
                   </div>
                 ))}
 

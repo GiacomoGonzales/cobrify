@@ -217,6 +217,25 @@ export default {
         },
       ],
     },
+
+    {
+      id: 'ficha-atencion',
+      title: 'Ficha de atención e historial',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Para consultorios y clínicas (podología, estética, salud), cada cliente tiene su **Ficha de atención**: un historial donde cada visita registra la fecha, el procedimiento, el tratamiento o medicación, las recomendaciones y la **especialista** que la atendió. La más reciente aparece primero, como se lee una historia clínica.',
+        },
+        {
+          type: 'texto',
+          text: 'Cada atención puede llevar además su **Próximo control** con fecha y hora. Al guardar la ficha, ese control **se agenda solo en la Agenda de Citas** — no tienes que ir al calendario a crearlo. Y si después cambias la fecha u hora desde la ficha, la cita se mueve sola: no se duplica.',
+        },
+        {
+          type: 'consejo',
+          text: 'Los productos y servicios que el cliente se llevó no van en la ficha: ya están en su historial de comprobantes, que se abre desde la columna Pedidos.',
+        },
+      ],
+    },
   ],
 
   preguntas: [
