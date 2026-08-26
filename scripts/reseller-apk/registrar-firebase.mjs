@@ -65,9 +65,20 @@ snap.forEach(d => {
 resellers.sort((a, b) => a.marca.localeCompare(b.marca, 'es'))
 
 // ------------------------------------------------------------ ya registradas
-const existentes = new Set(
-  ((await pedir(`${API}/androidApps`)).apps || []).map(a => a.packageName)
-)
+// PAGINADO: la API devuelve las apps por paginas. Sin seguir nextPageToken,
+// con 11 apps la primera bajada trajo 9. Paso de verdad (25-ago-2026).
+const listarApps = async () => {
+  const apps = []
+  let pageToken = null
+  do {
+    const r = await pedir(`${API}/androidApps${pageToken ? `?pageToken=${pageToken}` : ''}`)
+    apps.push(...(r.apps || []))
+    pageToken = r.nextPageToken || null
+  } while (pageToken)
+  return apps
+}
+
+const existentes = new Set((await listarApps()).map(a => a.packageName))
 
 const faltan = resellers.filter(r => !existentes.has(r.packageName))
 
@@ -113,17 +124,34 @@ for (const r of faltan) {
 }
 
 // --------------------------------------------- google-services.json del proyecto
-// Se baja el de la app PRINCIPAL: Firebase devuelve el archivo con TODOS los
-// clientes del proyecto, así que con uno alcanza para que compilen todas.
-const apps = (await pedir(`${API}/androidApps`)).apps || []
-const principal = apps.find(a => a.packageName === 'com.cobrify.app') || apps[0]
+// Se baja el de la app PRINCIPAL y se FUSIONA con el archivo local: el config
+// que devuelve Firebase puede venir incompleto (mismo paginado que la lista),
+// y pisar el archivo fue lo que dejo fuera a com.factuya.cobrify — la app de
+// Play — y el AAB de la 4.26.63 no compilaba. Un cliente que ya esta en el
+// archivo local NUNCA se pierde; solo se agregan los nuevos.
+const apps = await listarApps()
+const principal = apps.find(a => a.packageName === 'com.factuya.cobrify')
+  || apps.find(a => a.packageName === 'com.cobrify.app')
+  || apps[0]
 const cfg = await pedir(`https://firebase.googleapis.com/v1beta1/${principal.name}/config`)
-const contenido = Buffer.from(cfg.configFileContents, 'base64').toString('utf8')
+const bajado = JSON.parse(Buffer.from(cfg.configFileContents, 'base64').toString('utf8'))
 
 const destino = join(RAIZ, 'android/app/google-services.json')
-writeFileSync(destino, contenido, 'utf8')
+const { readFileSync, existsSync } = await import('node:fs')
+const local = existsSync(destino) ? JSON.parse(readFileSync(destino, 'utf8')) : { ...bajado, client: [] }
+const pkgDe = (c) => c.client_info.android_client_info.package_name
+const yaEsta = new Set(local.client.map(pkgDe))
+for (const c of bajado.client) {
+  if (!yaEsta.has(pkgDe(c))) local.client.push(c)
+}
+local.client.sort((a, b) => pkgDe(a).localeCompare(pkgDe(b)))
+writeFileSync(destino, JSON.stringify(local, null, 2), 'utf8')
 
-const paquetes = JSON.parse(contenido).client.map(c => c.client_info.android_client_info.package_name)
+const paquetes = local.client.map(pkgDe)
 console.log(`\ngoogle-services.json actualizado (${paquetes.length} paquetes):`)
 paquetes.forEach(p => console.log(`  · ${p}`))
+// Guardia: sin la app principal de Play, el AAB no compila.
+if (!paquetes.includes('com.factuya.cobrify')) {
+  console.log('\n⚠️  OJO: falta com.factuya.cobrify (la app de Play Store) en el archivo.')
+}
 console.log('\nOJO: los APK ya publicados llevan el archivo viejo. Hay que recompilarlos.\n')
