@@ -7,7 +7,7 @@ struct MainTabView: View {
         TabView {
             ConversationListView()
                 .tabItem { Label("Chats", systemImage: "bubble.left.and.bubble.right.fill") }
-            ClientesView()
+            ClientesRealesView()
                 .tabItem { Label("Clientes", systemImage: "person.2.fill") }
             CampanasRealesView()
                 .tabItem { Label("Campañas", systemImage: "megaphone.fill") }

@@ -23,6 +23,8 @@ struct ConversationView: View {
     @State private var estadoLocal: String?
     @State private var etiquetasLocal: Set<String>?
     @State private var mostrarPlantilla = false
+    @State private var mostrarFicha = false
+    @State private var mostrarVincular = false
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -106,6 +108,25 @@ struct ConversationView: View {
                     } label: {
                         Label(conv.nota == nil ? "Agregar nota interna" : "Ver nota interna", systemImage: "note.text")
                     }
+                    Divider()
+                    if conv.linkedBusinessId != nil {
+                        Button {
+                            mostrarFicha = true
+                        } label: {
+                            Label("Ficha del cliente", systemImage: "person.text.rectangle")
+                        }
+                        Button(role: .destructive) {
+                            BuscadorNegocios.desvincular(conversationId: conv.id)
+                        } label: {
+                            Label("Desvincular negocio", systemImage: "link.badge.minus")
+                        }
+                    } else {
+                        Button {
+                            mostrarVincular = true
+                        } label: {
+                            Label("Vincular a un negocio", systemImage: "link")
+                        }
+                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
@@ -131,6 +152,14 @@ struct ConversationView: View {
                     }
             }
             .presentationDetents([.medium])
+        }
+        .sheet(isPresented: $mostrarFicha) {
+            if let negocio = conv.linkedBusinessId {
+                FichaClienteView(businessId: negocio)
+            }
+        }
+        .sheet(isPresented: $mostrarVincular) {
+            VincularSheet(conversationId: conv.id)
         }
         .sheet(isPresented: $mostrarPlantilla) {
             EnviarPlantillaSheet(conversationId: conv.id)
