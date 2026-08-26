@@ -27,6 +27,10 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    entitlements:
+      path: CobrifyInbox/CobrifyInbox.entitlements
+      properties:
+        aps-environment: development
     info:
       path: CobrifyInbox/Info.plist
       properties:
@@ -40,3 +44,5 @@ targets:
         product: FirebaseAuth
       - package: Firebase
         product: FirebaseFirestore
+      - package: Firebase
+        product: FirebaseMessaging

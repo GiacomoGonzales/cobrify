@@ -58,8 +58,14 @@ struct ConversationView: View {
         .onAppear {
             store.empezar(conversationId: conv.id)
             alAbrir()
+            Navegacion.shared.conversacionVisible = conv.id
         }
-        .onDisappear { store.parar() }
+        .onDisappear {
+            store.parar()
+            if Navegacion.shared.conversacionVisible == conv.id {
+                Navegacion.shared.conversacionVisible = nil
+            }
+        }
     }
 
     /// Mensajes con su separador de día intercalado.

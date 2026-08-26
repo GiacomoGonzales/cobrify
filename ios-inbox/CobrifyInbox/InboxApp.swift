@@ -3,6 +3,7 @@ import FirebaseCore
 
 @main
 struct InboxApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var session: SessionStore
 
     init() {

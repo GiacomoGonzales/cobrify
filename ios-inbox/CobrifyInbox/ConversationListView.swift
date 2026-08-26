@@ -4,9 +4,11 @@ import SwiftUI
 struct ConversationListView: View {
     @EnvironmentObject private var session: SessionStore
     @StateObject private var inbox = InboxStore()
+    @ObservedObject private var navegacion = Navegacion.shared
+    @State private var ruta: [String] = []
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $ruta) {
             Group {
                 if let error = inbox.error {
                     ContentUnavailableView("Sin acceso", systemImage: "lock", description: Text(error))
@@ -41,7 +43,17 @@ struct ConversationListView: View {
                 }
             }
         }
-        .onAppear { inbox.empezar() }
+        .onAppear {
+            inbox.empezar()
+            AppDelegate.activarNotificaciones()
+        }
+        .onChange(of: navegacion.abrirConversacion) {
+            // El aviso tocado trae la conversación: se abre encima de todo.
+            if let id = navegacion.abrirConversacion {
+                ruta = [id]
+                navegacion.abrirConversacion = nil
+            }
+        }
     }
 }
 
