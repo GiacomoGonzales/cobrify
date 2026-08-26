@@ -111,10 +111,10 @@ const UNIT_ALIASES = {
   'KM': 'KTM', 'KILOMETRO': 'KTM', 'KILOMETROS': 'KTM',
   'PULG': 'INH', 'PULGADA': 'INH', 'PULGADAS': 'INH',
   // Área
-  'M2': 'MTK', 'METRO2': 'MTK', 'METROCUADRADO': 'MTK',
+  'M2': 'MTK', 'METRO2': 'MTK', 'METROCUADRADO': 'MTK', 'METROSCUADRADOS': 'MTK',
   'CM2': 'CMK', 'MM2': 'MMK',
   // Volumen cúbico
-  'M3': 'MTQ', 'METRO3': 'MTQ', 'METROCUBICO': 'MTQ',
+  'M3': 'MTQ', 'METRO3': 'MTQ', 'METROCUBICO': 'MTQ', 'METROSCUBICOS': 'MTQ',
   'CM3': 'CMQ', 'MM3': 'MMQ',
   // Empaque
   'CAJA': 'BX', 'CAJAS': 'BX', 'CJ': 'BX',
@@ -161,26 +161,48 @@ const UNIT_ALIASES = {
  *   normalizeSunatUnit('xxx')      → 'NIU'
  */
 export function normalizeSunatUnit(input) {
-  if (!input) return 'NIU'
+  return resolverUnidad(input) || 'NIU'
+}
+
+/**
+ * ¿Este texto corresponde a una unidad que el sistema reconoce?
+ *
+ * `normalizeSunatUnit` no sirve para preguntarlo: devuelve 'NIU' tanto para
+ * "unidad" como para cualquier cosa que no entendió. Quien VALIDA una entrada
+ * del usuario (una celda de Excel, por ejemplo) necesita distinguir las dos
+ * cosas para poder avisarle en vez de emitir "unidad" por lo bajo.
+ */
+export function esUnidadValida(input) {
+  return resolverUnidad(input) !== null
+}
+
+/** El núcleo compartido: devuelve el código, o null si no reconoce el texto. */
+function resolverUnidad(input) {
+  if (!input) return null
   const trimmed = String(input).trim()
-  if (!trimmed) return 'NIU'
+  if (!trimmed) return null
 
-  // 1. Match exacto contra código válido
-  if (VALID_UNIT_CODES.has(trimmed)) return trimmed
+  // Acepta la etiqueta completa de los desplegables: "MTQ - METRO CÚBICO"
+  const soloCodigo = trimmed.split(' - ')[0].trim()
 
-  // 2. Match case-insensitive contra códigos válidos
-  const upper = trimmed.toUpperCase()
-  if (VALID_UNIT_CODES.has(upper)) return upper
+  for (const candidato of [trimmed, soloCodigo]) {
+    // 1. Match exacto contra código válido
+    if (VALID_UNIT_CODES.has(candidato)) return candidato
 
-  // 3. Alias exacto en uppercase
-  if (UNIT_ALIASES[upper]) return UNIT_ALIASES[upper]
+    // 2. Match case-insensitive contra códigos válidos
+    const upper = candidato.toUpperCase()
+    if (VALID_UNIT_CODES.has(upper)) return upper
 
-  // 4. Alias sin puntos / espacios / acentos
-  const clean = upper.replace(/[\s.,]/g, '').normalize('NFD').replace(/[̀-ͯ]/g, '')
-  if (UNIT_ALIASES[clean]) return UNIT_ALIASES[clean]
-  if (VALID_UNIT_CODES.has(clean)) return clean
+    // 3. Alias exacto en uppercase
+    if (UNIT_ALIASES[upper]) return UNIT_ALIASES[upper]
 
-  return 'NIU'
+    // 4. Alias sin puntos / espacios / acentos
+    const clean = upper.replace(/[\s.,]/g, '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+    if (UNIT_ALIASES[clean]) return UNIT_ALIASES[clean]
+    if (VALID_UNIT_CODES.has(clean)) return clean
+  }
+
+  return null
 }
 
 // Mapa codigo SUNAT -> nombre legible (ej. 'NIU' -> 'UNIDAD', 'KGM' -> 'KILOGRAMO')
@@ -306,5 +328,42 @@ export const UNIDADES_SELECT = [
   { value: 'RD',     label: 'Varilla' },  // no es codigo SUNAT
   { value: 'YRD',    label: 'Yarda' },
 ]
+
+/**
+ * Las que casi todos usan a diario. Van primero en los desplegables largos:
+ * un Excel con 69 unidades en orden alfabético obliga a scrollear hasta para
+ * elegir "unidad".
+ */
+const UNIDADES_FRECUENTES = [
+  'NIU', 'ZZ', 'KGM', 'GRM', 'TNE', 'LTR', 'MLT', 'GLL',
+  'MTR', 'MTK', 'MTQ', 'BX', 'PK', 'DZN', 'CEN', 'MIL', 'SA', 'BG', 'BO',
+]
+
+/**
+ * Unidades para los desplegables de las PLANTILLAS EXCEL, como
+ * `'MTQ - METRO CÚBICO'`: ahí el usuario necesita ver el código, porque es el
+ * que termina en el XML, y el nombre, porque el código solo no dice nada.
+ *
+ * Sale del catálogo 03 entero y no de una lista propia. Las plantillas traían
+ * 16 y 12 unidades escritas a mano y faltaba, por ejemplo, el metro cúbico:
+ * quien facturaba servicios ambientales no tenía cómo poner su unidad y la
+ * fila le quedaba rechazada.
+ */
+export function etiquetasParaExcel() {
+  const porCodigo = new Map(SUNAT_UNITS.map(u => [u.value, u]))
+  // FT3 y FTQ son los dos "pie cúbico"; en un desplegable dos opciones con el
+  // mismo nombre solo confunden. Se ofrece FTQ, que es el código de UN/ECE.
+  porCodigo.delete('FT3')
+
+  const etiqueta = (u) => `${u.value} - ${(u.label.split(' - ')[1] || u.value).trim().toUpperCase()}`
+
+  const frecuentes = UNIDADES_FRECUENTES.map(c => porCodigo.get(c)).filter(Boolean)
+  const puestas = new Set(frecuentes.map(u => u.value))
+  const resto = [...porCodigo.values()]
+    .filter(u => !puestas.has(u.value))
+    .sort((a, b) => etiqueta(a).localeCompare(etiqueta(b), 'es'))
+
+  return [...frecuentes, ...resto].map(etiqueta)
+}
 
 export default SUNAT_UNITS

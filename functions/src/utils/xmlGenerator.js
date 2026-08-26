@@ -241,6 +241,38 @@ const UNIT_CODE_MAP = {
   'CH': 'CH',
   'AV': 'AV',
   'SA': 'SA',
+  // Estos siete faltaban y el sistema YA los ofrecía para elegir (producto,
+  // cotizacion, orden de compra). Sin pass-through caian en el default de
+  // mapUnitToSunatCode y el comprobante salia con unitCode="NIU": el cliente
+  // elegia "Rollo" o "Tambor" y a SUNAT le llegaba "unidad".
+  '4B': '4B',
+  'GRO': 'GRO',
+  'RM': 'RM',
+  'RO': 'RO',
+  'DR': 'DR',
+  'STN': 'STN',
+  // FT3 no es del catalogo 03; el codigo de pie cubico es FTQ. Se traduce en
+  // vez de dejarlo pasar crudo, que seria un rechazo de SUNAT.
+  'FT3': 'FTQ',
+
+  // Alias de texto que el front ya reconocia y aca caian en NIU: un producto
+  // guardado como "kilos", "rollo" o "servicios" se emitia a SUNAT como
+  // "unidad". Se agregan SOLO los que hoy se degradan; donde este mapa ya
+  // resuelve distinto (PIEZA->C62, HOJA->LEF, KIT->KT) manda el suyo, porque
+  // cambiarlo moveria comprobantes que hoy salen bien.
+  'KGS': 'KGM', 'KILO': 'KGM', 'KILOS': 'KGM', 'G': 'GRM',
+  'GRS': 'GRM', 'TN': 'TNE', 'TON': 'TNE', 'LB': 'LBR',
+  'OZ': 'ONZ', 'L': 'LTR', 'LTS': 'LTR', 'GL': 'GLL',
+  'GAL': 'GLL', 'MT': 'MTR', 'MTS': 'MTR', 'PULG': 'INH',
+  'METRO2': 'MTK', 'METROCUADRADO': 'MTK', 'METROSCUADRADOS': 'MTK', 'CM2': 'CMK',
+  'MM2': 'MMK', 'METRO3': 'MTQ', 'METROCUBICO': 'MTQ', 'METROSCUBICOS': 'MTQ',
+  'CM3': 'CMQ', 'MM3': 'MMQ', 'CJ': 'BX', 'BLS': 'BG',
+  'PAQ': 'PK', 'PKT': 'PK', 'BOT': 'BO', 'CTN': 'CT',
+  'CIENTOS': 'CEN', 'DOC': 'DZN', 'TAMBOR': 'DR', 'TAMBORES': 'DR',
+  'BLD': 'BJ', 'PALET': 'PF', 'PALETS': 'PF', 'ROLLO': 'RO',
+  'ROLLOS': 'RO', 'RESMA': 'RM', 'RESMAS': 'RM', 'CONJUNTO': 'SET',
+  'GRUESA': 'GRO', 'H': 'HUR', 'KW/H': 'KWH', 'SERVICIOS': 'ZZ',
+  'SERV': 'ZZ', 'SRV': 'ZZ',
   'BT': 'BT',
   'U2': 'U2',
   'DZP': 'DZP',

@@ -16,6 +16,7 @@
  */
 import { COLUMNAS_COMPROBANTES, VALORES_COMPROBANTES } from './bulkEmissionTemplateService'
 import { validateDocument, ID_TYPES, DETRACTION_TYPES, DETRACTION_MIN_AMOUNT, calcularDetraccion } from '@/utils/peruUtils'
+import { esUnidadValida, normalizeSunatUnit, unitDisplayName } from '@/data/sunatUnits'
 
 /** Tope de operaciones por archivo (decisión de diseño: lotes manejables). */
 export const LIMITE_OPERACIONES = 500
@@ -397,13 +398,16 @@ export async function parsearExcelComprobantes(buffer, { products = [], igvRate 
         error(fila, 'DSCTO. ÍTEM (S/)', `El descuento (${descuentoItem.toFixed(2)}) supera el total de la línea (${(cantidad * precio).toFixed(2)}).`)
       }
 
-      // Unidad: se acepta "NIU - UNIDAD" (desplegable) o el código pelado "NIU"
-      const unidadTexto = normalizar(valores.UNIDAD) || 'NIU - UNIDAD'
-      const enLista = VALORES_COMPROBANTES.UNIDAD.find((u) => normalizar(u) === unidadTexto || normalizar(u).split(' - ')[0] === unidadTexto)
-      if (!enLista) {
+      // Unidad: se valida contra el CATÁLOGO 03 entero, no contra la lista de
+      // la plantilla. Antes cualquier código válido que no estuviera en las 16
+      // del desplegable (el metro cúbico, por ejemplo) rebotaba la fila. Se
+      // acepta la etiqueta "MTQ - METRO CÚBICO", el código pelado y los alias
+      // de texto de siempre ("m3", "kg", "litros").
+      const unidadTexto = String(valores.UNIDAD ?? '').trim()
+      if (unidadTexto && !esUnidadValida(unidadTexto)) {
         error(fila, 'UNIDAD', `Unidad "${valores.UNIDAD}" no válida. Usa el desplegable de la plantilla (NIU para unidades, ZZ para servicios).`)
       }
-      const unidadCodigo = (enLista || 'NIU - UNIDAD').split(' - ')[0]
+      const unidadCodigo = unidadTexto ? normalizeSunatUnit(unidadTexto) : 'NIU'
 
       // Cruce con el catálogo: el código decide si la emisión toca stock
       const codigo = String(valores.CODIGO_PRODUCTO ?? '').trim()
@@ -435,7 +439,7 @@ export async function parsearExcelComprobantes(buffer, { products = [], igvRate 
         descripcion,
         cantidad: cantidad ?? 0,
         unidadCodigo,
-        unidadTexto: enLista || 'NIU - UNIDAD',
+        unidadTexto: `${unidadCodigo} - ${unitDisplayName(unidadCodigo)}`,
         precioUnitario: precio ?? 0,
         taxAffectation: esBonificacion ? '10' : (AFECTACION_A_CODIGO[afectacionTexto] || '10'),
         isBonificacion: esBonificacion,

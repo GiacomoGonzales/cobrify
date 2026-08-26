@@ -21,6 +21,7 @@
  */
 
 import { DETRACTION_TYPES } from '@/utils/peruUtils'
+import { etiquetasParaExcel } from '@/data/sunatUnits'
 
 /** Columnas de la hoja COMPROBANTES, en orden. `key` es el nombre técnico. */
 export const COLUMNAS_COMPROBANTES = [
@@ -36,7 +37,7 @@ export const COLUMNAS_COMPROBANTES = [
   { key: 'CODIGO_PRODUCTO', header: 'CÓDIGO PRODUCTO', width: 16, nota: 'Opcional. Si coincide con un producto de tu catálogo (SKU o código de barras), la venta DESCUENTA stock. Vacío = ítem libre sin stock.' },
   { key: 'DESCRIPCION', header: 'DESCRIPCIÓN', width: 34, nota: 'Descripción del ítem tal como saldrá en el comprobante.' },
   { key: 'CANTIDAD', header: 'CANTIDAD', width: 10, nota: 'Acepta decimales (0.5 kilos).' },
-  { key: 'UNIDAD', header: 'UNIDAD', width: 16, nota: 'Unidad de medida SUNAT. NIU para unidades, ZZ para servicios.' },
+  { key: 'UNIDAD', header: 'UNIDAD', width: 16, nota: 'Unidad de medida SUNAT (catálogo 03). Las más usadas están arriba en la lista; NIU para unidades, ZZ para servicios.' },
   { key: 'PRECIO_UNITARIO', header: 'PRECIO UNITARIO', width: 15, nota: 'Precio de venta CON IGV incluido (como en tu POS). Para BONIFICACIÓN: el valor referencial de lo que regalas (obligatorio, no 0).' },
   { key: 'AFECTACION', header: 'AFECTACIÓN IGV', width: 15, nota: 'GRAVADO, EXONERADO, INAFECTO o BONIFICACION (regalo: se declara por su valor pero no se cobra).' },
   { key: 'DESCUENTO_ITEM', header: 'DSCTO. ÍTEM (S/)', width: 14, nota: 'Opcional. Descuento en dinero de ESTA línea.' },
@@ -67,12 +68,8 @@ export const VALORES_COMPROBANTES = {
   FORMA_PAGO: ['CONTADO', 'CREDITO'],
   METODO_PAGO: ['EFECTIVO', 'TRANSFERENCIA', 'YAPE', 'PLIN', 'TARJETA'],
   DETRACCION: DETRACTION_TYPES.map(etiquetaDetraccion),
-  UNIDAD: [
-    'NIU - UNIDAD', 'ZZ - SERVICIO', 'KGM - KILOGRAMO', 'GRM - GRAMO',
-    'LTR - LITRO', 'MTR - METRO', 'MTK - METRO CUADRADO', 'BX - CAJA',
-    'PK - PAQUETE', 'DZN - DOCENA', 'GLL - GALÓN', 'CEN - CIENTO',
-    'MIL - MILLAR', 'SA - SACO', 'BG - BOLSA', 'BO - BOTELLA',
-  ],
+  // Catálogo 03 completo, no una lista propia: ver etiquetasParaExcel().
+  UNIDAD: etiquetasParaExcel(),
 }
 
 const AZUL = 'FF1E3A8A'   // cabecera (navy del sistema)

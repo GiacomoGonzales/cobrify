@@ -14,6 +14,7 @@
  * los resuelve contra el catálogo corregido; pedirle códigos de 6 dígitos a
  * un transportista es pedirle errores.
  */
+import { etiquetasParaExcel } from '@/data/sunatUnits'
 
 /** Columnas de la hoja GUIAS, en orden. `key` es el nombre técnico. */
 export const COLUMNAS_GRE_TRANSPORTISTA = [
@@ -39,7 +40,7 @@ export const COLUMNAS_GRE_TRANSPORTISTA = [
   { key: 'GTIN', header: 'GTIN / EAN', width: 15, nota: 'Opcional. Código de barras del producto (8, 12, 13 o 14 dígitos). Hoy solo se imprime en la guía.' },
   { key: 'DESCRIPCION_CARGA', header: 'DESCRIPCIÓN DE LA CARGA', width: 32, nota: 'Qué se transporta, tal como saldrá en la guía.' },
   { key: 'CANTIDAD', header: 'CANTIDAD', width: 10, nota: 'Cantidad de bultos/unidades de esta fila.' },
-  { key: 'UNIDAD', header: 'UNIDAD', width: 16, nota: 'Unidad de medida SUNAT. NIU para unidades.' },
+  { key: 'UNIDAD', header: 'UNIDAD', width: 16, nota: 'Unidad de medida SUNAT (catálogo 03). Las más usadas están arriba en la lista; NIU para unidades.' },
   { key: 'PESO_TOTAL_KG', header: 'PESO TOTAL (KG)', width: 14, nota: 'Peso bruto TOTAL de la guía en kilogramos. Solo en la primera fila de la operación.' },
   { key: 'OBSERVACIONES', header: 'OBSERVACIONES', width: 26, nota: 'Opcional. Sale en la guía.' },
 ]
@@ -47,11 +48,8 @@ export const COLUMNAS_GRE_TRANSPORTISTA = [
 /** Valores admitidos por columna. El parser valida contra ESTAS listas. */
 export const VALORES_GRE_TRANSPORTISTA = {
   TIPO_DOC_DESTINATARIO: ['RUC', 'DNI', 'CE'],
-  UNIDAD: [
-    'NIU - UNIDAD', 'ZZ - SERVICIO', 'KGM - KILOGRAMO', 'TNE - TONELADA',
-    'LTR - LITRO', 'MTR - METRO', 'BX - CAJA', 'PK - PAQUETE',
-    'SA - SACO', 'BG - BOLSA', 'BO - BOTELLA', 'MIL - MILLAR',
-  ],
+  // Catálogo 03 completo, no una lista propia: ver etiquetasParaExcel().
+  UNIDAD: etiquetasParaExcel(),
 }
 
 const AZUL = 'FF1E3A8A'
