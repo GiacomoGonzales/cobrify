@@ -154,9 +154,25 @@ export default function CreateInvoice() {
   const [exchangeRateSource, setExchangeRateSource] = useState(null) // 'sbs'|'cache'|'manual'
   const [loadingRate, setLoadingRate] = useState(false)
 
+  // currentBusinessId, igual que el POS: para un sub-usuario, getBusinessId()
+  // cambia cuando terminan de cargar sus permisos (pasa a ser el ownerId).
+  // Sin esta dependencia, loadData corría UNA vez con los permisos vacíos:
+  // hasMainBranchAccess daba true, no se preseleccionaba sucursal y el
+  // comprobante caía en la Principal — invisible para su propio autor.
+  const currentBusinessId = getBusinessId()
+
   useEffect(() => {
     loadData()
-  }, [user])
+  }, [user, currentBusinessId])
+
+  // Red de seguridad: si los permisos llegan tarde, corregir la sucursal en
+  // cuanto están (mismo caso real que en CreateQuotation).
+  useEffect(() => {
+    if (hasMainBranchAccess !== false) return
+    if (selectedBranch) return
+    if (branches.length === 0) return
+    setSelectedBranch(branches[0])
+  }, [hasMainBranchAccess, branches, selectedBranch])
 
   // Trae el TC del día desde SBS (vía Cloud Function). Si el usuario ya
   // editó el TC a mano, no lo sobrescribe.
@@ -353,6 +369,12 @@ export default function CreateInvoice() {
       return
     }
 
+    // Última defensa: sin acceso a la Principal, el comprobante NUNCA puede
+    // quedar sin sucursal (terminaría invisible para su propio autor).
+    const sucursalAEmitir = (!selectedBranch && hasMainBranchAccess === false && branches.length > 0)
+      ? branches[0]
+      : selectedBranch
+
     setIsSaving(true)
     setMessage(null)
 
@@ -419,10 +441,10 @@ export default function CreateInvoice() {
         status: 'pending',
         notes: '',
         // Sucursal de emisión (null = Sucursal Principal), mismos campos que el POS
-        branchId: selectedBranch?.id || null,
-        branchName: selectedBranch?.name || null,
-        branchTradeName: selectedBranch?.tradeName || null,
-        branchAddress: selectedBranch?.address || null,
+        branchId: sucursalAEmitir?.id || null,
+        branchName: sucursalAEmitir?.name || null,
+        branchTradeName: sucursalAEmitir?.tradeName || null,
+        branchAddress: sucursalAEmitir?.address || null,
         createdBy: user.uid,
         createdByName: user.displayName || user.email || 'Usuario',
         createdByEmail: user.email || '',

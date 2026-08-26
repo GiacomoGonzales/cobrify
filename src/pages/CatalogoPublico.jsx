@@ -596,8 +596,16 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const hideOutOfStock = business?.catalogHideOutOfStock === true
   const ignoreStockSetting = business?.catalogIgnoreStock === true
 
-  const filteredProducts = useMemo(() => {
-    const list = products.filter(product => {
+  /**
+   * Lo que el catálogo PUBLICA, antes de que el visitante filtre nada.
+   *
+   * Está separado de `filteredProducts` a propósito: aquel además aplica la
+   * búsqueda y la categoría elegida, así que no sirve para alimentar otras
+   * vistas. El buscador de la lupa recibía la lista CRUDA y por ahí se colaban
+   * los productos desactivados, que sí estaban excluidos del grid.
+   */
+  const publicProducts = useMemo(() => {
+    return products.filter(product => {
       // Excluir productos desactivados (isActive === false) del catálogo público.
       if (product.isActive === false) return false
 
@@ -606,6 +614,15 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         return false
       }
 
+      // Excluir productos de categorías ocultas
+      if (product.category && hiddenCategoryIds.has(product.category)) return false
+
+      return true
+    })
+  }, [products, hiddenCategoryIds, hideOutOfStock, ignoreStockSetting])
+
+  const filteredProducts = useMemo(() => {
+    const list = publicProducts.filter(product => {
       // Búsqueda flexible e insensible a tildes/acentos: cada palabra (parcial) del término
       // debe aparecer en algún campo del producto. Ej: "POL ROJ" encuentra "Polo Adidas Rojo"
       // y "camion" encuentra "Camión".
@@ -622,11 +639,6 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         )
         return terms.every(term => haystack.includes(term))
       })()
-
-      // Excluir productos de categorías ocultas
-      if (product.category && hiddenCategoryIds.has(product.category)) {
-        return false
-      }
 
       // Incluir productos de la categoría/subcategoría seleccionada
       let matchesCategory = !selectedCategory
@@ -679,7 +691,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         sorted.sort(byName)
     }
     return sorted
-  }, [products, searchQuery, selectedCategory, selectedSubcategory, categories, hiddenCategoryIds, hideOutOfStock, ignoreStockSetting, sortBy, business, catalogExchangeRate])
+  }, [publicProducts, searchQuery, selectedCategory, selectedSubcategory, categories, sortBy, business, catalogExchangeRate])
 
   // Productos destacados
   const featuredProducts = useMemo(() => {
@@ -2988,7 +3000,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       {/* Panel de busqueda (lupa junto a las categorias) */}
       {searchOpen && (
         <CatalogSearchModal
-          products={products}
+          products={publicProducts}
           showPrices={showPrices}
           formatPrice={fmtCatalog}
           onSelectProduct={(p) => setSelectedProduct(p)}

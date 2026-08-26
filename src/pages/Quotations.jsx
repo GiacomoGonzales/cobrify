@@ -520,26 +520,30 @@ export default function Quotations() {
     return map
   }, [quotations])
 
+  /**
+   * Cotizaciones que este usuario PUEDE VER: sus ubicaciones permitidas y la
+   * sucursal elegida en el header. Es la base tanto de la lista como de las
+   * tarjetas de arriba.
+   *
+   * Antes las tarjetas contaban sobre la lista CRUDA: mostraban "Total 2"
+   * mientras la lista salía vacía, y el usuario no entendía dónde estaban sus
+   * cotizaciones. Un número que nadie puede abrir es peor que no mostrarlo.
+   */
+  const visibleQuotations = quotations.filter(canAccessQuotation).filter(quotation => {
+    if (filterBranch === 'all') return true
+    return filterBranch === 'main' ? !quotation.branchId : quotation.branchId === filterBranch
+  })
+
   // Filtrar cotizaciones (búsqueda flexible: multi-palabra parcial, sin acentos)
-  const filteredQuotations = quotations.filter(canAccessQuotation).filter(quotation => {
+  const filteredQuotations = visibleQuotations.filter(quotation => {
     const matchesSearch = matchesPrebuilt(deferredSearchTerm, quotationSearchIndex.get(quotation.id) || '')
 
     const matchesStatus = filterStatus === 'all' || quotation.status === filterStatus
 
-    // Filtrar por sucursal
-    let matchesBranch = true
-    if (filterBranch !== 'all') {
-      if (filterBranch === 'main') {
-        matchesBranch = !quotation.branchId
-      } else {
-        matchesBranch = quotation.branchId === filterBranch
-      }
-    }
-
     // Filtrar por fecha
     const matchesDate = filterByDateRange(quotation)
 
-    return matchesSearch && matchesStatus && matchesBranch && matchesDate
+    return matchesSearch && matchesStatus && matchesDate
   })
 
   const displayedQuotations = filteredQuotations.slice(0, visibleCount)
@@ -609,12 +613,12 @@ export default function Quotations() {
   }
 
   // Cotizaciones filtradas solo por fecha (para estadísticas)
-  const dateFilteredQuotations = quotations.filter(filterByDateRange)
+  const dateFilteredQuotations = visibleQuotations.filter(filterByDateRange)
 
   // Estadísticas (basadas en el período seleccionado)
   const stats = {
     total: dateFilteredQuotations.length,
-    totalAll: quotations.length,
+    totalAll: visibleQuotations.length,
     sent: dateFilteredQuotations.filter(q => q.status === 'sent').length,
     accepted: dateFilteredQuotations.filter(q => q.status === 'accepted').length,
     converted: dateFilteredQuotations.filter(q => q.status === 'converted').length,

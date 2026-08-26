@@ -477,9 +477,33 @@ export default function CreateQuotation() {
     return () => window.removeEventListener('beforeunload', handler)
   }, [quotationItems, selectedCustomer, manualCustomer, isSaving])
 
+  // currentBusinessId, igual que el POS: para un sub-usuario, getBusinessId()
+  // cambia de valor cuando terminan de cargar sus permisos (pasa a ser el
+  // ownerId). Sin esta dependencia, loadData corría UNA vez con los permisos
+  // todavía vacíos y nunca se repetía.
+  const currentBusinessId = getBusinessId()
+
   useEffect(() => {
     loadData()
-  }, [user, quotationId, cloneId])
+  }, [user, currentBusinessId, quotationId, cloneId])
+
+  // Red de seguridad para la sucursal de la cotización.
+  //
+  // loadData corre apenas hay `user`, y los permisos del sub-usuario todavía
+  // pueden estar cargando: en ese instante allowedBranches está vacío, que
+  // significa "sin restricción", así que hasMainBranchAccess da true y la
+  // preselección de arriba no se hace. Resultado: la cotización se guardaba en
+  // la Sucursal Principal, y después el propio autor no la veía porque su
+  // filtro de ubicación la escondía. Caso real, reportado por un cliente.
+  //
+  // Cuando los permisos llegan, esto corrige la sucursal elegida.
+  useEffect(() => {
+    if (quotationId || isEditing) return          // editando manda lo guardado
+    if (hasMainBranchAccess !== false) return     // puede usar la Principal
+    if (selectedBranch) return                    // ya hay una elegida
+    if (branches.length === 0) return             // todavía no cargaron
+    setSelectedBranch(branches[0])
+  }, [hasMainBranchAccess, branches, selectedBranch, quotationId, isEditing])
 
   const loadData = async () => {
     if (!user?.uid) return
@@ -525,6 +549,10 @@ export default function CreateQuotation() {
         setBranches(accessibleBranches)
         // Si no tiene acceso a la Sucursal Principal (branchId null), preseleccionar
         // su primera sucursal permitida para que la cotización no caiga en Principal.
+        // OJO: esto puede correr ANTES de que lleguen los permisos del
+        // sub-usuario (loadData depende de `user`, no de allowedBranches). Con
+        // los permisos vacíos, hasMainBranchAccess vale true y no se
+        // preselecciona nada: por eso hay un efecto correctivo más abajo.
         if (!quotationId && hasMainBranchAccess === false && accessibleBranches.length > 0) {
           setSelectedBranch(accessibleBranches[0])
         }
@@ -1273,6 +1301,13 @@ export default function CreateQuotation() {
       return
     }
 
+    // Sucursal con la que se emite. Última defensa contra el caso de arriba:
+    // si el usuario no tiene acceso a la Principal, la cotización NUNCA puede
+    // quedar sin sucursal — terminaría invisible para su propio autor.
+    const sucursalAEmitir = (!selectedBranch && hasMainBranchAccess === false && branches.length > 0)
+      ? branches[0]
+      : selectedBranch
+
     setIsSaving(true)
 
     try {
@@ -1389,12 +1424,12 @@ export default function CreateQuotation() {
           notes: notes,
           recipientName: recipientName,
           recipientPosition: recipientPosition,
-          branchId: selectedBranch?.id || null,
-          branchName: selectedBranch?.name || null,
-          branchTradeName: selectedBranch?.tradeName || null,
-          branchLogoUrl: selectedBranch?.logoUrl || null,
-          branchAddress: selectedBranch?.address || null,
-          branchPhone: selectedBranch?.phone || null,
+          branchId: sucursalAEmitir?.id || null,
+          branchName: sucursalAEmitir?.name || null,
+          branchTradeName: sucursalAEmitir?.tradeName || null,
+          branchLogoUrl: sucursalAEmitir?.logoUrl || null,
+          branchAddress: sucursalAEmitir?.address || null,
+          branchPhone: sucursalAEmitir?.phone || null,
           sellerId: selectedSeller?.id || null,
           sellerName: selectedSeller?.name || null,
           sellerCode: selectedSeller?.code || null,
