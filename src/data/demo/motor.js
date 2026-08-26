@@ -253,6 +253,137 @@ function generarCotizaciones(rubro, hoy, azar) {
 }
 
 /**
+ * Salón de un restaurante: mesas con su estado, mozos y las órdenes abiertas.
+ *
+ * Una mesa "ocupada" tiene que tener SU orden y SU monto, o el mapa del salón
+ * muestra mesas ocupadas en cero y el tablero no cuadra.
+ */
+function generarSalon(rubro, hoy, azar) {
+  const salon = rubro.salon
+  if (!salon) return { tables: [], waiters: [], orders: [] }
+
+  const waiters = (salon.mozos || []).map((nombre, i) => ({
+    id: `w${i + 1}`,
+    code: `MOZ${String(i + 1).padStart(3, '0')}`,
+    name: nombre,
+    phone: `9871234${String(50 + i)}`,
+    status: 'active',
+    createdAt: new Date(hoy.getFullYear() - 1, 0, 15),
+  }))
+
+  const platos = rubro.productos.filter((p) => Number(p.price) > 0)
+  const tables = []
+  const orders = []
+  let nOrden = 0
+
+  ;(salon.zonas || []).forEach((zona) => {
+    for (let n = 1; n <= zona.mesas; n++) {
+      const numero = tables.length + 1
+      // Alrededor de un tercio del salón ocupado: un salón vacío no vende, y
+      // uno lleno tapa el mapa.
+      const ocupada = azar() < 0.35 && waiters.length > 0
+      const mesa = {
+        id: String(numero),
+        number: numero,
+        capacity: zona.capacidad || 4,
+        zone: zona.nombre,
+        status: ocupada ? 'occupied' : 'available',
+      }
+
+      if (ocupada) {
+        const mozo = waiters[Math.floor(azar() * waiters.length)]
+        const items = []
+        let total = 0
+        for (let k = 0; k < 1 + Math.floor(azar() * 3); k++) {
+          const p = platos[Math.floor(azar() * platos.length)]
+          if (!p || items.some((it) => it.productId === p.id)) continue
+          const cantidad = 1 + Math.floor(azar() * 3)
+          items.push({
+            productId: p.id,
+            name: p.name,
+            code: p.code,
+            price: p.price,
+            quantity: cantidad,
+            total: redondear(p.price * cantidad),
+          })
+          total += p.price * cantidad
+        }
+        if (items.length > 0) {
+          const montos = desglosarIGV(total)
+          const abierta = new Date(hoy.getTime() - (10 + Math.floor(azar() * 70)) * 60000)
+          nOrden += 1
+          const orden = {
+            id: `order${nOrden}`,
+            orderNumber: `#${String(nOrden).padStart(3, '0')}`,
+            tableId: mesa.id,
+            tableNumber: mesa.number,
+            waiterName: mozo.name,
+            waiterId: mozo.id,
+            status: azar() < 0.5 ? 'pending' : 'preparing',
+            items,
+            subtotal: montos.subtotal,
+            tax: montos.tax,
+            total: montos.total,
+            createdAt: abierta,
+          }
+          orders.push(orden)
+          mesa.waiter = mozo.name
+          mesa.waiterId = mozo.id
+          mesa.startTime = abierta
+          mesa.amount = montos.total
+          mesa.currentOrder = orden.id
+        } else {
+          mesa.status = 'available'
+        }
+      }
+
+      tables.push(mesa)
+    }
+  })
+
+  return { tables, waiters, orders }
+}
+
+/**
+ * Lotes con fecha de vencimiento (farmacia).
+ *
+ * Se reparten en tres tramos a propósito: uno vencido, uno por vencer y el
+ * resto lejano. Sin un lote por vencer, la alerta de vencimientos —que es LA
+ * razón por la que una botica compra el sistema— sale vacía.
+ */
+function generarLotes(producto, hoy, azar, indice) {
+  const total = Number(producto.stock) || 0
+  if (total <= 0) return []
+  const dia = (dias) => new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + dias)
+
+  // Uno de cada seis productos arrastra un lote próximo a vencer.
+  const porVencer = indice % 6 === 0
+  const lejano = Math.ceil(total * (porVencer ? 0.7 : 1))
+  // warehouseId: sin él las alertas muestran el lote como "Sin asignar" y no
+  // se puede filtrar por almacén, que es como trabaja una botica con
+  // mostrador y depósito.
+  const lotes = [{
+    id: `${producto.id}-l1`,
+    lotNumber: `LOT-${String(1000 + indice)}`,
+    warehouseId: '1',
+    expiryDate: dia(240 + Math.floor(azar() * 400)),
+    quantity: lejano,
+    isExpired: false,
+  }]
+  if (porVencer && total - lejano > 0) {
+    lotes.push({
+      id: `${producto.id}-l2`,
+      lotNumber: `LOT-${String(2000 + indice)}`,
+      warehouseId: '2',
+      expiryDate: dia(10 + Math.floor(azar() * 40)),
+      quantity: total - lejano,
+      isExpired: false,
+    })
+  }
+  return lotes
+}
+
+/**
  * Arma el paquete completo de datos del demo para un rubro.
  * @param {object} rubro - definición del rubro (src/data/demo/rubros/*.js)
  */
@@ -282,7 +413,7 @@ export function construirDatosDemo(rubro) {
     ]
   }
 
-  const productos = rubro.productos.map((p) => {
+  const productos = rubro.productos.map((p, i) => {
     // Con variantes el stock vive en CADA VARIANTE, no en el padre: sin
     // repartirlo ahí, Inventario avisa "302 unidades sin asignar a almacén" y
     // el POS no las ofrece.
@@ -307,10 +438,14 @@ export function construirDatosDemo(rubro) {
       stock: Number(p.stock) || 0,
       unit: p.unit || 'UNIDAD',
       warehouseStocks: repartir(p.stock),
+      // Lotes solo donde el rubro los usa (farmacia): en una ferretería
+      // inventar fechas de vencimiento sería ruido.
+      ...(rubro.conLotes ? { batches: generarLotes(p, hoy, azar, i) } : {}),
     }
   })
 
   const conProductos = { ...rubro, productos }
+  const salon = generarSalon(conProductos, hoy, azar)
 
   return {
     user: {
@@ -348,6 +483,12 @@ export function construirDatosDemo(rubro) {
     // traen. Una ferretería no tiene materia prima y su pestaña queda vacía,
     // que es lo honesto.
     ingredients: rubro.insumos || [],
+    recipes: rubro.recetas || [],
+    // Salón: vacío en los rubros que no atienden mesas.
+    tables: salon.tables,
+    waiters: salon.waiters,
+    orders: salon.orders,
+    laboratories: rubro.laboratorios || [],
     financialMovements: [],
     onlineOrders: [],
     employees: [],

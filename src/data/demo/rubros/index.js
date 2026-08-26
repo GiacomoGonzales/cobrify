@@ -40,6 +40,20 @@ export const RUBROS_DEMO = [
     modo: 'retail',
     cargar: () => import('./pasteleria'),
   },
+  {
+    slug: 'restaurante',
+    nombre: 'Restaurante',
+    descripcion: 'Mesas, comandas a cocina y recetas',
+    modo: 'restaurant',
+    cargar: () => import('./restaurante'),
+  },
+  {
+    slug: 'farmacia',
+    nombre: 'Botica / Farmacia',
+    descripcion: 'Lotes, vencimientos y laboratorios',
+    modo: 'pharmacy',
+    cargar: () => import('./farmacia'),
+  },
 ]
 
 export const SLUGS_DEMO = RUBROS_DEMO.map((r) => r.slug)
