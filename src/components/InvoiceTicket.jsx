@@ -8,6 +8,7 @@ import { unitDisplayName } from '@/data/sunatUnits'
 import { getComprobanteBreakdown } from '@/utils/peruUtils'
 import { formatQuantity } from '@/lib/utils'
 import { getTicketFooterParts } from '@/utils/ticketFooter'
+import { vinculoDe } from '@/utils/documentLinks'
 
 /**
  * Componente de Ticket Imprimible según formato SUNAT
@@ -755,6 +756,20 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           <div className="info-row">
             <span className="info-label">Validez:</span>
             <span>{Number(invoice.validityDays)} día{Number(invoice.validityDays) !== 1 ? 's' : ''}</span>
+          </div>
+        )}
+        {/* El vínculo con el otro documento, en los dos sentidos: la cotización
+            dice con qué se facturó y el comprobante de qué cotización salió. */}
+        {vinculoDe(invoice.convertedTo)?.numero && (
+          <div className="info-row">
+            <span className="info-label">Facturado con:</span>
+            <span>{vinculoDe(invoice.convertedTo).numero}</span>
+          </div>
+        )}
+        {vinculoDe(invoice.convertedFrom)?.numero && (
+          <div className="info-row">
+            <span className="info-label">{vinculoDe(invoice.convertedFrom).tipo === 'quotation' ? 'Cotización:' : 'Doc. origen:'}</span>
+            <span>{vinculoDe(invoice.convertedFrom).numero}</span>
           </div>
         )}
       </div>

@@ -14,6 +14,7 @@ import { Capacitor, CapacitorHttp } from '@capacitor/core'
 import { getWalletLogoDataUrl } from '@/utils/walletLogos'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
+import { vinculoDe } from '@/utils/documentLinks'
 
 /**
  * Convierte un número a texto en español (para montos en facturas peruanas)
@@ -1368,6 +1369,18 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.text('N° PEDIDO:', colRightX, rightY)
     doc.setFont('helvetica', 'normal')
     doc.text(invoice.orderNumber, rightValueX, rightY)
+    rightY += dataLineHeight
+  }
+
+  // De qué cotización (o nota, o guía) salió este comprobante. Lo pidió un
+  // cliente que cotiza y factura por separado: sin el número impreso, con el
+  // documento en la mano no hay forma de saber a qué cotización responde.
+  const origen = vinculoDe(invoice.convertedFrom)
+  if (origen && origen.numero) {
+    doc.setFont('helvetica', 'bold')
+    doc.text(`${origen.tipo === 'quotation' ? 'N° COTIZ.' : 'N° DOC. ORIGEN'}:`, colRightX, rightY)
+    doc.setFont('helvetica', 'normal')
+    doc.text(origen.numero, rightValueX, rightY)
     rightY += dataLineHeight
   }
 

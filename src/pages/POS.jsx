@@ -737,7 +737,9 @@ export default function POS() {
   const orderClaimRef = React.useRef(null)
 
   // Estado para cotización (para marcar como convertida al completar)
-  const [pendingQuotationId, setPendingQuotationId] = useState(null)
+  // { id, number } — el número hacía falta guardarlo: antes solo viajaba al
+  // toast y se perdía, y es el dato que el cliente quiere ver en la factura.
+  const [pendingQuotation, setPendingQuotation] = useState(null)
 
   // Estado para nota(s) de venta (para marcar como convertida(s) y skip stock al completar)
   // Puede ser un string (una nota) o un array (múltiples notas)
@@ -2020,7 +2022,7 @@ export default function POS() {
 
       // Guardar info de la cotización para marcar como convertida al completar
       if (quotationInfo.quotationId) {
-        setPendingQuotationId(quotationInfo.quotationId)
+        setPendingQuotation({ id: quotationInfo.quotationId, number: quotationInfo.quotationNumber || '' })
       }
 
       // Cargar items de la cotización al carrito.
@@ -7341,6 +7343,12 @@ export default function POS() {
             ? { type: 'nota_venta', id: pendingNotaVentaIds[0] }
             : { type: 'nota_venta', ids: pendingNotaVentaIds },
         }),
+        // De qué cotización salió. Mismo shape que las notas de venta y las
+        // guías: sin esto, desde el comprobante era imposible saberlo.
+        // No lleva skipStockDeduction — una cotización no mueve stock.
+        ...(pendingQuotation && {
+          convertedFrom: { type: 'quotation', id: pendingQuotation.id, number: pendingQuotation.number || '' },
+        }),
         // Si viene de una guía de remisión que ya descontó stock, no descontar de nuevo
         ...(sourceDispatchGuide && sourceDispatchGuide.stockAlreadyDeducted && {
           skipStockDeduction: true,
@@ -7774,7 +7782,7 @@ export default function POS() {
         const _pendingOrderId = pendingOrderId
         const _markOrderPaidOnComplete = markOrderPaidOnComplete
         const _markOnlineOrderCompleteOnSale = markOnlineOrderCompleteOnSale
-        const _pendingQuotationId = pendingQuotationId
+        const _pendingQuotation = pendingQuotation
         const _pendingNotaVentaIds = pendingNotaVentaIds
         const _sourceDispatchGuide = sourceDispatchGuide
         const _pendingAppointmentData = pendingAppointmentData
@@ -7785,7 +7793,7 @@ export default function POS() {
           setMarkOnlineOrderCompleteOnSale(false)
           onlineOrderLoadedRef.current = false
         }
-        if (_pendingQuotationId) setPendingQuotationId(null)
+        if (_pendingQuotation) setPendingQuotation(null)
         if (_pendingNotaVentaIds) setPendingNotaVentaIds(null)
         if (_sourceDispatchGuide) setSourceDispatchGuide(null)
         if (_pendingAppointmentData) setPendingAppointmentData(null)
@@ -8617,9 +8625,9 @@ export default function POS() {
             }
 
             // 6.2. Marcar cotización como convertida
-            if (_pendingQuotationId) {
+            if (_pendingQuotation) {
               try {
-                await markQuotationAsConverted(businessId, _pendingQuotationId, bgInvoiceId)
+                await markQuotationAsConverted(businessId, _pendingQuotation.id, bgInvoiceId, bgDocumentType, bgNumberResult.number)
               } catch (error) {
                 console.error('Error al marcar cotización como convertida:', error)
               }

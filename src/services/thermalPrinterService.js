@@ -12,6 +12,7 @@ import { getSessionMoneyTotals } from '@/utils/cashTotals';
 import { getTicketFooterParts, justifyTicketText } from '@/utils/ticketFooter';
 import { formatQuantity } from '@/lib/utils'
 import { altoDeLinea } from '@/utils/escposCharSize';
+import { vinculoDe } from '@/utils/documentLinks';
 
 /**
  * Servicio para manejar impresoras térmicas WiFi/Bluetooth
@@ -1109,6 +1110,14 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
       .align('left')
       .text(convertSpanishText(`Fecha: ${invoiceDate.toLocaleDateString('es-PE')}\n`))
       .text(`Hora: ${timeString}\n`);
+
+    // De qué documento salió (cotización, nota de venta o guía). Con el
+    // ticket en la mano es lo único que ata el cobro a lo que se cotizó.
+    const origenTicket = vinculoDe(invoice.convertedFrom);
+    if (origenTicket?.numero) {
+      const etq = origenTicket.tipo === 'quotation' ? 'Cotizacion' : 'Doc. origen';
+      printer = printer.text(convertSpanishText(etq + ': ' + origenTicket.numero + String.fromCharCode(10)));
+    }
 
     // ========== Datos del Cliente (ticket-section) ==========
     // Mostrar para facturas, boletas y notas de venta
@@ -2597,6 +2606,14 @@ const buildTicketEscPos = async (invoice, business, paperWidth = 58) => {
       .newLine()
       .text(`Hora: ${createdDate.toLocaleTimeString('es-PE')}`)
       .newLine();
+
+    // De qué documento salió (cotización, nota de venta o guía). Con el
+    // ticket en la mano es lo único que ata el cobro a lo que se cotizó.
+    const origenWifi = vinculoDe(invoice.convertedFrom);
+    if (origenWifi?.numero) {
+      const etqW = origenWifi.tipo === 'quotation' ? 'Cotizacion' : 'Doc. origen';
+      builder.text(etqW + ': ' + origenWifi.numero).newLine();
+    }
 
     // Datos del cliente
     builder.bold(true)
@@ -4712,6 +4729,9 @@ const buildQuotationEscPos = (quotation, business, paperWidth = 58) => {
   } else if (quotation.validityDays) {
     addRow('Valido por:', `${quotation.validityDays} dias`);
   }
+  // Si ya se facturó, con qué documento
+  const destinoCotiz = vinculoDe(quotation.convertedTo);
+  if (destinoCotiz?.numero) addRow('Facturado con:', destinoCotiz.numero);
   builder.text(sep + '\n');
 
   // Datos del cliente

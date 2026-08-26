@@ -85,7 +85,7 @@ const getTomorrowDateString = () => {
   return getLocalDateString(1)
 }
 
-export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInvoice = null, selectedBranch = null, cloneData = null }) {
+export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = null, referenceInvoice = null, selectedBranch = null, cloneData = null }) {
   const toast = useToast()
   const { getBusinessId, filterBranchesByAccess, filterWarehousesByAccess, allowedBranches, user, businessMode, businessSettings } = useAppContext()
   const isPharmacy = businessMode === 'pharmacy'
@@ -1655,6 +1655,19 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
           fullNumber: referenceInvoice.number,
         } : null,
 
+        // De qué cotización salió. Va en un campo NUESTRO y no en
+        // `referencedInvoice` ni en `relatedDocuments`: esos dos se validan
+        // contra el catálogo SUNAT de comprobantes, y una cotización no lo es
+        // — meterla ahí hace que SUNAT rechace la guía. Por eso hasta ahora el
+        // vínculo se descartaba del todo y la guía quedaba huérfana.
+        ...(referenceInvoice?.documentType === 'cotizacion' && referenceInvoice.id && {
+          convertedFrom: {
+            type: 'quotation',
+            id: referenceInvoice.id,
+            number: referenceInvoice.number || '',
+          },
+        }),
+
         relatedDocuments: relatedDocuments.filter(doc => doc.series && doc.number).map(doc => ({
           type: doc.type,
           series: doc.series,
@@ -1839,6 +1852,14 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
               console.error('Error en envío automático a SUNAT:', err)
               toast.error(`Error al enviar guía a SUNAT: ${err.message}`)
             })
+        }
+
+        if (onCreated) {
+          try {
+            await onCreated({ id: result.id, number: result.number })
+          } catch (e) {
+            console.error('Error en el aviso de guía creada:', e)
+          }
         }
 
         onClose()
