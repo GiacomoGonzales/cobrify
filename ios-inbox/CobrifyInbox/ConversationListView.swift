@@ -205,6 +205,9 @@ struct ConversationListView: View {
                 .padding(.horizontal, 13)
                 .padding(.vertical, 7)
                 .background(filtro == f ? AnyShapeStyle(.tint.opacity(0.18)) : AnyShapeStyle(Color(.secondarySystemGroupedBackground)), in: Capsule())
+                .overlay(
+                    Capsule().stroke(filtro == f ? AnyShapeStyle(.tint.opacity(0.35)) : AnyShapeStyle(Color(.systemGray4)), lineWidth: 1)
+                )
                 .foregroundStyle(filtro == f ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
         }
         .buttonStyle(.plain)
@@ -222,6 +225,9 @@ struct ConversationListView: View {
             .padding(.horizontal, 13)
             .padding(.vertical, 7)
             .background(filtro == .etiqueta(e.id) ? AnyShapeStyle(e.color.opacity(0.18)) : AnyShapeStyle(Color(.secondarySystemGroupedBackground)), in: Capsule())
+            .overlay(
+                Capsule().stroke(filtro == .etiqueta(e.id) ? AnyShapeStyle(e.color.opacity(0.35)) : AnyShapeStyle(Color(.systemGray4)), lineWidth: 1)
+            )
             .foregroundStyle(filtro == .etiqueta(e.id) ? AnyShapeStyle(e.color) : AnyShapeStyle(.primary))
         }
         .buttonStyle(.plain)
