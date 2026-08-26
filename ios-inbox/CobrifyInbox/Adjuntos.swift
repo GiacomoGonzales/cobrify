@@ -90,7 +90,10 @@ final class ReproductorAudio: ObservableObject {
         if let observador { player?.removeTimeObserver(observador); self.observador = nil }
         player?.pause()
 
-        guard let u = URL(string: url) else { return }
+        // Si ya lo bajamos para la onda, se reproduce del disco: instantáneo.
+        let local = CacheAudio.archivoLocal(url)
+        let u = FileManager.default.fileExists(atPath: local.path) ? local : URL(string: url)
+        guard let u else { return }
         try? AVAudioSession.sharedInstance().setCategory(.playback)
         try? AVAudioSession.sharedInstance().setActive(true)
         let p = AVPlayer(url: u)
@@ -116,65 +119,188 @@ final class ReproductorAudio: ObservableObject {
     }
 }
 
-/// Duraciones ya averiguadas, para no releer el archivo en cada aparición.
+/// Lo que ya sabemos de cada audio: su archivo local, cuánto dura y su onda.
+/// Analizar un audio cuesta, y la burbuja aparece muchas veces.
 @MainActor
-final class DuracionesAudio {
-    static var cache: [String: Double] = [:]
+final class AudiosAnalizados {
+    static var duracion: [String: Double] = [:]
+    static var onda: [String: [Float]] = [:]
 }
 
-/// La nota de voz en su burbuja: play/pausa, barra de avance y la duración
-/// (o el tiempo transcurrido mientras suena), como WhatsApp.
-struct BurbujaAudio: View {
+/// Baja el audio una sola vez y lo guarda: la onda se calcula del archivo
+/// local (analizar por red es lento e inseguro) y reproducir es instantáneo.
+enum CacheAudio {
+    private static var dir: URL {
+        let d = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("audios", isDirectory: true)
+        try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }
+
+    static func archivoLocal(_ url: String) -> URL {
+        let nombre = String(url.hashValue.magnitude) + "." + (URL(string: url)?.pathExtension ?? "m4a")
+        return dir.appendingPathComponent(nombre)
+    }
+
+    /// Devuelve el archivo local, bajándolo si hace falta.
+    static func obtener(_ url: String) async -> URL? {
+        let destino = archivoLocal(url)
+        if FileManager.default.fileExists(atPath: destino.path) { return destino }
+        guard let remota = URL(string: url),
+              let (tmp, _) = try? await URLSession.shared.download(from: remota) else { return nil }
+        try? FileManager.default.removeItem(at: destino)
+        try? FileManager.default.moveItem(at: tmp, to: destino)
+        return FileManager.default.fileExists(atPath: destino.path) ? destino : nil
+    }
+}
+
+/// La onda REAL del audio: lee las muestras y saca el volumen promedio de
+/// cada tramo, que es lo que dibuja las rayitas altas (sonido) y bajas
+/// (silencio).
+enum AnalizadorOnda {
+    static let barras = 34
+
+    static func analizar(_ archivo: URL) -> [Float] {
+        let asset = AVURLAsset(url: archivo)
+        guard let pista = asset.tracks(withMediaType: .audio).first,
+              let lector = try? AVAssetReader(asset: asset) else { return [] }
+
+        let salida = AVAssetReaderTrackOutput(track: pista, outputSettings: [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsNonInterleaved: false,
+        ])
+        guard lector.canAdd(salida) else { return [] }
+        lector.add(salida)
+        lector.startReading()
+
+        var muestras: [Int16] = []
+        while lector.status == .reading, let buffer = salida.copyNextSampleBuffer() {
+            guard let bloque = CMSampleBufferGetDataBuffer(buffer) else { continue }
+            let largo = CMBlockBufferGetDataLength(bloque)
+            var trozo = [Int16](repeating: 0, count: largo / 2)
+            trozo.withUnsafeMutableBytes { destino in
+                _ = CMBlockBufferCopyDataBytes(bloque, atOffset: 0, dataLength: largo,
+                                               destination: destino.baseAddress!)
+            }
+            muestras.append(contentsOf: trozo)
+        }
+        guard muestras.count > barras else { return [] }
+
+        // Volumen (RMS) por tramo.
+        let porBarra = muestras.count / barras
+        var niveles: [Float] = []
+        for i in 0..<barras {
+            let desde = i * porBarra
+            let hasta = min(desde + porBarra, muestras.count)
+            var suma: Double = 0
+            for j in desde..<hasta {
+                let v = Double(muestras[j]) / 32768.0
+                suma += v * v
+            }
+            niveles.append(Float((suma / Double(max(1, hasta - desde))).squareRoot()))
+        }
+        // Normalizado contra el pico: la onda se ve igual de viva en un audio
+        // bajito que en uno fuerte.
+        let pico = niveles.max() ?? 0
+        guard pico > 0 else { return [] }
+        return niveles.map { min(1, $0 / pico) }
+    }
+}
+
+/// La nota de voz: play/pausa, la onda real del audio y — en la misma línea —
+/// su duración junto a la hora de envío, como WhatsApp.
+struct BurbujaAudio<Pie: View>: View {
     let mensaje: Mensaje
+    @ViewBuilder var pie: () -> Pie
+
     @ObservedObject private var repro = ReproductorAudio.shared
     @State private var duracion: Double = 0
+    @State private var onda: [Float] = []
 
     private var url: String? { mensaje.media?.url }
     private var esEste: Bool { repro.urlActual == url }
+    private var avance: Double { esEste ? repro.progreso : 0 }
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(alignment: .top, spacing: 8) {
             Button {
                 if let u = url { repro.alternar(url: u) }
             } label: {
                 Image(systemName: esEste && repro.reproduciendo ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 26))
+                    .font(.system(size: 28))
                     .foregroundStyle(Color(.systemGray))
             }
             .buttonStyle(.plain)
-            VStack(alignment: .leading, spacing: 4) {
-                ProgressView(value: esEste ? repro.progreso : 0)
-                    .frame(width: 150)
+
+            VStack(alignment: .leading, spacing: 3) {
+                onditas
                 HStack(spacing: 4) {
-                    Image(systemName: "mic.fill")
-                        .font(.system(size: 9))
+                    Image(systemName: "mic.fill").font(.system(size: 9))
                     Text(textoDuracion)
                         .font(.caption2.monospacedDigit())
+                    Spacer(minLength: 10)
+                    pie()
                 }
                 .foregroundStyle(.secondary)
             }
         }
-        .task(id: url) { await cargarDuracion() }
+        .task(id: url) { await preparar() }
     }
 
-    /// Mientras suena, el tiempo que va; quieto, cuánto dura en total.
+    /// Las rayitas: altas donde hay sonido, bajas en los silencios. Las ya
+    /// reproducidas se pintan con el color de acento.
+    private var onditas: some View {
+        HStack(alignment: .center, spacing: 2) {
+            ForEach(Array(barras.enumerated()), id: \.offset) { i, nivel in
+                let reproducida = Double(i) / Double(max(1, barras.count)) < avance
+                Capsule()
+                    .fill(reproducida ? AnyShapeStyle(.tint) : AnyShapeStyle(Color(.systemGray3)))
+                    .frame(width: 2.5, height: max(3, CGFloat(nivel) * 22))
+            }
+        }
+        .frame(height: 24)
+    }
+
+    /// Sin análisis todavía: una onda tenue de relleno para no dejar el hueco.
+    private var barras: [Float] {
+        if !onda.isEmpty { return onda }
+        return (0..<AnalizadorOnda.barras).map { i in
+            0.25 + 0.2 * Float(abs(sin(Double(i) * 0.9)))
+        }
+    }
+
     private var textoDuracion: String {
         guard duracion > 0 else { return "—:—" }
         let segundos = (esEste && repro.progreso > 0) ? duracion * repro.progreso : duracion
         return String(format: "%d:%02d", Int(segundos) / 60, Int(segundos) % 60)
     }
 
-    /// La duración sale de los metadatos del archivo: AVURLAsset lee la
-    /// cabecera, no baja el audio completo.
-    private func cargarDuracion() async {
-        guard let url, let u = URL(string: url) else { return }
-        if let guardada = DuracionesAudio.cache[url] { duracion = guardada; return }
-        let asset = AVURLAsset(url: u)
-        guard let d = try? await asset.load(.duration) else { return }
-        let segundos = CMTimeGetSeconds(d)
-        guard segundos.isFinite, segundos > 0 else { return }
-        DuracionesAudio.cache[url] = segundos
-        duracion = segundos
+    private func preparar() async {
+        guard let url else { return }
+        if let d = AudiosAnalizados.duracion[url] { duracion = d }
+        if let o = AudiosAnalizados.onda[url] { onda = o }
+        guard duracion == 0 || onda.isEmpty else { return }
+
+        guard let archivo = await CacheAudio.obtener(url) else { return }
+        let asset = AVURLAsset(url: archivo)
+        if let d = try? await asset.load(.duration) {
+            let seg = CMTimeGetSeconds(d)
+            if seg.isFinite, seg > 0 {
+                AudiosAnalizados.duracion[url] = seg
+                duracion = seg
+            }
+        }
+        // El análisis es pesado: fuera del hilo de la interfaz.
+        let calculada = await Task.detached(priority: .utility) {
+            AnalizadorOnda.analizar(archivo)
+        }.value
+        if !calculada.isEmpty {
+            AudiosAnalizados.onda[url] = calculada
+            onda = calculada
+        }
     }
 }
 

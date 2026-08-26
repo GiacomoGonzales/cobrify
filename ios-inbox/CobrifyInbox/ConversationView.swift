@@ -572,7 +572,9 @@ private struct BurbujaMensaje: View {
                     bloqueCita(citado)
                 }
                 contenido
-                if esStickerSuelto {
+                if mensaje.tipo == "audio", mensaje.media?.url != nil {
+                    EmptyView()  // la burbuja de audio ya lleva su pie
+                } else if esStickerSuelto {
                     // La hora del sticker va en su propia pastillita.
                     pieDeMensaje
                         .padding(.horizontal, 8)
@@ -676,7 +678,7 @@ private struct BurbujaMensaje: View {
                 .fullScreenCover(isPresented: $verAdjunto) { visor }
             case "audio":
                 if mensaje.media?.url != nil {
-                    BurbujaAudio(mensaje: mensaje)
+                    BurbujaAudio(mensaje: mensaje) { pieDeMensaje }
                 } else {
                     HStack(spacing: 8) {
                         Image(systemName: "mic.fill").font(.title3).foregroundStyle(.tint)
