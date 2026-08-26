@@ -32,6 +32,7 @@ import { formatDate } from '@/lib/utils'
 import { db } from '@/lib/firebase'
 import { collection, getDocs } from 'firebase/firestore'
 import { getVisiblePaymentMethods } from '@/utils/paymentMethods'
+import GuideLink from '@/components/guide/GuideLink'
 
 export default function Users() {
   const { user, isAdmin, isBusinessOwner } = useAuth()
@@ -760,7 +761,10 @@ export default function Users() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Gestión de Usuarios</h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Gestión de Usuarios</h1>
+            <GuideLink />
+          </div>
           <p className="text-sm sm:text-base text-gray-600 mt-1">
             Administra los usuarios y sus permisos
           </p>

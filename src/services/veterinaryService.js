@@ -13,7 +13,6 @@ import {
   getDocs,
   getDoc,
   query,
-  where,
   orderBy,
   Timestamp,
 } from 'firebase/firestore'
@@ -378,8 +377,12 @@ export const getVeterinaryReminders = async (businessId, daysAhead = 7, onProgre
     }
   })
 
-  const porFecha = (a, b) => a.dueDate - b.dueDate
-  return { overdue: vencidos.sort(porFecha), pending: proximos.sort(porFecha) }
+  // Mismo criterio que los recordatorios de ventas: lo próximo hacia adelante,
+  // lo vencido de más reciente a más viejo.
+  return {
+    overdue: vencidos.sort((a, b) => b.dueDate - a.dueDate),
+    pending: proximos.sort((a, b) => a.dueDate - b.dueDate),
+  }
 }
 
 /** @deprecated Usar getVeterinaryReminders: hace el recorrido una sola vez. */

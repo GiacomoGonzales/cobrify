@@ -68,11 +68,21 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'Arriba eliges el período: **Hoy**, **Esta semana**, **Este mes** o **Vencidos**. Cada botón trae su número, así ves de un vistazo cuánto hay en cada uno.',
+          text: 'La pantalla abre en **Hoy**: las personas a las que hoy se les cumple el plazo desde su última compra. Esa es la rutina — entras, ves quiénes son y les escribes.',
+        },
+        {
+          type: 'tabla',
+          encabezados: ['Filtro', 'Qué muestra'],
+          filas: [
+            ['**Hoy**', 'A quiénes se les cumple el plazo hoy.'],
+            ['**Esta semana**', 'Los de hoy más los de los próximos 7 días, para adelantarte.'],
+            ['**Este mes**', 'Los próximos 30 días.'],
+            ['**Vencidos**', 'A los que ya se les pasó la fecha, empezando por los que se vencieron recién.'],
+          ],
         },
         {
           type: 'consejo',
-          text: 'Lo vencido aparece siempre, en cualquier período. Es lo más urgente y esconderlo detrás de un filtro es la forma más segura de que nadie llame nunca.',
+          text: 'Cada filtro va por su lado: **Hoy** muestra solo los de hoy, sin mezclar lo vencido de meses atrás. Y en Vencidos, primero aparece lo que se pasó ayer o anteayer — que es lo que todavía se recupera con una llamada — y al final lo más viejo.',
         },
         {
           type: 'texto',
@@ -89,6 +99,10 @@ export default {
         {
           type: 'consejo',
           text: 'Si cobras la próxima visita en el Punto de Venta no hace falta marcar nada: la venta nueva corre la fecha sola.',
+        },
+        {
+          type: 'texto',
+          text: 'No hay botón de actualizar ni hace falta recargar: si cobras una venta mientras tienes esta pantalla abierta, la lista se pone al día sola en un par de segundos.',
         },
         { type: 'enlace', to: '/app/alertas-veterinaria', label: 'Ir a Recordatorios' },
       ],

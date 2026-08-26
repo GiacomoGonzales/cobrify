@@ -2,20 +2,23 @@ import { useState, useEffect } from 'react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { getVeterinaryReminders, markServiceCompleted } from '@/services/veterinaryService'
-import { getRemindersFromSales, getDescartados, descartarRecordatorio } from '@/services/salesRemindersService'
+import { getRemindersFromSales, getDescartados, descartarRecordatorio, escucharVentasNuevas } from '@/services/salesRemindersService'
 import { getProducts } from '@/services/firestoreService'
 import Card, { CardContent } from '@/components/ui/Card'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
-import Button from '@/components/ui/Button'
+import GuideLink from '@/components/guide/GuideLink'
 import {
   Bell,
+  ChevronsLeft,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsRight,
   Syringe,
   Calendar,
   PawPrint,
   Phone,
   CheckCircle2,
   Loader2,
-  RefreshCw,
   MessageCircle,
 } from 'lucide-react'
 
@@ -30,7 +33,9 @@ export default function VeterinaryAlerts() {
    * aplica en memoria: cambiar de "hoy" a "este mes" es instantáneo en vez de
    * volver a leer las ventas.
    */
-  const [periodo, setPeriodo] = useState('mes')
+  const [periodo, setPeriodo] = useState('hoy')
+  const [pagina, setPagina] = useState(1)
+  const POR_PAGINA = 25
   const daysAhead = 30
   const [markingCompleted, setMarkingCompleted] = useState(null)
   // Cuántos pacientes lleva revisados: esta pantalla tarda en proporción a
@@ -49,13 +54,33 @@ export default function VeterinaryAlerts() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId, isDemoMode])
 
-  const loadAlerts = async () => {
+  /**
+   * En vivo: al cobrar una venta, la lista se entera sola.
+   *
+   * Antes había un botón de actualizar, que además de feo era una tarea que no
+   * le toca al usuario. El recálculo se agrupa en un par de segundos porque en
+   * una tanda de ventas seguidas llegan varios avisos.
+   */
+  useEffect(() => {
+    if (!businessId || isDemoMode) return
+    let pendiente = null
+    const cortar = escucharVentasNuevas(businessId, () => {
+      clearTimeout(pendiente)
+      pendiente = setTimeout(() => loadAlerts({ silencioso: true }), 2500)
+    })
+    return () => { clearTimeout(pendiente); cortar() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [businessId, isDemoMode])
+
+  const loadAlerts = async ({ silencioso = false } = {}) => {
     if (!user?.uid || isDemoMode || !businessId) {
       setIsLoading(false)
       return
     }
 
-    setIsLoading(true)
+    // Al recargarse sola por una venta nueva NO se tapa la pantalla: quien está
+    // mirando la lista no tiene por qué ver un spinner encima.
+    if (!silencioso) setIsLoading(true)
     setAvance(null)
     const t0 = performance.now()
     try {
@@ -74,9 +99,12 @@ export default function VeterinaryAlerts() {
       ])
 
       console.log(`Recordatorios: ${Math.round(performance.now() - t0)} ms · ${deVentas.ventasLeidas ?? 0} ventas leídas`)
-      const porFecha = (a, b) => a.dueDate - b.dueDate
-      setPendingAlerts([...deVentas.pending, ...deFichas.pending].sort(porFecha))
-      setOverdueAlerts([...deVentas.overdue, ...deFichas.overdue].sort(porFecha))
+      // Lo próximo: lo que vence antes, primero.
+      // Lo vencido: al revés — el que se pasó ayer todavía se recupera con una
+      // llamada, el de hace cinco meses ya es historia. Con el orden al revés,
+      // lo accionable quedaba en la última página.
+      setPendingAlerts([...deVentas.pending, ...deFichas.pending].sort((a, b) => a.dueDate - b.dueDate))
+      setOverdueAlerts([...deVentas.overdue, ...deFichas.overdue].sort((a, b) => b.dueDate - a.dueDate))
     } catch (error) {
       console.error('Error al cargar alertas:', error)
       toast.error('Error al cargar las alertas')
@@ -219,15 +247,14 @@ export default function VeterinaryAlerts() {
           <span className="text-xs text-gray-400">{formatDate(alert.dueDate)}</span>
 
           <div className="flex items-center gap-1 mt-1">
-            {alert.phone && (
-              <button
-                onClick={() => handleWhatsApp(alert)}
-                className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
-                title="Enviar WhatsApp"
-              >
-                <MessageCircle className="w-4 h-4" />
-              </button>
-            )}
+            <button
+              onClick={() => handleWhatsApp(alert)}
+              disabled={!alert.phone}
+              className="p-1.5 text-gray-500 hover:text-green-700 hover:bg-green-50 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              title={alert.phone ? `Escribir a ${alert.phone}` : 'Este cliente no tiene teléfono registrado'}
+            >
+              <MessageCircle className="w-4 h-4" />
+            </button>
             {(alert.type === 'service' || alert.type === 'sale') && (
               <button
                 onClick={() => handleMarkCompleted(alert)}
@@ -279,21 +306,26 @@ export default function VeterinaryAlerts() {
   /**
    * Los recordatorios del período elegido.
    *
-   * Se calcula sobre lo que ya está en memoria — la carga trae el mes entero —
-   * así que cambiar de filtro es instantáneo en vez de volver a leer las
-   * ventas.
+   * Cada filtro es EXCLUYENTE. "Hoy" tiene que responder una sola pregunta —
+   * a quién se le cumple el plazo hoy, para escribirle hoy — y si además le
+   * mete adentro todo lo vencido de meses atrás, esa lista deja de servir para
+   * la rutina del día. Lo vencido tiene su propia pestaña.
    *
-   * Lo VENCIDO acompaña a todos los períodos: es lo más urgente, y esconderlo
-   * detrás de otro filtro es la forma más segura de que nadie lo llame nunca.
+   * Se calcula sobre lo que ya está en memoria (la carga trae el mes entero),
+   * así que cambiar de filtro es instantáneo.
    */
-  const cuantosEn = (id) =>
+  const delPeriodo = (id) =>
     id === 'vencidos'
-      ? overdueAlerts.length
-      : overdueAlerts.length + pendingAlerts.filter(a => a.dueDate <= limiteDelPeriodo(id)).length
+      ? overdueAlerts
+      : pendingAlerts.filter(a => a.dueDate <= limiteDelPeriodo(id))
 
-  const visibles = periodo === 'vencidos'
-    ? overdueAlerts
-    : [...overdueAlerts, ...pendingAlerts.filter(a => a.dueDate <= limiteDelPeriodo(periodo))]
+  const cuantosEn = (id) => delPeriodo(id).length
+  const visibles = delPeriodo(periodo)
+
+
+  const totalPaginas = Math.max(1, Math.ceil(visibles.length / POR_PAGINA))
+  const paginaActual = Math.min(pagina, totalPaginas)
+  const enPantalla = visibles.slice((paginaActual - 1) * POR_PAGINA, paginaActual * POR_PAGINA)
 
   const FILTROS = [
     { id: 'hoy', label: 'Hoy' },
@@ -306,8 +338,10 @@ export default function VeterinaryAlerts() {
     a.type === 'vaccination' ? 'Vacuna' : a.type === 'sale' ? 'Comprado' : 'Servicio'
 
   const estadoDe = (a) => {
-    if (a.overdue) return { texto: 'Vencido', urgente: true }
     const d = getDaysUntil(a.dueDate)
+    // "Vencido" a secas no dice nada: hace falta saber si fue anteayer o en
+    // abril para decidir a quién se llama primero.
+    if (a.overdue) return { texto: `Venció hace ${Math.abs(d)} día${Math.abs(d) === 1 ? '' : 's'}`, urgente: true }
     if (d === 0) return { texto: 'Hoy', urgente: true }
     if (d === 1) return { texto: 'Mañana', urgente: true }
     return { texto: `En ${d} días`, urgente: false }
@@ -316,16 +350,14 @@ export default function VeterinaryAlerts() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
+      <div>
+        <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Recordatorios</h1>
-          <p className="text-sm sm:text-base text-gray-600 mt-1">
-            A quién llamar: lo que cada cliente se llevó y ya toca repetir
-          </p>
+          <GuideLink />
         </div>
-        <Button variant="outline" onClick={loadAlerts}>
-          <RefreshCw className="w-4 h-4" />
-        </Button>
+        <p className="text-sm sm:text-base text-gray-600 mt-1">
+          A quién llamar: lo que cada cliente se llevó y ya toca repetir
+        </p>
       </div>
 
       {/* Filtros por período. Cada uno lleva su conteo, así que hacen de
@@ -336,7 +368,7 @@ export default function VeterinaryAlerts() {
           return (
             <button
               key={f.id}
-              onClick={() => setPeriodo(f.id)}
+              onClick={() => { setPeriodo(f.id); setPagina(1) }}
               className={`px-3 py-2 rounded-lg border text-sm transition-colors ${
                 activo
                   ? 'border-primary-600 bg-primary-50 text-primary-700 font-medium'
@@ -371,57 +403,66 @@ export default function VeterinaryAlerts() {
         </Card>
       ) : (
         <>
-          {/* ESCRITORIO: tabla. Con muchas filas, las columnas alineadas se
-              recorren de un vistazo; las tarjetas obligan a leer cada una. */}
+          {/* ESCRITORIO: tabla.
+              CINCO columnas, no nueve. Con una por dato —cliente, paciente,
+              teléfono, tipo, última vez, vence, estado— la tabla no entraba en
+              la pantalla y había que arrastrarla de lado para leer una fila.
+              Lo que va junto se muestra junto: el paciente debajo del cliente,
+              el estado debajo de la fecha. El teléfono vive en el botón de
+              WhatsApp, que es lo único para lo que se usa. */}
           <Card className="hidden lg:block">
             <CardContent className="p-0">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Producto o servicio</TableHead>
-                    <TableHead>Tipo</TableHead>
                     <TableHead>Cliente</TableHead>
-                    <TableHead>Paciente</TableHead>
-                    <TableHead>Teléfono</TableHead>
+                    <TableHead>Producto o servicio</TableHead>
                     <TableHead>Última vez</TableHead>
-                    <TableHead>Toca el</TableHead>
-                    <TableHead>Estado</TableHead>
+                    <TableHead>Vence</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {visibles.map(alert => {
+                  {enPantalla.map(alert => {
                     const estado = estadoDe(alert)
                     return (
                       <TableRow key={`${alert.type}-${alert.id}`}>
-                        <TableCell className="font-medium text-gray-900">{alert.title}</TableCell>
-                        <TableCell className="text-gray-500">{etiquetaTipo(alert)}</TableCell>
-                        <TableCell className="text-gray-700">{alert.customerName}</TableCell>
-                        <TableCell className="text-gray-500">
-                          {alert.petName || '-'}
-                          {alert.petSpecies ? ` (${alert.petSpecies})` : ''}
+                        <TableCell className="whitespace-normal max-w-[240px]">
+                          <div className="font-medium text-gray-900 break-words">{alert.customerName}</div>
+                          {(alert.petName || alert.phone) && (
+                            <div className="text-xs text-gray-500 mt-0.5 break-words">
+                              {alert.petName}
+                              {alert.petName && alert.petSpecies ? ` (${alert.petSpecies})` : ''}
+                              {alert.petName && alert.phone ? ' · ' : ''}
+                              {alert.phone}
+                            </div>
+                          )}
                         </TableCell>
-                        <TableCell className="text-gray-500">{alert.phone || '-'}</TableCell>
-                        <TableCell className="text-gray-500">
+                        <TableCell className="whitespace-normal max-w-[280px]">
+                          <div className="text-gray-900 break-words">{alert.title}</div>
+                          <div className="text-xs text-gray-500 mt-0.5">{etiquetaTipo(alert)}</div>
+                        </TableCell>
+                        <TableCell className="text-gray-500 whitespace-nowrap">
                           {alert.fecha ? formatDate(alert.fecha) : '-'}
                         </TableCell>
-                        <TableCell className="text-gray-500">{formatDate(alert.dueDate)}</TableCell>
-                        <TableCell>
-                          <span className={estado.urgente ? 'text-red-600 font-medium' : 'text-gray-700'}>
+                        <TableCell className="whitespace-nowrap">
+                          <div className={estado.urgente ? 'text-red-600 font-medium' : 'text-gray-700'}>
+                            {formatDate(alert.dueDate)}
+                          </div>
+                          <div className={`text-xs mt-0.5 ${estado.urgente ? 'text-red-500' : 'text-gray-500'}`}>
                             {estado.texto}
-                          </span>
+                          </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="w-px">
                           <div className="flex items-center justify-end gap-1">
-                            {alert.phone && (
-                              <button
-                                onClick={() => handleWhatsApp(alert)}
-                                className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
-                                title="Enviar WhatsApp"
-                              >
-                                <MessageCircle className="w-4 h-4" />
-                              </button>
-                            )}
+                            <button
+                              onClick={() => handleWhatsApp(alert)}
+                              disabled={!alert.phone}
+                              className="p-1.5 text-gray-500 hover:text-green-700 hover:bg-green-50 rounded transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+                              title={alert.phone ? `Escribir a ${alert.phone}` : 'Este cliente no tiene teléfono registrado'}
+                            >
+                              <MessageCircle className="w-4 h-4" />
+                            </button>
                             {(alert.type === 'service' || alert.type === 'sale') && (
                               <button
                                 onClick={() => handleMarkCompleted(alert)}
@@ -448,9 +489,58 @@ export default function VeterinaryAlerts() {
               nueve columnas apretadas. */}
           <Card className="lg:hidden">
             <CardContent className="p-4">
-              {visibles.map(alert => renderAlert(alert, !!alert.overdue))}
+              {enPantalla.map(alert => renderAlert(alert, !!alert.overdue))}
             </CardContent>
           </Card>
+          {/* Paginación. Con el historial completo detrás, un negocio con
+              movimiento junta cientos de recordatorios y volcarlos todos deja
+              la pantalla imposible de recorrer. */}
+          {visibles.length > POR_PAGINA && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+              <p className="text-sm text-gray-500">
+                Mostrando {(paginaActual - 1) * POR_PAGINA + 1}
+                {' - '}
+                {Math.min(paginaActual * POR_PAGINA, visibles.length)} de {visibles.length}
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPagina(1)}
+                  disabled={paginaActual === 1}
+                  className="w-8 h-8 flex items-center justify-center border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  title="Primera"
+                >
+                  <ChevronsLeft className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setPagina(paginaActual - 1)}
+                  disabled={paginaActual === 1}
+                  className="w-8 h-8 flex items-center justify-center border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  title="Anterior"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="px-3 text-sm text-gray-600">
+                  {paginaActual} / {totalPaginas}
+                </span>
+                <button
+                  onClick={() => setPagina(paginaActual + 1)}
+                  disabled={paginaActual === totalPaginas}
+                  className="w-8 h-8 flex items-center justify-center border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  title="Siguiente"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setPagina(totalPaginas)}
+                  disabled={paginaActual === totalPaginas}
+                  className="w-8 h-8 flex items-center justify-center border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  title="Última"
+                >
+                  <ChevronsRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

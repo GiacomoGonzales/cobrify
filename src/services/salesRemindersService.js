@@ -21,7 +21,7 @@
  * Lo que el negocio marca a mano (vacunas, controles del historial clínico)
  * sigue viviendo donde está: son otra cosa, con su propia fecha.
  */
-import { collection, doc, getDocs, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, doc, getDocs, setDoc, deleteDoc, serverTimestamp, onSnapshot, query, orderBy, limit } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { getInvoicesPage } from './firestoreService'
 import { diasDeRecordatorio, diasPorDefectoDelNegocio } from '@/utils/vetReminders'
@@ -188,8 +188,13 @@ export async function getRemindersFromSales({
     else if (r.vence <= hasta) pending.push(alerta)
   }
 
-  const porFecha = (a, b) => a.dueDate - b.dueDate
-  return { overdue: overdue.sort(porFecha), pending: pending.sort(porFecha), ventasLeidas: ventas.length }
+  // Lo que vence antes, primero. Pero los VENCIDOS al revés: el que se pasó
+  // ayer se recupera con una llamada; el de hace cinco meses ya es historia.
+  // Ordenarlos de más viejo a más nuevo dejaba lo accionable en la última
+  // página.
+  const masProximo = (a, b) => a.dueDate - b.dueDate
+  const masReciente = (a, b) => b.dueDate - a.dueDate
+  return { overdue: overdue.sort(masReciente), pending: pending.sort(masProximo), ventasLeidas: ventas.length }
 }
 
 // ---------------------------------------------------------------- descartes
@@ -239,4 +244,35 @@ export async function getDescartados(businessId) {
     console.error('Error al leer los recordatorios atendidos:', error)
     return new Set()
   }
+}
+
+/**
+ * Avisa cuando entra una venta nueva o cambia una reciente.
+ *
+ * La pantalla no tiene botón de actualizar: se entera sola. Se escuchan solo
+ * las últimas ventas, no todo el período —serían miles de documentos abiertos
+ * para detectar algo que casi siempre está en las últimas filas— y el aviso se
+ * usa para recalcular, no para pintar: el cálculo necesita el período completo.
+ *
+ * El primer disparo del snapshot es el estado actual, no un cambio, así que se
+ * ignora. Sin eso, la pantalla se recargaría dos veces cada vez que se abre.
+ */
+export function escucharVentasNuevas(businessId, alCambiar) {
+  if (!businessId) return () => {}
+  const q = query(
+    collection(db, 'businesses', businessId, 'invoices'),
+    orderBy('createdAt', 'desc'),
+    limit(30),
+  )
+  let primera = true
+  return onSnapshot(
+    q,
+    (snap) => {
+      if (primera) { primera = false; return }
+      // Los cambios que este servicio ya escribió (nada) o los que no tocan
+      // ventas no llegan acá; cualquier cosa que sí llegue afecta la lista.
+      if (snap.docChanges().length > 0) alCambiar()
+    },
+    (error) => console.error('Error escuchando ventas para los recordatorios:', error),
+  )
 }

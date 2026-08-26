@@ -55,6 +55,7 @@ import {
   MapPin,
 } from 'lucide-react'
 import { filtrarPorSucursal, nombreDeSucursal, sucursalParaGuardar } from '@/utils/branchScope'
+import GuideLink from '@/components/guide/GuideLink'
 
 export default function VeterinaryAgenda() {
   const navigate = useNavigate()
@@ -772,7 +773,10 @@ export default function VeterinaryAgenda() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Agenda de Citas</h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Agenda de Citas</h1>
+            <GuideLink />
+          </div>
           <p className="text-sm sm:text-base text-gray-600 mt-1 capitalize">{formatDate(selectedDate)}</p>
         </div>
         <div className="flex items-center gap-2">
