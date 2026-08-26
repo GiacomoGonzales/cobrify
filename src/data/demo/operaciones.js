@@ -241,6 +241,150 @@ export function eliminarGastoDemo(id) {
   return { success: true }
 }
 
+// ──────────────────────────────────────────────────────────── salón ──
+
+/** Totales de una orden a partir de sus ítems (precios CON IGV). */
+const totalesDeOrden = (items) => {
+  const total = items.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.quantity) || 0), 0)
+  const subtotal = redondear(total / 1.18)
+  return { subtotal, tax: redondear(total - subtotal), total: redondear(total) }
+}
+
+/** Ocupa una mesa y le abre su orden. */
+export function ocuparMesaDemo(tableId, { waiterId, waiterName, customerName } = {}) {
+  const d = datosDemo()
+  if (!d) return { success: false }
+  const numero = (d.orders || []).length + 1
+  const orden = {
+    id: nuevoId('order'),
+    orderNumber: `#${String(numero).padStart(3, '0')}`,
+    tableId,
+    tableNumber: (d.tables || []).find((t) => t.id === tableId)?.number,
+    waiterId: waiterId || null,
+    waiterName: waiterName || '',
+    customerName: customerName || '',
+    status: 'pending',
+    items: [],
+    subtotal: 0,
+    tax: 0,
+    total: 0,
+    createdAt: new Date(),
+  }
+  mutarDemo((dd) => ({
+    orders: [...(dd.orders || []), orden],
+    tables: (dd.tables || []).map((t) => (t.id === tableId
+      ? { ...t, status: 'occupied', waiter: waiterName || '', waiterId: waiterId || null, startTime: new Date(), amount: 0, currentOrder: orden.id }
+      : t)),
+  }))
+  return { success: true, orderId: orden.id }
+}
+
+/** Agrega platos a la orden abierta y actualiza el consumo de la mesa. */
+export function agregarItemsOrdenDemo(orderId, nuevos) {
+  mutarDemo((d) => {
+    const orders = (d.orders || []).map((o) => {
+      if (o.id !== orderId) return o
+      const items = [...(o.items || [])]
+      for (const n of nuevos) {
+        // Mismo producto ya pedido: suma cantidad en vez de repetir la línea,
+        // como hace la comanda real.
+        const i = items.findIndex((x) => x.productId === n.productId)
+        if (i >= 0) items[i] = { ...items[i], quantity: (Number(items[i].quantity) || 0) + (Number(n.quantity) || 0) }
+        else items.push({ ...n })
+      }
+      const t = totalesDeOrden(items)
+      return { ...o, items, ...t }
+    })
+    const orden = orders.find((o) => o.id === orderId)
+    return {
+      orders,
+      tables: (d.tables || []).map((t) => (t.currentOrder === orderId ? { ...t, amount: orden?.total || 0 } : t)),
+    }
+  })
+  return { success: true }
+}
+
+/** Cambia el estado de la comanda (pendiente → preparando → lista). */
+export function cambiarEstadoOrdenDemo(orderId, status) {
+  mutarDemo((d) => ({
+    orders: (d.orders || []).map((o) => (o.id === orderId ? { ...o, status } : o)),
+  }))
+  return { success: true }
+}
+
+/**
+ * Cierra la mesa: la libera y descuenta el stock de lo consumido, igual que
+ * cobrar en el POS.
+ */
+export function cerrarMesaDemo(tableId) {
+  const d = datosDemo()
+  if (!d) return { success: false }
+  const mesa = (d.tables || []).find((t) => t.id === tableId)
+  const orden = (d.orders || []).find((o) => o.id === mesa?.currentOrder)
+
+  mutarDemo((dd) => {
+    const porProducto = new Map()
+    for (const it of orden?.items || []) {
+      if (!it.productId) continue
+      porProducto.set(it.productId, (porProducto.get(it.productId) || 0) + (Number(it.quantity) || 0))
+    }
+    const products = dd.products.map((p) => {
+      const cantidad = porProducto.get(p.id)
+      if (!cantidad || p.stock === null || p.trackStock === false) return p
+      return aplicarStock(p, null, -cantidad)
+    })
+    return {
+      products,
+      orders: (dd.orders || []).filter((o) => o.id !== orden?.id),
+      tables: (dd.tables || []).map((t) => (t.id === tableId
+        ? { id: t.id, number: t.number, capacity: t.capacity, zone: t.zone, status: 'available' }
+        : t)),
+    }
+  })
+  return { success: true, orden }
+}
+
+/** Libera la mesa sin cobrar (cancelar la atención). */
+export function liberarMesaDemo(tableId) {
+  mutarDemo((d) => {
+    const mesa = (d.tables || []).find((t) => t.id === tableId)
+    return {
+      orders: (d.orders || []).filter((o) => o.id !== mesa?.currentOrder),
+      tables: (d.tables || []).map((t) => (t.id === tableId
+        ? { id: t.id, number: t.number, capacity: t.capacity, zone: t.zone, status: 'available' }
+        : t)),
+    }
+  })
+  return { success: true }
+}
+
+/** Alta de mesa desde la pantalla de Mesas. */
+export function crearMesaDemo({ number, capacity, zone }) {
+  const mesa = {
+    id: nuevoId('t'),
+    number: Number(number) || 0,
+    capacity: Number(capacity) || 4,
+    zone: zone || 'Salón',
+    status: 'available',
+  }
+  mutarDemo((d) => ({ tables: [...(d.tables || []), mesa] }))
+  return { success: true, id: mesa.id }
+}
+
+export function actualizarMesaDemo(tableId, cambios) {
+  mutarDemo((d) => ({
+    tables: (d.tables || []).map((t) => (t.id === tableId
+      ? { ...t, ...cambios, number: Number(cambios.number) || t.number, id: t.id }
+      : t)),
+  }))
+  return { success: true }
+}
+
+export function eliminarMesaDemo(tableId) {
+  mutarDemo((d) => ({ tables: (d.tables || []).filter((t) => t.id !== tableId) }))
+  return { success: true }
+}
+
 // ─────────────────────────────────────────────────── equipo del local ──
 
 /** Vendedores y mozos: misma forma, distinta clave del paquete. */

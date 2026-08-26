@@ -14,6 +14,7 @@ import PresentationSelectorModal from '@/components/product/PresentationSelector
 import { computeRecipeStockAlerts, hasAnyRecipe } from '@/utils/recipeAvailability'
 import { filterProductsForBranch } from '@/utils/branchCatalog'
 import { cn } from '@/lib/utils'
+import { agregarItemsOrdenDemo } from '@/data/demo/operaciones'
 
 export default function OrderItemsModal({
   isOpen,
@@ -36,10 +37,17 @@ export default function OrderItemsModal({
   // un plato que la cocina de esta sede no prepara. branchId explicito gana;
   // si no, se toma de la mesa o de la orden. null = Sucursal Principal.
   const orderBranchId = branchId !== undefined ? branchId : (table?.branchId ?? order?.branchId ?? null)
-  const demoContext = useDemoRestaurant()
+  // Dos demos distintos llegan acá: el de restaurante con ruta propia
+  // (/demorestaurant) y el demo POR RUBRO (/demo/restaurante), que usa el
+  // contexto general. Mirando solo el primero, el modal salía con "No hay
+  // productos disponibles" en el demo por rubro.
+  const demoContextRestaurante = useDemoRestaurant()
+  const contextoGeneral = useAppContext()
+  const demoContext = demoContextRestaurante?.demoData
+    ? demoContextRestaurante
+    : (contextoGeneral?.isDemoMode ? contextoGeneral : null)
   const toast = useToast()
 
-  // Detectar si estamos en modo demo restaurant
   const isDemoMode = !!demoContext?.demoData
   const demoData = demoContext?.demoData
 
@@ -230,6 +238,14 @@ export default function OrderItemsModal({
       // Cargar categorías primero (en modo normal)
       let categoriesData = []
       let catMap = {}
+
+      // En demo las categorías salen del propio demo. Sin esto los filtros
+      // mostraban el ID crudo ("cat-marinos") en vez del nombre.
+      if (isDemoMode && demoData?.categories) {
+        categoriesData = demoData.categories
+        categoriesData.forEach(cat => { catMap[cat.id] = cat.name })
+        setCategoryMap(catMap)
+      }
 
       if (!isDemoMode && !demoContext) {
         const categoriesResult = await getProductCategories(businessId)
@@ -608,10 +624,20 @@ export default function OrderItemsModal({
         setCart([])
         onClose()
       }
-      // En modo demo, mostrar mensaje amigable
+      // En demo los platos se agregan de verdad a la comanda: aparecen en la
+      // mesa, suman al consumo y salen en la Vista de Cocina.
       else if (isDemoMode || demoContext) {
-        toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
+        agregarItemsOrdenDemo(order?.id, cart.map(i => ({
+          productId: i.productId || i.id,
+          name: i.name,
+          code: i.code || '',
+          price: Number(i.price) || 0,
+          quantity: Number(i.quantity) || 0,
+          total: Math.round((Number(i.price) || 0) * (Number(i.quantity) || 0) * 100) / 100,
+        })))
+        toast.success(`${cart.length} items agregados a la orden`)
         setCart([])
+        if (onSuccess) onSuccess()
         onClose()
       } else {
         // En modo normal, agregar items a orden existente

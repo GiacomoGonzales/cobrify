@@ -11,6 +11,7 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import TableActionModal from '@/components/restaurant/TableActionModal'
 import OrderItemsModal from '@/components/restaurant/OrderItemsModal'
+import { ocuparMesaDemo, cerrarMesaDemo, liberarMesaDemo, eliminarMesaDemo, crearMesaDemo, actualizarMesaDemo } from '@/data/demo/operaciones'
 import EditOrderItemsModal from '@/components/restaurant/EditOrderItemsModal'
 import SplitBillModal from '@/components/restaurant/SplitBillModal'
 import SplitTableModal from '@/components/restaurant/SplitTableModal'
@@ -542,7 +543,11 @@ export default function Tables() {
       }
 
       let result
-      if (editingTable) {
+      if (isDemoMode) {
+        result = editingTable
+          ? actualizarMesaDemo(editingTable.id, tableData)
+          : crearMesaDemo(tableData)
+      } else if (editingTable) {
         result = await updateTable(getBusinessId(), editingTable.id, tableData)
       } else {
         result = await createTable(getBusinessId(), tableData)
@@ -566,16 +571,21 @@ export default function Tables() {
   }
 
   const handleDeleteRequest = (table) => {
-    if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
-      return
-    }
     setDeleteConfirm({ isOpen: true, tableId: table.id, tableNumber: String(table.number) })
     setDeleteInput('')
   }
 
   const handleDeleteConfirm = async () => {
     if (deleteInput !== deleteConfirm.tableNumber) return
+
+    if (isDemoMode) {
+      // Liberar antes de borrar: una mesa ocupada deja su orden colgando.
+      liberarMesaDemo(deleteConfirm.tableId)
+      eliminarMesaDemo(deleteConfirm.tableId)
+      toast.success('Mesa eliminada exitosamente')
+      setDeleteConfirm({ isOpen: false, tableId: null, tableNumber: '' })
+      return
+    }
 
     setIsDeleting(true)
     try {
@@ -1481,8 +1491,16 @@ export default function Tables() {
   }
 
   const handleOccupyTable = async (tableId, occupyData) => {
+    // En demo la mesa se ocupa de verdad y se le abre su orden, para que el
+    // visitante siga el flujo completo: ocupar → pedir → cobrar.
     if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
+      const res = ocuparMesaDemo(tableId, occupyData)
+      if (res.success) {
+        toast.success('Mesa ocupada exitosamente')
+        setSelectedTable(prev => (prev ? { ...prev, status: 'occupied', currentOrder: res.orderId, waiter: occupyData.waiterName, waiterId: occupyData.waiterId } : prev))
+        setIsActionModalOpen(false)
+        setIsOrderItemsModalOpen(true)
+      }
       return
     }
 
@@ -1529,8 +1547,15 @@ export default function Tables() {
   }
 
   const handleConfirmCloseTable = async (closeData) => {
+    // En demo cerrar la mesa la libera y descuenta el stock de lo consumido,
+    // igual que cobrar.
     if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
+      cerrarMesaDemo(selectedTable?.id)
+      toast.success(`Mesa ${selectedTable?.number} cerrada`)
+      setIsCloseTableModalOpen(false)
+      setIsActionModalOpen(false)
+      setSelectedTable(null)
+      setSelectedOrder(null)
       return
     }
 
