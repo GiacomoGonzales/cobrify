@@ -6,6 +6,9 @@ struct ConversationView: View {
     let conv: Conversacion
     let alAbrir: () -> Void
     @StateObject private var store = MensajesStore()
+    @State private var borrador = ""
+    @State private var enviando = false
+    @State private var errorEnvio: String?
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -32,8 +35,8 @@ struct ConversationView: View {
                 .padding(.top, 8)
             }
             .defaultScrollAnchor(.bottom)
-            .onChange(of: store.mensajes.count) {
-                if let ultimo = store.mensajes.last {
+            .onChange(of: store.mensajes.count + store.pendientes.count) {
+                if let ultimo = (store.mensajes + store.pendientes).last {
                     withAnimation { proxy.scrollTo(ultimo.id, anchor: .bottom) }
                 }
             }
@@ -51,14 +54,7 @@ struct ConversationView: View {
                 }
             }
         }
-        .safeAreaInset(edge: .bottom) {
-            Text("Responder llega en la Fase 2")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(.bar)
-        }
+        .safeAreaInset(edge: .bottom) { barraDeRespuesta }
         .onAppear {
             store.empezar(conversationId: conv.id)
             alAbrir()
@@ -70,7 +66,7 @@ struct ConversationView: View {
     private var elementos: [ElementoChat] {
         var resultado: [ElementoChat] = []
         var diaAnterior: DateComponents?
-        for m in store.mensajes {
+        for m in store.mensajes + store.pendientes {
             if let fecha = m.timestamp {
                 let dia = Calendar.current.dateComponents([.year, .month, .day], from: fecha)
                 if dia != diaAnterior {
@@ -81,6 +77,93 @@ struct ConversationView: View {
             resultado.append(.mensaje(m))
         }
         return resultado
+    }
+
+    // MARK: - Responder
+
+    /// Vencimiento VIVO de la ventana de 24 h: desde el último mensaje del
+    /// cliente ya cargado (si el cliente escribe, se extiende sola); si aún
+    /// no hay mensajes, lo que diga la conversación.
+    private var venceVentana: Date? {
+        if let ultimoEntrante = store.mensajes.last(where: { !$0.esSaliente })?.timestamp {
+            return ultimoEntrante.addingTimeInterval(24 * 3600)
+        }
+        return conv.ventanaVenceAt
+    }
+
+    @ViewBuilder private var barraDeRespuesta: some View {
+        TimelineView(.periodic(from: .now, by: 60)) { _ in
+            VStack(spacing: 0) {
+                if let errorEnvio {
+                    Text(errorEnvio)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
+                }
+                if let vence = venceVentana, vence.timeIntervalSinceNow <= 0 {
+                    // Ventana cerrada: WhatsApp ya no acepta texto libre.
+                    VStack(spacing: 4) {
+                        Label("La ventana de 24 horas se cerró", systemImage: "clock.badge.exclamationmark")
+                            .font(.footnote.weight(.medium))
+                        Text("Se reabre sola cuando el cliente escriba. Para escribirle tú primero hace falta una plantilla (llega en la Fase 5).")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(12)
+                } else {
+                    if let vence = venceVentana, vence.timeIntervalSinceNow < 3 * 3600 {
+                        // Aviso discreto solo cuando queda poco.
+                        Text("La ventana se cierra en \(Formato.restante(hasta: vence))")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 6)
+                    }
+                    HStack(alignment: .bottom, spacing: 8) {
+                        TextField("Mensaje", text: $borrador, axis: .vertical)
+                            .lineLimit(1...5)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 9)
+                            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
+
+                        Button(action: enviar) {
+                            Image(systemName: "arrow.up.circle.fill")
+                                .font(.system(size: 33))
+                                .foregroundStyle(puedeEnviar ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
+                        }
+                        .disabled(!puedeEnviar)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                }
+            }
+            .background(.bar)
+        }
+    }
+
+    private var puedeEnviar: Bool {
+        !borrador.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !enviando
+    }
+
+    private func enviar() {
+        let texto = borrador.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !texto.isEmpty, !enviando else { return }
+        borrador = ""
+        errorEnvio = nil
+        enviando = true
+        Task {
+            let error = await store.enviar(texto: texto, conversationId: conv.id)
+            enviando = false
+            if let error {
+                errorEnvio = error
+                // El texto vuelve al borrador: nada se pierde por un fallo.
+                if borrador.isEmpty { borrador = texto }
+            }
+        }
     }
 }
 
@@ -200,6 +283,9 @@ private struct BurbujaMensaje: View {
                 case "failed":
                     Image(systemName: "exclamationmark.circle")
                         .font(.caption2).foregroundStyle(.red)
+                case "sending":
+                    Image(systemName: "clock")
+                        .font(.caption2).foregroundStyle(.secondary)
                 default:
                     Text("✓").font(.caption2).foregroundStyle(.secondary)
                 }

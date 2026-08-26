@@ -69,6 +69,18 @@ struct Mensaje: Identifiable, Equatable {
     }
 
     var esSaliente: Bool { direccion == "saliente" }
+
+    /// Eco optimista: el mensaje recién enviado, visible al instante con su
+    /// relojito mientras el servidor lo confirma.
+    init(pendiente texto: String) {
+        id = "local-\(UUID().uuidString)"
+        direccion = "saliente"
+        tipo = "text"
+        self.texto = texto
+        estado = "sending"
+        timestamp = Date()
+        media = nil
+    }
 }
 
 struct MediaAdjunto: Equatable {
@@ -123,6 +135,15 @@ enum Formato {
         f.locale = Locale(identifier: "es_PE")
         f.dateFormat = "EEEE d 'de' MMMM"
         return f.string(from: fecha).capitalized
+    }
+
+    /// Cuánto queda de ventana: "3 h 12 min", "45 min" o "cerrada".
+    static func restante(hasta fecha: Date) -> String {
+        let s = fecha.timeIntervalSinceNow
+        if s <= 0 { return "cerrada" }
+        let h = Int(s) / 3600
+        let m = (Int(s) % 3600) / 60
+        return h > 0 ? "\(h) h \(m) min" : "\(m) min"
     }
 
     /// Qué se muestra en la lista cuando el último mensaje fue un adjunto.
