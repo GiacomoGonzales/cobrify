@@ -28,7 +28,7 @@ struct RootView: View {
         if !FirebaseBootstrap.isConfigured {
             SetupNeededView()
         } else if session.user != nil {
-            ConversationListView()
+            MainTabView()
         } else {
             LoginView()
         }

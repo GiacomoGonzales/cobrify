@@ -44,6 +44,7 @@ struct ConversationView: View {
         .background(Color(.systemGroupedBackground))
         .navigationTitle(conv.titulo)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .principal) {
                 VStack(spacing: 0) {
@@ -104,22 +105,25 @@ struct ConversationView: View {
                     Text(errorEnvio)
                         .font(.footnote)
                         .foregroundStyle(.red)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 8)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .vidrioCapsula()
+                        .padding(.bottom, 4)
                 }
                 if let vence = venceVentana, vence.timeIntervalSinceNow <= 0 {
                     // Ventana cerrada: WhatsApp ya no acepta texto libre.
                     VStack(spacing: 4) {
                         Label("La ventana de 24 horas se cerró", systemImage: "clock.badge.exclamationmark")
                             .font(.footnote.weight(.medium))
-                        Text("Se reabre sola cuando el cliente escriba. Para escribirle tú primero hace falta una plantilla (llega en la Fase 5).")
+                        Text("Se reabre sola cuando el cliente escriba. Para escribirle tú primero hace falta una plantilla.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(12)
+                    .padding(14)
+                    .vidrioRedondeado(22)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 6)
                 } else {
                     if let vence = venceVentana, vence.timeIntervalSinceNow < 3 * 3600 {
                         // Aviso discreto solo cuando queda poco.
@@ -129,25 +133,26 @@ struct ConversationView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.top, 6)
                     }
-                    HStack(alignment: .bottom, spacing: 8) {
+                    HStack(alignment: .bottom, spacing: 10) {
                         TextField("Mensaje", text: $borrador, axis: .vertical)
                             .lineLimit(1...5)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 9)
-                            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .vidrioCapsula()
 
                         Button(action: enviar) {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.system(size: 33))
-                                .foregroundStyle(puedeEnviar ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 40, height: 40)
+                                .background(puedeEnviar ? AnyShapeStyle(.tint) : AnyShapeStyle(.quaternary), in: Circle())
                         }
                         .disabled(!puedeEnviar)
                     }
                     .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    .padding(.bottom, 6)
                 }
             }
-            .background(.bar)
         }
     }
 
