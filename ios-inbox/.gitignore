@@ -1,0 +1,5 @@
+# Generado por xcodegen a partir de project.yml — no se versiona.
+*.xcodeproj
+# Artefactos de build
+DerivedData/
+build/
