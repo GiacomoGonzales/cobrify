@@ -210,6 +210,10 @@ enum AnalizadorOnda {
     }
 }
 
+/// Ancho fijo de la nota de voz: todas miden igual y la onda se reparte
+/// dentro, dure 3 segundos o 3 minutos — como WhatsApp.
+private let anchoOndaAudio: CGFloat = 196
+
 /// La nota de voz: play/pausa, la onda real del audio y — en la misma línea —
 /// su duración junto a la hora de envío, como WhatsApp.
 struct BurbujaAudio<Pie: View>: View {
@@ -231,7 +235,7 @@ struct BurbujaAudio<Pie: View>: View {
             } label: {
                 Image(systemName: esEste && repro.reproduciendo ? "pause.circle.fill" : "play.circle.fill")
                     .font(.system(size: 28))
-                    .foregroundStyle(Color(.systemGray))
+                    .foregroundStyle(Color.primary.opacity(0.55))
             }
             .buttonStyle(.plain)
 
@@ -241,10 +245,11 @@ struct BurbujaAudio<Pie: View>: View {
                     Image(systemName: "mic.fill").font(.system(size: 9))
                     Text(textoDuracion)
                         .font(.caption2.monospacedDigit())
-                    Spacer(minLength: 10)
+                    Spacer(minLength: 8)
                     pie()
                 }
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.primary.opacity(0.55))
+                .frame(width: anchoOndaAudio)
             }
         }
         .task(id: url) { await preparar() }
@@ -253,15 +258,16 @@ struct BurbujaAudio<Pie: View>: View {
     /// Las rayitas: altas donde hay sonido, bajas en los silencios. Las ya
     /// reproducidas se pintan con el color de acento.
     private var onditas: some View {
-        HStack(alignment: .center, spacing: 2) {
+        HStack(alignment: .center, spacing: 0) {
             ForEach(Array(barras.enumerated()), id: \.offset) { i, nivel in
                 let reproducida = Double(i) / Double(max(1, barras.count)) < avance
                 Capsule()
-                    .fill(reproducida ? AnyShapeStyle(.tint) : AnyShapeStyle(Color(.systemGray3)))
+                    .fill(reproducida ? AnyShapeStyle(.tint) : AnyShapeStyle(Color(.systemGray2)))
                     .frame(width: 2.5, height: max(3, CGFloat(nivel) * 22))
+                if i < barras.count - 1 { Spacer(minLength: 0) }
             }
         }
-        .frame(height: 24)
+        .frame(width: anchoOndaAudio, height: 24)
     }
 
     /// Sin análisis todavía: una onda tenue de relleno para no dejar el hueco.
