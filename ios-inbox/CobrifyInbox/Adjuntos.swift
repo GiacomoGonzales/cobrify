@@ -124,22 +124,21 @@ struct BurbujaAudio: View {
     private var esEste: Bool { repro.urlActual == mensaje.media?.url }
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Button {
                 if let u = mensaje.media?.url { repro.alternar(url: u) }
             } label: {
                 Image(systemName: esEste && repro.reproduciendo ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 34))
+                    .font(.system(size: 26))
                     .foregroundStyle(.tint)
             }
             .buttonStyle(.plain)
             ProgressView(value: esEste ? repro.progreso : 0)
-                .frame(width: 130)
+                .frame(width: 150)
             Image(systemName: "mic.fill")
-                .font(.caption)
+                .font(.caption2)
                 .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 4)
     }
 }
 

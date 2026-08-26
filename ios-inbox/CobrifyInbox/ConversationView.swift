@@ -29,7 +29,7 @@ struct ConversationView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 4) {
+                LazyVStack(spacing: 3) {
                     ForEach(elementos) { elemento in
                         switch elemento {
                         case .separador(let id, let titulo):
@@ -41,8 +41,9 @@ struct ConversationView: View {
                                 .background(.quaternary.opacity(0.5), in: Capsule())
                                 .padding(.vertical, 6)
                                 .id(id)
-                        case .mensaje(let m):
+                        case .mensaje(let m, let cambiaDeLado):
                             BurbujaMensaje(mensaje: m)
+                                .padding(.top, cambiaDeLado ? 10 : 0)
                                 .id(m.id)
                         }
                     }
@@ -228,15 +229,20 @@ struct ConversationView: View {
     private var elementos: [ElementoChat] {
         var resultado: [ElementoChat] = []
         var diaAnterior: DateComponents?
+        var direccionAnterior: String?
         for m in store.mensajes + store.pendientes {
             if let fecha = m.timestamp {
                 let dia = Calendar.current.dateComponents([.year, .month, .day], from: fecha)
                 if dia != diaAnterior {
                     resultado.append(.separador(id: "sep-\(m.id)", titulo: Formato.dia(fecha)))
                     diaAnterior = dia
+                    direccionAnterior = nil  // el separador ya da el respiro
                 }
             }
-            resultado.append(.mensaje(m))
+            // El respiro de WhatsApp: cuando cambia quién habla, aire extra.
+            let cambia = direccionAnterior != nil && direccionAnterior != m.direccion
+            resultado.append(.mensaje(m, cambiaDeLado: cambia))
+            direccionAnterior = m.direccion
         }
         return resultado
     }
@@ -466,12 +472,12 @@ struct ConversationView: View {
 
 private enum ElementoChat: Identifiable {
     case separador(id: String, titulo: String)
-    case mensaje(Mensaje)
+    case mensaje(Mensaje, cambiaDeLado: Bool)
 
     var id: String {
         switch self {
         case .separador(let id, _): return id
-        case .mensaje(let m): return m.id
+        case .mensaje(let m, _): return m.id
         }
     }
 }
@@ -648,10 +654,11 @@ private struct BurbujaMensaje: View {
     }
 
     @ObservedObject private var apariencia = Apariencia.shared
+    @Environment(\.colorScheme) private var esquema
 
     private var fondo: some ShapeStyle {
         mensaje.esSaliente
-            ? AnyShapeStyle(apariencia.colorBurbuja.opacity(0.22))
+            ? AnyShapeStyle(apariencia.fondoBurbuja(esquema))
             : AnyShapeStyle(Color(.secondarySystemGroupedBackground))
     }
 }

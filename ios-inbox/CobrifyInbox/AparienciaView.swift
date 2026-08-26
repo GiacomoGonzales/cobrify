@@ -4,6 +4,7 @@ import PhotosUI
 /// Elegir el fondo del chat y el color de tus burbujas.
 struct AparienciaView: View {
     @ObservedObject private var apariencia = Apariencia.shared
+    @Environment(\.colorScheme) private var esquema
     @State private var fotoElegida: PhotosPickerItem?
 
     var body: some View {
@@ -66,7 +67,7 @@ struct AparienciaView: View {
                             Spacer(minLength: 60)
                             Text("¡Todo bien! 🙌")
                                 .padding(.horizontal, 12).padding(.vertical, 8)
-                                .background(apariencia.colorBurbuja.opacity(0.25), in: RoundedRectangle(cornerRadius: 14))
+                                .background(apariencia.fondoBurbuja(esquema), in: RoundedRectangle(cornerRadius: 14))
                         }
                     }
                     .font(.callout)
@@ -88,7 +89,9 @@ struct AparienciaView: View {
         }
     }
 
-    private func miniaturaFondo(_ f: (id: String, nombre: String, colores: [Color])) -> some View {
+    @Environment(\.colorScheme) private var esquemaActual
+
+    private func miniaturaFondo(_ f: (id: String, nombre: String, claros: [Color], oscuros: [Color])) -> some View {
         VStack(spacing: 6) {
             ZStack {
                 if f.id == "clasico" {
@@ -102,7 +105,8 @@ struct AparienciaView: View {
                     }
                 } else {
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(LinearGradient(colors: f.colores, startPoint: .top, endPoint: .bottom))
+                        .fill(LinearGradient(colors: esquemaActual == .dark ? f.oscuros : f.claros,
+                                             startPoint: .top, endPoint: .bottom))
                 }
                 if Apariencia.shared.fondoId == f.id {
                     RoundedRectangle(cornerRadius: 12).stroke(.tint, lineWidth: 3)
