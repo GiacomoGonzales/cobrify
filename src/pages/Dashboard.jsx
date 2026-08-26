@@ -86,6 +86,9 @@ export default function Dashboard() {
     isDemoMode || localStorage.getItem('dashboard_show_amounts') === 'true'
   ))
   const [openTablesAmount, setOpenTablesAmount] = useState(0) // Suma de mesas ocupadas (modo restaurante)
+  // Cuántas mesas tiene el negocio. Un delivery puro (dark kitchen) no tiene
+  // salón, y mostrarle "Abierto (mesas): S/ 0.00" para siempre solo confunde.
+  const [tablesCount, setTablesCount] = useState(0)
   // Aggregates mensuales del gráfico de 12 meses (Fase B: server-side, no descarga
   // miles de invoices, solo 12 queries de sum).
   const [monthlyYearData, setMonthlyYearData] = useState([])
@@ -465,7 +468,9 @@ export default function Dashboard() {
 
     // Modo demo: usar las mesas de demoData
     if (isDemoMode) {
-      setOpenTablesAmount(Array.isArray(demoData?.tables) ? sumOpen(demoData.tables) : 0)
+      const mesas = Array.isArray(demoData?.tables) ? demoData.tables : []
+      setOpenTablesAmount(sumOpen(mesas))
+      setTablesCount(mesas.length)
       return
     }
 
@@ -477,6 +482,7 @@ export default function Dashboard() {
         const result = await getTables(getBusinessId())
         if (cancelled) return
         setOpenTablesAmount(result.success ? sumOpen(result.data) : 0)
+        setTablesCount(result.success ? (result.data || []).length : 0)
       } catch (error) {
         if (!cancelled) {
           console.error('Error al cargar monto de mesas abiertas:', error)
@@ -838,7 +844,7 @@ export default function Dashboard() {
       changeType: todaysSales >= yesterdaySales ? 'positive' : 'negative',
       isSalesAmount: true,
       // En modo restaurante, mostrar desglose Cerrado / Abierto / Total proyectado
-      restaurantBreakdown: isRestaurantMode ? {
+      restaurantBreakdown: isRestaurantMode && tablesCount > 0 ? {
         closed: showAmounts ? formatCurrency(toDisp(todaysSales), reportsCcy) : hiddenAmount,
         open: showAmounts ? formatCurrency(toDisp(openTablesAmount), reportsCcy) : hiddenAmount,
         projected: showAmounts ? formatCurrency(toDisp(projectedDayTotal), reportsCcy) : hiddenAmount,

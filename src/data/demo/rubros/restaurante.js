@@ -65,20 +65,20 @@ export default {
   productos: [
     // — Entradas —
     { id: 'r1', code: 'ENT-PAP-HUA', name: 'Papa a la huancaína', price: 16.00, cost: 5.20, stock: null, trackStock: false, unit: 'PLATO', category: 'cat-entradas', ventaTipica: 2 },
-    { id: 'r2', code: 'ENT-CAU-LIM', name: 'Causa limeña de pollo', price: 19.00, cost: 6.40, stock: null, trackStock: false, unit: 'PLATO', category: 'cat-entradas', ventaTipica: 2 },
+    { id: 'r2', code: 'ENT-CAU-LIM', imageUrl: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=400&h=400&fit=crop', name: 'Causa limeña de pollo', price: 19.00, cost: 6.40, stock: null, trackStock: false, unit: 'PLATO', category: 'cat-entradas', ventaTipica: 2 },
     { id: 'r3', code: 'ENT-ANT-COR', name: 'Anticuchos de corazón', price: 24.00, cost: 9.80, stock: null, trackStock: false, unit: 'PLATO', category: 'cat-entradas', ventaTipica: 2 },
 
     // — Marinos (los que más pesan en la carta) —
-    { id: 'r4', code: 'MAR-CEV-PES', name: 'Ceviche de pescado', description: 'Pescado del día, camote y choclo', price: 38.00, cost: 15.50, stock: null, trackStock: false, unit: 'PLATO', category: 'cat-marinos', ventaTipica: 2 },
-    { id: 'r5', code: 'MAR-CEV-MIX', name: 'Ceviche mixto', price: 45.00, cost: 19.00, stock: null, trackStock: false, unit: 'PLATO', category: 'cat-marinos', ventaTipica: 2 },
+    { id: 'r4', code: 'MAR-CEV-PES', imageUrl: 'https://images.unsplash.com/photo-1535399831218-d5bd36d1a6b3?w=400&h=400&fit=crop', name: 'Ceviche de pescado', description: 'Pescado del día, camote y choclo', price: 38.00, cost: 15.50, stock: null, trackStock: false, unit: 'PLATO', category: 'cat-marinos', ventaTipica: 2 },
+    { id: 'r5', code: 'MAR-CEV-MIX', imageUrl: 'https://images.unsplash.com/photo-1535399831218-d5bd36d1a6b3?w=400&h=400&fit=crop', name: 'Ceviche mixto', price: 45.00, cost: 19.00, stock: null, trackStock: false, unit: 'PLATO', category: 'cat-marinos', ventaTipica: 2 },
     { id: 'r6', code: 'MAR-ARR-MAR', name: 'Arroz con mariscos', price: 42.00, cost: 17.80, stock: null, trackStock: false, unit: 'PLATO', category: 'cat-marinos', ventaTipica: 2 },
     { id: 'r7', code: 'MAR-JAL-MIX', name: 'Jalea mixta', price: 52.00, cost: 22.00, stock: null, trackStock: false, unit: 'PLATO', category: 'cat-marinos', ventaTipica: 1 },
     { id: 'r8', code: 'MAR-CHI-PES', name: 'Chicharrón de pescado', price: 36.00, cost: 14.50, stock: null, trackStock: false, unit: 'PLATO', category: 'cat-marinos', ventaTipica: 2 },
 
     // — Criollos —
-    { id: 'r9', code: 'CRI-LOM-SAL', name: 'Lomo saltado', price: 39.00, cost: 16.20, stock: null, trackStock: false, unit: 'PLATO', category: 'cat-criollos', ventaTipica: 2 },
-    { id: 'r10', code: 'CRI-AJI-GAL', name: 'Ají de gallina', price: 28.00, cost: 10.40, stock: null, trackStock: false, unit: 'PLATO', category: 'cat-criollos', ventaTipica: 2 },
-    { id: 'r11', code: 'CRI-ARR-POL', name: 'Arroz con pollo', price: 26.00, cost: 9.60, stock: null, trackStock: false, unit: 'PLATO', category: 'cat-criollos', ventaTipica: 2 },
+    { id: 'r9', code: 'CRI-LOM-SAL', imageUrl: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=400&h=400&fit=crop', name: 'Lomo saltado', price: 39.00, cost: 16.20, stock: null, trackStock: false, unit: 'PLATO', category: 'cat-criollos', ventaTipica: 2 },
+    { id: 'r10', code: 'CRI-AJI-GAL', imageUrl: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=400&h=400&fit=crop', name: 'Ají de gallina', price: 28.00, cost: 10.40, stock: null, trackStock: false, unit: 'PLATO', category: 'cat-criollos', ventaTipica: 2 },
+    { id: 'r11', code: 'CRI-ARR-POL', imageUrl: 'https://images.unsplash.com/photo-1512058564366-18510be2db19?w=400&h=400&fit=crop', name: 'Arroz con pollo', price: 26.00, cost: 9.60, stock: null, trackStock: false, unit: 'PLATO', category: 'cat-criollos', ventaTipica: 2 },
     { id: 'r12', code: 'CRI-SEC-CAB', name: 'Seco de cabrito con frejoles', price: 44.00, cost: 18.50, stock: null, trackStock: false, unit: 'PLATO', category: 'cat-criollos', ventaTipica: 1 },
     { id: 'r13', code: 'CRI-TAL-VER', name: 'Tallarín verde con bistec', price: 32.00, cost: 12.80, stock: null, trackStock: false, unit: 'PLATO', category: 'cat-criollos', ventaTipica: 2 },
 
@@ -87,13 +87,13 @@ export default {
     { id: 'r15', code: 'MEN-DIA-SEG', name: 'Segundo solo', price: 12.00, cost: 4.90, stock: null, trackStock: false, unit: 'PLATO', category: 'cat-menu', ventaTipica: 3 },
 
     // — Bebidas (SÍ llevan stock: son botellas) —
-    { id: 'r16', code: 'BEB-INC-500', sku: 'BEB-INC-500', barcode: '7754001000165', name: 'Inca Kola 500ml', price: 6.00, cost: 2.60, stock: 180, unit: 'UNIDAD', category: 'cat-bebidas', ventaTipica: 4, minStock: 48 },
-    { id: 'r17', code: 'BEB-CHI-JAR', name: 'Chicha morada jarra 1L', price: 14.00, cost: 4.20, stock: null, trackStock: false, unit: 'JARRA', category: 'cat-bebidas', ventaTipica: 2 },
+    { id: 'r16', code: 'BEB-INC-500', imageUrl: 'https://images.unsplash.com/photo-1581006852262-e4307cf6283a?w=400&h=400&fit=crop', sku: 'BEB-INC-500', barcode: '7754001000165', name: 'Inca Kola 500ml', price: 6.00, cost: 2.60, stock: 180, unit: 'UNIDAD', category: 'cat-bebidas', ventaTipica: 4, minStock: 48 },
+    { id: 'r17', code: 'BEB-CHI-JAR', imageUrl: 'https://images.unsplash.com/photo-1534353473418-4cfa6c56fd38?w=400&h=400&fit=crop', name: 'Chicha morada jarra 1L', price: 14.00, cost: 4.20, stock: null, trackStock: false, unit: 'JARRA', category: 'cat-bebidas', ventaTipica: 2 },
     { id: 'r18', code: 'BEB-CER-PIL', sku: 'BEB-CER-PIL', barcode: '7754001000189', name: 'Cerveza Pilsen 620ml', price: 12.00, cost: 6.40, stock: 120, unit: 'UNIDAD', category: 'cat-bebidas', ventaTipica: 3, minStock: 36 },
     { id: 'r19', code: 'BEB-AGU-625', sku: 'BEB-AGU-625', barcode: '7754001000196', name: 'Agua mineral 625ml', price: 4.00, cost: 1.20, stock: 150, unit: 'UNIDAD', category: 'cat-bebidas', ventaTipica: 3, minStock: 40 },
 
     // — Postres —
-    { id: 'r20', code: 'POS-SUS-LIM', name: 'Suspiro a la limeña', price: 12.00, cost: 4.10, stock: null, trackStock: false, unit: 'PORCION', category: 'cat-postres', ventaTipica: 2 },
+    { id: 'r20', code: 'POS-SUS-LIM', imageUrl: 'https://images.unsplash.com/photo-1551024506-0bccd828d307?w=400&h=400&fit=crop', name: 'Suspiro a la limeña', price: 12.00, cost: 4.10, stock: null, trackStock: false, unit: 'PORCION', category: 'cat-postres', ventaTipica: 2 },
     { id: 'r21', code: 'POS-ARR-ZAM', name: 'Arroz zambito', price: 10.00, cost: 3.20, stock: null, trackStock: false, unit: 'PORCION', category: 'cat-postres', ventaTipica: 2 },
   ],
 

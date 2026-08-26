@@ -55,9 +55,9 @@ export default {
 
   productos: [
     // — Laptops (ticket alto, se venden de a una) —
-    { id: 't1', code: 'LAP-HP-15I5', sku: 'LAP-HP-15I5', barcode: '7752001000015', name: 'Laptop HP 15" Core i5 8GB 512GB SSD', description: 'Intel Core i5 12va gen, Windows 11', price: 2790.00, cost: 2180.00, stock: 14, unit: 'UNIDAD', category: 'cat-laptops', ventaTipica: 1, minStock: 4 },
-    { id: 't2', code: 'LAP-LEN-I7', sku: 'LAP-LEN-I7', barcode: '7752001000022', name: 'Laptop Lenovo IdeaPad Core i7 16GB', price: 3990.00, cost: 3120.00, stock: 8, unit: 'UNIDAD', category: 'cat-laptops', ventaTipica: 1, minStock: 3 },
-    { id: 't3', code: 'LAP-ASU-GAM', sku: 'LAP-ASU-GAM', name: 'Laptop gamer ASUS TUF RTX 3050', price: 5490.00, cost: 4350.00, stock: 5, unit: 'UNIDAD', category: 'cat-laptops', ventaTipica: 1, minStock: 2 },
+    { id: 't1', code: 'LAP-HP-15I5', imageUrl: 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=400&h=400&fit=crop', sku: 'LAP-HP-15I5', barcode: '7752001000015', name: 'Laptop HP 15" Core i5 8GB 512GB SSD', description: 'Intel Core i5 12va gen, Windows 11', price: 2790.00, cost: 2180.00, stock: 14, unit: 'UNIDAD', category: 'cat-laptops', ventaTipica: 1, minStock: 4 },
+    { id: 't2', code: 'LAP-LEN-I7', imageUrl: 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=400&h=400&fit=crop', sku: 'LAP-LEN-I7', barcode: '7752001000022', name: 'Laptop Lenovo IdeaPad Core i7 16GB', price: 3990.00, cost: 3120.00, stock: 8, unit: 'UNIDAD', category: 'cat-laptops', ventaTipica: 1, minStock: 3 },
+    { id: 't3', code: 'LAP-ASU-GAM', imageUrl: 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=400&h=400&fit=crop', sku: 'LAP-ASU-GAM', name: 'Laptop gamer ASUS TUF RTX 3050', price: 5490.00, cost: 4350.00, stock: 5, unit: 'UNIDAD', category: 'cat-laptops', ventaTipica: 1, minStock: 2 },
 
     // — Celulares —
     { id: 't4', code: 'CEL-SAM-A55', sku: 'CEL-SAM-A55', barcode: '7752001000039', name: 'Samsung Galaxy A55 256GB', description: 'Liberado, garantía oficial 1 año', price: 1699.00, cost: 1340.00, stock: 22, unit: 'UNIDAD', category: 'cat-celulares', ventaTipica: 1, minStock: 6 },
@@ -65,16 +65,16 @@ export default {
     { id: 't6', code: 'CEL-IPH-15', sku: 'CEL-IPH-15', name: 'iPhone 15 128GB', price: 4290.00, cost: 3580.00, stock: 6, unit: 'UNIDAD', category: 'cat-celulares', ventaTipica: 1, minStock: 2 },
 
     // — Componentes —
-    { id: 't7', code: 'SSD-KIN-1TB', sku: 'SSD-KIN-1TB', barcode: '7752001000053', name: 'SSD Kingston NV2 1TB NVMe', price: 289.00, cost: 205.00, stock: 45, unit: 'UNIDAD', category: 'cat-componentes', ventaTipica: 2, minStock: 12 },
-    { id: 't8', code: 'RAM-COR-16', sku: 'RAM-COR-16', barcode: '7752001000060', name: 'Memoria RAM Corsair 16GB DDR4', price: 219.00, cost: 158.00, stock: 38, unit: 'UNIDAD', category: 'cat-componentes', ventaTipica: 2, minStock: 10 },
-    { id: 't9', code: 'MON-LG-24', sku: 'MON-LG-24', name: 'Monitor LG 24" Full HD 75Hz', price: 549.00, cost: 420.00, stock: 18, unit: 'UNIDAD', category: 'cat-componentes', ventaTipica: 1, minStock: 5 },
+    { id: 't7', code: 'SSD-KIN-1TB', imageUrl: 'https://images.unsplash.com/photo-1587826080692-f439cd0b70da?w=400&h=400&fit=crop', sku: 'SSD-KIN-1TB', barcode: '7752001000053', name: 'SSD Kingston NV2 1TB NVMe', price: 289.00, cost: 205.00, stock: 45, unit: 'UNIDAD', category: 'cat-componentes', ventaTipica: 2, minStock: 12 },
+    { id: 't8', code: 'RAM-COR-16', imageUrl: 'https://images.unsplash.com/photo-1587826080692-f439cd0b70da?w=400&h=400&fit=crop', sku: 'RAM-COR-16', barcode: '7752001000060', name: 'Memoria RAM Corsair 16GB DDR4', price: 219.00, cost: 158.00, stock: 38, unit: 'UNIDAD', category: 'cat-componentes', ventaTipica: 2, minStock: 10 },
+    { id: 't9', code: 'MON-LG-24', imageUrl: 'https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?w=400&h=400&fit=crop', sku: 'MON-LG-24', name: 'Monitor LG 24" Full HD 75Hz', price: 549.00, cost: 420.00, stock: 18, unit: 'UNIDAD', category: 'cat-componentes', ventaTipica: 1, minStock: 5 },
 
     // — Accesorios (rotación alta, ticket bajo) —
-    { id: 't10', code: 'MOU-LOG-M170', sku: 'MOU-LOG-M170', barcode: '7752001000077', name: 'Mouse inalámbrico Logitech M170', price: 59.00, cost: 36.00, stock: 120, unit: 'UNIDAD', category: 'cat-accesorios', ventaTipica: 3, minStock: 30 },
-    { id: 't11', code: 'TEC-MEC-RGB', sku: 'TEC-MEC-RGB', barcode: '7752001000084', name: 'Teclado mecánico RGB switch azul', price: 189.00, cost: 128.00, stock: 34, unit: 'UNIDAD', category: 'cat-accesorios', ventaTipica: 1, minStock: 8 },
-    { id: 't12', code: 'AUD-BT-INA', sku: 'AUD-BT-INA', barcode: '7752001000091', name: 'Audífonos Bluetooth con estuche', price: 129.00, cost: 74.00, stock: 65, unit: 'UNIDAD', category: 'cat-accesorios', ventaTipica: 2, minStock: 15 },
-    { id: 't13', code: 'CAR-USB-65', sku: 'CAR-USB-65', name: 'Cargador USB-C 65W carga rápida', price: 89.00, cost: 48.00, stock: 80, unit: 'UNIDAD', category: 'cat-accesorios', ventaTipica: 3, minStock: 20 },
-    { id: 't14', code: 'CAB-HDM-2M', sku: 'CAB-HDM-2M', barcode: '7752001000114', name: 'Cable HDMI 2.0 4K x 2m', price: 35.00, cost: 17.00, stock: 150, unit: 'UNIDAD', category: 'cat-accesorios', ventaTipica: 4, minStock: 40 },
+    { id: 't10', code: 'MOU-LOG-M170', imageUrl: 'https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?w=400&h=400&fit=crop', sku: 'MOU-LOG-M170', barcode: '7752001000077', name: 'Mouse inalámbrico Logitech M170', price: 59.00, cost: 36.00, stock: 120, unit: 'UNIDAD', category: 'cat-accesorios', ventaTipica: 3, minStock: 30 },
+    { id: 't11', code: 'TEC-MEC-RGB', imageUrl: 'https://images.unsplash.com/photo-1511467687858-23d96c32e4ae?w=400&h=400&fit=crop', sku: 'TEC-MEC-RGB', barcode: '7752001000084', name: 'Teclado mecánico RGB switch azul', price: 189.00, cost: 128.00, stock: 34, unit: 'UNIDAD', category: 'cat-accesorios', ventaTipica: 1, minStock: 8 },
+    { id: 't12', code: 'AUD-BT-INA', imageUrl: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=400&fit=crop', sku: 'AUD-BT-INA', barcode: '7752001000091', name: 'Audífonos Bluetooth con estuche', price: 129.00, cost: 74.00, stock: 65, unit: 'UNIDAD', category: 'cat-accesorios', ventaTipica: 2, minStock: 15 },
+    { id: 't13', code: 'CAR-USB-65', imageUrl: 'https://images.unsplash.com/photo-1625723044792-44de16ccb4e9?w=400&h=400&fit=crop', sku: 'CAR-USB-65', name: 'Cargador USB-C 65W carga rápida', price: 89.00, cost: 48.00, stock: 80, unit: 'UNIDAD', category: 'cat-accesorios', ventaTipica: 3, minStock: 20 },
+    { id: 't14', code: 'CAB-HDM-2M', imageUrl: 'https://images.unsplash.com/photo-1625723044792-44de16ccb4e9?w=400&h=400&fit=crop', sku: 'CAB-HDM-2M', barcode: '7752001000114', name: 'Cable HDMI 2.0 4K x 2m', price: 35.00, cost: 17.00, stock: 150, unit: 'UNIDAD', category: 'cat-accesorios', ventaTipica: 4, minStock: 40 },
     { id: 't15', code: 'MOC-LAP-15', sku: 'MOC-LAP-15', name: 'Mochila para laptop 15.6"', price: 119.00, cost: 62.00, stock: 42, unit: 'UNIDAD', category: 'cat-accesorios', ventaTipica: 1, minStock: 10 },
 
     // — Impresión —
