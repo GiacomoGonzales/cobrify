@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet, FileText, Printer, Upload, CalendarClock, Cake, Columns3, PawPrint, ClipboardList, Eye, EyeOff, X, ChevronDown, Stamp } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
+import { crearClienteDemo, actualizarClienteDemo, eliminarClienteDemo } from '@/data/demo/operaciones'
 import { useDataPermissions } from '@/hooks/useDataPermissions'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -703,6 +704,12 @@ function CustomerOrdersModal({ customer, businessId, businessSettings, isDemoMod
 
 export default function Customers() {
   const { user, isDemoMode, demoData, getBusinessId, businessSettings, businessMode } = useAppContext()
+
+  // Demo: la lista sigue al estado vivo, así lo que se crea aparece de una.
+  useEffect(() => {
+    if (!isDemoMode || !demoData) return
+    setCustomers(demoData.customers || [])
+  }, [isDemoMode, demoData])
   const permisos = useDataPermissions()
   const toast = useToast()
   const [customers, setCustomers] = useState([])
@@ -1151,7 +1158,13 @@ export default function Customers() {
 
       let result
 
-      if (editingCustomer) {
+      if (isDemoMode) {
+        // En demo se guarda contra el estado en memoria: el cliente aparece en
+        // la lista y se puede elegir en el POS.
+        result = editingCustomer
+          ? actualizarClienteDemo(editingCustomer.id, data)
+          : crearClienteDemo(data)
+      } else if (editingCustomer) {
         // Actualizar
         result = await updateCustomer(businessId, editingCustomer.id, data)
       } else {
@@ -1199,7 +1212,9 @@ export default function Customers() {
     const businessId = getBusinessId()
     setIsSaving(true)
     try {
-      const result = await deleteCustomer(businessId, deletingCustomer.id)
+      const result = isDemoMode
+        ? eliminarClienteDemo(deletingCustomer.id)
+        : await deleteCustomer(businessId, deletingCustomer.id)
 
       if (result.success) {
         toast.success('Cliente eliminado exitosamente')

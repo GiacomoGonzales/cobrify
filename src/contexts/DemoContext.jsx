@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useSyncExternalStore } from 'react'
+import { iniciarDemo, limpiarDemo, datosDemo, suscribirDemo } from '@/data/demo/demoStore'
 
 const DemoContext = createContext(null)
 
@@ -1640,12 +1641,25 @@ export const DemoProvider = ({ children, rubro = null }) => {
   // El demo genérico se arma de una y sin esperar: es el que más se visita.
   const [demoData, setDemoData] = useState(() => (rubro ? null : generateDemoData()))
 
+  // Estado VIVO: el visitante puede vender, crear productos y editar, y la
+  // pantalla se entera. El almacén vive fuera de React (los servicios, que no
+  // son componentes, tienen que poder escribir en él) y acá nos suscribimos.
+  const datosVivos = useSyncExternalStore(suscribirDemo, datosDemo, datosDemo)
+
+  // Se siembra el store en cuanto hay datos. Sin cleanup destructivo: en
+  // StrictMode el desmontaje-remontaje dejaba el demo sin estado.
+  useEffect(() => {
+    if (demoData && !datosDemo()) iniciarDemo(demoData)
+  }, [demoData])
+
   useEffect(() => {
     if (!rubro) {
       setDemoData(generateDemoData())
       return
     }
     let vivo = true
+    // Cambió el rubro: se descarta el estado del anterior.
+    limpiarDemo()
     // Import dinámico: el catálogo de cada rubro NO viaja en el bundle
     // principal, solo se baja cuando alguien abre ese demo.
     Promise.all([
@@ -1662,19 +1676,21 @@ export const DemoProvider = ({ children, rubro = null }) => {
 
   // Inyectar datos de demo en window para que los servicios puedan acceder
   useEffect(() => {
-    if (typeof window !== 'undefined' && demoData) {
-      window.__DEMO_DATA__ = demoData
+    if (typeof window !== 'undefined' && (datosVivos || demoData)) {
+      window.__DEMO_DATA__ = datosVivos || demoData
     }
     return () => {
       if (typeof window !== 'undefined') {
         delete window.__DEMO_DATA__
       }
     }
-  }, [demoData])
+  }, [demoData, datosVivos])
 
   const value = {
     isDemoMode: true,
-    demoData,
+    // El vivo manda: es el que trae las ventas y los productos que el
+    // visitante creó en esta sesión.
+    demoData: datosVivos || demoData,
     rubroDemo: rubro,
   }
 

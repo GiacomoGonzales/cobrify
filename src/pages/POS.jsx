@@ -68,6 +68,7 @@ import {
 import { getRateForDate } from '@/services/exchangeRateService'
 import { vendedoresDeSucursal } from '@/utils/sellerBranches'
 import { stockPorSucursal } from '@/utils/branchStockView'
+import { registrarVentaDemo } from '@/data/demo/operaciones'
 import { applyBranchPricing } from '@/utils/branchPricing'
 import { filterProductsForBranch, isProductInBranch } from '@/utils/branchCatalog'
 import { getAvailableDocumentTypes, resolveDocumentType } from '@/utils/documentTypes'
@@ -2812,6 +2813,14 @@ export default function POS() {
   useEffect(() => {
     loadInitialData()
   }, [user, currentBusinessId])
+
+  // Demo: el catálogo sigue al estado vivo. Al vender baja el stock, y sin
+  // esto las tarjetas seguirían mostrando el número anterior hasta recargar.
+  useEffect(() => {
+    if (!isDemoMode || !demoData) return
+    setProductsRaw(demoData.products || [])
+    setCustomers(demoData.customers || [])
+  }, [isDemoMode, demoData])
 
   // Productos en TIEMPO REAL: un listener (onSnapshot) mantiene el catálogo del POS
   // siempre fresco, así un cambio/renombre de producto hecho desde otra pestaña o
@@ -6850,11 +6859,18 @@ export default function POS() {
           }),
         }
 
-        setLastInvoiceNumber(demoNumber)
-        setLastInvoiceData(invoiceData)
+        // La venta se REGISTRA en el estado del demo: aparece en Ventas, en el
+        // Dashboard y en la caja, y DESCUENTA EL STOCK. Antes la venta se
+        // simulaba y no dejaba rastro: el visitante vendía diez veces y el
+        // inventario no se movía, así que el demo se sentía de mentira.
+        const registro = registrarVentaDemo(invoiceData, selectedWarehouse?.id || null)
+        const numeroReal = registro.success ? registro.number : demoNumber
+
+        setLastInvoiceNumber(numeroReal)
+        setLastInvoiceData({ ...invoiceData, number: numeroReal, series: registro.series || invoiceData.series })
 
         const documentName = documentType === 'factura' ? 'Factura' : documentType === 'nota_venta' ? 'Nota de Venta' : 'Boleta'
-        toast.success(`${documentName} ${demoNumber} generada exitosamente (DEMO - No se guardó)`, 5000)
+        toast.success(`${documentName} ${numeroReal} generada exitosamente`, 5000)
 
         // Limpiar el carrito y resetear el estado
         setCart([])
