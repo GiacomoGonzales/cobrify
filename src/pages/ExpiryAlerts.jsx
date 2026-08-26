@@ -48,6 +48,10 @@ function ExpiryAlerts() {
                 expirationDate: batch.expiryDate || batch.expirationDate,
                 batchQuantity: batch.quantity,
                 batchCost: batch.costPrice,
+                // La rama real sí lo copia; acá faltaba, así que en demo el
+                // lote salía siempre "Sin asignar" y el filtro por almacén no
+                // encontraba nada.
+                batchWarehouseId: batch.warehouseId || null,
                 isBatch: true,
                 stock: batch.quantity
               })

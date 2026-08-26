@@ -200,6 +200,18 @@ const RUTAS_DEMO = (
               <Route path="mi-horario" element={<MySchedule />} />
               <Route path="asistencia" element={<Attendance />} />
               <Route path="contabilidad" element={<Accounting />} />
+              {/* Páginas de otros modos de negocio. El menú de cada rubro
+                  decide cuáles se muestran; acá solo se declaran para que la
+                  URL exista (sin esto, /demo/farmacia/control-lotes caía en
+                  la landing). */}
+              <Route path="control-lotes" element={<BatchControl />} />
+              <Route path="alertas-vencimiento" element={<ExpiryAlerts />} />
+              <Route path="laboratorios" element={<Laboratories />} />
+              <Route path="agenda-veterinaria" element={<VeterinaryAgenda />} />
+              <Route path="certificados" element={<Certificates />} />
+              <Route path="prestamos" element={<Loans />} />
+              <Route path="prestamos-cartera" element={<LendingPortfolio />} />
+              <Route path="control-pagos-alumnos" element={<StudentPaymentControl />} />
   </>
 )
 
