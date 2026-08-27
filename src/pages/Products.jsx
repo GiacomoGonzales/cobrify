@@ -316,6 +316,11 @@ export default function Products() {
   // primer render — y no lo agarra el build, solo el navegador.
   const branchCatalogOn = businessSettings?.branchCatalogEnabled === true && branches.length > 0
 
+  // Declarado ACÁ, antes de los useMemo que lo consumen: un `const` usado
+  // antes de su línea revienta en tiempo de ejecución ("Cannot access before
+  // initialization") y `vite build` NO lo detecta — solo el navegador.
+  const [categories, setCategories] = useState([])
+
   const scopedProducts = React.useMemo(() => {
     if (!branchCatalogOn || !branchScope || branchScope === 'all') return products
     const branchId = branchScope === MAIN_BRANCH_TOKEN ? null : branchScope
@@ -392,7 +397,6 @@ export default function Products() {
   const [editingVariant, setEditingVariant] = useState(null)
 
   // Category management state
-  const [categories, setCategories] = useState([])
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [parentCategoryId, setParentCategoryId] = useState(null)
