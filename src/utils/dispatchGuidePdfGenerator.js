@@ -230,14 +230,39 @@ function hexToRgb(hex) {
 }
 
 /**
+ * Cuánto se puede apretar el documento para que entre en una sola cara.
+ *
+ * Se prueban de menos a más agresivo y nos quedamos con el primero que no deje
+ * una página huérfana (una hoja extra que solo lleva el QR y el sello).
+ */
+const APRETONES = [
+  { spacious: false, footerCompacto: false },
+  { spacious: false, footerCompacto: true },
+  { spacious: false, footerCompacto: true, filasApretadas: true },
+  // Ya no se puede ganar la hoja: al menos que la segunda lleve el último ítem
+  // y no solo el QR.
+  { spacious: false, footerCompacto: true, filasApretadas: true, reservarPie: true },
+]
+
+/**
  * Genera un PDF para Guía de Remisión Electrónica - Diseño Profesional
  * Basado en el estilo visual de la Guía de Remisión Transportista
  * Con soporte para paginación dinámica cuando hay muchos items
+ *
+ * Si el documento entra justo, se rearma más apretado antes de tirar una hoja
+ * extra: los clientes piden la guía en una sola cara, y una segunda página con
+ * nada más que el QR es papel tirado. Cuando hay tantos ítems que la segunda
+ * hoja es inevitable, esa hoja lleva ítems de verdad, no solo el pie.
+ *
+ * @param {object|null} ajuste uso interno del reintento; no lo pasa nadie más.
  */
-export const generateDispatchGuidePDF = async (guide, companySettings, download = true, products = [], branding = null) => {
+export const generateDispatchGuidePDF = async (guide, companySettings, download = true, products = [], branding = null, ajuste = null) => {
   // Crear mapa de productos para buscar SKU por productId
   const productsMap = {}
   products.forEach(p => { productsMap[p.id] = p })
+
+  // El logo se descarga una sola vez aunque haya que rearmar el PDF.
+  const cacheLogo = ajuste?.cacheLogo || {}
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'pt',
@@ -253,9 +278,22 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   // Texto legible ENCIMA del acento: negro si el acento es claro.
   const ON_ACCENT = contrastTextColor(ACCENT_COLOR)
 
-  // Modo espaciado amplio (configurado por el usuario en Preferencias)
-  // Puede ser desactivado automáticamente si los items no caben en una sola hoja con espaciado
-  let spacious = companySettings?.pdfSpacious === true
+  // Modo espaciado amplio (configurado por el usuario en Preferencias).
+  // Se desactiva solo si el documento no entra en una hoja con espaciado.
+  let spacious = ajuste ? ajuste.spacious === true : companySettings?.pdfSpacious === true
+
+  // Pie compacto y filas apretadas: últimos recursos antes de tirar una hoja extra.
+  const footerCompacto = ajuste?.footerCompacto === true
+  const filasApretadas = ajuste?.filasApretadas === true
+  const reservarPie = ajuste?.reservarPie === true
+
+  // Cuánto ocupa el pie (QR + sello + texto legal). Se declara acá arriba porque
+  // la tabla necesita saberlo para reservarle sitio al último ítem.
+  const altoDelPie = footerCompacto ? 85 : 110
+
+  // La estimación de la tabla (más abajo) puede apagar `spacious` sola, así que
+  // guardamos con qué densidad arrancó este intento para no repetirla.
+  const densidadInicial = { spacious, footerCompacto, filasApretadas }
 
   // Márgenes y dimensiones
   const MARGIN_LEFT = 30
@@ -327,10 +365,11 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
 
   if (branchInfo.logoUrl) {
     try {
-      const imgData = await Promise.race([
+      const imgData = cacheLogo[branchInfo.logoUrl] || await Promise.race([
         loadImageAsBase64(branchInfo.logoUrl),
         new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 15000))
       ])
+      if (imgData) cacheLogo[branchInfo.logoUrl] = imgData
 
       let format = 'PNG'
       if (branchInfo.logoUrl.toLowerCase().includes('.jpg') ||
@@ -1087,6 +1126,17 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     // Si pagesCompact < pagesSpacious, queda en compacto para este PDF (ahorra hojas)
   }
 
+  // Último apretón: filas más juntas. Esta estimación solo mira la tabla, así que
+  // no ve el pie; cuando por el pie se pierde una hoja entera, el reintento llega
+  // hasta acá y recorta lo único que queda por recortar.
+  if (filasApretadas) {
+    spacious = false
+    minRowHeight = 17
+    lineHeight = 8.5
+    tableHeaderHeight = 16
+    tableHeaderTextY = 11
+  }
+
   // Dibujar el encabezado de la tabla inicial
   drawTableHeader()
 
@@ -1097,11 +1147,16 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   items.forEach((item, index) => {
     const { height: rowHeight, descLines, batchLine, serialLines } = calculateItemHeight(item)
 
-    // No reservamos espacio preventivo para el último item: las secciones siguientes
-    // (transporte, observaciones, QR) hacen su propio checkPageBreak y saltarán a
-    // nueva página si no caben. Reservar antes provocaba que el último item se
-    // empujara a página 2 dejando la página 1 semi-vacía (bug con espaciado amplio).
-    if (checkPageBreak(rowHeight + 20, false)) {
+    // Normalmente NO se reserva espacio para el último item: las secciones
+    // siguientes (transporte, observaciones, QR) hacen su propio checkPageBreak.
+    // Reservar siempre empujaba el último item a la página 2 dejando la 1
+    // semi-vacía (bug con espaciado amplio).
+    //
+    // `reservarPie` es el último escalón del reintento: cuando ya se sabe que la
+    // segunda hoja es inevitable, se prefiere que baje el último ítem con el pie
+    // antes que dejar una hoja con nada más que el QR.
+    const reservaDelPie = (reservarPie && index === items.length - 1) ? altoDelPie : 0
+    if (checkPageBreak(rowHeight + 20 + reservaDelPie, false)) {
       // Nueva página - redibujar encabezado de tabla
       drawTableHeader()
     }
@@ -1124,8 +1179,10 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
 
   // ========== 5. DATOS DE TRANSPORTE ==========
 
-  // Verificar espacio para sección de transporte (~100pt)
-  checkPageBreak(100, false)
+  // Verificar espacio para sección de transporte (~100pt).
+  // Con `reservarPie` se pide además el sitio del pie: si no entran los dos,
+  // bajan juntos y la segunda hoja lleva contenido, no solo el QR.
+  checkPageBreak(100 + (reservarPie ? altoDelPie : 0), false)
 
   doc.setLineWidth(0.5)
   doc.setDrawColor(...BLACK)
@@ -1360,8 +1417,8 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
 
   // ========== 6. OBSERVACIONES ==========
 
-  // Verificar espacio para observaciones (~50pt)
-  checkPageBreak(50, false)
+  // Verificar espacio para observaciones (~50pt), más el pie si toca reservarlo.
+  checkPageBreak(50 + (reservarPie ? altoDelPie : 0), false)
 
   doc.setLineWidth(0.5)
   doc.setDrawColor(...BLACK)
@@ -1460,20 +1517,26 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     }
   }
 
-  currentY += spacious ? 16 : 10
+  currentY += footerCompacto ? 6 : (spacious ? 16 : 10)
 
   // ========== 7. PIE DE PÁGINA - QR Y FIRMA ==========
 
-  // Verificar espacio para footer (~110pt)
-  checkPageBreak(110, false)
+  // Medidas del pie. La versión compacta ocupa ~85pt en vez de ~110pt y es el
+  // último recurso para que la guía entre en una sola cara.
+  const qrSize = footerCompacto ? 54 : 70
+
+  // Si el pie no entra, salta de página. Anotamos si eso pasó: una hoja que solo
+  // lleva el pie es la página huérfana que hay que evitar.
+  const paginaAntesDelPie = currentPage
+  checkPageBreak(altoDelPie, false)
+  const pieEnPaginaPropia = currentPage > paginaAntesDelPie
 
   doc.setLineWidth(0.5)
   doc.setDrawColor(...BLACK)
   doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
-  currentY += 10
+  currentY += footerCompacto ? 7 : 10
 
   const footerY = currentY
-  const qrSize = 70
 
   // QR Code
   try {
@@ -1492,10 +1555,10 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   }
 
   // ===== SELLO DE VERIFICACIÓN SUNAT (derecha) =====
-  const sealWidth = 100
-  const sealHeight = 50
+  const sealWidth = footerCompacto ? 92 : 100
+  const sealHeight = footerCompacto ? 42 : 50
   const sealX = PAGE_WIDTH - MARGIN_RIGHT - sealWidth
-  const sealY = footerY + 10
+  const sealY = footerY + (footerCompacto ? 6 : 10)
 
   // Borde del sello con color accent
   doc.setDrawColor(...ACCENT_COLOR)
@@ -1506,36 +1569,38 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   doc.setFontSize(7)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...ACCENT_COLOR)
-  doc.text('VERIFICACIÓN SUNAT', sealX + sealWidth/2, sealY + 12, { align: 'center' })
+  doc.text('VERIFICACIÓN SUNAT', sealX + sealWidth/2, sealY + (footerCompacto ? 10 : 12), { align: 'center' })
 
   doc.setFontSize(6)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...DARK_GRAY)
-  doc.text('Consulte en:', sealX + sealWidth/2, sealY + 24, { align: 'center' })
-  doc.text('www.sunat.gob.pe', sealX + sealWidth/2, sealY + 34, { align: 'center' })
+  doc.text('Consulte en:', sealX + sealWidth/2, sealY + (footerCompacto ? 20 : 24), { align: 'center' })
+  doc.text('www.sunat.gob.pe', sealX + sealWidth/2, sealY + (footerCompacto ? 29 : 34), { align: 'center' })
 
   // Fecha de emisión en el sello
   const emissionDate = formatDate(guide.issueDate || guide.createdAt || guide.transferDate)
   doc.setFontSize(5)
-  doc.text(`Emitido: ${emissionDate}`, sealX + sealWidth/2, sealY + 44, { align: 'center' })
+  doc.text(`Emitido: ${emissionDate}`, sealX + sealWidth/2, sealY + (footerCompacto ? 37 : 44), { align: 'center' })
 
   // Sección de texto legal (centro)
-  const legalX = MARGIN_LEFT + qrSize + 15
+  const legalX = MARGIN_LEFT + qrSize + (footerCompacto ? 12 : 15)
   doc.setFont('helvetica', 'normal')
-  doc.setFontSize(7)
+  doc.setFontSize(footerCompacto ? 6.5 : 7)
   doc.setTextColor(...MEDIUM_GRAY)
 
-  doc.text('Representación impresa de la Guía de', legalX, footerY + 12)
-  doc.text('Remisión Electrónica Remitente', legalX, footerY + 22)
-  doc.text('Autorizado mediante Resolución de', legalX, footerY + 34)
-  doc.text('Superintendencia N° 000123-2023/SUNAT', legalX, footerY + 44)
+  const saltoLegal = footerCompacto ? 9 : 10
+  const baseLegal = footerY + (footerCompacto ? 9 : 12)
+  doc.text('Representación impresa de la Guía de', legalX, baseLegal)
+  doc.text('Remisión Electrónica Remitente', legalX, baseLegal + saltoLegal)
+  doc.text('Autorizado mediante Resolución de', legalX, baseLegal + saltoLegal * 2 + (footerCompacto ? 2 : 2))
+  doc.text('Superintendencia N° 000123-2023/SUNAT', legalX, baseLegal + saltoLegal * 3 + (footerCompacto ? 2 : 2))
 
   if (guide.sunatHash) {
     doc.setFontSize(6)
-    doc.text(`Hash: ${guide.sunatHash}`, legalX, footerY + 56)
+    doc.text(`Hash: ${guide.sunatHash}`, legalX, baseLegal + saltoLegal * 4 + 2)
   }
 
-  currentY = footerY + qrSize + 15
+  currentY = footerY + qrSize + (footerCompacto ? 10 : 15)
 
   // Pie final con número de páginas
   doc.setDrawColor(...LIGHT_GRAY)
@@ -1561,59 +1626,95 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
 
   // ========== GENERAR PDF ==========
 
-  if (download) {
-    const fileName = `Guia_Remision_${(guide.number || 'T001-00000001').replace(/\//g, '-')}.pdf`
+  // Cuántas hojas salieron, para que el intento de arriba pueda comparar.
+  doc.__paginas = totalPages
+  doc.__pieHuerfano = pieEnPaginaPropia
 
-    const isNativePlatform = Capacitor.isNativePlatform()
+  // Si salió en más de una cara, se rearma más apretado y nos quedamos con el
+  // que menos hojas gaste. Solo reintenta el intento original (ajuste === null),
+  // así no se encadenan reintentos dentro de reintentos.
+  //
+  // Con pocos ítems esto termina en una sola cara. Con muchos, ninguna densidad
+  // alcanza y se acepta el resultado: ahí la segunda hoja lleva ítems de verdad,
+  // que es lo que se quería evitar tirar por el pie solo.
+  if (!ajuste && totalPages > 1) {
+    let mejor = doc
+    for (const apreton of APRETONES) {
+      const yaProbado = apreton.spacious === densidadInicial.spacious &&
+        Boolean(apreton.footerCompacto) === densidadInicial.footerCompacto &&
+        Boolean(apreton.filasApretadas) === densidadInicial.filasApretadas
+      if (yaProbado) continue
 
-    if (isNativePlatform) {
-      try {
-        const pdfOutput = doc.output('datauristring')
-        const base64Data = pdfOutput.split(',')[1]
+      const reintento = await generateDispatchGuidePDF(
+        guide, companySettings, false, products, branding, { ...apreton, cacheLogo }
+      )
+      // Gana el que use menos hojas; a igualdad de hojas, el que no deje una
+      // hoja con solo el pie.
+      const puntaje = (d) => d.__paginas * 10 + (d.__pieHuerfano ? 1 : 0)
+      if (reintento && puntaje(reintento) < puntaje(mejor)) mejor = reintento
+      if (mejor.__paginas === 1 && !mejor.__pieHuerfano) break
+    }
+    if (mejor !== doc) return entregar(mejor)
+  }
 
-        const pdfDir = 'PDFs'
+  return entregar(doc)
+
+  async function entregar(doc) {
+
+    if (download) {
+      const fileName = `Guia_Remision_${(guide.number || 'T001-00000001').replace(/\//g, '-')}.pdf`
+
+      const isNativePlatform = Capacitor.isNativePlatform()
+
+      if (isNativePlatform) {
         try {
-          await Filesystem.mkdir({
-            path: pdfDir,
+          const pdfOutput = doc.output('datauristring')
+          const base64Data = pdfOutput.split(',')[1]
+
+          const pdfDir = 'PDFs'
+          try {
+            await Filesystem.mkdir({
+              path: pdfDir,
+              directory: Directory.Documents,
+              recursive: true
+            })
+          } catch (mkdirError) {
+            console.log('Directorio ya existe:', mkdirError)
+          }
+
+          const result = await Filesystem.writeFile({
+            path: `${pdfDir}/${fileName}`,
+            data: base64Data,
             directory: Directory.Documents,
             recursive: true
           })
-        } catch (mkdirError) {
-          console.log('Directorio ya existe:', mkdirError)
+
+          console.log('PDF guardado en:', result.uri)
+
+          // Abrir el diálogo de compartir para que el usuario pueda ver/compartir el PDF
+          try {
+            await Share.share({
+              title: fileName,
+              text: `Guía de Remisión: ${fileName}`,
+              url: result.uri,
+              dialogTitle: 'Compartir Guía de Remisión'
+            })
+          } catch (shareError) {
+            console.log('Compartir cancelado o no disponible:', shareError)
+          }
+
+          return { success: true, uri: result.uri, fileName, doc }
+        } catch (error) {
+          console.error('Error al guardar PDF en móvil:', error)
+          throw error
         }
-
-        const result = await Filesystem.writeFile({
-          path: `${pdfDir}/${fileName}`,
-          data: base64Data,
-          directory: Directory.Documents,
-          recursive: true
-        })
-
-        console.log('PDF guardado en:', result.uri)
-
-        // Abrir el diálogo de compartir para que el usuario pueda ver/compartir el PDF
-        try {
-          await Share.share({
-            title: fileName,
-            text: `Guía de Remisión: ${fileName}`,
-            url: result.uri,
-            dialogTitle: 'Compartir Guía de Remisión'
-          })
-        } catch (shareError) {
-          console.log('Compartir cancelado o no disponible:', shareError)
-        }
-
-        return { success: true, uri: result.uri, fileName, doc }
-      } catch (error) {
-        console.error('Error al guardar PDF en móvil:', error)
-        throw error
+      } else {
+        doc.save(fileName)
       }
-    } else {
-      doc.save(fileName)
     }
-  }
 
-  return doc
+    return doc
+  }
 }
 
 /**
