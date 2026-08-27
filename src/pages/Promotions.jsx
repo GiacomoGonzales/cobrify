@@ -23,7 +23,7 @@ import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import LoyaltyManager from '@/components/loyalty/LoyaltyManager'
 import GuideLink from '@/components/guide/GuideLink'
-import { getProducts, createProduct, updateProduct } from '@/services/firestoreService'
+import { getProducts, createProduct, updateProduct, getProductCategories } from '@/services/firestoreService'
 import { createRecipe } from '@/services/recipeService'
 import { uploadProductImage, createImagePreview, revokeImagePreview } from '@/services/productImageService'
 import ProductModifiersSection from '@/components/ProductModifiersSection'
@@ -98,6 +98,8 @@ export default function Promotions() {
 
   // ── Combos ──
   const [products, setProducts] = useState([])
+  // Catálogo de categorías: el producto guarda el ID, acá se traduce a nombre.
+  const [categoriasDelNegocio, setCategoriasDelNegocio] = useState([])
   const [loadingProducts, setLoadingProducts] = useState(true)
   const [isComboOpen, setIsComboOpen] = useState(false)
   const [comboName, setComboName] = useState('')
@@ -119,6 +121,7 @@ export default function Promotions() {
     // no creó promociones.
     if (isDemoMode) {
       setProducts(demoData?.products || [])
+      setCategoriasDelNegocio(demoData?.categories || [])
       setTarjetas([])
       setCupones([])
       setCertificados([])
@@ -139,6 +142,9 @@ export default function Promotions() {
       .then((r) => setProducts(r?.data || []))
       .catch(() => {})
       .finally(() => setLoadingProducts(false))
+    getProductCategories(businessId)
+      .then((res) => setCategoriasDelNegocio(res?.success ? (res.data || []) : []))
+      .catch(() => {})
     getCoupons(businessId)
       .then((res) => setCupones(res?.success ? res.data : []))
       .catch(() => {})
@@ -153,9 +159,32 @@ export default function Promotions() {
       .finally(() => setCargandoPromos(false))
   }, [businessId, isDemoMode, demoData])
 
+  /**
+   * Las categorías que se pueden elegir en una promoción.
+   *
+   * El producto guarda el ID de la categoría (`cat-1787806688822-nexi7afug`) y
+   * la promoción se guarda igual, porque así se cruzan las dos al aplicar el
+   * descuento (scheduledDiscountService: `product.category === promo.category`).
+   * Lo que cambia acá es solo lo que se MUESTRA: antes salía el ID crudo.
+   *
+   * Los productos viejos guardan el nombre en vez del ID; para esos el valor ya
+   * es legible y se deja tal cual.
+   */
+  const nombreDeCategoria = useMemo(() => {
+    const porId = new Map(categoriasDelNegocio.map((c) => [c.id, c]))
+    return (valor) => {
+      const cat = porId.get(valor)
+      if (!cat) return valor
+      const padre = cat.parentId ? porId.get(cat.parentId) : null
+      return padre ? `${padre.name} > ${cat.name}` : cat.name
+    }
+  }, [categoriasDelNegocio])
+
   const categorias = useMemo(
-    () => [...new Set(products.map((p) => p.category).filter(Boolean))].sort(),
-    [products]
+    () => [...new Set(products.map((p) => p.category).filter(Boolean))]
+      .map((valor) => ({ valor, nombre: nombreDeCategoria(valor) }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre)),
+    [products, nombreDeCategoria]
   )
 
   // ── Certificados de regalo: vender, listar, anular ──
@@ -935,7 +964,7 @@ export default function Promotions() {
                       ? 'bg-green-100 text-green-700'
                       : estado === 'Programada' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'
                     const alcance = p.scope === 'all' ? 'todos los productos'
-                      : p.scope === 'category' ? `categoría ${p.category}`
+                      : p.scope === 'category' ? `categoría ${nombreDeCategoria(p.category)}`
                       : `${p.productIds?.length || 0} producto${(p.productIds?.length || 0) === 1 ? '' : 's'}`
                     const dias = (p.days || []).length === 7 ? 'todos los días'
                       : (p.days || []).map((d) => DIAS[d]).join(' ')
@@ -1025,7 +1054,7 @@ export default function Promotions() {
                 className={inputCls}
               >
                 <option value="">Elige una categoría...</option>
-                {categorias.map((c) => <option key={c} value={c}>{c}</option>)}
+                {categorias.map((c) => <option key={c.valor} value={c.valor}>{c.nombre}</option>)}
               </select>
             </div>
           )}
