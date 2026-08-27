@@ -34,6 +34,11 @@ targets:
     info:
       path: CobrifyInbox/Info.plist
       properties:
+        # Atadas a los ajustes del proyecto: sin esto xcodegen reescribe el
+        # Info.plist con sus valores por defecto (1 / 1.0) cada vez que cambia
+        # una propiedad, y el build sube con el numero equivocado.
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleDisplayName: Cobrify Chat
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
