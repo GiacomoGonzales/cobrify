@@ -1,4 +1,4 @@
-import { formatPricedModifierHtmlLines } from './modifierHelpers'
+import { formatBreakdownHtmlRows, getItemPriceBreakdown } from './modifierHelpers'
 
 import { printHtmlIframe } from './printHtmlIframe'
 
@@ -491,14 +491,17 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
         const isCourtesy = !!item.isCourtesy
         const displayTotal = isCourtesy && item.originalTotal !== undefined ? item.originalTotal : item.total
         const courtesyClass = isCourtesy ? ' is-courtesy' : ''
+        // El monto de la fila es el del producto SIN adicionales; cada adicional
+        // baja como fila propia que suma, para que la cuenta cierre a la vista.
+        const desglose = getItemPriceBreakdown(item, item.unitPrice || item.price || 0, item.quantity)
         return `
         <div class="item-row">
           <div class="qty">${item.quantity}</div>
           <div class="desc${courtesyClass}">${(item.name || '').toUpperCase()}${isCourtesy ? '<span class="courtesy-badge">CORTESÍA</span>' : ''}</div>
-          <div class="price${courtesyClass}">S/ ${(displayTotal || 0).toFixed(2)}</div>
+          <div class="price${courtesyClass}">S/ ${(isCourtesy ? (displayTotal || 0) : desglose.baseTotal).toFixed(2)}</div>
         </div>
         ${isCourtesy && item.courtesyReason ? `<div class="item-courtesy-reason">${item.courtesyReason}</div>` : ''}
-        ${formatPricedModifierHtmlLines(item)}
+        ${isCourtesy ? '' : formatBreakdownHtmlRows(item, item.unitPrice || item.price || 0, item.quantity)}
         ${item.notes ? `<div class="item-notes">⚠ ${item.notes}</div>` : ''}
       `}).join('')}
 
@@ -629,14 +632,17 @@ export const printAllSplitPreBills = (table, order, splitData, businessInfo = {}
         const isCourtesy = !!item.isCourtesy
         const displayTotal = isCourtesy && item.originalTotal !== undefined ? item.originalTotal : item.total
         const courtesyClass = isCourtesy ? ' is-courtesy' : ''
+        // El monto de la fila es el del producto SIN adicionales; cada adicional
+        // baja como fila propia que suma, para que la cuenta cierre a la vista.
+        const desglose = getItemPriceBreakdown(item, item.unitPrice || item.price || 0, item.quantity)
         return `
         <div class="item-row">
           <div class="qty">${item.quantity}</div>
           <div class="desc${courtesyClass}">${(item.name || '').toUpperCase()}${isCourtesy ? '<span class="courtesy-badge">CORTESÍA</span>' : ''}</div>
-          <div class="price${courtesyClass}">S/ ${(displayTotal || 0).toFixed(2)}</div>
+          <div class="price${courtesyClass}">S/ ${(isCourtesy ? (displayTotal || 0) : desglose.baseTotal).toFixed(2)}</div>
         </div>
         ${isCourtesy && item.courtesyReason ? `<div class="item-courtesy-reason">${item.courtesyReason}</div>` : ''}
-        ${formatPricedModifierHtmlLines(item)}
+        ${isCourtesy ? '' : formatBreakdownHtmlRows(item, item.unitPrice || item.price || 0, item.quantity)}
         ${item.notes ? `<div class="item-notes">⚠ ${item.notes}</div>` : ''}
       `}).join('')}
 
