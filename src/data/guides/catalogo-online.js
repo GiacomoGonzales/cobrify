@@ -52,6 +52,10 @@ export default {
         },
         {
           type: 'texto',
+          text: 'En **Apariencia > Buscador** eliges cómo busca tu cliente. Por defecto hay una **lupa** al inicio de la fila de categorías, que abre un panel de búsqueda. Si activas **Barra de búsqueda siempre visible**, en su lugar aparece una barra a la vista que va filtrando los productos mientras el cliente escribe, sin abrir nada. Conviene cuando tu gente busca por nombre casi siempre; la lupa deja más espacio para las categorías.',
+        },
+        {
+          type: 'texto',
           text: 'Cuando hay muchos productos puedes elegir cómo se cargan en **Paginación de productos** (tarjeta "Así se ve tu tienda"): mostrar todo de una, botón de **Cargar más**, **scroll infinito** (recomendado) o **páginas numeradas**.',
         },
         {

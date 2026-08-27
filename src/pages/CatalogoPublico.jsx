@@ -986,6 +986,19 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const thViewHover = themeClasses.viewHover
   const thCatBadge = themeClasses.catBadge
   const thListBadge = themeClasses.listBadge
+  /**
+   * BUSCADOR: lupa o barra a la vista.
+   *
+   * La barra ancha bajo el hero se cambio por la lupa (bd0b99e4). A varios les
+   * gusto, pero hay tiendas donde el cliente busca por nombre casi siempre y la
+   * lupa les agrega un clic de por medio. Con esto cada negocio elige.
+   *
+   * La barra va en la MISMA fila de las categorias, donde estaba la lupa: es el
+   * unico sitio comun a todos los disenos de portada, y ademas queda fija
+   * arriba al desplazarse, que es cuando mas se necesita.
+   */
+  const barraDeBusquedaVisible = business?.catalogSearchBar === true
+
   const thSearchBanner = themeClasses.searchBanner
   const thSearchClassic = themeClasses.searchClassic
   const thObsText = themeClasses.obsText
@@ -2145,8 +2158,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               </div>
             </div>
           </div>
-          {/* Barra de búsqueda debajo del banner */}
-          <div className={`${themeClasses.bg} px-4 py-3 ${sidebarNav ? 'md:px-0 md:pt-5' : ''}`}>
+          {/* Barra de búsqueda debajo del banner. Se oculta si el negocio activó
+              la barra fija: esa vive en la fila de categorías y son la misma. */}
+          <div className={`${themeClasses.bg} px-4 py-3 ${sidebarNav ? 'md:px-0 md:pt-5' : ''} ${barraDeBusquedaVisible ? 'hidden' : ''}`}>
             <div className={`relative ${sidebarNav ? '' : 'max-w-7xl mx-auto'}`}>
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
@@ -2326,8 +2340,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               </p>
             )}
 
-            {/* Barra de búsqueda */}
-            <div className="relative max-w-2xl mx-auto md:mx-0">
+            {/* Barra de búsqueda (oculta si el negocio activó la barra fija) */}
+            <div className={`relative max-w-2xl mx-auto md:mx-0 ${barraDeBusquedaVisible ? 'hidden' : ''}`}>
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
                 type="text"
@@ -2408,14 +2422,39 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 categorias y desaparecia al deslizar a la derecha — justo cuando
                 mas se necesita, porque quien desliza buscando su categoria es
                 el que no la encuentra. */}
-            <div className="flex items-stretch gap-1">
-              <button
-                onClick={() => setSearchOpen(true)}
-                className={`flex-shrink-0 rounded-full flex items-center justify-center transition-colors ${thViewHover} ${categoriesVariant === 'circles' ? 'w-14 h-14 self-start mt-3' : 'w-10 h-10 self-center'}`}
-                aria-label="Buscar productos"
-              >
-                <Search className={`w-[18px] h-[18px] ${thTextMuted}`} />
-              </button>
+            <div className={barraDeBusquedaVisible ? '' : 'flex items-stretch gap-1'}>
+              {barraDeBusquedaVisible ? (
+                /* Barra a la vista: filtra la grilla mientras se escribe, sin abrir nada. */
+                <div className="relative py-3">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Buscar productos..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className={`w-full pl-11 pr-10 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 ${thSearchClassic} ${thBorderColor}`}
+                    aria-label="Buscar productos"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className={`absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center ${thViewHover}`}
+                      aria-label="Limpiar búsqueda"
+                    >
+                      <X className={`w-4 h-4 ${thTextMuted}`} />
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <button
+                  onClick={() => setSearchOpen(true)}
+                  className={`flex-shrink-0 rounded-full flex items-center justify-center transition-colors ${thViewHover} ${categoriesVariant === 'circles' ? 'w-14 h-14 self-start mt-3' : 'w-10 h-10 self-center'}`}
+                  aria-label="Buscar productos"
+                >
+                  <Search className={`w-[18px] h-[18px] ${thTextMuted}`} />
+                </button>
+              )}
               <div className="min-w-0 flex-1">
             <CategoryScroller className="-mx-4 px-4 md:mx-0 md:px-0" innerClassName="gap-2 py-3">
               {/* Botón "Todos": oculto en modo onlyCarousels cuando estamos en la vista principal,

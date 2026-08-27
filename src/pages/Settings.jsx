@@ -654,6 +654,8 @@ export default function Settings() {
   const [catalogTrustBadges, setCatalogTrustBadges] = useState({ enabled: false, badges: [] })
   // Efectos del catálogo (F2.7)
   const [catalogEffects, setCatalogEffects] = useState({ scrollReveal: false, imageSwapOnHover: false })
+  // Buscador del catalogo: lupa (por defecto) o barra siempre a la vista.
+  const [catalogSearchBar, setCatalogSearchBar] = useState(false)
   const [catalogLogoUrl, setCatalogLogoUrl] = useState('')                // logo cuadrado
   const [catalogLogoLandscape, setCatalogLogoLandscape] = useState('')    // logo horizontal (opcional, reemplaza cuadrado+nombre)
   const [uploadingCatalogLogo, setUploadingCatalogLogo] = useState(false)
@@ -1480,6 +1482,7 @@ export default function Settings() {
           scrollReveal: businessData.catalogEffects?.scrollReveal === true,
           imageSwapOnHover: businessData.catalogEffects?.imageSwapOnHover === true,
         })
+        setCatalogSearchBar(businessData.catalogSearchBar === true)
         setCatalogLogoUrl(businessData.catalogLogoUrl || '')
         setCatalogLogoLandscape(businessData.catalogLogoLandscape || '')
         setCatalogShowAllPrices(businessData.catalogShowAllPrices !== false)
@@ -8547,6 +8550,26 @@ export default function Settings() {
                         </div>
                       </div>
 
+{/* Buscador: lupa (por defecto) o barra siempre a la vista */}
+                      <div className="p-4 border border-gray-200 rounded-lg space-y-2.5">
+                        <span className="text-sm font-medium text-gray-900">Buscador</span>
+                        <label className="flex items-center justify-between gap-3 cursor-pointer">
+                          <span className="text-sm text-gray-700">
+                            Barra de búsqueda siempre visible
+                            <span className="block text-xs text-gray-500">
+                              En vez de la lupa, una barra a la vista que va filtrando los productos mientras el cliente escribe.
+                            </span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setCatalogSearchBar(v => !v)}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${catalogSearchBar ? 'bg-primary-600' : 'bg-gray-300'}`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${catalogSearchBar ? 'translate-x-6' : 'translate-x-1'}`} />
+                          </button>
+                        </label>
+                      </div>
+
 {/* Efectos del catálogo (F2.7) */}
                       <div className="p-4 border border-gray-200 rounded-lg space-y-2.5">
                         <span className="text-sm font-medium text-gray-900">Efectos</span>
@@ -9233,6 +9256,7 @@ export default function Settings() {
                           })),
                         },
                         catalogEffects,
+                        catalogSearchBar,
                         catalogLogoUrl: catalogLogoUrl || null,
                         catalogLogoLandscape: catalogLogoLandscape || null,
                         // La cantidad minima por nivel de precio se configura AHORA EN
