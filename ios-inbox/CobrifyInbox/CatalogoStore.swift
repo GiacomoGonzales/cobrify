@@ -83,6 +83,24 @@ final class CatalogoStore: ObservableObject {
         }
     }
 
+    /// Guarda la lista completa de respuestas rápidas en el documento
+    /// compartido con la web (whatsappSettings/automaticos). merge:true
+    /// respeta bienvenida y ausencia, que viven en el mismo documento.
+    func guardarRespuestasRapidas(_ lista: [RespuestaRapida]) async -> String? {
+        let arr = lista.map { r -> [String: Any] in
+            var d: [String: Any] = ["atajo": r.atajo, "texto": r.texto]
+            if let m = r.media { d["media"] = m }
+            return d
+        }
+        do {
+            try await Firestore.firestore().collection("whatsappSettings").document("automaticos")
+                .setData(["respuestasRapidas": arr, "updatedAt": FieldValue.serverTimestamp()], merge: true)
+            return nil
+        } catch {
+            return "No se pudo guardar. Revisa tu conexión."
+        }
+    }
+
     // ---------- Acciones sobre una conversación ----------
     // Las reglas de Firestore solo dejan tocar estos campos; los mensajes
     // siguen siendo territorio del servidor.

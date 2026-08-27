@@ -61,6 +61,11 @@ struct AjustesView: View {
                     } label: {
                         Label("Apariencia del chat", systemImage: "paintbrush")
                     }
+                    NavigationLink {
+                        RespuestasRapidasConfigView()
+                    } label: {
+                        Label("Respuestas rápidas", systemImage: "bolt.fill")
+                    }
                 }
                 Section("Notificaciones") {
                     Label {

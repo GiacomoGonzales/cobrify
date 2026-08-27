@@ -47,7 +47,13 @@ struct ConversationView: View {
                                            citado: m.respondeA.flatMap { id in store.mensajes.first { $0.id == id } },
                                            nombreContacto: conv.titulo,
                                            alResponder: { respondiendoA = m },
-                                           alReaccionar: { emoji in reaccionar(m, emoji) })
+                                           alReaccionar: { emoji in reaccionar(m, emoji) },
+                                           alTocarCita: {
+                                               // Tocar la cita lleva al mensaje original, como WhatsApp.
+                                               if let id = m.respondeA {
+                                                   withAnimation { proxy.scrollTo(id, anchor: .center) }
+                                               }
+                                           })
                                 .padding(.top, cambiaDeLado ? 10 : 0)
                                 .id(m.id)
                         }
@@ -345,6 +351,40 @@ struct ConversationView: View {
                         .padding(.horizontal, 12)
                         .padding(.bottom, 6)
                     } else {
+                    if !sugerenciasSlash.isEmpty {
+                        // Escribir "/" abre los atajos, como WhatsApp Business.
+                        VStack(spacing: 0) {
+                            ForEach(Array(sugerenciasSlash.prefix(4).enumerated()), id: \.element.id) { i, r in
+                                Button {
+                                    elegirSugerencia(r)
+                                } label: {
+                                    HStack(spacing: 10) {
+                                        Image(systemName: r.media != nil ? "paperclip" : "bolt.fill")
+                                            .font(.caption)
+                                            .foregroundStyle(.tint)
+                                            .frame(width: 18)
+                                        Text("/" + r.atajo)
+                                            .font(.subheadline.weight(.semibold))
+                                        Text(r.texto)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 10)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                if i < min(3, sugerenciasSlash.count - 1) {
+                                    Divider().padding(.leading, 42)
+                                }
+                            }
+                        }
+                        .vidrioRedondeado(16)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 2)
+                    }
                     if let citado = respondiendoA {
                         HStack(spacing: 10) {
                             RoundedRectangle(cornerRadius: 2)
@@ -435,6 +475,20 @@ struct ConversationView: View {
     private func avisarLeido() {
         guard let ultimoEntrante = store.mensajes.last(where: { !$0.esSaliente }) else { return }
         Task { await ChatAPI.marcarLeidoWhatsApp(conversationId: conv.id, waMessageId: ultimoEntrante.id) }
+    }
+
+    /// Los atajos que calzan con lo escrito tras el "/" (vacío = todos).
+    private var sugerenciasSlash: [RespuestaRapida] {
+        guard borrador.hasPrefix("/") else { return [] }
+        let q = borrador.dropFirst().lowercased()
+        let todas = catalogo.respuestasRapidas
+        guard !q.isEmpty else { return todas }
+        return todas.filter { $0.atajo.lowercased().hasPrefix(q) }
+    }
+
+    private func elegirSugerencia(_ r: RespuestaRapida) {
+        borrador = ""
+        usarRapida(r)  // texto -> al borrador para retocar; adjunto -> sale directo
     }
 
     private var puedeEnviar: Bool {
@@ -554,6 +608,7 @@ private struct BurbujaMensaje: View {
     var nombreContacto: String = ""
     var alResponder: (() -> Void)? = nil
     var alReaccionar: ((String) -> Void)? = nil
+    var alTocarCita: (() -> Void)? = nil
     @State private var verAdjunto = false
 
     // Cuatro: los que caben en una sola fila del menú.
@@ -622,9 +677,13 @@ private struct BurbujaMensaje: View {
             Spacer(minLength: 0)
         }
         .padding(6)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // Tope de ancho: sin esto la cita estiraba la burbuja a toda la
+        // pantalla (se notaba feo citando una nota de voz).
+        .frame(maxWidth: 240, alignment: .leading)
         .background(Color(.systemGray6).opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
         .fixedSize(horizontal: false, vertical: true)
+        .contentShape(Rectangle())
+        .onTapGesture { alTocarCita?() }
     }
 
     private var chipReacciones: String {
