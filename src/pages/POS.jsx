@@ -134,6 +134,7 @@ import { getVisiblePaymentMethods, getPaymentLabel, getPaymentKeyByLabel } from 
 import GuideLink from '@/components/guide/GuideLink'
 import { diasDeRecordatorio } from '@/utils/vetReminders'
 import { repreciarPorCantidad } from '@/utils/autoPriceByQty'
+import { revisarAntesDeEmitir, textoDeErrores } from '@/utils/sunatPreflight'
 
 const PAYMENT_METHODS = {
   CASH: 'Efectivo',
@@ -6283,6 +6284,32 @@ export default function POS() {
     // Sin conexión SUNAT (ni override del admin): no se permiten comprobantes fiscales.
     if ((documentType === 'boleta' || documentType === 'factura') && !canEmitFiscal) {
       toast.error('Este negocio no tiene conexión con SUNAT. Solo puede emitir Nota de Venta. Contacta al administrador para habilitar comprobantes.')
+      return
+    }
+
+    /**
+     * Revisión previa de lo que SUNAT rechazaría.
+     *
+     * Se hace ACÁ y no después de emitir: un rechazo consume el correlativo,
+     * obliga a rehacer la venta y el negocio se entera horas más tarde, con el
+     * cliente ya en la calle. Dos segundos antes valen más que la corrección
+     * después. Ver src/utils/sunatPreflight.js.
+     */
+    const revision = revisarAntesDeEmitir({
+      documentType,
+      items: cart.map(item => ({
+        name: item.name,
+        quantity: item.quantity,
+        unitPrice: item.price,
+        isBonificacion: item.isBonificacion,
+        itemDiscount: item.itemDiscount,
+        ...referenciaDeRegalo(item),
+      })),
+    })
+    if (revision.errores.length > 0) {
+      toast.error(`SUNAT rechazaría este comprobante:
+
+${textoDeErrores(revision.errores)}`, 9000)
       return
     }
 

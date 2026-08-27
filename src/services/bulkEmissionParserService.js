@@ -393,6 +393,13 @@ export async function parsearExcelComprobantes(buffer, { products = [], igvRate 
         // línea en 0 que SUNAT rechaza. Acá se corta antes.
         error(fila, 'PRECIO UNITARIO', 'Una BONIFICACIÓN necesita el valor referencial de lo que regalas (mayor a 0). No se cobra, pero SUNAT lo exige declarado.')
       }
+      // Misma lección por el otro lado: precio 0 SIN marcar la afectación como
+      // BONIFICACION. Ahí la línea viaja como operación con cobro y valor cero,
+      // que es la contradicción que SUNAT rechaza. Fue el caso de las 13
+      // boletas de APU MARKET.
+      if (!esBonificacion && precio === 0) {
+        error(fila, 'PRECIO UNITARIO', 'Un ítem no puede ir en 0 en un comprobante electrónico. Si lo estás regalando, pon en AFECTACIÓN IGV el valor BONIFICACION y en PRECIO UNITARIO cuánto vale lo que entregas.')
+      }
       if (descuentoItem < 0) error(fila, 'DSCTO. ÍTEM (S/)', 'El descuento no puede ser negativo.')
       if (!esBonificacion && cantidad > 0 && precio >= 0 && descuentoItem > cantidad * precio) {
         error(fila, 'DSCTO. ÍTEM (S/)', `El descuento (${descuentoItem.toFixed(2)}) supera el total de la línea (${(cantidad * precio).toFixed(2)}).`)
