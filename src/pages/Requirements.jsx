@@ -13,13 +13,18 @@ import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
 import { formatDate, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import { getIngredients } from '@/services/ingredientService'
-import { getIngredientCategories } from '@/services/firestoreService'
+import { getIngredientCategories, getProducts, getProductCategories } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
+import { getUnitLabel } from '@/utils/units'
 import { getRequirements, createRequirement, updateRequirement, deleteRequirement } from '@/services/requirementService'
 import { useLocationAccess } from '@/utils/locationAccess'
 
 /**
  * REQUERIMIENTOS — pedidos de compra de insumos (cocina → compras).
+ *
+ * Lo pedible sale de DOS catálogos: insumos y productos. No todos los negocios
+ * registran insumos —una ferretería tiene productos— y mirando solo insumos la
+ * lista salía vacía y todo terminaba escrito a mano en "Otros".
  *
  * Flujo: el cocinero (usualmente el turno de cierre) marca qué insumos faltan,
  * cuánto comprar y con qué prioridad; el sistema pre-sugiere los que están en
@@ -59,7 +64,9 @@ export default function Requirements() {
   const [isLoading, setIsLoading] = useState(true)
   const [requirements, setRequirements] = useState([])
   const [ingredients, setIngredients] = useState([])
+  const [products, setProducts] = useState([])
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES)
+  const [productCategories, setProductCategories] = useState([])
   const [branches, setBranches] = useState([])
 
   // ===== Vista: 'list' | 'editor' =====
@@ -89,22 +96,28 @@ export default function Requirements() {
       try {
         if (isDemoMode) {
           setIngredients(demoData?.ingredients || [])
+          setProducts(demoData?.products || [])
           setCategories(DEFAULT_CATEGORIES)
+          setProductCategories(demoData?.categories || [])
           setRequirements([]) // demo: solo en memoria
           setBranches([])
           return
         }
         const businessId = getBusinessId()
         if (!businessId) return
-        const [reqsRes, ingsRes, catsRes, branchesRes] = await Promise.all([
+        const [reqsRes, ingsRes, catsRes, branchesRes, prodsRes, prodCatsRes] = await Promise.all([
           getRequirements(businessId),
           getIngredients(businessId),
           getIngredientCategories(businessId),
           getActiveBranches(businessId),
+          getProducts(businessId),
+          getProductCategories(businessId),
         ])
         if (reqsRes.success) setRequirements(reqsRes.data || [])
         if (ingsRes.success) setIngredients(ingsRes.data || [])
         if (catsRes.success && catsRes.data?.length > 0) setCategories(catsRes.data)
+        if (prodsRes.success) setProducts(prodsRes.data || [])
+        if (prodCatsRes.success) setProductCategories(prodCatsRes.data || [])
         if (branchesRes.success) {
           const list = filterBranchesByAccess ? filterBranchesByAccess(branchesRes.data || []) : (branchesRes.data || [])
           setBranches(list)
@@ -141,6 +154,84 @@ export default function Requirements() {
     return categoryId
   }
 
+  // El stock de un producto: con variantes vive en cada variante, no en el padre.
+  const getVisibleProductStock = (product) => {
+    const sumar = (lista) => (lista || []).reduce(
+      (total, w) => (!allowedWarehouseIdSet || allowedWarehouseIdSet.has(w.warehouseId) ? total + (w.stock || 0) : total),
+      0
+    )
+
+    if (product.hasVariants && Array.isArray(product.variants) && product.variants.length > 0) {
+      return product.variants.reduce((total, v) => total + sumar(v.warehouseStocks), 0)
+    }
+
+    const ws = product.warehouseStocks || []
+    if (ws.length > 0) return sumar(ws)
+
+    // Sin desglose por almacén solo existe el total del producto, y ese total no
+    // se puede recortar a los almacenes que este usuario tiene permitidos.
+    return allowedWarehouseIdSet ? 0 : (product.stock || 0)
+  }
+
+  /**
+   * CATÁLOGO PEDIBLE — insumos y productos en una sola lista.
+   *
+   * Los dos catálogos se normalizan a la misma forma para que el resto de la
+   * página no tenga que saber de dónde vino cada fila. La clave lleva el origen
+   * ('ingredient:xxx' / 'product:xxx') porque los IDs son de colecciones
+   * distintas y podrían chocar.
+   */
+  const catalogo = useMemo(() => {
+    const filas = []
+
+    for (const ing of ingredients) {
+      filas.push({
+        key: `ingredient:${ing.id}`,
+        source: 'ingredient',
+        id: ing.id,
+        name: ing.name || '',
+        categoryId: ing.category || null,
+        categoryLabel: getCategoryLabel(ing.category),
+        unit: ing.purchaseUnit || 'unidades',
+        stock: getVisibleStock(ing),
+        min: ing.minimumStock || 0,
+        trackStock: ing.trackStock !== false,
+      })
+    }
+
+    for (const prod of products) {
+      const cat = productCategories.find(c => c.id === prod.category)
+      filas.push({
+        key: `product:${prod.id}`,
+        source: 'product',
+        id: prod.id,
+        name: prod.name || '',
+        categoryId: prod.category || null,
+        categoryLabel: cat?.name || 'Otros',
+        sku: prod.sku || '',
+        barcode: prod.barcode || '',
+        unit: getUnitLabel(prod.unit, 'unidades'),
+        stock: getVisibleProductStock(prod),
+        min: prod.minStock || 0,
+        trackStock: prod.hasVariants === true || prod.trackStock !== false,
+      })
+    }
+
+    return filas
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ingredients, products, categories, productCategories, allowedWarehouseIdSet])
+
+  // Distinguir el origen solo aporta cuando conviven los dos catálogos.
+  const showSourceTag = ingredients.length > 0 && products.length > 0
+  const sourceTagForIngredient = isRestaurantMode ? 'Ingrediente' : 'Insumo'
+
+  // Cómo llamar a la lista según lo que el negocio realmente tenga registrado.
+  const catalogLabel = useMemo(() => {
+    if (ingredients.length > 0 && products.length > 0) return `${itemLabel} y productos`
+    if (products.length > 0) return 'productos'
+    return itemLabel
+  }, [ingredients.length, products.length, itemLabel])
+
   // ===== Requerimientos visibles (permisos de sucursal) =====
   const visibleRequirements = useMemo(
     () => requirements.filter(r => canAccessByLocation(r)),
@@ -149,18 +240,22 @@ export default function Requirements() {
 
   // ===== Editor: abrir nuevo / editar =====
   const openNewEditor = () => {
-    // Pre-sugerir insumos en o bajo su stock mínimo (la data ya existe: minimumStock)
+    // Pre-sugerir lo que está en o bajo su stock mínimo (la data ya existe).
+    //
+    // Los productos exigen tener un mínimo declarado: un catálogo grande tiene
+    // decenas de productos en cero que simplemente ya no se venden, y sin este
+    // filtro abrir un requerimiento nuevo llegaba con media tienda marcada.
     const suggested = {}
-    for (const ing of ingredients) {
-      if (ing.trackStock === false) continue
-      const stock = getVisibleStock(ing)
-      const min = ing.minimumStock || 0
-      if (min <= 0 && stock > 0) continue
-      if (stock <= min) {
-        const qty = Math.max(min - stock, 0)
-        suggested[ing.id] = {
+    for (const item of catalogo) {
+      if (!item.trackStock) continue
+      const min = item.min
+      if (item.source === 'product' && min <= 0) continue
+      if (min <= 0 && item.stock > 0) continue
+      if (item.stock <= min) {
+        const qty = Math.max(min - item.stock, 0)
+        suggested[item.key] = {
           qty: qty > 0 ? String(Math.round(qty * 100) / 100) : '1',
-          priority: stock <= 0 ? 'alta' : 'media',
+          priority: item.stock <= 0 ? 'alta' : 'media',
         }
       }
     }
@@ -173,7 +268,7 @@ export default function Requirements() {
     setEditingId(null)
     setView('editor')
     if (Object.keys(suggested).length > 0) {
-      toast.info(`${Object.keys(suggested).length} ${itemLabel} con stock bajo ya vienen sugeridos`, 4000)
+      toast.info(`${Object.keys(suggested).length} ${catalogLabel} con stock bajo ya vienen sugeridos`, 4000)
     }
   }
 
@@ -181,8 +276,12 @@ export default function Requirements() {
     const sel = {}
     const free = []
     for (const item of req.items || []) {
-      if (item.ingredientId) {
-        sel[item.ingredientId] = { qty: String(item.qty ?? ''), priority: item.priority || 'media' }
+      // Los requerimientos viejos solo guardaban ingredientId; siguen abriendo.
+      const key = item.productId
+        ? `product:${item.productId}`
+        : (item.ingredientId ? `ingredient:${item.ingredientId}` : null)
+      if (key) {
+        sel[key] = { qty: String(item.qty ?? ''), priority: item.priority || 'media' }
       } else {
         free.push({ id: `free-${free.length}-${item.name}`, name: item.name, qty: String(item.qty ?? ''), unit: item.unit || 'unidades', priority: item.priority || 'media' })
       }
@@ -197,23 +296,21 @@ export default function Requirements() {
     setView('editor')
   }
 
-  const toggleIngredient = (ing) => {
+  const toggleItem = (item) => {
     setSelection(prev => {
       const next = { ...prev }
-      if (next[ing.id]) {
-        delete next[ing.id]
+      if (next[item.key]) {
+        delete next[item.key]
       } else {
-        const stock = getVisibleStock(ing)
-        const min = ing.minimumStock || 0
-        const qty = Math.max(min - stock, 0)
-        next[ing.id] = { qty: qty > 0 ? String(Math.round(qty * 100) / 100) : '', priority: stock <= 0 ? 'alta' : 'media' }
+        const qty = Math.max(item.min - item.stock, 0)
+        next[item.key] = { qty: qty > 0 ? String(Math.round(qty * 100) / 100) : '', priority: item.stock <= 0 ? 'alta' : 'media' }
       }
       return next
     })
   }
 
-  const setItemField = (ingredientId, field, value) => {
-    setSelection(prev => ({ ...prev, [ingredientId]: { ...prev[ingredientId], [field]: value } }))
+  const setItemField = (key, field, value) => {
+    setSelection(prev => ({ ...prev, [key]: { ...prev[key], [field]: value } }))
   }
 
   const addFreeItem = () => {
@@ -232,19 +329,24 @@ export default function Requirements() {
   // ===== Construir items del documento =====
   const buildItems = () => {
     const items = []
-    for (const ing of ingredients) {
-      const sel = selection[ing.id]
+    for (const item of catalogo) {
+      const sel = selection[item.key]
       if (!sel) continue
       const qty = parseFloat(sel.qty)
       if (!Number.isFinite(qty) || qty <= 0) continue
       items.push({
-        ingredientId: ing.id,
-        name: ing.name,
-        unit: ing.purchaseUnit || 'unidades',
+        // Se guardan los dos campos: ingredientId sigue siendo lo que leen los
+        // requerimientos ya emitidos, productId es lo nuevo.
+        ingredientId: item.source === 'ingredient' ? item.id : null,
+        productId: item.source === 'product' ? item.id : null,
+        source: item.source,
+        name: item.name,
+        unit: item.unit,
         qty: Math.round(qty * 100) / 100,
         priority: sel.priority || 'media',
-        category: ing.category || null,
-        stockAtRequest: Math.round(getVisibleStock(ing) * 100) / 100,
+        category: item.categoryId,
+        categoryLabel: item.categoryLabel,
+        stockAtRequest: Math.round(item.stock * 100) / 100,
       })
     }
     for (const f of freeItems) {
@@ -252,6 +354,8 @@ export default function Requirements() {
       if (!f.name.trim() || !Number.isFinite(qty) || qty <= 0) continue
       items.push({
         ingredientId: null,
+        productId: null,
+        source: 'free',
         name: f.name.trim(),
         unit: f.unit || 'unidades',
         qty: Math.round(qty * 100) / 100,
@@ -284,7 +388,7 @@ export default function Requirements() {
   const saveRequirement = async (status) => {
     const items = buildItems()
     if (items.length === 0) {
-      toast.error(`Marca al menos un ${isRestaurantMode ? 'ingrediente' : 'insumo'} con cantidad`)
+      toast.error('Marca al menos un ítem con cantidad')
       return
     }
     const branch = branches.find(b => b.id === editorBranchId)
@@ -523,31 +627,39 @@ export default function Requirements() {
     <span className={`inline-block w-2 h-2 rounded-full ${p === 'alta' ? 'bg-red-500' : p === 'media' ? 'bg-amber-500' : 'bg-green-500'}`} />
   )
 
-  // ===== Editor: ingredientes agrupados por categoría =====
+  // ===== Editor: lo pedible, agrupado por categoría =====
   const searchIndex = useMemo(() => {
     const map = new Map()
-    for (const ing of ingredients) map.set(ing.id, buildSearchHaystack(ing.name))
+    for (const item of catalogo) map.set(item.key, buildSearchHaystack(item.name, item.sku, item.barcode))
     return map
-  }, [ingredients])
+  }, [catalogo])
 
   const editorGroups = useMemo(() => {
-    const filtered = ingredients.filter(ing => matchesPrebuilt(editorSearch, searchIndex.get(ing.id) || ''))
+    const filtered = catalogo.filter(item => matchesPrebuilt(editorSearch, searchIndex.get(item.key) || ''))
+
+    // Se agrupa por NOMBRE de categoría, no por id: insumos y productos viven en
+    // catálogos separados y una misma "Limpieza" no debería salir dos veces.
     const byCat = new Map()
-    for (const ing of filtered) {
-      const key = ing.category || 'otros'
-      if (!byCat.has(key)) byCat.set(key, [])
-      byCat.get(key).push(ing)
+    for (const item of filtered) {
+      const label = item.categoryLabel || 'Otros'
+      if (!byCat.has(label)) byCat.set(label, [])
+      byCat.get(label).push(item)
     }
-    // Ordenar categorías según el orden configurado; las no listadas al final
-    const orderOf = (catId) => {
-      const idx = categories.findIndex(c => c.id === catId)
-      return idx === -1 ? 999 : idx
+
+    // Primero el orden configurado en insumos, después el de productos, y las
+    // que no estén en ninguno al final.
+    const orderOf = (label) => {
+      const i = categories.findIndex(c => c.name === label)
+      if (i !== -1) return i
+      const j = productCategories.findIndex(c => c.name === label)
+      if (j !== -1) return 500 + j
+      return 999
     }
+
     return [...byCat.entries()]
-      .sort((a, b) => orderOf(a[0]) - orderOf(b[0]))
-      .map(([catId, list]) => ({ catId, label: getCategoryLabel(catId), items: list.sort((a, b) => a.name.localeCompare(b.name)) }))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ingredients, editorSearch, searchIndex, categories])
+      .sort((a, b) => orderOf(a[0]) - orderOf(b[0]) || a[0].localeCompare(b[0]))
+      .map(([label, list]) => ({ catId: label, label, items: list.sort((a, b) => a.name.localeCompare(b.name)) }))
+  }, [catalogo, editorSearch, searchIndex, categories, productCategories])
 
   if (isLoading) {
     return (
@@ -611,7 +723,7 @@ export default function Requirements() {
               <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
-                placeholder={`Buscar ${itemLabel}...`}
+                placeholder={`Buscar ${catalogLabel}...`}
                 value={editorSearch}
                 onChange={(e) => setEditorSearch(e.target.value)}
                 className="w-full h-10 pl-9 pr-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -620,13 +732,13 @@ export default function Requirements() {
           </CardContent>
         </Card>
 
-        {/* Lista de insumos por categoría */}
+        {/* Lista de lo pedible (insumos + productos) por categoría */}
         <Card>
           <CardContent className="p-0">
             {editorGroups.length === 0 ? (
               <div className="text-center py-12 text-gray-500">
                 <ClipboardList className="w-10 h-10 mx-auto mb-2 text-gray-300" />
-                <p className="text-sm">No hay {itemLabel} registrados{editorSearch ? ' que coincidan con la búsqueda' : ''}.</p>
+                <p className="text-sm">No hay {catalogLabel} registrados{editorSearch ? ' que coincidan con la búsqueda' : ''}.</p>
               </div>
             ) : editorGroups.map(group => (
               <div key={group.catId}>
@@ -634,24 +746,31 @@ export default function Requirements() {
                   <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{group.label}</span>
                   <span className="text-xs text-gray-400 ml-2">{group.items.length}</span>
                 </div>
-                {group.items.map(ing => {
-                  const sel = selection[ing.id]
-                  const stock = getVisibleStock(ing)
-                  const min = ing.minimumStock || 0
-                  const low = ing.trackStock !== false && stock <= min
+                {group.items.map(item => {
+                  const sel = selection[item.key]
+                  const stock = item.stock
+                  const min = item.min
+                  const low = item.trackStock && stock <= min
                   return (
-                    <div key={ing.id} className={`flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-gray-50 last:border-b-0 ${sel ? 'bg-primary-50/40' : ''}`}>
+                    <div key={item.key} className={`flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-gray-50 last:border-b-0 ${sel ? 'bg-primary-50/40' : ''}`}>
                       <button
-                        onClick={() => toggleIngredient(ing)}
+                        onClick={() => toggleItem(item)}
                         className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${sel ? 'bg-primary-600 border-primary-600' : 'border-gray-300 bg-white hover:border-primary-400'}`}
                         aria-label={sel ? 'Quitar' : 'Agregar'}
                       >
                         {sel && <CheckCircle className="w-3.5 h-3.5 text-white" />}
                       </button>
                       <div className="flex-1 min-w-[140px]">
-                        <p className="text-sm font-medium text-gray-900">{ing.name}</p>
+                        <p className="text-sm font-medium text-gray-900">
+                          {item.name}
+                          {showSourceTag && (
+                            <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 border border-gray-200 font-medium align-middle">
+                              {item.source === 'product' ? 'Producto' : sourceTagForIngredient}
+                            </span>
+                          )}
+                        </p>
                         <p className="text-xs text-gray-500">
-                          Stock: <span className={low ? 'text-red-600 font-semibold' : ''}>{Math.round(stock * 100) / 100} {ing.purchaseUnit || ''}</span>
+                          Stock: <span className={low ? 'text-red-600 font-semibold' : ''}>{Math.round(stock * 100) / 100} {item.unit || ''}</span>
                           {min > 0 && <span className="text-gray-400"> · mín. {min}</span>}
                           {low && <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-100 font-semibold">BAJO</span>}
                         </p>
@@ -664,17 +783,17 @@ export default function Requirements() {
                               min="0"
                               step="any"
                               value={sel.qty}
-                              onChange={(e) => setItemField(ing.id, 'qty', e.target.value)}
+                              onChange={(e) => setItemField(item.key, 'qty', e.target.value)}
                               placeholder="Cant."
                               className="w-20 h-9 px-2 border border-gray-300 rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary-500"
                             />
-                            <span className="text-xs text-gray-500 w-14 truncate">{ing.purchaseUnit || 'unid.'}</span>
+                            <span className="text-xs text-gray-500 w-14 truncate">{item.unit || 'unid.'}</span>
                           </div>
                           <div className="flex rounded-lg border border-gray-200 overflow-hidden">
                             {PRIORITY_ORDER.map(p => (
                               <button
                                 key={p}
-                                onClick={() => setItemField(ing.id, 'priority', p)}
+                                onClick={() => setItemField(item.key, 'priority', p)}
                                 title={PRIORITIES[p]}
                                 className={`w-9 h-9 text-xs font-bold transition-colors ${sel.priority === p
                                   ? (p === 'alta' ? 'bg-red-500 text-white' : p === 'media' ? 'bg-amber-500 text-white' : 'bg-green-600 text-white')
