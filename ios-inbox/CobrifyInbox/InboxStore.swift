@@ -55,6 +55,12 @@ final class MensajesStore: ObservableObject {
     @Published var mensajes: [Mensaje] = []
     @Published var pendientes: [Mensaje] = []
     @Published var cargando = true
+    /// Fotos que aún viajan, para pintarlas en su burbuja mientras suben.
+    @Published var previasLocales: [String: Data] = [:]
+
+    /// Reacciones que ya tocaste pero el servidor todavía no confirma
+    /// (cadena vacía = la quitaste). Se aplican encima de lo que hay.
+    private var reaccionesOptimistas: [String: String] = [:]
 
     private var listener: ListenerRegistration?
 
@@ -68,12 +74,52 @@ final class MensajesStore: ObservableObject {
             .addSnapshotListener { [weak self] snap, _ in
                 guard let self else { return }
                 self.cargando = false
-                self.mensajes = snap?.documents.map { Mensaje(id: $0.documentID, data: $0.data()) } ?? []
+                let llegados = snap?.documents.map { Mensaje(id: $0.documentID, data: $0.data()) } ?? []
+                self.mensajes = llegados
+
+                // Una reacción deja de ser optimista cuando el servidor trae
+                // ese mismo valor: ahí ya manda el dato real.
+                for (id, emoji) in self.reaccionesOptimistas {
+                    if let m = llegados.first(where: { $0.id == id }),
+                       (m.reaccionMia ?? "") == emoji {
+                        self.reaccionesOptimistas.removeValue(forKey: id)
+                    }
+                }
+                self.aplicarReaccionesOptimistas()
+
                 // El eco optimista se retira cuando el servidor ya guardó el
                 // mensaje de verdad (mismo texto, dirección saliente).
                 let confirmados = Set(self.mensajes.filter(\.esSaliente).map { "\($0.tipo)|\($0.texto)" })
+                let retirados = self.pendientes.filter { confirmados.contains("\($0.tipo)|\($0.texto)") }
+                for r in retirados { self.previasLocales.removeValue(forKey: r.id) }
                 self.pendientes.removeAll { confirmados.contains("\($0.tipo)|\($0.texto)") }
             }
+    }
+
+    private func aplicarReaccionesOptimistas() {
+        for (id, emoji) in reaccionesOptimistas {
+            guard let i = mensajes.firstIndex(where: { $0.id == id }) else { continue }
+            mensajes[i].reaccionMia = emoji.isEmpty ? nil : emoji
+        }
+    }
+
+    /// Reacciona al instante: el emoji aparece antes de que el servidor
+    /// responda, y si el envío falla se revierte solo.
+    func reaccionar(conversationId: String, mensaje: Mensaje, emoji: String) async {
+        // Tocar el mismo emoji lo quita.
+        let nuevo = (mensaje.reaccionMia == emoji) ? "" : emoji
+        let previo = mensaje.reaccionMia
+        reaccionesOptimistas[mensaje.id] = nuevo
+        aplicarReaccionesOptimistas()
+        do {
+            try await ChatAPI.reaccionar(conversationId: conversationId,
+                                         waMessageId: mensaje.id, emoji: nuevo)
+        } catch {
+            reaccionesOptimistas.removeValue(forKey: mensaje.id)
+            if let i = mensajes.firstIndex(where: { $0.id == mensaje.id }) {
+                mensajes[i].reaccionMia = previo
+            }
+        }
     }
 
     /// Envía por la Cloud Function con eco optimista. Devuelve el mensaje de
@@ -95,6 +141,9 @@ final class MensajesStore: ObservableObject {
                      filename: String, caption: String, tipo: String) async -> String? {
         let eco = Mensaje(pendienteTipo: tipo, texto: caption)
         pendientes.append(eco)
+        // La foto se ve en su burbuja desde el primer instante, no un cartel
+        // de "Enviando…" sobre un hueco.
+        if tipo == "image" { previasLocales[eco.id] = datos }
         do {
             try await ChatAPI.enviarMedia(conversationId: conversationId,
                                           base64: datos.base64EncodedString(),
@@ -102,6 +151,7 @@ final class MensajesStore: ObservableObject {
             return nil
         } catch {
             pendientes.removeAll { $0.id == eco.id }
+            previasLocales.removeValue(forKey: eco.id)
             return (error as? ChatAPI.ErrorEnvio)?.mensaje ?? "No se pudo enviar el archivo."
         }
     }

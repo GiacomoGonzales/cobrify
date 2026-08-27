@@ -9,7 +9,6 @@ struct ConversationView: View {
     let alAbrir: () -> Void
     @StateObject private var store = MensajesStore()
     @State private var borrador = ""
-    @State private var enviando = false
     @State private var errorEnvio: String?
     @State private var mostrarGaleria = false
     @State private var fotoSeleccionada: PhotosPickerItem?
@@ -43,17 +42,7 @@ struct ConversationView: View {
                                 .padding(.vertical, 6)
                                 .id(id)
                         case .mensaje(let m, let cambiaDeLado):
-                            BurbujaMensaje(mensaje: m,
-                                           citado: m.respondeA.flatMap { id in store.mensajes.first { $0.id == id } },
-                                           nombreContacto: conv.titulo,
-                                           alResponder: { respondiendoA = m },
-                                           alReaccionar: { emoji in reaccionar(m, emoji) },
-                                           alTocarCita: {
-                                               // Tocar la cita lleva al mensaje original, como WhatsApp.
-                                               if let id = m.respondeA {
-                                                   withAnimation { proxy.scrollTo(id, anchor: .center) }
-                                               }
-                                           })
+                            burbuja(m, proxy: proxy)
                                 .padding(.top, cambiaDeLado ? 10 : 0)
                                 .id(m.id)
                         }
@@ -238,6 +227,29 @@ struct ConversationView: View {
                 Navegacion.shared.conversacionVisible = nil
             }
         }
+    }
+
+    /// Arma la burbuja de un mensaje. Vive fuera del cuerpo porque el
+    /// compilador no lograba inferir tipos con todo junto en el ForEach.
+    @ViewBuilder
+    private func burbuja(_ m: Mensaje, proxy: ScrollViewProxy) -> some View {
+        let citado: Mensaje? = m.respondeA.flatMap { id in
+            store.mensajes.first { $0.id == id }
+        }
+        BurbujaMensaje(
+            mensaje: m,
+            citado: citado,
+            nombreContacto: conv.titulo,
+            alResponder: { respondiendoA = m },
+            alReaccionar: { emoji in reaccionar(m, emoji) },
+            alTocarCita: {
+                // Tocar la cita lleva al mensaje original, como WhatsApp.
+                if let id = m.respondeA {
+                    withAnimation { proxy.scrollTo(id, anchor: .center) }
+                }
+            },
+            previaLocal: store.previasLocales[m.id]
+        )
     }
 
     private func bajarAlFinal(_ proxy: ScrollViewProxy, animado: Bool = true) {
@@ -453,7 +465,6 @@ struct ConversationView: View {
                                     .frame(width: 40, height: 40)
                             }
                             .vidrioCapsula()
-                            .disabled(enviando)
                         }
                     }
                     .padding(.horizontal, 12)
@@ -467,8 +478,7 @@ struct ConversationView: View {
     /// Reaccionar (tocar el mismo emoji la quita). El servidor actualiza el
     /// mensaje y la pantalla lo ve llegar por la suscripción.
     private func reaccionar(_ m: Mensaje, _ emoji: String) {
-        let nuevo = (m.reaccionMia == emoji) ? "" : emoji
-        Task { try? await ChatAPI.reaccionar(conversationId: conv.id, waMessageId: m.id, emoji: nuevo) }
+        Task { await store.reaccionar(conversationId: conv.id, mensaje: m, emoji: emoji) }
     }
 
     /// Palomitas azules para el cliente: se marca leído el último entrante.
@@ -492,7 +502,7 @@ struct ConversationView: View {
     }
 
     private var puedeEnviar: Bool {
-        !borrador.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !enviando
+        !borrador.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// La foto sale recomprimida (tope 2048 px, JPEG 80%): una foto de cámara
@@ -534,12 +544,11 @@ struct ConversationView: View {
 
     private func enviarAdjunto(datos: Data, mimeType: String, filename: String, tipo: String) {
         errorEnvio = nil
-        enviando = true
+        // Tampoco bloquea: la foto se ve en su burbuja mientras sube.
         Task {
             let error = await store.enviarMedia(conversationId: conv.id, datos: datos,
                                                 mimeType: mimeType, filename: filename,
                                                 caption: "", tipo: tipo)
-            enviando = false
             if let error { errorEnvio = error }
         }
     }
@@ -553,14 +562,12 @@ struct ConversationView: View {
     private func usarRapida(_ r: RespuestaRapida) {
         if let media = r.media, media["url"] != nil {
             errorEnvio = nil
-            enviando = true
             Task {
                 do {
                     try await ChatAPI.enviarMediaGuardada(conversationId: conv.id, media: media, caption: r.texto)
                 } catch {
                     errorEnvio = (error as? ChatAPI.ErrorEnvio)?.mensaje ?? "No se pudo enviar."
                 }
-                enviando = false
             }
         } else {
             borrador = r.texto
@@ -569,15 +576,15 @@ struct ConversationView: View {
 
     private func enviar() {
         let texto = borrador.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !texto.isEmpty, !enviando else { return }
+        guard !texto.isEmpty else { return }
         let cita = respondiendoA?.id
         respondiendoA = nil
         borrador = ""
         errorEnvio = nil
-        enviando = true
+        // Sin bloquear el compositor: el mensaje ya se ve y puedes seguir
+        // escribiendo el siguiente mientras este viaja.
         Task {
             let error = await store.enviar(texto: texto, conversationId: conv.id, respondeA: cita)
-            enviando = false
             if let error {
                 errorEnvio = error
                 // El texto vuelve al borrador: nada se pierde por un fallo.
@@ -609,6 +616,7 @@ private struct BurbujaMensaje: View {
     var alResponder: (() -> Void)? = nil
     var alReaccionar: ((String) -> Void)? = nil
     var alTocarCita: (() -> Void)? = nil
+    var previaLocal: Data? = nil
     @State private var verAdjunto = false
 
     // Cuatro: los que caben en una sola fila del menú.
@@ -717,11 +725,27 @@ private struct BurbujaMensaje: View {
 
     @ViewBuilder private var contenido: some View {
         if mensaje.estado == "sending", mensaje.media == nil, mensaje.tipo != "text" {
-            // Eco optimista de un adjunto que aún viaja
-            HStack(spacing: 8) {
-                ProgressView()
-                Text(etiquetaEnviando)
-                    .foregroundStyle(.secondary)
+            if let previaLocal, let imagen = UIImage(data: previaLocal) {
+                // La foto ya se ve mientras viaja: solo se atenúa y gira.
+                Image(uiImage: imagen)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 230)
+                    .aspectRatio(imagen.size.width / max(1, imagen.size.height), contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay {
+                        ZStack {
+                            Color.black.opacity(0.25)
+                            ProgressView().tint(.white)
+                        }
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+            } else {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text(etiquetaEnviando)
+                        .foregroundStyle(.secondary)
+                }
             }
         } else {
             switch mensaje.tipo {
