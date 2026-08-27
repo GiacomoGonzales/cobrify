@@ -53,7 +53,7 @@ import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
 import PostSaleModal from '@/components/pos/PostSaleModal'
 import { WALLET_EN_APROBACION, programaVigente, vigenciaLegible } from '@/services/loyaltyService'
-import { promoParaProducto } from '@/services/scheduledDiscountService'
+import { promoParaProducto, CANAL_POS } from '@/services/scheduledDiscountService'
 import { formatCurrency, formatUnitPrice, formatLineAmount, formatProductPrice, applyMarginToCost, matchesSearchQuery, buildSearchHaystack, matchesPrebuilt, cleanText } from '@/lib/utils'
 import { buildProductHaystack } from '@/utils/productSearch'
 import {
@@ -2207,6 +2207,12 @@ export default function POS() {
             price: item.price || 0,
             quantity: item.quantity || 1,
             unit: item.unit || 'NIU',
+            // El precio ya viene con la promoción que vio el cliente al ordenar.
+            // Sin esto la caja le aplicaría OTRO descuento encima, y si el
+            // cajero abre el pedido fuera del horario de la promo el cliente
+            // terminaría pagando más de lo que le prometimos.
+            promoEvaluated: true,
+            ...(item.promoPercent ? { promoName: item.promoName || '' } : {}),
             // En una variante manda su propio SKU, más específico que el del padre.
             sku: item.sku || item.variantSku || product?.sku || '',
             code: item.code || product?.code || '',
@@ -5185,7 +5191,8 @@ export default function POS() {
       // Evaluación inicial: solo líneas nuevas, sin descuento previo (si el
       // producto ya vino con descuento de otra pantalla, se respeta).
       if (!item.promoEvaluated) {
-        const promo = (item.itemDiscount || 0) > 0 ? null : promoParaProducto(item, scheduledPromos, ahora)
+        // CANAL_POS: una promo marcada "solo catálogo" no debe aplicarse en la caja.
+        const promo = (item.itemDiscount || 0) > 0 ? null : promoParaProducto(item, scheduledPromos, ahora, CANAL_POS)
         cambio = true
         if (!promo) return { ...item, promoEvaluated: true }
         const monto = Math.min(

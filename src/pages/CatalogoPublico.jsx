@@ -71,6 +71,7 @@ import { BedDouble,
   BookOpen
 } from 'lucide-react'
 import { repreciarPorCantidad } from '@/utils/autoPriceByQty'
+import { promoParaProducto, precioConPromo, CANAL_CATALOGO } from '@/services/scheduledDiscountService'
 
 // Estilos de animacion para fade-in escalonado
 const fadeInStyle = `
@@ -437,6 +438,54 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         // "cargando" varios segundos. El primer lote pinta el catálogo de una y
         // el resto sigue llegando en background. Se pagina con orderBy(documentId())
         // (índice single-field de Firestore — no requiere índices compuestos).
+        /**
+         * PROMOCIONES DEL CATÁLOGO.
+         *
+         * Se cargan ANTES que los productos para que el primer lote ya salga
+         * con el precio de oferta puesto: si llegaran después, el cliente vería
+         * el precio de lista y un parpadeo al corregirse.
+         *
+         * El descuento se aplica sobre la ficha del producto (precio nuevo, y el
+         * de lista pasa a `catalogComparePrice`). Así el precio tachado, la
+         * pastilla de "-10%", el detalle, el carrito y el pedido salen todos
+         * bien sin tocar cada pantalla — y el precio que ve el cliente es el que
+         * viaja al POS cuando el cajero abre el pedido.
+         */
+        let promosDelCatalogo = []
+        try {
+          const promosSnap = await getDocs(collection(db, 'businesses', businessData.id, 'scheduledDiscounts'))
+          const ahora = new Date()
+          promosDelCatalogo = promosSnap.docs
+            .map(d => ({ id: d.id, ...d.data() }))
+            .filter(p => p.active && (!p.endsAt || p.endsAt.toDate() >= ahora))
+        } catch {
+          // Sin promociones el catálogo vende igual, a precio de lista.
+        }
+
+        const conPromo = (producto) => {
+          const promo = promoParaProducto(producto, promosDelCatalogo, new Date(), CANAL_CATALOGO)
+          if (!promo) return producto
+
+          const precioLista = Number(producto.price) || 0
+          const precioOferta = precioConPromo(precioLista, promo)
+          if (!(precioOferta < precioLista)) return producto
+
+          const listaUSD = Number(producto.priceUSD)
+          return {
+            ...producto,
+            price: precioOferta,
+            // Si el negocio ya tenía un "antes" más alto, ese manda: sigue
+            // siendo cierto y el ahorro que muestra es el real.
+            catalogComparePrice: Math.max(Number(producto.catalogComparePrice) || 0, precioLista),
+            ...(Number.isFinite(listaUSD) && listaUSD > 0 ? { priceUSD: precioConPromo(listaUSD, promo) } : {}),
+            ...(Array.isArray(producto.variants) && producto.variants.length > 0 ? {
+              variants: producto.variants.map(v => ({ ...v, price: precioConPromo(v.price, promo) })),
+            } : {}),
+            promoPercent: promo.percent,
+            promoName: promo.name || '',
+          }
+        }
+
         const productsRef = collection(db, 'businesses', businessData.id, 'products')
         const BATCH = 120
         let lastDoc = null
@@ -447,7 +496,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           if (lastDoc) constraints.push(startAfter(lastDoc))
           constraints.push(limit(BATCH))
           const snap = await getDocs(query(productsRef, ...constraints))
-          accumulated = accumulated.concat(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+          accumulated = accumulated.concat(snap.docs.map(d => conPromo({ id: d.id, ...d.data() })))
           setProducts(accumulated)
           if (firstBatch) {
             setLoading(false) // el catálogo ya es usable con el primer lote

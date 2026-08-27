@@ -33,7 +33,7 @@ import { getGiftCertificates, createGiftCertificate, cancelGiftCertificate } fro
 import { getOpenCashSessions } from '@/services/firestoreService'
 import {
   getScheduledDiscounts, createScheduledDiscount, setScheduledDiscountActive,
-  deleteScheduledDiscount, promoVigente, DIAS,
+  deleteScheduledDiscount, promoVigente, DIAS, CANAL_POS, CANAL_CATALOGO, canalesDePromo,
 } from '@/services/scheduledDiscountService'
 
 /**
@@ -87,7 +87,21 @@ export default function Promotions() {
   const FORM_PROMO_VACIO = {
     name: '', percent: '', scope: 'all', category: '', productIds: [],
     days: [1, 2, 3, 4, 5, 6, 0], startTime: '00:00', endTime: '23:59', endsAt: '',
+    // Por defecto vale en los dos lados; el que quiera limitarla lo cambia.
+    channels: [CANAL_POS, CANAL_CATALOGO],
   }
+  // Dónde aplica una promoción. Son excluyentes: o los dos canales, o uno.
+  const OPCIONES_CANAL = [
+    { valor: 'ambos', etiqueta: 'Local y catálogo', canales: [CANAL_POS, CANAL_CATALOGO] },
+    { valor: 'pos', etiqueta: 'Solo en el local', canales: [CANAL_POS] },
+    { valor: 'catalog', etiqueta: 'Solo en el catálogo', canales: [CANAL_CATALOGO] },
+  ]
+  const textoDeCanal = (promo) => {
+    const canales = canalesDePromo(promo)
+    if (canales.includes(CANAL_POS) && canales.includes(CANAL_CATALOGO)) return null
+    return canales.includes(CANAL_CATALOGO) ? 'solo catálogo' : 'solo local'
+  }
+
   const [promos, setPromos] = useState([])
   const [cargandoPromos, setCargandoPromos] = useState(true)
   const [isPromoOpen, setIsPromoOpen] = useState(false)
@@ -968,12 +982,16 @@ export default function Promotions() {
                       : `${p.productIds?.length || 0} producto${(p.productIds?.length || 0) === 1 ? '' : 's'}`
                     const dias = (p.days || []).length === 7 ? 'todos los días'
                       : (p.days || []).map((d) => DIAS[d]).join(' ')
+                    const canal = textoDeCanal(p)
                     return (
                       <li key={p.id} className="flex items-center gap-3 py-3">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <p className="font-semibold text-gray-900 truncate">{p.name}</p>
                             <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${estadoCls}`}>{estado}</span>
+                            {canal && (
+                              <span className="text-xs px-2 py-0.5 rounded-full font-medium shrink-0 bg-gray-100 text-gray-600 border border-gray-200">{canal}</span>
+                            )}
                           </div>
                           <p className="text-xs text-gray-500 mt-0.5">
                             −{p.percent}% en {alcance} · {dias} · {p.startTime}–{p.endTime}
@@ -1109,6 +1127,31 @@ export default function Promotions() {
               )}
             </div>
           )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Dónde aplica</label>
+            <div className="flex flex-wrap gap-1.5">
+              {OPCIONES_CANAL.map((op) => {
+                const elegido = op.canales.length === promoForm.channels.length &&
+                  op.canales.every((c) => promoForm.channels.includes(c))
+                return (
+                  <button
+                    key={op.valor}
+                    type="button"
+                    onClick={() => setPromoForm((f) => ({ ...f, channels: op.canales }))}
+                    className={`px-3 h-9 rounded-lg text-sm font-medium border transition-colors ${elegido
+                      ? 'bg-primary-600 border-primary-600 text-white'
+                      : 'bg-white border-gray-300 text-gray-600 hover:border-primary-400'}`}
+                  >
+                    {op.etiqueta}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="mt-1 text-xs text-gray-500">
+              Hay ofertas que son solo para quien viene a la tienda, y otras que son gancho para vender online.
+            </p>
+          </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Días</label>

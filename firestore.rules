@@ -766,10 +766,14 @@ service cloud.firestore {
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
-      // Subcollection: Descuentos programados (Promociones). Solo los lee el
-      // POS con sesión — no hay acceso público.
+      // Subcollection: Descuentos programados (Promociones).
+      //
+      // Lectura PÚBLICA: el catálogo online tiene que mostrar el precio con la
+      // oferta puesta, y lo abre gente sin sesión. Una promoción es una oferta
+      // pública por definición —el mismo cartel que se cuelga en la tienda—, no
+      // hay nada sensible que proteger acá. Escribir sigue siendo del negocio.
       match /scheduledDiscounts/{promoId} {
-        allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+        allow read: if true;
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
