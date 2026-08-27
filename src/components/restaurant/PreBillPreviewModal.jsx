@@ -213,7 +213,7 @@ export default function PreBillPreviewModal({
                           : 'text-gray-900 font-medium'
                       }`}
                     >
-                      S/ {(displayTotal || 0).toFixed(2)}
+                      S/ {(Number(displayTotal) || 0).toFixed(2)}
                     </div>
                   </div>
                 )

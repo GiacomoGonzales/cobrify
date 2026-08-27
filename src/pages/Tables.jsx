@@ -2012,7 +2012,7 @@ export default function Tables() {
                               <div className="flex justify-between items-center">
                                 <span>{isPrimary ? 'Cuenta del grupo:' : 'Consumo:'}</span>
                                 <span className="font-bold text-gray-900">
-                                  S/ {(table.amount || 0).toFixed(2)}
+                                  S/ {(Number(table.amount) || 0).toFixed(2)}
                                 </span>
                               </div>
                             </div>

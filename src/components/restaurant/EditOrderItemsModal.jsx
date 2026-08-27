@@ -272,7 +272,7 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
                           </span>
                         )}
                       </div>
-                      <div className={`text-xs text-gray-500 ${isCourtesy ? 'line-through' : ''}`}>S/ {(displayPriceUnit || 0).toFixed(2)} c/u</div>
+                      <div className={`text-xs text-gray-500 ${isCourtesy ? 'line-through' : ''}`}>S/ {(Number(displayPriceUnit) || 0).toFixed(2)} c/u</div>
                     </div>
 
                     {/* Fila de controles (en móvil va debajo del nombre) */}
@@ -302,7 +302,7 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
                       <div className="w-20 text-right text-sm font-semibold shrink-0">
                         {isCourtesy ? (
                           <div className="flex flex-col items-end leading-tight">
-                            <span className="text-gray-400 line-through text-xs">S/ {(displayTotal || 0).toFixed(2)}</span>
+                            <span className="text-gray-400 line-through text-xs">S/ {(Number(displayTotal) || 0).toFixed(2)}</span>
                             <span className="text-green-700">S/ 0.00</span>
                           </div>
                         ) : (
@@ -371,7 +371,7 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
           <div className="border-t pt-4 space-y-2 mb-4">
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Subtotal productos:</span>
-              <span className="font-medium">S/ {(totals.itemsTotal || 0).toFixed(2)}</span>
+              <span className="font-medium">S/ {(Number(totals.itemsTotal) || 0).toFixed(2)}</span>
             </div>
             {recargoConfig.enabled && totals.recargo > 0 && (
               <div className="flex justify-between text-sm">

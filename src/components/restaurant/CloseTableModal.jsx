@@ -142,7 +142,7 @@ export default function CloseTableModal({
           <div className="flex items-center justify-between mb-2">
             <span className="text-gray-700 font-medium">Total a Cobrar:</span>
             <span className="text-3xl font-bold text-primary-600">
-              S/ {(order.total || 0).toFixed(2)}
+              S/ {(Number(order.total) || 0).toFixed(2)}
             </span>
           </div>
           <div className="text-sm text-gray-600 space-y-1">
@@ -151,7 +151,7 @@ export default function CloseTableModal({
                 <span>
                   Descuento aplicado{order.discount.type === 'percent' ? ` (-${order.discount.value}%)` : ''}:
                 </span>
-                <span>- S/ {(order.discount.amount || 0).toFixed(2)}</span>
+                <span>- S/ {(Number(order.discount.amount) || 0).toFixed(2)}</span>
               </div>
             )}
             {!taxConfig.igvExempt && (

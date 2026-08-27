@@ -431,7 +431,7 @@ export default function TableActionModal({
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Consumo:</span>
                     <span className="font-bold text-gray-900">
-                      S/ {(table.amount || 0).toFixed(2)}
+                      S/ {(Number(table.amount) || 0).toFixed(2)}
                     </span>
                   </div>
                   {/* Cliente de la mesa: se escanea su tarjeta de sellos y queda
@@ -611,7 +611,7 @@ export default function TableActionModal({
                       <span className="text-[10px] font-semibold bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
                         {order.discount.type === 'percent'
                           ? `-${order.discount.value}%`
-                          : `-S/ ${(order.discount.amount || order.discount.value || 0).toFixed(2)}`}
+                          : `-S/ ${(Number(order.discount.amount || order.discount.value) || 0).toFixed(2)}`}
                       </span>
                     )}
                   </Button>
@@ -890,7 +890,7 @@ export default function TableActionModal({
                     </div>
                     <div className="text-right">
                       <div className="text-sm font-semibold text-gray-900">
-                        {isAvail ? '—' : `S/ ${(t.amount || 0).toFixed(2)}`}
+                        {isAvail ? '—' : `S/ ${(Number(t.amount) || 0).toFixed(2)}`}
                       </div>
                     </div>
                   </label>
@@ -912,7 +912,7 @@ export default function TableActionModal({
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-1">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Cuenta actual Mesa {table.number}:</span>
-                <span className="font-medium text-gray-900">S/ {(table.amount || 0).toFixed(2)}</span>
+                <span className="font-medium text-gray-900">S/ {(Number(table.amount) || 0).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">
@@ -1170,7 +1170,7 @@ export default function TableActionModal({
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Consumo total:</span>
               <span className="font-bold text-green-600 text-lg">
-                S/ {(table.amount || 0).toFixed(2)}
+                S/ {(Number(table.amount) || 0).toFixed(2)}
               </span>
             </div>
           </div>
