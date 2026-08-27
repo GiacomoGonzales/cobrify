@@ -26,6 +26,7 @@ export default function TableActionModal({
   onOpenPrimary,
   onPrintPreBill,
   onPrintKitchenTicket,
+  isPrintingKitchen = false,
   onToggleItemServed,
   onMarkAllServed,
   onAssignCustomer = null,
@@ -571,15 +572,17 @@ export default function TableActionModal({
                       <div className="flex flex-col gap-1">
                         <Button
                           onClick={() => { if (onPrintKitchenTicket) onPrintKitchenTicket(false) }}
+                          disabled={isPrintingKitchen}
                           variant="outline"
                           className="flex items-center justify-center gap-2 text-xs"
                           size="sm"
                         >
-                          <FileText className="w-4 h-4" />
-                          Comanda Nuevos ({unprintedCount})
+                          {isPrintingKitchen ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+                          {isPrintingKitchen ? 'Enviando...' : `Comanda Nuevos (${unprintedCount})`}
                         </Button>
                         <Button
                           onClick={() => { if (onPrintKitchenTicket) onPrintKitchenTicket(true) }}
+                          disabled={isPrintingKitchen}
                           variant="ghost"
                           className="flex items-center justify-center gap-1 text-xs text-gray-500"
                           size="sm"
@@ -590,11 +593,12 @@ export default function TableActionModal({
                     ) : (
                       <Button
                         onClick={() => { if (onPrintKitchenTicket) onPrintKitchenTicket() }}
+                        disabled={isPrintingKitchen}
                         variant="outline"
                         className="flex items-center justify-center gap-2"
                       >
-                        <FileText className="w-5 h-5" />
-                        Imprimir Comanda
+                        {isPrintingKitchen ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileText className="w-5 h-5" />}
+                        {isPrintingKitchen ? 'Enviando a cocina...' : 'Imprimir Comanda'}
                       </Button>
                     )
                   })()}

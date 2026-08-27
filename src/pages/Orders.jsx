@@ -203,6 +203,8 @@ export default function Orders() {
   const appNavigate = useAppNavigate()
 
   const [orders, setOrders] = useState([])
+  // Comanda en curso: el id de la orden que se esta imprimiendo.
+  const [printingOrderId, setPrintingOrderId] = useState(null)
   // Pestaña de HISTORIAL: las órdenes cerradas desaparecían de la vista al
   // cobrarlas, aunque el documento sigue guardado con su mesa, mozo, items y
   // el comprobante con el que se cobró. Acá se pueden volver a mirar.
@@ -455,7 +457,29 @@ export default function Orders() {
   // Función para imprimir comanda
   // silent=true: auto-impresión (al crear el pedido) — sin toasts de error ni caída al
   // diálogo de impresión web. Devuelve true si se imprimió en la ticketera.
+  /**
+   * Imprimir comanda desde la lista.
+   *
+   * El aviso va por ORDEN, no global: son muchas filas y apagar todos los
+   * botones porque se imprime uno seria peor que no avisar nada.
+   *
+   * La automatica llama con silent y no debe tocar el boton: el mozo no esta
+   * mirando la pantalla y encenderlo confundiria.
+   */
   const handlePrintKitchenTicket = async (orderArg, { silent = false } = {}) => {
+    const idEnCurso = orderArg?.id || null
+    if (!silent) {
+      if (printingOrderId) return false
+      setPrintingOrderId(idEnCurso)
+    }
+    try {
+      return await imprimirComandaDeOrden(orderArg, { silent })
+    } finally {
+      if (!silent) setPrintingOrderId(null)
+    }
+  }
+
+  const imprimirComandaDeOrden = async (orderArg, { silent = false } = {}) => {
     if (isDemoMode) {
       if (!silent) toast.info('Esta función no está disponible en modo demo')
       return false
@@ -1798,14 +1822,21 @@ export default function Orders() {
                           <Edit2 className="w-4 h-4" />
                         </Button>
                       )}
+                      {/* Se apagan TODOS los botones mientras hay una comanda en
+                          curso: la ticketera acepta una conexion a la vez, y un
+                          boton que no hace nada al tocarlo es peor que uno
+                          apagado. El reloj de arena va solo en el que se imprime. */}
                       <Button
                         onClick={() => handlePrintKitchenTicket(order)}
+                        disabled={!!printingOrderId}
                         variant="outline"
                         size="sm"
                         className="p-1.5"
-                        title="Imprimir Comanda"
+                        title={printingOrderId === order.id ? 'Enviando a cocina...' : 'Imprimir Comanda'}
                       >
-                        <Printer className="w-4 h-4" />
+                        {printingOrderId === order.id
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : <Printer className="w-4 h-4" />}
                       </Button>
                     </div>
                   </div>

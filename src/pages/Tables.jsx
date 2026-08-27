@@ -62,6 +62,8 @@ export default function Tables() {
   const location = useLocation()
 
   const [tables, setTables] = useState([])
+  // Imprimiendo comanda: apaga el boton y le pone el reloj de arena.
+  const [isPrintingKitchen, setIsPrintingKitchen] = useState(false)
   // Sucursales (sedes): para filtrar y crear mesas por sede
   const [branches, setBranches] = useState([])
   const [selectedBranchId, setSelectedBranchId] = useState(null) // null = Sucursal Principal
@@ -689,8 +691,15 @@ export default function Tables() {
   // El descuento ya fue persistido por el modal antes de llamar a esta función.
   // handlePrintPreBill lee la orden fresca de Firestore, así que captura el descuento recién aplicado.
   const handleConfirmPreBillPrint = async () => {
-    closePreBillPreview()
-    await handlePrintPreBill()
+    // Imprimir PRIMERO y cerrar despues. El preview ya trae su spinner en el
+    // boton; cerrandolo antes desaparecia justo cuando arranca el trabajo real
+    // (armar el ticket, esperar el logo, hablar con la impresora) y el usuario
+    // se quedaba sin saber si estaba pasando algo. Es la queja que llego.
+    try {
+      await handlePrintPreBill()
+    } finally {
+      closePreBillPreview()
+    }
   }
 
   // Marcar/desmarcar un ítem como servido al cliente
@@ -1284,7 +1293,26 @@ export default function Tables() {
     }
   }
 
+  /**
+   * Imprimir comanda, avisando en el botón mientras dura.
+   *
+   * El trabajo real puede tardar varios segundos —armar el ESC/POS, conectar a
+   * la ticketera de red, recorrer las estaciones— y el botón no decía nada. La
+   * gente lo apretaba de nuevo creyendo que no había pasado nada y salía la
+   * comanda dos veces. El envoltorio existe para que el cuerpo, que tiene
+   * muchos returns tempranos, no tenga que acordarse de apagar el aviso.
+   */
   const handlePrintKitchenTicket = async (printAll = false) => {
+    if (isPrintingKitchen) return
+    setIsPrintingKitchen(true)
+    try {
+      await imprimirComanda(printAll)
+    } finally {
+      setIsPrintingKitchen(false)
+    }
+  }
+
+  const imprimirComanda = async (printAll = false) => {
     if (!selectedTable || !selectedOrder) {
       toast.error('No se puede imprimir: datos incompletos')
       return
@@ -2248,6 +2276,7 @@ export default function Tables() {
         onOpenPrimary={handleOpenPrimary}
         onPrintPreBill={() => openPreBillPreview('action')}
         onPrintKitchenTicket={handlePrintKitchenTicket}
+        isPrintingKitchen={isPrintingKitchen}
         onToggleItemServed={handleToggleItemServed}
         onMarkAllServed={handleMarkAllServed}
         onAssignCustomer={companySettings?.loyaltyConfig?.enabled === true && selectedOrder ? () => setIsCustomerModalOpen(true) : null}
