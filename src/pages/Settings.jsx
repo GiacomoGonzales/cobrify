@@ -4222,6 +4222,7 @@ export default function Settings() {
                         { id: 'public-catalog', label: 'Mi Catálogo Online', description: 'Catálogo digital para compartir con tus clientes y recibir pedidos' },
                         { id: 'hotel-rooms', label: 'Habitaciones', description: 'Gestión de habitaciones y estados' },
                         { id: 'hotel-reservations', label: 'Reservas', description: 'Reservas, check-in y check-out' },
+                        { id: 'online-orders', label: 'Pedidos Online', description: 'Bandeja de pedidos que llegan desde tu carta digital' },
                         { id: 'hotel-services', label: 'Servicios', description: 'Piscina, juegos, eventos y áreas' },
                         { id: 'hotel-housekeeping', label: 'Housekeeping', description: 'Limpieza y mantenimiento de habitaciones' },
                         { id: 'hotel-audit', label: 'Auditoría y Tarifas', description: 'Auditoría nocturna y tarifas por temporada' },

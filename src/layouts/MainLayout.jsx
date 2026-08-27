@@ -19,7 +19,7 @@ import ReviewPrompt from '@/components/ReviewPrompt'
 import KitchenTicket from '@/components/KitchenTicket'
 import { useYapeListener } from '@/hooks/useYapeListener'
 import { useReactToPrint } from 'react-to-print'
-import { AlertTriangle, MessageCircle, Bell, Smartphone, Plus, Printer, CheckCircle, X, Volume2 } from 'lucide-react'
+import { AlertTriangle, MessageCircle, Bell, Smartphone, Plus, Printer, CheckCircle, X } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
 import { getAudioContext } from '@/lib/globalAudio'
 import { useToast } from '@/contexts/ToastContext'
@@ -32,7 +32,7 @@ import { routeToPageId, getFirstAllowedRoute } from '@/utils/pageRoutes'
 import { getSubscriptionWarning, ESTILO_AVISO } from '@/utils/subscriptionWarning'
 
 export default function MainLayout() {
-  const { user, isAuthenticated, isLoading, hasAccess, isAdmin, subscription, isBusinessOwner, isReseller, userPermissions, rolesResolved, hasPageAccess, allowedPages, getBusinessId, businessMode } = useAuth()
+  const { user, isAuthenticated, isLoading, hasAccess, isAdmin, subscription, isBusinessOwner, isReseller, userPermissions, rolesResolved, hasPageAccess, allowedPages, getBusinessId, businessMode, businessSettings } = useAuth()
   const toast = useToast()
   const [hasBusiness, setHasBusiness] = useState(null)
   const [checkingBusiness, setCheckingBusiness] = useState(false)
@@ -51,9 +51,21 @@ export default function MainLayout() {
   const [alertCompanySettings, setAlertCompanySettings] = useState(null)
   const alertKitchenTicketRef = useRef()
 
-  // Modos que reciben pedidos del catálogo digital en tiempo real
-  const listenOrdersModes = ['restaurant', 'retail']
-  const isOnlineOrdersMode = listenOrdersModes.includes(businessMode)
+  /**
+   * ¿Hay que escuchar los pedidos del catálogo digital?
+   *
+   * Antes esto dependía del MODO ACTIVO (`['restaurant','retail']`), y con modo
+   * por sucursal eso rompe: un negocio con la Principal en hotel y otra sede en
+   * restaurante dejaba de recibir el aviso mientras miraba el hotel. El pedido
+   * entraba igual, pero nadie se enteraba hasta cambiar de sucursal.
+   *
+   * Un pedido del catálogo es del NEGOCIO, no de la sucursal que uno esté
+   * mirando. Así que la condición es tener catálogo con pedidos: si el negocio
+   * los recibe, el aviso suena siempre, se esté donde se esté. Los negocios sin
+   * catálogo no abren la suscripción, igual que antes.
+   */
+  const isOnlineOrdersMode = businessSettings?.catalogEnabled === true ||
+    ['restaurant', 'retail'].includes(businessMode)
 
   // Cargar company settings para el KitchenTicket (web print)
   useEffect(() => {
@@ -90,40 +102,53 @@ export default function MainLayout() {
     setOrderAlertCount(globalOrderAlerts.length)
   }, [globalOrderAlerts.length, setOrderAlertCount])
 
-  // Sonido: 10 repeticiones de campanita (cancelable)
-  // Usa AudioContext global que se desbloqueó con el click del login
+  /**
+   * Aviso de pedido nuevo.
+   *
+   * Antes eran DIEZ repeticiones de una campanita de tres notas a volumen 0.5
+   * — veinte segundos de pitidos que en un local lleno terminaban con alguien
+   * bajándole el volumen a la computadora, y con eso se perdían los avisos
+   * siguientes. Un aviso tiene que hacerse notar una vez, no ganar por
+   * insistencia.
+   *
+   * Ahora son dos notas ascendentes (Sol-Do), tres veces cada cuatro segundos,
+   * a volumen moderado y con ataque y caída suaves. Onda triangular en vez de
+   * seno puro: suena más de "notificación" y menos de alarma de reloj.
+   */
   const playNotificationSound = useCallback(async () => {
     try {
       const ctx = getAudioContext()
       if (ctx.state === 'suspended') await ctx.resume()
 
-      // Detener sonidos anteriores
       stopNotificationSound()
 
       const oscillators = []
-      const playTone = (freq, startTime, duration) => {
+      const nota = (freq, inicio, dur, volumen) => {
         const osc = ctx.createOscillator()
         const gain = ctx.createGain()
         osc.connect(gain)
         gain.connect(ctx.destination)
-        osc.type = 'sine'
-        osc.frequency.setValueAtTime(freq, startTime)
-        gain.gain.setValueAtTime(0.5, startTime)
-        gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration)
-        osc.start(startTime)
-        osc.stop(startTime + duration)
+        osc.type = 'triangle'
+        osc.frequency.setValueAtTime(freq, inicio)
+        // Rampa de entrada: un corte seco en el arranque se oye como un "clic".
+        gain.gain.setValueAtTime(0.0001, inicio)
+        gain.gain.exponentialRampToValueAtTime(volumen, inicio + 0.02)
+        gain.gain.exponentialRampToValueAtTime(0.0001, inicio + dur)
+        osc.start(inicio)
+        osc.stop(inicio + dur + 0.02)
         oscillators.push(osc)
       }
 
       const now = ctx.currentTime
-      for (let i = 0; i < 10; i++) {
-        const offset = i * 2.0
-        playTone(880, now + offset, 0.15)
-        playTone(1108, now + offset + 0.15, 0.15)
-        playTone(1320, now + offset + 0.3, 0.3)
-        playTone(880, now + offset + 0.7, 0.15)
-        playTone(1108, now + offset + 0.85, 0.15)
-        playTone(1320, now + offset + 1.0, 0.3)
+      const REPETICIONES = 3
+      const CADA = 4.0
+      for (let i = 0; i < REPETICIONES; i++) {
+        const t = now + i * CADA
+        // Cada repetición suena un poco más suave: si alguien ya lo escuchó,
+        // no hace falta insistir al mismo volumen.
+        const vol = 0.28 - i * 0.05
+        nota(784, t, 0.18, vol)          // Sol5
+        nota(1046, t + 0.14, 0.42, vol)  // Do6
       }
       activeOscillatorsRef.current = oscillators
     } catch (e) {
@@ -245,7 +270,16 @@ export default function MainLayout() {
       prevOrdersRef.current = new Map(ordersData.map(o => [o.id, { itemCount: o.items?.length || 0 }]))
     })
 
-    return () => unsubscribe()
+    return () => {
+      unsubscribe()
+      // La próxima suscripción arranca de cero: su primer snapshot es el estado
+      // actual, no novedades. Sin esto, al cambiar de sucursal o de negocio el
+      // efecto se volvía a montar con `firstLoadRef` ya gastado y comparaba el
+      // primer snapshot contra la lista ANTERIOR — una ráfaga de alertas de
+      // pedidos que ya estaban ahí.
+      firstLoadRef.current = true
+      prevOrdersRef.current = null
+    }
   }, [user?.uid, businessMode, isOnlineOrdersMode, getBusinessId, playNotificationSound])
 
   const dismissGlobalAlert = (alertId) => {
@@ -635,70 +669,97 @@ export default function MainLayout() {
           {/* Banner de actualización integrado (web/PWA: reiniciar; app: tienda) */}
           <UpdateBanner />
 
-          {/* Banner global de alertas de pedidos desde el catálogo / menú digital */}
+          {/* Aviso de pedidos del catálogo digital.
+              Antes era una franja naranja con borde de 2px, íconos rebotando y
+              cuatro colores de botón compitiendo (verde, azul, naranja,
+              primario). Con todo gritando, nada destacaba. Ahora es blanco con
+              un borde fino, como el resto del sistema: el único color queda
+              para el punto que marca que hay algo sin atender. */}
           {globalOrderAlerts.length > 0 && (
-            <div className="bg-orange-50 border-b-2 border-orange-400 px-3 py-2 flex-shrink-0 space-y-2 max-h-[40vh] overflow-y-auto">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-orange-700">
-                  <Volume2 className="w-5 h-5 animate-bounce" />
-                  <span className="font-bold text-sm">{globalOrderAlerts.length} pedido{globalOrderAlerts.length > 1 ? 's' : ''} del {businessMode === 'restaurant' ? 'menú digital' : 'catálogo digital'}</span>
+            <div className="bg-white border-b border-gray-200 flex-shrink-0 max-h-[40vh] overflow-y-auto">
+              <div className="px-3 sm:px-4 py-2.5 flex items-center justify-between gap-3 border-b border-gray-100">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="relative flex h-2 w-2 flex-shrink-0">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-primary-600" />
+                  </span>
+                  <span className="font-semibold text-sm text-gray-900 truncate">
+                    {globalOrderAlerts.length} pedido{globalOrderAlerts.length > 1 ? 's' : ''} sin atender
+                  </span>
+                  <span className="hidden sm:inline text-xs text-gray-500 truncate">
+                    · desde {businessMode === 'restaurant' ? 'la carta digital' : 'el catálogo online'}
+                  </span>
                 </div>
                 <button
                   onClick={dismissAllGlobalAlerts}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors"
+                  className="flex-shrink-0 text-xs font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 px-2.5 py-1.5 rounded-lg transition-colors"
                 >
-                  <CheckCircle className="w-4 h-4" />
-                  Recibir todos
+                  Marcar todo como visto
                 </button>
               </div>
+
               {globalOrderAlerts.map(alert => (
                 <div
                   key={alert.id}
-                  className="bg-white border-l-4 border-orange-500 rounded-lg p-3 shadow-sm flex items-start gap-3"
+                  className="px-3 sm:px-4 py-3 flex items-start gap-3 border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors"
                 >
-                  <div className="flex-shrink-0 mt-0.5">
-                    {alert.type === 'new_order' ? (
-                      <Smartphone className="w-5 h-5 text-orange-600" />
-                    ) : (
-                      <Plus className="w-5 h-5 text-blue-600" />
-                    )}
+                  <div className="flex-shrink-0 mt-0.5 p-1.5 rounded-lg bg-gray-100">
+                    {alert.type === 'new_order'
+                      ? <Smartphone className="w-4 h-4 text-gray-500" />
+                      : <Plus className="w-4 h-4 text-gray-500" />}
                   </div>
+
                   <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm text-gray-900">
-                      {alert.type === 'new_order'
-                        ? `Nuevo pedido #${alert.orderNumber}`
-                        : `+${alert.itemCount} item${alert.itemCount > 1 ? 's' : ''} en pedido #${alert.orderNumber}`
-                      }
-                      {alert.tableNumber ? ` · Mesa ${alert.tableNumber}` : ''}
-                      {businessMode === 'restaurant' && alert.orderType === 'delivery' ? ' · Delivery' : ''}
-                      {businessMode === 'restaurant' && alert.orderType === 'takeaway' ? ' · Para llevar' : businessMode === 'restaurant' && alert.orderType === 'counter' ? ' · En Local' : ''}
-                    </p>
-                    {alert.customerName && (
-                      <p className="text-xs text-gray-600">{alert.customerName}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-sm text-gray-900">
+                        {alert.type === 'new_order'
+                          ? `Pedido #${alert.orderNumber}`
+                          : `+${alert.itemCount} ítem${alert.itemCount > 1 ? 's' : ''} en el #${alert.orderNumber}`}
+                      </span>
+                      {[
+                        alert.tableNumber ? `Mesa ${alert.tableNumber}` : null,
+                        businessMode === 'restaurant' && alert.orderType === 'delivery' ? 'Delivery' : null,
+                        businessMode === 'restaurant' && alert.orderType === 'takeaway' ? 'Para llevar' : null,
+                        businessMode === 'restaurant' && alert.orderType === 'counter' ? 'En local' : null,
+                      ].filter(Boolean).map(etiqueta => (
+                        <span key={etiqueta} className="text-xs text-gray-500 border border-gray-200 rounded px-1.5 py-0.5">
+                          {etiqueta}
+                        </span>
+                      ))}
+                    </div>
+
+                    {(alert.customerName || alert.customerAddress) && (
+                      <p className="text-xs text-gray-600 mt-0.5 truncate">
+                        {alert.customerName}
+                        {alert.customerName && alert.customerAddress ? ' · ' : ''}
+                        {alert.customerAddress}
+                      </p>
                     )}
-                    {alert.customerAddress && (
-                      <p className="text-xs text-gray-600">📍 {alert.customerAddress}</p>
-                    )}
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      {alert.items.join(' | ')}
-                    </p>
-                    <div className="flex flex-wrap gap-2 mt-1.5">
-                      {/* Restaurante: imprimir comanda + WhatsApp. Retail: solo "Recibido". */}
+                    <p className="text-xs text-gray-500 mt-0.5 truncate">{alert.items.join(' · ')}</p>
+
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                      <button
+                        onClick={() => dismissGlobalAlert(alert.id)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 text-white text-xs font-medium rounded-lg hover:bg-primary-700 transition-colors"
+                      >
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        Recibido
+                      </button>
                       {businessMode === 'restaurant' && (
                         <>
                           <button
                             onClick={() => handlePrintFromAlert(alert)}
-                            className="flex items-center gap-1 px-3 py-1 bg-primary-600 text-white text-xs font-semibold rounded-lg hover:bg-primary-700 transition-colors"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-100 transition-colors"
                           >
                             <Printer className="w-3.5 h-3.5" />
-                            Imprimir
+                            Imprimir comanda
                           </button>
                           {alert.orderType === 'delivery' && alert.customerPhone && (
                             <a
                               href={`https://wa.me/${alert.customerPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${alert.customerName || ''}, su pedido #${alert.orderNumber} está siendo preparado.`)}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="flex items-center gap-1 px-3 py-1 bg-green-500 text-white text-xs font-semibold rounded-lg hover:bg-green-600 transition-colors"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-100 transition-colors"
                             >
                               <MessageCircle className="w-3.5 h-3.5" />
                               WhatsApp
@@ -706,13 +767,6 @@ export default function MainLayout() {
                           )}
                         </>
                       )}
-                      <button
-                        onClick={() => dismissGlobalAlert(alert.id)}
-                        className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors"
-                      >
-                        <CheckCircle className="w-3.5 h-3.5" />
-                        Recibido
-                      </button>
                     </div>
                   </div>
                 </div>

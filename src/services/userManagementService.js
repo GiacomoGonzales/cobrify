@@ -167,6 +167,8 @@ export const HOTEL_PAGES = [
   // Operaciones hoteleras
   { id: 'hotel-rooms', name: 'Habitaciones', path: '/habitaciones', category: 'operaciones' },
   { id: 'hotel-reservations', name: 'Reservas', path: '/reservas', category: 'operaciones' },
+  // Un hotel con restaurante recibe pedidos por su carta digital.
+  { id: 'online-orders', name: 'Pedidos Online', path: '/pedidos-online', category: 'operaciones' },
   { id: 'hotel-services', name: 'Servicios Hotel', path: '/servicios-hotel', category: 'operaciones' },
   { id: 'hotel-housekeeping', name: 'Housekeeping', path: '/housekeeping', category: 'operaciones' },
   { id: 'hotel-audit', name: 'Auditoría y Tarifas', path: '/auditoria-hotel', category: 'operaciones' },

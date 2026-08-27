@@ -1240,6 +1240,17 @@ function Sidebar() {
       menuId: 'hotel-reservations',
     },
     {
+      // Un hotel con restaurante recibe pedidos por su carta digital igual que
+      // cualquier otro negocio. Sin esta entrada el aviso sonaba pero no había
+      // a dónde ir a verlo, y el badge de pedidos nuevos no tenía dónde pintarse.
+      path: '/pedidos-online',
+      icon: ShoppingBag,
+      label: 'Pedidos Online',
+      pageId: 'online-orders',
+      menuId: 'online-orders',
+      requiresCatalog: true,
+    },
+    {
       path: '/housekeeping',
       icon: ClipboardCheck,
       label: 'Housekeeping',
@@ -2037,6 +2048,9 @@ function Sidebar() {
       const rappiEnabled = businessSettings?.rappiEnabled === true
       if (!rappiEnabled) return false
       if (isDemoMode) return false
+    }
+    if (item.requiresCatalog) {
+      if (businessSettings?.catalogEnabled !== true) return false
     }
     if (item.requiresAppointments) {
       const appointmentsEnabled = businessSettings?.appointmentsEnabled === true
