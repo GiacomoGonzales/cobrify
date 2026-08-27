@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { collection, query, where, getAggregateFromServer, sum } from 'firebase/firestore'
+import { getMonthSalesAggregated } from '@/services/dashboardStatsService'
 import { db } from '@/lib/firebase'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useDataPermissions } from '@/hooks/useDataPermissions'
@@ -39,6 +40,33 @@ import HotelDashboard from '@/components/hotel/HotelDashboard'
 import GuideLink from '@/components/guide/GuideLink'
 
 // Placeholder mientras llega el segundo tramo de facturas del mes.
+/**
+ * Los "top" del mes (productos, clientes, métodos de pago) son los únicos que
+ * necesitan los ÍTEMS de cada venta, así que obligan a descargar el mes entero
+ * —34.8 MB en la cuenta que motivó esto—. El resto del Dashboard ya no los
+ * necesita: el servidor resuelve los totales.
+ *
+ * Por eso se cargan cuando alguien los pide. El tablero abre en segundos y
+ * quien quiera el detalle lo pide y espera.
+ */
+function BloqueBajoDemanda({ onPedir, cargando, className = 'h-[180px]' }) {
+  if (cargando) return <PendingBlock className={className} />
+  return (
+    <div className={`flex flex-col items-center justify-center gap-2 ${className}`}>
+      <p className="text-xs text-gray-500 text-center px-4">
+        Se calcula con el detalle de las ventas del mes.
+      </p>
+      <button
+        type="button"
+        onClick={onPedir}
+        className="text-sm font-medium text-primary-600 hover:text-primary-700 hover:underline"
+      >
+        Ver detalle
+      </button>
+    </div>
+  )
+}
+
 function PendingBlock({ className = 'h-[300px]' }) {
   return (
     <div className={`flex items-center justify-center ${className}`}>
@@ -73,6 +101,14 @@ export default function Dashboard() {
   const [loadedSince, setLoadedSince] = useState(null)
   // Fase 2 en vuelo → los KPIs y gráficos del MES todavía están incompletos.
   const [monthLoading, setMonthLoading] = useState(true)
+  // Totales del mes resueltos por el servidor (sin descargar las ventas).
+  // null = no se pudo (multi-divisa, usuario limitado, o indice construyendose)
+  // y se usa el camino de siempre.
+  const [monthAgg, setMonthAgg] = useState(null)
+  // Los "top" necesitan los items de cada venta, asi que obligan a descargar el
+  // mes. Se cargan cuando el usuario los pide.
+  const [detalleMesPedido, setDetalleMesPedido] = useState(false)
+  const [detalleMesCargando, setDetalleMesCargando] = useState(false)
   // Invalida las fases en vuelo si el efecto se vuelve a disparar (cambio de
   // usuario/permisos) o el componente se desmonta.
   const loadTokenRef = useRef(0)
@@ -403,8 +439,35 @@ export default function Dashboard() {
       }
       setIsLoading(false)
 
+      // --- El mes, resuelto por el SERVIDOR ---
+      //
+      // Medido en una cuenta real: descargar el mes son 6,431 documentos,
+      // 34.8 MB y 45.6 segundos; pedirle la suma al servidor, 1.2 segundos.
+      // Y como la caché local del SDK es de 100 MB, esa descarga desalojaba
+      // productos y clientes: por eso se sentía lento TODO el sistema, no solo
+      // esta pantalla.
+      //
+      // No sirve para todos: con multi-divisa la suma mezclaría dólares con
+      // soles, y a un usuario limitado a sucursales o a un vendedor la
+      // agregación no le puede filtrar. Esos siguen descargando, como antes.
+      const puedeAgregar = !restringido && !sellerRestricted && !dashMultiCurrencyOn
+      let mesResuelto = false
+      if (puedeAgregar) {
+        const monthEnd = getEndOfMonthPeru()
+        const agg = await getMonthSalesAggregated(businessId, monthStart, monthEnd)
+        if (!alive()) return
+        if (agg.ok) {
+          setMonthAgg(agg)
+          setMonthLoading(false)
+          mesResuelto = true
+        }
+      }
+
       // --- Fase 2: resto del mes / últimos 14 días ---
-      if (phase2Since < phase1Since) {
+      // Se salta si el servidor ya resolvió el mes. Los "top" del mes sí
+      // necesitan los ítems de cada venta; se descargan cuando el usuario los
+      // pide (botón "Ver detalle").
+      if (!mesResuelto && phase2Since < phase1Since) {
         const r2 = await getRecentInvoices(businessId, phase2Since, phase1Since)
         if (!alive()) return
         if (r2.success) {
@@ -416,7 +479,10 @@ export default function Dashboard() {
       setMonthLoading(false)
 
       // --- Fase 3: mes anterior completo (diferida) ---
-      if (prevMonthStart < phase2Since) {
+      // Solo alimenta el "% vs mes anterior". Si el mes lo resolvió el servidor
+      // no vale la pena bajar 40 MB por un porcentaje: se usa el aggregate de
+      // 12 meses que ya se pide igual.
+      if (!mesResuelto && prevMonthStart < phase2Since) {
         await whenIdle()
         if (!alive()) return
         const r3 = await getRecentInvoices(businessId, prevMonthStart, phase2Since)
@@ -746,12 +812,72 @@ export default function Dashboard() {
     })
   }, [monthlyYearData, validInvoicesForSales, getInvoiceDate, loadedSince])
 
-  const monthSales = monthStats.monthSales
+  // Cuando el servidor pudo resolver el mes, mandan sus numeros: son exactos y
+  // no requirieron descargar nada. Si no, los del recorrido local de siempre.
+  /**
+   * Descargar el mes, solo cuando el usuario pide el detalle.
+   *
+   * Reusa el mismo camino de siempre (`getRecentInvoices`), así que los "top"
+   * salen calculados igual que antes; lo único que cambia es CUÁNDO.
+   */
+  const pedirDetalleDelMes = useCallback(async () => {
+    if (detalleMesPedido || detalleMesCargando) return
+    setDetalleMesCargando(true)
+    try {
+      const businessId = getBusinessId()
+      const monthStart = getStartOfMonthPeru()
+      const desde = loadedSince && loadedSince < monthStart ? null : monthStart
+      if (desde) {
+        const res = await getRecentInvoices(businessId, desde, loadedSince || null)
+        if (res.success) {
+          const nuevas = (res.data || []).filter(canAccess).filter(canSeeSale)
+          setInvoices(prev => {
+            const vistos = new Set(prev.map(i => i.id))
+            return [...prev, ...nuevas.filter(i => !vistos.has(i.id))]
+          })
+          setLoadedSince(monthStart)
+        }
+      }
+      setDetalleMesPedido(true)
+    } catch (e) {
+      console.error('No se pudo cargar el detalle del mes:', e)
+    } finally {
+      setDetalleMesCargando(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detalleMesPedido, detalleMesCargando, loadedSince])
+
+  // Falta el detalle cuando el mes lo resolvio el servidor y nadie lo pidio:
+  // en ese caso `invoices` solo tiene los ultimos dos dias.
+  const faltaDetalleDelMes = !!monthAgg && !detalleMesPedido
+
+  const monthSales = monthAgg ? monthAgg.sales : monthStats.monthSales
   const monthSalesUSD = monthStats.monthSalesUSD
-  const monthSalesCount = monthStats.monthCount
-  const avgTicketMonth = monthStats.avgTicketMonth
-  const dailyMonthData = monthStats.dailyMonthData
-  const avgDailyMonth = monthStats.avgDailyMonth
+  const monthSalesCount = monthAgg ? monthAgg.count : monthStats.monthCount
+  const avgTicketMonth = monthAgg
+    ? (monthAgg.count > 0 ? monthAgg.sales / monthAgg.count : 0)
+    : monthStats.avgTicketMonth
+  // El agregado devuelve un mapa dia->total; el grafico espera la serie completa
+  // del mes con los dias futuros marcados. Misma forma que el camino local.
+  const serieDelAgregado = useMemo(() => {
+    if (!monthAgg) return null
+    const hoyPeru = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
+    const [anio, mes, diaHoy] = hoyPeru.split('-').map(Number)
+    const diasDelMes = new Date(anio, mes, 0).getDate()
+    const serie = []
+    for (let d = 1; d <= diasDelMes; d++) {
+      serie.push({ day: d, ventas: monthAgg.daily[d] || 0, isFuture: d > diaHoy })
+    }
+    // Promedio solo con dias CERRADOS: el dia en curso recien empieza y
+    // arrastraria el promedio hacia abajo.
+    const cerrados = Math.max(diaHoy - 1, 0)
+    let ventasCerradas = 0
+    for (let d = 1; d <= cerrados; d++) ventasCerradas += (monthAgg.daily[d] || 0)
+    return { serie, promedio: cerrados > 0 ? ventasCerradas / cerrados : 0 }
+  }, [monthAgg])
+
+  const dailyMonthData = serieDelAgregado ? serieDelAgregado.serie : monthStats.dailyMonthData
+  const avgDailyMonth = serieDelAgregado ? serieDelAgregado.promedio : monthStats.avgDailyMonth
   const topProducts = monthStats.topProducts
   const topCustomers = monthStats.topCustomers
   const paymentMethodsData = monthStats.paymentMethodsData
@@ -1123,6 +1249,8 @@ export default function Dashboard() {
           <CardContent>
             {monthLoading ? (
               <PendingBlock className="h-[180px]" />
+            ) : faltaDetalleDelMes ? (
+              <BloqueBajoDemanda onPedir={pedirDetalleDelMes} cargando={detalleMesCargando} />
             ) : topProducts.length === 0 ? (
               <div className="text-center py-8 text-sm text-gray-500">
                 Sin ventas este mes
@@ -1158,7 +1286,9 @@ export default function Dashboard() {
             {monthLoading ? (
               <PendingBlock className="h-[180px]" />
             ) : (
-              <PaymentMethodsPieChart data={paymentMethodsData} />
+              faltaDetalleDelMes
+                ? <BloqueBajoDemanda onPedir={pedirDetalleDelMes} cargando={detalleMesCargando} className="h-[220px]" />
+                : <PaymentMethodsPieChart data={paymentMethodsData} />
             )}
           </CardContent>
         </Card>
@@ -1175,6 +1305,8 @@ export default function Dashboard() {
           <CardContent>
             {monthLoading ? (
               <PendingBlock className="h-[180px]" />
+            ) : faltaDetalleDelMes ? (
+              <BloqueBajoDemanda onPedir={pedirDetalleDelMes} cargando={detalleMesCargando} />
             ) : topCustomers.length === 0 ? (
               <div className="text-center py-8 text-sm text-gray-500">
                 Sin clientes identificados este mes
