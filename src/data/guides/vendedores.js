@@ -68,6 +68,27 @@ export default {
           type: 'texto',
           text: 'Si le defines un porcentaje de comisión, cada venta guarda la comisión calculada **en el momento de venderse**. Eso significa que cambiar el porcentaje hoy no altera lo ya vendido: las comisiones pasadas quedan como se acordaron entonces.',
         },
+        {
+          type: 'texto',
+          text: 'Además del porcentaje general puedes darle a **ciertos productos** su propia comisión, en la misma ventana del vendedor: busca el producto y ponle un **porcentaje** de esa línea o un **monto fijo por cada unidad** vendida. Sirve cuando solo algunas líneas dejan margen para pagar comisión.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Edita el vendedor y marca **Este vendedor gana comisión**.',
+            'En **Comisión por producto**, busca el producto por nombre o código y tócalo para agregarlo.',
+            'Elige **%** (porcentaje de esa línea) o **S/** (monto fijo por unidad) y escribe el valor.',
+            'Si quieres que gane comisión ÚNICAMENTE con esos productos, marca **Comisionar SOLO estos productos**.',
+          ],
+        },
+        {
+          type: 'ojo',
+          text: 'Con **Comisionar SOLO estos productos** apagado, los productos que no estén en la lista pagan el porcentaje general. Encendido, todo lo demás no comisiona — y ahí el porcentaje general puede quedar en 0.',
+        },
+        {
+          type: 'ojo',
+          text: 'Cuando hay comisiones por producto, la comisión de la venta es la SUMA de sus líneas. Los descuentos generales y el recargo al consumo no se reparten línea por línea, así que la base de la comisión puede no coincidir exactamente con el total del comprobante.',
+        },
       ],
     },
   ],

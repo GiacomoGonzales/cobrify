@@ -7227,10 +7227,29 @@ ${textoDeErrores(revision.errores)}`, 9000)
         // puede venir en dólares. La utilidad usa el costo ya congelado de cada
         // item, así que la comisión sobre utilidad tampoco se mueve después.
         ...(() => {
+          // Detalle por línea, para los vendedores que comisionan por producto.
+          // El total de cada línea va en la moneda de la venta, así que se pasa
+          // a soles con el mismo factor que ya se aplicó al total del documento
+          // —así la suma de las líneas no se despega del total congelado—.
+          // El costo NO se convierte: `costAtSale` ya está en soles.
+          const aSoles = Number(amounts.total) > 0
+            ? Number(amounts.totalInBase) / Number(amounts.total)
+            : 1
+          const lineasParaComision = items.map(it => {
+            const cantidad = Number(it.quantity) || 0
+            const bruto = (Number(it.unitPrice) || 0) * cantidad - (Number(it.itemDiscount) || 0)
+            return {
+              productId: it.productId,
+              quantity: cantidad,
+              totalInBase: Math.max(0, bruto) * aSoles,
+              costInBase: (Number(it.costAtSale) || 0) * cantidad,
+            }
+          })
           const com = computeSaleCommission(
             selectedSeller,
             amounts.totalInBase,
-            items.reduce((sum, it) => sum + (Number(it.costAtSale) || 0) * (Number(it.quantity) || 0), 0)
+            lineasParaComision.reduce((sum, l) => sum + l.costInBase, 0),
+            lineasParaComision
           )
           return com ? { commission: com } : {}
         })(),
