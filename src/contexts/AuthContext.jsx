@@ -4,6 +4,27 @@ import { doc, getDoc, collection, query, where, getDocs, onSnapshot } from 'fire
 import { db, auth } from '@/lib/firebase'
 import { updateProfile } from 'firebase/auth'
 import { loginWithEmail, logout as logoutService, onAuthChange } from '@/services/authService'
+
+/**
+ * ¿Esta copia de la app corre dentro de un iframe?
+ *
+ * La vista previa de temas del catálogo carga la app REAL en un iframe del
+ * mismo origen, así que comparte la sesión de Firebase con la pestaña. Si el
+ * AuthContext del iframe decide cerrar sesión, se la cierra al dueño que está
+ * mirando Configuración — que era justo el síntoma: tocar "Vista previa" y
+ * aparecer en la pantalla de login.
+ *
+ * Cerrar la sesión es decisión de la ventana principal. Un iframe puede leer;
+ * desloguear al usuario, no.
+ */
+const enIframe = () => {
+  try {
+    return window.self !== window.top
+  } catch {
+    // Un cross-origin al comparar ya significa que estamos embebidos.
+    return true
+  }
+}
 import { isUserAdmin, isBusinessAdmin, setAsBusinessOwner } from '@/services/adminService'
 import { getSubscription, hasActiveAccess } from '@/services/subscriptionService'
 import { getUserData } from '@/services/userManagementService'
@@ -219,6 +240,7 @@ export const AuthProvider = ({ children }) => {
                 // Si el usuario no está activo, cerrar sesión
                 if (!userData.isActive) {
                   console.warn('Usuario inactivo, cerrando sesión')
+                  if (enIframe()) return
                   await logoutService()
                   return
                 }
@@ -579,6 +601,7 @@ export const AuthProvider = ({ children }) => {
       // Usuario desactivado por el dueño: cerrar la sesión al instante
       if (userData.isActive === false) {
         console.warn('🔒 Usuario desactivado en tiempo real, cerrando sesión')
+        if (enIframe()) return
         logoutService()
         return
       }
