@@ -70,7 +70,7 @@ import { vendedoresDeSucursal } from '@/utils/sellerBranches'
 import { stockPorSucursal } from '@/utils/branchStockView'
 import { registrarVentaDemo } from '@/data/demo/operaciones'
 import { applyBranchPricing } from '@/utils/branchPricing'
-import { filterProductsForBranch, isProductInBranch } from '@/utils/branchCatalog'
+import { filterProductsForBranch, filterCategoriesForBranch, isProductInBranch } from '@/utils/branchCatalog'
 import { getAvailableDocumentTypes, resolveDocumentType } from '@/utils/documentTypes'
 import { calculateInvoiceAmounts, calculateMixedInvoiceAmounts, calculateRecargoConsumo, ID_TYPES, DETRACTION_TYPES, DETRACTION_MIN_AMOUNT, calcularDetraccion } from '@/utils/peruUtils'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
@@ -691,19 +691,32 @@ export default function POS() {
   // Precios por sucursal (businessSettings.branchPricingEnabled): `products` es la
   // vista EFECTIVA con price/price2/3/4 reemplazados por el override de la sucursal
   // activa. Sin feature o en Sucursal Principal (sin branchId) → lista original tal
+  // Declarado ACÁ, antes del useMemo que lo consume: un `const` usado antes de
+  // su línea revienta en tiempo de ejecución ("Cannot access before
+  // initialization") y `vite build` no lo detecta.
+  const [categories, setCategories] = useState([])
+
   // cual (misma referencia, no invalida memos aguas abajo).
   const products = useMemo(() => {
     const branchId = selectedBranch?.id || null
     // 1) Catalogo por sucursal: saca del catalogo los productos que no aplican a
     //    esta sede. Va PRIMERO para no repreciar lo que igual no se va a mostrar.
     const visibles = filterProductsForBranch(
-      productsRaw, branchId, businessSettings?.branchCatalogEnabled === true
+      productsRaw, branchId, businessSettings?.branchCatalogEnabled === true, categories
     )
     // 2) Precios por sucursal sobre lo que quedo visible.
     if (!businessSettings?.branchPricingEnabled) return visibles
     if (!branchId) return visibles
     return visibles.map(p => applyBranchPricing(p, branchId))
-  }, [productsRaw, selectedBranch, businessSettings?.branchPricingEnabled, businessSettings?.branchCatalogEnabled])
+  }, [productsRaw, selectedBranch, businessSettings?.branchPricingEnabled, businessSettings?.branchCatalogEnabled, categories])
+
+  const categoriasVisibles = useMemo(
+    () => filterCategoriesForBranch(
+      categories, selectedBranch?.id || null, businessSettings?.branchCatalogEnabled === true,
+    ),
+    [categories, selectedBranch, businessSettings?.branchCatalogEnabled],
+  )
+
 
   // Aviso (no bloqueo) cuando un carrito precargado —cotizacion, nota de venta,
   // pedido online, guia— trae productos ocultos en la sucursal activa. La venta
@@ -772,7 +785,6 @@ export default function POS() {
   const [selectedSeller, setSelectedSeller] = useState(null)
 
   // Categories
-  const [categories, setCategories] = useState([])
   const [brands, setBrands] = useState([])
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all')
   // Categoría raíz cuya rama de subcategorías está expandida. Una sola raíz a la vez.
@@ -9546,7 +9558,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 <Tag className="w-3.5 h-3.5 inline mr-1" />
                 Todas
               </button>
-              {getRootCategories(categories).map((category) => {
+              {getRootCategories(categoriasVisibles).map((category) => {
                 const subcats = getSubcategories(categories, category.id)
                 const hasSubs = subcats.length > 0
                 const isExpanded = expandedRootCategoryId === category.id

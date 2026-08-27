@@ -58,15 +58,66 @@ export const isProductInBranch = (product, branchId) => {
 }
 
 /**
+ * ── Categorías por sucursal ──────────────────────────────────────────────────
+ * Mismo modelo: `categoria.hiddenInBranches`. Se agregó porque marcar producto
+ * por producto no escala — un local carga cincuenta artículos y el otro los ve
+ * todos. Con la categoría se resuelve de una.
+ *
+ * Ocultar una categoría oculta TAMBIÉN sus subcategorías y todos sus productos
+ * en esa sede: si no, se escondería el rótulo y los artículos quedarían
+ * sueltos, que es peor que no hacer nada.
+ */
+
+/** Ids de categorías ocultas en esta sede, incluyendo las hijas de una oculta. */
+export const getHiddenCategoryIds = (categories, branchId) => {
+  const ocultas = new Set()
+  if (!Array.isArray(categories)) return ocultas
+
+  for (const c of categories) {
+    if (c?.id && !isProductInBranch(c, branchId)) ocultas.add(c.id)
+  }
+  if (ocultas.size === 0) return ocultas
+
+  // Arrastrar a las descendientes: se repite hasta que no se agregue ninguna,
+  // así funciona con cualquier profundidad y sin recursión.
+  let crecio = true
+  while (crecio) {
+    crecio = false
+    for (const c of categories) {
+      if (!c?.id || ocultas.has(c.id)) continue
+      if (c.parentId && ocultas.has(c.parentId)) { ocultas.add(c.id); crecio = true }
+    }
+  }
+  return ocultas
+}
+
+/** Categorías visibles en esta sede. */
+export const filterCategoriesForBranch = (categories, branchId, enabled) => {
+  if (!enabled || !Array.isArray(categories)) return categories
+  const ocultas = getHiddenCategoryIds(categories, branchId)
+  if (ocultas.size === 0) return categories
+  return categories.filter(c => !ocultas.has(c.id))
+}
+
+/**
  * Filtra una lista para una sucursal. Devuelve el MISMO arreglo por referencia
  * cuando no hay nada que filtrar, para no invalidar memos aguas abajo (mismo
  * criterio que applyBranchPricing).
+ *
+ * `categories` es opcional: cuando se pasa, un producto también desaparece si
+ * su categoría está oculta en esa sede.
  */
-export const filterProductsForBranch = (products, branchId, enabled) => {
+export const filterProductsForBranch = (products, branchId, enabled, categories = null) => {
   if (!enabled || !Array.isArray(products)) return products
-  const alguno = products.some(p => getHiddenBranches(p).length > 0)
-  if (!alguno) return products
-  return products.filter(p => isProductInBranch(p, branchId))
+
+  const categoriasOcultas = categories ? getHiddenCategoryIds(categories, branchId) : new Set()
+  const algunProducto = products.some(p => getHiddenBranches(p).length > 0)
+  if (!algunProducto && categoriasOcultas.size === 0) return products
+
+  return products.filter(p =>
+    isProductInBranch(p, branchId) &&
+    !(p?.category && categoriasOcultas.has(p.category)),
+  )
 }
 
 /**

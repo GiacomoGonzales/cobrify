@@ -153,7 +153,7 @@ export const GUIDES = [
     title: 'Productos',
     category: 'Inventario',
     description: 'Crear productos, códigos de barras, variantes y presentaciones, precios, acciones masivas, etiquetas e importación.',
-    keywords: 'productos catalogo crear precio costo sku codigo de barras ean variantes tallas colores presentaciones caja docena categoria marca igv afectacion etiquetas zebra importar exportar excel acciones masivas activar desactivar decimales servicio',
+    keywords: 'productos catalogo crear precio costo sku codigo de barras ean variantes tallas colores presentaciones caja docena categoria marca igv afectacion etiquetas zebra importar exportar excel acciones masivas activar desactivar decimales servicio categorias por sucursal ocultar categoria por local se ve en',
     modos: null,
     load: () => import('./productos.js'),
   },
