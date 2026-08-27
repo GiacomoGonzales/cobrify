@@ -559,8 +559,15 @@ export default function Orders() {
       }
     }
 
-    // En auto-impresión silenciosa NO caemos al diálogo de impresión web (solo app térmica).
-    if (silent) return false
+    // En la APP, una auto-impresión silenciosa que no salió por la térmica no
+    // debe abrir el diálogo del navegador encima: la ticketera es el destino y
+    // el mozo no está mirando la pantalla.
+    //
+    // En el NAVEGADOR es al revés: no hay térmica —los plugins son de la app— y
+    // el ticket web es el ÚNICO destino posible. Antes este return lo tapaba y
+    // la comanda automática no salía nunca desde la computadora, sin ningún
+    // aviso. Es el mismo camino que el POS ya usa.
+    if (silent && Capacitor.isNativePlatform()) return false
 
     // Fallback: impresión estándar (web o si falla la térmica)
     setOrderToPrint(order)
