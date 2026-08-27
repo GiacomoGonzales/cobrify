@@ -18,6 +18,7 @@ import {
 } from 'firebase/firestore'
 import { db, auth } from '@/lib/firebase'
 import { generatePetId, normalizePets } from '@/utils/petUtils'
+import { buscarLoteEnAlmacen, cantidadDeLote, idDeLote } from '@/utils/batchLookup'
 
 /**
  * Servicio para interactuar con Firestore
@@ -1232,17 +1233,20 @@ export const transferProductStockTransaction = async (userId, productId, fromWar
       // --- LOTES: mover el lote indicado del origen al destino (datos FRESCOS) ---
       if (!isNoLot && batchNumber && Array.isArray(product.batches) && product.batches.length > 0) {
         let batches = product.batches.map(b => ({ ...b }))
-        const bId = (b) => b.lotNumber || b.batchNumber || b.id
-        const srcBatch = batches.find(b => bId(b) === batchNumber && (b.warehouseId === fromWarehouseId || !b.warehouseId))
+        const bId = (b) => idDeLote(b)
+        // El mismo numero de lote puede existir dos veces (la compra vieja ya
+        // agotada, sin almacen, y la de hoy). Sin acotar por almacen se
+        // descontaba del lote equivocado — el que estaba en cero.
+        const srcBatch = buscarLoteEnAlmacen(batches, batchNumber, fromWarehouseId)
         if (srcBatch) {
-          srcBatch.quantity = (srcBatch.quantity || 0) - quantity
+          srcBatch.quantity = cantidadDeLote(srcBatch) - quantity
           srcBatch.warehouseId = srcBatch.warehouseId || fromWarehouseId
         }
         // En una descarga el lote solo se reduce en el origen: no hay lote destino.
         if (!isDischarge) {
           const destBatch = batches.find(b => bId(b) === batchNumber && b.warehouseId === toWarehouseId)
           if (destBatch) {
-            destBatch.quantity = (destBatch.quantity || 0) + quantity
+            destBatch.quantity = cantidadDeLote(destBatch) + quantity
           } else {
             const meta = srcBatch || {}
             batches.push({
@@ -1255,7 +1259,7 @@ export const transferProductStockTransaction = async (userId, productId, fromWar
             })
           }
         }
-        updateData.batches = batches.filter(b => (b.quantity || 0) > 0)
+        updateData.batches = batches.filter(b => cantidadDeLote(b) > 0)
       }
 
       // --- SERIES: cambiar warehouseId del origen al destino. En una descarga la

@@ -82,6 +82,7 @@ import { getExitReasons, getExitReasonLabel } from '@/utils/warehouseExitReasons
 import { getItemUnitLabel, formatPresentationEquivalence } from '@/utils/units'
 import { buildProductHaystack, buildIngredientHaystack } from '@/utils/productSearch'
 import GuideLink from '@/components/guide/GuideLink'
+import { buscarLoteEnAlmacen, cantidadDeLote, lotesDelAlmacen, sumarLotes } from '@/utils/batchLookup'
 
 // Helper functions for category hierarchy
 const migrateLegacyCategories = (cats) => {
@@ -1659,16 +1660,19 @@ export default function Inventory() {
     }
 
     // Verificar stock disponible en almacén origen (o en el lote seleccionado)
-    const batchesInOrigin = (transferProduct.batches || []).filter(b => b.quantity > 0 && (!b.warehouseId || b.warehouseId === transferData.fromWarehouse))
+    const batchesInOrigin = lotesDelAlmacen(transferProduct.batches, transferData.fromWarehouse)
     const hasBatches = batchesInOrigin.length > 0
     const isNoLotTransfer = transferData.selectedBatch === '__NO_LOT__'
+    // Buscar el lote ACOTADO al almacen origen: el mismo numero de lote puede
+    // existir dos veces (la compra vieja agotada y la de hoy), y buscar por
+    // numero a secas devolvia la vieja en cero.
     const selectedBatchData = hasBatches && transferData.selectedBatch && !isNoLotTransfer
-      ? transferProduct.batches.find(b => (b.lotNumber || b.batchNumber || b.id) === transferData.selectedBatch)
+      ? buscarLoteEnAlmacen(transferProduct.batches, transferData.selectedBatch, transferData.fromWarehouse)
       : null
 
     // Calcular stock sin lote para validación
     const warehouseStockTotal = transferProduct.warehouseStocks?.find(ws => ws.warehouseId === transferData.fromWarehouse)?.stock || 0
-    const batchesTotalInOrigin = batchesInOrigin.reduce((sum, b) => sum + (b.quantity || 0), 0)
+    const batchesTotalInOrigin = sumarLotes(batchesInOrigin)
     const stockWithoutLotInOrigin = Math.max(0, warehouseStockTotal - batchesTotalInOrigin)
 
     if (hasBatches && !transferData.selectedBatch) {
@@ -1705,7 +1709,7 @@ export default function Inventory() {
       // Transferencia de stock sin lote
       availableStock = stockWithoutLotInOrigin
     } else if (selectedBatchData) {
-      availableStock = selectedBatchData.quantity
+      availableStock = cantidadDeLote(selectedBatchData)
     } else {
       const warehouseStock = transferProduct.warehouseStocks?.find(ws => ws.warehouseId === transferData.fromWarehouse)
       availableStock = warehouseStock?.stock || 0
@@ -4362,9 +4366,9 @@ export default function Inventory() {
           </div>
 
           {/* Selección de Lote (si el producto tiene lotes en el almacén origen) */}
-          {transferProduct?.batches?.filter(b => b.quantity > 0 && (!b.warehouseId || b.warehouseId === transferData.fromWarehouse)).length > 0 && (() => {
-            const warehouseBatches = transferProduct.batches.filter(b => b.quantity > 0 && (!b.warehouseId || b.warehouseId === transferData.fromWarehouse))
-            const batchesTotal = warehouseBatches.reduce((sum, b) => sum + (b.quantity || 0), 0)
+          {lotesDelAlmacen(transferProduct?.batches, transferData.fromWarehouse).length > 0 && (() => {
+            const warehouseBatches = lotesDelAlmacen(transferProduct.batches, transferData.fromWarehouse)
+            const batchesTotal = sumarLotes(warehouseBatches)
             const warehouseStock = transferProduct.warehouseStocks?.find(ws => ws.warehouseId === transferData.fromWarehouse)?.stock || 0
             const stockWithoutLot = Math.max(0, warehouseStock - batchesTotal)
 
@@ -4428,7 +4432,7 @@ export default function Inventory() {
                             <p className="text-xs text-gray-500">Vence: {expiryStr}</p>
                           </div>
                           <div className="text-right">
-                            <p className="text-lg font-bold text-primary-600">{batch.quantity}</p>
+                            <p className="text-lg font-bold text-primary-600">{cantidadDeLote(batch)}</p>
                             <p className="text-xs text-gray-400">disponibles</p>
                           </div>
                         </div>
@@ -4497,7 +4501,7 @@ export default function Inventory() {
               }
               if (transferProduct?.batches?.length > 0 && transferData.selectedBatch) {
                 const batch = transferProduct.batches.find(b => (b.lotNumber || b.batchNumber || b.id) === transferData.selectedBatch)
-                return batch?.quantity || 0
+                return cantidadDeLote(batch)
               }
               return transferProduct?.warehouseStocks?.find(ws => ws.warehouseId === transferData.fromWarehouse)?.stock || 0
             })()}
@@ -4514,13 +4518,11 @@ export default function Inventory() {
                   if (transferData.selectedBatch === '__NO_LOT__') {
                     // Stock sin lote = total del almacén - suma de lotes
                     const warehouseStock = transferProduct?.warehouseStocks?.find(ws => ws.warehouseId === transferData.fromWarehouse)?.stock || 0
-                    const batchesInWarehouse = (transferProduct?.batches || []).filter(b => b.quantity > 0 && (!b.warehouseId || b.warehouseId === transferData.fromWarehouse))
-                    const batchesTotal = batchesInWarehouse.reduce((sum, b) => sum + (b.quantity || 0), 0)
+                    const batchesTotal = sumarLotes(lotesDelAlmacen(transferProduct?.batches, transferData.fromWarehouse))
                     return Math.max(0, warehouseStock - batchesTotal)
                   }
                   if (transferProduct?.batches?.length > 0 && transferData.selectedBatch) {
-                    const batch = transferProduct.batches.find(b => (b.lotNumber || b.batchNumber || b.id) === transferData.selectedBatch)
-                    return batch?.quantity || 0
+                    return cantidadDeLote(buscarLoteEnAlmacen(transferProduct.batches, transferData.selectedBatch, transferData.fromWarehouse))
                   }
                   return transferProduct?.warehouseStocks?.find(
                     ws => ws.warehouseId === transferData.fromWarehouse
