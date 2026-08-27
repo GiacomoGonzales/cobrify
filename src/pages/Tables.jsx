@@ -1249,10 +1249,30 @@ export default function Tables() {
   }
 
   // Marcar items como impresos en Firestore
+  /**
+   * Marca los items de la orden como enviados a cocina.
+   *
+   * PISA el array `items` entero, así que SIEMPRE lee la orden fresca de
+   * Firestore en vez de fiarse del `order` que le pasen. El estado de React va
+   * un paso atrás justo cuando importa —la comanda se dispara al agregar
+   * productos, y `selectedOrder` todavía es la orden SIN esos productos—, así
+   * que escribir esa copia borraba los items recién agregados.
+   *
+   * Pasó de verdad (27-ago-2026): 8 mesas quedaron con su monto pero sin
+   * productos, imposibles de cobrar. Por eso la lectura fresca vive ACÁ ADENTRO
+   * y no en cada llamador: no depende de que el próximo se acuerde.
+   */
   const markItemsAsPrinted = async (order) => {
     try {
       const businessId = getBusinessId()
-      const updatedItems = order.items.map(item => ({
+      const fresh = await getOrder(businessId, order.id)
+      const items = (fresh.success && fresh.data?.items) || order.items || []
+
+      // Nunca vaciar una orden por marcar una comanda: si no hay nada que
+      // marcar, no hay nada que escribir.
+      if (items.length === 0) return
+
+      const updatedItems = items.map(item => ({
         ...item,
         printedToKitchen: true,
       }))
@@ -1427,6 +1447,8 @@ export default function Tables() {
       if (!Capacitor.isNativePlatform()) {
         kitchenAutoPrintInProgressRef.current = true
         setOrderToPrint({ ...selectedOrder, items, _ultraCompact: ultraCompactKitchen })
+        // markItemsAsPrinted relee la orden de Firestore: `selectedOrder` todavía
+        // no tiene los items que se acaban de agregar.
         await markItemsAsPrinted(selectedOrder)
         setTimeout(() => {
           handlePrintWeb()
@@ -1489,11 +1511,10 @@ export default function Tables() {
       }
 
       if (printed) {
-        // Marcar la orden como impresa (leyendo la orden fresca de Firestore, que ya
-        // incluye los items recien agregados) para que el boton manual no los reimprima.
+        // Marcar la orden como impresa para que el boton manual no los reimprima.
+        // La lectura fresca la hace markItemsAsPrinted por dentro.
         try {
-          const fresh = await getOrder(businessId, selectedOrder.id)
-          if (fresh.success && fresh.data) await markItemsAsPrinted(fresh.data)
+          await markItemsAsPrinted(selectedOrder)
         } catch (e) { void e }
         toast.success('Comanda enviada a cocina')
       }
