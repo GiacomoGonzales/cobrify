@@ -71,7 +71,7 @@ import {
 import { CHART_COLORS, CHART_MUTED, colorForKey, assignColors, capSeries } from '@/utils/chartColors'
 import { getSaleSeller } from '@/utils/saleSeller'
 import MonthSelect from '@/components/MonthSelect'
-import { getInvoiceCommission, buildSellerIndex } from '@/utils/commissions'
+import { getInvoiceCommission, buildSellerIndex, ventaCobrada } from '@/utils/commissions'
 import { getSellers } from '@/services/sellerService'
 import GuideLink from '@/components/guide/GuideLink'
 
@@ -1304,10 +1304,9 @@ export default function Reports() {
       if (com) {
         sellers[sellerId].commission += com.amount
         if (com.estimated) sellers[sellerId].commissionEstimated += com.amount
-        // Contado o credito ya saldado. `paymentStatus` ausente = venta vieja al
-        // contado, que si esta cobrada.
-        const cobrada = !invoice.paymentStatus || invoice.paymentStatus === 'completed' || invoice.paymentStatus === 'paid'
-        if (cobrada) sellers[sellerId].commissionCollected += com.amount
+        // El criterio de "cobrada" vive en utils/commissions: la liquidacion
+        // usa el mismo y las dos pantallas tienen que decir lo mismo.
+        if (ventaCobrada(invoice)) sellers[sellerId].commissionCollected += com.amount
       }
       // Una venta hecha 100% de productos personalizados no tiene costo que
       // consultar: su "utilidad" sería el importe completo, y eso es falso.

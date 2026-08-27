@@ -91,6 +91,37 @@ export default {
         },
       ],
     },
+    {
+      id: 'liquidacion',
+      title: 'Liquidar: pagarle la comisión al vendedor',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'La columna **Por pagar** muestra lo que se le debe HOY a cada vendedor. No depende del filtro de fechas de la pantalla: una deuda no cambia según el mes que estés mirando.',
+        },
+        {
+          type: 'texto',
+          text: 'Solo entran ventas **cobradas**. Una venta al crédito que todavía no te pagan no genera pago al vendedor: el dinero aún no entró. Las anuladas tampoco cuentan.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Toca el monto en **Por pagar**.',
+            'Elige hasta qué fecha liquidar (por ejemplo, hasta fin de mes) y revisa cuántas ventas entran y cuánto suma.',
+            'Presiona **Liquidar**. El período queda cerrado y el importe congelado.',
+            'Cuando le pagues, en **Liquidaciones de comisión** presiona **Marcar pagada**.',
+          ],
+        },
+        {
+          type: 'texto',
+          text: 'Al marcarla como pagada se registra sola en **Gastos > Gastos de Ventas**, con el nombre del vendedor. Así la comisión aparece en tu flujo de caja sin que tengas que cargarla a mano.',
+        },
+        {
+          type: 'ojo',
+          text: 'Una venta se liquida UNA sola vez: al liquidar, esas ventas dejan de contar en "Por pagar". Si te equivocaste, **anula** la liquidación y sus ventas vuelven a quedar pendientes. Ojo: anular NO borra el gasto, porque si ya pagaste, ese dinero salió de la caja. Corrígelo desde Gastos.',
+        },
+      ],
+    },
   ],
 
   preguntas: [

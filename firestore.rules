@@ -592,6 +592,13 @@ service cloud.firestore {
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
+      // Subcollection: Liquidaciones de comision. Cierran un periodo y dejan
+      // constancia de lo pagado a cada vendedor. Solo el negocio con sesion.
+      match /commissionPayouts/{payoutId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
       // Subcollection: Orders (Órdenes - para modo restaurante)
       match /orders/{orderId} {
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);

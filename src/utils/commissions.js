@@ -219,6 +219,29 @@ export const getInvoiceCommission = (invoice, { sellersById, totalInBase, costIn
   return { ...calc, estimated: true }
 }
 
+/**
+ * ¿Esta venta ya está cobrada?
+ *
+ * Una venta al crédito impaga no debería gatillar un pago al vendedor: el
+ * negocio todavía no vio ese dinero. `paymentStatus` ausente es una venta
+ * vieja al contado, que sí está cobrada.
+ *
+ * El criterio estaba escrito dentro de Reportes; vive acá porque ahora también
+ * lo necesita la liquidación, y las dos tienen que decir lo mismo.
+ */
+export const ventaCobrada = (invoice) =>
+  !invoice?.paymentStatus ||
+  invoice.paymentStatus === 'completed' ||
+  invoice.paymentStatus === 'paid'
+
+/** ¿Esta venta cuenta para comisión? Las anuladas no. */
+export const ventaComisionable = (invoice) => {
+  if (!invoice) return false
+  if (invoice.status === 'cancelled' || invoice.status === 'voided') return false
+  if (invoice.sunatStatus === 'voiding' || invoice.sunatStatus === 'voided') return false
+  return true
+}
+
 /** Índice id → vendedor, para no recorrer el array en cada comprobante. */
 export const buildSellerIndex = (sellers = []) => {
   const map = new Map()
