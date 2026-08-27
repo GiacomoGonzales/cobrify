@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
-import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, ChevronDown, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer, X, ShoppingCart, Truck, PackageCheck, Edit2, MoreVertical, FileText, Split, UserMinus, Wine, UtensilsCrossed, ChevronUp, ClipboardList } from 'lucide-react'
+import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, ChevronDown, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer, X, ShoppingCart, Truck, PackageCheck, Edit2, MoreVertical, FileText, Split, UserMinus, Wine, UtensilsCrossed, ChevronUp, ClipboardList, UserRound } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
@@ -10,6 +10,9 @@ import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import { getActiveOrders, getClosedOrders, getOrdersStats, updateOrderStatus, createOrder, completeOrder, markOrderAsPaid, updateOrder, getOrder } from '@/services/orderService'
 import { getActiveBranches } from '@/services/branchService'
+import { getProducts } from '@/services/firestoreService'
+import { getWarehouses } from '@/services/warehouseService'
+import ConsumoInternoModal from '@/components/inventory/ConsumoInternoModal'
 import { createBarTab, occupyTable } from '@/services/tableService'
 import { useLocationAccess } from '@/utils/locationAccess'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -191,7 +194,7 @@ function HistorialOrdenes({ ordenes, cargando, fechas, setFechas, abierta, setAb
 }
 
 export default function Orders() {
-  const { user, getBusinessId, isDemoMode, demoData, filterBranchesByAccess, allowedBranches, hasMainBranchAccess, userPermissions } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData, filterBranchesByAccess, filterWarehousesByAccess, allowedBranches, hasMainBranchAccess, userPermissions, businessMode, businessSettings } = useAppContext()
   const isOwner = !userPermissions?.ownerId
   // Filtro de seguridad por sede (respeta las sucursales habilitadas del usuario secundario)
   const canAccess = useLocationAccess()
@@ -255,6 +258,40 @@ export default function Orders() {
   // acumula como una mesa. Se toma el pedido al toque; las rondas siguientes y
   // el cobro se hacen desde Mesas > Barra.
   const [showBarTabModal, setShowBarTabModal] = useState(false)
+
+  /**
+   * Consumo interno desde el salón.
+   *
+   * El mismo modal que Inventario, no una copia: es la pieza que ya sabe
+   * descontar sin cobrar, con su motivo y su costo. Duplicarla significaría
+   * arreglar cada cosa dos veces.
+   *
+   * Los productos y almacenes se cargan al ABRIRLO, no al entrar a la página:
+   * Órdenes se mira en tiempo real durante todo el servicio y no tiene por qué
+   * arrastrar el catálogo entero por una acción que se usa de vez en cuando.
+   */
+  const [showConsumoInterno, setShowConsumoInterno] = useState(false)
+  const [cargandoConsumo, setCargandoConsumo] = useState(false)
+  const [datosConsumo, setDatosConsumo] = useState({ productos: [], almacenes: [] })
+
+  const abrirConsumoInterno = async () => {
+    if (datosConsumo.productos.length > 0) { setShowConsumoInterno(true); return }
+    setCargandoConsumo(true)
+    try {
+      const businessId = getBusinessId()
+      const [prod, alm] = await Promise.all([getProducts(businessId), getWarehouses(businessId)])
+      setDatosConsumo({
+        productos: prod?.success ? (prod.data || []) : [],
+        almacenes: filterWarehousesByAccess(alm?.success ? (alm.data || []) : []),
+      })
+      setShowConsumoInterno(true)
+    } catch (error) {
+      console.error('Error al preparar el consumo interno:', error)
+      toast.error('No se pudo abrir el consumo interno')
+    } finally {
+      setCargandoConsumo(false)
+    }
+  }
   const [barTabName, setBarTabName] = useState('')
   const [isCreatingBarTab, setIsCreatingBarTab] = useState(false)
   const [barTab, setBarTab] = useState(null) // { table, order }
@@ -522,8 +559,15 @@ export default function Orders() {
       }
     }
 
-    // En auto-impresión silenciosa NO caemos al diálogo de impresión web (solo app térmica).
-    if (silent) return false
+    // En la APP, una auto-impresión silenciosa que no salió por la térmica no
+    // debe abrir el diálogo del navegador encima: la ticketera es el destino y
+    // el mozo no está mirando la pantalla.
+    //
+    // En el NAVEGADOR es al revés: no hay térmica —los plugins son de la app— y
+    // el ticket web es el ÚNICO destino posible. Antes este return lo tapaba y
+    // la comanda automática no salía nunca desde la computadora, sin ningún
+    // aviso. Es el mismo camino que el POS ya usa.
+    if (silent && Capacitor.isNativePlatform()) return false
 
     // Fallback: impresión estándar (web o si falla la térmica)
     setOrderToPrint(order)
@@ -1496,6 +1540,19 @@ export default function Orders() {
           )}
           {pestana === 'activas' && (
             <>
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={abrirConsumoInterno}
+                disabled={isDemoMode || cargandoConsumo}
+                className="w-full sm:w-auto"
+                title={isDemoMode ? 'No disponible en modo demo' : 'Descontar stock sin cobrar: consumo del personal, merma, cortesías'}
+              >
+                {cargandoConsumo
+                  ? <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  : <UserRound className="w-5 h-5 mr-2" />}
+                Consumo interno
+              </Button>
               <Button
                 variant="outline"
                 size="lg"
@@ -2528,6 +2585,17 @@ export default function Orders() {
           </div>
         </div>
       </Modal>
+
+      <ConsumoInternoModal
+        isOpen={showConsumoInterno}
+        onClose={() => setShowConsumoInterno(false)}
+        productos={datosConsumo.productos}
+        almacenes={datosConsumo.almacenes}
+        businessMode={businessMode}
+        permitirNegativo={!!businessSettings?.allowNegativeStock}
+        businessId={getBusinessId()}
+        usuario={{ uid: user?.uid, email: user?.email, nombre: user?.displayName }}
+      />
     </div>
   )
 }

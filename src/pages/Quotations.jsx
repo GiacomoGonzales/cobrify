@@ -43,7 +43,7 @@ import {
   updateQuotationStatus,
   markQuotationAsSent,
   convertToInvoice,
-  markQuotationAsConverted,
+  linkQuotationToGuide,
 } from '@/services/quotationService'
 import { createInvoice, getCompanySettings, getNextDocumentNumber } from '@/services/firestoreService'
 import { generateQuotationPDF, previewQuotationPDF } from '@/utils/quotationPdfGenerator'
@@ -55,6 +55,7 @@ import { getActiveBranches } from '@/services/branchService'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import { useLocationAccess } from '@/utils/locationAccess'
 import GuideLink from '@/components/guide/GuideLink'
+import { vinculoDe } from '@/utils/documentLinks'
 
 export default function Quotations() {
   const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess, hasMainBranchAccess, allowedBranches, allowedWarehouses , branchScope } = useAppContext()
@@ -925,6 +926,15 @@ export default function Quotations() {
                     )}
                   </div>
 
+                  {/* En qué documento terminó. El badge "Convertida" decía que
+                      pasó algo pero no en qué; el número es lo que se busca. */}
+                  {vinculoDe(quotation.convertedTo) && (
+                    <div className="flex items-center gap-1 mt-1 text-xs text-green-700">
+                      <CheckCircle className="w-3 h-3 shrink-0" />
+                      <span className="truncate">{vinculoDe(quotation.convertedTo).numero || vinculoDe(quotation.convertedTo).etiqueta}</span>
+                    </div>
+                  )}
+
                   {/* Portal del menú de acciones */}
                   {openMenuId === quotation.id && createPortal(
                     <>
@@ -1079,6 +1089,11 @@ export default function Quotations() {
                     </TableCell>
                     <TableCell className="py-2.5 px-2">
                       <div className="scale-90 origin-left">{getStatusBadge(quotation.status)}</div>
+                      {vinculoDe(quotation.convertedTo) && (
+                        <span className="block text-xs text-green-700 mt-0.5 truncate">
+                          {vinculoDe(quotation.convertedTo).numero || vinculoDe(quotation.convertedTo).etiqueta}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="py-2.5 px-1 w-12">
                       <div className="flex items-center justify-end">
@@ -1415,6 +1430,35 @@ export default function Quotations() {
               </div>
             )}
 
+            {/* En qué documento terminó esta cotización */}
+            {vinculoDe(viewingQuotation.convertedTo) && (
+              <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
+                <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
+                <div className="min-w-0">
+                  <p className="font-medium text-green-800">
+                    Convertida en {vinculoDe(viewingQuotation.convertedTo).nombre}
+                  </p>
+                  {vinculoDe(viewingQuotation.convertedTo).numero && (
+                    <p className="text-sm text-green-700 truncate">
+                      N.º <strong>{vinculoDe(viewingQuotation.convertedTo).numero}</strong>
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Guías de remisión que salieron de esta cotización */}
+            {Array.isArray(viewingQuotation.relatedGuides) && viewingQuotation.relatedGuides.length > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                <p className="font-medium text-blue-800 mb-1">
+                  {viewingQuotation.relatedGuides.length === 1 ? 'Guía de remisión generada' : 'Guías de remisión generadas'}
+                </p>
+                <p className="text-sm text-blue-700">
+                  {viewingQuotation.relatedGuides.map(g => g.number).filter(Boolean).join(' · ')}
+                </p>
+              </div>
+            )}
+
             {/* Actions */}
             <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
               <Button variant="outline" onClick={() => setViewingQuotation(null)}>
@@ -1542,6 +1586,13 @@ export default function Quotations() {
       <CreateDispatchGuideModal
         isOpen={!!dispatchGuideQuotation}
         onClose={() => setDispatchGuideQuotation(null)}
+        onCreated={async (guia) => {
+          // La cotización se entera de la guía que salió de ella. Antes el
+          // modal se cerraba y no quedaba rastro por ningún lado.
+          if (!dispatchGuideQuotation?.id || isDemoMode) return
+          await linkQuotationToGuide(getBusinessId(), dispatchGuideQuotation.id, guia)
+          loadQuotations()
+        }}
         referenceInvoice={dispatchGuideQuotation ? mapQuotationForDispatchGuide(dispatchGuideQuotation) : null}
       />
 

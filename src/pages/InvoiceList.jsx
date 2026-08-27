@@ -83,6 +83,7 @@ import { getSaleSeller, matchesSaleSeller, listSaleSellers } from '@/utils/saleS
 import { getNoteReasonLabel, getReferencedDocTypeLabel } from '@/data/noteReasons'
 import MonthSelect from '@/components/MonthSelect'
 import GuideLink from '@/components/guide/GuideLink'
+import { vinculoDe } from '@/utils/documentLinks'
 
 /**
  * Tipo de pedido guardado en el comprobante. Solo aplica a restaurante/delivery;
@@ -3295,10 +3296,10 @@ Gracias por tu preferencia.`
                           Convertida
                         </span>
                       )}
-                      {invoice.convertedFrom && (
+                      {vinculoDe(invoice.convertedFrom) && (
                         <span className="text-xs text-blue-600 flex items-center gap-1">
                           <ArrowRightCircle className="w-3 h-3" />
-                          Desde nota
+                          Desde {vinculoDe(invoice.convertedFrom).nombre.toLowerCase()}
                         </span>
                       )}
                       {(invoice.documentType === 'nota_credito' || invoice.documentType === 'nota_debito') &&
@@ -3384,11 +3385,11 @@ Gracias por tu preferencia.`
                             Convertida
                           </span>
                         )}
-                        {/* Indicador de boleta desde nota */}
-                        {invoice.convertedFrom && (
+                        {/* De qué documento salió: nota de venta, cotización o guía */}
+                        {vinculoDe(invoice.convertedFrom) && (
                           <span className="text-xs text-blue-600 flex items-center gap-1">
                             <ArrowRightCircle className="w-3 h-3" />
-                            Desde nota
+                            Desde {vinculoDe(invoice.convertedFrom).nombre.toLowerCase()}
                           </span>
                         )}
                       </div>
@@ -4749,12 +4750,16 @@ Gracias por tu preferencia.`
                 )}
               </div>
             )}
-            {viewingInvoice.convertedFrom && (
+            {vinculoDe(viewingInvoice.convertedFrom) && (
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-3">
                 <ArrowRightCircle className="w-5 h-5 text-blue-600" />
                 <div>
-                  <p className="font-medium text-blue-800">Generada desde Nota de Venta</p>
-                  <p className="text-sm text-blue-700">Nota: <strong>{viewingInvoice.convertedFrom.number}</strong></p>
+                  <p className="font-medium text-blue-800">Generada desde {vinculoDe(viewingInvoice.convertedFrom).nombre}</p>
+                  {vinculoDe(viewingInvoice.convertedFrom).numero && (
+                    <p className="text-sm text-blue-700">
+                      {vinculoDe(viewingInvoice.convertedFrom).nombre}: <strong>{vinculoDe(viewingInvoice.convertedFrom).numero}</strong>
+                    </p>
+                  )}
                 </div>
               </div>
             )}

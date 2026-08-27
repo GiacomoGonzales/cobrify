@@ -7,6 +7,7 @@ import {
   updateDoc,
   deleteDoc,
   serverTimestamp,
+  arrayUnion,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
@@ -302,14 +303,54 @@ export const convertToInvoice = async (userId, quotationId) => {
 }
 
 /**
- * Marcar cotización como convertida a factura
+ * Anotar en la cotización la guía de remisión que se generó desde ella.
+ *
+ * Va aparte de `convertedTo` y NO toca `status`: emitir la guía no consume la
+ * cotización — el cliente despacha primero y factura después, así que la
+ * cotización tiene que seguir siendo convertible. Es un array porque de una
+ * misma cotización pueden salir varias guías (entregas parciales).
  */
-export const markQuotationAsConverted = async (userId, quotationId, invoiceId) => {
+export const linkQuotationToGuide = async (userId, quotationId, guide) => {
+  try {
+    const docRef = doc(db, 'businesses', userId, 'quotations', quotationId)
+    await updateDoc(docRef, {
+      relatedGuides: arrayUnion({
+        type: 'dispatch_guide',
+        id: guide?.id || '',
+        number: guide?.number || '',
+      }),
+      updatedAt: serverTimestamp(),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error('Error al vincular la guía con la cotización:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Marcar cotización como convertida a comprobante.
+ *
+ * Guarda `convertedTo` con el mismo shape que usan las notas de venta
+ * (`{ type, id, number }`), que es lo que las pantallas y los PDF ya saben
+ * leer. Antes solo se guardaba `relatedInvoiceId`: el ID de Firestore, sin el
+ * número, y ninguna pantalla lo leía — así que la cotización decía
+ * "Convertida" pero no había forma de saber en qué comprobante terminó.
+ *
+ * `relatedInvoiceId` se mantiene porque la guardia anti-doble-conversión de
+ * `convertToInvoice` lo consulta y hay cotizaciones viejas que solo tienen eso.
+ */
+export const markQuotationAsConverted = async (userId, quotationId, invoiceId, documentType = 'invoice', invoiceNumber = '') => {
   try {
     const docRef = doc(db, 'businesses', userId, 'quotations', quotationId)
     await updateDoc(docRef, {
       status: 'converted',
       relatedInvoiceId: invoiceId,
+      convertedTo: {
+        type: documentType || 'invoice',
+        id: invoiceId,
+        number: invoiceNumber || '',
+      },
       convertedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     })

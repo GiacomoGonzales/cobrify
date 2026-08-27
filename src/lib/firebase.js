@@ -61,12 +61,35 @@ let db
 let storage
 let functions
 
+/**
+ * ¿Esta copia de la app corre dentro de un iframe?
+ *
+ * La vista previa de temas del catálogo (Configuración > Mi Catálogo Online)
+ * carga la app REAL dentro de un iframe del mismo origen. Ahí Firebase Auth
+ * arranca otra vez sobre el MISMO almacenamiento de sesión que la pestaña, y
+ * las dos instancias se sincronizan entre sí: si la del iframe concluye que no
+ * hay usuario, la pestaña se entera y manda al login. Ese era el síntoma —
+ * tocar "Vista previa" y aparecer en la pantalla de inicio de sesión.
+ *
+ * Dentro de un iframe la sesión va EN MEMORIA: el catálogo es público y no
+ * necesita ninguna, y así no toca la del usuario que está trabajando.
+ */
+const dentroDeIframe = (() => {
+  try {
+    return typeof window !== 'undefined' && window.self !== window.top
+  } catch {
+    // Comparar ya lanzó cross-origin: estamos embebidos.
+    return true
+  }
+})()
+
 try {
   app = initializeApp(firebaseConfig)
 
-  // Inicializar Auth con persistencia local explícita
-  // Esto asegura que la sesión se mantenga incluso después de cerrar la app
-  if (isNative) {
+  if (dentroDeIframe) {
+    auth = initializeAuth(app, { persistence: inMemoryPersistence })
+    console.log('🔐 Auth en memoria: la app corre embebida (vista previa)')
+  } else if (isNative) {
     // En plataformas nativas (Android/iOS), usar persistencia IndexedDB
     auth = initializeAuth(app, {
       persistence: indexedDBLocalPersistence,
@@ -140,9 +163,11 @@ try {
   catalogAuth = initializeAuth(catalogApp, {
     // El comprador espera seguir logueado entre visitas (a diferencia del auth
     // secundario, que es efímero). Web usa browserLocalPersistence.
-    persistence: Capacitor.isNativePlatform()
-      ? indexedDBLocalPersistence
-      : browserLocalPersistence,
+    // En una vista previa embebida tampoco se guarda la sesión del comprador:
+    // es una muestra del tema, no una tienda para comprar.
+    persistence: dentroDeIframe
+      ? inMemoryPersistence
+      : (Capacitor.isNativePlatform() ? indexedDBLocalPersistence : browserLocalPersistence),
   })
 } catch (error) {
   try {

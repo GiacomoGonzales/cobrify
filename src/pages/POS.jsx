@@ -70,7 +70,7 @@ import { vendedoresDeSucursal } from '@/utils/sellerBranches'
 import { stockPorSucursal } from '@/utils/branchStockView'
 import { registrarVentaDemo } from '@/data/demo/operaciones'
 import { applyBranchPricing } from '@/utils/branchPricing'
-import { filterProductsForBranch, isProductInBranch } from '@/utils/branchCatalog'
+import { filterProductsForBranch, filterCategoriesForBranch, isProductInBranch } from '@/utils/branchCatalog'
 import { getAvailableDocumentTypes, resolveDocumentType } from '@/utils/documentTypes'
 import { calculateInvoiceAmounts, calculateMixedInvoiceAmounts, calculateRecargoConsumo, ID_TYPES, DETRACTION_TYPES, DETRACTION_MIN_AMOUNT, calcularDetraccion } from '@/utils/peruUtils'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
@@ -120,8 +120,7 @@ import { clampEmissionDate, getEmissionDateLimits, validateEmissionDate } from '
 import { computeSaleCommission } from '@/utils/commissions'
 import { getSellers } from '@/services/sellerService'
 import { markOrderAsPaid, updateOrder, updateOrderStatus, claimOrderForInvoicing, releaseOrderInvoicingClaim, markOrderInvoiced } from '@/services/orderService'
-import { markQuotationAsConverted } from '@/services/quotationService'
-import { markNotaVentaAsConverted } from '@/services/firestoreService'
+import { cerrarVinculoDeOrigen } from '@/services/documentLinking'
 import { completeAppointment } from '@/services/appointmentService'
 import { programarRecordatoriosDeVenta } from '@/services/veterinaryService'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
@@ -133,6 +132,8 @@ import { useReactToPrint } from 'react-to-print'
 import { getPrimaryPet } from '@/utils/petUtils'
 import { getVisiblePaymentMethods, getPaymentLabel, getPaymentKeyByLabel } from '@/utils/paymentMethods'
 import GuideLink from '@/components/guide/GuideLink'
+import { diasDeRecordatorio } from '@/utils/vetReminders'
+import { repreciarPorCantidad } from '@/utils/autoPriceByQty'
 
 const PAYMENT_METHODS = {
   CASH: 'Efectivo',
@@ -690,19 +691,32 @@ export default function POS() {
   // Precios por sucursal (businessSettings.branchPricingEnabled): `products` es la
   // vista EFECTIVA con price/price2/3/4 reemplazados por el override de la sucursal
   // activa. Sin feature o en Sucursal Principal (sin branchId) → lista original tal
+  // Declarado ACÁ, antes del useMemo que lo consume: un `const` usado antes de
+  // su línea revienta en tiempo de ejecución ("Cannot access before
+  // initialization") y `vite build` no lo detecta.
+  const [categories, setCategories] = useState([])
+
   // cual (misma referencia, no invalida memos aguas abajo).
   const products = useMemo(() => {
     const branchId = selectedBranch?.id || null
     // 1) Catalogo por sucursal: saca del catalogo los productos que no aplican a
     //    esta sede. Va PRIMERO para no repreciar lo que igual no se va a mostrar.
     const visibles = filterProductsForBranch(
-      productsRaw, branchId, businessSettings?.branchCatalogEnabled === true
+      productsRaw, branchId, businessSettings?.branchCatalogEnabled === true, categories
     )
     // 2) Precios por sucursal sobre lo que quedo visible.
     if (!businessSettings?.branchPricingEnabled) return visibles
     if (!branchId) return visibles
     return visibles.map(p => applyBranchPricing(p, branchId))
-  }, [productsRaw, selectedBranch, businessSettings?.branchPricingEnabled, businessSettings?.branchCatalogEnabled])
+  }, [productsRaw, selectedBranch, businessSettings?.branchPricingEnabled, businessSettings?.branchCatalogEnabled, categories])
+
+  const categoriasVisibles = useMemo(
+    () => filterCategoriesForBranch(
+      categories, selectedBranch?.id || null, businessSettings?.branchCatalogEnabled === true,
+    ),
+    [categories, selectedBranch, businessSettings?.branchCatalogEnabled],
+  )
+
 
   // Aviso (no bloqueo) cuando un carrito precargado —cotizacion, nota de venta,
   // pedido online, guia— trae productos ocultos en la sucursal activa. La venta
@@ -737,7 +751,9 @@ export default function POS() {
   const orderClaimRef = React.useRef(null)
 
   // Estado para cotización (para marcar como convertida al completar)
-  const [pendingQuotationId, setPendingQuotationId] = useState(null)
+  // { id, number } — el número hacía falta guardarlo: antes solo viajaba al
+  // toast y se perdía, y es el dato que el cliente quiere ver en la factura.
+  const [pendingQuotation, setPendingQuotation] = useState(null)
 
   // Estado para nota(s) de venta (para marcar como convertida(s) y skip stock al completar)
   // Puede ser un string (una nota) o un array (múltiples notas)
@@ -769,7 +785,6 @@ export default function POS() {
   const [selectedSeller, setSelectedSeller] = useState(null)
 
   // Categories
-  const [categories, setCategories] = useState([])
   const [brands, setBrands] = useState([])
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all')
   // Categoría raíz cuya rama de subcategorías está expandida. Una sola raíz a la vez.
@@ -2020,7 +2035,7 @@ export default function POS() {
 
       // Guardar info de la cotización para marcar como convertida al completar
       if (quotationInfo.quotationId) {
-        setPendingQuotationId(quotationInfo.quotationId)
+        setPendingQuotation({ id: quotationInfo.quotationId, number: quotationInfo.quotationNumber || '' })
       }
 
       // Cargar items de la cotización al carrito.
@@ -3247,7 +3262,9 @@ export default function POS() {
     const salida = []
     for (const item of cart) {
       if (item.isCustom) continue
-      const base = Number(fichaPorId.get(item.id)?.reminderDays) || 0
+      // Por defecto TODO lo que se vende se recuerda (30 días de fábrica); la
+      // ficha del producto solo marca las excepciones. Ver vetReminders.js.
+      const base = diasDeRecordatorio(fichaPorId.get(item.id), businessSettings)
       if (base <= 0) continue
       const elegido = diasRecordatorio[item.id]
       const dias = (elegido === undefined || elegido === '')
@@ -3256,7 +3273,7 @@ export default function POS() {
       salida.push({ productId: item.id, nombre: item.name, dias, base })
     }
     return salida
-  }, [businessMode, cart, productsRaw, diasRecordatorio])
+  }, [businessMode, cart, productsRaw, diasRecordatorio, businessSettings])
 
   // useDeferredValue mantiene el <input> responsivo aunque el filtro tarde.
   // React renderiza el input con la última tecla de inmediato, y el filter
@@ -4227,7 +4244,7 @@ export default function POS() {
     // precio automático por cantidad. Con el automático activado ya no aparece el
     // modal para elegir precio, así que el cajero no tenía forma de saber desde
     // cuántas unidades baja: por eso se muestra en la tarjeta. Misma resolución
-    // que computeAutoPriceForQty (mínimo del producto → global → legacy global).
+    // que minimoDeNivel (mínimo del producto → global → legacy global).
     const autoByQty = product?.useAutoPriceByQty === true
     const productMins = product?.priceMinQtys || {}
     const globalMins = companySettings?.catalogWholesaleMinQtys || {}
@@ -4725,54 +4742,6 @@ export default function POS() {
    * Si el cliente del POS tiene `priceLevel` asignado, no se modifica nada
    * (esa selección tiene prioridad).
    */
-  const computeAutoPriceForQty = (productId, qty, variantSku = null) => {
-    if (selectedCustomer?.priceLevel) return null
-    const product = products.find(p => p.id === productId)
-    if (!product || product.useAutoPriceByQty !== true) return null
-
-    const productMins = product.priceMinQtys || {}
-    const globalMins = companySettings?.catalogWholesaleMinQtys || {}
-    const legacyGlobal = parseInt(companySettings?.catalogWholesaleMinQty)
-
-    const getMin = (key) => {
-      const p = parseInt(productMins[key])
-      if (Number.isFinite(p) && p >= 1) return p
-      const g = parseInt(globalMins[key])
-      if (Number.isFinite(g) && g >= 1) return g
-      if (Number.isFinite(legacyGlobal) && legacyGlobal >= 1) return legacyGlobal
-      return null
-    }
-
-    // De dónde salen los PRECIOS: de la variante si la hay, con el producto de
-    // respaldo. El umbral ("desde 50 unidades") es del producto —es una regla
-    // comercial única— pero cuánto cuesta el mayorista sí depende de la variante:
-    // el papel lustre rojo puede valer distinto que el dorado.
-    const variant = variantSku && Array.isArray(product.variants)
-      ? product.variants.find(v => v.sku === variantSku)
-      : null
-    const priceOf = (key) => {
-      const v = variant ? parseFloat(variant[key]) : NaN
-      if (Number.isFinite(v) && v > 0) return v
-      const p = parseFloat(product[key])
-      return Number.isFinite(p) && p > 0 ? p : null
-    }
-
-    const basePrice = priceOf('price') ?? (parseFloat(product.price) || 0)
-    const candidates = ['price2', 'price3', 'price4']
-      .map(key => {
-        const v = priceOf(key)
-        if (v == null) return null
-        const min = getMin(key)
-        if (min == null || min < 1) return null
-        if (qty < min) return null
-        return { value: v }
-      })
-      .filter(Boolean)
-    if (candidates.length === 0) return basePrice
-    candidates.sort((a, b) => a.value - b.value)
-    return candidates[0].value
-  }
-
   /**
    * Reprecia TODO el carrito según el precio automático por cantidad.
    *
@@ -4780,50 +4749,36 @@ export default function POS() {
    * 20 rojos + 20 azules + 20 verdes se llevó 60 hojas de papel lustre y le
    * corresponde el mayorista, aunque ningún color por separado llegue al mínimo.
    *
-   * Por eso el precio de una línea NO se puede calcular sola: depende del resto
-   * del carrito. Antes cada sitio que cambiaba una cantidad repreciaba solo esa
-   * línea; ahora los tres llaman acá y el criterio vive en un lugar.
-   *
-   * `autoPriceByTotal` marca las líneas cuyo precio bajó por la suma con OTRAS
-   * variantes, para que el cajero vea por qué cambió un renglón que no tocó.
+   * El criterio vive en `src/utils/autoPriceByQty.js` porque el catálogo online
+   * necesita EXACTAMENTE el mismo: tenía una versión propia que sumaba línea
+   * por línea y leía los precios del producto padre, así que el mismo carrito
+   * costaba distinto en el mostrador y en la tienda.
    */
   const applyAutoPricingToCart = (cartToPrice) => {
     if (selectedCustomer?.priceLevel) return cartToPrice
 
-    // Total por producto (todas las variantes juntas)
-    const totalPorProducto = {}
-    for (const item of cartToPrice) {
-      // Las bonificaciones van regaladas: no son unidades compradas y no deben
-      // empujar al cliente al siguiente nivel de precio.
-      if (!item.id || item.isCustom || item.isBonificacion) continue
-      totalPorProducto[item.id] = (totalPorProducto[item.id] || 0) + (parseFloat(item.quantity) || 0)
-    }
+    const repreciado = repreciarPorCantidad(cartToPrice, {
+      // productsRaw: si el producto está oculto en esta sede pero entró al
+      // carrito (cotización/edición), su precio por cantidad sigue aplicando.
+      productoPorId: (id) => productsRaw.find(p => p.id === id),
+      businessSettings: companySettings,
+      excluir: (item) => (
+        !item.id || item.isCustom ||
+        // Bonificación: precio 0 puesto a propósito. Comparte productId con la
+        // línea pagada, así que sin este guard el motor la habría "corregido" al
+        // precio del catálogo y el regalo pasaba a cobrarse. Tampoco empuja al
+        // siguiente nivel: no son unidades compradas.
+        item.isBonificacion || Number(item.price) === 0 ||
+        // Precio anclado en dólares: se fijó a propósito y los niveles del
+        // catálogo están en soles. Repreciarlo lo convierte en otra moneda.
+        !!item.fixedPriceUSD
+      ),
+    })
 
-    return cartToPrice.map(item => {
-      if (!item.id || item.isCustom) return item
-      // Bonificación: precio 0 puesto a propósito. Comparte productId con la
-      // línea pagada, así que sin este guard el motor la habría "corregido" al
-      // precio del catálogo y el regalo pasaba a cobrarse.
-      if (item.isBonificacion || Number(item.price) === 0) return item
-      // Precio anclado en dólares: se fijó a propósito y los niveles del catálogo
-      // están en soles. Repreciarlo lo convertiría en un número de otra moneda.
-      if (item.fixedPriceUSD) return item
-      // productsRaw: si el producto esta oculto en esta sede pero entro al
-      // carrito (cotizacion/edicion), su precio por cantidad sigue aplicando.
-      const product = productsRaw.find(p => p.id === item.id)
-      if (!product || product.useAutoPriceByQty !== true) return item
-
-      const totalProducto = totalPorProducto[item.id] || 0
-      const propia = parseFloat(item.quantity) || 0
-      const nuevoPrecio = computeAutoPriceForQty(item.id, totalProducto, item.variantSku || null)
-      if (nuevoPrecio == null) return item
-
-      // El precio bajó gracias a otras variantes, no a la cantidad de esta línea.
-      const porSuma = totalProducto > propia &&
-        nuevoPrecio !== computeAutoPriceForQty(item.id, propia, item.variantSku || null)
-
-      if (Number(item.price) === Number(nuevoPrecio) && !!item.autoPriceByTotal === porSuma) return item
-      return { ...item, price: nuevoPrecio, autoPriceByTotal: porSuma }
+    return repreciado.map(({ linea, precio, porSuma }) => {
+      if (precio == null) return linea
+      if (Number(linea.price) === Number(precio) && !!linea.autoPriceByTotal === porSuma) return linea
+      return { ...linea, price: precio, autoPriceByTotal: porSuma }
     })
   }
 
@@ -7341,6 +7296,12 @@ export default function POS() {
             ? { type: 'nota_venta', id: pendingNotaVentaIds[0] }
             : { type: 'nota_venta', ids: pendingNotaVentaIds },
         }),
+        // De qué cotización salió. Mismo shape que las notas de venta y las
+        // guías: sin esto, desde el comprobante era imposible saberlo.
+        // No lleva skipStockDeduction — una cotización no mueve stock.
+        ...(pendingQuotation && {
+          convertedFrom: { type: 'quotation', id: pendingQuotation.id, number: pendingQuotation.number || '' },
+        }),
         // Si viene de una guía de remisión que ya descontó stock, no descontar de nuevo
         ...(sourceDispatchGuide && sourceDispatchGuide.stockAlreadyDeducted && {
           skipStockDeduction: true,
@@ -7774,7 +7735,7 @@ export default function POS() {
         const _pendingOrderId = pendingOrderId
         const _markOrderPaidOnComplete = markOrderPaidOnComplete
         const _markOnlineOrderCompleteOnSale = markOnlineOrderCompleteOnSale
-        const _pendingQuotationId = pendingQuotationId
+        const _pendingQuotation = pendingQuotation
         const _pendingNotaVentaIds = pendingNotaVentaIds
         const _sourceDispatchGuide = sourceDispatchGuide
         const _pendingAppointmentData = pendingAppointmentData
@@ -7785,7 +7746,7 @@ export default function POS() {
           setMarkOnlineOrderCompleteOnSale(false)
           onlineOrderLoadedRef.current = false
         }
-        if (_pendingQuotationId) setPendingQuotationId(null)
+        if (_pendingQuotation) setPendingQuotation(null)
         if (_pendingNotaVentaIds) setPendingNotaVentaIds(null)
         if (_sourceDispatchGuide) setSourceDispatchGuide(null)
         if (_pendingAppointmentData) setPendingAppointmentData(null)
@@ -8616,24 +8577,28 @@ export default function POS() {
               }
             }
 
-            // 6.2. Marcar cotización como convertida
-            if (_pendingQuotationId) {
-              try {
-                await markQuotationAsConverted(businessId, _pendingQuotationId, bgInvoiceId)
-              } catch (error) {
-                console.error('Error al marcar cotización como convertida:', error)
-              }
+            // 6.2. Marcar la cotización como convertida. Mismo criterio que usa
+            // la sincronización de ventas offline: cuando esto vivía suelto acá,
+            // una venta sin conexión nunca marcaba su cotización.
+            if (_pendingQuotation) {
+              await cerrarVinculoDeOrigen({
+                businessId,
+                convertedFrom: { type: 'quotation', id: _pendingQuotation.id },
+                documentType: bgDocumentType,
+                invoiceId: bgInvoiceId,
+                invoiceNumber: bgNumberResult.number,
+              })
             }
 
             // 6.3. Marcar nota(s) de venta como convertida(s) y verificar movimientos de stock
             if (_pendingNotaVentaIds && _pendingNotaVentaIds.length > 0) {
-              try {
-                await Promise.all(_pendingNotaVentaIds.map(notaId =>
-                  markNotaVentaAsConverted(businessId, notaId, bgDocumentType, bgInvoiceId, bgNumberResult.number)
-                ))
-              } catch (error) {
-                console.error('Error al marcar notas de venta como convertidas:', error)
-              }
+              await cerrarVinculoDeOrigen({
+                businessId,
+                convertedFrom: { type: 'nota_venta', ids: _pendingNotaVentaIds },
+                documentType: bgDocumentType,
+                invoiceId: bgInvoiceId,
+                invoiceNumber: bgNumberResult.number,
+              })
 
               // Verificar que las notas originales tengan movimientos de stock
               try {
@@ -9593,7 +9558,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 <Tag className="w-3.5 h-3.5 inline mr-1" />
                 Todas
               </button>
-              {getRootCategories(categories).map((category) => {
+              {getRootCategories(categoriasVisibles).map((category) => {
                 const subcats = getSubcategories(categories, category.id)
                 const hasSubs = subcats.length > 0
                 const isExpanded = expandedRootCategoryId === category.id

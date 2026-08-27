@@ -525,8 +525,20 @@ export default {
           text: '**Catálogo por sucursal**: puedes ocultar productos en los locales donde no se venden, con la acción masiva **Asignar sucursales**.',
         },
         {
+          type: 'texto',
+          text: '**Categorías por sucursal**: cuando son muchos productos, marcar uno por uno no rinde. En **Gestionar Categorías**, cada categoría tiene el bloque **Se ve en** con una casilla por local. Al desmarcar uno, ahí dejan de verse esa categoría, sus subcategorías y todos los productos que tenga dentro — de una sola vez.',
+        },
+        {
+          type: 'consejo',
+          text: 'Es lo que resuelve el caso típico de dos locales que trabajan rubros distintos: lo que carga un equipo deja de llenarle la pantalla al otro, sin tocar producto por producto.',
+        },
+        {
           type: 'ojo',
-          text: 'Ocultar un producto **no mueve ni borra su stock**: solo deja de mostrarse en esa sede. Si ahí tenía mercadería, sigue estando en el inventario y en los reportes. Esconder no es descontar.',
+          text: 'Ocultar un producto o una categoría **no mueve ni borra stock**: solo deja de mostrarse en esa sede. Si ahí había mercadería, sigue estando en el inventario y en los reportes. Esconder no es descontar.',
+        },
+        {
+          type: 'texto',
+          text: 'Al asignar una categoría a un producto, al administrar categorías o al hacer un cambio masivo, la lista sigue mostrándolas **todas**: si ahí se filtraran, no podrías asignar una categoría de otro local ni volver a activar una que ocultaste.',
         },
         {
           type: 'enlace',

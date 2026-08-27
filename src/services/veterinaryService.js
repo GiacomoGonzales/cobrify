@@ -13,7 +13,6 @@ import {
   getDocs,
   getDoc,
   query,
-  where,
   orderBy,
   Timestamp,
 } from 'firebase/firestore'
@@ -270,158 +269,129 @@ export const deleteRecurringService = async (businessId, customerId, serviceId) 
 // ==================== ALERTAS Y RECORDATORIOS ====================
 
 /**
- * Obtener todas las alertas pendientes (vacunas y servicios próximos a vencer)
- * @param {number} daysAhead - Días hacia adelante para buscar alertas (default 7)
+ * Recordatorios de vacunas y servicios: los vencidos y los que vienen.
+ *
+ * Antes eran dos funciones, `getPendingAlerts` y `getOverdueAlerts`, y cada
+ * una recorría TODOS los clientes leyendo sus dos subcolecciones **de a una,
+ * esperando cada lectura antes de pedir la siguiente**. Eran `2 + 4N` viajes
+ * a Firestore encadenados: con 300 clientes, más de mil idas y vueltas en
+ * fila india. La pantalla no estaba colgada en "Cargando alertas...", estaba
+ * haciendo cola — y en la práctica es lo mismo para quien la mira.
+ *
+ * Ahora es UN recorrido, en paralelo por lotes, que clasifica vencido/próximo
+ * en el mismo pase: `1 + 2N` lecturas y un tiempo que no depende de N.
+ *
+ * También se cayó el filtro que salteaba a los clientes sin mascota cargada
+ * en su ficha. Los recordatorios que crea el POS guardan la mascota en el
+ * propio recordatorio y no tocan la ficha del cliente, así que ese filtro
+ * escondía recordatorios que SÍ existían: el negocio veía "no hay
+ * recordatorios pendientes" con la subcolección llena. Leer de más sale
+ * barato ahora que las lecturas van en paralelo, y sigue siendo la mitad de
+ * lo que se leía antes.
  */
-export const getPendingAlerts = async (businessId, daysAhead = 7) => {
-  const alerts = []
-  const today = new Date()
-  const futureDate = new Date()
-  futureDate.setDate(today.getDate() + daysAhead)
+const LOTE_CLIENTES = 20
 
-  // Obtener todos los clientes
-  const customersRef = collection(db, 'businesses', businessId, 'customers')
-  const customersSnapshot = await getDocs(customersRef)
-
-  for (const customerDoc of customersSnapshot.docs) {
-    const customer = { id: customerDoc.id, ...customerDoc.data() }
-
-    // Solo procesar si tiene datos de mascota (modo veterinaria)
-    if (!customer.petName && (!customer.pets || customer.pets.length === 0)) continue
-
-    // Verificar vacunas próximas
-    const vaccinationsRef = collection(db, 'businesses', businessId, 'customers', customer.id, 'vaccinations')
-    const vaccinationsSnapshot = await getDocs(vaccinationsRef)
-
-    for (const vacDoc of vaccinationsSnapshot.docs) {
-      const vac = vacDoc.data()
-      if (vac.nextDoseDate) {
-        const nextDate = vac.nextDoseDate.toDate()
-        if (nextDate <= futureDate && nextDate >= new Date(today.setHours(0,0,0,0))) {
-          alerts.push({
-            id: vacDoc.id,
-            type: 'vaccination',
-            customerId: customer.id,
-            customerName: customer.name,
-            petName: customer.petName,
-            petSpecies: customer.petSpecies,
-            title: `Vacuna: ${vac.name}`,
-            description: `Refuerzo pendiente`,
-            dueDate: nextDate,
-            phone: customer.phone,
-          })
-        }
-      }
-    }
-
-    // Verificar servicios recurrentes próximos
-    const servicesRef = collection(db, 'businesses', businessId, 'customers', customer.id, 'recurringServices')
-    const servicesSnapshot = await getDocs(servicesRef)
-
-    for (const svcDoc of servicesSnapshot.docs) {
-      const svc = svcDoc.data()
-      if (svc.nextDate) {
-        const nextDate = svc.nextDate.toDate()
-        if (nextDate <= futureDate && nextDate >= new Date(today.setHours(0,0,0,0))) {
-          alerts.push({
-            id: svcDoc.id,
-            type: 'service',
-            customerId: customer.id,
-            customerName: customer.name,
-            // La mascota del recordatorio manda: un cliente puede tener dos
-            // perros, y `customer.petName` es siempre el primero. Sin esto, el
-            // baño de Toby llegaba avisado como si fuera el de Firulais.
-            petName: svc.petName || customer.petName,
-            petSpecies: customer.petSpecies,
-            title: svc.name,
-            description: `Cada ${svc.frequency} días`,
-            dueDate: nextDate,
-            phone: customer.phone,
-          })
-        }
-      }
-    }
+async function enLotes(items, tamano, fn) {
+  const salida = []
+  for (let i = 0; i < items.length; i += tamano) {
+    const lote = items.slice(i, i + tamano)
+    salida.push(...await Promise.all(lote.map(fn)))
   }
-
-  // Ordenar por fecha
-  alerts.sort((a, b) => a.dueDate - b.dueDate)
-
-  return alerts
+  return salida
 }
 
-/**
- * Obtener alertas vencidas (pasadas de fecha)
- */
-export const getOverdueAlerts = async (businessId) => {
-  const alerts = []
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+export const getVeterinaryReminders = async (businessId, daysAhead = 7, onProgress = null) => {
+  const vencidos = []
+  const proximos = []
+  if (!businessId) return { overdue: vencidos, pending: proximos }
 
-  const customersRef = collection(db, 'businesses', businessId, 'customers')
-  const customersSnapshot = await getDocs(customersRef)
+  // Fechas fijas ANTES del recorrido. `today.setHours(...)` dentro del bucle
+  // mutaba la fecha de referencia en cada vuelta.
+  const hoy = new Date()
+  hoy.setHours(0, 0, 0, 0)
+  const hasta = new Date(hoy)
+  hasta.setDate(hasta.getDate() + daysAhead)
+  hasta.setHours(23, 59, 59, 999)
 
-  for (const customerDoc of customersSnapshot.docs) {
-    const customer = { id: customerDoc.id, ...customerDoc.data() }
+  const customersSnapshot = await getDocs(collection(db, 'businesses', businessId, 'customers'))
+  const clientes = customersSnapshot.docs.map(d => ({ id: d.id, ...d.data() }))
+  // El tiempo de esta pantalla es proporcional a la cantidad de pacientes
+  // (los recordatorios viven DENTRO de cada cliente). Se avisa el avance para
+  // que la espera no sea un spinner mudo.
+  let revisados = 0
+  if (onProgress) onProgress({ revisados: 0, total: clientes.length })
 
-    if (!customer.petName && (!customer.pets || customer.pets.length === 0)) continue
-
-    // Vacunas vencidas
-    const vaccinationsRef = collection(db, 'businesses', businessId, 'customers', customer.id, 'vaccinations')
-    const vaccinationsSnapshot = await getDocs(vaccinationsRef)
-
-    for (const vacDoc of vaccinationsSnapshot.docs) {
-      const vac = vacDoc.data()
-      if (vac.nextDoseDate) {
-        const nextDate = vac.nextDoseDate.toDate()
-        if (nextDate < today) {
-          alerts.push({
-            id: vacDoc.id,
-            type: 'vaccination',
-            customerId: customer.id,
-            customerName: customer.name,
-            petName: customer.petName,
-            petSpecies: customer.petSpecies,
-            title: `Vacuna: ${vac.name}`,
-            description: `Refuerzo VENCIDO`,
-            dueDate: nextDate,
-            phone: customer.phone,
-            overdue: true,
-          })
-        }
-      }
-    }
-
-    // Servicios vencidos
-    const servicesRef = collection(db, 'businesses', businessId, 'customers', customer.id, 'recurringServices')
-    const servicesSnapshot = await getDocs(servicesRef)
-
-    for (const svcDoc of servicesSnapshot.docs) {
-      const svc = svcDoc.data()
-      if (svc.nextDate) {
-        const nextDate = svc.nextDate.toDate()
-        if (nextDate < today) {
-          alerts.push({
-            id: svcDoc.id,
-            type: 'service',
-            customerId: customer.id,
-            customerName: customer.name,
-            petName: svc.petName || customer.petName,
-            petSpecies: customer.petSpecies,
-            title: svc.name,
-            description: `VENCIDO - Cada ${svc.frequency} días`,
-            dueDate: nextDate,
-            phone: customer.phone,
-            overdue: true,
-          })
-        }
-      }
-    }
+  const aFecha = (valor) => {
+    if (!valor) return null
+    const d = valor.toDate ? valor.toDate() : new Date(valor)
+    return isNaN(d.getTime()) ? null : d
   }
 
-  alerts.sort((a, b) => a.dueDate - b.dueDate)
+  /** Clasifica un recordatorio según su fecha: vencido, próximo, o ninguno. */
+  const clasificar = (fecha, alerta) => {
+    if (!fecha) return
+    if (fecha < hoy) vencidos.push({ ...alerta, dueDate: fecha, overdue: true })
+    else if (fecha <= hasta) proximos.push({ ...alerta, dueDate: fecha })
+  }
 
-  return alerts
+  await enLotes(clientes, LOTE_CLIENTES, async (customer) => {
+    const base = { customerId: customer.id, customerName: customer.name, phone: customer.phone, petSpecies: customer.petSpecies }
+
+    const [vacunas, servicios] = await Promise.all([
+      getDocs(collection(db, 'businesses', businessId, 'customers', customer.id, 'vaccinations')),
+      getDocs(collection(db, 'businesses', businessId, 'customers', customer.id, 'recurringServices')),
+    ])
+
+    vacunas.docs.forEach(vacDoc => {
+      const vac = vacDoc.data()
+      const fecha = aFecha(vac.nextDoseDate)
+      clasificar(fecha, {
+        ...base,
+        id: vacDoc.id,
+        type: 'vaccination',
+        petName: vac.petName || customer.petName,
+        title: `Vacuna: ${vac.name}`,
+        description: fecha && fecha < hoy ? 'Refuerzo VENCIDO' : 'Refuerzo próximo',
+      })
+    })
+
+    servicios.docs.forEach(svcDoc => {
+      const svc = svcDoc.data()
+      const fecha = aFecha(svc.nextDate)
+      clasificar(fecha, {
+        ...base,
+        id: svcDoc.id,
+        type: 'service',
+        // La mascota del recordatorio manda: un cliente puede tener dos
+        // perros, y `customer.petName` es siempre el primero. Sin esto, el
+        // baño de Toby llegaba avisado como si fuera el de Firulais.
+        petName: svc.petName || customer.petName,
+        title: svc.name,
+        description: `${fecha && fecha < hoy ? 'VENCIDO - ' : ''}Cada ${svc.frequency} días`,
+      })
+    })
+
+    revisados++
+    if (onProgress && (revisados % LOTE_CLIENTES === 0 || revisados === clientes.length)) {
+      onProgress({ revisados, total: clientes.length })
+    }
+  })
+
+  // Mismo criterio que los recordatorios de ventas: lo próximo hacia adelante,
+  // lo vencido de más reciente a más viejo.
+  return {
+    overdue: vencidos.sort((a, b) => b.dueDate - a.dueDate),
+    pending: proximos.sort((a, b) => a.dueDate - b.dueDate),
+  }
 }
+
+/** @deprecated Usar getVeterinaryReminders: hace el recorrido una sola vez. */
+export const getPendingAlerts = async (businessId, daysAhead = 7) =>
+  (await getVeterinaryReminders(businessId, daysAhead)).pending
+
+/** @deprecated Usar getVeterinaryReminders: hace el recorrido una sola vez. */
+export const getOverdueAlerts = async (businessId) =>
+  (await getVeterinaryReminders(businessId, 0)).overdue
 
 // ==================== TIPOS DE CONSULTA PREDEFINIDOS ====================
 

@@ -14,6 +14,7 @@
 import { COLUMNAS_GRE_TRANSPORTISTA, VALORES_GRE_TRANSPORTISTA } from './bulkCarrierGuideTemplateService'
 import { validateDocument, ID_TYPES } from '@/utils/peruUtils'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
+import { esUnidadValida, normalizeSunatUnit } from '@/data/sunatUnits'
 
 export const LIMITE_GUIAS = 500
 export const MAX_DIAS_ATRAS = 3
@@ -259,9 +260,13 @@ export async function parsearExcelGreTransportista(buffer, { hoy = new Date() } 
       if (!descripcion) error(fila, 'DESCRIPCIÓN DE LA CARGA', 'Falta la descripción de la carga.')
       if (cantidad === null || cantidad <= 0) error(fila, 'CANTIDAD', 'La cantidad debe ser mayor a 0.')
 
-      const unidadTexto = normalizar(valores.UNIDAD) || 'NIU - UNIDAD'
-      const enLista = VALORES_GRE_TRANSPORTISTA.UNIDAD.find((u) => normalizar(u) === unidadTexto || normalizar(u).split(' - ')[0] === unidadTexto)
-      if (!enLista) error(fila, 'UNIDAD', `Unidad "${valores.UNIDAD}" no válida. Usa el desplegable de la plantilla.`)
+      // Contra el catálogo 03 entero, no contra la lista de la plantilla:
+      // mismo criterio que la plantilla de comprobantes.
+      const unidadTexto = String(valores.UNIDAD ?? '').trim()
+      if (unidadTexto && !esUnidadValida(unidadTexto)) {
+        error(fila, 'UNIDAD', `Unidad "${valores.UNIDAD}" no válida. Usa el desplegable de la plantilla.`)
+      }
+      const unidadCodigo = unidadTexto ? normalizeSunatUnit(unidadTexto) : 'NIU'
 
       // Los tres códigos son OPCIONALES y ninguno bloquea: el código interno es
       // el único que hoy viaja en el XML (como SellersItemIdentification); el
@@ -284,7 +289,7 @@ export async function parsearExcelGreTransportista(buffer, { hoy = new Date() } 
         fila,
         description: descripcion,
         quantity: cantidad ?? 0,
-        unit: (enLista || 'NIU - UNIDAD').split(' - ')[0],
+        unit: unidadCodigo,
         code: codigoInterno,
         sunatCode: codigoSunat,
         gtin,

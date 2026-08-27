@@ -1415,10 +1415,25 @@ export default function Tables() {
       // Config del negocio: si el dueño apagó la impresión automática, la comanda
       // se manda solo con el botón "Imprimir Comanda" del modal de la mesa.
       if (!autoPrintKitchenComanda) return
-      if (!Capacitor.isNativePlatform()) return
       if (!selectedOrder || !selectedTable) return
       const items = (addedItems || []).filter(Boolean)
       if (items.length === 0) return
+
+      // NAVEGADOR: no hay impresión térmica (los plugins son de la app), pero sí
+      // el ticket web que ya usa el botón manual. Antes acá había un `return` y
+      // la comanda automática sencillamente no salía en la computadora — sin
+      // ningún aviso, así que parecía que la opción no funcionaba. Es el mismo
+      // camino que el POS ya usa para su comanda automática.
+      if (!Capacitor.isNativePlatform()) {
+        kitchenAutoPrintInProgressRef.current = true
+        setOrderToPrint({ ...selectedOrder, items, _ultraCompact: ultraCompactKitchen })
+        await markItemsAsPrinted(selectedOrder)
+        setTimeout(() => {
+          handlePrintWeb()
+          kitchenAutoPrintInProgressRef.current = false
+        }, 300)
+        return
+      }
 
       const businessId = getBusinessId()
       const printerConfigResult = await getPrinterConfig(businessId)

@@ -52,11 +52,14 @@ import {
   Trash2,
   Edit,
   Search,
+  MapPin,
 } from 'lucide-react'
+import { filtrarPorSucursal, nombreDeSucursal, sucursalParaGuardar } from '@/utils/branchScope'
+import GuideLink from '@/components/guide/GuideLink'
 
 export default function VeterinaryAgenda() {
   const navigate = useNavigate()
-  const { user, getBusinessId, isDemoMode, businessMode } = useAppContext()
+  const { user, getBusinessId, isDemoMode, businessMode, branchScope, branches } = useAppContext()
 
   /**
    * La agenda nació para veterinarias, pero cualquier negocio que atienda con
@@ -98,6 +101,10 @@ export default function VeterinaryAgenda() {
   const [walkInMode, setWalkInMode] = useState('existing') // 'existing' | 'new'
   const [schedDate, setSchedDate] = useState('')
   const [schedTime, setSchedTime] = useState('09:00')
+  // A qué local va la cita. Con el selector del header en "Todas" no hay una
+  // respuesta obvia, así que el modal pregunta en vez de adivinar: agendar sin
+  // querer en la sede equivocada es justo lo que hay que evitar.
+  const [schedBranch, setSchedBranch] = useState('')
   // Citas ya tomadas del día elegido, para ver la disponibilidad al agendar
   const [schedDayAppts, setSchedDayAppts] = useState([])
   const [customers, setCustomers] = useState([])
@@ -132,14 +139,20 @@ export default function VeterinaryAgenda() {
     const businessId = getBusinessId()
     const start = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1, 0, 0, 0)
     const end = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59)
+    // El filtro por sucursal se hace acá, sobre el único origen de datos de la
+    // pantalla: el calendario, el día, las estadísticas y los huecos libres
+    // salen todos de `monthAppointments`, así que ninguno puede quedarse con
+    // las citas del otro local. Va en memoria y no en la consulta porque
+    // Firestore no indexa los documentos sin `branchId` y el histórico entero
+    // se quedaría afuera.
     const unsubscribe = subscribeAppointmentsByDateRange(
       businessId, start, end,
-      (appts) => { setMonthAppointments(appts); setIsLoading(false) },
+      (appts) => { setMonthAppointments(filtrarPorSucursal(appts, branchScope)); setIsLoading(false) },
       () => { toast.error('Error al cargar las citas'); setIsLoading(false) },
     )
     return () => unsubscribe()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.uid, currentMonth, isDemoMode])
+  }, [user?.uid, currentMonth, isDemoMode, branchScope])
 
   // Las acciones (agendar, cancelar, completar) siguen llamando a esto por
   // costumbre; ya no hace falta porque el snapshot se entera solo. Se deja
@@ -234,6 +247,21 @@ export default function VeterinaryAgenda() {
     return date.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
   }
 
+  /**
+   * Chip con el local de la cita. Solo aparece con el selector del header en
+   * "Todas las sucursales": ahí conviven citas de los dos lados y sin esto no
+   * hay forma de saber cuál es de cuál. Viendo un local solo sobra.
+   */
+  const varios = (branches || []).length > 0
+  const chipDeLocal = (appt) => {
+    if (!varios || (branchScope || 'all') !== 'all') return null
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
+        <MapPin className="w-3 h-3" /> {nombreDeSucursal(appt.branchId, branches)}
+      </span>
+    )
+  }
+
   const getStatusBadge = (status) => {
     const config = APPOINTMENT_STATUS[status] || APPOINTMENT_STATUS.scheduled
     const colorMap = {
@@ -311,7 +339,7 @@ export default function VeterinaryAgenda() {
       const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0)
       const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
       const appts = await getAppointmentsByDateRange(businessId, start, end)
-      setInProgress(appts.filter(a => a.status === 'in_progress'))
+      setInProgress(filtrarPorSucursal(appts, branchScope).filter(a => a.status === 'in_progress'))
     } catch (e) {
       console.error('Error al cargar en atención:', e)
     }
@@ -320,7 +348,7 @@ export default function VeterinaryAgenda() {
   useEffect(() => {
     if (view === 'attention') loadInProgress()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, monthAppointments])
+  }, [view, monthAppointments, branchScope])
 
   const openWalkIn = async (intent = 'now', { time } = {}) => {
     setWalkInIntent(intent)
@@ -331,6 +359,7 @@ export default function VeterinaryAgenda() {
     setNewClient({ documentType: ID_TYPES.DNI, documentNumber: '', name: '', phone: '' })
     setNewPet({ name: '', species: '' })
     setWalkInServices([{ serviceId: '', serviceName: '', price: '' }])
+    setSchedBranch(sucursalParaGuardar(branchScope))
     if (intent === 'schedule') {
       // Arranca con el día que está seleccionado en el calendario: el flujo
       // natural es "clic en el día → clic en la hora libre".
@@ -367,7 +396,10 @@ export default function VeterinaryAgenda() {
         const appts = await getAppointmentsByDate(getBusinessId(), new Date(y, m - 1, d))
         if (alive) {
           setSchedDayAppts(
-            appts
+            // Contra la sucursal ELEGIDA en el modal, no contra la del header:
+            // una hora ocupada en un local no ocupa nada en el otro, que era
+            // justamente lo que impedía dar la misma hora en las dos sedes.
+            filtrarPorSucursal(appts, schedBranch || 'main')
               .filter(a => a.status !== 'cancelled' && a.status !== 'no_show')
               .sort((a, b) => {
                 const dA = a.scheduledDate?.toDate ? a.scheduledDate.toDate() : new Date(a.scheduledDate)
@@ -382,7 +414,7 @@ export default function VeterinaryAgenda() {
     })()
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [walkInOpen, walkInIntent, schedDate])
+  }, [walkInOpen, walkInIntent, schedDate, schedBranch])
 
   const selectWalkInCustomer = (c) => {
     setWalkInCustomer(c)
@@ -547,6 +579,7 @@ export default function VeterinaryAgenda() {
         ? schedTime
         : `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
       const id = await createAppointment(businessId, {
+        branchId: schedBranch,
         customerId, customerName, petName, petSpecies, petId, phone,
         serviceName: svcName,
         servicePrice: price,
@@ -740,7 +773,10 @@ export default function VeterinaryAgenda() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Agenda de Citas</h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Agenda de Citas</h1>
+            <GuideLink />
+          </div>
           <p className="text-sm sm:text-base text-gray-600 mt-1 capitalize">{formatDate(selectedDate)}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -791,6 +827,7 @@ export default function VeterinaryAgenda() {
                       <span className="font-semibold text-gray-900 truncate">{appt.serviceName}</span>
                       <Badge variant="warning" className="ml-auto flex-shrink-0">En atención</Badge>
                     </div>
+                    {chipDeLocal(appt) && <div className="mb-2">{chipDeLocal(appt)}</div>}
                     {esVeterinaria ? (
                       <>
                         <p className="text-sm text-gray-800 flex items-center gap-1">
@@ -916,7 +953,9 @@ export default function VeterinaryAgenda() {
           onPickSlot={(hora) => openWalkIn('schedule', { time: hora })}
           onPrevDay={() => changeDate(-1)}
           onNextDay={() => changeDate(1)}
-          renderStatus={(a) => getStatusBadge(a.status)}
+          renderStatus={(a) => (
+            <span className="inline-flex items-center gap-1.5">{getStatusBadge(a.status)}{chipDeLocal(a)}</span>
+          )}
           renderActions={renderApptActions}
         />
       </div>
@@ -970,6 +1009,26 @@ export default function VeterinaryAgenda() {
           fecha, hora y la disponibilidad del día elegido. */}
       <Modal isOpen={walkInOpen} onClose={() => !savingWalkIn && setWalkInOpen(false)} title={walkInIntent === 'schedule' ? 'Agendar cita' : 'Atender ahora'} size="lg">
         <div className="space-y-4">
+          {/* ===== LOCAL (solo si el negocio tiene más de uno) ===== */}
+          {(branches || []).length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Local</label>
+              <select
+                value={schedBranch}
+                onChange={(e) => setSchedBranch(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              >
+                <option value="">Principal</option>
+                {(branches || []).map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                La agenda de cada local es independiente: la misma hora puede estar libre en uno y ocupada en otro.
+              </p>
+            </div>
+          )}
+
           {/* ===== FECHA, HORA Y DISPONIBILIDAD (solo al agendar) ===== */}
           {walkInIntent === 'schedule' && (
             <div className="space-y-2">

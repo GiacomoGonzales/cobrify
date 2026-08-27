@@ -3,11 +3,12 @@ import { getRealPayments } from '@/utils/receivables'
 import { getNotaVentaLegend } from '@/utils/documentLegends'
 import React from 'react'
 import { QRCodeSVG } from 'qrcode.react'
-import { formatPricedModifierLines } from '@/utils/modifierHelpers'
+import { getItemPriceBreakdown } from '@/utils/modifierHelpers'
 import { unitDisplayName } from '@/data/sunatUnits'
 import { getComprobanteBreakdown } from '@/utils/peruUtils'
 import { formatQuantity } from '@/lib/utils'
 import { getTicketFooterParts } from '@/utils/ticketFooter'
+import { vinculoDe } from '@/utils/documentLinks'
 
 /**
  * Componente de Ticket Imprimible según formato SUNAT
@@ -757,6 +758,20 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
             <span>{Number(invoice.validityDays)} día{Number(invoice.validityDays) !== 1 ? 's' : ''}</span>
           </div>
         )}
+        {/* El vínculo con el otro documento, en los dos sentidos: la cotización
+            dice con qué se facturó y el comprobante de qué cotización salió. */}
+        {vinculoDe(invoice.convertedTo)?.numero && (
+          <div className="info-row">
+            <span className="info-label">Facturado con:</span>
+            <span>{vinculoDe(invoice.convertedTo).numero}</span>
+          </div>
+        )}
+        {vinculoDe(invoice.convertedFrom)?.numero && (
+          <div className="info-row">
+            <span className="info-label">{vinculoDe(invoice.convertedFrom).tipo === 'quotation' ? 'Cotización:' : 'Doc. origen:'}</span>
+            <span>{vinculoDe(invoice.convertedFrom).numero}</span>
+          </div>
+        )}
       </div>
 
       {/* Datos del Cliente */}
@@ -957,15 +972,25 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
             // tomaba por "vacio", saltaba al otro campo (inexistente) e imprimia
             // NaN en el comprobante (reporte 18-ago-2026).
             const unitario = item.price ?? item.unitPrice ?? 0;
-            const lineTotal = (Number(item.quantity) || 0) * unitario;
+            // Precio de LISTA y adicionales aparte: el guardado ya los incluye,
+            // y mostrarlo junto a un "(+S/2.00)" hacía que el cliente sumara de
+            // más. Ver getItemPriceBreakdown.
+            const desglose = getItemPriceBreakdown(item, unitario, item.quantity);
+            const lineTotal = desglose.baseTotal;
 
             return (
               <div key={index} className="item-row">
                 <div className="item-desc">{showItemUnit ? `${qtyFormatted} ${measureUnit}  ${cleanName}` : itemName}</div>
                 <div className="item-details">
-                  <span style={{ whiteSpace: 'normal' }}>{qtyFormatted}{unitSuffix} x {formatCurrency(unitario)}</span>
+                  <span style={{ whiteSpace: 'normal' }}>{qtyFormatted}{unitSuffix} x {formatCurrency(desglose.baseUnit)}</span>
                   <span style={{ whiteSpace: 'nowrap' }}>{formatCurrency(lineTotal)}</span>
                 </div>
+                {desglose.lineas.map((l, i) => (
+                  <div key={`adic-${i}`} className="item-details">
+                    <span style={{ whiteSpace: 'normal' }}>+ {l.texto}</span>
+                    <span style={{ whiteSpace: 'nowrap' }}>{formatCurrency(l.monto)}</span>
+                  </div>
+                ))}
                 {itemDiscount > 0 && (
                   <div className="item-details">
                     <span>Dsct.</span>
@@ -1000,9 +1025,6 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
                 {itemObservations && (
                   <div className="item-code">{itemObservations}</div>
                 )}
-                {formatPricedModifierLines(item).map((line, lineIdx) => (
-                  <div key={`mod-${lineIdx}`} className="item-code">{line}</div>
-                ))}
               </div>
             );
           })}

@@ -45,7 +45,7 @@ import { getActiveBranches } from '@/services/branchService'
 import { cleanBranchPrices } from '@/utils/branchPricing'
 import {
   MAIN_BRANCH_TOKEN, buildHiddenFromSelection, buildSelectionFromHidden,
-  isProductInBranch, getBranchScopeLabel,
+  filterProductsForBranch, filterCategoriesForBranch, getBranchScopeLabel,
 } from '@/utils/branchCatalog'
 import { needsRestock } from '@/utils/stockAlerts'
 import { isPharmaLikeMode } from '@/utils/businessModes'
@@ -316,11 +316,25 @@ export default function Products() {
   // primer render — y no lo agarra el build, solo el navegador.
   const branchCatalogOn = businessSettings?.branchCatalogEnabled === true && branches.length > 0
 
+  // Declarado ACÁ, antes de los useMemo que lo consumen: un `const` usado
+  // antes de su línea revienta en tiempo de ejecución ("Cannot access before
+  // initialization") y `vite build` NO lo detecta — solo el navegador.
+  const [categories, setCategories] = useState([])
+
   const scopedProducts = React.useMemo(() => {
     if (!branchCatalogOn || !branchScope || branchScope === 'all') return products
     const branchId = branchScope === MAIN_BRANCH_TOKEN ? null : branchScope
-    return products.filter(p => isProductInBranch(p, branchId))
-  }, [products, branchScope, branchCatalogOn])
+    // También caen los que están en una categoría oculta en esta sede: si no,
+    // se esconde el rótulo y los artículos quedan sueltos, que es peor.
+    return filterProductsForBranch(products, branchId, true, categories)
+  }, [products, branchScope, branchCatalogOn, categories])
+
+  /** Categorías visibles en la sede elegida en el header. */
+  const scopedCategories = React.useMemo(() => {
+    if (!branchCatalogOn || !branchScope || branchScope === 'all') return categories
+    const branchId = branchScope === MAIN_BRANCH_TOKEN ? null : branchScope
+    return filterCategoriesForBranch(categories, branchId, true)
+  }, [categories, branchScope, branchCatalogOn])
 
   /**
    * Almacenes donde tiene sentido cargarle stock a ESTE producto.
@@ -383,11 +397,13 @@ export default function Products() {
   const [editingVariant, setEditingVariant] = useState(null)
 
   // Category management state
-  const [categories, setCategories] = useState([])
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [parentCategoryId, setParentCategoryId] = useState(null)
   const [editingCategory, setEditingCategory] = useState(null)
+  // Sedes donde la categoría está DISPONIBLE (mismo modelo que los productos:
+  // el formulario razona en positivo y se guarda en negativo).
+  const [categoryBranches, setCategoryBranches] = useState([])
   const [categoryShowInCatalog, setCategoryShowInCatalog] = useState(true)
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all')
   // Categoría raíz cuya rama de subcategorías está expandida. Una sola raíz expandida
@@ -3032,6 +3048,7 @@ export default function Products() {
         parentId: parentCategoryId,
         showInCatalog: categoryShowInCatalog,
         order: maxOrder + 1,
+        ...(branchCatalogOn && { hiddenInBranches: buildHiddenFromSelection(categoryBranches, branches) }),
       }
 
       const updatedCategories = [...categories, newCategory]
@@ -3056,6 +3073,7 @@ export default function Products() {
     setNewCategoryName(category.name)
     setParentCategoryId(category.parentId)
     setCategoryShowInCatalog(category.showInCatalog !== false)
+    setCategoryBranches(buildSelectionFromHidden(category, branches))
   }
 
   const handleUpdateCategory = async () => {
@@ -3064,7 +3082,13 @@ export default function Products() {
     try {
       const updatedCategories = categories.map(cat =>
         cat.id === editingCategory.id
-          ? { ...cat, name: newCategoryName.trim(), parentId: parentCategoryId, showInCatalog: categoryShowInCatalog }
+          ? {
+            ...cat,
+            name: newCategoryName.trim(),
+            parentId: parentCategoryId,
+            showInCatalog: categoryShowInCatalog,
+            ...(branchCatalogOn && { hiddenInBranches: buildHiddenFromSelection(categoryBranches, branches) }),
+          }
           : cat
       )
       setCategories(updatedCategories)
@@ -5218,7 +5242,7 @@ export default function Products() {
               </button>
               {/* Render root categories. Subcategorías solo se muestran si su raíz
                   está expandida. Click en raíz: filtra + (si tiene subs) toggle expansión. */}
-              {getRootCategories(categories).map((category) => {
+              {getRootCategories(scopedCategories).map((category) => {
                 const subcats = getSubcategories(categories, category.id)
                 const hasSubs = subcats.length > 0
                 const isExpanded = expandedRootCategoryId === category.id
@@ -8084,11 +8108,11 @@ export default function Products() {
                   <Input
                     label="Recordar servicio (días)"
                     type="number"
-                    min="1"
+                    min="0"
                     placeholder="30"
                     error={errors.reminderDays?.message}
                     {...register('reminderDays')}
-                    helperText="Al cobrar este servicio se programa solo el recordatorio de la mascota. Ej: baño 30, desparasitación 90. Vacío = no recuerda nada."
+                    helperText="Vacío = usa el plazo del negocio (Configuración > Ventas). Pon un número para darle su propio plazo (ej: desparasitación 90) o 0 para que este producto no genere recordatorio."
                   />
                 )}
 
@@ -9626,6 +9650,38 @@ export default function Products() {
                 <EyeOff className="w-4 h-4 text-gray-400" />
               )}
             </label>
+
+            {/* En qué locales se ve esta categoría.
+                Marcar producto por producto no escala: un local carga cincuenta
+                artículos y el otro los ve todos. Ocultar la categoría resuelve
+                de una — y se lleva sus subcategorías y sus productos. */}
+            {branchCatalogOn && (
+              <div className="pt-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Se ve en
+                </label>
+                <div className="space-y-1.5">
+                  {[{ key: MAIN_BRANCH_TOKEN, name: businessSettings?.mainBranchName || 'Sucursal Principal' },
+                    ...branches.map(b => ({ key: b.id, name: b.name }))].map(sede => (
+                    <label key={sede.key} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={categoryBranches.includes(sede.key)}
+                        onChange={e => setCategoryBranches(prev => (
+                          e.target.checked ? [...prev, sede.key] : prev.filter(k => k !== sede.key)
+                        ))}
+                        className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                      />
+                      <span className="text-sm text-gray-700">{sede.name}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 mt-1.5">
+                  Al desmarcar un local, ahí dejan de verse la categoría, sus subcategorías
+                  y los productos que tenga dentro. El stock no se toca.
+                </p>
+              </div>
+            )}
 
             <div className="flex gap-2">
               <Button

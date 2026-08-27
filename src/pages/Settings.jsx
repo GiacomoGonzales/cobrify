@@ -74,6 +74,7 @@ import {
   deleteAllProductions,
   countDocuments
 } from '@/services/bulkDeleteService'
+import { DIAS_RECORDATORIO_POR_DEFECTO, diasPorDefectoDelNegocio } from '@/utils/vetReminders'
 
 // URL base de producción para el catálogo público
 const PRODUCTION_URL = 'https://cobrifyperu.com'
@@ -473,6 +474,8 @@ export default function Settings() {
   const [autoResetPOS, setAutoResetPOS] = useState(false)
   const [autoPrintTicket, setAutoPrintTicket] = useState(false)
   const [showChangeReminder, setShowChangeReminder] = useState(false)
+  // Días que se recuerda un producto/servicio cuando su ficha no dice otra cosa.
+  const [vetReminderDefaultDays, setVetReminderDefaultDays] = useState(DIAS_RECORDATORIO_POR_DEFECTO)
   const [lockCashRegisterHistory, setLockCashRegisterHistory] = useState(false)
   const [allowEditNotaVenta, setAllowEditNotaVenta] = useState(false)
   const [showAllProductsInPOS, setShowAllProductsInPOS] = useState(false)
@@ -1360,6 +1363,7 @@ export default function Settings() {
         setAutoResetPOS(businessData.autoResetPOS || false)
         setAutoPrintTicket(businessData.autoPrintTicket || false)
         setShowChangeReminder(businessData.showChangeReminder || false)
+        setVetReminderDefaultDays(diasPorDefectoDelNegocio(businessData))
         setLockCashRegisterHistory(businessData.lockCashRegisterHistory || false)
         setAllowEditNotaVenta(businessData.allowEditNotaVenta || false)
         setShowAllProductsInPOS(businessData.showAllProductsInPOS || false)
@@ -4218,6 +4222,7 @@ export default function Settings() {
                         { id: 'public-catalog', label: 'Mi Catálogo Online', description: 'Catálogo digital para compartir con tus clientes y recibir pedidos' },
                         { id: 'hotel-rooms', label: 'Habitaciones', description: 'Gestión de habitaciones y estados' },
                         { id: 'hotel-reservations', label: 'Reservas', description: 'Reservas, check-in y check-out' },
+                        { id: 'online-orders', label: 'Pedidos Online', description: 'Bandeja de pedidos que llegan desde tu carta digital' },
                         { id: 'hotel-services', label: 'Servicios', description: 'Piscina, juegos, eventos y áreas' },
                         { id: 'hotel-housekeeping', label: 'Housekeeping', description: 'Limpieza y mantenimiento de habitaciones' },
                         { id: 'hotel-audit', label: 'Auditoría y Tarifas', description: 'Auditoría nocturna y tarifas por temporada' },
@@ -5405,6 +5410,31 @@ export default function Settings() {
                       : '✗ Deshabilitado: No se mostrará ningún aviso de vuelto al completar la venta.'}
                   />
 
+                  {/* Recordatorios de servicios. Solo donde hay pacientes: el
+                      recordatorio se guarda en la ficha del cliente. */}
+                  {businessMode === 'veterinary' && (
+                    <div id="opcion-vetReminderDefaultDays" className="p-3 rounded-lg border border-gray-200">
+                      <div className="text-sm font-medium text-gray-900">Recordar cada venta a los</div>
+                      <div className="flex items-center gap-2 mt-2">
+                        <input
+                          type="number"
+                          min="0"
+                          value={vetReminderDefaultDays}
+                          onChange={(e) => setVetReminderDefaultDays(e.target.value)}
+                          className="w-20 text-center px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        />
+                        <span className="text-sm text-gray-600">días</span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        Todo lo que cobres a un cliente registrado aparecerá en Recordatorios pasados
+                        esos días. Si un producto necesita otro plazo, ponle el suyo en su ficha
+                        (Productos y Servicios); si no debe recordarse nunca, ponle 0 ahí.
+                        Las ventas sin cliente no generan recordatorio.
+                        Con 0 acá, solo se recuerdan los productos que tengan su plazo configurado.
+                      </p>
+                    </div>
+                  )}
+
                   {/* Programa de fidelización: se administra COMPLETO desde
                       Clientes (programa + diseño de la tarjeta de Wallet +
                       tarjetas de cada cliente). Acá solo queda el puntero
@@ -6142,6 +6172,7 @@ export default function Settings() {
                       autoResetPOS: autoResetPOS,
                       autoPrintTicket: autoPrintTicket,
                       showChangeReminder: showChangeReminder,
+                      vetReminderDefaultDays: Number(vetReminderDefaultDays) || 0,
                       lockCashRegisterHistory: lockCashRegisterHistory,
                       allowEditNotaVenta: allowEditNotaVenta,
                       showAllProductsInPOS: showAllProductsInPOS,

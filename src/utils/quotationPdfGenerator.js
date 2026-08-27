@@ -10,6 +10,7 @@ import { Share } from '@capacitor/share'
 import { resolveBranchCompanyInfo } from '@/utils/companyDisplay'
 import { getWalletLogoDataUrl } from '@/utils/walletLogos'
 import { unitDisplayName } from '@/data/sunatUnits'
+import { vinculoDe } from '@/utils/documentLinks'
 
 // Sistema de caché compartido con pdfGenerator
 const LOGO_CACHE_KEY = 'cobrify_logo_cache'
@@ -836,6 +837,16 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   doc.setFont('helvetica', 'normal')
   doc.text(currencyName, rightValueX, rightY)
   rightY += dataLineHeight
+
+  // En qué comprobante terminó (si ya se facturó)
+  const destino = vinculoDe(quotation.convertedTo)
+  if (destino && destino.numero) {
+    doc.setFont('helvetica', 'bold')
+    doc.text('FACTURADO CON:', colRightX, rightY)
+    doc.setFont('helvetica', 'normal')
+    doc.text(destino.numero, rightValueX, rightY)
+    rightY += dataLineHeight
+  }
 
   // Destinatario (si existe)
   if (quotation.recipientName) {

@@ -24,9 +24,10 @@ import {
 } from '@/services/veterinaryService'
 import { createAppointment } from '@/services/appointmentService'
 import { normalizePets } from '@/utils/petUtils'
+import { sucursalParaGuardar } from '@/utils/branchScope'
 
 export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
-  const { getBusinessId, isDemoMode, demoData } = useAppContext()
+  const { getBusinessId, isDemoMode, demoData, branchScope } = useAppContext()
   const toast = useToast()
 
   const [isLoading, setIsLoading] = useState(true)
@@ -256,6 +257,9 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
         services: selectedServices,
         scheduledDate: formData.date,
         scheduledTime: formData.time,
+        // La cita queda en el local donde se está atendiendo; sin esto saldría
+        // en la agenda de todos.
+        branchId: sucursalParaGuardar(branchScope),
         notes: formData.notes,
       })
 

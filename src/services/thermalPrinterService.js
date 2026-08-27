@@ -4,13 +4,15 @@ import { getNotaVentaLegend, wrapLegend } from '@/utils/documentLegends'
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { prepareLogoForPrinting, prepareLogoRasterForEscPos } from './imageProcessingService';
 import * as BLEPrinter from './blePrinterService';
-import { getPricedModifiers } from '@/utils/modifierHelpers';
+import { getItemPriceBreakdown } from '@/utils/modifierHelpers';
 import { unitDisplayName } from '@/data/sunatUnits';
 import { getComprobanteBreakdown } from '@/utils/peruUtils';
 import { buildKitchenLines, stationsForOrder } from '@/utils/kitchenComandaFormat';
 import { getSessionMoneyTotals } from '@/utils/cashTotals';
 import { getTicketFooterParts, justifyTicketText } from '@/utils/ticketFooter';
 import { formatQuantity } from '@/lib/utils'
+import { altoDeLinea } from '@/utils/escposCharSize';
+import { vinculoDe } from '@/utils/documentLinks';
 
 /**
  * Servicio para manejar impresoras térmicas WiFi/Bluetooth
@@ -858,10 +860,22 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
         // Formatear cantidad: con decimales si tiene, sino entero
         const qtyFormatted = formatQuantity(item.quantity);
         const unitSuffix = item.unit && item.allowDecimalQuantity ? item.unit.toLowerCase() : '';
-        const qtyAndPrice = `${qtyFormatted}${unitSuffix} X ${currencySymbol} ${unitPrice.toFixed(2)}`;
-        const totalStr = `${currencySymbol} ${itemTotal.toFixed(2)}`;
+        // Precio de LISTA y cada adicional como una línea que suma. Antes se
+        // mostraba el precio ya con adicionales y debajo "+ Grande (+S/2.00)":
+        // el cliente sumaba los dos números, no le cuadraba con el total y
+        // desconfiaba. Ver getItemPriceBreakdown.
+        const desglose80 = getItemPriceBreakdown(item, unitPrice, item.quantity);
+        const qtyAndPrice = `${qtyFormatted}${unitSuffix} X ${currencySymbol} ${desglose80.baseUnit.toFixed(2)}`;
+        const totalStr = `${currencySymbol} ${desglose80.baseTotal.toFixed(2)}`;
         const spaceBetween = lineWidth - qtyAndPrice.length - totalStr.length;
         itemsText += `${qtyAndPrice}${' '.repeat(Math.max(1, spaceBetween))}${totalStr}\n`;
+
+        desglose80.lineas.forEach((l) => {
+          const etiqueta = `  + ${convertSpanishText(l.texto)}`;
+          const monto = `${currencySymbol} ${l.monto.toFixed(2)}`;
+          const hueco = lineWidth - etiqueta.length - monto.length;
+          itemsText += `${etiqueta}${' '.repeat(Math.max(1, hueco))}${monto}\n`;
+        });
 
         // Línea de descuento por ítem si existe
         if (itemDiscount > 0) {
@@ -904,15 +918,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
           itemsText += `  ${itemObservations}\n`;
         }
 
-        // Modificadores con precio (los gratis solo van a cocina)
-        const pricedMods80 = getPricedModifiers(item);
-        pricedMods80.forEach((modifier) => {
-          modifier.options.forEach((option) => {
-            const qty = option.quantity > 1 ? `${option.quantity}x ` : '';
-            const totalAdj = (option.priceAdjustment || 0) * (option.quantity || 1);
-            itemsText += `  + ${qty}${convertSpanishText(option.optionName)} (+${currencySymbol} ${totalAdj.toFixed(2)})\n`;
-          });
-        });
+        // (los adicionales van junto al precio, arriba)
       } else {
         // FORMATO 58MM - IGUAL QUE 80MM pero adaptado al ancho de 24 caracteres
         // Línea 1: Nombre del producto completo (con unidad/presentacion opcional)
@@ -922,10 +928,20 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
         // Formatear cantidad: con decimales si tiene, sino entero
         const qtyFormatted = formatQuantity(item.quantity);
         const unitSuffix = item.unit && item.allowDecimalQuantity ? item.unit.toLowerCase() : '';
-        const qtyAndPrice = `${qtyFormatted}${unitSuffix}x ${currencySymbol} ${unitPrice.toFixed(2)}`;
-        const totalStr = `${currencySymbol} ${itemTotal.toFixed(2)}`;
+        const desglose58 = getItemPriceBreakdown(item, unitPrice, item.quantity);
+        const qtyAndPrice = `${qtyFormatted}${unitSuffix}x ${currencySymbol} ${desglose58.baseUnit.toFixed(2)}`;
+        const totalStr = `${currencySymbol} ${desglose58.baseTotal.toFixed(2)}`;
         const spaceBetween = lineWidth - qtyAndPrice.length - totalStr.length;
         itemsText += `${qtyAndPrice}${' '.repeat(Math.max(1, spaceBetween))}${totalStr}\n`;
+
+        // En 58mm el ancho es de 24 caracteres: la sangría se reduce a uno
+        // para que el nombre del adicional no quede partido.
+        desglose58.lineas.forEach((l) => {
+          const etiqueta = ` + ${convertSpanishText(l.texto)}`;
+          const monto = `${currencySymbol}${l.monto.toFixed(2)}`;
+          const hueco = lineWidth - etiqueta.length - monto.length;
+          itemsText += `${etiqueta}${' '.repeat(Math.max(1, hueco))}${monto}\n`;
+        });
 
         // Línea de descuento por ítem si existe
         if (itemDiscount > 0) {
@@ -968,15 +984,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
           itemsText += `  ${itemObservations}\n`;
         }
 
-        // Modificadores con precio (los gratis solo van a cocina)
-        const pricedMods58 = getPricedModifiers(item);
-        pricedMods58.forEach((modifier) => {
-          modifier.options.forEach((option) => {
-            const qty = option.quantity > 1 ? `${option.quantity}x ` : '';
-            const totalAdj = (option.priceAdjustment || 0) * (option.quantity || 1);
-            itemsText += `  + ${qty}${convertSpanishText(option.optionName)} (+${currencySymbol}${totalAdj.toFixed(2)})\n`;
-          });
-        });
+        // (los adicionales van junto al precio, arriba)
       }
     }
 
@@ -1108,6 +1116,14 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
       .align('left')
       .text(convertSpanishText(`Fecha: ${invoiceDate.toLocaleDateString('es-PE')}\n`))
       .text(`Hora: ${timeString}\n`);
+
+    // De qué documento salió (cotización, nota de venta o guía). Con el
+    // ticket en la mano es lo único que ata el cobro a lo que se cotizó.
+    const origenTicket = vinculoDe(invoice.convertedFrom);
+    if (origenTicket?.numero) {
+      const etq = origenTicket.tipo === 'quotation' ? 'Cotizacion' : 'Doc. origen';
+      printer = printer.text(convertSpanishText(etq + ': ' + origenTicket.numero + String.fromCharCode(10)));
+    }
 
     // ========== Datos del Cliente (ticket-section) ==========
     // Mostrar para facturas, boletas y notas de venta
@@ -1592,33 +1608,41 @@ function kitchenSizeScaleFromConfig() {
 
 // Renderiza la lista de líneas de la comanda (buildKitchenLines) usando el
 // EscPosBuilder (WiFi / interna / estación). builder.text() ya convierte acentos.
-function renderKitchenLinesEscPos(builder, lines, format) {
+//
+// El tamaño se recompone en CADA línea con altoDeLinea() y NO se deja puesto
+// desde init(): esta ruta usaba doubleHeight(), que emite `ESC ! n`, y ese
+// comando borra el `GS ! n` del tamaño base. Resultado: la comanda por red
+// salía siempre en letra normal por más que se eligiera "Muy grande".
+function renderKitchenLinesEscPos(builder, lines, format, escala = 0) {
   for (const ln of lines) {
     if (ln.sep) {
-      builder.alignLeft().bold(false).doubleHeight(false).text(format.separator).newLine();
+      builder.alignLeft().bold(false).charHeight(altoDeLinea(escala, false)).text(format.separator).newLine();
       continue;
     }
     if (ln.blank) { builder.newLine(); continue; }
     builder[ln.a === 'C' ? 'alignCenter' : 'alignLeft']()
-      .doubleHeight(!!ln.big)
+      .charHeight(altoDeLinea(escala, ln.big))
       .bold(!!ln.b)
       .text(ln.t)
       .newLine();
   }
-  builder.doubleHeight(false).bold(false).alignLeft();
+  // Normal otra vez antes del avance y el corte, para no arrastrar el tamaño.
+  builder.charHeight(0).bold(false).alignLeft();
 }
 
 // Renderiza la lista de líneas de la comanda usando CapacitorThermalPrinter
 // (Bluetooth clásico Android). Aquí SÍ hay que convertir acentos manualmente.
 function renderKitchenLinesBT(printer, lines, format) {
-  // El Bluetooth clasico no pasaba por EscPosBuilder, asi que era la unica
-  // ruta que ignoraba el tamano configurado. La escala se manda como comando
-  // crudo GS ! n (nibble bajo = alto-1) antes de cada linea, porque
-  // clearFormatting() la borra al terminarla.
+  // El Bluetooth clasico no pasa por EscPosBuilder. La escala se manda como
+  // comando crudo GS ! n antes de cada linea, porque clearFormatting() la
+  // borra al terminarla. El alto sale de altoDeLinea(): doubleHeight() emite
+  // `ESC ! n` y pisaria la escala, dejando el titulo MAS chico que el resto de
+  // la comanda cuando esta configurada en grande.
   const escala = kitchenSizeScaleFromConfig();
-  const aplicarEscala = (p) => (escala > 0
-    ? p.raw(new Uint8Array([0x1D, 0x21, escala & 0x07]))
-    : p);
+  const aplicarAlto = (p, big) => {
+    const alto = altoDeLinea(escala, big);
+    return alto > 0 ? p.raw(new Uint8Array([0x1D, 0x21, alto])) : p;
+  };
 
   for (const ln of lines) {
     if (ln.sep) {
@@ -1626,8 +1650,7 @@ function renderKitchenLinesBT(printer, lines, format) {
       continue;
     }
     if (ln.blank) { printer = printer.text('\n'); continue; }
-    printer = aplicarEscala(printer.align(ln.a === 'C' ? 'center' : 'left'));
-    if (ln.big) printer = printer.doubleHeight();
+    printer = aplicarAlto(printer.align(ln.a === 'C' ? 'center' : 'left'), ln.big);
     if (ln.b) printer = printer.bold();
     printer = printer.text(convertSpanishText(ln.t) + '\n').clearFormatting();
   }
@@ -1636,9 +1659,6 @@ function renderKitchenLinesBT(printer, lines, format) {
 
 export const printKitchenOrder = async (order, table = null, paperWidth = 58, stationName = null) => {
   const isNative = Capacitor.isNativePlatform();
-
-  // Tamaño de letra de la comanda en ESC/POS (propio de la comanda; 0 = sin cambios)
-  EscPosBuilder.baseSizeScale = kitchenSizeScaleFromConfig();
 
   console.log('🖨️ printKitchenOrder - Iniciando...');
   console.log('📱 Plataforma nativa:', isNative);
@@ -1791,9 +1811,15 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
       const displayTotal = isCourtesy && item.originalTotal !== undefined ? item.originalTotal : item.total;
       const cant = String(item.quantity).padEnd(6);
       const desc = convertSpanishText(item.name).substring(0, descWidth).padEnd(descWidth);
+      // El monto de la fila es el del producto SIN adicionales; cada uno
+      // baja como línea propia que suma. Ver getItemPriceBreakdown: el
+      // precio guardado ya los incluye, y mostrarlo junto a un "(+S/2.00)"
+      // hacía que el cliente sumara de más y desconfiara del total.
+      const desglosePB = getItemPriceBreakdown(item, item.unitPrice || item.price || 0, item.quantity);
+      const anchoMonto = paperWidth === 80 ? 10 : 8;
       const priceStr = isCourtesy
-        ? `[CORT.]`.padStart(paperWidth === 80 ? 10 : 8)
-        : `S/${item.total.toFixed(2)}`.padStart(paperWidth === 80 ? 10 : 8);
+        ? `[CORT.]`.padStart(anchoMonto)
+        : `S/${desglosePB.baseTotal.toFixed(2)}`.padStart(anchoMonto);
       itemsText += `${cant}${desc}${priceStr}\n`;
       if (isCourtesy) {
         itemsText += `  *** CORTESIA *** (Valor: S/${(displayTotal || 0).toFixed(2)})\n`;
@@ -1802,15 +1828,15 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
         }
       }
 
-      // Mostrar SOLO modificadores con precio (los gratis quedan en cocina)
-      const pricedMods = getPricedModifiers(item);
-      pricedMods.forEach((modifier) => {
-        modifier.options.forEach((option) => {
-          const qty = option.quantity > 1 ? `${option.quantity}x ` : '';
-          const totalAdj = (option.priceAdjustment || 0) * (option.quantity || 1);
-          itemsText += `  + ${qty}${convertSpanishText(option.optionName)} (+S/${totalAdj.toFixed(2)})\n`;
+      // Adicionales: alineados en la misma columna que el producto.
+      if (!isCourtesy) {
+        desglosePB.lineas.forEach((l) => {
+          const ancho = 6 + descWidth;
+          const etiqueta = `  + ${convertSpanishText(l.texto)}`.substring(0, ancho).padEnd(ancho);
+          const monto = `S/${l.monto.toFixed(2)}`.padStart(anchoMonto);
+          itemsText += `${etiqueta}${monto}\n`;
         });
-      });
+      }
 
       if (item.notes) {
         itemsText += `  * ${convertSpanishText(item.notes)}\n`;
@@ -1968,14 +1994,10 @@ const printBLETicket = async (invoice, business, paperWidth = 58) => {
       items: (invoice.items || []).map(item => {
         // Anexar modificadores con precio a observations para que el plugin BLE
         // los muestre (no tiene lógica propia de modifiers).
-        const pricedMods = getPricedModifiers(item)
-        const modLines = pricedMods.flatMap((m) =>
-          m.options.map((o) => {
-            const qty = o.quantity > 1 ? `${o.quantity}x ` : ''
-            const totalAdj = (o.priceAdjustment || 0) * (o.quantity || 1)
-            return `+ ${qty}${o.optionName} (+${currencySymbol} ${totalAdj.toFixed(2)})`
-          })
-        )
+        // Sin el "(+...)": el monto del adicional se suma aparte, igual que
+        // en los demás tickets. Ver getItemPriceBreakdown.
+        const desgloseBLE = getItemPriceBreakdown(item, item.unitPrice || item.price || 0, item.quantity)
+        const modLines = desgloseBLE.lineas.map((l) => `+ ${l.texto}  ${currencySymbol} ${l.monto.toFixed(2)}`)
         const baseObs = item.observations || ''
         const combinedObs = [baseObs, ...modLines].filter(Boolean).join('\n')
         return {
@@ -2372,6 +2394,15 @@ class EscPosBuilder {
     return this;
   }
 
+  // Alto de carácter explícito (GS ! n, nibble bajo = alto-1; el ancho queda
+  // en x1). A diferencia de doubleHeight(), que emite `ESC ! n` y de paso
+  // borra el tamaño base, este comando LO define: sirve para recomponer el
+  // tamaño línea por línea. Ver src/utils/escposCharSize.js.
+  charHeight(alto = 0) {
+    this.commands.push(EscPosBuilder.GS, 0x21, (alto | 0) & 0x07);
+    return this;
+  }
+
   // Limpiar formato
   clearFormatting() {
     this.commands.push(EscPosBuilder.ESC, 0x21, 0x00);
@@ -2584,6 +2615,14 @@ const buildTicketEscPos = async (invoice, business, paperWidth = 58) => {
       .text(`Hora: ${createdDate.toLocaleTimeString('es-PE')}`)
       .newLine();
 
+    // De qué documento salió (cotización, nota de venta o guía). Con el
+    // ticket en la mano es lo único que ata el cobro a lo que se cotizó.
+    const origenWifi = vinculoDe(invoice.convertedFrom);
+    if (origenWifi?.numero) {
+      const etqW = origenWifi.tipo === 'quotation' ? 'Cotizacion' : 'Doc. origen';
+      builder.text(etqW + ': ' + origenWifi.numero).newLine();
+    }
+
     // Datos del cliente
     builder.bold(true)
       .text('DATOS DEL CLIENTE')
@@ -2674,10 +2713,20 @@ const buildTicketEscPos = async (invoice, business, paperWidth = 58) => {
       const qtyFormatted = formatQuantity(item.quantity);
       const unitSuffix = item.unit && item.allowDecimalQuantity ? item.unit.toLowerCase() : '';
 
+      // Precio de LISTA; los adicionales van debajo, cada uno con su monto.
+      // Ver getItemPriceBreakdown: el precio guardado ya los incluye, y
+      // mostrarlo junto a un "(+S/2.00)" hacía que el cliente sumara de más.
+      const desgloseTk = getItemPriceBreakdown(item, unitPrice, item.quantity);
       builder.text(itemName).newLine()
-        .text(`${qtyFormatted}${unitSuffix} x ${currencySymbol} ${unitPrice.toFixed(2)}`)
-        .text(`  ${currencySymbol} ${itemTotal.toFixed(2)}`)
+        .text(`${qtyFormatted}${unitSuffix} x ${currencySymbol} ${desgloseTk.baseUnit.toFixed(2)}`)
+        .text(`  ${currencySymbol} ${desgloseTk.baseTotal.toFixed(2)}`)
         .newLine();
+
+      desgloseTk.lineas.forEach((l) => {
+        builder.text(`  + ${l.texto}`)
+          .text(`  ${currencySymbol} ${l.monto.toFixed(2)}`)
+          .newLine();
+      });
 
       // Mostrar descuento por ítem si existe
       if (itemDiscount > 0) {
@@ -2714,15 +2763,7 @@ const buildTicketEscPos = async (invoice, business, paperWidth = 58) => {
         builder.text(`  ${itemObservations}`).newLine();
       }
 
-      // Modificadores con precio (los gratis solo van a cocina)
-      const pricedModsTk = getPricedModifiers(item);
-      pricedModsTk.forEach((modifier) => {
-        modifier.options.forEach((option) => {
-          const qty = option.quantity > 1 ? `${option.quantity}x ` : '';
-          const totalAdj = (option.priceAdjustment || 0) * (option.quantity || 1);
-          builder.text(`  + ${qty}${option.optionName} (+${currencySymbol} ${totalAdj.toFixed(2)})`).newLine();
-        });
-      });
+      // (los adicionales van junto al precio, arriba)
     }
 
     builder.text(format.separator).newLine()
@@ -2887,13 +2928,13 @@ export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
 const printWifiKitchenOrder = async (order, table = null, paperWidth = 58, stationName = null) => {
   try {
     const format = getFormat(paperWidth);
-    EscPosBuilder.baseSizeScale = kitchenSizeScaleFromConfig();
+    const escala = kitchenSizeScaleFromConfig();
     const builder = new EscPosBuilder();
     builder.init();
 
     // Formato ÚNICO de comanda (mismo que Bluetooth / estación / BLE / HTML)
     const lines = buildKitchenLines(order, table, paperWidth, stationName);
-    renderKitchenLinesEscPos(builder, lines, format);
+    renderKitchenLinesEscPos(builder, lines, format, escala);
 
     builder.feed(getCutFeedLines())
       .cut();
@@ -2927,7 +2968,7 @@ export const printStationTicket = async (printerIp, order, station, items, paper
 
   try {
     const format = getFormat(paperWidth);
-    EscPosBuilder.baseSizeScale = kitchenSizeScaleFromConfig();
+    const escala = kitchenSizeScaleFromConfig();
     const builder = new EscPosBuilder();
     builder.init();
 
@@ -2938,7 +2979,7 @@ export const printStationTicket = async (printerIp, order, station, items, paper
       ? { number: order.tableNumber, waiter: order.waiterName || order.waiter || '' }
       : null;
     const lines = buildKitchenLines(stationOrder, stationTable, paperWidth, station.name || 'ESTACION');
-    renderKitchenLinesEscPos(builder, lines, format);
+    renderKitchenLinesEscPos(builder, lines, format, escala);
 
     builder.feed(getCutFeedLines()).cut();
 
@@ -3094,8 +3135,8 @@ const buildPreBillEscPos = (order, table, business, taxConfig = { igvRate: 18, i
     for (const item of order.items || []) {
       const isCourtesy = !!item.isCourtesy;
       const displayTotal = isCourtesy && item.originalTotal !== undefined ? item.originalTotal : (item.total || (item.price * item.quantity));
-      const itemTotal = item.total || (item.price * item.quantity);
       const itemDiscount = item.itemDiscount || 0;
+      const desglosePBW = getItemPriceBreakdown(item, item.unitPrice || item.price || 0, item.quantity);
       builder.text(`${item.quantity}x ${item.name}`)
         .newLine();
       if (isCourtesy) {
@@ -3105,7 +3146,7 @@ const buildPreBillEscPos = (order, table, business, taxConfig = { igvRate: 18, i
           builder.text(`   Motivo: ${item.courtesyReason}`).newLine();
         }
       } else {
-        builder.text(`   S/ ${itemTotal.toFixed(2)}`)
+        builder.text(`   S/ ${desglosePBW.baseTotal.toFixed(2)}`)
           .newLine();
       }
 
@@ -3115,15 +3156,12 @@ const buildPreBillEscPos = (order, table, business, taxConfig = { igvRate: 18, i
           .newLine();
       }
 
-      // Modificadores con precio (los gratis solo van a cocina)
-      const pricedModsPB = getPricedModifiers(item);
-      pricedModsPB.forEach((modifier) => {
-        modifier.options.forEach((option) => {
-          const qty = option.quantity > 1 ? `${option.quantity}x ` : '';
-          const totalAdj = (option.priceAdjustment || 0) * (option.quantity || 1);
-          builder.text(`   + ${qty}${option.optionName}: S/${totalAdj.toFixed(2)}`).newLine();
+      // Adicionales: cada uno suma, no van entre paréntesis dentro del precio.
+      if (!isCourtesy) {
+        desglosePBW.lineas.forEach((l) => {
+          builder.text(`   + ${l.texto}   S/ ${l.monto.toFixed(2)}`).newLine();
         });
-      });
+      }
 
       if (item.notes) {
         builder.text(`   * ${item.notes}`).newLine();
@@ -4698,6 +4736,9 @@ const buildQuotationEscPos = (quotation, business, paperWidth = 58) => {
   } else if (quotation.validityDays) {
     addRow('Valido por:', `${quotation.validityDays} dias`);
   }
+  // Si ya se facturó, con qué documento
+  const destinoCotiz = vinculoDe(quotation.convertedTo);
+  if (destinoCotiz?.numero) addRow('Facturado con:', destinoCotiz.numero);
   builder.text(sep + '\n');
 
   // Datos del cliente

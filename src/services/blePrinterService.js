@@ -11,6 +11,8 @@ import { BleClient, numbersToDataView, numberToUUID } from '@capacitor-community
 import { prepareLogoForPrinting } from './imageProcessingService';
 import { buildKitchenLines } from '@/utils/kitchenComandaFormat';
 import { formatQuantity } from '@/lib/utils'
+import { altoDeLinea } from '@/utils/escposCharSize';
+import { getItemPriceBreakdown } from '@/utils/modifierHelpers';
 
 // Estado de conexión
 let connectedDeviceId = null;
@@ -959,10 +961,21 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
         // Línea 2: cantidad x precio -> total
         const qtyFormatted = formatQuantity(item.quantity);
         const unitSuffix = item.unit && item.allowDecimalQuantity ? item.unit.toLowerCase() : '';
-        const qtyAndPrice = `${qtyFormatted}${unitSuffix}x ${currencySymbol} ${unitPrice.toFixed(2)}`;
-        const totalStr = `${currencySymbol} ${itemTotal.toFixed(2)}`;
+        // Precio de LISTA; los adicionales bajan como líneas que suman.
+        // El guardado ya los incluye, y mostrarlo junto a un "(+S/2.00)"
+        // hacía que el cliente sumara de más. Ver getItemPriceBreakdown.
+        const desgloseBLE = getItemPriceBreakdown(item, unitPrice, item.quantity);
+        const qtyAndPrice = `${qtyFormatted}${unitSuffix}x ${currencySymbol} ${desgloseBLE.baseUnit.toFixed(2)}`;
+        const totalStr = `${currencySymbol} ${desgloseBLE.baseTotal.toFixed(2)}`;
         const spaceBetween = charsPerLine - qtyAndPrice.length - totalStr.length;
         commands.push(ESCPOSCommands.text(qtyAndPrice + ' '.repeat(Math.max(1, spaceBetween)) + totalStr + '\n'));
+
+        for (const l of desgloseBLE.lineas) {
+          const etiqueta = '  + ' + convertSpanishText(l.texto);
+          const monto = `${currencySymbol} ${l.monto.toFixed(2)}`;
+          const hueco = charsPerLine - etiqueta.length - monto.length;
+          commands.push(ESCPOSCommands.text(etiqueta + ' '.repeat(Math.max(1, hueco)) + monto + '\n'));
+        }
 
         // Línea de descuento por ítem si existe
         if (itemDiscount > 0) {
@@ -995,22 +1008,7 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
           commands.push(ESCPOSCommands.text('  ' + itemObservations + '\n'));
         }
 
-        // Modificadores con precio (modo restaurante).
-        // Solo se imprimen los que suman al total (priceAdjustment > 0).
-        // Los gratis (mayonesa, ketchup) no aparecen en el comprobante; sí en la comanda de cocina.
-        if (Array.isArray(item.modifiers) && item.modifiers.length > 0) {
-          for (const modifier of item.modifiers) {
-            for (const option of (modifier.options || [])) {
-              if (!(Number(option.priceAdjustment) > 0)) continue;
-              const qtyPrefix = option.quantity > 1 ? option.quantity + 'x ' : '';
-              const totalAdj = (option.priceAdjustment || 0) * (option.quantity || 1);
-              commands.push(ESCPOSCommands.text(
-                '  + ' + qtyPrefix + convertSpanishText(option.optionName) +
-                ' (+' + currencySymbol + ' ' + totalAdj.toFixed(2) + ')\n'
-              ));
-            }
-          }
-        }
+        // (los adicionales van junto al precio, arriba)
 
         // Espacio entre items (solo para 80mm)
         if (paperWidth === 80) {
@@ -1293,20 +1291,22 @@ export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58)
     const lines = buildKitchenLines(order, table, paperWidth, null);
     for (const ln of lines) {
       if (ln.sep) {
-        commands.push(ESCPOSCommands.align(0), ESCPOSCommands.bold(false), ESCPOSCommands.doubleHeight(false));
+        commands.push(ESCPOSCommands.align(0), ESCPOSCommands.bold(false));
+        commands.push(new Uint8Array([0x1D, 0x21, altoDeLinea(escala, false)]));
         commands.push(ESCPOSCommands.text('-'.repeat(paperWidth === 58 ? 24 : 42) + '\n'));
         continue;
       }
       if (ln.blank) { commands.push(ESCPOSCommands.text('\n')); continue; }
       commands.push(ESCPOSCommands.align(ln.a === 'C' ? 1 : 0));
-      // doubleHeight escribe GS ! y pisaria la escala; se recompone el byte
-      // completo: alto = escala (o 1 si la linea es "big"), sin tocar el ancho.
-      const alto = Math.max(escala, ln.big ? 1 : 0);
-      commands.push(new Uint8Array([0x1D, 0x21, alto & 0x07]));
+      // doubleHeight escribe ESC ! y pisaria la escala; se recompone el byte
+      // completo con el criterio compartido (src/utils/escposCharSize.js).
+      commands.push(new Uint8Array([0x1D, 0x21, altoDeLinea(escala, ln.big)]));
       commands.push(ESCPOSCommands.bold(!!ln.b));
       commands.push(ESCPOSCommands.text(convertSpanishText(ln.t) + '\n'));
     }
-    commands.push(ESCPOSCommands.align(0), ESCPOSCommands.bold(false), ESCPOSCommands.doubleHeight(false));
+    // Normal otra vez antes del avance y el corte, para no arrastrar el tamano.
+    commands.push(ESCPOSCommands.align(0), ESCPOSCommands.bold(false));
+    commands.push(new Uint8Array([0x1D, 0x21, 0x00]));
 
     // En 80mm la impresora hace feed automático al cortar, menos líneas evitan margen excesivo
     commands.push(ESCPOSCommands.feed(getCutFeedLines()));
@@ -1400,7 +1400,9 @@ export const printBLEPreBill = async (order, table, business, taxConfig = { igvR
           for (const option of modifier.options) {
             let optText = '  + ' + (option.quantity > 1 ? option.quantity + 'x ' : '') + convertSpanishText(option.optionName);
             if (option.priceAdjustment > 0) {
-              optText += ' (+S/' + ((option.priceAdjustment || 0) * (option.quantity || 1)).toFixed(2) + ')';
+              // Con el monto separado del nombre: sumado, no entre paréntesis
+              // dentro del precio del plato.
+              optText += '   S/ ' + ((option.priceAdjustment || 0) * (option.quantity || 1) * (item.quantity || 1)).toFixed(2);
             }
             commands.push(ESCPOSCommands.text(optText + '\n'));
           }

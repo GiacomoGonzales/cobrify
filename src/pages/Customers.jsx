@@ -31,6 +31,7 @@ import { normalizePets, createEmptyPet } from '@/utils/petUtils'
 import DeliveryAddressesEditor, { limpiarDireccionesParaGuardar } from '@/components/customer/DeliveryAddressesEditor'
 import LoyaltyManager from '@/components/loyalty/LoyaltyManager'
 import GuideLink from '@/components/guide/GuideLink'
+import { sucursalParaGuardar } from '@/utils/branchScope'
 
 // Etiquetas cortas por tipo de comprobante (para el modal de pedidos)
 const DOC_TYPE_LABELS = {
@@ -703,7 +704,7 @@ function CustomerOrdersModal({ customer, businessId, businessSettings, isDemoMod
 }
 
 export default function Customers() {
-  const { user, isDemoMode, demoData, getBusinessId, businessSettings, businessMode } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessSettings, businessMode, branchScope } = useAppContext()
 
   // Demo: la lista sigue al estado vivo, así lo que se crea aparece de una.
   useEffect(() => {
@@ -941,6 +942,9 @@ export default function Customers() {
           services: [],
           scheduledDate: at.nextControlDate,
           scheduledTime: hora,
+          // El control se agenda en el local donde se está atendiendo: si la
+          // cita no llevara sucursal, aparecería en la agenda de los dos.
+          branchId: sucursalParaGuardar(branchScope),
           notes: 'Agendado desde la ficha de atención',
         })
         creadas++
