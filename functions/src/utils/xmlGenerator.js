@@ -786,9 +786,26 @@ export function generateInvoiceXML(invoiceData, businessData) {
   // afectación 10 (gravado oneroso) con LineExtensionAmount=0 y TaxAmount=0.
   // La bonificación se declara con afectación 15, PriceTypeCode 02 y tributo 9996 (GRA).
   const isBonificacionItem = (item) => {
+    // Marcada explícitamente al cobrar.
+    if (item.isBonificacion === true) return true
+
+    // Precio 0 CON valor de referencia: es un regalo aunque nadie lo haya
+    // marcado. Una gratuita necesita declarar cuánto vale lo regalado, así que
+    // sin esa referencia no se puede emitir como tal — esa línea queda con su
+    // afectación original y lo que la salva es el subtotal de cabecera (más
+    // abajo). Pasó de verdad: el vendedor puso el producto a 0 y le agregó
+    // "(BONIFICACIÓN)" al nombre en vez de usar el botón, y el comprobante se
+    // rechazó con el error 3105.
+    const precio = Number(item.unitPrice)
+    const cantidad = Number(item.quantity)
+    const referencia = Number(item.referencePrice ?? item.originalUnitPrice ?? item.listPrice ?? 0)
+    if (precio === 0 && cantidad > 0 && Number.isFinite(referencia) && referencia > 0) return true
+
+    // Precio normal con descuento del 100%: la forma en que el POS registra
+    // una bonificación.
     const itemDiscount = item.itemDiscount || item.descuento || 0
     if (itemDiscount <= 0) return false
-    const lineTotalWithIGV = item.quantity * item.unitPrice
+    const lineTotalWithIGV = cantidad * precio
     return Math.abs(lineTotalWithIGV - itemDiscount) < 0.005
   }
 
@@ -864,7 +881,12 @@ export function generateInvoiceXML(invoiceData, businessData) {
     const isInafecto = taxAffectation === '30'
     // isGravadoOrBonif: ambos casos calculan con IGV (gravado oneroso y bonificación)
     const isGravadoOrBonif = isGravadoOneroso || isBonifLine
-    const originalPriceWithIGV = item.unitPrice
+    // Para una gratuita marcada con precio 0, el valor de referencia es lo que
+    // vale el producto: es el número que SUNAT quiere ver declarado.
+    const referenciaItem = Number(item.referencePrice ?? item.originalUnitPrice ?? item.listPrice ?? 0)
+    const originalPriceWithIGV = (isBonifLine && Number(item.unitPrice) === 0 && referenciaItem > 0)
+      ? referenciaItem
+      : item.unitPrice
 
     // IGV rate: SIEMPRE usar la tasa global del negocio para items con IGV (gravado u bonificación)
     // SUNAT regla 3462: "La tasa del IGV debe ser la misma en todas las líneas"
@@ -1194,25 +1216,35 @@ export function generateInvoiceXML(invoiceData, businessData) {
     createTaxSubtotal(sumGravadas, sumIGVGravadas, gravadoPercent, 'S', '1000', 'IGV', 'VAT')
   }
 
-  // Generar TaxSubtotal para operaciones EXONERADAS (si hay)
-  if (sumExoneradas > 0) {
+  // Generar TaxSubtotal para operaciones EXONERADAS y INAFECTAS.
+  //
+  // La condición mira si hay LÍNEAS de ese tipo, no si suman más de cero. Un
+  // tributo declarado en una línea que no aparece en el resumen del documento
+  // es exactamente el error 3105 de SUNAT ("debe contener al menos un tributo
+  // por línea de afectación"), y con una línea de importe 0 el subtotal se
+  // omitía mientras la línea seguía declarando su 9997/9998.
+  const hayLineasExoneradas = lineTaxAffectations.includes('20')
+  const hayLineasInafectas = lineTaxAffectations.includes('30')
+
+  if (sumExoneradas > 0 || hayLineasExoneradas) {
     createTaxSubtotal(sumExoneradas, 0, '0.00', 'E', '9997', 'EXO', 'VAT')
   }
 
-  // Generar TaxSubtotal para operaciones INAFECTAS (si hay)
-  if (sumInafectas > 0) {
+  if (sumInafectas > 0 || hayLineasInafectas) {
     createTaxSubtotal(sumInafectas, 0, '0.00', 'O', '9998', 'INA', 'FRE')
   }
 
   // Generar TaxSubtotal para BONIFICACIONES (si hay) — afectación 15, tributo 9996 (GRA)
   // El IGV referencial de bonificaciones NO se incluye en el TaxTotal global del documento
   // (el cliente no lo paga), pero SUNAT requiere el TaxSubtotal informativo.
-  if (sumBonificadas > 0) {
+  const hayLineasBonificadas = lineIsBonificacion.some(Boolean)
+  if (sumBonificadas > 0 || hayLineasBonificadas) {
     createTaxSubtotal(sumBonificadas, sumIGVBonificadas, gravadoPercent, 'S', '9996', 'GRA', 'FRE')
   }
 
   // Si no hay ningún tipo (caso edge), generar al menos uno según igvExempt
-  if (sumGravadas === 0 && sumExoneradas === 0 && sumInafectas === 0) {
+  if (sumGravadas === 0 && sumExoneradas === 0 && sumInafectas === 0 &&
+      !hayLineasExoneradas && !hayLineasInafectas && sumBonificadas === 0) {
     if (igvExempt) {
       createTaxSubtotal(0, 0, '0.00', 'E', '9997', 'EXO', 'VAT')
     } else {
@@ -1662,9 +1694,26 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
   // Si un item viene con itemDiscount que iguala su valor total, se trata como bonificación.
   // Mismo helper que generateInvoiceXML para consistencia.
   const isBonificacionItem = (item) => {
+    // Marcada explícitamente al cobrar.
+    if (item.isBonificacion === true) return true
+
+    // Precio 0 CON valor de referencia: es un regalo aunque nadie lo haya
+    // marcado. Una gratuita necesita declarar cuánto vale lo regalado, así que
+    // sin esa referencia no se puede emitir como tal — esa línea queda con su
+    // afectación original y lo que la salva es el subtotal de cabecera (más
+    // abajo). Pasó de verdad: el vendedor puso el producto a 0 y le agregó
+    // "(BONIFICACIÓN)" al nombre en vez de usar el botón, y el comprobante se
+    // rechazó con el error 3105.
+    const precio = Number(item.unitPrice)
+    const cantidad = Number(item.quantity)
+    const referencia = Number(item.referencePrice ?? item.originalUnitPrice ?? item.listPrice ?? 0)
+    if (precio === 0 && cantidad > 0 && Number.isFinite(referencia) && referencia > 0) return true
+
+    // Precio normal con descuento del 100%: la forma en que el POS registra
+    // una bonificación.
     const itemDiscount = item.itemDiscount || item.descuento || 0
     if (itemDiscount <= 0) return false
-    const lineTotalWithIGV = item.quantity * item.unitPrice
+    const lineTotalWithIGV = cantidad * precio
     return Math.abs(lineTotalWithIGV - itemDiscount) < 0.005
   }
 

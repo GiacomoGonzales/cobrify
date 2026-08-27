@@ -472,6 +472,23 @@ export default function POS() {
     }
   }
 
+  /**
+   * Regalo puesto "a mano": el vendedor deja el precio en 0 en vez de usar el
+   * botón de bonificación (y suele agregarle "(BONIFICACIÓN)" al nombre).
+   *
+   * Para SUNAT una línea en 0 declarada como operación ONEROSA es una
+   * contradicción y rechaza el comprobante. Guardando cuánto vale el producto,
+   * el XML puede declararla como lo que es: una entrega gratuita con su valor
+   * de referencia. Caso real: APU MARKET, boleta B001-00000054.
+   */
+  const referenciaDeRegalo = (item) => {
+    if (item?.isBonificacion) return {}      // ese camino ya lo cubre bonificacionParaSunat
+    if (Number(item?.price) !== 0) return {}
+    const ficha = productsRaw.find(p => p.id === item.id)
+    const lista = Number(item?.originalPrice ?? item?.basePrice ?? ficha?.price ?? 0)
+    return Number.isFinite(lista) && lista > 0 ? { referencePrice: lista } : {}
+  }
+
   const resolveItemTaxAffectation = React.useCallback((item) => {
     if (allowManualTaxAffectation && saleTaxMode === 'gravado') return '10'
     if (effectiveTaxConfig.igvExempt) return '20'
@@ -6919,6 +6936,7 @@ export default function POS() {
         ...(item.observations && { observations: item.observations }), // Incluir observaciones si existen (IMEI, placa, serie, etc.)
         ...(item.itemDiscount > 0 && { itemDiscount: item.itemDiscount }), // Descuento por ítem para XML SUNAT
         ...bonificacionParaSunat(item),
+        ...referenciaDeRegalo(item),
         ...(item.notes && { notes: item.notes }), // Incluir notas si existen
         ...(item.presentationName && { presentationName: item.presentationName, presentationFactor: item.presentationFactor }),
         ...(item.batchNumber && { batchNumber: item.batchNumber }),
