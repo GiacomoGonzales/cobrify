@@ -11953,15 +11953,36 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           )}
                           {/* Nombre + sub-info inline */}
                           <div className="flex-1 min-w-0 pt-0.5">
+                            {/* La descripción se ve COMPLETA, en varias líneas.
+                                Antes se cortaba con puntos suspensivos —una sola
+                                línea— y en rubros donde el nombre es la
+                                descripción del servicio ("RECOJO, TRANSPORTE Y
+                                DISPOSICIÓN FINAL DE RESIDUOS SÓLIDOS...") el
+                                cajero no podía leer ni verificar lo que iba a
+                                salir en el comprobante.
+                                Editable: textarea que crece con el texto, para
+                                corregirlo ahí mismo sin abrir otra ventana. */}
                             {companySettings?.allowNameEdit ? (
-                              <input
-                                type="text"
+                              <textarea
                                 value={item.name}
-                                onChange={(e) => updateItemName(item.cartId || item.id, e.target.value)}
-                                className="font-semibold text-sm text-gray-900 w-full bg-transparent border-b border-dashed border-gray-300 focus:border-primary-500 focus:outline-none py-0.5"
+                                rows={1}
+                                onChange={(e) => {
+                                  updateItemName(item.cartId || item.id, e.target.value)
+                                  // Crece con el contenido: sin esto la textarea
+                                  // se queda en una línea y volvemos al problema.
+                                  e.target.style.height = 'auto'
+                                  e.target.style.height = `${e.target.scrollHeight}px`
+                                }}
+                                ref={(el) => {
+                                  if (el) {
+                                    el.style.height = 'auto'
+                                    el.style.height = `${el.scrollHeight}px`
+                                  }
+                                }}
+                                className="font-semibold text-sm text-gray-900 w-full bg-transparent border-b border-dashed border-gray-300 focus:border-primary-500 focus:outline-none py-0.5 resize-none overflow-hidden leading-snug"
                               />
                             ) : (
-                              <p className="font-semibold text-sm text-gray-900 line-clamp-1" title={item.name}>
+                              <p className="font-semibold text-sm text-gray-900 break-words leading-snug" title={item.name}>
                                 {item.name}
                               </p>
                             )}
