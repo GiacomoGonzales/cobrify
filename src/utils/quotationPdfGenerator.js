@@ -1380,7 +1380,10 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
       doc.setFont('helvetica', 'normal')
       doc.setTextColor(220, 38, 38)
       doc.text(discountLabel, totalsX + 5, footerY + 10)
-      doc.text('- S/ ' + discountAmount.toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+      // El simbolo sale de la moneda de la cotizacion, como el resto de la
+      // columna: estaba fijo en soles y una cotizacion en dolares mostraba el
+      // descuento con S/ entre importes en $.
+      doc.text('- ' + currencySymbol + ' ' + discountAmount.toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
       footerY += totalsRowHeight
     }
 
@@ -1442,7 +1445,10 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
       doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
       doc.setTextColor(220, 38, 38)
       doc.text(discountLabel, totalsX + 5, footerY + 10)
-      doc.text('- S/ ' + discountAmount.toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+      // El simbolo sale de la moneda de la cotizacion, como el resto de la
+      // columna: estaba fijo en soles y una cotizacion en dolares mostraba el
+      // descuento con S/ entre importes en $.
+      doc.text('- ' + currencySymbol + ' ' + discountAmount.toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
       footerY += totalsRowHeight
     }
 
