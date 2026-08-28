@@ -26,6 +26,10 @@ struct ConversationView: View {
     @State private var mostrarFicha = false
     @State private var respondiendoA: Mensaje?
     @State private var lejosDelFondo = false
+    /// Archivo de una respuesta rápida que espera en el compositor: sale
+    /// recién al tocar enviar, con lo que haya en el cuadro como pie.
+    @State private var mediaPendiente: MediaBiblioteca?
+    @FocusState private var cuadroEnfocado: Bool
     @State private var mostrarVincular = false
 
     var body: some View {
@@ -430,6 +434,31 @@ struct ConversationView: View {
                         .padding(.horizontal, 12)
                         .padding(.bottom, 2)
                     }
+                    if let m = mediaPendiente {
+                        HStack(spacing: 10) {
+                            Image(systemName: m.icono)
+                                .foregroundStyle(.tint)
+                                .frame(width: 22)
+                            Text(m.nombreLegible)
+                                .font(.caption.weight(.medium))
+                            Text("se envía con este mensaje")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button {
+                                mediaPendiente = nil
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .vidrioRedondeado(16)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 2)
+                    }
                     if let citado = respondiendoA {
                         HStack(spacing: 10) {
                             RoundedRectangle(cornerRadius: 2)
@@ -473,6 +502,7 @@ struct ConversationView: View {
 
                         TextField("Mensaje", text: $borrador, axis: .vertical)
                             .lineLimit(1...5)
+                            .focused($cuadroEnfocado)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
                             .vidrioCapsula()
@@ -532,7 +562,8 @@ struct ConversationView: View {
     }
 
     private var puedeEnviar: Bool {
-        !borrador.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        mediaPendiente != nil
+            || !borrador.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// La foto sale recomprimida (tope 2048 px, JPEG 80%): una foto de cámara
@@ -589,23 +620,45 @@ struct ConversationView: View {
 
     /// Una respuesta rápida con adjunto sale directo (el archivo ya está
     /// guardado); una de solo texto cae al borrador para retocarla antes.
+    /// La respuesta rápida cae SIEMPRE en el cuadro (con su archivo esperando
+    /// al lado, si lo lleva) y queda seleccionada, como WhatsApp: se puede
+    /// retocar, sobrescribir de un tirón o enviar tal cual.
     private func usarRapida(_ r: RespuestaRapida) {
-        if let media = r.media {
-            errorEnvio = nil
-            Task {
-                do {
-                    try await ChatAPI.enviarMediaGuardada(conversationId: conv.id, media: media, caption: r.texto)
-                } catch {
-                    errorEnvio = (error as? ChatAPI.ErrorEnvio)?.mensaje ?? "No se pudo enviar."
-                }
-            }
-        } else {
-            borrador = r.texto
+        errorEnvio = nil
+        mediaPendiente = r.media
+        borrador = r.texto
+        cuadroEnfocado = true
+        guard !r.texto.isEmpty else { return }
+        // Seleccionar todo el texto recién puesto: así escribir encima lo
+        // reemplaza de una, sin tener que borrarlo.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            UIApplication.shared.sendAction(#selector(UIResponder.selectAll(_:)),
+                                            to: nil, from: nil, for: nil)
         }
     }
 
     private func enviar() {
         let texto = borrador.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Con archivo esperando, el texto es opcional (va de pie de foto).
+        if let media = mediaPendiente {
+            mediaPendiente = nil
+            borrador = ""
+            errorEnvio = nil
+            let eco = Mensaje(pendienteTipo: media.tipo, texto: texto)
+            store.pendientes.append(eco)
+            Task {
+                do {
+                    try await ChatAPI.enviarMediaGuardada(conversationId: conv.id,
+                                                          media: media, caption: texto)
+                } catch {
+                    store.pendientes.removeAll { $0.id == eco.id }
+                    errorEnvio = (error as? ChatAPI.ErrorEnvio)?.mensaje ?? "No se pudo enviar."
+                    mediaPendiente = media
+                    if borrador.isEmpty { borrador = texto }
+                }
+            }
+            return
+        }
         guard !texto.isEmpty else { return }
         let cita = respondiendoA?.id
         respondiendoA = nil

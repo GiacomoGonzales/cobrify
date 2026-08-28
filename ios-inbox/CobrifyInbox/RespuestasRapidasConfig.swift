@@ -16,7 +16,9 @@ struct RespuestasRapidasConfigView: View {
     @State private var elegido: PhotosPickerItem?
     @State private var mostrarGaleria = false
     @State private var mostrarArchivos = false
-    @FocusState private var enfocado: Bool
+    @FocusState private var enfocado: Campo?
+
+    private enum Campo { case atajo, texto }
 
     /// El atajo normalizado como la web: minúsculas, sin "/", espacios a "-".
     private var atajoLimpio: String {
@@ -44,11 +46,24 @@ struct RespuestasRapidasConfigView: View {
                     TextField("atajo (ej: gracias)", text: $atajo)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                        .focused($enfocado)
+                        .focused($enfocado, equals: .atajo)
                 }
-                TextField(media == nil ? "Texto de la respuesta…" : "Pie de foto (opcional)…",
-                          text: $texto, axis: .vertical)
-                    .lineLimit(2...6)
+                // TextEditor y no TextField: con un texto largo el TextField
+                // vertical estira la fila sin fin y el contenido se ve
+                // cortado. Este tiene alto fijo y su propio scroll.
+                ZStack(alignment: .topLeading) {
+                    if texto.isEmpty {
+                        Text(media == nil ? "Texto de la respuesta…" : "Pie de foto (opcional)…")
+                            .foregroundStyle(.tertiary)
+                            .padding(.top, 8)
+                            .padding(.leading, 5)
+                            .allowsHitTesting(false)
+                    }
+                    TextEditor(text: $texto)
+                        .focused($enfocado, equals: .texto)
+                        .scrollContentBackground(.hidden)
+                        .frame(height: 110)
+                }
 
                 if let media {
                     HStack(spacing: 12) {
@@ -112,7 +127,7 @@ struct RespuestasRapidasConfigView: View {
             } header: {
                 Text(editando ? "Editando" : "Nueva respuesta")
             } footer: {
-                Text("En el chat, escribe / para ver tus atajos. Las que llevan archivo se envían al instante; las de solo texto van al cuadro para retocarlas.")
+                Text("En el chat, escribe / para ver tus atajos. La que elijas cae en el cuadro de mensaje —con su archivo si lo lleva— para revisarla antes de enviar.")
             }
 
             Section("Tus respuestas (\(catalogo.respuestasRapidas.count))") {
@@ -126,7 +141,7 @@ struct RespuestasRapidasConfigView: View {
                         texto = r.texto
                         media = r.media
                         error = nil
-                        enfocado = true
+                        enfocado = .texto
                     } label: {
                         HStack(spacing: 10) {
                             if let m = r.media {
@@ -165,6 +180,16 @@ struct RespuestasRapidasConfigView: View {
         }
         .navigationTitle("Respuestas rápidas")
         .navigationBarTitleDisplayMode(.inline)
+        // Arrastrar la lista cierra el teclado, y el botón Listo lo cierra
+        // desde el propio teclado: antes no había forma de bajarlo.
+        .scrollDismissesKeyboard(.interactively)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Listo") { enfocado = nil }
+                    .fontWeight(.semibold)
+            }
+        }
         .onAppear { catalogo.empezar() }
         .photosPicker(isPresented: $mostrarGaleria, selection: $elegido,
                       matching: .any(of: [.images, .videos]))
