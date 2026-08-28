@@ -289,12 +289,18 @@ final class BuscadorNegocios: ObservableObject {
     @Published var resultados: [(id: String, nombre: String, ruc: String?)] = []
     @Published var buscando = false
 
+    /// Índice liviano de negocios (id, nombre, RUC) para poder buscar por
+    /// cualquier palabra. Se arma una sola vez y se reusa.
+    private static var indice: [(id: String, nombre: String, ruc: String?)] = []
+
     func buscar(_ texto: String) async {
         let t = texto.trimmingCharacters(in: .whitespaces)
         guard t.count >= 2 else { resultados = []; return }
         buscando = true
+        defer { buscando = false }
+
+        // 1) Por prefijo: es lo barato y resuelve la mayoría.
         let db = Firestore.firestore()
-        // Prefijos con las tres formas típicas, como la web.
         let variantes = Array(Set([t, t.uppercased(),
                                    t.prefix(1).uppercased() + t.dropFirst().lowercased()]))
         var encontrados: [String: (id: String, nombre: String, ruc: String?)] = [:]
@@ -310,8 +316,40 @@ final class BuscadorNegocios: ObservableObject {
                 }
             }
         }
-        resultados = Array(encontrados.values.prefix(10)).sorted { $0.nombre < $1.nombre }
-        buscando = false
+
+        // 2) El prefijo solo mira el ARRANQUE del nombre: buscar "giacomo" no
+        // encuentra "GONZALES GIACOMO". Si quedó corto, se busca dentro del
+        // nombre completo sobre un índice local que se arma una sola vez.
+        if encontrados.count < 5 {
+            await Self.asegurarIndice()
+            let aguja = Self.normalizar(t)
+            for n in Self.indice where Self.normalizar(n.nombre).contains(aguja) || (n.ruc ?? "").contains(t) {
+                encontrados[n.id] = n
+                if encontrados.count >= 25 { break }
+            }
+        }
+
+        resultados = Array(encontrados.values)
+            .sorted { $0.nombre.localizedCaseInsensitiveCompare($1.nombre) == .orderedAscending }
+            .prefix(20)
+            .map { $0 }
+    }
+
+    /// Sin tildes y en minúsculas: "GONZÁLES" y "gonzales" deben coincidir.
+    private static func normalizar(_ s: String) -> String {
+        s.folding(options: [.diacriticInsensitive, .caseInsensitive],
+                  locale: Locale(identifier: "es"))
+    }
+
+    private static func asegurarIndice() async {
+        guard indice.isEmpty else { return }
+        guard let snap = try? await Firestore.firestore().collection("businesses")
+            .order(by: "businessName").limit(to: 3000).getDocuments() else { return }
+        indice = snap.documents.map {
+            ($0.documentID,
+             $0.data()["businessName"] as? String ?? "(sin nombre)",
+             $0.data()["ruc"] as? String)
+        }
     }
 
     static func vincular(conversationId: String, businessId: String, nombre: String) {
@@ -373,6 +411,24 @@ final class GrupoCuentasStore: ObservableObject {
     @Published var cargando = true
 
     private let db = Firestore.firestore()
+    private var listener: ListenerRegistration?
+
+    /// Escucha la conversación: al sumar o quitar una cuenta, la lista se
+    /// rehace sola —antes había que salir y volver a entrar para verlo.
+    func escuchar(conversationId: String) {
+        guard listener == nil else { return }
+        listener = db.collection("whatsappConversations").document(conversationId)
+            .addSnapshotListener { [weak self] snap, _ in
+                guard let self, let data = snap?.data() else { return }
+                let conv = Conversacion(id: snap?.documentID ?? "", data: data)
+                Task { await self.cargar(ids: conv.linkedBusinessIds) }
+            }
+    }
+
+    func parar() {
+        listener?.remove()
+        listener = nil
+    }
 
     func cargar(ids: [String]) async {
         cargando = true

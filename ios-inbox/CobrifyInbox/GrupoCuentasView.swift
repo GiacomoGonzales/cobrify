@@ -38,9 +38,8 @@ struct GrupoCuentasView: View {
                 AgregarCuentaSheet(conversationId: conv.id, sugeridas: grupo.sugeridas)
             }
         }
-        .task(id: conv.linkedBusinessIds) {
-            await grupo.cargar(ids: conv.linkedBusinessIds)
-        }
+        .onAppear { grupo.escuchar(conversationId: conv.id) }
+        .onDisappear { grupo.parar() }
     }
 
     private var lista: some View {

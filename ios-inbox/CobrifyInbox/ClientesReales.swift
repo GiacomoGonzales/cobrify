@@ -96,6 +96,9 @@ struct ClientesRealesView: View {
                                 Image(systemName: "chevron.right")
                                     .font(.caption).foregroundStyle(.tertiary)
                             }
+                            // Sin esto solo respondían el texto y el icono:
+                            // el hueco de la derecha no abría nada.
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }
