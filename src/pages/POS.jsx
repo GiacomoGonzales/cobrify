@@ -5431,6 +5431,13 @@ export default function POS() {
         return
       }
 
+      // Si el formulario todavía tiene los datos de OTRO cliente (el que se
+      // atendió antes), NO deben heredarse: así es como la dirección y la
+      // mascota del anterior terminaban pegadas a la ficha del siguiente
+      // —y guardadas de verdad, porque al cobrar se hace upsert del cliente.
+      const veniaOtroCliente = !!selectedCustomer && selectedCustomer.documentNumber !== docNumber
+      const conservar = (valorPrevio) => (veniaOtroCliente ? '' : (valorPrevio || ''))
+
       if (result.success) {
         // Si el cliente ya existe localmente, fijarlo para que aparezcan sus mascotas (chips).
         if (existingCustomer) setSelectedCustomer(existingCustomer)
@@ -5442,18 +5449,18 @@ export default function POS() {
             name: result.data.nombreCompleto || '',
             // Completar con datos del cliente registrado (si existe)
             ...(existingCustomer && {
-              phone: existingCustomer.phone || prev.phone || '',
-              email: existingCustomer.email || prev.email || '',
-              address: existingCustomer.address || prev.address || '',
-              studentName: existingCustomer.studentName || prev.studentName || '',
-              studentSchedule: existingCustomer.studentSchedule || prev.studentSchedule || '',
-              vehiclePlate: existingCustomer.vehiclePlate || prev.vehiclePlate || '',
-              vehicleModel: existingCustomer.vehicleModel || prev.vehicleModel || '',
-              vehicleYear: existingCustomer.vehicleYear || prev.vehicleYear || '',
-              licenseNumber: existingCustomer.licenseNumber || prev.licenseNumber || '',
-              propertyCard: existingCustomer.propertyCard || prev.propertyCard || '',
+              phone: existingCustomer.phone || conservar(prev.phone),
+              email: existingCustomer.email || conservar(prev.email),
+              address: existingCustomer.address || conservar(prev.address),
+              studentName: existingCustomer.studentName || conservar(prev.studentName),
+              studentSchedule: existingCustomer.studentSchedule || conservar(prev.studentSchedule),
+              vehiclePlate: existingCustomer.vehiclePlate || conservar(prev.vehiclePlate),
+              vehicleModel: existingCustomer.vehicleModel || conservar(prev.vehicleModel),
+              vehicleYear: existingCustomer.vehicleYear || conservar(prev.vehicleYear),
+              licenseNumber: existingCustomer.licenseNumber || conservar(prev.licenseNumber),
+              propertyCard: existingCustomer.propertyCard || conservar(prev.propertyCard),
               // Veterinaria: traer la mascota del cliente local (si la tiene).
-              petName: getPrimaryPet(existingCustomer)?.name || existingCustomer.petName || prev.petName || '',
+              petName: getPrimaryPet(existingCustomer)?.name || existingCustomer.petName || conservar(prev.petName),
             }),
           }))
           toast.success(`Datos encontrados: ${result.data.nombreCompleto}`)
@@ -5466,17 +5473,17 @@ export default function POS() {
             address: result.data.direccion || '',
             // Completar con datos del cliente registrado (si existe)
             ...(existingCustomer && {
-              phone: existingCustomer.phone || prev.phone || '',
-              email: existingCustomer.email || prev.email || '',
-              studentName: existingCustomer.studentName || prev.studentName || '',
-              studentSchedule: existingCustomer.studentSchedule || prev.studentSchedule || '',
-              vehiclePlate: existingCustomer.vehiclePlate || prev.vehiclePlate || '',
-              vehicleModel: existingCustomer.vehicleModel || prev.vehicleModel || '',
-              vehicleYear: existingCustomer.vehicleYear || prev.vehicleYear || '',
-              licenseNumber: existingCustomer.licenseNumber || prev.licenseNumber || '',
-              propertyCard: existingCustomer.propertyCard || prev.propertyCard || '',
+              phone: existingCustomer.phone || conservar(prev.phone),
+              email: existingCustomer.email || conservar(prev.email),
+              studentName: existingCustomer.studentName || conservar(prev.studentName),
+              studentSchedule: existingCustomer.studentSchedule || conservar(prev.studentSchedule),
+              vehiclePlate: existingCustomer.vehiclePlate || conservar(prev.vehiclePlate),
+              vehicleModel: existingCustomer.vehicleModel || conservar(prev.vehicleModel),
+              vehicleYear: existingCustomer.vehicleYear || conservar(prev.vehicleYear),
+              licenseNumber: existingCustomer.licenseNumber || conservar(prev.licenseNumber),
+              propertyCard: existingCustomer.propertyCard || conservar(prev.propertyCard),
               // Veterinaria: traer la mascota del cliente local (si la tiene).
-              petName: getPrimaryPet(existingCustomer)?.name || existingCustomer.petName || prev.petName || '',
+              petName: getPrimaryPet(existingCustomer)?.name || existingCustomer.petName || conservar(prev.petName),
             }),
           }))
           toast.success(`Datos encontrados: ${result.data.razonSocial}`)
@@ -5493,18 +5500,20 @@ export default function POS() {
           setCustomerData(prev => ({
             ...prev,
             documentType: existingCustomer.documentType || prev.documentType,
-            name: existingCustomer.name || prev.name || '',
-            businessName: existingCustomer.businessName || prev.businessName || '',
-            address: existingCustomer.address || prev.address || '',
-            email: existingCustomer.email || prev.email || '',
-            phone: existingCustomer.phone || prev.phone || '',
-            studentName: existingCustomer.studentName || prev.studentName || '',
-            studentSchedule: existingCustomer.studentSchedule || prev.studentSchedule || '',
-            vehiclePlate: existingCustomer.vehiclePlate || prev.vehiclePlate || '',
-            vehicleModel: existingCustomer.vehicleModel || prev.vehicleModel || '',
-            vehicleYear: existingCustomer.vehicleYear || prev.vehicleYear || '',
-              licenseNumber: existingCustomer.licenseNumber || prev.licenseNumber || '',
-              propertyCard: existingCustomer.propertyCard || prev.propertyCard || '',
+            name: existingCustomer.name || conservar(prev.name),
+            businessName: existingCustomer.businessName || conservar(prev.businessName),
+            address: existingCustomer.address || conservar(prev.address),
+            email: existingCustomer.email || conservar(prev.email),
+            phone: existingCustomer.phone || conservar(prev.phone),
+            studentName: existingCustomer.studentName || conservar(prev.studentName),
+            studentSchedule: existingCustomer.studentSchedule || conservar(prev.studentSchedule),
+            vehiclePlate: existingCustomer.vehiclePlate || conservar(prev.vehiclePlate),
+            vehicleModel: existingCustomer.vehicleModel || conservar(prev.vehicleModel),
+            vehicleYear: existingCustomer.vehicleYear || conservar(prev.vehicleYear),
+            licenseNumber: existingCustomer.licenseNumber || conservar(prev.licenseNumber),
+            propertyCard: existingCustomer.propertyCard || conservar(prev.propertyCard),
+            // Sin mascota heredada del cliente anterior.
+            petName: getPrimaryPet(existingCustomer)?.name || existingCustomer.petName || conservar(prev.petName),
           }))
           toast.success(`Cliente registrado encontrado: ${existingCustomer.name || existingCustomer.businessName}`)
         } else {
