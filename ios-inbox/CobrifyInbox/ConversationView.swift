@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import AVFoundation
 import UIKit
 
 /// Una conversación, leída en vivo. Fase 1: solo lectura — responder
@@ -438,10 +439,7 @@ struct ConversationView: View {
                                 Text(citado.esSaliente ? "Tú" : conv.titulo)
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(.tint)
-                                Text(Formato.resumenMensaje(citado))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
+                                ResumenCita(mensaje: citado, lineas: 1)
                             }
                             Spacer()
                             Button {
@@ -709,10 +707,7 @@ private struct BurbujaMensaje: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(c.esSaliente ? "Tú" : nombreContacto)
                     .font(.caption.weight(.semibold))
-                Text(Formato.resumenMensaje(c))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                ResumenCita(mensaje: c)
             }
         }
         .padding(6)
@@ -907,5 +902,41 @@ private struct BurbujaMensaje: View {
         mensaje.esSaliente
             ? AnyShapeStyle(apariencia.fondoBurbuja(esquema))
             : AnyShapeStyle(Color(.secondarySystemGroupedBackground))
+    }
+}
+
+
+/// El resumen del mensaje citado. Para una nota de voz muestra además cuánto
+/// dura ("🎤 Nota de voz 0:14"), como WhatsApp. La duración sale del caché si
+/// ya se analizó ese audio; si no, se lee de sus metadatos.
+struct ResumenCita: View {
+    let mensaje: Mensaje
+    var lineas: Int = 2
+    @State private var duracion: Double = 0
+
+    var body: some View {
+        Text(texto)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(lineas)
+            .task(id: mensaje.media?.url) { await cargarDuracion() }
+    }
+
+    private var texto: String {
+        guard mensaje.tipo == "audio" else { return Formato.resumenMensaje(mensaje) }
+        let base = "🎤 Nota de voz"
+        guard duracion > 0 else { return base }
+        return "\(base)  \(Int(duracion) / 60):\(String(format: "%02d", Int(duracion) % 60))"
+    }
+
+    private func cargarDuracion() async {
+        guard mensaje.tipo == "audio", let url = mensaje.media?.url else { return }
+        if let d = await AudiosAnalizados.duracion[url] { duracion = d; return }
+        guard let archivo = await CacheAudio.obtener(url) else { return }
+        guard let d = try? await AVURLAsset(url: archivo).load(.duration) else { return }
+        let seg = CMTimeGetSeconds(d)
+        guard seg.isFinite, seg > 0 else { return }
+        await MainActor.run { AudiosAnalizados.duracion[url] = seg }
+        duracion = seg
     }
 }
