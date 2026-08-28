@@ -51,9 +51,15 @@ export default {
             'Toca una hora libre (las casillas punteadas). Se abre el formulario con la fecha y la hora ya puestas — puedes cambiarlas ahí mismo si hace falta.',
             'Busca al cliente por nombre, documento o teléfono (en veterinaria, también por el nombre de su mascota). Si es nuevo, usa la pestaña "Cliente nuevo": con el DNI o RUC la lupa completa el nombre sola.',
             'Elige los servicios con su precio. En veterinaria, antes eliges la mascota (o la agregas si no está registrada).',
+            'Si tienes personal cargado en Vendedores, elige el **Especialista** que va a atender. Puedes dejarlo sin asignar.',
             'Presiona "Agendar cita". La cita queda como Programada, en su hora, en el panel del día.',
           ],
         },
+        {
+          type: 'texto',
+          text: 'El **Especialista** sale de tu lista de **Vendedores**: ahí es donde el sistema guarda a tu personal, así no tienes que cargar a la misma gente dos veces. Si todavía no tienes a nadie ahí, el campo no aparece — créalos en Vendedores y listo. Una vez asignado, el nombre se ve en la agenda del día junto a cada cita.',
+        },
+        { type: 'enlace', to: '/app/vendedores', label: 'Ir a Vendedores' },
         {
           type: 'consejo',
           text: 'Si dos clientes piden la misma hora, el sistema te avisa pero no te bloquea: tú decides si tu equipo puede atender a dos a la vez.',

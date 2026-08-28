@@ -56,6 +56,7 @@ import {
 } from 'lucide-react'
 import { filtrarPorSucursal, nombreDeSucursal, sucursalParaGuardar } from '@/utils/branchScope'
 import GuideLink from '@/components/guide/GuideLink'
+import { getSellers } from '@/services/sellerService'
 
 export default function VeterinaryAgenda() {
   const navigate = useNavigate()
@@ -121,6 +122,16 @@ export default function VeterinaryAgenda() {
   // Qué fila de servicio tiene el buscador abierto (índice) o null
   const [activeSvcIdx, setActiveSvcIdx] = useState(null)
   const [savingWalkIn, setSavingWalkIn] = useState(false)
+  /**
+   * Quién atiende la cita.
+   *
+   * La lista sale de VENDEDORES, que es donde los negocios ya tienen cargado a
+   * su personal: Podología Vital tenía ahí a sus podólogas por nombre antes de
+   * pedir esto. Crear una colección aparte les habría hecho cargar dos veces a
+   * la misma gente.
+   */
+  const [specialists, setSpecialists] = useState([])
+  const [schedSpecialist, setSchedSpecialist] = useState('')
 
   // Citas del mes EN TIEMPO REAL. La agenda la miran dos personas a la vez
   // (quien agenda por telefono y quien atiende en el mostrador): con una
@@ -262,6 +273,22 @@ export default function VeterinaryAgenda() {
     )
   }
 
+  /**
+   * Quién atiende, en la fila de la agenda.
+   *
+   * Sin esto el dato quedaba guardado pero invisible: quien agenda no puede
+   * comprobar que asigno bien, y quien mira la agenda del dia —que es el uso
+   * real— no sabe a quien le toca.
+   */
+  const chipDeEspecialista = (appt) => {
+    if (!appt?.specialistName) return null
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700">
+        <User className="w-3 h-3" /> {appt.specialistName}
+      </span>
+    )
+  }
+
   const getStatusBadge = (status) => {
     const config = APPOINTMENT_STATUS[status] || APPOINTMENT_STATUS.scheduled
     const colorMap = {
@@ -359,6 +386,8 @@ export default function VeterinaryAgenda() {
     setNewClient({ documentType: ID_TYPES.DNI, documentNumber: '', name: '', phone: '' })
     setNewPet({ name: '', species: '' })
     setWalkInServices([{ serviceId: '', serviceName: '', price: '' }])
+    // Que no se arrastre el especialista de la cita anterior.
+    setSchedSpecialist('')
     setSchedBranch(sucursalParaGuardar(branchScope))
     if (intent === 'schedule') {
       // Arranca con el día que está seleccionado en el calendario: el flujo
@@ -383,6 +412,17 @@ export default function VeterinaryAgenda() {
           .sort((a, b) => (a.name || '').localeCompare(b.name || '')))
       }
     } catch (e) { /* sin servicios */ }
+    // Quien atiende: se toma de Vendedores, donde el negocio ya tiene a su gente.
+    if (specialists.length === 0) {
+      try {
+        const rs = await getSellers(getBusinessId())
+        if (rs.success) {
+          setSpecialists((rs.data || [])
+            .filter(v => v.status !== 'inactive')
+            .sort((a, b) => (a.name || '').localeCompare(b.name || '')))
+        }
+      } catch (e) { /* sin vendedores cargados */ }
+    }
   }
 
   // Disponibilidad: al agendar, cargar las citas ya tomadas del día elegido
@@ -578,8 +618,12 @@ export default function VeterinaryAgenda() {
       const timeStr = isSchedule
         ? schedTime
         : `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+      const especialista = specialists.find(e => e.id === schedSpecialist)
       const id = await createAppointment(businessId, {
         branchId: schedBranch,
+        // El NOMBRE se guarda junto al id: si mañana borran al vendedor, la cita
+        // vieja tiene que seguir diciendo quien atendio.
+        ...(especialista && { specialistId: especialista.id, specialistName: especialista.name || '' }),
         customerId, customerName, petName, petSpecies, petId, phone,
         serviceName: svcName,
         servicePrice: price,
@@ -954,7 +998,7 @@ export default function VeterinaryAgenda() {
           onPrevDay={() => changeDate(-1)}
           onNextDay={() => changeDate(1)}
           renderStatus={(a) => (
-            <span className="inline-flex items-center gap-1.5">{getStatusBadge(a.status)}{chipDeLocal(a)}</span>
+            <span className="inline-flex items-center gap-1.5 flex-wrap">{getStatusBadge(a.status)}{chipDeLocal(a)}{chipDeEspecialista(a)}</span>
           )}
           renderActions={renderApptActions}
         />
@@ -1025,6 +1069,28 @@ export default function VeterinaryAgenda() {
               </select>
               <p className="text-xs text-gray-500 mt-1">
                 La agenda de cada local es independiente: la misma hora puede estar libre en uno y ocupada en otro.
+              </p>
+            </div>
+          )}
+
+          {/* ===== QUIÉN ATIENDE ===== */}
+          {/* Se muestra solo si el negocio tiene personal cargado en Vendedores:
+              a quien no lo use, el formulario no le crece con un campo vacío. */}
+          {specialists.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Especialista</label>
+              <select
+                value={schedSpecialist}
+                onChange={(e) => setSchedSpecialist(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              >
+                <option value="">Sin asignar</option>
+                {specialists.map(e => (
+                  <option key={e.id} value={e.id}>{e.name}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Quién va a atender. La lista sale de tus vendedores.
               </p>
             </div>
           )}
