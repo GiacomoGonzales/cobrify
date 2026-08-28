@@ -135,6 +135,7 @@ import GuideLink from '@/components/guide/GuideLink'
 import { diasDeRecordatorio } from '@/utils/vetReminders'
 import { repreciarPorCantidad } from '@/utils/autoPriceByQty'
 import { revisarAntesDeEmitir, textoDeErrores } from '@/utils/sunatPreflight'
+import AutoGrowTextarea from '@/components/ui/AutoGrowTextarea'
 
 const PAYMENT_METHODS = {
   CASH: 'Efectivo',
@@ -11972,23 +11973,10 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                 Editable: textarea que crece con el texto, para
                                 corregirlo ahí mismo sin abrir otra ventana. */}
                             {companySettings?.allowNameEdit ? (
-                              <textarea
+                              <AutoGrowTextarea
                                 value={item.name}
-                                rows={1}
-                                onChange={(e) => {
-                                  updateItemName(item.cartId || item.id, e.target.value)
-                                  // Crece con el contenido: sin esto la textarea
-                                  // se queda en una línea y volvemos al problema.
-                                  e.target.style.height = 'auto'
-                                  e.target.style.height = `${e.target.scrollHeight}px`
-                                }}
-                                ref={(el) => {
-                                  if (el) {
-                                    el.style.height = 'auto'
-                                    el.style.height = `${el.scrollHeight}px`
-                                  }
-                                }}
-                                className="font-semibold text-sm text-gray-900 w-full bg-transparent border-b border-dashed border-gray-300 focus:border-primary-500 focus:outline-none py-0.5 resize-none overflow-hidden leading-snug"
+                                onChange={(e) => updateItemName(item.cartId || item.id, e.target.value)}
+                                className="font-semibold text-sm text-gray-900 w-full bg-transparent border-b border-dashed border-gray-300 focus:border-primary-500 focus:outline-none py-0.5"
                               />
                             ) : (
                               <p className="font-semibold text-sm text-gray-900 break-words leading-snug" title={item.name}>

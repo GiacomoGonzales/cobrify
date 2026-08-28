@@ -1709,7 +1709,19 @@ export default function Inventory() {
       // Transferencia de stock sin lote
       availableStock = stockWithoutLotInOrigin
     } else if (selectedBatchData) {
-      availableStock = cantidadDeLote(selectedBatchData)
+      // El lote NUNCA puede autorizar mas de lo que el almacen realmente tiene.
+      //
+      // Caso real (InduHealth, 28-ago-2026): el lote decia 20.000 y el almacen
+      // tenia 10.000, asi que se transfirieron 20.000 y el stock quedo al doble.
+      // El lote se habia desincronizado antes —el mismo producto salio dos veces,
+      // por la factura y por la guia de remision— y la transferencia le creyo.
+      //
+      // Sacar de un almacen mas de lo que hay no es valido en ningun caso, haya
+      // o no lotes descuadrados: por eso se toma el menor de los dos.
+      const stockDelAlmacen = transferProduct.warehouseStocks?.find(
+        ws => ws.warehouseId === transferData.fromWarehouse
+      )?.stock
+      availableStock = Math.min(cantidadDeLote(selectedBatchData), Number(stockDelAlmacen) || 0)
     } else {
       const warehouseStock = transferProduct.warehouseStocks?.find(ws => ws.warehouseId === transferData.fromWarehouse)
       availableStock = warehouseStock?.stock || 0
@@ -1717,7 +1729,16 @@ export default function Inventory() {
 
     if (quantity > availableStock) {
       const stockSource = isNoLotTransfer ? 'stock sin lote' : selectedBatchData ? `lote ${transferData.selectedBatch}` : 'almacén origen'
-      toast.error(`Stock insuficiente en ${stockSource}. Disponible: ${availableStock}`)
+      // Si el tope lo puso el almacen y no el lote, decirlo: si no, el usuario ve
+      // "lote 20401796: disponible 10.000" mientras la tarjeta del lote muestra
+      // 20.000 y no entiende nada.
+      const loteDice = selectedBatchData ? cantidadDeLote(selectedBatchData) : null
+      const topeEsElAlmacen = loteDice != null && availableStock < loteDice
+      toast.error(
+        topeEsElAlmacen
+          ? `El almacén de origen solo tiene ${availableStock}, aunque el lote figure con ${loteDice}. Revisa el inventario de ese producto.`
+          : `Stock insuficiente en ${stockSource}. Disponible: ${availableStock}`
+      )
       return
     }
 
