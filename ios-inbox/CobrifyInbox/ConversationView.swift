@@ -57,6 +57,9 @@ struct ConversationView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.top, 8)
+                // Un respiro antes del compositor: sin esto la última burbuja
+                // queda pegada al cuadro de escribir.
+                .padding(.bottom, 8)
             }
             .defaultScrollAnchor(.bottom)
             // Al subir por la conversación aparece la flecha para volver al
