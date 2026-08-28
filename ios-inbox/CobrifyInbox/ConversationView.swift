@@ -104,6 +104,15 @@ struct ConversationView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            if conv.linkedBusinessId != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        mostrarFicha = true
+                    } label: {
+                        Image(systemName: "person.text.rectangle")
+                    }
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Picker("Estado", selection: Binding(
@@ -705,12 +714,12 @@ private struct BurbujaMensaje: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
-            Spacer(minLength: 0)
         }
         .padding(6)
-        // Tope de ancho: sin esto la cita estiraba la burbuja a toda la
-        // pantalla (se notaba feo citando una nota de voz).
-        .frame(maxWidth: 240, alignment: .leading)
+        // Nada de frame con maxWidth: eso vuelve la cita FLEXIBLE y se
+        // estira sola hasta el tope, inflando la burbuja aunque el mensaje
+        // sea "Entendido". Sin él mide su contenido, y el ancho máximo lo
+        // pone el propio margen de la burbuja.
         .background(Color(.systemGray6).opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
         .fixedSize(horizontal: false, vertical: true)
         .contentShape(Rectangle())
@@ -875,9 +884,9 @@ private struct BurbujaMensaje: View {
             if mensaje.esSaliente {
                 switch mensaje.estado {
                 case "read":
-                    Text("✓✓").font(.caption2).foregroundStyle(.blue)
+                    Text("✓✓").font(.caption2).kerning(-3).foregroundStyle(.blue)
                 case "delivered":
-                    Text("✓✓").font(.caption2).foregroundStyle(.secondary)
+                    Text("✓✓").font(.caption2).kerning(-3).foregroundStyle(.secondary)
                 case "failed":
                     Image(systemName: "exclamationmark.circle")
                         .font(.caption2).foregroundStyle(.red)
