@@ -17,7 +17,7 @@ import {
 } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { collection, query, where, getAggregateFromServer, sum } from 'firebase/firestore'
-import { getMonthSalesAggregated } from '@/services/dashboardStatsService'
+import { getMonthSalesAggregated, getRangeSalesAggregated } from '@/services/dashboardStatsService'
 import { db } from '@/lib/firebase'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useDataPermissions } from '@/hooks/useDataPermissions'
@@ -105,6 +105,10 @@ export default function Dashboard() {
   // null = no se pudo (multi-divisa, usuario limitado, o indice construyendose)
   // y se usa el camino de siempre.
   const [monthAgg, setMonthAgg] = useState(null)
+  // Mes anterior, tambien resuelto por el servidor. Sin esto la comparacion
+  // enfrentaba un numero exacto contra el aggregate crudo (que suma notas de
+  // credito y anuladas), y el porcentaje salia mal.
+  const [prevMonthAgg, setPrevMonthAgg] = useState(null)
   // Los "top" necesitan los items de cada venta, asi que obligan a descargar el
   // mes. Se cargan cuando el usuario los pide.
   const [detalleMesPedido, setDetalleMesPedido] = useState(false)
@@ -460,6 +464,13 @@ export default function Dashboard() {
           setMonthAgg(agg)
           setMonthLoading(false)
           mesResuelto = true
+
+          // El mes anterior, para que el "% vs mes anterior" compare iguales.
+          // Va despues de pintar: la tarjeta ya muestra su total.
+          const prev = getPrevMonthPeru()
+          getRangeSalesAggregated(businessId, prev.start, prev.end).then(r => {
+            if (alive() && r.ok) setPrevMonthAgg(r)
+          })
         }
       }
 
@@ -799,8 +810,20 @@ export default function Dashboard() {
       const key = `${parseInt(yStr, 10)}-${parseInt(mStr, 10)}`
       localTotals.set(key, (localTotals.get(key) || 0) + getDocumentTotalInBase(inv))
     }
+    // El mes EN CURSO, cuando lo resolvió el servidor. La suma cruda del
+    // aggregate incluye notas de crédito, anuladas y archivadas, así que la
+    // barra salía más alta que la tarjeta "Ventas del Mes" — dos números
+    // distintos para lo mismo en la misma pantalla.
+    const hoyPeru = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
+    const [anioActual, mesActual] = hoyPeru.split('-').map(Number)
+
     return monthlyYearData.map(entry => {
       if (entry.year == null || entry.monthNum == null) return entry
+
+      if (monthAgg && entry.year === anioActual && entry.monthNum === mesActual) {
+        return { ...entry, ventas: monthAgg.sales }
+      }
+
       // Con la carga por tramos solo reemplazamos meses que tenemos ENTEROS en
       // memoria: un mes cargado a medias pintaría una barra más baja que la real.
       const entryStart = new Date(
@@ -810,7 +833,7 @@ export default function Dashboard() {
       const key = `${entry.year}-${entry.monthNum}`
       return localTotals.has(key) ? { ...entry, ventas: localTotals.get(key) } : entry
     })
-  }, [monthlyYearData, validInvoicesForSales, getInvoiceDate, loadedSince])
+  }, [monthlyYearData, validInvoicesForSales, getInvoiceDate, loadedSince, monthAgg])
 
   // Cuando el servidor pudo resolver el mes, mandan sus numeros: son exactos y
   // no requirieron descargar nada. Si no, los del recorrido local de siempre.
@@ -887,6 +910,9 @@ export default function Dashboard() {
   const prevMonthSales = useMemo(() => {
     const { start: prevMonthStart, end: monthStart, year: prevYear, monthNum: prevMonth } = getPrevMonthPeru()
 
+    // Lo resolvio el servidor, ya descontando notas de credito y anuladas.
+    if (prevMonthAgg) return prevMonthAgg.sales
+
     // Camino exacto: la fase 3 ya trajo el mes anterior completo, así que lo
     // sumamos localmente excluyendo NC/ND, anuladas y notas de venta convertidas.
     if (loadedSince && loadedSince <= prevMonthStart) {
@@ -908,7 +934,7 @@ export default function Dashboard() {
     // muestra "Comparando..." en vez de un falso "Primer mes con ventas".
     const entry = monthlyYearData.find(e => e.year === prevYear && e.monthNum === prevMonth)
     return entry ? entry.ventas || 0 : null
-  }, [validInvoicesForSales, getInvoiceDate, getPrevMonthPeru, loadedSince, monthlyYearData])
+  }, [validInvoicesForSales, getInvoiceDate, getPrevMonthPeru, loadedSince, monthlyYearData, prevMonthAgg])
 
   const monthChange = prevMonthSales > 0
     ? ((monthSales - prevMonthSales) / prevMonthSales * 100).toFixed(1)
