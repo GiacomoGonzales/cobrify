@@ -34,6 +34,7 @@ struct ConversationView: View {
 
     var body: some View {
         ScrollViewReader { proxy in
+          ZStack(alignment: .bottomTrailing) {
             ScrollView {
                 LazyVStack(spacing: 3) {
                     ForEach(elementos) { elemento in
@@ -63,23 +64,6 @@ struct ConversationView: View {
             .alAlejarseDelFondo { lejos in
                 withAnimation(.easeOut(duration: 0.18)) { lejosDelFondo = lejos }
             }
-            .overlay(alignment: .bottomTrailing) {
-                if lejosDelFondo {
-                    Button {
-                        bajarAlFinal(proxy)
-                    } label: {
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(Color.primary.opacity(0.6))
-                            .frame(width: 38, height: 38)
-                    }
-                    .vidrioCapsula()
-                    .overlay(Circle().stroke(Color(.systemGray4), lineWidth: 0.5))
-                    .padding(.trailing, 14)
-                    .padding(.bottom, 10)
-                    .transition(.scale.combined(with: .opacity))
-                }
-            }
             // Arrastrar hacia abajo va cerrando el teclado, como WhatsApp.
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: store.mensajes.count + store.pendientes.count) {
@@ -95,6 +79,29 @@ struct ConversationView: View {
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
                 bajarAlFinal(proxy)
             }
+
+            // Fuera del ScrollView, no encima de él: dentro, el primer toque
+            // mientras la lista corre lo consume el propio scroll para
+            // frenarse y el botón nunca se entera. Aquí responde al toque
+            // aunque venga deslizándose, como WhatsApp.
+            if lejosDelFondo {
+                Button {
+                    bajarAlFinal(proxy)
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color.primary.opacity(0.6))
+                        .frame(width: 38, height: 38)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .vidrioCapsula()
+                .overlay(Circle().stroke(Color(.systemGray4), lineWidth: 0.5))
+                .padding(.trailing, 14)
+                .padding(.bottom, 10)
+                .transition(.scale.combined(with: .opacity))
+            }
+          }
         }
         .background(Apariencia.shared.fondoView())
         .navigationTitle(conv.titulo)
