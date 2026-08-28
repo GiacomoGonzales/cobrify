@@ -378,6 +378,8 @@ export default function Settings() {
 
   // Estado para mostrar imágenes de producto en comprobantes de venta PDF
   const [showImagesInInvoices, setShowImagesInInvoices] = useState(false)
+  // Columna MARCA en el PDF. En farmacia sale siempre; el resto la activa aca.
+  const [showBrandInInvoices, setShowBrandInInvoices] = useState(false)
 
   // Tamaño de las imágenes de producto en los PDF (50–150%; 100 = tamaño actual)
   const [quotationImageScale, setQuotationImageScale] = useState(100)
@@ -1272,6 +1274,7 @@ export default function Settings() {
         }
 
         // Cargar flag de imágenes en comprobantes de venta (default false)
+        setShowBrandInInvoices(businessData.showBrandInInvoices === true)
         if (businessData.showImagesInInvoices !== undefined) {
           setShowImagesInInvoices(businessData.showImagesInInvoices)
         }
@@ -6422,6 +6425,18 @@ export default function Settings() {
                   </SettingToggle>
                 </div>
 
+                {/* Columna MARCA en comprobantes */}
+                <div className="mb-3">
+                  <SettingToggle
+                    checked={showBrandInInvoices}
+                    onChange={(e) => setShowBrandInInvoices(e.target.checked)}
+                    title="Mostrar la marca en comprobantes de venta"
+                    description={showBrandInInvoices
+                      ? 'Habilitado: El PDF agrega una columna MARCA con la marca de cada producto. El espacio sale de la columna DESCRIPCIÓN.'
+                      : 'Deshabilitado: El PDF no muestra la marca. Útil cuando la marca importa para identificar el producto (municiones, repuestos, herramientas).'}
+                  />
+                </div>
+
                 {/* Ocultar lote y vencimiento en comprobantes */}
                 <SettingToggle
                   checked={hideBatchAndExpiryInDocuments}
@@ -7092,6 +7107,7 @@ export default function Settings() {
                       showProductDescriptionInInvoice: showProductDescriptionInInvoice,
                       showImagesInQuotations: showImagesInQuotations,
                       showImagesInInvoices: showImagesInInvoices,
+                      showBrandInInvoices: showBrandInInvoices,
                       quotationImageScale: Number(quotationImageScale) || 100,
                       invoiceImageScale: Number(invoiceImageScale) || 100,
                       pdfSpacious: pdfSpacious,
