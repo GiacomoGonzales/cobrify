@@ -14,6 +14,7 @@ import { getInvoicesPage, createInvoice, updateInvoice, getDocumentSeries, updat
 import { formatCurrency } from '@/lib/utils'
 import { normalizeCurrency, convertToBase } from '@/utils/currency'
 import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
+import AutoGrowTextarea from '@/components/ui/AutoGrowTextarea'
 
 // Modos de creación de nota de crédito
 const CREDIT_NOTE_MODES = {
@@ -1836,11 +1837,12 @@ export default function CreateCreditNote() {
                               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
                                 Debe decir
                               </label>
-                              <Input
+                              <AutoGrowTextarea
                                 value={item.name}
                                 onChange={e => handleItemNameChange(index, e.target.value)}
                                 placeholder="Escribe la descripción corregida"
                                 maxLength={500}
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                               />
                               <p className="text-xs text-gray-500 mt-1">
                                 Esta es la descripción que saldrá en la nota de crédito.
@@ -2144,11 +2146,15 @@ export default function CreateCreditNote() {
                       <div className="flex-1 grid grid-cols-1 sm:grid-cols-4 gap-3">
                         <div className="sm:col-span-2">
                           <label className="block text-xs text-gray-600 mb-1">Descripción</label>
-                          <Input
+                          {/* Caja que crece: la descripcion del servicio puede ser
+                              larga y en un campo de una linea no se podia leer ni
+                              verificar lo que iba a salir en el comprobante. */}
+                          <AutoGrowTextarea
                             value={item.description}
                             onChange={e => handleExternalItemChange(index, 'description', e.target.value)}
                             placeholder="Descripción del item"
                             required
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                           />
                         </div>
                         <div>
