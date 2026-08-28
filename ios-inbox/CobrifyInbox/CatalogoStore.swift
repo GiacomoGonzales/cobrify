@@ -8,15 +8,71 @@ struct Etiqueta: Identifiable, Equatable {
     var color: Color { Color(hex: colorHex) }
 }
 
+/// El archivo guardado de una respuesta rápida (vive en la biblioteca de R2).
+/// Campos calcados de lo que devuelve uploadWhatsappLibraryMedia, para que
+/// la web y la app guarden exactamente lo mismo.
+struct MediaBiblioteca: Equatable {
+    var url: String
+    var mimeType: String
+    var tipo: String          // image | video | audio | document
+    var filename: String?
+    var bytes: Int?
+    var thumbUrl: String?
+    var ancho: Int?
+    var alto: Int?
+    /// El documento tal como vino: al guardar se devuelve completo, así
+    /// editar desde el teléfono nunca borra un campo que solo la web escriba.
+    private var crudo: [String: Any]
+
+    init?(_ d: [String: Any]) {
+        guard let url = d["url"] as? String, let mime = d["mimeType"] as? String else { return nil }
+        self.url = url
+        mimeType = mime
+        tipo = d["tipo"] as? String ?? MediaBiblioteca.tipoDeMime(mime)
+        filename = d["filename"] as? String
+        bytes = d["bytes"] as? Int
+        thumbUrl = d["thumbUrl"] as? String
+        ancho = d["ancho"] as? Int
+        alto = d["alto"] as? Int
+        crudo = d
+    }
+
+    var diccionario: [String: Any] { crudo }
+
+    static func == (a: MediaBiblioteca, b: MediaBiblioteca) -> Bool {
+        a.url == b.url && a.mimeType == b.mimeType && a.filename == b.filename
+    }
+
+    static func tipoDeMime(_ m: String) -> String {
+        if m.hasPrefix("image/") { return "image" }
+        if m.hasPrefix("video/") { return "video" }
+        if m.hasPrefix("audio/") { return "audio" }
+        return "document"
+    }
+
+    var nombreLegible: String {
+        switch tipo {
+        case "image": return "Imagen"
+        case "video": return "Video"
+        case "audio": return "Audio"
+        default: return filename ?? "Documento"
+        }
+    }
+    var icono: String {
+        switch tipo {
+        case "image": return "photo"
+        case "video": return "video"
+        case "audio": return "mic"
+        default: return "doc"
+        }
+    }
+}
+
 struct RespuestaRapida: Identifiable, Equatable {
     var id: String { atajo }
     var atajo: String
     var texto: String
-    var media: [String: String]?
-
-    static func == (a: RespuestaRapida, b: RespuestaRapida) -> Bool {
-        a.atajo == b.atajo && a.texto == b.texto && a.media == b.media
-    }
+    var media: MediaBiblioteca?
 }
 
 /// Catálogos compartidos de la bandeja: etiquetas y respuestas rápidas.
@@ -48,13 +104,9 @@ final class CatalogoStore: ObservableObject {
                 let lista = snap?.data()?["respuestasRapidas"] as? [[String: Any]] ?? []
                 self?.respuestasRapidas = lista.compactMap { r in
                     guard let atajo = r["atajo"] as? String else { return nil }
-                    var media: [String: String]?
-                    if let m = r["media"] as? [String: Any] {
-                        media = m.compactMapValues { $0 as? String }
-                    }
                     return RespuestaRapida(atajo: atajo,
                                            texto: r["texto"] as? String ?? "",
-                                           media: media)
+                                           media: (r["media"] as? [String: Any]).flatMap(MediaBiblioteca.init))
                 }
             })
     }
@@ -89,7 +141,7 @@ final class CatalogoStore: ObservableObject {
     func guardarRespuestasRapidas(_ lista: [RespuestaRapida]) async -> String? {
         let arr = lista.map { r -> [String: Any] in
             var d: [String: Any] = ["atajo": r.atajo, "texto": r.texto]
-            if let m = r.media { d["media"] = m }
+            if let m = r.media { d["media"] = m.diccionario }
             return d
         }
         do {

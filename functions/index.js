@@ -14083,7 +14083,7 @@ export const sendWhatsappMediaMessage = onRequest(
       //  - mediaUrl: archivo YA guardado (respuestas rapidas), se manda por
       //    su direccion sin volver a subirlo. Guardar una vez y reusar es lo
       //    que hace que una respuesta rapida con video sea instantanea.
-      const { conversationId, base64, mediaUrl, mimeType, filename, caption } = req.body || {}
+      const { conversationId, base64, mediaUrl, mimeType, filename, caption, respondeA = null } = req.body || {}
       if (!conversationId || (!base64 && !mediaUrl) || !mimeType) {
         res.status(400).json({ error: 'Faltan datos del archivo' }); return
       }
@@ -14143,6 +14143,7 @@ export const sendWhatsappMediaMessage = onRequest(
       }
 
       const { waMessageId } = await sendWhatsappMedia({
+        contextId: respondeA,
         token: process.env.WHATSAPP_TOKEN,
         phoneNumberId: conv.phoneNumberId,
         to: conv.waId,

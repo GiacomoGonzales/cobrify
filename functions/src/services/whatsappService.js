@@ -278,7 +278,7 @@ export function extensionDeMime(mimeType) {
  * @param {string} [p.caption] pie (imagenes, videos y documentos)
  * @param {string} [p.filename] nombre visible (solo documentos)
  */
-export async function sendWhatsappMedia({ token, phoneNumberId, to, tipo, link, caption, filename }) {
+export async function sendWhatsappMedia({ token, phoneNumberId, to, tipo, link, caption, filename, contextId = null }) {
   const cuerpoMedia = { link }
   if (caption && tipo !== 'audio') cuerpoMedia.caption = caption
   if (filename && tipo === 'document') cuerpoMedia.filename = filename
@@ -295,6 +295,8 @@ export async function sendWhatsappMedia({ token, phoneNumberId, to, tipo, link, 
       to,
       type: tipo,
       [tipo]: cuerpoMedia,
+      // Citar tambien al mandar un archivo.
+      ...(contextId ? { context: { message_id: contextId } } : {}),
     }),
   })
 

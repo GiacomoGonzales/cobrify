@@ -24,6 +24,7 @@ struct ConversationView: View {
     @State private var mostrarPlantilla = false
     @State private var mostrarFicha = false
     @State private var respondiendoA: Mensaje?
+    @State private var lejosDelFondo = false
     @State private var mostrarVincular = false
 
     var body: some View {
@@ -52,6 +53,28 @@ struct ConversationView: View {
                 .padding(.top, 8)
             }
             .defaultScrollAnchor(.bottom)
+            // Al subir por la conversación aparece la flecha para volver al
+            // final, como WhatsApp.
+            .alAlejarseDelFondo { lejos in
+                withAnimation(.easeOut(duration: 0.18)) { lejosDelFondo = lejos }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if lejosDelFondo {
+                    Button {
+                        bajarAlFinal(proxy)
+                    } label: {
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Color.primary.opacity(0.6))
+                            .frame(width: 38, height: 38)
+                    }
+                    .vidrioCapsula()
+                    .overlay(Circle().stroke(Color(.systemGray4), lineWidth: 0.5))
+                    .padding(.trailing, 14)
+                    .padding(.bottom, 10)
+                    .transition(.scale.combined(with: .opacity))
+                }
+            }
             // Arrastrar hacia abajo va cerrando el teclado, como WhatsApp.
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: store.mensajes.count + store.pendientes.count) {
@@ -371,7 +394,7 @@ struct ConversationView: View {
                                     elegirSugerencia(r)
                                 } label: {
                                     HStack(spacing: 10) {
-                                        Image(systemName: r.media != nil ? "paperclip" : "bolt.fill")
+                                        Image(systemName: r.media?.icono ?? "bolt.fill")
                                             .font(.caption)
                                             .foregroundStyle(.tint)
                                             .frame(width: 18)
@@ -560,7 +583,7 @@ struct ConversationView: View {
     /// Una respuesta rápida con adjunto sale directo (el archivo ya está
     /// guardado); una de solo texto cae al borrador para retocarla antes.
     private func usarRapida(_ r: RespuestaRapida) {
-        if let media = r.media, media["url"] != nil {
+        if let media = r.media {
             errorEnvio = nil
             Task {
                 do {
@@ -724,28 +747,21 @@ private struct BurbujaMensaje: View {
     }
 
     @ViewBuilder private var contenido: some View {
-        if mensaje.estado == "sending", mensaje.media == nil, mensaje.tipo != "text" {
-            if let previaLocal, let imagen = UIImage(data: previaLocal) {
-                // La foto ya se ve mientras viaja: solo se atenúa y gira.
-                Image(uiImage: imagen)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 230)
-                    .aspectRatio(imagen.size.width / max(1, imagen.size.height), contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .overlay {
-                        ZStack {
-                            Color.black.opacity(0.25)
-                            ProgressView().tint(.white)
-                        }
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+        if mensaje.estado == "sending", mensaje.tipo == "image", previaLocal != nil {
+            // La foto propia se ve mientras sube, con su ruedita encima.
+            miniatura
+                .overlay {
+                    ZStack {
+                        Color.black.opacity(0.25)
+                        ProgressView().tint(.white)
                     }
-            } else {
-                HStack(spacing: 8) {
-                    ProgressView()
-                    Text(etiquetaEnviando)
-                        .foregroundStyle(.secondary)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
+        } else if mensaje.estado == "sending", mensaje.media == nil, mensaje.tipo != "text" {
+            HStack(spacing: 8) {
+                ProgressView()
+                Text(etiquetaEnviando)
+                    .foregroundStyle(.secondary)
             }
         } else {
             switch mensaje.tipo {
@@ -825,15 +841,10 @@ private struct BurbujaMensaje: View {
 
     /// La foto con su proporción real: alto = 230 / (ancho/alto guardados).
     private var miniatura: some View {
-        let ancho = CGFloat(mensaje.media?.ancho ?? 4)
-        let alto = CGFloat(mensaje.media?.alto ?? 3)
-        let proporcion = alto > 0 ? ancho / alto : 4.0 / 3.0
-        return ImagenCacheada(url: mensaje.media?.thumbUrl ?? mensaje.media?.url ?? "") { imagen in
-            imagen.resizable().scaledToFill()
-        }
-        .aspectRatio(proporcion, contentMode: .fit)
-        .frame(width: 230)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        ImagenBurbuja(url: mensaje.media?.thumbUrl ?? mensaje.media?.url ?? "",
+                      anchoGuardado: mensaje.media?.ancho,
+                      altoGuardado: mensaje.media?.alto,
+                      datosLocales: previaLocal)
     }
 
     private var icono: String {

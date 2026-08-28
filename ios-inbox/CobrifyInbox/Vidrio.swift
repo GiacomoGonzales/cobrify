@@ -36,3 +36,20 @@ extension View {
         }
     }
 }
+
+extension View {
+    /// Avisa cuando la conversación está lejos del final, para sacar la
+    /// flecha de "bajar". Necesita iOS 18; en versiones previas simplemente
+    /// no aparece el botón.
+    @ViewBuilder func alAlejarseDelFondo(_ accion: @escaping (Bool) -> Void) -> some View {
+        if #available(iOS 18.0, *) {
+            self.onScrollGeometryChange(for: Bool.self) { geo in
+                geo.contentSize.height - (geo.contentOffset.y + geo.containerSize.height) > 260
+            } action: { _, lejos in
+                accion(lejos)
+            }
+        } else {
+            self
+        }
+    }
+}

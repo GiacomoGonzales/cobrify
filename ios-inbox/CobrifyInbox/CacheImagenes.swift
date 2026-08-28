@@ -86,3 +86,82 @@ struct ImagenCacheada<Contenido: View>: View {
         }
     }
 }
+
+/// La foto de un mensaje: SIEMPRE completa, con su proporción real — nada de
+/// recortes. Mientras carga reserva el espacio con las medidas que guardó el
+/// servidor (o 4:3) para que la conversación no salte, y al llegar la imagen
+/// usa su proporción de verdad.
+struct ImagenBurbuja: View {
+    let url: String
+    var anchoGuardado: Int?
+    var altoGuardado: Int?
+    /// Foto propia que todavía viaja: se pinta del dato local.
+    var datosLocales: Data?
+
+    private let anchoMax: CGFloat = 244
+    private let altoMax: CGFloat = 340
+
+    @State private var imagen: UIImage?
+    @State private var fallo = false
+
+    init(url: String, anchoGuardado: Int? = nil, altoGuardado: Int? = nil, datosLocales: Data? = nil) {
+        self.url = url
+        self.anchoGuardado = anchoGuardado
+        self.altoGuardado = altoGuardado
+        self.datosLocales = datosLocales
+        let inicial = datosLocales.flatMap(UIImage.init(data:)) ?? CacheImagenes.shared.enMemoria(url)
+        _imagen = State(initialValue: inicial)
+    }
+
+    private var proporcion: CGFloat {
+        if let imagen, imagen.size.height > 0 {
+            return imagen.size.width / imagen.size.height
+        }
+        if let a = anchoGuardado, let b = altoGuardado, b > 0 {
+            return CGFloat(a) / CGFloat(b)
+        }
+        return 4.0 / 3.0
+    }
+
+    /// Cabe en el ancho y en el alto máximos conservando la proporción: la
+    /// foto entera, sea apaisada, vertical o panorámica.
+    private var tamano: CGSize {
+        let p = max(0.25, min(4, proporcion))
+        var w = anchoMax
+        var h = w / p
+        if h > altoMax {
+            h = altoMax
+            w = h * p
+        }
+        return CGSize(width: w, height: h)
+    }
+
+    var body: some View {
+        Group {
+            if let imagen {
+                Image(uiImage: imagen).resizable().scaledToFit()
+            } else if fallo {
+                ZStack {
+                    Color(.tertiarySystemFill)
+                    Label("Foto", systemImage: "photo").foregroundStyle(.secondary)
+                }
+            } else {
+                ZStack {
+                    Color(.tertiarySystemFill)
+                    ProgressView()
+                }
+            }
+        }
+        .frame(width: tamano.width, height: tamano.height)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .animation(.easeOut(duration: 0.15), value: tamano)
+        .task(id: url) {
+            guard imagen == nil, !url.isEmpty else { return }
+            if let cargada = await CacheImagenes.shared.cargar(url) {
+                imagen = cargada
+            } else {
+                fallo = true
+            }
+        }
+    }
+}

@@ -66,7 +66,7 @@ enum ChatAPI {
 
     /// Envía un archivo que YA está guardado (el de una respuesta rápida):
     /// viaja solo su dirección, no el archivo — instantáneo aunque pese 15 MB.
-    static func enviarMediaGuardada(conversationId: String, media: [String: String], caption: String) async throws {
+    static func enviarMediaGuardada(conversationId: String, media: MediaBiblioteca, caption: String) async throws {
         guard let user = Auth.auth().currentUser else {
             throw ErrorEnvio(mensaje: "La sesión venció. Vuelve a entrar.", ventanaCerrada: false)
         }
@@ -75,11 +75,16 @@ enum ChatAPI {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        req.httpBody = try JSONSerialization.data(withJSONObject: [
+        // El servidor espera mediaUrl suelto, NO un objeto media: mandarlo
+        // anidado hacía que rechazara el envío por "falta el archivo".
+        var cuerpo: [String: Any] = [
             "conversationId": conversationId,
-            "media": media,
+            "mediaUrl": media.url,
+            "mimeType": media.mimeType,
             "caption": caption,
-        ])
+        ]
+        if let nombre = media.filename { cuerpo["filename"] = nombre }
+        req.httpBody = try JSONSerialization.data(withJSONObject: cuerpo)
         let (data, resp) = try await URLSession.shared.data(for: req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard status < 300 else {
@@ -87,6 +92,20 @@ enum ChatAPI {
             throw ErrorEnvio(mensaje: json?["error"] as? String ?? "No se pudo enviar.",
                              ventanaCerrada: json?["ventanaCerrada"] as? Bool ?? false)
         }
+    }
+
+    /// Sube un archivo a la biblioteca (para las respuestas rápidas): queda
+    /// guardado en R2 y se reutiliza por referencia en cada envío.
+    static func subirABiblioteca(datos: Data, mimeType: String, filename: String) async throws -> MediaBiblioteca {
+        let json = try await postFn("uploadWhatsappLibraryMedia", [
+            "base64": datos.base64EncodedString(),
+            "mimeType": mimeType,
+            "filename": filename,
+        ])
+        guard let m = json["media"] as? [String: Any], let media = MediaBiblioteca(m) else {
+            throw ErrorEnvio(mensaje: "El servidor no devolvió el archivo.", ventanaCerrada: false)
+        }
+        return media
     }
 
     /// Envía una foto, un audio o un PDF: el archivo viaja en base64 y el
