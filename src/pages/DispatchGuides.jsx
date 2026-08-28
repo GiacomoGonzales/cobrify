@@ -15,7 +15,7 @@ import { generateDispatchGuidePDF, previewDispatchGuidePDF, shareDispatchGuidePD
 import { buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import { getActiveBranches } from '@/services/branchService'
 import { canVoidDispatchGuide } from '@/services/sunatService'
-import { updateDispatchGuide, deleteDispatchGuide } from '@/services/firestoreService'
+import { updateDispatchGuide, deleteDispatchGuide, getDispatchGuide } from '@/services/firestoreService'
 import { Capacitor } from '@capacitor/core'
 import GuideLink from '@/components/guide/GuideLink'
 
@@ -466,6 +466,25 @@ export default function DispatchGuides() {
       }
 
       const businessId = getBusinessId()
+
+      // La guía se lee FRESCA de Firestore antes de decidir si hay que devolver
+      // stock. `voidingGuide` es el objeto de la lista en memoria, y si el
+      // descuento se hizo desde otra pestaña —o la lista no se refrescó— trae
+      // `stockDeducted: false` viejo: la devolución se salteaba en silencio y el
+      // stock quedaba descontado para siempre.
+      //
+      // Pasó de verdad (InduHealth, guía T001-00000076): anulada con
+      // `stockDeducted: true`, sin ningún movimiento de devolución. Ese producto
+      // quedó 10.000 abajo y despues el descuadre se arrastró a una
+      // transferencia.
+      let guiaFresca = voidingGuide
+      try {
+        const fresca = await getDispatchGuide(businessId, voidingGuide.id)
+        if (fresca.success && fresca.data) guiaFresca = { ...voidingGuide, ...fresca.data }
+      } catch (e) {
+        console.warn('No se pudo releer la guía; se usa la de la lista:', e)
+      }
+
       const result = await updateDispatchGuide(businessId, voidingGuide.id, {
         sunatStatus: 'voided',
         voidReason: voidGuideReason,
@@ -475,11 +494,11 @@ export default function DispatchGuides() {
       if (result.success) {
         // Restaurar stock si fue descontado. Usa el helper compartido para que la
         // restauración por lote sea consistente con el toggle manual.
-        if (voidingGuide.stockDeducted && voidingGuide.warehouseId) {
+        if (guiaFresca.stockDeducted && guiaFresca.warehouseId) {
           const { restoreStockForDispatchGuide } = await import('@/services/dispatchGuideStockService')
           const restoreRes = await restoreStockForDispatchGuide({
             businessId,
-            guide: voidingGuide,
+            guide: guiaFresca,
             userId: user?.uid,
             reason: 'Anulación guía de remisión',
             referenceType: 'dispatch_guide_void',
@@ -487,7 +506,13 @@ export default function DispatchGuides() {
           if (restoreRes.success) {
             toast.info('Stock restaurado al anular la guía')
           } else {
-            toast.warning('Guía anulada pero hubo un error al restaurar stock')
+            // Un aviso suave se pierde: la guía queda anulada CON el stock
+            // descontado, que es un descuadre que nadie va a notar hasta el
+            // inventario. Se dice fuerte y el menú deja el botón para reintentar.
+            toast.error(
+              'La guía se anuló pero NO se pudo devolver el stock. Usa "Devolver stock" en el menú de la guía.',
+              10000
+            )
           }
         }
         toast.success(`Guía ${voidingGuide.number} marcada como anulada`)
@@ -1223,8 +1248,13 @@ export default function DispatchGuides() {
                     </button>
                   )}
 
-                  {/* Revertir descuento de stock - Solo si ya se descontó y tiene almacén */}
-                  {guide.stockDeducted && guide.warehouseId && guide.sunatStatus !== 'voided' && (
+                  {/* Devolver el stock descontado.
+                      También en guías ANULADAS: si la devolución automática falló,
+                      la guía queda anulada con el stock descontado y este botón es
+                      la ÚNICA forma de arreglarlo. Antes se ocultaba justo ahí
+                      —cuando `sunatStatus === 'voided'`— y el descuadre quedaba
+                      sin salida desde la pantalla. */}
+                  {guide.stockDeducted && guide.warehouseId && (
                     <button
                       onClick={async () => {
                         setOpenMenuId(null)
@@ -1255,7 +1285,11 @@ export default function DispatchGuides() {
                       className="w-full px-4 py-2 text-left text-sm hover:bg-green-50 flex items-center gap-3 text-green-700"
                     >
                       <RotateCcw className="w-4 h-4" />
-                      <span>Revertir descuento</span>
+                      {/* En una guia ANULADA esto ya no es "revertir": es arreglar
+                          un descuadre que quedo colgado. El texto lo dice. */}
+                      <span>
+                        {guide.sunatStatus === 'voided' ? 'Devolver stock (quedó pendiente)' : 'Revertir descuento'}
+                      </span>
                     </button>
                   )}
 
