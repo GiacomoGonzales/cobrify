@@ -182,7 +182,7 @@ export default function IndividualPaymentModal({
                       </div>
                     </div>
                     <span className="font-semibold text-gray-900">
-                      S/ {(item.total || 0).toFixed(2)}
+                      S/ {(Number(item.total) || 0).toFixed(2)}
                     </span>
                   </div>
                   {item.modifiers && item.modifiers.length > 0 && (

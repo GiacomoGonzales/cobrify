@@ -71,6 +71,7 @@ import { BedDouble,
   BookOpen
 } from 'lucide-react'
 import { repreciarPorCantidad } from '@/utils/autoPriceByQty'
+import { promoParaProducto, precioConPromo, CANAL_CATALOGO } from '@/services/scheduledDiscountService'
 
 // Estilos de animacion para fade-in escalonado
 const fadeInStyle = `
@@ -437,6 +438,54 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         // "cargando" varios segundos. El primer lote pinta el catálogo de una y
         // el resto sigue llegando en background. Se pagina con orderBy(documentId())
         // (índice single-field de Firestore — no requiere índices compuestos).
+        /**
+         * PROMOCIONES DEL CATÁLOGO.
+         *
+         * Se cargan ANTES que los productos para que el primer lote ya salga
+         * con el precio de oferta puesto: si llegaran después, el cliente vería
+         * el precio de lista y un parpadeo al corregirse.
+         *
+         * El descuento se aplica sobre la ficha del producto (precio nuevo, y el
+         * de lista pasa a `catalogComparePrice`). Así el precio tachado, la
+         * pastilla de "-10%", el detalle, el carrito y el pedido salen todos
+         * bien sin tocar cada pantalla — y el precio que ve el cliente es el que
+         * viaja al POS cuando el cajero abre el pedido.
+         */
+        let promosDelCatalogo = []
+        try {
+          const promosSnap = await getDocs(collection(db, 'businesses', businessData.id, 'scheduledDiscounts'))
+          const ahora = new Date()
+          promosDelCatalogo = promosSnap.docs
+            .map(d => ({ id: d.id, ...d.data() }))
+            .filter(p => p.active && (!p.endsAt || p.endsAt.toDate() >= ahora))
+        } catch {
+          // Sin promociones el catálogo vende igual, a precio de lista.
+        }
+
+        const conPromo = (producto) => {
+          const promo = promoParaProducto(producto, promosDelCatalogo, new Date(), CANAL_CATALOGO)
+          if (!promo) return producto
+
+          const precioLista = Number(producto.price) || 0
+          const precioOferta = precioConPromo(precioLista, promo)
+          if (!(precioOferta < precioLista)) return producto
+
+          const listaUSD = Number(producto.priceUSD)
+          return {
+            ...producto,
+            price: precioOferta,
+            // Si el negocio ya tenía un "antes" más alto, ese manda: sigue
+            // siendo cierto y el ahorro que muestra es el real.
+            catalogComparePrice: Math.max(Number(producto.catalogComparePrice) || 0, precioLista),
+            ...(Number.isFinite(listaUSD) && listaUSD > 0 ? { priceUSD: precioConPromo(listaUSD, promo) } : {}),
+            ...(Array.isArray(producto.variants) && producto.variants.length > 0 ? {
+              variants: producto.variants.map(v => ({ ...v, price: precioConPromo(v.price, promo) })),
+            } : {}),
+            promoPercent: promo.percent,
+            promoName: promo.name || '',
+          }
+        }
+
         const productsRef = collection(db, 'businesses', businessData.id, 'products')
         const BATCH = 120
         let lastDoc = null
@@ -447,7 +496,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           if (lastDoc) constraints.push(startAfter(lastDoc))
           constraints.push(limit(BATCH))
           const snap = await getDocs(query(productsRef, ...constraints))
-          accumulated = accumulated.concat(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+          accumulated = accumulated.concat(snap.docs.map(d => conPromo({ id: d.id, ...d.data() })))
           setProducts(accumulated)
           if (firstBatch) {
             setLoading(false) // el catálogo ya es usable con el primer lote
@@ -937,6 +986,19 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const thViewHover = themeClasses.viewHover
   const thCatBadge = themeClasses.catBadge
   const thListBadge = themeClasses.listBadge
+  /**
+   * BUSCADOR: lupa o barra a la vista.
+   *
+   * La barra ancha bajo el hero se cambio por la lupa (bd0b99e4). A varios les
+   * gusto, pero hay tiendas donde el cliente busca por nombre casi siempre y la
+   * lupa les agrega un clic de por medio. Con esto cada negocio elige.
+   *
+   * La barra va en la MISMA fila de las categorias, donde estaba la lupa: es el
+   * unico sitio comun a todos los disenos de portada, y ademas queda fija
+   * arriba al desplazarse, que es cuando mas se necesita.
+   */
+  const barraDeBusquedaVisible = business?.catalogSearchBar === true
+
   const thSearchBanner = themeClasses.searchBanner
   const thSearchClassic = themeClasses.searchClassic
   const thObsText = themeClasses.obsText
@@ -2096,8 +2158,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               </div>
             </div>
           </div>
-          {/* Barra de búsqueda debajo del banner */}
-          <div className={`${themeClasses.bg} px-4 py-3 ${sidebarNav ? 'md:px-0 md:pt-5' : ''}`}>
+          {/* Barra de búsqueda debajo del banner. Se oculta si el negocio activó
+              la barra fija: esa vive en la fila de categorías y son la misma. */}
+          <div className={`${themeClasses.bg} px-4 py-3 ${sidebarNav ? 'md:px-0 md:pt-5' : ''} ${barraDeBusquedaVisible ? 'hidden' : ''}`}>
             <div className={`relative ${sidebarNav ? '' : 'max-w-7xl mx-auto'}`}>
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
@@ -2277,8 +2340,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               </p>
             )}
 
-            {/* Barra de búsqueda */}
-            <div className="relative max-w-2xl mx-auto md:mx-0">
+            {/* Barra de búsqueda (oculta si el negocio activó la barra fija) */}
+            <div className={`relative max-w-2xl mx-auto md:mx-0 ${barraDeBusquedaVisible ? 'hidden' : ''}`}>
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
                 type="text"
@@ -2359,14 +2422,39 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 categorias y desaparecia al deslizar a la derecha — justo cuando
                 mas se necesita, porque quien desliza buscando su categoria es
                 el que no la encuentra. */}
-            <div className="flex items-stretch gap-1">
-              <button
-                onClick={() => setSearchOpen(true)}
-                className={`flex-shrink-0 rounded-full flex items-center justify-center transition-colors ${thViewHover} ${categoriesVariant === 'circles' ? 'w-14 h-14 self-start mt-3' : 'w-10 h-10 self-center'}`}
-                aria-label="Buscar productos"
-              >
-                <Search className={`w-[18px] h-[18px] ${thTextMuted}`} />
-              </button>
+            <div className={barraDeBusquedaVisible ? '' : 'flex items-stretch gap-1'}>
+              {barraDeBusquedaVisible ? (
+                /* Barra a la vista: filtra la grilla mientras se escribe, sin abrir nada. */
+                <div className="relative py-3">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Buscar productos..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className={`w-full pl-11 pr-10 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 ${thSearchClassic} ${thBorderColor}`}
+                    aria-label="Buscar productos"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className={`absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center ${thViewHover}`}
+                      aria-label="Limpiar búsqueda"
+                    >
+                      <X className={`w-4 h-4 ${thTextMuted}`} />
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <button
+                  onClick={() => setSearchOpen(true)}
+                  className={`flex-shrink-0 rounded-full flex items-center justify-center transition-colors ${thViewHover} ${categoriesVariant === 'circles' ? 'w-14 h-14 self-start mt-3' : 'w-10 h-10 self-center'}`}
+                  aria-label="Buscar productos"
+                >
+                  <Search className={`w-[18px] h-[18px] ${thTextMuted}`} />
+                </button>
+              )}
               <div className="min-w-0 flex-1">
             <CategoryScroller className="-mx-4 px-4 md:mx-0 md:px-0" innerClassName="gap-2 py-3">
               {/* Botón "Todos": oculto en modo onlyCarousels cuando estamos en la vista principal,

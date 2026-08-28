@@ -68,6 +68,58 @@ export default {
           type: 'texto',
           text: 'Si le defines un porcentaje de comisión, cada venta guarda la comisión calculada **en el momento de venderse**. Eso significa que cambiar el porcentaje hoy no altera lo ya vendido: las comisiones pasadas quedan como se acordaron entonces.',
         },
+        {
+          type: 'texto',
+          text: 'Además del porcentaje general puedes darle a **ciertos productos** su propia comisión, en la misma ventana del vendedor: busca el producto y ponle un **porcentaje** de esa línea o un **monto fijo por cada unidad** vendida. Sirve cuando solo algunas líneas dejan margen para pagar comisión.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Edita el vendedor y marca **Este vendedor gana comisión**.',
+            'En **Comisión por producto**, busca el producto por nombre o código y tócalo para agregarlo.',
+            'Elige **%** (porcentaje de esa línea) o **S/** (monto fijo por unidad) y escribe el valor.',
+            'Si quieres que gane comisión ÚNICAMENTE con esos productos, marca **Comisionar SOLO estos productos**.',
+          ],
+        },
+        {
+          type: 'ojo',
+          text: 'Con **Comisionar SOLO estos productos** apagado, los productos que no estén en la lista pagan el porcentaje general. Encendido, todo lo demás no comisiona — y ahí el porcentaje general puede quedar en 0.',
+        },
+        {
+          type: 'ojo',
+          text: 'Cuando hay comisiones por producto, la comisión de la venta es la SUMA de sus líneas. Los descuentos generales y el recargo al consumo no se reparten línea por línea, así que la base de la comisión puede no coincidir exactamente con el total del comprobante.',
+        },
+      ],
+    },
+    {
+      id: 'liquidacion',
+      title: 'Liquidar: pagarle la comisión al vendedor',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'La columna **Por pagar** muestra lo que se le debe HOY a cada vendedor. No depende del filtro de fechas de la pantalla: una deuda no cambia según el mes que estés mirando.',
+        },
+        {
+          type: 'texto',
+          text: 'Solo entran ventas **cobradas**. Una venta al crédito que todavía no te pagan no genera pago al vendedor: el dinero aún no entró. Las anuladas tampoco cuentan.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Toca el monto en **Por pagar**.',
+            'Elige hasta qué fecha liquidar (por ejemplo, hasta fin de mes) y revisa cuántas ventas entran y cuánto suma.',
+            'Presiona **Liquidar**. El período queda cerrado y el importe congelado.',
+            'Cuando le pagues, en **Liquidaciones de comisión** presiona **Marcar pagada**.',
+          ],
+        },
+        {
+          type: 'texto',
+          text: 'Al marcarla como pagada se registra sola en **Gastos > Gastos de Ventas**, con el nombre del vendedor. Así la comisión aparece en tu flujo de caja sin que tengas que cargarla a mano.',
+        },
+        {
+          type: 'ojo',
+          text: 'Una venta se liquida UNA sola vez: al liquidar, esas ventas dejan de contar en "Por pagar". Si te equivocaste, **anula** la liquidación y sus ventas vuelven a quedar pendientes. Ojo: anular NO borra el gasto, porque si ya pagaste, ese dinero salió de la caja. Corrígelo desde Gastos.',
+        },
       ],
     },
   ],

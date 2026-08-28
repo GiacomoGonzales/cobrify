@@ -62,6 +62,8 @@ export default function Tables() {
   const location = useLocation()
 
   const [tables, setTables] = useState([])
+  // Imprimiendo comanda: apaga el boton y le pone el reloj de arena.
+  const [isPrintingKitchen, setIsPrintingKitchen] = useState(false)
   // Sucursales (sedes): para filtrar y crear mesas por sede
   const [branches, setBranches] = useState([])
   const [selectedBranchId, setSelectedBranchId] = useState(null) // null = Sucursal Principal
@@ -689,8 +691,15 @@ export default function Tables() {
   // El descuento ya fue persistido por el modal antes de llamar a esta función.
   // handlePrintPreBill lee la orden fresca de Firestore, así que captura el descuento recién aplicado.
   const handleConfirmPreBillPrint = async () => {
-    closePreBillPreview()
-    await handlePrintPreBill()
+    // Imprimir PRIMERO y cerrar despues. El preview ya trae su spinner en el
+    // boton; cerrandolo antes desaparecia justo cuando arranca el trabajo real
+    // (armar el ticket, esperar el logo, hablar con la impresora) y el usuario
+    // se quedaba sin saber si estaba pasando algo. Es la queja que llego.
+    try {
+      await handlePrintPreBill()
+    } finally {
+      closePreBillPreview()
+    }
   }
 
   // Marcar/desmarcar un ítem como servido al cliente
@@ -1249,10 +1258,30 @@ export default function Tables() {
   }
 
   // Marcar items como impresos en Firestore
+  /**
+   * Marca los items de la orden como enviados a cocina.
+   *
+   * PISA el array `items` entero, así que SIEMPRE lee la orden fresca de
+   * Firestore en vez de fiarse del `order` que le pasen. El estado de React va
+   * un paso atrás justo cuando importa —la comanda se dispara al agregar
+   * productos, y `selectedOrder` todavía es la orden SIN esos productos—, así
+   * que escribir esa copia borraba los items recién agregados.
+   *
+   * Pasó de verdad (27-ago-2026): 8 mesas quedaron con su monto pero sin
+   * productos, imposibles de cobrar. Por eso la lectura fresca vive ACÁ ADENTRO
+   * y no en cada llamador: no depende de que el próximo se acuerde.
+   */
   const markItemsAsPrinted = async (order) => {
     try {
       const businessId = getBusinessId()
-      const updatedItems = order.items.map(item => ({
+      const fresh = await getOrder(businessId, order.id)
+      const items = (fresh.success && fresh.data?.items) || order.items || []
+
+      // Nunca vaciar una orden por marcar una comanda: si no hay nada que
+      // marcar, no hay nada que escribir.
+      if (items.length === 0) return
+
+      const updatedItems = items.map(item => ({
         ...item,
         printedToKitchen: true,
       }))
@@ -1264,7 +1293,26 @@ export default function Tables() {
     }
   }
 
+  /**
+   * Imprimir comanda, avisando en el botón mientras dura.
+   *
+   * El trabajo real puede tardar varios segundos —armar el ESC/POS, conectar a
+   * la ticketera de red, recorrer las estaciones— y el botón no decía nada. La
+   * gente lo apretaba de nuevo creyendo que no había pasado nada y salía la
+   * comanda dos veces. El envoltorio existe para que el cuerpo, que tiene
+   * muchos returns tempranos, no tenga que acordarse de apagar el aviso.
+   */
   const handlePrintKitchenTicket = async (printAll = false) => {
+    if (isPrintingKitchen) return
+    setIsPrintingKitchen(true)
+    try {
+      await imprimirComanda(printAll)
+    } finally {
+      setIsPrintingKitchen(false)
+    }
+  }
+
+  const imprimirComanda = async (printAll = false) => {
     if (!selectedTable || !selectedOrder) {
       toast.error('No se puede imprimir: datos incompletos')
       return
@@ -1427,6 +1475,8 @@ export default function Tables() {
       if (!Capacitor.isNativePlatform()) {
         kitchenAutoPrintInProgressRef.current = true
         setOrderToPrint({ ...selectedOrder, items, _ultraCompact: ultraCompactKitchen })
+        // markItemsAsPrinted relee la orden de Firestore: `selectedOrder` todavía
+        // no tiene los items que se acaban de agregar.
         await markItemsAsPrinted(selectedOrder)
         setTimeout(() => {
           handlePrintWeb()
@@ -1489,11 +1539,10 @@ export default function Tables() {
       }
 
       if (printed) {
-        // Marcar la orden como impresa (leyendo la orden fresca de Firestore, que ya
-        // incluye los items recien agregados) para que el boton manual no los reimprima.
+        // Marcar la orden como impresa para que el boton manual no los reimprima.
+        // La lectura fresca la hace markItemsAsPrinted por dentro.
         try {
-          const fresh = await getOrder(businessId, selectedOrder.id)
-          if (fresh.success && fresh.data) await markItemsAsPrinted(fresh.data)
+          await markItemsAsPrinted(selectedOrder)
         } catch (e) { void e }
         toast.success('Comanda enviada a cocina')
       }
@@ -1991,7 +2040,7 @@ export default function Tables() {
                               <div className="flex justify-between items-center">
                                 <span>{isPrimary ? 'Cuenta del grupo:' : 'Consumo:'}</span>
                                 <span className="font-bold text-gray-900">
-                                  S/ {(table.amount || 0).toFixed(2)}
+                                  S/ {(Number(table.amount) || 0).toFixed(2)}
                                 </span>
                               </div>
                             </div>
@@ -2227,6 +2276,7 @@ export default function Tables() {
         onOpenPrimary={handleOpenPrimary}
         onPrintPreBill={() => openPreBillPreview('action')}
         onPrintKitchenTicket={handlePrintKitchenTicket}
+        isPrintingKitchen={isPrintingKitchen}
         onToggleItemServed={handleToggleItemServed}
         onMarkAllServed={handleMarkAllServed}
         onAssignCustomer={companySettings?.loyaltyConfig?.enabled === true && selectedOrder ? () => setIsCustomerModalOpen(true) : null}

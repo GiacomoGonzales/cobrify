@@ -771,6 +771,12 @@ Gracias por tu preferencia.`
   // una venta al crédito no representa ningún pago real. Mismo criterio que
   // el cuadre de caja (cashReportService.formatPaymentMethods).
   const getRealPaymentMethods = (invoice) => {
+    // Una nota de credito NO tiene forma de pago: no es un cobro, es la
+    // reversion de un documento. La caja tampoco la cuenta como venta. Antes
+    // caia al relleno de abajo y mostraba "Efectivo", y el cliente pedia poder
+    // cambiarlo — pero el dato no existe, no es que estuviera mal elegido.
+    if (invoice.documentType === 'nota_credito') return ['—']
+
     if (Array.isArray(invoice.paymentHistory) && invoice.paymentHistory.length > 0) {
       return [...new Set(invoice.paymentHistory.map(p => p.method || 'Efectivo'))]
     }

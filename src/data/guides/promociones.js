@@ -180,6 +180,7 @@ export default {
             'En la pestaña **Descuentos**, presiona **Crear promoción**.',
             'Ponle **Nombre** (ej: Hora feliz) y el **Descuento (%)**.',
             'En **Se aplica a**, elige: **Todos los productos**, **Una categoría** o **Productos específicos**.',
+            'En **Dónde aplica**, elige **Local y catálogo**, **Solo en el local** o **Solo en el catálogo**.',
             'Marca los **Días** y define el horario **Desde** / **Hasta**. Opcional: una fecha en **Termina el** para campañas con final.',
             'Presiona **Crear promoción**.',
           ],
@@ -189,8 +190,16 @@ export default {
           text: 'En el POS, cuando un producto en promoción entra al carrito, su descuento se aplica solo y la línea muestra una etiqueta ámbar con el porcentaje. Si el cajero escribe otro descuento a mano en esa línea, su número manda y la promoción se suelta.',
         },
         {
+          type: 'texto',
+          text: 'En tu **catálogo online**, un producto en promoción se muestra con el precio de lista tachado, el precio de oferta al lado y una pastilla con el porcentaje. Hay ofertas que solo tienen sentido para quien viene a la tienda, y otras que son gancho para vender online: por eso cada promoción elige dónde aplica.',
+        },
+        {
           type: 'ojo',
-          text: 'La promoción se evalúa EN EL MOMENTO de agregar el producto al carrito. Si dos promociones alcanzan al mismo producto, no se suman: se aplica solo la más generosa. La lista muestra el estado de cada regla: Activa ahora, Programada, Vencida o Desactivada.',
+          text: 'Cuando un cliente pide online, **el precio que vio es el que se cobra**. Si el pedido se abre en la caja horas después, con la promoción ya terminada, la línea llega con su precio de oferta y no se le aplica otro descuento encima. Le prometiste ese precio y se respeta.',
+        },
+        {
+          type: 'ojo',
+          text: 'La promoción se evalúa EN EL MOMENTO de agregar el producto al carrito, con hora de Perú. Si dos promociones alcanzan al mismo producto, no se suman: se aplica solo la más generosa. La lista muestra el estado de cada regla: Activa ahora, Programada, Vencida o Desactivada, y marca las que valen solo para un canal.',
         },
       ],
     },

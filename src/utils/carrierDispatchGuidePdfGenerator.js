@@ -7,6 +7,7 @@ import { Capacitor, CapacitorHttp } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
+import { medirTextoCentrado, dibujarTextoCentrado } from '@/utils/pdfCenteredText'
 
 const TRANSFER_REASONS = {
   '01': 'Venta',
@@ -400,12 +401,21 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   }
 
   // Datos de la empresa (centro) - posición dinámica basada en el logo
+  //
+  // Esta franja vive entre el logo y el recuadro del R.U.C., así que todo lo que
+  // se dibuje acá tiene que quedar DENTRO de `centerWidth`: jsPDF no recorta, y
+  // una razón social larga se montaba encima del logo y del recuadro.
   const centerX = logoX + actualLogoWidth + 10
   const centerWidth = CONTENT_WIDTH - actualLogoWidth - docBoxWidth - 20
+  const centerMidX = centerX + centerWidth / 2
+  const maxNameWidth = centerWidth - 10
+  const maxTextWidth = centerWidth - 10
+
   const commercialName = (companySettings?.name || 'EMPRESA SAC').toUpperCase()
   const legalName = (companySettings?.businessName || '').toUpperCase()
   const phone = companySettings?.phone || ''
   const email = companySettings?.email || ''
+  const showLegalName = Boolean(legalName) && legalName !== commercialName
 
   // Construir dirección completa con ubicación (igual que facturas)
   let fullAddress = companySettings?.address || ''
@@ -416,49 +426,71 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
     }
   }
 
-  // Calcular altura total del texto
-  let totalTextHeight = 14 // Nombre comercial
-  if (legalName && legalName !== commercialName) totalTextHeight += 12
-  if (fullAddress || phone) totalTextHeight += 18
+  let addressLine = fullAddress
+  if (phone) addressLine += (fullAddress ? ' - ' : '') + 'Tel: ' + phone
+
+  // Se mide TODO antes de dibujar: el alto real es el que decide dónde empieza
+  // el bloque para que quede centrado en la cabecera.
+  doc.setFont('helvetica', 'bold')
+  const commercialFit = medirTextoCentrado(doc, commercialName, {
+    ancho: maxNameWidth, tamano: 12, tamanoMinimo: 8, maxLineas: 2, alturaLinea: 14,
+  })
+
+  doc.setFont('helvetica', 'normal')
+  const legalFit = showLegalName
+    ? medirTextoCentrado(doc, legalName, { ancho: maxNameWidth, tamano: 8, tamanoMinimo: 6, maxLineas: 2, alturaLinea: 10 })
+    : null
+
+  // La cabecera mide 85pt y no crece. Si los nombres se llevaron dos líneas cada
+  // uno, lo que se recorta es la dirección —el dato menos crítico— y no el email
+  // ni el bloque entero saliéndose por debajo del recuadro.
+  const altoDisponible = headerHeight - 12
+  const altoDeNombres = commercialFit.alto + (legalFit ? legalFit.alto : 0)
+  const lineasDeDireccion = Math.max(0, Math.min(2, Math.floor((altoDisponible - altoDeNombres - (email ? 10 : 0)) / 9)))
+
+  doc.setFontSize(7)
+  const addressLines = (addressLine && lineasDeDireccion > 0)
+    ? doc.splitTextToSize(addressLine, maxTextWidth).slice(0, lineasDeDireccion)
+    : []
+
+  let totalTextHeight = altoDeNombres
+  if (addressLines.length > 0) totalTextHeight += addressLines.length * 9
   if (email) totalTextHeight += 10
 
   let centerY = currentY + (headerHeight - totalTextHeight) / 2 + 10
 
   // Nombre comercial
-  doc.setFontSize(12)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...BLACK)
-  doc.text(commercialName, centerX + centerWidth/2, centerY, { align: 'center' })
-  centerY += 14
+  centerY += dibujarTextoCentrado(doc, commercialName, { centroX: centerMidX, y: centerY, medida: commercialFit })
 
   // Razón social (si es diferente)
-  if (legalName && legalName !== commercialName) {
-    doc.setFontSize(8)
+  if (legalFit) {
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(...DARK_GRAY)
-    doc.text(legalName, centerX + centerWidth/2, centerY, { align: 'center' })
-    centerY += 12
+    centerY += dibujarTextoCentrado(doc, legalName, { centroX: centerMidX, y: centerY, medida: legalFit })
   }
 
   // Dirección y teléfono (mismo formato que facturas)
-  if (fullAddress || phone) {
+  if (addressLines.length > 0) {
     doc.setFontSize(7)
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(...MEDIUM_GRAY)
-    let addressLine = fullAddress
-    if (phone) addressLine += (fullAddress ? ' - ' : '') + 'Tel: ' + phone
-    const addressLines = doc.splitTextToSize(addressLine, centerWidth - 10)
-    addressLines.slice(0, 2).forEach((line, i) => {
-      doc.text(line, centerX + centerWidth/2, centerY + (i * 9), { align: 'center' })
+    addressLines.forEach((line, i) => {
+      doc.text(line, centerMidX, centerY + (i * 9), { align: 'center' })
     })
-    centerY += addressLines.slice(0, 2).length * 9
+    centerY += addressLines.length * 9
   }
 
   // Email
   if (email) {
     doc.setFontSize(7)
+    doc.setFont('helvetica', 'normal')
     doc.setTextColor(...MEDIUM_GRAY)
-    doc.text(`Email: ${email}`, centerX + centerWidth/2, centerY + 2, { align: 'center' })
+    const emailFit = medirTextoCentrado(doc, `Email: ${email}`, {
+      ancho: maxTextWidth, tamano: 7, tamanoMinimo: 5.5, maxLineas: 1, alturaLinea: 9,
+    })
+    dibujarTextoCentrado(doc, `Email: ${email}`, { centroX: centerMidX, y: centerY + 2, medida: emailFit })
   }
 
   // Recuadro del documento (derecha)
@@ -481,23 +513,37 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   doc.setLineWidth(0.5)
   doc.line(docBoxX, docBoxY + rucSectionHeight, docBoxX + docBoxWidth, docBoxY + rucSectionHeight)
 
+  // Todo lo del recuadro se achica si hace falta en vez de desbordar el borde:
+  // "TRANSPORTISTA ELECTRÓNICA" ya venía rozando los bordes a 8pt.
+  const docBoxMidX = docBoxX + docBoxWidth / 2
+  const docBoxTextWidth = docBoxWidth - 8
+
   // RUC (texto blanco sobre fondo de color)
-  doc.setFontSize(9)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(255, 255, 255)
-  doc.text(`R.U.C. ${companySettings?.ruc || ''}`, docBoxX + docBoxWidth/2, docBoxY + 17, { align: 'center' })
+  dibujarTextoCentrado(doc, `R.U.C. ${companySettings?.ruc || ''}`, {
+    centroX: docBoxMidX, y: docBoxY + 17,
+    ancho: docBoxTextWidth, tamano: 9, tamanoMinimo: 6.5, maxLineas: 1, alturaLinea: 11,
+  })
   doc.setTextColor(...BLACK) // Restaurar color negro
 
   // Título
-  doc.setFontSize(8)
   doc.setFont('helvetica', 'bold')
-  doc.text('GUÍA DE REMISIÓN', docBoxX + docBoxWidth/2, docBoxY + 38, { align: 'center' })
-  doc.text('TRANSPORTISTA ELECTRÓNICA', docBoxX + docBoxWidth/2, docBoxY + 50, { align: 'center' })
+  dibujarTextoCentrado(doc, 'GUÍA DE REMISIÓN', {
+    centroX: docBoxMidX, y: docBoxY + 38,
+    ancho: docBoxTextWidth, tamano: 8, tamanoMinimo: 6, maxLineas: 1, alturaLinea: 10,
+  })
+  dibujarTextoCentrado(doc, 'TRANSPORTISTA ELECTRÓNICA', {
+    centroX: docBoxMidX, y: docBoxY + 50,
+    ancho: docBoxTextWidth, tamano: 8, tamanoMinimo: 6, maxLineas: 1, alturaLinea: 10,
+  })
 
   // Número
-  doc.setFontSize(11)
   doc.setFont('helvetica', 'bold')
-  doc.text(`N° ${guide.number || 'V001-00000001'}`, docBoxX + docBoxWidth/2, docBoxY + 72, { align: 'center' })
+  dibujarTextoCentrado(doc, `N° ${guide.number || 'V001-00000001'}`, {
+    centroX: docBoxMidX, y: docBoxY + 72,
+    ancho: docBoxTextWidth, tamano: 11, tamanoMinimo: 8, maxLineas: 1, alturaLinea: 13,
+  })
 
   currentY += headerHeight + 15
 

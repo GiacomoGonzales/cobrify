@@ -23,7 +23,7 @@ import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import LoyaltyManager from '@/components/loyalty/LoyaltyManager'
 import GuideLink from '@/components/guide/GuideLink'
-import { getProducts, createProduct, updateProduct } from '@/services/firestoreService'
+import { getProducts, createProduct, updateProduct, getProductCategories } from '@/services/firestoreService'
 import { createRecipe } from '@/services/recipeService'
 import { uploadProductImage, createImagePreview, revokeImagePreview } from '@/services/productImageService'
 import ProductModifiersSection from '@/components/ProductModifiersSection'
@@ -33,7 +33,7 @@ import { getGiftCertificates, createGiftCertificate, cancelGiftCertificate } fro
 import { getOpenCashSessions } from '@/services/firestoreService'
 import {
   getScheduledDiscounts, createScheduledDiscount, setScheduledDiscountActive,
-  deleteScheduledDiscount, promoVigente, DIAS,
+  deleteScheduledDiscount, promoVigente, DIAS, CANAL_POS, CANAL_CATALOGO, canalesDePromo,
 } from '@/services/scheduledDiscountService'
 
 /**
@@ -87,7 +87,21 @@ export default function Promotions() {
   const FORM_PROMO_VACIO = {
     name: '', percent: '', scope: 'all', category: '', productIds: [],
     days: [1, 2, 3, 4, 5, 6, 0], startTime: '00:00', endTime: '23:59', endsAt: '',
+    // Por defecto vale en los dos lados; el que quiera limitarla lo cambia.
+    channels: [CANAL_POS, CANAL_CATALOGO],
   }
+  // Dónde aplica una promoción. Son excluyentes: o los dos canales, o uno.
+  const OPCIONES_CANAL = [
+    { valor: 'ambos', etiqueta: 'Local y catálogo', canales: [CANAL_POS, CANAL_CATALOGO] },
+    { valor: 'pos', etiqueta: 'Solo en el local', canales: [CANAL_POS] },
+    { valor: 'catalog', etiqueta: 'Solo en el catálogo', canales: [CANAL_CATALOGO] },
+  ]
+  const textoDeCanal = (promo) => {
+    const canales = canalesDePromo(promo)
+    if (canales.includes(CANAL_POS) && canales.includes(CANAL_CATALOGO)) return null
+    return canales.includes(CANAL_CATALOGO) ? 'solo catálogo' : 'solo local'
+  }
+
   const [promos, setPromos] = useState([])
   const [cargandoPromos, setCargandoPromos] = useState(true)
   const [isPromoOpen, setIsPromoOpen] = useState(false)
@@ -98,6 +112,8 @@ export default function Promotions() {
 
   // ── Combos ──
   const [products, setProducts] = useState([])
+  // Catálogo de categorías: el producto guarda el ID, acá se traduce a nombre.
+  const [categoriasDelNegocio, setCategoriasDelNegocio] = useState([])
   const [loadingProducts, setLoadingProducts] = useState(true)
   const [isComboOpen, setIsComboOpen] = useState(false)
   const [comboName, setComboName] = useState('')
@@ -119,6 +135,7 @@ export default function Promotions() {
     // no creó promociones.
     if (isDemoMode) {
       setProducts(demoData?.products || [])
+      setCategoriasDelNegocio(demoData?.categories || [])
       setTarjetas([])
       setCupones([])
       setCertificados([])
@@ -139,6 +156,9 @@ export default function Promotions() {
       .then((r) => setProducts(r?.data || []))
       .catch(() => {})
       .finally(() => setLoadingProducts(false))
+    getProductCategories(businessId)
+      .then((res) => setCategoriasDelNegocio(res?.success ? (res.data || []) : []))
+      .catch(() => {})
     getCoupons(businessId)
       .then((res) => setCupones(res?.success ? res.data : []))
       .catch(() => {})
@@ -153,9 +173,32 @@ export default function Promotions() {
       .finally(() => setCargandoPromos(false))
   }, [businessId, isDemoMode, demoData])
 
+  /**
+   * Las categorías que se pueden elegir en una promoción.
+   *
+   * El producto guarda el ID de la categoría (`cat-1787806688822-nexi7afug`) y
+   * la promoción se guarda igual, porque así se cruzan las dos al aplicar el
+   * descuento (scheduledDiscountService: `product.category === promo.category`).
+   * Lo que cambia acá es solo lo que se MUESTRA: antes salía el ID crudo.
+   *
+   * Los productos viejos guardan el nombre en vez del ID; para esos el valor ya
+   * es legible y se deja tal cual.
+   */
+  const nombreDeCategoria = useMemo(() => {
+    const porId = new Map(categoriasDelNegocio.map((c) => [c.id, c]))
+    return (valor) => {
+      const cat = porId.get(valor)
+      if (!cat) return valor
+      const padre = cat.parentId ? porId.get(cat.parentId) : null
+      return padre ? `${padre.name} > ${cat.name}` : cat.name
+    }
+  }, [categoriasDelNegocio])
+
   const categorias = useMemo(
-    () => [...new Set(products.map((p) => p.category).filter(Boolean))].sort(),
-    [products]
+    () => [...new Set(products.map((p) => p.category).filter(Boolean))]
+      .map((valor) => ({ valor, nombre: nombreDeCategoria(valor) }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre)),
+    [products, nombreDeCategoria]
   )
 
   // ── Certificados de regalo: vender, listar, anular ──
@@ -935,16 +978,20 @@ export default function Promotions() {
                       ? 'bg-green-100 text-green-700'
                       : estado === 'Programada' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'
                     const alcance = p.scope === 'all' ? 'todos los productos'
-                      : p.scope === 'category' ? `categoría ${p.category}`
+                      : p.scope === 'category' ? `categoría ${nombreDeCategoria(p.category)}`
                       : `${p.productIds?.length || 0} producto${(p.productIds?.length || 0) === 1 ? '' : 's'}`
                     const dias = (p.days || []).length === 7 ? 'todos los días'
                       : (p.days || []).map((d) => DIAS[d]).join(' ')
+                    const canal = textoDeCanal(p)
                     return (
                       <li key={p.id} className="flex items-center gap-3 py-3">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <p className="font-semibold text-gray-900 truncate">{p.name}</p>
                             <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${estadoCls}`}>{estado}</span>
+                            {canal && (
+                              <span className="text-xs px-2 py-0.5 rounded-full font-medium shrink-0 bg-gray-100 text-gray-600 border border-gray-200">{canal}</span>
+                            )}
                           </div>
                           <p className="text-xs text-gray-500 mt-0.5">
                             −{p.percent}% en {alcance} · {dias} · {p.startTime}–{p.endTime}
@@ -1025,7 +1072,7 @@ export default function Promotions() {
                 className={inputCls}
               >
                 <option value="">Elige una categoría...</option>
-                {categorias.map((c) => <option key={c} value={c}>{c}</option>)}
+                {categorias.map((c) => <option key={c.valor} value={c.valor}>{c.nombre}</option>)}
               </select>
             </div>
           )}
@@ -1080,6 +1127,31 @@ export default function Promotions() {
               )}
             </div>
           )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Dónde aplica</label>
+            <div className="flex flex-wrap gap-1.5">
+              {OPCIONES_CANAL.map((op) => {
+                const elegido = op.canales.length === promoForm.channels.length &&
+                  op.canales.every((c) => promoForm.channels.includes(c))
+                return (
+                  <button
+                    key={op.valor}
+                    type="button"
+                    onClick={() => setPromoForm((f) => ({ ...f, channels: op.canales }))}
+                    className={`px-3 h-9 rounded-lg text-sm font-medium border transition-colors ${elegido
+                      ? 'bg-primary-600 border-primary-600 text-white'
+                      : 'bg-white border-gray-300 text-gray-600 hover:border-primary-400'}`}
+                  >
+                    {op.etiqueta}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="mt-1 text-xs text-gray-500">
+              Hay ofertas que son solo para quien viene a la tienda, y otras que son gancho para vender online.
+            </p>
+          </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Días</label>

@@ -53,7 +53,7 @@ import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
 import PostSaleModal from '@/components/pos/PostSaleModal'
 import { WALLET_EN_APROBACION, programaVigente, vigenciaLegible } from '@/services/loyaltyService'
-import { promoParaProducto } from '@/services/scheduledDiscountService'
+import { promoParaProducto, CANAL_POS } from '@/services/scheduledDiscountService'
 import { formatCurrency, formatUnitPrice, formatLineAmount, formatProductPrice, applyMarginToCost, matchesSearchQuery, buildSearchHaystack, matchesPrebuilt, cleanText } from '@/lib/utils'
 import { buildProductHaystack } from '@/utils/productSearch'
 import {
@@ -134,6 +134,7 @@ import { getVisiblePaymentMethods, getPaymentLabel, getPaymentKeyByLabel } from 
 import GuideLink from '@/components/guide/GuideLink'
 import { diasDeRecordatorio } from '@/utils/vetReminders'
 import { repreciarPorCantidad } from '@/utils/autoPriceByQty'
+import { revisarAntesDeEmitir, textoDeErrores } from '@/utils/sunatPreflight'
 
 const PAYMENT_METHODS = {
   CASH: 'Efectivo',
@@ -470,6 +471,23 @@ export default function POS() {
       itemDiscountType: 'amount',
       isBonificacion: true,
     }
+  }
+
+  /**
+   * Regalo puesto "a mano": el vendedor deja el precio en 0 en vez de usar el
+   * botón de bonificación (y suele agregarle "(BONIFICACIÓN)" al nombre).
+   *
+   * Para SUNAT una línea en 0 declarada como operación ONEROSA es una
+   * contradicción y rechaza el comprobante. Guardando cuánto vale el producto,
+   * el XML puede declararla como lo que es: una entrega gratuita con su valor
+   * de referencia. Caso real: APU MARKET, boleta B001-00000054.
+   */
+  const referenciaDeRegalo = (item) => {
+    if (item?.isBonificacion) return {}      // ese camino ya lo cubre bonificacionParaSunat
+    if (Number(item?.price) !== 0) return {}
+    const ficha = productsRaw.find(p => p.id === item.id)
+    const lista = Number(item?.originalPrice ?? item?.basePrice ?? ficha?.price ?? 0)
+    return Number.isFinite(lista) && lista > 0 ? { referencePrice: lista } : {}
   }
 
   const resolveItemTaxAffectation = React.useCallback((item) => {
@@ -2189,6 +2207,12 @@ export default function POS() {
             price: item.price || 0,
             quantity: item.quantity || 1,
             unit: item.unit || 'NIU',
+            // El precio ya viene con la promoción que vio el cliente al ordenar.
+            // Sin esto la caja le aplicaría OTRO descuento encima, y si el
+            // cajero abre el pedido fuera del horario de la promo el cliente
+            // terminaría pagando más de lo que le prometimos.
+            promoEvaluated: true,
+            ...(item.promoPercent ? { promoName: item.promoName || '' } : {}),
             // En una variante manda su propio SKU, más específico que el del padre.
             sku: item.sku || item.variantSku || product?.sku || '',
             code: item.code || product?.code || '',
@@ -5167,7 +5191,8 @@ export default function POS() {
       // Evaluación inicial: solo líneas nuevas, sin descuento previo (si el
       // producto ya vino con descuento de otra pantalla, se respeta).
       if (!item.promoEvaluated) {
-        const promo = (item.itemDiscount || 0) > 0 ? null : promoParaProducto(item, scheduledPromos, ahora)
+        // CANAL_POS: una promo marcada "solo catálogo" no debe aplicarse en la caja.
+        const promo = (item.itemDiscount || 0) > 0 ? null : promoParaProducto(item, scheduledPromos, ahora, CANAL_POS)
         cambio = true
         if (!promo) return { ...item, promoEvaluated: true }
         const monto = Math.min(
@@ -6269,6 +6294,32 @@ export default function POS() {
       return
     }
 
+    /**
+     * Revisión previa de lo que SUNAT rechazaría.
+     *
+     * Se hace ACÁ y no después de emitir: un rechazo consume el correlativo,
+     * obliga a rehacer la venta y el negocio se entera horas más tarde, con el
+     * cliente ya en la calle. Dos segundos antes valen más que la corrección
+     * después. Ver src/utils/sunatPreflight.js.
+     */
+    const revision = revisarAntesDeEmitir({
+      documentType,
+      items: cart.map(item => ({
+        name: item.name,
+        quantity: item.quantity,
+        unitPrice: item.price,
+        isBonificacion: item.isBonificacion,
+        itemDiscount: item.itemDiscount,
+        ...referenciaDeRegalo(item),
+      })),
+    })
+    if (revision.errores.length > 0) {
+      toast.error(`SUNAT rechazaría este comprobante:
+
+${textoDeErrores(revision.errores)}`, 9000)
+      return
+    }
+
     checkoutGuardRef.current = true
     setIsProcessing(true)
     setChangeReminder(null) // Limpiar recordatorio de vuelto de la venta anterior
@@ -6919,6 +6970,7 @@ export default function POS() {
         ...(item.observations && { observations: item.observations }), // Incluir observaciones si existen (IMEI, placa, serie, etc.)
         ...(item.itemDiscount > 0 && { itemDiscount: item.itemDiscount }), // Descuento por ítem para XML SUNAT
         ...bonificacionParaSunat(item),
+        ...referenciaDeRegalo(item),
         ...(item.notes && { notes: item.notes }), // Incluir notas si existen
         ...(item.presentationName && { presentationName: item.presentationName, presentationFactor: item.presentationFactor }),
         ...(item.batchNumber && { batchNumber: item.batchNumber }),
@@ -7175,10 +7227,29 @@ export default function POS() {
         // puede venir en dólares. La utilidad usa el costo ya congelado de cada
         // item, así que la comisión sobre utilidad tampoco se mueve después.
         ...(() => {
+          // Detalle por línea, para los vendedores que comisionan por producto.
+          // El total de cada línea va en la moneda de la venta, así que se pasa
+          // a soles con el mismo factor que ya se aplicó al total del documento
+          // —así la suma de las líneas no se despega del total congelado—.
+          // El costo NO se convierte: `costAtSale` ya está en soles.
+          const aSoles = Number(amounts.total) > 0
+            ? Number(amounts.totalInBase) / Number(amounts.total)
+            : 1
+          const lineasParaComision = items.map(it => {
+            const cantidad = Number(it.quantity) || 0
+            const bruto = (Number(it.unitPrice) || 0) * cantidad - (Number(it.itemDiscount) || 0)
+            return {
+              productId: it.productId,
+              quantity: cantidad,
+              totalInBase: Math.max(0, bruto) * aSoles,
+              costInBase: (Number(it.costAtSale) || 0) * cantidad,
+            }
+          })
           const com = computeSaleCommission(
             selectedSeller,
             amounts.totalInBase,
-            items.reduce((sum, it) => sum + (Number(it.costAtSale) || 0) * (Number(it.quantity) || 0), 0)
+            lineasParaComision.reduce((sum, l) => sum + l.costInBase, 0),
+            lineasParaComision
           )
           return com ? { commission: com } : {}
         })(),
@@ -11882,15 +11953,36 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           )}
                           {/* Nombre + sub-info inline */}
                           <div className="flex-1 min-w-0 pt-0.5">
+                            {/* La descripción se ve COMPLETA, en varias líneas.
+                                Antes se cortaba con puntos suspensivos —una sola
+                                línea— y en rubros donde el nombre es la
+                                descripción del servicio ("RECOJO, TRANSPORTE Y
+                                DISPOSICIÓN FINAL DE RESIDUOS SÓLIDOS...") el
+                                cajero no podía leer ni verificar lo que iba a
+                                salir en el comprobante.
+                                Editable: textarea que crece con el texto, para
+                                corregirlo ahí mismo sin abrir otra ventana. */}
                             {companySettings?.allowNameEdit ? (
-                              <input
-                                type="text"
+                              <textarea
                                 value={item.name}
-                                onChange={(e) => updateItemName(item.cartId || item.id, e.target.value)}
-                                className="font-semibold text-sm text-gray-900 w-full bg-transparent border-b border-dashed border-gray-300 focus:border-primary-500 focus:outline-none py-0.5"
+                                rows={1}
+                                onChange={(e) => {
+                                  updateItemName(item.cartId || item.id, e.target.value)
+                                  // Crece con el contenido: sin esto la textarea
+                                  // se queda en una línea y volvemos al problema.
+                                  e.target.style.height = 'auto'
+                                  e.target.style.height = `${e.target.scrollHeight}px`
+                                }}
+                                ref={(el) => {
+                                  if (el) {
+                                    el.style.height = 'auto'
+                                    el.style.height = `${el.scrollHeight}px`
+                                  }
+                                }}
+                                className="font-semibold text-sm text-gray-900 w-full bg-transparent border-b border-dashed border-gray-300 focus:border-primary-500 focus:outline-none py-0.5 resize-none overflow-hidden leading-snug"
                               />
                             ) : (
-                              <p className="font-semibold text-sm text-gray-900 line-clamp-1" title={item.name}>
+                              <p className="font-semibold text-sm text-gray-900 break-words leading-snug" title={item.name}>
                                 {item.name}
                               </p>
                             )}

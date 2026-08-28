@@ -1,14 +1,18 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Users, Plus, Edit, Trash2, UserCheck, DollarSign, ShoppingCart, TrendingUp, Loader2, Store, Search, Eye, MoreVertical, Target, Calendar } from 'lucide-react'
+import { Users, Plus, Edit, Trash2, UserCheck, DollarSign, ShoppingCart, TrendingUp, Loader2, Store, Search, Eye, MoreVertical, Target, Calendar, Wallet, Check, X } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { getSellers, deleteSeller, toggleSellerStatus } from '@/services/sellerService'
-import { getInvoiceCommission, buildSellerIndex } from '@/utils/commissions'
+import { getInvoiceCommission, buildSellerIndex, ventaCobrada, ventaComisionable } from '@/utils/commissions'
+import {
+  getCommissionPayouts, idsYaLiquidados, marcarPayoutPagado, anularPayout, PAYOUT_STATES,
+} from '@/services/commissionPayoutService'
+import CommissionPayoutModal from '@/components/CommissionPayoutModal'
 import MonthSelect from '@/components/MonthSelect'
 import { getDocumentTotalInBase } from '@/utils/currency'
-import { getInvoices, getRecentInvoices } from '@/services/firestoreService'
+import { getInvoices, getRecentInvoices, getInvoicesBySeller } from '@/services/firestoreService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { sucursalesDelVendedor, etiquetaSucursales } from '@/utils/sellerBranches'
 import { useToast } from '@/contexts/ToastContext'
@@ -82,6 +86,13 @@ export default function Sellers() {
   const toast = useToast()
 
   const [sellers, setSellers] = useState([])
+  // ── Liquidación de comisiones ──
+  const [payouts, setPayouts] = useState([])
+  const [payoutSeller, setPayoutSeller] = useState(null)   // vendedor a liquidar
+  const [pendientesDelVendedor, setPendientesDelVendedor] = useState(null) // ventas a liquidar
+  const [calculandoPendiente, setCalculandoPendiente] = useState(false)
+  const [payoutBusy, setPayoutBusy] = useState(null)       // id de la liquidación en curso
+  const [verLiquidaciones, setVerLiquidaciones] = useState(false)
   const [invoices, setInvoices] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [isFormModalOpen, setIsFormModalOpen] = useState(false)
@@ -112,7 +123,7 @@ export default function Sellers() {
 
   // Recargar cuando cambia el filtro de fecha (la query de Firestore cambia)
   useEffect(() => {
-    if (user?.uid) loadSellers()
+    if (user?.uid) { loadSellers(); cargarPayouts() }
   }, [dateFrom])
 
   // Cargar sucursales para filtro
@@ -155,6 +166,9 @@ export default function Sellers() {
   }
 
   // Facturas válidas (excluye anuladas/convertidas/archivadas)
+  // Indice de vendedores, compartido por las estadisticas y la liquidacion.
+  const sellerIndex = useMemo(() => buildSellerIndex(sellers), [sellers])
+
   const validInvoices = useMemo(() => {
     return invoices.filter(invoice => {
       if (invoice.status === 'cancelled' || invoice.status === 'voided') return false
@@ -185,7 +199,8 @@ export default function Sellers() {
 
   // Calcular estadísticas de vendedores desde facturas filtradas
   const sellerInvoiceStats = useMemo(() => {
-    const sellerIndex = buildSellerIndex(sellers)
+    // sellerIndex vive fuera: lo usan tambien la comision pendiente y la
+    // liquidacion, y construirlo dos veces por render no aporta nada.
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
@@ -237,7 +252,103 @@ export default function Sellers() {
     })
 
     return statsMap
-  }, [dateFilteredInvoices, sellers])
+  }, [dateFilteredInvoices, sellers, sellerIndex])
+
+  /**
+   * COMISIÓN PENDIENTE de UN vendedor, al abrir la liquidación.
+   *
+   * Se calcula acá y no en la lista porque la página solo carga 30 días: sobre
+   * esa ventana el pendiente salía MENOR al real si quedaba comisión vieja sin
+   * liquidar, y un número equivocado sobre plata es peor que no mostrarlo.
+   *
+   * Trae solo las ventas de ESE vendedor —una fracción del total— y descarta:
+   *  - las ya liquidadas (si no, se pagaría dos veces)
+   *  - las no cobradas (el negocio todavía no vio ese dinero)
+   *  - las anuladas
+   */
+  const abrirLiquidacion = async (seller) => {
+    setPayoutSeller(seller)
+    setPendientesDelVendedor(null)
+    setCalculandoPendiente(true)
+    try {
+      const res = await getInvoicesBySeller(getBusinessId(), seller.id)
+      if (!res.success) { toast.error('No se pudo calcular la comisión pendiente'); return }
+
+      const liquidadas = idsYaLiquidados(payouts)
+      const ventas = []
+      for (const invoice of res.data || []) {
+        if (liquidadas.has(invoice.id)) continue
+        if (!ventaComisionable(invoice)) continue
+        if (!ventaCobrada(invoice)) continue
+
+        const items = invoice.items || []
+        const total = getDocumentTotalInBase(invoice)
+        const com = getInvoiceCommission(invoice, {
+          sellersById: sellerIndex,
+          totalInBase: total,
+          costInBase: items.reduce((c, it) => c + (Number(it.costAtSale) || 0) * (Number(it.quantity) || 0), 0),
+          items: items.map(it => ({
+            productId: it.productId,
+            quantity: Number(it.quantity) || 0,
+            totalInBase: (Number(it.unitPrice) || 0) * (Number(it.quantity) || 0) - (Number(it.itemDiscount) || 0),
+            costInBase: (Number(it.costAtSale) || 0) * (Number(it.quantity) || 0),
+          })),
+        })
+        if (!com || !(com.amount > 0)) continue
+
+        ventas.push({
+          id: invoice.id,
+          numero: invoice.number || invoice.fullNumber || '',
+          fecha: invoice.createdAt?.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt || 0),
+          amount: com.amount,
+          base: com.base || 0,
+          estimated: com.estimated === true,
+        })
+      }
+      ventas.sort((a, b) => a.fecha - b.fecha)
+      setPendientesDelVendedor(ventas)
+    } finally {
+      setCalculandoPendiente(false)
+    }
+  }
+
+  // ── Acciones de liquidación ──
+  const alLiquidar = async ({ id, paymentMethod }) => {
+    await cargarPayouts()
+    // Recién creada queda "por pagar". Se marca pagada aparte, a propósito:
+    // liquidar es cerrar el período; pagar es que el dinero salga.
+    void id; void paymentMethod
+  }
+
+  const pagarPayout = async (payout) => {
+    if (isDemoMode) { toast.info('No disponible en modo demo'); return }
+    setPayoutBusy(payout.id)
+    try {
+      const res = await marcarPayoutPagado(getBusinessId(), payout, {
+        paymentMethod: payout.paymentMethod || 'efectivo',
+        paidBy: user?.uid || null,
+        paidByName: user?.displayName || user?.email || '',
+      })
+      if (!res.success) { toast.error(res.error); return }
+      toast.success('Liquidación pagada y registrada en Gastos de Ventas')
+      await cargarPayouts()
+    } finally {
+      setPayoutBusy(null)
+    }
+  }
+
+  const anularLiquidacion = async (payout) => {
+    if (isDemoMode) { toast.info('No disponible en modo demo'); return }
+    setPayoutBusy(payout.id)
+    try {
+      const res = await anularPayout(getBusinessId(), payout.id)
+      if (!res.success) { toast.error(res.error); return }
+      toast.success('Liquidación anulada. Sus ventas vuelven a quedar pendientes.')
+      await cargarPayouts()
+    } finally {
+      setPayoutBusy(null)
+    }
+  }
 
   // Enriquecer vendedores con stats calculadas desde facturas (en demo usar datos de ejemplo)
   const sellersWithStats = useMemo(() => {
@@ -308,6 +419,12 @@ export default function Sellers() {
   useEffect(() => {
     setVisibleCount(ITEMS_PER_PAGE)
   }, [searchTerm, filterBranch])
+
+  const cargarPayouts = async () => {
+    if (isDemoMode) { setPayouts([]); return }
+    const res = await getCommissionPayouts(getBusinessId())
+    if (res.success) setPayouts(res.data || [])
+  }
 
   const loadSellers = async () => {
     setIsLoading(true)
@@ -671,6 +788,7 @@ export default function Sellers() {
                           Comisión: <span className="font-semibold text-sm">{formatCurrency(seller.commission)}</span>
                         </span>
                       )}
+
                     </div>
                     <Badge variant={seller.status === 'active' ? 'success' : 'secondary'}>
                       {seller.status === 'active' ? 'Activo' : 'Inactivo'}
@@ -716,6 +834,7 @@ export default function Sellers() {
                     <TableHead>Meta</TableHead>
                     <TableHead>{hasDateFilter ? 'Total (Período)' : 'Total Ventas'}</TableHead>
                     <TableHead className="text-right">Comisión</TableHead>
+                    <TableHead className="text-right">Comisión pendiente</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -789,6 +908,28 @@ export default function Sellers() {
                         ) : (
                           // Sin comisión configurada no hay nada que mostrar; un
                           // S/ 0.00 se leería como "vendió y no ganó nada".
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
+                      </TableCell>
+                      {/* Sin importe acá a propósito: la página carga 30 días y
+                          el pendiente real puede incluir comisión más vieja. El
+                          número exacto se calcula al abrir, con las ventas de
+                          ESE vendedor. */}
+                      <TableCell className="text-right">
+                        {seller.commissionEnabled ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => abrirLiquidacion(seller)}
+                            disabled={calculandoPendiente && payoutSeller?.id === seller.id}
+                            className="gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50"
+                          >
+                            {calculandoPendiente && payoutSeller?.id === seller.id
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <Wallet className="w-3.5 h-3.5" />}
+                            Liquidar
+                          </Button>
+                        ) : (
                           <span className="text-xs text-gray-400">—</span>
                         )}
                       </TableCell>
@@ -883,6 +1024,90 @@ export default function Sellers() {
       )}
 
       {/* Form Modal */}
+      <CommissionPayoutModal
+        isOpen={!!payoutSeller && !calculandoPendiente}
+        onClose={() => { setPayoutSeller(null); setPendientesDelVendedor(null) }}
+        seller={payoutSeller}
+        pendientes={pendientesDelVendedor || []}
+        onSuccess={alLiquidar}
+      />
+
+      {/* Historial de liquidaciones */}
+      {payouts.length > 0 && (
+        <Card className="mt-6">
+          <CardHeader
+            className="cursor-pointer"
+            onClick={() => setVerLiquidaciones(v => !v)}
+          >
+            <CardTitle className="flex items-center justify-between text-base">
+              <span className="flex items-center gap-2">
+                <Wallet className="w-4 h-4 text-gray-400" />
+                Liquidaciones de comisión
+                <Badge variant="secondary">{payouts.length}</Badge>
+              </span>
+              <span className="text-xs font-normal text-gray-500">
+                {verLiquidaciones ? 'Ocultar' : 'Ver'}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          {verLiquidaciones && (
+            <CardContent className="p-0">
+              <ul className="divide-y divide-gray-100">
+                {payouts.map(p => {
+                  const estado = PAYOUT_STATES[p.status] || PAYOUT_STATES.pendiente
+                  const fecha = (t) => t?.toDate ? t.toDate().toLocaleDateString('es-PE') : '-'
+                  return (
+                    <li key={p.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                      <div className="flex-1 min-w-[180px]">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-gray-900">{p.sellerName || 'Vendedor'}</span>
+                          <Badge variant={estado.tone === 'success' ? 'success' : estado.tone === 'warning' ? 'warning' : 'secondary'}>
+                            {estado.label}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {fecha(p.desde)} — {fecha(p.hasta)} · {p.ventas} venta{p.ventas === 1 ? '' : 's'}
+                          {p.notes ? ` · ${p.notes}` : ''}
+                        </p>
+                      </div>
+                      <span className="font-semibold text-gray-900">{formatCurrency(p.amount || 0)}</span>
+                      {p.status === 'pendiente' && (
+                        <div className="flex items-center gap-1.5">
+                          <Button
+                            size="sm"
+                            onClick={() => pagarPayout(p)}
+                            disabled={payoutBusy === p.id}
+                            className="gap-1.5"
+                          >
+                            {payoutBusy === p.id
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <Check className="w-3.5 h-3.5" />}
+                            Marcar pagada
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => anularLiquidacion(p)}
+                            disabled={payoutBusy === p.id}
+                            className="text-gray-400 hover:text-red-600"
+                            title="Anular"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      )}
+                      {p.status === 'pagada' && (
+                        <span className="text-xs text-gray-500">Pagada el {fecha(p.paidAt)}</span>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            </CardContent>
+          )}
+        </Card>
+      )}
+
       <SellerFormModal
         isOpen={isFormModalOpen}
         onClose={() => {

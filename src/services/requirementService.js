@@ -26,7 +26,9 @@ import {
  *     branchId: string|null, branchName: string|null,   // sucursal de la cocina
  *     notes: string,
  *     items: [{
- *       ingredientId: string|null,   // null = ítem de texto libre (ej. "gas")
+ *       ingredientId: string|null,   // insumo del catálogo de insumos
+ *       productId: string|null,      // producto del catálogo de productos
+ *       source: 'ingredient'|'product'|'free',  // 'free' = texto libre (ej. "gas")
  *       name, unit, qty, priority: 'alta'|'media'|'baja',
  *       stockAtRequest: number|null, // stock al momento de pedir (referencial)
  *     }],

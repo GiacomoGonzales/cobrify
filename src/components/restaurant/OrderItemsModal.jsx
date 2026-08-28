@@ -920,10 +920,10 @@ export default function OrderItemsModal({
                           return (
                             <>
                               <p className="text-sm font-bold text-primary-600">
-                                S/ {(product.price || 0).toFixed(2)}
+                                S/ {(Number(product.price) || 0).toFixed(2)}
                                 {isNewOrder && (product.price2 || product.price3 || product.price4) && (
                                   <span className="text-[10px] font-normal text-gray-400 ml-1">
-                                    - S/ {(product.price2 || product.price3 || product.price4 || 0).toFixed(2)}
+                                    - S/ {(Number(product.price2 || product.price3 || product.price4) || 0).toFixed(2)}
                                   </span>
                                 )}
                               </p>
@@ -1021,7 +1021,7 @@ export default function OrderItemsModal({
         product={productForVariant}
         onSelect={handleVariantSelection}
         allowNegativeStock={businessSettings?.allowNegativeStock}
-        formatCurrency={(v) => `S/ ${(Number(v) || 0).toFixed(2)}`}
+        formatCurrency={(v) => `S/ ${(Number(Number(v)) || 0).toFixed(2)}`}
       />
 
       {/* Modal de selección de presentación (ej. Ron: Vaso / Botella) */}
@@ -1034,7 +1034,7 @@ export default function OrderItemsModal({
         product={productForPresentation}
         onSelectBase={handleSellAsBaseUnit}
         onSelectPresentation={handlePresentationSelection}
-        formatCurrency={(v) => `S/ ${(Number(v) || 0).toFixed(2)}`}
+        formatCurrency={(v) => `S/ ${(Number(Number(v)) || 0).toFixed(2)}`}
       />
 
       {/* Modal de selección de modificadores */}
@@ -1077,7 +1077,7 @@ export default function OrderItemsModal({
                     <p className="text-xs text-gray-500">Precio principal</p>
                   </div>
                   <p className="text-xl font-bold text-primary-600">
-                    S/ {(productForPriceSelection.price || 0).toFixed(2)}
+                    S/ {(Number(productForPriceSelection.price) || 0).toFixed(2)}
                   </p>
                 </div>
               </button>

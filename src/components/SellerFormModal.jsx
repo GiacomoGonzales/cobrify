@@ -1,10 +1,13 @@
-import { useState, useEffect } from 'react'
-import { Loader2, User, Store, Target, Percent } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Loader2, User, Store, Target, Percent, Search, X, Package } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import { createSeller, updateSeller } from '@/services/sellerService'
-import { COMMISSION_TYPES, DEFAULT_COMMISSION_TYPE } from '@/utils/commissions'
+import { COMMISSION_TYPES, DEFAULT_COMMISSION_TYPE, PRODUCT_COMMISSION_MODES } from '@/utils/commissions'
+import { getProducts } from '@/services/firestoreService'
+import { buildProductHaystack } from '@/utils/productSearch'
+import { matchesPrebuilt } from '@/lib/utils'
 import { getActiveBranches } from '@/services/branchService'
 import { PRINCIPAL, sucursalesDelVendedor, camposDeSucursales } from '@/utils/sellerBranches'
 import { crearVendedorDemo, actualizarVendedorDemo } from '@/data/demo/operaciones'
@@ -29,9 +32,75 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
     commissionEnabled: false,
     commissionType: DEFAULT_COMMISSION_TYPE,
     commissionRate: '',
+    // Reglas para productos puntuales: [{ productId, name, mode, value }]
+    productCommissions: [],
+    commissionOnlyListedProducts: false,
   })
 
   const [errors, setErrors] = useState({})
+
+  // Catálogo para el buscador de la sección de comisión por producto. Se carga
+  // solo al abrir el modal: no hace falta tenerlo si nadie va a asignar nada.
+  const [productos, setProductos] = useState([])
+  const [buscandoProductos, setBuscandoProductos] = useState(false)
+  const [busquedaProducto, setBusquedaProducto] = useState('')
+
+  // Catálogo de productos, para el buscador de comisión por producto.
+  useEffect(() => {
+    if (!isOpen || isDemoMode) return
+    let vivo = true
+    setBuscandoProductos(true)
+    getProducts(getBusinessId())
+      .then(r => { if (vivo) setProductos(r?.data || []) })
+      .catch(() => {})
+      .finally(() => { if (vivo) setBuscandoProductos(false) })
+    return () => { vivo = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, isDemoMode])
+
+  // Buscador: se indexa una vez y se filtra con el mismo criterio que usan las
+  // otras 8 pantallas (nombre, código, SKU, marca, categoría, sin tildes).
+  const indiceProductos = useMemo(() => {
+    const map = new Map()
+    for (const p of productos) map.set(p.id, buildProductHaystack(p))
+    return map
+  }, [productos])
+
+  const resultadosBusqueda = useMemo(() => {
+    const q = busquedaProducto.trim()
+    if (q.length < 2) return []
+    const yaAsignados = new Set((formData.productCommissions || []).map(r => r.productId))
+    return productos
+      .filter(p => !yaAsignados.has(p.id) && matchesPrebuilt(q, indiceProductos.get(p.id) || ''))
+      .slice(0, 8)
+  }, [busquedaProducto, productos, indiceProductos, formData.productCommissions])
+
+  const agregarProducto = (producto) => {
+    setFormData(prev => ({
+      ...prev,
+      productCommissions: [
+        ...(prev.productCommissions || []),
+        { productId: producto.id, name: producto.name || '', mode: 'percent', value: '' },
+      ],
+    }))
+    setBusquedaProducto('')
+  }
+
+  const cambiarRegla = (productId, campo, valor) => {
+    setFormData(prev => ({
+      ...prev,
+      productCommissions: (prev.productCommissions || []).map(r =>
+        r.productId === productId ? { ...r, [campo]: valor } : r
+      ),
+    }))
+  }
+
+  const quitarProducto = (productId) => {
+    setFormData(prev => ({
+      ...prev,
+      productCommissions: (prev.productCommissions || []).filter(r => r.productId !== productId),
+    }))
+  }
 
   // Cargar sucursales
   useEffect(() => {
@@ -61,6 +130,8 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
         salesGoal: seller.salesGoal || seller.dailyGoal || '',
         goalPeriod: seller.goalPeriod || (seller.dailyGoal ? 'daily' : 'monthly'),
         commissionEnabled: seller.commissionEnabled === true,
+        productCommissions: Array.isArray(seller.productCommissions) ? seller.productCommissions : [],
+        commissionOnlyListedProducts: seller.commissionOnlyListedProducts === true,
         commissionType: seller.commissionType || DEFAULT_COMMISSION_TYPE,
         commissionRate: seller.commissionRate != null ? String(seller.commissionRate) : '',
       })
@@ -68,6 +139,8 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
       // Reset form for new seller
       setFormData({
         commissionEnabled: false,
+        productCommissions: [],
+        commissionOnlyListedProducts: false,
         commissionType: DEFAULT_COMMISSION_TYPE,
         commissionRate: '',
         name: '',
@@ -144,6 +217,20 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
         // multiplica y un string daria NaN silencioso.
         commissionEnabled: formData.commissionEnabled === true,
         commissionRate: formData.commissionEnabled ? (parseFloat(formData.commissionRate) || 0) : 0,
+        // Igual que el porcentaje general: el valor va como NUMERO. Y se
+        // descartan las reglas sin valor, que no comisionan nada y solo
+        // ensucian la lista.
+        productCommissions: formData.commissionEnabled
+          ? (formData.productCommissions || [])
+            .map(r => ({
+              productId: r.productId,
+              name: r.name || '',
+              mode: r.mode === 'fixed' ? 'fixed' : 'percent',
+              value: parseFloat(r.value) || 0,
+            }))
+            .filter(r => r.productId && r.value > 0)
+          : [],
+        commissionOnlyListedProducts: formData.commissionEnabled && formData.commissionOnlyListedProducts === true,
       }
       // En demo se guarda contra el estado en memoria, con el mismo resultado
       // que el servicio real para no ramificar lo que sigue.
@@ -350,7 +437,7 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
               </div>
 
               <div>
-                <label className="block text-xs text-gray-600 mb-1">Porcentaje (%)</label>
+                <label className="block text-xs text-gray-600 mb-1">Porcentaje general (%)</label>
                 <Input
                   type="number"
                   name="commissionRate"
@@ -361,6 +448,112 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
                   max="100"
                   step="0.01"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  Se aplica a todos los productos que no tengan uno propio más abajo.
+                </p>
+              </div>
+
+              {/* ===== COMISIÓN POR PRODUCTO ===== */}
+              <div className="border-t border-gray-200 pt-3">
+                <span className="text-xs font-semibold text-gray-800 flex items-center gap-1.5">
+                  <Package className="w-3.5 h-3.5" />
+                  Comisión por producto (opcional)
+                </span>
+                <p className="text-xs text-gray-500 mt-0.5 mb-2">
+                  Busca un producto y ponle su propio porcentaje o un monto fijo por unidad.
+                </p>
+
+                <label className="flex items-start gap-2 cursor-pointer mb-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.commissionOnlyListedProducts}
+                    onChange={(e) => setFormData(prev => ({ ...prev, commissionOnlyListedProducts: e.target.checked }))}
+                    className="mt-0.5 rounded text-primary-600"
+                  />
+                  <span className="text-xs text-gray-700">
+                    Comisionar SOLO estos productos
+                    <span className="block text-gray-500">
+                      Apagado, el resto de productos paga el porcentaje general.
+                    </span>
+                  </span>
+                </label>
+
+                {/* Buscador */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={busquedaProducto}
+                    onChange={(e) => setBusquedaProducto(e.target.value)}
+                    placeholder={buscandoProductos ? 'Cargando productos...' : 'Buscar producto por nombre o código...'}
+                    disabled={buscandoProductos}
+                    className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+
+                {resultadosBusqueda.length > 0 && (
+                  <div className="mt-1 border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto">
+                    {resultadosBusqueda.map(p => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => agregarProducto(p)}
+                        className="w-full text-left px-3 py-2 hover:bg-primary-50 transition-colors"
+                      >
+                        <span className="block text-sm text-gray-900 truncate">{p.name}</span>
+                        {(p.sku || p.code) && (
+                          <span className="block text-xs text-gray-400">{p.sku || p.code}</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {busquedaProducto.trim().length >= 2 && resultadosBusqueda.length === 0 && !buscandoProductos && (
+                  <p className="text-xs text-gray-500 mt-1.5">Ningún producto coincide.</p>
+                )}
+
+                {/* Asignados */}
+                {(formData.productCommissions || []).length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {formData.productCommissions.map(regla => (
+                      <div key={regla.productId} className="flex items-center gap-2">
+                        <span className="flex-1 min-w-0 text-sm text-gray-800 truncate" title={regla.name}>
+                          {regla.name || 'Producto'}
+                        </span>
+                        <select
+                          value={regla.mode}
+                          onChange={(e) => cambiarRegla(regla.productId, 'mode', e.target.value)}
+                          className="w-16 px-1.5 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        >
+                          {PRODUCT_COMMISSION_MODES.map(m => (
+                            <option key={m.id} value={m.id}>{m.label}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          value={regla.value}
+                          onChange={(e) => cambiarRegla(regla.productId, 'value', e.target.value)}
+                          placeholder={regla.mode === 'fixed' ? '2.00' : '10'}
+                          min="0"
+                          step="0.01"
+                          className="w-20 px-2 py-1.5 border border-gray-300 rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => quitarProducto(regla.productId)}
+                          className="text-gray-400 hover:text-red-500 p-1"
+                          aria-label="Quitar"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                    <p className="text-xs text-gray-500">
+                      El monto fijo se paga por CADA unidad vendida.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           )}
