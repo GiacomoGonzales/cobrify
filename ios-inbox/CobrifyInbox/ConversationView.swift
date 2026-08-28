@@ -26,6 +26,11 @@ struct ConversationView: View {
     @State private var mostrarFicha = false
     @State private var respondiendoA: Mensaje?
     @State private var lejosDelFondo = false
+    /// Ya está anclada al final: hasta entonces la conversación no se pinta,
+    /// para que nunca se vea el desplazamiento inicial.
+    @State private var yaAnclada = false
+    /// El usuario ya tomó el control de la lista: dejamos de reanclar.
+    @State private var usuarioMovioLaLista = false
     /// Archivo de una respuesta rápida que espera en el compositor: sale
     /// recién al tocar enviar, con lo que haya en el cuadro como pie.
     @State private var mediaPendiente: MediaBiblioteca?
@@ -54,6 +59,13 @@ struct ConversationView: View {
                                 .id(m.id)
                         }
                     }
+                    // Ancla del final. Saltar "al último mensaje" fallaba
+                    // cuando ese mensaje era larguísimo (alineaba su inicio,
+                    // no el fondo real de la conversación). Una marca de 1pt
+                    // al final siempre cae donde debe.
+                    Color.clear
+                        .frame(height: 1)
+                        .id(Self.anclaFinal)
                 }
                 .padding(.horizontal, 12)
                 .padding(.top, 8)
@@ -62,20 +74,45 @@ struct ConversationView: View {
                 .padding(.bottom, 8)
             }
             .defaultScrollAnchor(.bottom)
+            .opacity(yaAnclada ? 1 : 0)
             // Al subir por la conversación aparece la flecha para volver al
             // final, como WhatsApp.
             .alAlejarseDelFondo { lejos in
+                // Si se aleja del fondo estando ya colocada, fue él: no se
+                // le vuelve a mover la lista bajo los dedos.
+                if lejos && yaAnclada { usuarioMovioLaLista = true }
                 withAnimation(.easeOut(duration: 0.18)) { lejosDelFondo = lejos }
             }
             // Arrastrar hacia abajo va cerrando el teclado, como WhatsApp.
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: store.mensajes.count + store.pendientes.count) {
-                bajarAlFinal(proxy)
-                // La cura de la pantalla en blanco al llegar desde una
-                // notificación: la pila perezosa a veces no pinta hasta que
-                // algo mueve el layout. Dos pasadas más, ya asentado.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { bajarAlFinal(proxy, animado: false) }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { bajarAlFinal(proxy, animado: false) }
+                let primeraVez = !yaAnclada
+                // Un mensaje que llega estando ya dentro sí se desliza.
+                if !primeraVez { bajarAlFinal(proxy) }
+                // La pila perezosa a veces no pinta hasta que algo mueve el
+                // layout (se notaba al entrar desde una notificación): dos
+                // pasadas más, ya asentado.
+                if primeraVez {
+                    // Se coloca de golpe, sin animar, y se reafirma mientras
+                    // las fotos terminan de cargar y empujan el contenido.
+                    bajarAlFinal(proxy, animado: false)
+                    for retraso in [0.05, 0.2, 0.5, 1.0] {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + retraso) {
+                            guard !usuarioMovioLaLista else { return }
+                            bajarAlFinal(proxy, animado: false)
+                            yaAnclada = true
+                        }
+                    }
+                } else {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                        bajarAlFinal(proxy, animado: false)
+                    }
+                }
+            }
+            // Conversación sin mensajes: no hay nada que anclar, pero igual
+            // tiene que verse.
+            .onChange(of: store.cargando) {
+                if !store.cargando && store.mensajes.isEmpty { yaAnclada = true }
             }
             // Al abrir el teclado, la conversación sube sola y lo último
             // queda a la vista — sin tener que hacer scroll a mano.
@@ -299,12 +336,14 @@ struct ConversationView: View {
         )
     }
 
+    private static let anclaFinal = "fin-de-la-conversacion"
+
     private func bajarAlFinal(_ proxy: ScrollViewProxy, animado: Bool = true) {
-        guard let ultimo = (store.mensajes + store.pendientes).last else { return }
+        guard !store.mensajes.isEmpty || !store.pendientes.isEmpty else { return }
         if animado {
-            withAnimation { proxy.scrollTo(ultimo.id, anchor: .bottom) }
+            withAnimation { proxy.scrollTo(Self.anclaFinal, anchor: .bottom) }
         } else {
-            proxy.scrollTo(ultimo.id, anchor: .bottom)
+            proxy.scrollTo(Self.anclaFinal, anchor: .bottom)
         }
     }
 
