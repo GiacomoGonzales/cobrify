@@ -165,6 +165,17 @@ enum Formato {
         return f.string(from: fecha).capitalized
     }
 
+    /// "hace 20 min", "hace 3 h", "ayer", "hace 5 días".
+    static func haceCuanto(_ fecha: Date) -> String {
+        let s = -fecha.timeIntervalSinceNow
+        if s < 60 { return "recién" }
+        if s < 3600 { return "hace \(Int(s / 60)) min" }
+        if s < 86400 { return "hace \(Int(s / 3600)) h" }
+        if Calendar.current.isDateInYesterday(fecha) { return "ayer" }
+        let dias = Int(s / 86400)
+        return "hace \(dias) día\(dias == 1 ? "" : "s")"
+    }
+
     /// Cuánto queda de ventana: "3 h 12 min", "45 min" o "cerrada".
     static func restante(hasta fecha: Date) -> String {
         let s = fecha.timeIntervalSinceNow

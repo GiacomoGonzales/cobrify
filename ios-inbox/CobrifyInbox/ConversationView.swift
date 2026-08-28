@@ -149,11 +149,20 @@ struct ConversationView: View {
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                VStack(spacing: 0) {
-                    Text(conv.titulo).font(.headline).lineLimit(1)
-                    Text(Formato.numero(conv.waId))
+                // El estado vive aquí, chiquito, en vez de una franja naranja
+                // sobre el teclado. TimelineView lo mantiene al día solo.
+                TimelineView(.periodic(from: .now, by: 60)) { _ in
+                    VStack(spacing: 0) {
+                        Text(conv.titulo).font(.headline).lineLimit(1)
+                        HStack(spacing: 4) {
+                            if let punto = colorEstado {
+                                Circle().fill(punto).frame(width: 5, height: 5)
+                            }
+                            Text(subtituloCabecera)
+                        }
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(colorEstado ?? .secondary)
+                    }
                 }
             }
             if conv.linkedBusinessId != nil {
@@ -371,6 +380,34 @@ struct ConversationView: View {
 
     // MARK: - Responder
 
+    /// Bajo el nombre: el número cuando todo está tranquilo, y el estado de
+    /// la ventana cuando importa. WhatsApp no entrega "en línea" ni "última
+    /// vez" por la Cloud API, así que lo útil que sí sabemos es cuándo
+    /// escribió el cliente por última vez.
+    private var subtituloCabecera: String {
+        guard let vence = venceVentana else { return Formato.numero(conv.waId) }
+        let restante = vence.timeIntervalSinceNow
+        if restante <= 0 {
+            if let ultimo = store.mensajes.last(where: { !$0.esSaliente })?.timestamp {
+                return "Escribió \(Formato.haceCuanto(ultimo))"
+            }
+            return "Ventana cerrada"
+        }
+        if restante < 3 * 3600 {
+            return "Cierra en \(Formato.restante(hasta: vence))"
+        }
+        return Formato.numero(conv.waId)
+    }
+
+    /// Sin color mientras no haya nada que avisar.
+    private var colorEstado: Color? {
+        guard let vence = venceVentana else { return nil }
+        let restante = vence.timeIntervalSinceNow
+        if restante <= 0 { return Color(.systemGray) }
+        if restante < 3 * 3600 { return .orange }
+        return nil
+    }
+
     /// Vencimiento VIVO de la ventana de 24 h: desde el último mensaje del
     /// cliente ya cargado (si el cliente escribe, se extiende sola); si aún
     /// no hay mensajes, lo que diga la conversación.
@@ -416,14 +453,6 @@ struct ConversationView: View {
                     .padding(.horizontal, 12)
                     .padding(.bottom, 6)
                 } else {
-                    if let vence = venceVentana, vence.timeIntervalSinceNow < 3 * 3600 {
-                        // Aviso discreto solo cuando queda poco.
-                        Text("La ventana se cierra en \(Formato.restante(hasta: vence))")
-                            .font(.caption2)
-                            .foregroundStyle(.orange)
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 6)
-                    }
                     if grabadora.grabando {
                         // Grabando nota de voz
                         HStack(spacing: 12) {
