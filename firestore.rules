@@ -117,6 +117,11 @@ service cloud.firestore {
         request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['estado', 'etiquetas', 'nota', 'sinLeer',
                     'linkedBusinessId', 'linkedBusinessName', 'linkedBy',
+                    // linkedBusinessIds: las OTRAS cuentas del mismo cliente.
+                    // Un contacto (un vendedor, un reseller) suele manejar
+                    // varias; linkedBusinessId sigue siendo la principal para
+                    // que la web no cambie.
+                    'linkedBusinessIds',
                     'linkAttempted', 'optOut', 'optOutAt', 'updatedAt']);
       allow create, delete: if false;
 

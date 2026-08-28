@@ -202,8 +202,8 @@ struct ConversationView: View {
             .presentationDetents([.medium])
         }
         .sheet(isPresented: $mostrarFicha) {
-            if let negocio = conv.linkedBusinessId {
-                FichaClienteView(businessId: negocio)
+            if conv.linkedBusinessId != nil {
+                GrupoCuentasView(conv: conv)
             }
         }
         .sheet(isPresented: $mostrarVincular) {

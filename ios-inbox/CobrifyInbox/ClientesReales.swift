@@ -50,7 +50,7 @@ struct VincularSheet: View {
 /// acceso directo a su ficha y su chat.
 struct ClientesRealesView: View {
     @StateObject private var inbox = InboxStore()
-    @State private var fichaDe: String?
+    @State private var convFicha: Conversacion?
     @State private var busqueda = ""
 
     private var clientes: [(id: String, nombre: String, conv: Conversacion)] {
@@ -78,7 +78,7 @@ struct ClientesRealesView: View {
                 } else {
                     List(clientes, id: \.id) { c in
                         Button {
-                            fichaDe = c.id
+                            convFicha = c.conv
                         } label: {
                             HStack(spacing: 12) {
                                 ZStack {
@@ -104,11 +104,8 @@ struct ClientesRealesView: View {
                 }
             }
             .navigationTitle("Clientes")
-            .sheet(item: Binding(
-                get: { fichaDe.map { FichaId(id: $0) } },
-                set: { fichaDe = $0?.id }
-            )) { f in
-                FichaClienteView(businessId: f.id)
+            .sheet(item: $convFicha) { c in
+                GrupoCuentasView(conv: c)
             }
         }
         .onAppear { inbox.empezar() }

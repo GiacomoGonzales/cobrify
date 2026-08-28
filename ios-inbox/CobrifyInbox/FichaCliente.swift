@@ -321,11 +321,117 @@ final class BuscadorNegocios: ObservableObject {
                          "updatedAt": FieldValue.serverTimestamp()]) { _ in }
     }
 
+    /// Suma otra cuenta al mismo cliente. La principal no se toca: esta va a
+    /// la lista de acompañantes, que la web ignora sin romperse.
+    static func agregarCuenta(conversationId: String, businessId: String) {
+        Firestore.firestore().collection("whatsappConversations").document(conversationId)
+            .updateData(["linkedBusinessIds": FieldValue.arrayUnion([businessId]),
+                         "updatedAt": FieldValue.serverTimestamp()]) { _ in }
+    }
+
+    static func quitarCuenta(conversationId: String, businessId: String) {
+        Firestore.firestore().collection("whatsappConversations").document(conversationId)
+            .updateData(["linkedBusinessIds": FieldValue.arrayRemove([businessId]),
+                         "updatedAt": FieldValue.serverTimestamp()]) { _ in }
+    }
+
     static func desvincular(conversationId: String) {
         Firestore.firestore().collection("whatsappConversations").document(conversationId)
             .updateData(["linkedBusinessId": FieldValue.delete(),
                          "linkedBusinessName": FieldValue.delete(),
                          "linkedBy": FieldValue.delete(),
                          "updatedAt": FieldValue.serverTimestamp()]) { _ in }
+    }
+}
+
+// ---------- El cliente y TODAS sus cuentas ----------
+
+/// Resumen de una cuenta para la lista del grupo: lo justo para decidir cuál
+/// abrir sin cargar la ficha entera.
+struct CuentaResumen: Identifiable, Equatable {
+    let id: String
+    var nombre: String
+    var planName: String?
+    var vence: Date?
+    var accessBlocked: Bool
+    /// Quién la trajo, que es como se agrupan: el reseller o el vendedor.
+    var resellerId: String?
+    var vendedorId: String?
+
+    var diasParaVencer: Int? {
+        guard let vence else { return nil }
+        return Int(ceil(vence.timeIntervalSinceNow / 86400))
+    }
+    var vencida: Bool { (diasParaVencer ?? 1) < 0 }
+}
+
+/// Las cuentas de un mismo cliente y las que podrían serlo.
+@MainActor
+final class GrupoCuentasStore: ObservableObject {
+    @Published var cuentas: [CuentaResumen] = []
+    @Published var sugeridas: [CuentaResumen] = []
+    @Published var cargando = true
+
+    private let db = Firestore.firestore()
+
+    func cargar(ids: [String]) async {
+        cargando = true
+        var resultado: [CuentaResumen] = []
+        for id in ids {
+            if let c = await leerCuenta(id) { resultado.append(c) }
+        }
+        cuentas = resultado
+        cargando = false
+        await buscarSugeridas()
+    }
+
+    private func leerCuenta(_ id: String) async -> CuentaResumen? {
+        async let sub = db.collection("subscriptions").document(id).getDocument()
+        async let biz = db.collection("businesses").document(id).getDocument()
+        guard let (s, b) = try? await (sub, biz), s.exists || b.exists else { return nil }
+        let sd = s.data() ?? [:]
+        let bd = b.data() ?? [:]
+        return CuentaResumen(
+            id: id,
+            nombre: bd["businessName"] as? String ?? sd["businessName"] as? String ?? "(sin nombre)",
+            // El nombre bonito del catálogo; si el plan no está ahí, lo que
+            // haya guardado. Nunca el código crudo tipo "qpse_1_month".
+            planName: PlanCatalogo.plan(sd["plan"] as? String)?.nombre
+                ?? sd["planName"] as? String
+                ?? sd["plan"] as? String,
+            vence: (sd["currentPeriodEnd"] as? Timestamp)?.dateValue(),
+            accessBlocked: sd["accessBlocked"] as? Bool ?? false,
+            resellerId: sd["resellerId"] as? String,
+            vendedorId: sd["vendedorId"] as? String
+        )
+    }
+
+    /// Otras cuentas que trajo el mismo reseller o el mismo vendedor: son las
+    /// candidatas naturales a pertenecer a este cliente. Solo se sugieren —
+    /// entrar al grupo siempre es decisión tuya.
+    private func buscarSugeridas() async {
+        let yaEstan = Set(cuentas.map(\.id))
+        let resellers = Set(cuentas.compactMap(\.resellerId))
+        let vendedores = Set(cuentas.compactMap(\.vendedorId))
+        guard !resellers.isEmpty || !vendedores.isEmpty else { sugeridas = []; return }
+
+        var encontradas: [String: CuentaResumen] = [:]
+        for rid in resellers {
+            if let snap = try? await db.collection("subscriptions")
+                .whereField("resellerId", isEqualTo: rid).limit(to: 25).getDocuments() {
+                for d in snap.documents where !yaEstan.contains(d.documentID) {
+                    if let c = await leerCuenta(d.documentID) { encontradas[d.documentID] = c }
+                }
+            }
+        }
+        for vid in vendedores {
+            if let snap = try? await db.collection("subscriptions")
+                .whereField("vendedorId", isEqualTo: vid).limit(to: 25).getDocuments() {
+                for d in snap.documents where !yaEstan.contains(d.documentID) {
+                    if let c = await leerCuenta(d.documentID) { encontradas[d.documentID] = c }
+                }
+            }
+        }
+        sugeridas = Array(encontradas.values).sorted { $0.nombre < $1.nombre }
     }
 }

@@ -14,6 +14,8 @@ struct Conversacion: Identifiable, Equatable {
     var estado: String
     var linkedBusinessName: String?
     var linkedBusinessId: String?
+    /// Todas las cuentas de este cliente (la principal incluida).
+    var linkedBusinessIds: [String]
     var optOut: Bool
     var ventanaVenceAt: Date?
     var etiquetas: [String]
@@ -30,6 +32,12 @@ struct Conversacion: Identifiable, Equatable {
         estado = data["estado"] as? String ?? "abierta"
         linkedBusinessName = data["linkedBusinessName"] as? String
         linkedBusinessId = data["linkedBusinessId"] as? String
+        let extras = data["linkedBusinessIds"] as? [String] ?? []
+        // La principal siempre primero y sin repetir.
+        var todas: [String] = []
+        if let p = data["linkedBusinessId"] as? String { todas.append(p) }
+        for id in extras where !todas.contains(id) { todas.append(id) }
+        linkedBusinessIds = todas
         etiquetas = data["etiquetas"] as? [String] ?? []
         nota = data["nota"] as? String
         optOut = data["optOut"] as? Bool ?? false
