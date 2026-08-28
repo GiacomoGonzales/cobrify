@@ -229,6 +229,30 @@ export const createNoteWithNumber = async (userId, noteData, seriesKey) => {
  * @param {Date} sinceDate - Fecha desde la cual obtener facturas (inclusive)
  * @param {Date|null} untilDate - Tope superior EXCLUSIVO (opcional)
  */
+/**
+ * Las ventas de UN vendedor.
+ *
+ * Existe para la liquidación de comisiones: la página de Vendedores carga 30
+ * días, y sobre esa ventana el pendiente salía menor al real si quedaba
+ * comisión vieja sin liquidar. Traer solo las de ese vendedor es una fracción
+ * de todo el historial, y da el número exacto.
+ *
+ * Requiere índice (sellerId + createdAt).
+ */
+export const getInvoicesBySeller = async (userId, sellerId, sinceDate = null) => {
+  try {
+    const constraints = [where('sellerId', '==', sellerId)]
+    if (sinceDate) constraints.push(where('createdAt', '>=', sinceDate))
+    constraints.push(orderBy('createdAt', 'desc'))
+    const q = query(collection(db, 'businesses', userId, 'invoices'), ...constraints)
+    const snap = await getDocs(q)
+    return { success: true, data: snap.docs.map(d => ({ id: d.id, ...d.data() })) }
+  } catch (error) {
+    console.error('Error al obtener ventas del vendedor:', error)
+    return { success: false, error: error.message }
+  }
+}
+
 export const getRecentInvoices = async (userId, sinceDate, untilDate = null) => {
   try {
     const constraints = [where('createdAt', '>=', sinceDate)]

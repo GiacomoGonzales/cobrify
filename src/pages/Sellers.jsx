@@ -5,14 +5,14 @@ import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { getSellers, deleteSeller, toggleSellerStatus } from '@/services/sellerService'
-import { getInvoiceCommission, buildSellerIndex, ventaCobrada } from '@/utils/commissions'
+import { getInvoiceCommission, buildSellerIndex, ventaCobrada, ventaComisionable } from '@/utils/commissions'
 import {
   getCommissionPayouts, idsYaLiquidados, marcarPayoutPagado, anularPayout, PAYOUT_STATES,
 } from '@/services/commissionPayoutService'
 import CommissionPayoutModal from '@/components/CommissionPayoutModal'
 import MonthSelect from '@/components/MonthSelect'
 import { getDocumentTotalInBase } from '@/utils/currency'
-import { getInvoices, getRecentInvoices } from '@/services/firestoreService'
+import { getInvoices, getRecentInvoices, getInvoicesBySeller } from '@/services/firestoreService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { sucursalesDelVendedor, etiquetaSucursales } from '@/utils/sellerBranches'
 import { useToast } from '@/contexts/ToastContext'
@@ -89,6 +89,8 @@ export default function Sellers() {
   // ── Liquidación de comisiones ──
   const [payouts, setPayouts] = useState([])
   const [payoutSeller, setPayoutSeller] = useState(null)   // vendedor a liquidar
+  const [pendientesDelVendedor, setPendientesDelVendedor] = useState(null) // ventas a liquidar
+  const [calculandoPendiente, setCalculandoPendiente] = useState(false)
   const [payoutBusy, setPayoutBusy] = useState(null)       // id de la liquidación en curso
   const [verLiquidaciones, setVerLiquidaciones] = useState(false)
   const [invoices, setInvoices] = useState([])
@@ -253,61 +255,62 @@ export default function Sellers() {
   }, [dateFilteredInvoices, sellers, sellerIndex])
 
   /**
-   * COMISIÓN PENDIENTE por vendedor: lo que se le debe hoy.
+   * COMISIÓN PENDIENTE de UN vendedor, al abrir la liquidación.
    *
-   * Tres filtros, y los tres importan:
-   *  - ya liquidada NO cuenta (si no, se pagaría dos veces)
-   *  - venta no cobrada NO cuenta (el negocio todavía no vio ese dinero)
-   *  - anuladas ya vienen fuera de `validInvoices`
+   * Se calcula acá y no en la lista porque la página solo carga 30 días: sobre
+   * esa ventana el pendiente salía MENOR al real si quedaba comisión vieja sin
+   * liquidar, y un número equivocado sobre plata es peor que no mostrarlo.
    *
-   * Se calcula sobre TODAS las ventas, sin el filtro de fechas de la pantalla:
-   * lo que se le debe a alguien no depende del mes que uno esté mirando.
+   * Trae solo las ventas de ESE vendedor —una fracción del total— y descarta:
+   *  - las ya liquidadas (si no, se pagaría dos veces)
+   *  - las no cobradas (el negocio todavía no vio ese dinero)
+   *  - las anuladas
    */
-  const pendientePorVendedor = useMemo(() => {
-    const liquidadas = idsYaLiquidados(payouts)
-    const porVendedor = {}
+  const abrirLiquidacion = async (seller) => {
+    setPayoutSeller(seller)
+    setPendientesDelVendedor(null)
+    setCalculandoPendiente(true)
+    try {
+      const res = await getInvoicesBySeller(getBusinessId(), seller.id)
+      if (!res.success) { toast.error('No se pudo calcular la comisión pendiente'); return }
 
-    for (const invoice of validInvoices) {
-      if (!invoice.sellerId) continue
-      if (liquidadas.has(invoice.id)) continue
-      if (!ventaCobrada(invoice)) continue
+      const liquidadas = idsYaLiquidados(payouts)
+      const ventas = []
+      for (const invoice of res.data || []) {
+        if (liquidadas.has(invoice.id)) continue
+        if (!ventaComisionable(invoice)) continue
+        if (!ventaCobrada(invoice)) continue
 
-      const items = invoice.items || []
-      const total = getDocumentTotalInBase(invoice)
-      const com = getInvoiceCommission(invoice, {
-        sellersById: sellerIndex,
-        totalInBase: total,
-        costInBase: items.reduce((c, it) => c + (Number(it.costAtSale) || 0) * (Number(it.quantity) || 0), 0),
-        // Necesario para los vendedores que comisionan por producto y cuya
-        // venta es anterior al congelado.
-        items: items.map(it => ({
-          productId: it.productId,
-          quantity: Number(it.quantity) || 0,
-          totalInBase: (Number(it.unitPrice) || 0) * (Number(it.quantity) || 0) - (Number(it.itemDiscount) || 0),
-          costInBase: (Number(it.costAtSale) || 0) * (Number(it.quantity) || 0),
-        })),
-      })
-      if (!com || !(com.amount > 0)) continue
+        const items = invoice.items || []
+        const total = getDocumentTotalInBase(invoice)
+        const com = getInvoiceCommission(invoice, {
+          sellersById: sellerIndex,
+          totalInBase: total,
+          costInBase: items.reduce((c, it) => c + (Number(it.costAtSale) || 0) * (Number(it.quantity) || 0), 0),
+          items: items.map(it => ({
+            productId: it.productId,
+            quantity: Number(it.quantity) || 0,
+            totalInBase: (Number(it.unitPrice) || 0) * (Number(it.quantity) || 0) - (Number(it.itemDiscount) || 0),
+            costInBase: (Number(it.costAtSale) || 0) * (Number(it.quantity) || 0),
+          })),
+        })
+        if (!com || !(com.amount > 0)) continue
 
-      if (!porVendedor[invoice.sellerId]) porVendedor[invoice.sellerId] = { total: 0, ventas: [] }
-      porVendedor[invoice.sellerId].total += com.amount
-      porVendedor[invoice.sellerId].ventas.push({
-        id: invoice.id,
-        numero: invoice.number || invoice.fullNumber || '',
-        fecha: invoice.createdAt?.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt || 0),
-        amount: com.amount,
-        base: com.base || 0,
-        estimated: com.estimated === true,
-      })
+        ventas.push({
+          id: invoice.id,
+          numero: invoice.number || invoice.fullNumber || '',
+          fecha: invoice.createdAt?.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt || 0),
+          amount: com.amount,
+          base: com.base || 0,
+          estimated: com.estimated === true,
+        })
+      }
+      ventas.sort((a, b) => a.fecha - b.fecha)
+      setPendientesDelVendedor(ventas)
+    } finally {
+      setCalculandoPendiente(false)
     }
-
-    for (const v of Object.values(porVendedor)) {
-      v.total = Math.round(v.total * 100) / 100
-      v.ventas.sort((a, b) => a.fecha - b.fecha)
-    }
-    return porVendedor
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [validInvoices, payouts, sellerIndex])
+  }
 
   // ── Acciones de liquidación ──
   const alLiquidar = async ({ id, paymentMethod }) => {
@@ -785,11 +788,7 @@ export default function Sellers() {
                           Comisión: <span className="font-semibold text-sm">{formatCurrency(seller.commission)}</span>
                         </span>
                       )}
-                      {(pendientePorVendedor[seller.id]?.total || 0) > 0 && (
-                        <span className="text-amber-700">
-                          Por pagar: <span className="font-semibold text-sm">{formatCurrency(pendientePorVendedor[seller.id].total)}</span>
-                        </span>
-                      )}
+
                     </div>
                     <Badge variant={seller.status === 'active' ? 'success' : 'secondary'}>
                       {seller.status === 'active' ? 'Activo' : 'Inactivo'}
@@ -835,7 +834,7 @@ export default function Sellers() {
                     <TableHead>Meta</TableHead>
                     <TableHead>{hasDateFilter ? 'Total (Período)' : 'Total Ventas'}</TableHead>
                     <TableHead className="text-right">Comisión</TableHead>
-                    <TableHead className="text-right">Por pagar</TableHead>
+                    <TableHead className="text-right">Comisión pendiente</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -912,19 +911,23 @@ export default function Sellers() {
                           <span className="text-xs text-gray-400">—</span>
                         )}
                       </TableCell>
-                      {/* Por pagar: lo que se le debe HOY, sin importar el filtro
-                          de fechas de arriba. Una deuda no cambia segun el mes
-                          que uno este mirando. */}
+                      {/* Sin importe acá a propósito: la página carga 30 días y
+                          el pendiente real puede incluir comisión más vieja. El
+                          número exacto se calcula al abrir, con las ventas de
+                          ESE vendedor. */}
                       <TableCell className="text-right">
-                        {(pendientePorVendedor[seller.id]?.total || 0) > 0 ? (
+                        {seller.commissionEnabled ? (
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => setPayoutSeller(seller)}
+                            onClick={() => abrirLiquidacion(seller)}
+                            disabled={calculandoPendiente && payoutSeller?.id === seller.id}
                             className="gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50"
                           >
-                            <Wallet className="w-3.5 h-3.5" />
-                            {formatCurrency(pendientePorVendedor[seller.id].total)}
+                            {calculandoPendiente && payoutSeller?.id === seller.id
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <Wallet className="w-3.5 h-3.5" />}
+                            Liquidar
                           </Button>
                         ) : (
                           <span className="text-xs text-gray-400">—</span>
@@ -1022,10 +1025,10 @@ export default function Sellers() {
 
       {/* Form Modal */}
       <CommissionPayoutModal
-        isOpen={!!payoutSeller}
-        onClose={() => setPayoutSeller(null)}
+        isOpen={!!payoutSeller && !calculandoPendiente}
+        onClose={() => { setPayoutSeller(null); setPendientesDelVendedor(null) }}
         seller={payoutSeller}
-        pendientes={payoutSeller ? (pendientePorVendedor[payoutSeller.id]?.ventas || []) : []}
+        pendientes={pendientesDelVendedor || []}
         onSuccess={alLiquidar}
       />
 
