@@ -391,6 +391,7 @@ export default {
             ['Mostrar códigos de producto', 'El código junto a cada ítem (por separado en cotizaciones y comprobantes)'],
             ['Mostrar descripción del producto', 'La descripción larga bajo el nombre'],
             ['Habilitar imágenes', 'La foto del producto en el documento'],
+            ['Mostrar la marca en comprobantes', 'Agrega una columna MARCA al PDF. Útil cuando la marca identifica al producto (municiones, repuestos, herramientas). El espacio sale de DESCRIPCIÓN'],
             ['Ocultar lote y vencimiento en comprobantes', 'Quita esa columna de la impresión'],
             ['Imprimir también en el ticket térmico', 'Los términos y condiciones salen también en el ticket, no solo en el PDF'],
             ['Imprimir código QR al pie del ticket', 'Agrega el QR al final del ticket'],

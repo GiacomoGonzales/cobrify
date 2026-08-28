@@ -1559,6 +1559,18 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   // Detectar modo farmacia para mostrar columna LABORATORIO
   const isPharmacy = companySettings?.businessMode === 'pharmacy'
+
+  /**
+   * Columna MARCA.
+   *
+   * Ya existia, pero atada al modo farmacia. El dato viaja en los items de
+   * CUALQUIER negocio (el POS lo copia del producto), asi que solo faltaba
+   * poder mostrarlo: una armeria quiere que su cartucho diga BORNAGHI igual
+   * que una farmacia quiere ver el laboratorio.
+   *
+   * En farmacia sigue saliendo siempre, como hasta ahora.
+   */
+  const showMarca = isPharmacy || companySettings?.showBrandInInvoices === true
   const hasBatchControl = isPharmacy || companySettings?.posCustomFields?.showBatchExpiryInPurchase
   // Si el negocio ocultó lote/vencimiento en comprobantes, suprimir esa info en el PDF
   const hideBatchAndExpiry = companySettings?.hideBatchAndExpiryInDocuments === true
@@ -1619,9 +1631,11 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     img: showImages ? CONTENT_WIDTH * IMG_FRAC : 0,
     desc: isPharmacy
       ? CONTENT_WIDTH * (showImages ? DESC_FRAC : 0.26)
-      : CONTENT_WIDTH * (showImages ? DESC_FRAC : 0.40),
+      // La MARCA se le resta a DESCRIPCION: es la unica columna con holgura,
+      // y sin restarlo la fila se pasaria del ancho de la hoja.
+      : CONTENT_WIDTH * ((showImages ? DESC_FRAC : 0.40) - (showMarca ? 0.08 : 0)),
     lab: isPharmacy ? CONTENT_WIDTH * 0.10 : 0,
-    marca: isPharmacy ? CONTENT_WIDTH * 0.08 : 0,
+    marca: showMarca ? CONTENT_WIDTH * 0.08 : 0,
     pu: isPharmacy ? CONTENT_WIDTH * 0.09 : CONTENT_WIDTH * 0.15,
     dcto: CONTENT_WIDTH * 0.10,
     total: isPharmacy ? CONTENT_WIDTH * 0.12 : CONTENT_WIDTH * 0.19
@@ -1632,9 +1646,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     img: showImages ? CONTENT_WIDTH * IMG_FRAC : 0,
     desc: isPharmacy
       ? CONTENT_WIDTH * (showImages ? DESC_FRAC : 0.40)
-      : CONTENT_WIDTH * (showImages ? DESC_FRAC : 0.49),
+      : CONTENT_WIDTH * ((showImages ? DESC_FRAC : 0.49) - (showMarca ? 0.08 : 0)),
     lab: isPharmacy ? CONTENT_WIDTH * 0.10 : 0,
-    marca: isPharmacy ? CONTENT_WIDTH * 0.08 : 0,
+    marca: showMarca ? CONTENT_WIDTH * 0.08 : 0,
     pu: isPharmacy ? CONTENT_WIDTH * 0.08 : CONTENT_WIDTH * 0.17,
     dcto: 0,
     total: isPharmacy ? CONTENT_WIDTH * 0.14 : CONTENT_WIDTH * 0.19
@@ -1863,6 +1877,8 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.text('DESCRIPCIÓN', cols.desc + 5, headerTextY)
     if (isPharmacy) {
       doc.text('LABORATORIO', cols.lab + colWidths.lab / 2, headerTextY, { align: 'center' })
+    }
+    if (showMarca) {
       doc.text('MARCA', cols.marca + colWidths.marca / 2, headerTextY, { align: 'center' })
     }
     doc.text('P. UNIT.', cols.pu + colWidths.pu - 5, headerTextY, { align: 'right' })
@@ -2043,8 +2059,11 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
           doc.text(line, cols.lab + colWidths.lab / 2, labStartY + (i * 7), { align: 'center' })
         })
       }
+    }
 
-      // Marca
+    // Marca — ya no es exclusiva de farmacia: cualquier negocio puede activarla.
+    if (showMarca) {
+      doc.setFontSize(6)
       const marcaText = item.marca || ''
       if (marcaText) {
         const marcaLines = doc.splitTextToSize(marcaText, colWidths.marca - 4)
