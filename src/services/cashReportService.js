@@ -6,6 +6,7 @@ import { es } from 'date-fns/locale';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
+import { resumirProductosVendidos } from '@/utils/cashClosureProducts';
 import { preloadLogo } from '@/utils/pdfGenerator';
 import { getSessionMoneyTotals } from '@/utils/cashTotals'
 
@@ -1538,6 +1539,56 @@ export const generateCashReportPDF = async (sessionData, movements, invoices, bu
       );
     });
     y += 4;
+  }
+
+  // ===== QUÉ SE VENDIÓ =====
+  // Pedido del dueño: no tener que entrar venta por venta para saber qué
+  // productos salieron. Se arma del MISMO array de comprobantes que los
+  // totales de arriba, así que no puede contradecirlos.
+  const productos = resumirProductosVendidos(invoices);
+  if (productos.lineas.length > 0) {
+    if (y > PH - 40) { doc.addPage(); y = 10; }
+    section(`PRODUCTOS VENDIDOS (${productos.lineas.length})`);
+
+    // 2 sale "2" y 1.5 sale "1.5": las cantidades decimales son reales
+    // (venta por peso) y redondearlas mentiria sobre lo que salio.
+    const formatQty = (n) => Number.isInteger(n) ? String(n) : String(Math.round(n * 1000) / 1000);
+
+    doc.setFillColor(...LIGHT);
+    doc.rect(ML, y, CW, 5, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(5.5);
+    doc.setTextColor(...MED);
+    doc.text('CÓDIGO', ML + 2, y + 3.3);
+    doc.text('PRODUCTO', ML + 25, y + 3.3);
+    doc.text('CANT.', ML + 125, y + 3.3, { align: 'right' });
+    doc.text('IMPORTE', ML + 153, y + 3.3, { align: 'right' });
+    y += 5;
+
+    productos.lineas.forEach((p, i) => {
+      if (y > PH - 15) { doc.addPage(); y = 10; }
+      if (i % 2 === 0) { doc.setFillColor(250, 250, 250); doc.rect(ML, y, CW, 5, 'F'); }
+      doc.setTextColor(...DARK);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(5.5);
+      doc.text((p.codigo || '-').substring(0, 14), ML + 2, y + 3.3);
+      doc.setFontSize(6);
+      doc.text(p.nombre.substring(0, 55), ML + 25, y + 3.3);
+      doc.setFont('helvetica', 'bold');
+      doc.text(formatQty(p.cantidad), ML + 125, y + 3.3, { align: 'right' });
+      doc.text(fmt(p.importe), ML + 153, y + 3.3, { align: 'right' });
+      y += 5;
+    });
+
+    // Total de la seccion. Puede NO cuadrar con Total Ventas y esta bien: ahi
+    // entran cobros de comprobantes de otros dias y no entran los productos
+    // que se devolvieron. Se rotula distinto para que nadie los compare.
+    if (y > PH - 12) { doc.addPage(); y = 10; }
+    doc.setFillColor(...LIGHT);
+    doc.rect(ML, y, CW, 5, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(6); doc.setTextColor(...DARK);
+    doc.text(`${formatQty(productos.totalUnidades)} unidades`, ML + 2, y + 3.4);
+    doc.text(fmt(productos.totalImporte), ML + 153, y + 3.4, { align: 'right' });
+    y += 8;
   }
 
   // ===== COMPROBANTES DE LA SESIÓN =====

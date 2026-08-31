@@ -1,4 +1,5 @@
 import { forwardRef } from 'react'
+import { resumirProductosVendidos } from '@/utils/cashClosureProducts'
 import React from 'react'
 import { getSessionMoneyTotals } from '@/utils/cashTotals'
 
@@ -17,6 +18,10 @@ const CashClosureTicket = forwardRef(({
   printMargins = 8,
   // Cierre "a ciegas": sin calculo, esperado ni diferencias para el cajero
   hideExpected = false,
+  // Relacion de productos vendidos en el turno. Va apagada por defecto: en un
+  // restaurante con 300 items al dia son metros de papel, y quien la pidio la
+  // enciende en Configuracion.
+  showProducts = false,
   simplePrint = false,
 }, ref) => {
   // Estado para detectar si el logo es cuadrado
@@ -77,6 +82,14 @@ const CashClosureTicket = forwardRef(({
   }
 
   // Calcular totales de movimientos (PEN — los USD van separados)
+  // 2 sale "2" y 1.5 sale "1.5": las cantidades decimales son reales (venta
+  // por peso) y redondearlas mentiria sobre lo que salio del deposito.
+  const formatQty = (n) => Number.isInteger(n) ? String(n) : String(Math.round(n * 1000) / 1000)
+
+  const productosVendidos = showProducts
+    ? resumirProductosVendidos(invoices)
+    : { lineas: [], totalUnidades: 0, totalImporte: 0 }
+
   const totalIncome = movements
     .filter(m => m.type === 'income' && m.currency !== 'USD')
     .reduce((sum, m) => sum + (m.amount || 0), 0)
@@ -500,6 +513,27 @@ const CashClosureTicket = forwardRef(({
           <span>{formatCurrency(totalSales)}</span>
         </div>
       </div>
+
+      {/* Que se vendio. Sale de los mismos comprobantes que los totales de
+          arriba, asi que no puede contradecirlos. */}
+      {showProducts && productosVendidos.lineas.length > 0 && (
+        <div className="ticket-section">
+          <div className="section-title">Productos Vendidos</div>
+          {productosVendidos.lineas.map((p, i) => (
+            <div className="info-row" key={`${p.nombre}-${i}`}>
+              <span className="info-label" style={{ paddingRight: 6 }}>
+                {formatQty(p.cantidad)} {p.nombre}
+              </span>
+              <span style={{ whiteSpace: 'nowrap' }}>{formatCurrency(p.importe)}</span>
+            </div>
+          ))}
+          <div className="separator" />
+          <div className="total-row" style={{ fontWeight: 700 }}>
+            <span>{formatQty(productosVendidos.totalUnidades)} unidades</span>
+            <span>{formatCurrency(productosVendidos.totalImporte)}</span>
+          </div>
+        </div>
+      )}
 
       {/* Otros Movimientos (si existen) */}
       {(totalIncome > 0 || totalExpense > 0) && (

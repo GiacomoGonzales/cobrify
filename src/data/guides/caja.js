@@ -180,6 +180,23 @@ export default {
           type: 'consejo',
           text: 'Si manejas varios cajeros, imprimir la constancia y que la firme quien cerró convierte el arqueo en un documento con responsable. Cuesta diez segundos y evita discusiones después.',
         },
+        {
+          type: 'texto',
+          text: 'El PDF además trae **Productos Vendidos**: qué salió en el turno, con cantidad e importe, agrupado y ordenado de lo que más se vendió a lo que menos. Sirve para no tener que entrar venta por venta a ver qué se movió.',
+        },
+        {
+          type: 'texto',
+          text: 'Si quieres esa misma lista en el **ticket impreso** del cierre, actívala en Configuración. Viene apagada porque con muchos productos el ticket se alarga bastante; el PDF los trae siempre.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=preferencias&opcion=showProductsInCashClosure',
+          label: 'Imprimir los productos vendidos en el cierre',
+        },
+        {
+          type: 'ojo',
+          text: 'Ese total de productos puede **no coincidir** con el Total Ventas del turno, y es correcto: en las ventas entran los cobros de comprobantes de días anteriores, que no movieron mercadería hoy. Y si en el turno se emitió una nota de crédito, esos productos se restan porque volvieron al depósito.',
+        },
       ],
     },
 
@@ -220,6 +237,10 @@ export default {
   ],
 
   preguntas: [
+    {
+      q: 'Los productos del cierre no suman lo mismo que el Total Ventas.',
+      a: 'Es lo esperado y las dos cifras son correctas: miden cosas distintas. El **Total Ventas** es la plata que entró al turno, e incluye cobros de comprobantes emitidos otros días. **Productos Vendidos** es la mercadería que salió hoy del depósito. Una nota de crédito del turno resta productos (volvieron), pero no toca lo cobrado antes.',
+    },
     {
       q: '¿Tengo que abrir caja para poder vender?',
       a: 'Por defecto no, pero puedes hacerlo obligatorio desde Configuración → Ventas con **Requerir caja diaria abierta para vender**. Sin caja abierta no hay monto inicial, ni arqueo, ni constancia: se pierde el control del turno aunque los comprobantes salgan bien.',

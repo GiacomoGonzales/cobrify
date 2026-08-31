@@ -5045,6 +5045,7 @@ export default function CashRegister() {
             branchName={selectedBranch?.name || null}
             printMargins={printerConfig?.printMargins ?? 8}
             simplePrint={printerConfig?.simplePrint || false}
+            showProducts={businessSettings?.showProductsInCashClosure === true}
           />
         </div>
       )}

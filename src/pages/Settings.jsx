@@ -395,6 +395,7 @@ export default function Settings() {
   // Ocultar el monto "Efectivo Esperado" del cierre de caja a sub-usuarios (cajeros).
   // El dueño/admin siempre lo ve para poder comparar después.
   const [hideCashExpectedFromCashier, setHideCashExpectedFromCashier] = useState(false)
+  const [showProductsInCashClosure, setShowProductsInCashClosure] = useState(false)
 
   // Estados para exportación a Meta Ads (Facebook Conversions API)
   const [metaAdsEnabled, setMetaAdsEnabled] = useState(false)
@@ -1301,6 +1302,9 @@ export default function Settings() {
         }
 
         // Cargar flag para ocultar efectivo esperado a cajeros
+        if (businessData.showProductsInCashClosure !== undefined) {
+          setShowProductsInCashClosure(businessData.showProductsInCashClosure)
+        }
         if (businessData.hideCashExpectedFromCashier !== undefined) {
           setHideCashExpectedFromCashier(businessData.hideCashExpectedFromCashier)
         }
@@ -2047,6 +2051,7 @@ export default function Settings() {
         pdfA5: pdfA5,
         hideBatchAndExpiryInDocuments: hideBatchAndExpiryInDocuments,
         hideCashExpectedFromCashier: hideCashExpectedFromCashier,
+        showProductsInCashClosure: showProductsInCashClosure,
         businessMode: businessMode,
         restaurantConfig: restaurantConfig,
         posCustomFields: posCustomFields,
@@ -7003,6 +7008,24 @@ export default function Settings() {
                       </span>
                     </div>
                   </SettingToggle>
+
+                  {/* Relacion de productos vendidos en el ticket de cierre */}
+                  <SettingToggle
+                    id="opcion-showProductsInCashClosure"
+                    checked={showProductsInCashClosure}
+                    onChange={(e) => setShowProductsInCashClosure(e.target.checked)}
+                    title="Imprimir los productos vendidos en el cierre de caja"
+                    description={showProductsInCashClosure
+                      ? '✓ Activado: El ticket de cierre lista qué productos se vendieron en el turno, con su cantidad e importe.'
+                      : '✗ Desactivado: El ticket de cierre solo muestra los totales.'}
+                  >
+                    <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
+                      <Info className="w-4 h-4 text-blue-600" />
+                      <span className="text-xs text-blue-700 font-medium">
+                        Evita entrar venta por venta. Con muchos productos el ticket se alarga: el PDF del cierre siempre los trae
+                      </span>
+                    </div>
+                  </SettingToggle>
                 </div>
               </div>
 
@@ -7114,6 +7137,7 @@ export default function Settings() {
                       pdfA5: pdfA5,
                       hideBatchAndExpiryInDocuments: hideBatchAndExpiryInDocuments,
                       hideCashExpectedFromCashier: hideCashExpectedFromCashier,
+                      showProductsInCashClosure: showProductsInCashClosure,
                       dispatchGuidesEnabled: dispatchGuidesEnabled,
                       exitNoteEnabled: exitNoteEnabled,
                       termsTemplates: termsTemplates,
