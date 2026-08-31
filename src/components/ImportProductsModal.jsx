@@ -501,7 +501,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
             .normalize('NFD').replace(/[̀-ͯ]/g, '')
             .toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '')
 
-          const addVariant = (atributoRaw, valorRaw, skuRaw, precio, stockRaw, barcodeRaw) => {
+          const addVariant = (atributoRaw, valorRaw, skuRaw, precio, stockRaw, barcodeRaw, imagenRaw) => {
             const atributo = String(atributoRaw || '').trim()
             const valor = String(valorRaw || '').trim()
             const sku = String(skuRaw || '').trim()
@@ -533,6 +533,10 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
               attributes: attrs,
               price: precio,
               stock: stockRaw !== undefined && stockRaw !== '' && stockRaw !== null ? parseInt(stockRaw) : null,
+              // Foto propia de la variante: la que el catálogo muestra al
+              // elegir ese color. Tiene que ser una URL ya publicada (la que
+              // sale al exportar); acá no se suben archivos.
+              ...(String(imagenRaw || '').trim() && { imageUrl: String(imagenRaw).trim() }),
             })
           }
 
@@ -545,8 +549,10 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
             const stock = row[`variante${vi}_stock`] || row[`Variante${vi}_Stock`] || row[`VARIANTE${vi}_STOCK`]
             const barcode = row[`variante${vi}_codigo_barras`] || row[`Variante${vi}_Codigo_Barras`] || row[`VARIANTE${vi}_CODIGO_BARRAS`]
               || row[`variante${vi}_barcode`] || row[`Variante${vi}_Barcode`] || row[`VARIANTE${vi}_BARCODE`]
+            const imagen = row[`variante${vi}_imagen`] || row[`Variante${vi}_Imagen`] || row[`VARIANTE${vi}_IMAGEN`]
+              || row[`variante${vi}_imagen_url`] || row[`variante${vi}_image`]
             if (atributo && valor && precio > 0) {
-              addVariant(atributo, valor, sku, precio, stock, barcode)
+              addVariant(atributo, valor, sku, precio, stock, barcode, imagen)
             }
           }
 
@@ -559,8 +565,10 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
             const stock = row.variante_stock || row.Variante_Stock || row.VARIANTE_STOCK
             const barcode = row.variante_codigo_barras || row.Variante_Codigo_Barras || row.VARIANTE_CODIGO_BARRAS
               || row.variante_barcode || row.Variante_Barcode || row.VARIANTE_BARCODE
+            const imagen = row.variante_imagen || row.Variante_Imagen || row.VARIANTE_IMAGEN
+              || row.variante_imagen_url || row.variante_image
             if (atributo && valor && precio > 0) {
-              addVariant(atributo, valor, sku, precio, stock, barcode)
+              addVariant(atributo, valor, sku, precio, stock, barcode, imagen)
             }
           }
 
@@ -1270,7 +1278,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           presentacion1_nombre: '', presentacion1_cantidad: '', presentacion1_precio: '',
           presentacion2_nombre: '', presentacion2_cantidad: '', presentacion2_precio: '',
           presentacion3_nombre: '', presentacion3_cantidad: '', presentacion3_precio: '',
-          variante1_atributo: '', variante1_valor: '', variante1_sku: '', variante1_codigo_barras: '', variante1_precio: '', variante1_stock: '',
+          variante1_atributo: '', variante1_valor: '', variante1_sku: '', variante1_codigo_barras: '', variante1_precio: '', variante1_stock: '', variante1_imagen: '',
           variante2_atributo: '', variante2_valor: '', variante2_sku: '', variante2_codigo_barras: '', variante2_precio: '', variante2_stock: '',
           variante3_atributo: '', variante3_valor: '', variante3_sku: '', variante3_codigo_barras: '', variante3_precio: '', variante3_stock: '',
           variante_atributo: '', variante_valor: '', variante_sku: '', variante_codigo_barras: '', variante_precio: '', variante_stock: '',
@@ -1310,7 +1318,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           presentacion1_nombre: '', presentacion1_cantidad: '', presentacion1_precio: '',
           presentacion2_nombre: '', presentacion2_cantidad: '', presentacion2_precio: '',
           presentacion3_nombre: '', presentacion3_cantidad: '', presentacion3_precio: '',
-          variante1_atributo: '', variante1_valor: '', variante1_sku: '', variante1_codigo_barras: '', variante1_precio: '', variante1_stock: '',
+          variante1_atributo: '', variante1_valor: '', variante1_sku: '', variante1_codigo_barras: '', variante1_precio: '', variante1_stock: '', variante1_imagen: '',
           variante2_atributo: '', variante2_valor: '', variante2_sku: '', variante2_codigo_barras: '', variante2_precio: '', variante2_stock: '',
           variante3_atributo: '', variante3_valor: '', variante3_sku: '', variante3_codigo_barras: '', variante3_precio: '', variante3_stock: '',
           variante_atributo: '', variante_valor: '', variante_sku: '', variante_codigo_barras: '', variante_precio: '', variante_stock: '',
@@ -1352,7 +1360,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           presentacion1_nombre: '', presentacion1_cantidad: '', presentacion1_precio: '',
           presentacion2_nombre: '', presentacion2_cantidad: '', presentacion2_precio: '',
           presentacion3_nombre: '', presentacion3_cantidad: '', presentacion3_precio: '',
-          variante1_atributo: '', variante1_valor: '', variante1_sku: '', variante1_codigo_barras: '', variante1_precio: '', variante1_stock: '',
+          variante1_atributo: '', variante1_valor: '', variante1_sku: '', variante1_codigo_barras: '', variante1_precio: '', variante1_stock: '', variante1_imagen: '',
           variante2_atributo: '', variante2_valor: '', variante2_sku: '', variante2_codigo_barras: '', variante2_precio: '', variante2_stock: '',
           variante3_atributo: '', variante3_valor: '', variante3_sku: '', variante3_codigo_barras: '', variante3_precio: '', variante3_stock: '',
           variante_atributo: '', variante_valor: '', variante_sku: '', variante_codigo_barras: '', variante_precio: '', variante_stock: '',
@@ -1395,7 +1403,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           presentacion1_nombre: '', presentacion1_cantidad: '', presentacion1_precio: '',
           presentacion2_nombre: '', presentacion2_cantidad: '', presentacion2_precio: '',
           presentacion3_nombre: '', presentacion3_cantidad: '', presentacion3_precio: '',
-          variante1_atributo: '', variante1_valor: '', variante1_sku: '', variante1_codigo_barras: '', variante1_precio: '', variante1_stock: '',
+          variante1_atributo: '', variante1_valor: '', variante1_sku: '', variante1_codigo_barras: '', variante1_precio: '', variante1_stock: '', variante1_imagen: '',
           variante2_atributo: '', variante2_valor: '', variante2_sku: '', variante2_codigo_barras: '', variante2_precio: '', variante2_stock: '',
           variante3_atributo: '', variante3_valor: '', variante3_sku: '', variante3_codigo_barras: '', variante3_precio: '', variante3_stock: '',
           variante_atributo: '', variante_valor: '', variante_sku: '', variante_codigo_barras: '', variante_precio: '', variante_stock: '',
@@ -1446,7 +1454,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           presentacion3_cantidad: '',
           presentacion3_precio: '',
           presentacion3_unidad: '',
-          variante1_atributo: '', variante1_valor: '', variante1_sku: '', variante1_codigo_barras: '', variante1_precio: '', variante1_stock: '',
+          variante1_atributo: '', variante1_valor: '', variante1_sku: '', variante1_codigo_barras: '', variante1_precio: '', variante1_stock: '', variante1_imagen: '',
           variante2_atributo: '', variante2_valor: '', variante2_sku: '', variante2_codigo_barras: '', variante2_precio: '', variante2_stock: '',
           variante3_atributo: '', variante3_valor: '', variante3_sku: '', variante3_codigo_barras: '', variante3_precio: '', variante3_stock: '',
           variante_atributo: '', variante_valor: '', variante_sku: '', variante_codigo_barras: '', variante_precio: '', variante_stock: '',
@@ -1550,7 +1558,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           presentacion1_nombre: '', presentacion1_cantidad: '', presentacion1_precio: '',
           presentacion2_nombre: '', presentacion2_cantidad: '', presentacion2_precio: '',
           presentacion3_nombre: '', presentacion3_cantidad: '', presentacion3_precio: '',
-          variante1_atributo: '', variante1_valor: '', variante1_sku: '', variante1_codigo_barras: '', variante1_precio: '', variante1_stock: '',
+          variante1_atributo: '', variante1_valor: '', variante1_sku: '', variante1_codigo_barras: '', variante1_precio: '', variante1_stock: '', variante1_imagen: '',
           variante2_atributo: '', variante2_valor: '', variante2_sku: '', variante2_codigo_barras: '', variante2_precio: '', variante2_stock: '',
           variante3_atributo: '', variante3_valor: '', variante3_sku: '', variante3_codigo_barras: '', variante3_precio: '', variante3_stock: '',
           // Variante por fila, multi-atributo separado por coma:

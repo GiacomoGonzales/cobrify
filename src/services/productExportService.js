@@ -92,7 +92,7 @@ export const exportProductsForImport = async (products, categories, businessMode
     'presentacion1_nombre', 'presentacion1_cantidad', 'presentacion1_precio',
     'presentacion2_nombre', 'presentacion2_cantidad', 'presentacion2_precio',
     'presentacion3_nombre', 'presentacion3_cantidad', 'presentacion3_precio',
-    'variante_atributo', 'variante_valor', 'variante_sku', 'variante_precio', 'variante_stock',
+    'variante_atributo', 'variante_valor', 'variante_sku', 'variante_precio', 'variante_stock', 'variante_imagen',
   ]
   const headers = [...baseHeaders, ...pharmacyHeaders, ...restHeaders]
   const totalCols = headers.length
@@ -180,7 +180,7 @@ export const exportProductsForImport = async (products, categories, businessMode
             isFirst ? (p1.name || '') : '', isFirst ? safeNum(p1.factor) : '', isFirst ? safeNum(p1.price) : '',
             isFirst ? (p2.name || '') : '', isFirst ? safeNum(p2.factor) : '', isFirst ? safeNum(p2.price) : '',
             isFirst ? (p3.name || '') : '', isFirst ? safeNum(p3.factor) : '', isFirst ? safeNum(p3.price) : '',
-            '', '', '', '', '',
+            '', '', '', '', '', '',
           ]
         })
       }
@@ -225,7 +225,7 @@ export const exportProductsForImport = async (products, categories, businessMode
         p1.name || '', safeNum(p1.factor), safeNum(p1.price),
         p2.name || '', safeNum(p2.factor), safeNum(p2.price),
         p3.name || '', safeNum(p3.factor), safeNum(p3.price),
-        '', '', '', '', '',
+        '', '', '', '', '', '',
       ]]
     }
 
@@ -249,7 +249,13 @@ export const exportProductsForImport = async (products, categories, businessMode
         ...emptyOrPharma,
         isFirst ? safeNum(product.cost) : '',
         isFirst ? formatYmd(product.lastPurchaseDate) : '',
-        '', '', '', '', // precio* no van en padre con variantes
+        // CINCO columnas: precio, precio_usd, precio2, precio3, precio4.
+        // Eran cuatro —faltaba precio_usd, que se sumó a la cabecera y no
+        // acá— y TODO lo que venía después salía corrido una columna: el
+        // atributo de la variante caía en presentacion3_precio, el color en
+        // variante_atributo, el SKU en variante_valor... Reimportar ese Excel
+        // metía los datos en los campos equivocados.
+        '', '', '', '', '', // precio* no van en padre con variantes
         '', // stock padre vacío
         isFirst ? safeNum(product.minStock) : '', // stock_minimo
         isFirst ? (product.trackStock === false ? 'NO' : 'SI') : '',
@@ -269,6 +275,9 @@ export const exportProductsForImport = async (products, categories, businessMode
         isFirst ? (p2.name || '') : '', isFirst ? safeNum(p2.factor) : '', isFirst ? safeNum(p2.price) : '',
         isFirst ? (p3.name || '') : '', isFirst ? safeNum(p3.factor) : '', isFirst ? safeNum(p3.price) : '',
         attrNames, attrValues, variant.sku || '', safeNum(variant.price), safeNum(variant.stock),
+        // Foto de la variante. Sale para que exportar -> editar -> reimportar
+        // no la pierda; el importador lee esta misma columna.
+        variant.imageUrl || '',
       ]
     })
   }
@@ -306,7 +315,7 @@ export const exportProductsForImport = async (products, categories, businessMode
     18, 16, 14, 14, // control_vencimiento + fecha_vencimiento + numero_lote + control_series
     18, 16, 30, 8, 14, 14, 10, // catálogo + comparación + imagen + peso + ubicación + igv
     18, 16, 12, 18, 16, 12, 18, 16, 12, // 3 presentaciones
-    18, 16, 18, 12, 12, // variantes
+    18, 16, 18, 12, 12, 30, // variantes (+ imagen)
   ]
   applyColumnWidths(ws, [...baseWidths, ...pharmacyWidths, ...restWidths])
   applyTitleRow(ws, 0, totalCols)

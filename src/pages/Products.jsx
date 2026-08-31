@@ -393,6 +393,10 @@ export default function Products() {
   const [newAttributeName, setNewAttributeName] = useState('')
   const [variants, setVariants] = useState([]) // [{ sku, attributes: {size: "M", color: "Red"}, price, stock }]
   const [newVariant, setNewVariant] = useState({ sku: '', barcode: '', attributes: {}, price: '', price2: '', price3: '', price4: '', stock: '', priceUSD: '' })
+  // Imagen propia de cada variante (el color que se ve en el catálogo).
+  // Se sube al vuelo y solo se guarda la URL en la variante; el producto
+  // conserva su galería aparte.
+  const [subiendoImagenVariante, setSubiendoImagenVariante] = useState(null)
   const [variantWarehouseId, setVariantWarehouseId] = useState('') // almacén destino para todas las variantes
   const [editingVariantIndex, setEditingVariantIndex] = useState(null)
   const [editingVariant, setEditingVariant] = useState(null)
@@ -4627,6 +4631,7 @@ export default function Products() {
       price4: v.price4?.toString() || '',
       stock: v.stock?.toString() || '',
       priceUSD: v.priceUSD != null ? v.priceUSD.toString() : '',
+      imageUrl: v.imageUrl || '',
     })
   }
 
@@ -4679,10 +4684,51 @@ export default function Products() {
         ? (editingVariant.stock === '' ? null : parseInt(editingVariant.stock))
         : (variants[editingVariantIndex]?.stock ?? null),
       priceUSD: editingVariant.priceUSD ? parseFloat(editingVariant.priceUSD) : null,
+      imageUrl: editingVariant.imageUrl || null,
     }
     setVariants(updated)
     setEditingVariantIndex(null)
     setEditingVariant(null)
+  }
+
+  /**
+   * Sube la foto de UNA variante.
+   *
+   * Va directo a la variante en vez de a la galería del producto: en el
+   * catálogo, al elegir "HOT PINK MACKEREL" hay que mostrar ese color, y desde
+   * la galería del padre no hay forma de saber cuál de las fotos le toca.
+   *
+   * Se sube al momento y se guarda solo la URL. Si el usuario cancela el
+   * producto después, queda una imagen huérfana en el almacenamiento — es el
+   * mismo trato que ya tiene la galería del producto, y es preferible a
+   * bloquear la pantalla hasta que termine de subir.
+   */
+  const handleVariantImage = async (index, file) => {
+    if (!file) return
+    if (!file.type?.startsWith('image/')) {
+      toast.error('Ese archivo no es una imagen')
+      return
+    }
+    setSubiendoImagenVariante(index)
+    try {
+      const businessId = getBusinessId()
+      const url = await uploadProductImage(businessId, editingProduct?.id || `temp-${Date.now()}`, file)
+      setVariants(prev => prev.map((v, i) => i === index ? { ...v, imageUrl: url } : v))
+      // Si es la variante que está abierta en edición, reflejarlo también ahí
+      // para que el formulario no la pise al guardar.
+      setEditingVariant(prev => (editingVariantIndex === index && prev) ? { ...prev, imageUrl: url } : prev)
+      toast.success('Foto de la variante cargada')
+    } catch (error) {
+      console.error('Error al subir la imagen de la variante:', error)
+      toast.error('No se pudo subir la imagen')
+    } finally {
+      setSubiendoImagenVariante(null)
+    }
+  }
+
+  const handleQuitarImagenVariante = (index) => {
+    setVariants(prev => prev.map((v, i) => i === index ? { ...v, imageUrl: null } : v))
+    setEditingVariant(prev => (editingVariantIndex === index && prev) ? { ...prev, imageUrl: '' } : prev)
   }
 
   const handleCancelEditVariant = () => {
@@ -8813,6 +8859,7 @@ export default function Products() {
                               {businessSettings?.multiCurrencyEnabled && (
                                 <th className="px-2 py-2 text-left">USD</th>
                               )}
+                              <th className="px-2 py-2 text-left">Foto</th>
                               <th className="px-2 py-2"></th>
                             </tr>
                           </thead>
@@ -8870,6 +8917,13 @@ export default function Products() {
                                       <input type="number" step="any" value={editingVariant.priceUSD} onChange={e => setEditingVariant({ ...editingVariant, priceUSD: e.target.value })} placeholder="-" className="w-20 px-2 py-1 text-xs border border-gray-300 rounded" />
                                     </td>
                                   )}
+                                  {/* En edición la foto se mantiene: se cambia con
+                                      el mismo control de la fila normal. */}
+                                  <td className="px-2 py-1">
+                                    {editingVariant.imageUrl
+                                      ? <img src={editingVariant.imageUrl} alt="" className="w-9 h-9 rounded object-cover border border-gray-200" />
+                                      : <span className="text-xs text-gray-400">—</span>}
+                                  </td>
                                   <td className="px-2 py-1">
                                     <div className="flex gap-1">
                                       <button type="button" onClick={handleSaveEditVariant} className="text-green-600 hover:text-green-800">
@@ -8900,6 +8954,38 @@ export default function Products() {
                                   {businessSettings?.multiCurrencyEnabled && (
                                     <td className="px-2 py-2 text-gray-600">{variant.priceUSD != null ? `$${parseFloat(variant.priceUSD).toFixed(2)}` : '-'}</td>
                                   )}
+                                  {/* Foto de la variante: es la que ve el comprador
+                                      en el catálogo al elegir el color. */}
+                                  <td className="px-2 py-2">
+                                    <label className="cursor-pointer inline-flex items-center" title={variant.imageUrl ? 'Cambiar la foto' : 'Subir una foto para esta variante'}>
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={e => { handleVariantImage(index, e.target.files?.[0]); e.target.value = '' }}
+                                      />
+                                      {subiendoImagenVariante === index ? (
+                                        <span className="w-9 h-9 rounded border border-gray-200 flex items-center justify-center">
+                                          <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                                        </span>
+                                      ) : variant.imageUrl ? (
+                                        <img src={variant.imageUrl} alt="" className="w-9 h-9 rounded object-cover border border-gray-200" />
+                                      ) : (
+                                        <span className="w-9 h-9 rounded border border-dashed border-gray-300 flex items-center justify-center text-gray-400 hover:border-primary-400 hover:text-primary-500">
+                                          <Image className="w-4 h-4" />
+                                        </span>
+                                      )}
+                                    </label>
+                                    {variant.imageUrl && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleQuitarImagenVariante(index)}
+                                        className="block text-[10px] text-gray-400 hover:text-red-600 mt-0.5"
+                                      >
+                                        quitar
+                                      </button>
+                                    )}
+                                  </td>
                                   <td className="px-2 py-2">
                                     <div className="flex gap-1">
                                       <button

@@ -63,14 +63,29 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
   const [selectedPriceLevel, setSelectedPriceLevel] = useState('price1')
   const [activeImageIdx, setActiveImageIdx] = useState(0)
 
-  // Galería: usa imageUrls si existe, si no cae a imageUrl (legacy)
+  // Galería: usa imageUrls si existe, si no cae a imageUrl (legacy).
+  //
+  // La foto de la VARIANTE elegida se antepone: quien está mirando "HOT PINK
+  // MACKEREL" quiere ver ese color, no la primera foto del producto. Va como
+  // una imagen más de la galería —no la reemplaza— para que el comprador
+  // pueda seguir viendo el resto de las fotos del producto.
   const productImages = useMemo(() => {
     if (!product) return []
-    if (Array.isArray(product.imageUrls) && product.imageUrls.length > 0) {
-      return product.imageUrls
-    }
-    return product.imageUrl ? [product.imageUrl] : []
-  }, [product])
+    const base = (Array.isArray(product.imageUrls) && product.imageUrls.length > 0)
+      ? product.imageUrls
+      : (product.imageUrl ? [product.imageUrl] : [])
+    const deLaVariante = selectedVariant?.imageUrl
+    if (!deLaVariante) return base
+    // Si la foto de la variante ya está en la galería del producto no se
+    // duplica; solo se pone primera.
+    return [deLaVariante, ...base.filter(u => u !== deLaVariante)]
+  }, [product, selectedVariant])
+
+  // Al cambiar de variante, la galería vuelve a la primera imagen — que con
+  // el bloque de arriba es justamente la de esa variante.
+  useEffect(() => {
+    setActiveImageIdx(0)
+  }, [selectedVariant?.sku])
 
   // Inicializar modificadores cuando se abre el modal
   useEffect(() => {
@@ -593,9 +608,23 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                             : bordeOpcion
                       }`}
                     >
-                      <span className="font-medium" style={isSelected ? { color: getCatalogAccent(business) } : { color: tokens.colors.text }}>
-                        {attrsLabel}
-                        {outOfStock && <span className="ml-2 text-xs text-gray-400">(Agotado)</span>}
+                      <span className="flex items-center gap-2.5 min-w-0">
+                        {/* La foto del color, cuando la variante la tiene. Es
+                            todo el punto: el nombre "HOT PINK MACKEREL" no le
+                            dice el color a nadie. */}
+                        {variant.imageUrl && (
+                          <img
+                            src={variant.imageUrl}
+                            alt=""
+                            loading="lazy"
+                            className="w-11 h-11 rounded object-cover flex-shrink-0"
+                            style={{ borderRadius: tokens.radius.sm }}
+                          />
+                        )}
+                        <span className="font-medium text-left truncate" style={isSelected ? { color: getCatalogAccent(business) } : { color: tokens.colors.text }}>
+                          {attrsLabel}
+                          {outOfStock && <span className="ml-2 text-xs text-gray-400">(Agotado)</span>}
+                        </span>
                       </span>
                       <div className="flex items-center gap-2">
                         {showPrices && (
