@@ -47,7 +47,7 @@ export default {
     // ─────────────────────────────────────────────────────────────────────
     {
       id: 'mapa',
-      title: 'Los reportes',
+      title: 'Los diez reportes',
       blocks: [
         {
           type: 'tabla',
@@ -62,7 +62,6 @@ export default {
             ['Vendedores', '¿Quién vende más? Ingresos y detalle por vendedor'],
             ['Gastos', '¿En qué se me va? Por categoría y tendencia'],
             ['Rentabilidad', '¿Cuánto gano de verdad? Costo, utilidad y margen'],
-            ['Mercadería estancada', '¿Qué no se vende? Cuánta plata tengo parada en el depósito'],
             ['Hotel', 'Reservas, habitaciones e ingresos (solo en modo Hotelería)'],
           ],
         },
@@ -297,55 +296,6 @@ export default {
 
     // ─────────────────────────────────────────────────────────────────────
     {
-      id: 'estancado',
-      title: 'Mercadería estancada: la plata parada en el depósito',
-      blocks: [
-        {
-          type: 'texto',
-          text: 'Este reporte responde una sola pregunta: **de lo que tengo hoy en stock, qué no se está vendiendo y cuánto vale**. Es la plata que compraste y sigue en el estante.',
-        },
-        {
-          type: 'texto',
-          text: 'Arriba eliges la ventana: sin vender hace más de **30, 60, 90 o 180 días**. Esa ventana **no depende del filtro de fechas de la pantalla** — la pregunta "¿hace cuánto que no se mueve?" se mide siempre hasta hoy.',
-        },
-        {
-          type: 'tabla',
-          encabezados: ['Cifra', 'Qué es'],
-          filas: [
-            ['Valor inmovilizado', 'Todo tu stock valorizado a costo'],
-            ['Sin vender en X días', 'Cuántos productos no tuvieron ni una venta en la ventana, y cuánto suman'],
-            ['Productos con stock', 'Cuántos entran al reporte'],
-          ],
-        },
-        {
-          type: 'texto',
-          text: 'La tabla va **de lo más parado a lo que más rota**, y entre dos igual de parados primero el de mayor valor: ahí está la plata que conviene mover con una promoción o una liquidación.',
-        },
-        {
-          type: 'ojo',
-          text: 'Cuando un producto no vendió nada en la ventana, la columna **Sin vender** dice **"+90 días"** (o los días que hayas elegido) en vez de un número: el sistema no inventa una fecha que no tiene.',
-        },
-        {
-          type: 'texto',
-          text: 'Para eso está la última columna, **En stock desde**: los días que pasaron desde la **fecha de compra** del producto. No dice cuándo se vendió por última vez, pero sí desde cuándo está en el depósito — que para decidir una liquidación es la pregunta útil. Entre dos productos que no vendieron nada, el reporte pone primero al que lleva más tiempo comprado.',
-        },
-        {
-          type: 'consejo',
-          text: 'Esa fecha la llena **Compras sola** (toma la fecha de la factura del proveedor). Si cargaste el stock a mano o subiste una importación que compraste hace meses, ponla tú: está en la ficha del producto, al lado del costo, y también viaja en el Excel de importación masiva como columna **fecha_compra**.',
-        },
-        {
-          type: 'texto',
-          text: 'Los productos **agotados no aparecen**: sin stock no hay plata parada, es justamente lo contrario. Los servicios y lo que no controla stock tampoco, porque no ocupan depósito.',
-        },
-        {
-          type: 'consejo',
-          text: 'En pantalla se muestran los 300 más parados. El botón **Descargar Excel** de arriba te los trae todos, con costo unitario y última venta de cada uno.',
-        },
-      ],
-    },
-
-    // ─────────────────────────────────────────────────────────────────────
-    {
       id: 'hotel',
       title: 'Reportes de Hotel',
       soloModos: ['hotel'],
@@ -432,18 +382,6 @@ export default {
     {
       q: 'El reporte de Zonas me sale casi vacío.',
       a: 'Zonas se arma con el distrito de tus clientes. Si registras las ventas sin cliente o sin su dirección, no hay de dónde sacar la zona. Empieza por cargar el distrito de los clientes que más te compran.',
-    },
-    {
-      q: 'En Mercadería estancada un producto dice "+90 días" pero yo lo vendí el año pasado.',
-      a: 'Es lo mismo: "+90 días" significa que **no vendió nada dentro de la ventana que elegiste**, no que vendió hace exactamente 90 días. Puede ser hace 4 meses o hace 2 años. Sube la ventana a 180 días para acotarlo.',
-    },
-    {
-      q: 'La columna "En stock desde" me sale toda en guiones.',
-      a: 'Es porque tus productos no tienen **fecha de compra** cargada. Se llena sola de acá en adelante cada vez que registres una compra. Para el stock que ya tienes, ponla a mano en la ficha del producto (al lado del costo) o cárgala de golpe con el Excel de importación, columna **fecha_compra**.',
-    },
-    {
-      q: 'El valor inmovilizado me sale en cero o muy bajo.',
-      a: 'Se calcula con el **costo** de cada producto. Si tus productos no tienen costo cargado, el reporte te dirá qué no se vende pero no cuánto vale. Cárgalo en la ficha del producto o deja que se llene solo al registrar tus compras.',
     },
     {
       q: 'No veo el reporte de Hotel.',

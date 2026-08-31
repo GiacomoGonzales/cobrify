@@ -21,7 +21,7 @@ export default {
         },
         {
           type: 'texto',
-          text: 'Los filtros rápidos te dejan aislar lo que importa: **Stock Bajo** (llegó al mínimo que definiste), **Agotados** y **Sin control de stock**. Si tienes varios almacenes, el selector de **Almacén** cambia todo lo que ves.',
+          text: 'Los filtros rápidos te dejan aislar lo que importa: **Stock Bajo** (llegó al mínimo que definiste), **Agotados**, **Sin control de stock** y **Rotación** (lo que no se vende hace tiempo). Si tienes varios almacenes, el selector de **Almacén** cambia todo lo que ves.',
         },
         {
           type: 'consejo',
@@ -34,6 +34,37 @@ export default {
         {
           type: 'texto',
           text: 'Si un producto dejó de venderse pero no quieres perder su historial, desactivarlo es mejor que borrarlo: sale de las alertas y del punto de venta, y sus ventas pasadas quedan intactas.',
+        },
+      ],
+    },
+
+    {
+      id: 'estancado',
+      title: 'Qué no se vende: la plata parada en el depósito',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'El filtro **Rotación** de arriba responde una pregunta que la lista sola no responde: de todo lo que tengo en stock, **qué no se está vendiendo**. Eliges la ventana —sin vender hace más de 30, 60, 90 o 180 días— y la lista se queda solo con eso.',
+        },
+        {
+          type: 'texto',
+          text: 'Arriba aparece **cuánta plata tienes parada ahí**, valorizada a costo. Debajo de cada producto verás hace cuánto no se vende y, si tiene fecha de compra cargada, hace cuánto lo compraste.',
+        },
+        {
+          type: 'consejo',
+          text: 'Lo bueno de que sea un filtro y no un reporte aparte: **se cruza con todo lo demás**. Puedes preguntar "qué está parado *de esta marca*", "qué está parado *en este almacén*", o combinarlo con Stock Bajo. Y si exportas a Excel con el filtro puesto, el archivo trae exactamente lo que estás viendo.',
+        },
+        {
+          type: 'ojo',
+          text: 'Un producto que cargaste **hace menos días que la ventana** no aparece, aunque no haya vendido nada. Si lo creaste hoy, no lleva 90 días sin venderse: lleva cero. Acusarlo de estancado sería mentir sobre mercadería que todavía no tuvo oportunidad de venderse.',
+        },
+        {
+          type: 'texto',
+          text: 'Tampoco aparecen los **agotados** —sin stock no hay plata parada, es lo contrario— ni los servicios, que no ocupan depósito.',
+        },
+        {
+          type: 'consejo',
+          text: 'La **fecha de compra** que se ve al lado es la que llena Compras sola con la fecha de la factura del proveedor. Si cargaste el stock a mano o subiste una importación vieja, ponla tú en la ficha del producto: es lo único que dice hace cuánto está parada la mercadería que nunca se vendió.',
         },
       ],
     },
@@ -341,6 +372,14 @@ export default {
     {
       q: 'Un producto aparece con stock en un almacén y sin stock en otro.',
       a: 'Es correcto: el stock vive por almacén. Revisa el selector de **Almacén** arriba, y si la mercadería está en el sitio equivocado, muévela con una transferencia.',
+    },
+    {
+      q: 'Filtré por Rotación y un producto que sé que no se vende no aparece.',
+      a: 'Dos razones posibles. Si lo **cargaste hace poco** —menos días que la ventana que elegiste— no se lo cuenta: todavía no tuvo tiempo de venderse. Y si está **agotado** tampoco aparece: sin stock no hay plata parada.',
+    },
+    {
+      q: 'El valor inmovilizado me sale en cero o muy bajo.',
+      a: 'Se calcula con el **costo** de cada producto. Si no lo tienes cargado, el filtro te dirá qué no se vende pero no cuánto vale. Cárgalo en la ficha del producto, o deja que se llene solo al registrar tus compras.',
     },
     {
       q: '¿Por qué un producto no aparece en Inventario?',

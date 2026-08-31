@@ -63,7 +63,7 @@ export default {
         },
         {
           type: 'consejo',
-          text: 'Vale la pena ponerla a mano en dos casos: cuando cargaste el stock escribiéndolo directamente, y cuando subiste una importación que compraste hace meses (el producto entra hoy al sistema, pero la mercadería es vieja). Es lo que hace que el reporte de **Mercadería estancada** sepa hace cuánto está parada. En el Excel de importación masiva la columna se llama `fecha_compra`.',
+          text: 'Vale la pena ponerla a mano en dos casos: cuando cargaste el stock escribiéndolo directamente, y cuando subiste una importación que compraste hace meses (el producto entra hoy al sistema, pero la mercadería es vieja). Es lo que hace que el filtro de **Rotación** de Inventario sepa hace cuánto está parada esa mercadería. En el Excel de importación masiva la columna se llama `fecha_compra`.',
         },
         {
           type: 'texto',

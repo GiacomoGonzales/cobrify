@@ -83,6 +83,7 @@ import { getItemUnitLabel, formatPresentationEquivalence } from '@/utils/units'
 import { buildProductHaystack, buildIngredientHaystack } from '@/utils/productSearch'
 import GuideLink from '@/components/guide/GuideLink'
 import { buscarLoteEnAlmacen, cantidadDeLote, lotesDelAlmacen, sumarLotes } from '@/utils/batchLookup'
+import { getLastSaleDates, evaluarEstancamiento } from '@/services/stagnantStockService'
 
 // Helper functions for category hierarchy
 const migrateLegacyCategories = (cats) => {
@@ -234,6 +235,45 @@ export default function Inventory() {
   const [isScanning, setIsScanning] = useState(false)
   const [filterCategories, setFilterCategories] = useState([]) // Array vacío = todas las categorías
   const [filterStatuses, setFilterStatuses] = useState([]) // Array vacío = todos los estados
+
+  // ── Mercadería estancada ──────────────────────────────────────────────────
+  // "Sin vender hace más de X días". Va aparte del filtro de estados a
+  // propósito: son preguntas ortogonales. Un producto puede estar en Stock
+  // Normal Y estar parado hace medio año; si compartieran el multi-select,
+  // marcar "Stock Bajo" + "Estancado" mostraría los de stock bajo que rotan
+  // bien, que es justo lo contrario de lo que se busca.
+  const [estancadoDias, setEstancadoDias] = useState(0)   // 0 = filtro apagado
+  const [estancadoVentas, setEstancadoVentas] = useState(null)
+  const [estancadoCargando, setEstancadoCargando] = useState(false)
+  const [estancadoError, setEstancadoError] = useState(false)
+
+  /**
+   * Últimas ventas por producto, para el filtro de estancados.
+   *
+   * Se lee SOLO cuando el usuario enciende el filtro. Inventario se abre todos
+   * los días para otra cosa y en las cuentas grandes ya carga lento: sumarle
+   * los movimientos de stock siempre le costaría segundos a todo el mundo para
+   * un filtro que se usa de vez en cuando.
+   */
+  useEffect(() => {
+    if (estancadoDias <= 0 || isDemoMode) return
+    let vivo = true
+    const desde = new Date()
+    desde.setDate(desde.getDate() - estancadoDias)
+    desde.setHours(0, 0, 0, 0)
+
+    setEstancadoCargando(true)
+    setEstancadoError(false)
+    getLastSaleDates(getBusinessId(), desde)
+      .then(r => {
+        if (!vivo) return
+        if (r.ok) setEstancadoVentas(r.ventas)
+        else setEstancadoError(true)
+      })
+      .finally(() => { if (vivo) setEstancadoCargando(false) })
+    return () => { vivo = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estancadoDias, isDemoMode])
 
   // Las tarjetas de Stock Bajo / Agotados actuan como atajo del filtro de
   // estado: tocarlas deja ver solo esos items, y volver a tocarlas lo quita.
@@ -714,17 +754,23 @@ export default function Inventory() {
       // productos ajenos a ella — salvo los que tengan stock ahi (huerfanos).
       // Un export "de la sede X" con todo el negocio es peor que no filtrar,
       // porque el usuario cree que esta filtrado.
-      const productsForExport = (businessSettings?.branchCatalogEnabled === true && filterBranch !== 'all')
+      let productsForExport = (businessSettings?.branchCatalogEnabled === true && filterBranch !== 'all')
         ? products.filter(p => {
             const bId = filterBranch === 'main' ? null : filterBranch
             const st = getStockForBranch(p)
             return isProductInBranch(p, bId) || (typeof st === 'number' && st > 0)
           })
         : products
+      // Con el filtro de estancados encendido, el Excel trae LO QUE SE ESTÁ
+      // VIENDO. Ver 40 productos parados, tocar Exportar y recibir el catálogo
+      // entero es peor que no poder exportar: el usuario cree que filtró.
+      if (estancadoDias > 0 && estancadoVentas) {
+        productsForExport = productsForExport.filter(p => estancadoPorId.get(p.id)?.nuncaEnVentana)
+      }
       // Inventario a una fecha pasada: no guardamos fotos del stock, así que se
       // reconstruye caminando el historial hacia atrás (stockSnapshotService).
       let itemsProductos = productsForExport
-      let itemsInsumos = ingredients
+      let itemsInsumos = estancadoDias > 0 ? [] : ingredients
       let snapshotLabel = null
       if (options.snapshotDate) {
         const { buildStockSnapshot, applyStockSnapshot } = await import('@/services/stockSnapshotService')
@@ -1874,6 +1920,22 @@ export default function Inventory() {
   }, [allItems, productCategories])
 
   // Filtrar y ordenar items (optimizado con useMemo)
+  /**
+   * productId → cómo de parado está, con la ventana elegida.
+   * Vacío mientras el filtro esté apagado o las ventas no hayan llegado.
+   */
+  const estancadoPorId = React.useMemo(() => {
+    const mapa = new Map()
+    if (estancadoDias <= 0 || !estancadoVentas) return mapa
+    const ahora = new Date()
+    for (const item of allItems) {
+      if (item.itemType === 'ingredient') continue   // los insumos no se venden
+      const info = evaluarEstancamiento(item, estancadoVentas, estancadoDias, ahora)
+      if (info) mapa.set(item.id, info)
+    }
+    return mapa
+  }, [allItems, estancadoVentas, estancadoDias])
+
   const filteredProducts = React.useMemo(() => {
     console.log(`🔍 [Inventory] filteredProducts recalculando. allItems.length=${allItems.length}`)
 
@@ -1950,7 +2012,18 @@ export default function Inventory() {
       if (filterActivo === 'active') matchesActivo = item.isActive !== false
       else if (filterActivo === 'inactive') matchesActivo = item.isActive === false
 
-      return matchesSearch && matchesCategory && matchesBrand && matchesStatus && matchesStockTracking && matchesBranchCatalog && matchesActivo
+      // Sin vender hace más de X días. Se cruza con TODO lo demás (marca,
+      // categoría, almacén): "muéstrame lo estancado de esta marca" es la
+      // pregunta que un reporte suelto no puede responder.
+      // Mientras las ventas no hayan llegado no se filtra nada: esconder media
+      // lista durante la carga se lee como que el filtro no encontró nada.
+      let matchesEstancado = true
+      if (estancadoDias > 0 && estancadoVentas) {
+        const info = estancadoPorId.get(item.id)
+        matchesEstancado = !!info?.nuncaEnVentana
+      }
+
+      return matchesSearch && matchesCategory && matchesBrand && matchesStatus && matchesStockTracking && matchesBranchCatalog && matchesActivo && matchesEstancado
     })
 
     // Ordenar productos
@@ -1995,7 +2068,7 @@ export default function Inventory() {
 
     console.log(`🔍 [Inventory] filteredProducts resultado: ${sorted.length} items`)
     return sorted
-  }, [allItems, deferredSearchTerm, itemSearchIndex, filterCategories, filterBrands, filterStatuses, filterStockTracking, filterActivo, productCategories, sortField, sortDirection, getStockForBranch, filterBranch, businessSettings?.branchCatalogEnabled])
+  }, [allItems, deferredSearchTerm, itemSearchIndex, filterCategories, filterBrands, filterStatuses, filterStockTracking, filterActivo, productCategories, sortField, sortDirection, getStockForBranch, filterBranch, businessSettings?.branchCatalogEnabled, estancadoDias, estancadoVentas, estancadoPorId])
 
   // Paginación de productos filtrados (optimizado con useMemo)
   const paginationData = React.useMemo(() => {
@@ -2019,7 +2092,7 @@ export default function Inventory() {
   // Resetear a página 1 cuando cambian los filtros
   React.useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, filterCategories, filterBrands, filterStatuses, filterBranch, filterWarehouses, filterStockTracking, filterActivo])
+  }, [searchTerm, filterCategories, filterBrands, filterStatuses, filterBranch, filterWarehouses, filterStockTracking, filterActivo, estancadoDias])
 
   // Obtener categorías únicas (productos + ingredientes en retail)
   const categories = React.useMemo(() => {
@@ -2734,6 +2807,56 @@ export default function Inventory() {
                 )}
               </div>
 
+              {/* Sin vender hace más de X días.
+                  Dropdown de opción única (no multi-select): las ventanas se
+                  contienen unas a otras — todo lo que no vendió en 180 días
+                  tampoco vendió en 90 — así que marcar dos no querría decir
+                  nada. Solo para productos: los insumos no se venden. */}
+              {filterType !== 'ingredients' && (
+                <div className="relative">
+                  <button
+                    onClick={() => setOpenDropdown(openDropdown === 'estancado' ? null : 'estancado')}
+                    className={`w-full flex items-center gap-2 bg-white border rounded-lg px-3 py-2 shadow-sm text-sm cursor-pointer hover:border-primary-400 transition-colors ${estancadoDias > 0 ? 'border-amber-500 bg-amber-50' : 'border-gray-300'}`}
+                  >
+                    {estancadoCargando
+                      ? <Loader2 className="w-4 h-4 text-amber-600 animate-spin" />
+                      : <CalendarClock className="w-4 h-4 text-gray-500" />}
+                    <span className="max-w-[150px] truncate">
+                      {estancadoDias > 0 ? `Sin vender +${estancadoDias} días` : 'Rotación'}
+                    </span>
+                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${openDropdown === 'estancado' ? 'rotate-180' : ''}`} />
+                    {estancadoDias > 0 && (
+                      <X
+                        className="w-4 h-4 text-gray-400 hover:text-gray-600"
+                        onClick={(e) => { e.stopPropagation(); setEstancadoDias(0); }}
+                      />
+                    )}
+                  </button>
+                  {openDropdown === 'estancado' && (
+                    <div className="absolute z-50 mt-1 w-60 bg-white border border-gray-300 rounded-lg shadow-lg">
+                      <p className="px-3 pt-2 pb-1 text-xs text-gray-500">
+                        Mercadería que no se vende
+                      </p>
+                      {[
+                        { dias: 0, label: 'Todos los productos' },
+                        { dias: 30, label: 'Sin vender hace +30 días' },
+                        { dias: 60, label: 'Sin vender hace +60 días' },
+                        { dias: 90, label: 'Sin vender hace +90 días' },
+                        { dias: 180, label: 'Sin vender hace +180 días' },
+                      ].map(op => (
+                        <button
+                          key={op.dias}
+                          onClick={() => { setEstancadoDias(op.dias); setOpenDropdown(null) }}
+                          className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${estancadoDias === op.dias ? 'text-primary-700 font-medium bg-primary-50' : 'text-gray-700'}`}
+                        >
+                          {op.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Warehouse Multi-Select Filter */}
               {filteredWarehouses.length > 0 && (
                 <div className="relative">
@@ -2817,6 +2940,43 @@ export default function Inventory() {
         </CardContent>
       </Card>
 
+      {/* Mercadería estancada: la plata parada en LO QUE SE ESTÁ VIENDO.
+          Se calcula sobre filteredProducts y no sobre todo el catálogo, para
+          que responda a los filtros cruzados ("lo estancado de esta marca"). */}
+      {estancadoDias > 0 && (
+        estancadoError ? (
+          <Card><CardContent className="p-4 text-sm text-gray-600">
+            No se pudo leer el movimiento de stock. Quita el filtro y vuelve a intentar.
+          </CardContent></Card>
+        ) : estancadoCargando ? (
+          <Card><CardContent className="p-4 flex items-center gap-2 text-sm text-gray-500">
+            <Loader2 className="w-4 h-4 animate-spin" /> Revisando qué se movió en los últimos {estancadoDias} días...
+          </CardContent></Card>
+        ) : (
+          <Card className="border-amber-200 bg-amber-50/50">
+            <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-gray-900">
+                  {filteredProducts.length} producto{filteredProducts.length === 1 ? '' : 's'} sin vender hace más de {estancadoDias} días
+                </p>
+                <p className="text-xs text-gray-600 mt-0.5">
+                  Los agotados no cuentan, y los cargados hace menos de {estancadoDias} días tampoco:
+                  todavía no se les puede pedir una venta.
+                </p>
+              </div>
+              {permisos.verCostos && (
+                <div className="text-right">
+                  <p className="text-xs text-gray-600">Valor inmovilizado</p>
+                  <p className="text-xl font-bold text-amber-700">
+                    {formatCurrency(filteredProducts.reduce((sum, it) => sum + (estancadoPorId.get(it.id)?.valor || 0), 0))}
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )
+      )}
+
       {/* Inventory Table */}
       <Card>
         <CardHeader>
@@ -2829,12 +2989,16 @@ export default function Inventory() {
             <div className="text-center py-12">
               <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">
-                {searchTerm || filterCategories.length > 0 || filterStatuses.length > 0
-                  ? 'No se encontraron productos'
-                  : 'No hay productos en inventario'}
+                {estancadoDias > 0
+                  ? `Nada parado hace más de ${estancadoDias} días`
+                  : searchTerm || filterCategories.length > 0 || filterStatuses.length > 0
+                    ? 'No se encontraron productos'
+                    : 'No hay productos en inventario'}
               </h3>
               <p className="text-gray-600 mb-4">
-                {searchTerm || filterCategories.length > 0 || filterStatuses.length > 0
+                {estancadoDias > 0
+                  ? 'Todo lo que tienes en stock se movió en ese plazo.'
+                  : searchTerm || filterCategories.length > 0 || filterStatuses.length > 0
                   ? 'Intenta con otros filtros de búsqueda'
                   : 'Ve a la página de Productos para agregar productos a tu catálogo'}
               </p>
@@ -3416,6 +3580,18 @@ export default function Inventory() {
                                 }
                               </p>
                             )}
+                            {estancadoDias > 0 && (() => {
+                              const info = estancadoPorId.get(item.id)
+                              if (!info) return null
+                              return (
+                                <p className="text-xs text-amber-700 mt-0.5">
+                                  Sin vender hace +{info.diasVentana} días
+                                  {info.diasEnStock != null && (
+                                    <span className="text-gray-500"> · comprado hace {info.diasEnStock} días</span>
+                                  )}
+                                </p>
+                              )
+                            })()}
                           </div>
                         </TableCell>
                         <TableCell className="hidden sm:table-cell lg:w-[6%]">
