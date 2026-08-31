@@ -61,7 +61,18 @@ export default function VariantSelectorModal({
                 }`}
               >
                 <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
+                  {/* La foto de la variante, cuando la tiene. En el mostrador
+                      sirve para lo mismo que en el catálogo: reconocer el color
+                      de un vistazo en vez de leer el nombre. */}
+                  {variant.imageUrl && (
+                    <img
+                      src={variant.imageUrl}
+                      alt=""
+                      loading="lazy"
+                      className="w-14 h-14 rounded-lg object-cover border border-gray-200 flex-shrink-0"
+                    />
+                  )}
+                  <div className="flex-1 min-w-0">
                     <p className="font-mono text-xs text-gray-500 mb-1">{variant.sku}</p>
                     <div className="flex flex-wrap gap-2 mb-2">
                       {Object.entries(variant.attributes || {}).map(([key, value]) => (
