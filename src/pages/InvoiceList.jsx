@@ -83,6 +83,7 @@ import { getSaleSeller, matchesSaleSeller, listSaleSellers } from '@/utils/saleS
 import { getNoteReasonLabel, getReferencedDocTypeLabel } from '@/data/noteReasons'
 import MonthSelect from '@/components/MonthSelect'
 import GuideLink from '@/components/guide/GuideLink'
+import { documentLabel } from '@/utils/documentType'
 import { vinculoDe } from '@/utils/documentLinks'
 
 /**
@@ -4384,7 +4385,7 @@ Gracias por tu preferencia.`
                   {viewingInvoice.customer?.name || viewingInvoice.customer?.businessName || 'Cliente General'}
                 </p>
                 <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-gray-600">
-                  <span>{viewingInvoice.customer?.documentType === '6' ? 'RUC' : 'DNI'}: {viewingInvoice.customer?.documentNumber || '-'}</span>
+                  <span>{documentLabel(viewingInvoice.customer?.documentType, viewingInvoice.customer?.documentNumber)}: {viewingInvoice.customer?.documentNumber || '-'}</span>
                   {viewingInvoice.customer?.phone && <span>Tel: {viewingInvoice.customer.phone}</span>}
                   {viewingInvoice.customer?.email && <span>{viewingInvoice.customer.email}</span>}
                 </div>

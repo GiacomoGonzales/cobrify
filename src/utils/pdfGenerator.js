@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf'
 import { contrastTextColor } from '@/utils/pdfColors'
 import { getNotaVentaLegend } from '@/utils/documentLegends'
+import { documentLabel, esRuc } from '@/utils/documentType'
 import { formatDate, formatQuantity } from '@/lib/utils'
 import { getCurrencySymbol, normalizeCurrency } from '@/utils/currency'
 import { getComprobanteBreakdown } from '@/utils/peruUtils'
@@ -1118,9 +1119,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     paymentForm = totalPaid === 0 ? 'CRÉDITO' : 'CONTADO'
   }
 
-  const rawDocType = invoice.customer?.documentType
-  const docType = (rawDocType === 'RUC' || rawDocType === '6') ? 'RUC' :
-                  (rawDocType === 'DNI' || rawDocType === '1') ? 'DNI' : 'DOC'
+  // El PDF rotula todo en mayusculas (RAZON SOCIAL:, DIRECCION:), asi que
+  // "Pasaporte" se sube; el criterio de QUE etiqueta va es compartido.
+  const docType = documentLabel(invoice.customer?.documentType, invoice.customer?.documentNumber).toUpperCase()
   const docNumber = invoice.customer?.documentNumber && invoice.customer.documentNumber !== '00000000'
                     ? invoice.customer.documentNumber : '-'
   const customerAddress = invoice.customer?.address || '-'
@@ -1134,7 +1135,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // "Razón Social" es solo para empresas (RUC); una persona natural (DNI, CE,
   // pasaporte) lleva "Nombre". El ancho de columna ya reserva el máximo (basado
   // en 'RAZÓN SOCIAL:'), así que el valor queda alineado con ambas etiquetas.
-  const nameLabel = docType === 'RUC' ? 'RAZÓN SOCIAL:' : 'NOMBRE:'
+  const nameLabel = esRuc(invoice.customer?.documentType, invoice.customer?.documentNumber) ? 'RAZÓN SOCIAL:' : 'NOMBRE:'
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(9)
   doc.text(nameLabel, colLeftX, leftY)

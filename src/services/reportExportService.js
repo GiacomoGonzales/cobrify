@@ -18,6 +18,7 @@ import {
   formatDate as formatDateLocale,
 } from './excelStyles'
 import { getDocumentRate, getDocumentTotalInBase } from '@/utils/currency'
+import { documentLabel } from '@/utils/documentType'
 
 // =================== HELPERS LOCALES ===================
 
@@ -1346,7 +1347,7 @@ export const exportGeneralReport = async (data) => {
       aoa.push([
         idx + 1,
         c.name,
-        c.documentType === '6' ? 'RUC' : 'DNI',
+        documentLabel(c.documentType, c.documentNumber),
         c.documentNumber || '-',
         orders,
         spent,
@@ -2474,7 +2475,7 @@ export const exportCustomersReport = async (data) => {
     aoa.push([
       idx + 1,
       customer.name,
-      customer.documentType === '6' ? 'RUC' : (customer.documentType === '1' ? 'DNI' : customer.documentType || '-'),
+      documentLabel(customer.documentType, customer.documentNumber),
       customer.documentNumber || '-',
       customer.email || '-',
       customer.phone || '-',

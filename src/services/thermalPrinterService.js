@@ -1,6 +1,7 @@
 import { CapacitorThermalPrinter } from 'capacitor-thermal-printer';
 import { getRealPayments } from '@/utils/receivables'
 import { getNotaVentaLegend, wrapLegend } from '@/utils/documentLegends'
+import { documentLabel } from '@/utils/documentType'
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { prepareLogoForPrinting, prepareLogoRasterForEscPos } from './imageProcessingService';
 import * as BLEPrinter from './blePrinterService';
@@ -4744,10 +4745,7 @@ const buildQuotationEscPos = (quotation, business, paperWidth = 58) => {
   // Datos del cliente
   builder.bold().text('DATOS DEL CLIENTE\n').clearFormatting();
   const customer = quotation.customer || {};
-  const rawDocType = customer.documentType;
-  const docTypeLabel = (rawDocType === 'RUC' || rawDocType === '6') ? 'RUC'
-    : (rawDocType === 'DNI' || rawDocType === '1') ? 'DNI'
-    : 'Doc';
+  const docTypeLabel = documentLabel(customer.documentType, customer.documentNumber);
   addRow('Cliente:', customer.name || customer.businessName || 'Cliente');
   if (customer.documentNumber && customer.documentNumber !== '00000000') {
     addRow(docTypeLabel + ':', customer.documentNumber);
@@ -4921,10 +4919,7 @@ export const printQuotationTicket = async (quotation, business, paperWidth = 58)
 
     // Cliente
     const customer = quotation.customer || {};
-    const rawDocType = customer.documentType;
-    const docTypeLabel = (rawDocType === 'RUC' || rawDocType === '6') ? 'RUC'
-      : (rawDocType === 'DNI' || rawDocType === '1') ? 'DNI'
-      : 'Doc';
+    const docTypeLabel = documentLabel(customer.documentType, customer.documentNumber);
     printer = printer
       .bold().text('DATOS DEL CLIENTE\n').clearFormatting()
       .text(createLine('Cliente:', convertSpanishText(customer.name || customer.businessName || 'Cliente')) + '\n');

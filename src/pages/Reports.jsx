@@ -30,6 +30,7 @@ import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { documentLabel, esRuc } from '@/utils/documentType'
 import { getDocumentTotalInBase, convertToBase, getReportsCurrency, resolveReportsRate, convertBaseToDisplay } from '@/utils/currency'
 import { getInvoices, getRecentInvoices, getCustomersWithStats, getProducts, getProductCategories, getProductBrands, getPurchases, getFinancialMovements, getAllCashMovements } from '@/services/firestoreService'
 import { getRecipes } from '@/services/recipeService'
@@ -4955,8 +4956,8 @@ export default function Reports() {
                       </div>
                       <div className="flex items-center justify-between mt-2 text-sm">
                         <div className="flex items-center gap-2">
-                          <Badge variant={customer.documentType === '6' ? 'primary' : 'default'}>
-                            {customer.documentType === '6' ? 'RUC' : 'DNI'}
+                          <Badge variant={esRuc(customer.documentType, customer.documentNumber) ? 'primary' : 'default'}>
+                            {documentLabel(customer.documentType, customer.documentNumber)}
                           </Badge>
                           <span className="text-gray-500">{customer.documentNumber}</span>
                         </div>
@@ -5009,11 +5010,9 @@ export default function Reports() {
                           <TableCell className="font-medium">{customer.name}</TableCell>
                           <TableCell>
                             <Badge
-                              variant={
-                                customer.documentType === '6' ? 'primary' : 'default'
-                              }
+                              variant={esRuc(customer.documentType, customer.documentNumber) ? 'primary' : 'default'}
                             >
-                              {customer.documentType === '6' ? 'RUC' : 'DNI'}
+                              {documentLabel(customer.documentType, customer.documentNumber)}
                             </Badge>
                             <span className="ml-2 text-sm">{customer.documentNumber}</span>
                           </TableCell>
