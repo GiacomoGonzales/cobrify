@@ -178,6 +178,8 @@ export default function Attendance() {
 
   // Modal de marcación manual
   const [showManualModal, setShowManualModal] = useState(false)
+  const [guardandoManual, setGuardandoManual] = useState(false)
+  const guardandoManualRef = useRef(false)   // el estado no corta el 2do clic a tiempo
   const [manualForm, setManualForm] = useState({ userId: '', branchId: '', type: 'in', timestamp: '', notes: '' })
 
   // Modal de fallback web (pegar contenido del QR)
@@ -533,35 +535,48 @@ export default function Attendance() {
   }
 
   const handleCreateManual = async () => {
+    // Primera barrera contra el doble clic. La de verdad está en el servicio
+    // (una marcación igual en el mismo minuto no se duplica), porque un ref no
+    // cubre las dos pestañas ni el reintento tras un corte de red.
+    if (guardandoManualRef.current) return
     if (!manualForm.userId || !manualForm.type || !manualForm.timestamp) {
       toast.error('Completá todos los campos')
       return
     }
-    const selectedUser = subUsers.find(u => u.uid === manualForm.userId || u.id === manualForm.userId)
-    const selectedBranch = branches.find(b => b.id === manualForm.branchId)
-    const res = await createManualAttendance(businessId, {
-      userId: selectedUser?.uid || selectedUser?.id || manualForm.userId,
-      userName: selectedUser?.displayName || selectedUser?.name || '',
-      userEmail: selectedUser?.email || '',
-      branchId: manualForm.branchId || null,
-      branchName: selectedBranch?.name || '',
-      type: manualForm.type,
-      timestamp: manualForm.timestamp,
-      notes: manualForm.notes,
-      createdBy: user?.uid,
-    })
-    if (res.success) {
-      toast.success('Marcación manual creada')
-      setShowManualModal(false)
-      setManualForm({ userId: '', branchId: '', type: 'in', timestamp: '', notes: '' })
-      await loadRecords({
-        userId: filterUser || undefined,
-        branchId: filterBranch || undefined,
-        fromDate: filterFrom || undefined,
-        toDate: filterTo || undefined,
+    guardandoManualRef.current = true
+    setGuardandoManual(true)
+    try {
+      const selectedUser = subUsers.find(u => u.uid === manualForm.userId || u.id === manualForm.userId)
+      const selectedBranch = branches.find(b => b.id === manualForm.branchId)
+      const res = await createManualAttendance(businessId, {
+        userId: selectedUser?.uid || selectedUser?.id || manualForm.userId,
+        userName: selectedUser?.displayName || selectedUser?.name || '',
+        userEmail: selectedUser?.email || '',
+        branchId: manualForm.branchId || null,
+        branchName: selectedBranch?.name || '',
+        type: manualForm.type,
+        timestamp: manualForm.timestamp,
+        notes: manualForm.notes,
+        createdBy: user?.uid,
       })
-    } else {
-      toast.error(res.error || 'Error')
+      if (res.success) {
+        toast.success(res.duplicada
+          ? 'Esa marcación ya estaba registrada'
+          : 'Marcación manual creada')
+        setShowManualModal(false)
+        setManualForm({ userId: '', branchId: '', type: 'in', timestamp: '', notes: '' })
+        await loadRecords({
+          userId: filterUser || undefined,
+          branchId: filterBranch || undefined,
+          fromDate: filterFrom || undefined,
+          toDate: filterTo || undefined,
+        })
+      } else {
+        toast.error(res.error || 'Error')
+      }
+    } finally {
+      guardandoManualRef.current = false
+      setGuardandoManual(false)
     }
   }
 
@@ -1211,7 +1226,9 @@ export default function Attendance() {
           </div>
           <div className="flex justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setShowManualModal(false)}>Cancelar</Button>
-            <Button onClick={handleCreateManual}>Guardar</Button>
+            <Button onClick={handleCreateManual} disabled={guardandoManual}>
+              {guardandoManual ? 'Guardando...' : 'Guardar'}
+            </Button>
           </div>
         </div>
       </Modal>

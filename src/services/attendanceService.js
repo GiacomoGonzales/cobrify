@@ -353,6 +353,39 @@ export const markAttendanceFromQR = async (businessId, { scannedToken, user, gps
 /**
  * Crea una marcación manual desde el admin (p.ej. cuando la app falló o el empleado olvidó marcar).
  */
+/**
+ * ¿Ya hay una marcación de esta persona, de este tipo, en este mismo minuto?
+ * Devuelve su id, o null.
+ *
+ * Se busca por un rango de un minuto y se compara el resto en memoria: pedirle
+ * a Firestore un índice compuesto más para esto no vale la pena, y el rango ya
+ * deja la lectura en un puñado de documentos.
+ */
+const buscarMarcacionIgual = async (businessId, userId, type, ts) => {
+  try {
+    const desde = new Date(ts); desde.setSeconds(0, 0)
+    const hasta = new Date(desde.getTime() + 60000)
+    const q = query(
+      getAttendanceColRef(businessId),
+      where('timestamp', '>=', Timestamp.fromDate(desde)),
+      where('timestamp', '<', Timestamp.fromDate(hasta))
+    )
+    const snap = await getDocs(q)
+    let encontrado = null
+    snap.forEach(d => {
+      if (encontrado) return
+      const r = d.data()
+      if (r.userId === userId && r.type === type) encontrado = d.id
+    })
+    return encontrado
+  } catch (error) {
+    // Si la comprobación falla, se deja pasar la marcación: perder un fichaje
+    // real es peor que un duplicado, que al menos se ve y se puede borrar.
+    console.warn('No se pudo comprobar si la marcación estaba repetida:', error)
+    return null
+  }
+}
+
 export const createManualAttendance = async (businessId, { userId, userName, userEmail, branchId, branchName, type, timestamp, notes, createdBy }) => {
   try {
     const ts = timestamp ? new Date(timestamp) : new Date()
@@ -375,6 +408,20 @@ export const createManualAttendance = async (businessId, { userId, userName, use
       ...enrichment,
       createdAt: serverTimestamp(),
     }
+    // La MISMA marcación no se guarda dos veces.
+    //
+    // Reportado el 31-ago-2026: tres clics en Guardar dejaron tres entradas
+    // idénticas. Bloquear el botón tapa el caso común, pero no el doble toque
+    // en el celular, las dos pestañas abiertas ni el reintento tras un corte
+    // de red — y una marcación repetida descuadra las horas trabajadas.
+    //
+    // Misma persona + mismo tipo + mismo minuto es siempre un duplicado: nadie
+    // ficha la entrada dos veces en el mismo minuto.
+    const yaExiste = await buscarMarcacionIgual(businessId, userId, type, ts)
+    if (yaExiste) {
+      return { success: true, id: yaExiste, duplicada: true }
+    }
+
     const docRef = await addDoc(getAttendanceColRef(businessId), record)
     return { success: true, id: docRef.id }
   } catch (error) {
