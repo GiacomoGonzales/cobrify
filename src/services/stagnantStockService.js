@@ -1,6 +1,6 @@
 import { db } from '@/lib/firebase'
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore'
-import { diasEnStock } from '@/utils/purchaseDate'
+import { diasEnStock, toDate } from '@/utils/purchaseDate'
 
 /**
  * MERCADERÍA ESTANCADA — qué no se vende y cuánta plata hay parada ahí.
@@ -83,8 +83,23 @@ export const buildStagnantReport = (products = [], ventas = new Map(), desde, as
     if (p.trackStock === false) continue
 
     const ultima = ventas.get(p.id) || null
-    const dias = ultima ? Math.floor((asOf - ultima) / 86400000) : null
     const costo = Number(p.cost) || 0
+
+    // Cuánto lleva el producto EN EL SISTEMA. Antes de esa fecha no hay
+    // registro de ventas de dónde agarrarse, así que nada puede llevar más
+    // tiempo sin venderse que el que lleva existiendo: un producto creado hoy
+    // no lleva 90 días sin vender, lleva cero.
+    const creado = toDate(p.createdAt)
+    const diasEnSistema = creado ? Math.max(0, Math.floor((asOf - creado) / 86400000)) : null
+
+    // Solo se puede afirmar "no se vendió en 90 días" del producto que lleva
+    // esos 90 días cargado. El más nuevo entra igual al reporte —su stock es
+    // plata parada como cualquier otro— pero no se lo acusa de estancado.
+    const esNuevo = diasEnSistema != null && diasEnSistema < diasVentana && !ultima
+
+    const dias = ultima
+      ? Math.floor((asOf - ultima) / 86400000)
+      : (esNuevo ? diasEnSistema : null)
     // Lo que no vendió en la ventana no tiene fecha de venta de dónde agarrarse.
     // Ahí la fecha de compra es la única pista de hace cuánto está parado: no
     // dice cuándo se vendió por última vez, pero sí desde cuándo está en el
@@ -102,7 +117,11 @@ export const buildStagnantReport = (products = [], ventas = new Map(), desde, as
       // null = no vendió NADA en la ventana consultada. Se muestra como
       // "más de N días" y no como un número inventado.
       diasSinVender: dias,
-      nuncaEnVentana: !ultima,
+      // Estancado CONFIRMADO: lleva la ventana completa en el sistema y no
+      // vendió nada. El producto nuevo no cuenta acá.
+      nuncaEnVentana: !ultima && !esNuevo,
+      esNuevo,
+      diasEnSistema,
       diasVentana,
       // Días desde la compra. null si el producto no tiene la fecha cargada.
       diasEnStock: enStock,

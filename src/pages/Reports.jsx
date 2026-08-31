@@ -843,6 +843,7 @@ export default function Reports() {
       // Fuera de la ventana no se inventa un numero: se dice "mas de N".
       'Dias sin vender': f.nuncaEnVentana ? `Mas de ${f.diasVentana}` : f.diasSinVender,
       'Dias en stock': f.diasEnStock != null ? f.diasEnStock : '',
+      'Estancado': f.nuncaEnVentana ? 'SI' : (f.esNuevo ? 'Recien cargado' : 'No'),
     }))
     const ws = XLSX.utils.json_to_sheet(datos)
     const wb = XLSX.utils.book_new()
@@ -6499,11 +6500,20 @@ export default function Reports() {
                       ))}
                     </tbody>
                   </table>
-                  {estancado.filas.length > 300 && (
-                    <p className="px-4 py-3 text-xs text-gray-500 border-t border-gray-100">
-                      Se muestran los 300 más parados de {estancado.totalItems}. El Excel los trae todos.
+                  <div className="px-4 py-3 text-xs text-gray-500 border-t border-gray-100 space-y-1">
+                    {/* Un producto no puede llevar mas tiempo sin venderse que
+                        el que lleva cargado: antes de eso no hay ventas que
+                        mirar. Por eso los recien creados muestran su numero
+                        real y no se pintan como estancados. */}
+                    <p>
+                      En ámbar, lo que no vendió nada en {estancadoDias} días. Los productos
+                      cargados hace menos de {estancadoDias} días muestran los días que llevan
+                      en el sistema: todavía no se les puede pedir una venta.
                     </p>
-                  )}
+                    {estancado.filas.length > 300 && (
+                      <p>Se muestran los 300 más parados de {estancado.totalItems}. El Excel los trae todos.</p>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             </>
