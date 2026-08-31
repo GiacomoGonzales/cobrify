@@ -22,6 +22,7 @@ import {
   ChevronRight,
   Tag,
   Award,
+  PackageX,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useDataPermissions } from '@/hooks/useDataPermissions'
@@ -72,6 +73,7 @@ import { CHART_COLORS, CHART_MUTED, colorForKey, assignColors, capSeries } from 
 import { getSaleSeller } from '@/utils/saleSeller'
 import MonthSelect from '@/components/MonthSelect'
 import { getInvoiceCommission, buildSellerIndex, ventaCobrada } from '@/utils/commissions'
+import { getLastSaleDates, buildStagnantReport } from '@/services/stagnantStockService'
 import { getSellers } from '@/services/sellerService'
 import GuideLink from '@/components/guide/GuideLink'
 
@@ -230,6 +232,13 @@ export default function Reports() {
   const [invoices, setInvoices] = useState([])
   const [customers, setCustomers] = useState([])
   const [products, setProducts] = useState([])
+  // ── Mercadería estancada ──
+  // Ventana propia, independiente del filtro de fechas de la pantalla: la
+  // pregunta "¿hace cuánto que no se vende?" no depende del mes que se mire.
+  const [estancadoDias, setEstancadoDias] = useState(90)
+  const [estancadoVentas, setEstancadoVentas] = useState(null)   // Map productId -> última venta
+  const [estancadoCargando, setEstancadoCargando] = useState(false)
+  const [estancadoError, setEstancadoError] = useState(false)
   // Vendedores: solo para el FALLBACK de comisiones de ventas anteriores al
   // congelado. Las ventas nuevas ya traen su comision guardada.
   const [sellersList, setSellersList] = useState([])
@@ -793,6 +802,64 @@ export default function Reports() {
     // `calculateItemCost` ya depende de products y recipes; se mantienen en las
     // dependencias porque el useMemo las sigue usando para el resto del cálculo.
   }, [filteredInvoices, getPreviousPeriodRevenue, products, recipes, calculateItemCost])
+
+  /**
+   * Últimas ventas para el reporte de estancados.
+   *
+   * Se carga SOLO al entrar a la pestaña y con su propia ventana, para no
+   * hacerle pagar el costo al resto de Reportes. Se relee cuando cambia la
+   * cantidad de días, que es lo único que altera el resultado.
+   */
+  useEffect(() => {
+    if (selectedReport !== 'estancado' || isDemoMode) return
+    let vivo = true
+    const desde = new Date()
+    desde.setDate(desde.getDate() - estancadoDias)
+    desde.setHours(0, 0, 0, 0)
+
+    setEstancadoCargando(true)
+    setEstancadoError(false)
+    getLastSaleDates(getBusinessId(), desde)
+      .then(r => {
+        if (!vivo) return
+        if (r.ok) setEstancadoVentas(r.ventas)
+        else setEstancadoError(true)
+      })
+      .finally(() => { if (vivo) setEstancadoCargando(false) })
+    return () => { vivo = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedReport, estancadoDias, isDemoMode])
+
+  /** El Excel del reporte: trae TODAS las filas, no solo las 300 que se ven. */
+  const exportarEstancado = async () => {
+    if (!estancado || estancado.filas.length === 0) return
+    const datos = estancado.filas.map(f => ({
+      'Producto': f.nombre,
+      'Codigo': f.sku,
+      'Stock': f.stock,
+      'Costo unitario': f.costo,
+      'Valor inmovilizado': f.valor,
+      'Ultima venta': f.ultimaVenta ? formatDate(f.ultimaVenta) : 'Sin ventas',
+      // Fuera de la ventana no se inventa un numero: se dice "mas de N".
+      'Dias sin vender': f.nuncaEnVentana ? `Mas de ${f.diasVentana}` : f.diasSinVender,
+    }))
+    const ws = XLSX.utils.json_to_sheet(datos)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Mercaderia estancada')
+    try {
+      await exportExcelFile(wb, `mercaderia-estancada-${estancadoDias}dias.xlsx`)
+    } catch (error) {
+      console.error('Error al exportar mercadería estancada:', error)
+    }
+  }
+
+  const estancado = useMemo(() => {
+    if (!estancadoVentas) return null
+    const desde = new Date()
+    desde.setDate(desde.getDate() - estancadoDias)
+    desde.setHours(0, 0, 0, 0)
+    return buildStagnantReport(products, estancadoVentas, desde)
+  }, [products, estancadoVentas, estancadoDias])
 
   // Top productos vendidos
   const topProducts = useMemo(() => {
@@ -2760,11 +2827,13 @@ export default function Reports() {
         return exportExpensesReport()
       case 'profitability':
         return exportProfitabilityReport()
+      case 'estancado':
+        return exportarEstancado()
       default:
         return null
     }
   }
-  const reportesExportables = ['overview', 'sales', 'products', 'brands', 'customers', 'sellers', 'expenses', 'profitability']
+  const reportesExportables = ['overview', 'sales', 'products', 'brands', 'customers', 'sellers', 'expenses', 'profitability', 'estancado']
   const puedeExportar = permisos.exportar
     && reportesExportables.includes(selectedReport)
     && !(selectedReport === 'brands' && selectedBrandName)
@@ -2779,6 +2848,7 @@ export default function Reports() {
     sellers: 'de Vendedores',
     expenses: 'de Gastos',
     profitability: 'de Rentabilidad',
+    estancado: 'de Mercadería Estancada',
   }[selectedReport]
 
   // Lo que el dueño llama "cuánto gané": la utilidad de lo vendido MENOS los
@@ -2904,6 +2974,7 @@ export default function Reports() {
             { id: 'sellers', label: 'Vendedores', icon: Users },
             { id: 'expenses', label: 'Gastos', icon: Receipt },
             { id: 'profitability', label: 'Rentabilidad', icon: TrendingUp },
+            { id: 'estancado', label: 'Mercadería estancada', icon: PackageX },
             ...(businessMode === 'hotel' ? [{ id: 'hotel', label: 'Hotel', icon: BedDouble }] : []),
           ].map(tab => (
             <button
@@ -6311,6 +6382,125 @@ export default function Reports() {
               </CardContent>
             </Card>
           </div>
+        </>
+      )}
+
+      {/* Reporte de Mercadería Estancada */}
+      {selectedReport === 'estancado' && (
+        <>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Sin vender hace más de</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    No depende del filtro de fechas de arriba: es hace cuánto que no se mueve.
+                  </p>
+                </div>
+                <div className="flex gap-1.5">
+                  {[30, 60, 90, 180].map(d => (
+                    <button
+                      key={d}
+                      onClick={() => setEstancadoDias(d)}
+                      className={`px-3 h-9 rounded-lg text-sm font-medium border transition-colors ${
+                        estancadoDias === d
+                          ? 'bg-primary-600 border-primary-600 text-white'
+                          : 'bg-white border-gray-300 text-gray-600 hover:border-primary-400'
+                      }`}
+                    >
+                      {d} días
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {estancadoCargando ? (
+            <Card><CardContent className="p-10 flex items-center justify-center gap-2 text-gray-500">
+              <Loader2 className="w-5 h-5 animate-spin" /> Revisando el movimiento de tu stock...
+            </CardContent></Card>
+          ) : estancadoError ? (
+            <Card><CardContent className="p-8 text-center text-sm text-gray-500">
+              No se pudo leer el movimiento de stock. Intenta de nuevo.
+            </CardContent></Card>
+          ) : !estancado ? null : (
+            <>
+              {/* Lo que importa primero: cuánta plata hay parada */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <Card><CardContent className="p-4">
+                  <p className="text-xs text-gray-500">Valor inmovilizado</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(estancado.totalValor)}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">A costo, de todo lo que tiene stock</p>
+                </CardContent></Card>
+                <Card><CardContent className="p-4">
+                  <p className="text-xs text-gray-500">Sin vender en {estancadoDias} días</p>
+                  <p className="text-2xl font-bold text-amber-600 mt-1">
+                    {estancado.filas.filter(f => f.nuncaEnVentana).length}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {formatCurrency(estancado.filas.filter(f => f.nuncaEnVentana).reduce((s, f) => s + f.valor, 0))} parados ahí
+                  </p>
+                </CardContent></Card>
+                <Card><CardContent className="p-4">
+                  <p className="text-xs text-gray-500">Productos con stock</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">{estancado.totalItems}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Los agotados no cuentan</p>
+                </CardContent></Card>
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Mercadería estancada</CardTitle>
+                  <p className="text-xs text-gray-500 mt-1">De lo más parado a lo que más rota</p>
+                </CardHeader>
+                <CardContent className="p-0 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 border-y border-gray-100">
+                      <tr>
+                        <th className="text-left px-4 py-2 font-medium text-gray-600">Producto</th>
+                        <th className="text-right px-4 py-2 font-medium text-gray-600">Stock</th>
+                        <th className="text-right px-4 py-2 font-medium text-gray-600">Valor</th>
+                        <th className="text-right px-4 py-2 font-medium text-gray-600">Última venta</th>
+                        <th className="text-right px-4 py-2 font-medium text-gray-600">Sin vender</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {estancado.filas.length === 0 ? (
+                        <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                          No hay productos con stock.
+                        </td></tr>
+                      ) : estancado.filas.slice(0, 300).map(f => (
+                        <tr key={f.id} className={f.nuncaEnVentana ? 'bg-amber-50/40' : ''}>
+                          <td className="px-4 py-2">
+                            <p className="text-gray-900">{f.nombre}</p>
+                            {f.sku && <p className="text-xs text-gray-400">{f.sku}</p>}
+                          </td>
+                          <td className="px-4 py-2 text-right text-gray-700">{f.stock}</td>
+                          <td className="px-4 py-2 text-right font-medium text-gray-900">{formatCurrency(f.valor)}</td>
+                          <td className="px-4 py-2 text-right text-gray-600">
+                            {f.ultimaVenta ? formatDate(f.ultimaVenta) : '—'}
+                          </td>
+                          <td className="px-4 py-2 text-right">
+                            {/* Sin venta en la ventana no se inventa un número:
+                                se dice que es MÁS de lo consultado. */}
+                            <span className={f.nuncaEnVentana ? 'text-amber-700 font-semibold' : 'text-gray-700'}>
+                              {f.nuncaEnVentana ? `+${f.diasVentana} días` : `${f.diasSinVender} días`}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {estancado.filas.length > 300 && (
+                    <p className="px-4 py-3 text-xs text-gray-500 border-t border-gray-100">
+                      Se muestran los 300 más parados de {estancado.totalItems}. El Excel los trae todos.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          )}
         </>
       )}
 
