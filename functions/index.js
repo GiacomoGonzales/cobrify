@@ -520,9 +520,34 @@ const TRANSIENT_SUNAT_ERRORS = [
  * @param {string} description - Descripción del error
  * @returns {boolean} true si es error temporal
  */
+/**
+ * Errores que NUNCA son temporales, por mucho que el HTTP diga 500.
+ *
+ * SUNAT devuelve HTTP 500 tanto cuando se le cayó un servicio como cuando las
+ * credenciales SOL están mal. Lo segundo no se arregla esperando: reintentarlo
+ * cada hora es gastar intentos y, peor, dejarle al usuario un "se reintentará
+ * automáticamente" para un documento que no va a salir hasta que corrija su
+ * usuario SOL.
+ */
+const ERRORES_DE_CONFIGURACION = [
+  '0103',  // El Usuario ingresado no existe
+  '0102',  // Usuario o contraseña incorrectos
+  '0105',  // El Usuario ingresado no está activo
+  '0106',  // El Usuario ingresado no existe (variante)
+  '0109',  // El sistema no puede responder su solicitud (usuario sin perfil)
+  'usuario ingresado no existe',
+  'usuario o contraseña',
+  'clave incorrecta',
+]
+
 function isTransientSunatError(responseCode, description) {
   const code = String(responseCode || '').toLowerCase()
   const desc = String(description || '').toLowerCase()
+
+  // Manda lo permanente: un usuario que no existe seguirá sin existir.
+  if (ERRORES_DE_CONFIGURACION.some(e => code.includes(e) || desc.includes(e))) {
+    return false
+  }
 
   return TRANSIENT_SUNAT_ERRORS.some(err => {
     const errLower = err.toLowerCase()

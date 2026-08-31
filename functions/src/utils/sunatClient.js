@@ -213,8 +213,12 @@ async function parseSunatResponse(soapResponse) {
     const fault = body['soap-env:Fault'] || body['soap:Fault'] || body['soapenv:Fault'] || body.Fault
 
     if (fault) {
-      const faultcode = fault.faultcode || 'UNKNOWN'
-      const faultstring = fault.faultstring || 'Error desconocido'
+      // Estos dos vienen sin prefijo en SOAP 1.1 y con él en 1.2; se buscan
+      // igual por sufijo. Cuando el nodo trae atributos, el parser deja el
+      // texto en '#text'.
+      const textoDe = (v) => (v && typeof v === 'object') ? (v['#text'] ?? '') : (v ?? '')
+      const faultcode = String(textoDe(porSufijo(fault, 'faultcode') ?? porSufijo(fault, 'Code')) || 'UNKNOWN')
+      const faultstring = String(textoDe(porSufijo(fault, 'faultstring') ?? porSufijo(fault, 'Reason')) || 'Error desconocido')
 
       console.log(`🚨 SUNAT devolvió SOAP Fault: [${faultcode}] ${faultstring}`)
 
@@ -375,10 +379,28 @@ function parseSunatError(soapResponse) {
 
     const parsed = parser.parse(soapResponse)
 
-    // Buscar faultstring en diferentes formatos (SUNAT usa 'soap-env:', 'soap:', 'soapenv:')
-    const envelope = parsed['soap-env:Envelope'] || parsed['soap:Envelope'] || parsed['soapenv:Envelope'] || parsed.Envelope
-    const body = envelope?.['soap-env:Body'] || envelope?.['soap:Body'] || envelope?.['soapenv:Body'] || envelope?.Body
-    const fault = body?.['soap-env:Fault'] || body?.['soap:Fault'] || body?.['soapenv:Fault'] || body?.Fault
+    // El prefijo de namespace lo elige SUNAT y NO es siempre el mismo: el
+    // endpoint de facturas responde con 'soap-env:' en unos errores y con 's:'
+    // en otros. La lista fija de prefijos dejaba fuera el 's:', y entonces no
+    // se encontraba el Fault, se devolvía el genérico y el usuario veía
+    // "Error al comunicarse con SUNAT (HTTP 500)" en lugar del motivo real.
+    //
+    // Caso del 31-ago-2026 (RUC 10701658201): SUNAT respondía
+    //   <s:Fault><faultcode>a:Client.0103</faultcode>
+    //   <faultstring>El Usuario ingresado no existe</faultstring>
+    // — credenciales SOL mal configuradas — y el sistema lo trataba como un
+    // error temporal, reintentando para siempre algo que nunca iba a andar.
+    //
+    // Se busca por el NOMBRE del nodo, ignorando el prefijo que traiga.
+    const porSufijo = (obj, nombre) => {
+      if (!obj || typeof obj !== 'object') return undefined
+      const clave = Object.keys(obj).find(k => k === nombre || k.endsWith(`:${nombre}`))
+      return clave ? obj[clave] : undefined
+    }
+
+    const envelope = porSufijo(parsed, 'Envelope')
+    const body = porSufijo(envelope, 'Body')
+    const fault = porSufijo(body, 'Fault')
 
     if (fault) {
       const faultcode = fault.faultcode || 'UNKNOWN'
