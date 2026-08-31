@@ -486,7 +486,7 @@ export default {
         },
         {
           type: 'consejo',
-          text: 'Exportar y volver a importar es la forma más cómoda de hacer cambios masivos: bajas tu catálogo, lo editas en Excel y lo subes. El archivo exportado usa las mismas columnas que espera la importación, así que el ida y vuelta no pierde datos.',
+          text: 'Exportar y volver a importar es la forma más cómoda de hacer cambios masivos: bajas tu catálogo, lo editas en Excel y lo subes. El archivo exportado usa las mismas columnas que espera la importación, así que el ida y vuelta no pierde datos. Es también la manera práctica de cargar la **fecha_compra** de todo tu stock de una vez: exportas, llenas esa columna y vuelves a subir el archivo.',
         },
         {
           type: 'ojo',
