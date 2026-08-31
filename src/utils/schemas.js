@@ -382,6 +382,8 @@ export const productSchema = z.object({
   // onSubmit — la fecha nunca se guardaba y trackExpiration quedaba siempre en
   // false. (Mismo problema que tuvo brandId en su momento.)
   expirationDate: z.string().optional(),
+  // Fecha de compra del stock ('YYYY-MM-DD' del input). Ver @/utils/purchaseDate.
+  lastPurchaseDate: z.string().optional(),
   batchNumber: z.string().optional(),
 }).superRefine((data, ctx) => {
   // Validar precio solo si NO tiene variantes (variantes se validan en onSubmit con state

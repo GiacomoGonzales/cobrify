@@ -324,6 +324,14 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
         row.fecha_vencimiento || row.Fecha_Vencimiento || row.FECHA_VENCIMIENTO ||
         row.fechaVencimiento || row.expiration_date || row.expirationDate
       ) : null
+      // Fecha de compra: cuándo se compró esta mercadería de verdad. Importa
+      // sobre todo al cargar stock inicial de una importación vieja — el
+      // producto entra hoy al sistema pero se compró hace meses, y el reporte
+      // de Mercadería Estancada necesita la fecha real, no la de carga.
+      const lastPurchaseDate = parseExcelDate(
+        row.fecha_compra || row.Fecha_Compra || row.FECHA_COMPRA ||
+        row.fechaCompra || row.purchase_date || row.purchaseDate
+      )
       // Número de lote: opcional. Si viene junto con stock + fecha_vencimiento,
       // se crea automáticamente un entry en batches[] para que el control FEFO
       // y la página BatchControl detecten el lote inicial.
@@ -447,6 +455,10 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
         // para que el sistema FEFO detecte el lote en BatchControl y POS.
         trackExpiration: trackExpiration || (!!batchNumber && !!expirationDate),
         expirationDate,
+        // Solo se manda si la fila la trae: una plantilla vieja sin la columna
+        // no debe borrar la fecha que ya tenía el producto (mismo criterio que
+        // priceUSDProvided).
+        ...(lastPurchaseDate && { lastPurchaseDate }),
         batchNumber: batchNumber || null,
         // Si vienen lote + vencimiento + stock, generar el primer entry de
         // batches[] para que aparezca como lote inicial.
@@ -935,6 +947,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           trackStock: 'SI',
           control_vencimiento: 'SI',
           fecha_vencimiento: '2027-06-30',
+          fecha_compra: '2026-05-10',
           numero_lote: 'L2026-A001',
           mostrar_en_catalogo: 'SI',
           unidad: 'UNIDAD',
@@ -979,6 +992,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           trackStock: 'SI',
           control_vencimiento: 'SI',
           fecha_vencimiento: '2027-03-15',
+          fecha_compra: '',
           numero_lote: 'AM-2026-15',
           mostrar_en_catalogo: 'SI',
           unidad: 'UNIDAD',
@@ -1023,6 +1037,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           trackStock: 'SI',
           control_vencimiento: 'SI',
           fecha_vencimiento: '2026-12-20',
+          fecha_compra: '',
           numero_lote: 'CLN-25-08',
           mostrar_en_catalogo: 'NO',
           unidad: 'UNIDAD',
@@ -1073,6 +1088,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           trackStock: 'SI',
           control_vencimiento: 'SI',
           fecha_vencimiento: '2027-02-15',
+          fecha_compra: '',
           numero_lote: 'IBU-LOT-A',
           mostrar_en_catalogo: 'SI',
           unidad: 'UNIDAD',
@@ -1117,6 +1133,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           trackStock: 'SI',
           control_vencimiento: 'SI',
           fecha_vencimiento: '2027-08-30',
+          fecha_compra: '',
           numero_lote: 'IBU-LOT-B',
           mostrar_en_catalogo: '',
           unidad: '',
@@ -1173,6 +1190,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           permitir_decimales: 'NO',
           control_vencimiento: 'NO',
           fecha_vencimiento: '',
+          fecha_compra: '',
           control_series: 'NO',
           mostrar_en_catalogo: 'SI',
           precio_comparacion: '',
@@ -1240,6 +1258,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           permitir_decimales: 'NO',
           control_vencimiento: 'NO',
           fecha_vencimiento: '',
+          fecha_compra: '',
           control_series: 'NO',
           mostrar_en_catalogo: 'NO',  // servicio interno, no en catálogo
           precio_comparacion: '',
@@ -1279,6 +1298,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           permitir_decimales: 'SI',   // CLAVE: permite cantidades fraccionarias
           control_vencimiento: 'NO',
           fecha_vencimiento: '',
+          fecha_compra: '',
           control_series: 'NO',
           mostrar_en_catalogo: 'SI',
           precio_comparacion: '',
@@ -1318,6 +1338,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           permitir_decimales: 'NO',
           control_vencimiento: 'SI',          // CLAVE: activa control de vencimiento
           fecha_vencimiento: '2026-08-30',    // formato YYYY-MM-DD
+          fecha_compra: '',
           numero_lote: 'L-2026-08',           // opcional, crea entry en batches[] si está
 
           control_series: 'NO',
@@ -1359,6 +1380,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           permitir_decimales: 'NO',
           control_vencimiento: 'NO',
           fecha_vencimiento: '',
+          fecha_compra: '',
           control_series: 'SI',         // CLAVE: pedirá serial al ingresar/vender
           // Series de las 5 unidades (separadas por coma). Alternativa: repetir
           // la fila del producto, una por unidad, con UNA serie en esta columna.
@@ -1402,6 +1424,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           permitir_decimales: 'NO',
           control_vencimiento: 'NO',
           fecha_vencimiento: '',
+          fecha_compra: '',
           control_series: 'NO',
           mostrar_en_catalogo: 'SI',
           precio_comparacion: '',
@@ -1451,6 +1474,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           permitir_decimales: 'NO',
           control_vencimiento: 'NO',
           fecha_vencimiento: '',
+          fecha_compra: '',
           control_series: 'NO',
           mostrar_en_catalogo: 'SI',
           precio_comparacion: '',
@@ -1514,6 +1538,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           permitir_decimales: 'NO',
           control_vencimiento: 'NO',
           fecha_vencimiento: '',
+          fecha_compra: '',
           control_series: 'NO',
           mostrar_en_catalogo: idx === 0 ? 'SI' : '',
           precio_comparacion: '',
@@ -1814,6 +1839,11 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           <p className="text-xs text-gray-500 mt-1">
             Control de lotes y vencimientos (opcional, útil para farmacia): control_vencimiento (SI/NO), fecha_vencimiento (YYYY-MM-DD), numero_lote.
             Si llenás los tres con stock &gt; 0, se crea automáticamente el lote inicial del producto.
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            <strong>Fecha de compra (columna <code>fecha_compra</code>):</strong> cuándo compraste esa mercadería de verdad, en formato YYYY-MM-DD.
+            Sirve sobre todo cuando cargás stock inicial de una importación vieja: el producto entra hoy al sistema pero se compró hace meses,
+            y el reporte de <strong>Mercadería estancada</strong> necesita la fecha real. Si la dejás vacía no se toca lo que el producto ya tenga.
           </p>
           <p className="text-xs text-gray-500 mt-1">
             <strong>Múltiples lotes del mismo producto:</strong> repetí el SKU (o el nombre) en varias filas, cada una con su propio numero_lote, fecha_vencimiento y stock.

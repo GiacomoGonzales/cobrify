@@ -1,5 +1,6 @@
 import { db } from '@/lib/firebase'
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore'
+import { diasEnStock } from '@/utils/purchaseDate'
 
 /**
  * MERCADERÍA ESTANCADA — qué no se vende y cuánta plata hay parada ahí.
@@ -84,6 +85,11 @@ export const buildStagnantReport = (products = [], ventas = new Map(), desde, as
     const ultima = ventas.get(p.id) || null
     const dias = ultima ? Math.floor((asOf - ultima) / 86400000) : null
     const costo = Number(p.cost) || 0
+    // Lo que no vendió en la ventana no tiene fecha de venta de dónde agarrarse.
+    // Ahí la fecha de compra es la única pista de hace cuánto está parado: no
+    // dice cuándo se vendió por última vez, pero sí desde cuándo está en el
+    // depósito, que para decidir una liquidación es la pregunta útil.
+    const enStock = diasEnStock(p, asOf)
 
     filas.push({
       id: p.id,
@@ -98,6 +104,8 @@ export const buildStagnantReport = (products = [], ventas = new Map(), desde, as
       diasSinVender: dias,
       nuncaEnVentana: !ultima,
       diasVentana,
+      // Días desde la compra. null si el producto no tiene la fecha cargada.
+      diasEnStock: enStock,
     })
   }
 
@@ -107,6 +115,13 @@ export const buildStagnantReport = (products = [], ventas = new Map(), desde, as
     const da = a.diasSinVender == null ? Infinity : a.diasSinVender
     const db2 = b.diasSinVender == null ? Infinity : b.diasSinVender
     if (da !== db2) return db2 - da
+    // Ambos sin venta en la ventana: desempata el que lleva más tiempo comprado.
+    // El que no tiene fecha de compra no se adelanta a uno que sí la tiene.
+    if (da === Infinity) {
+      const ea = a.diasEnStock == null ? -1 : a.diasEnStock
+      const eb = b.diasEnStock == null ? -1 : b.diasEnStock
+      if (ea !== eb) return eb - ea
+    }
     return b.valor - a.valor
   })
 

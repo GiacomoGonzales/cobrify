@@ -842,6 +842,7 @@ export default function Reports() {
       'Ultima venta': f.ultimaVenta ? formatDate(f.ultimaVenta) : 'Sin ventas',
       // Fuera de la ventana no se inventa un numero: se dice "mas de N".
       'Dias sin vender': f.nuncaEnVentana ? `Mas de ${f.diasVentana}` : f.diasSinVender,
+      'Dias en stock': f.diasEnStock != null ? f.diasEnStock : '',
     }))
     const ws = XLSX.utils.json_to_sheet(datos)
     const wb = XLSX.utils.book_new()
@@ -6463,11 +6464,12 @@ export default function Reports() {
                         <th className="text-right px-4 py-2 font-medium text-gray-600">Valor</th>
                         <th className="text-right px-4 py-2 font-medium text-gray-600">Última venta</th>
                         <th className="text-right px-4 py-2 font-medium text-gray-600">Sin vender</th>
+                        <th className="text-right px-4 py-2 font-medium text-gray-600">En stock desde</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {estancado.filas.length === 0 ? (
-                        <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                        <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500">
                           No hay productos con stock.
                         </td></tr>
                       ) : estancado.filas.slice(0, 300).map(f => (
@@ -6487,6 +6489,11 @@ export default function Reports() {
                             <span className={f.nuncaEnVentana ? 'text-amber-700 font-semibold' : 'text-gray-700'}>
                               {f.nuncaEnVentana ? `+${f.diasVentana} días` : `${f.diasSinVender} días`}
                             </span>
+                          </td>
+                          {/* Hace cuánto se compró. Es lo único que acota el
+                              "+90 días" de lo que nunca se vendió. */}
+                          <td className="px-4 py-2 text-right text-gray-600">
+                            {f.diasEnStock != null ? `${f.diasEnStock} días` : '—'}
                           </td>
                         </tr>
                       ))}

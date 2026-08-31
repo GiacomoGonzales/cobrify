@@ -323,7 +323,15 @@ export default {
         },
         {
           type: 'ojo',
-          text: 'Cuando un producto no vendió nada en la ventana, la columna dice **"+90 días"** (o los días que hayas elegido) en vez de un número: el sistema no inventa una fecha que no tiene. Si quieres saber si son 90 o 400, sube la ventana a 180 y mira si sigue apareciendo.',
+          text: 'Cuando un producto no vendió nada en la ventana, la columna **Sin vender** dice **"+90 días"** (o los días que hayas elegido) en vez de un número: el sistema no inventa una fecha que no tiene.',
+        },
+        {
+          type: 'texto',
+          text: 'Para eso está la última columna, **En stock desde**: los días que pasaron desde la **fecha de compra** del producto. No dice cuándo se vendió por última vez, pero sí desde cuándo está en el depósito — que para decidir una liquidación es la pregunta útil. Entre dos productos que no vendieron nada, el reporte pone primero al que lleva más tiempo comprado.',
+        },
+        {
+          type: 'consejo',
+          text: 'Esa fecha la llena **Compras sola** (toma la fecha de la factura del proveedor). Si cargaste el stock a mano o subiste una importación que compraste hace meses, ponla tú: está en la ficha del producto, al lado del costo, y también viaja en el Excel de importación masiva como columna **fecha_compra**.',
         },
         {
           type: 'texto',
@@ -428,6 +436,10 @@ export default {
     {
       q: 'En Mercadería estancada un producto dice "+90 días" pero yo lo vendí el año pasado.',
       a: 'Es lo mismo: "+90 días" significa que **no vendió nada dentro de la ventana que elegiste**, no que vendió hace exactamente 90 días. Puede ser hace 4 meses o hace 2 años. Sube la ventana a 180 días para acotarlo.',
+    },
+    {
+      q: 'La columna "En stock desde" me sale toda en guiones.',
+      a: 'Es porque tus productos no tienen **fecha de compra** cargada. Se llena sola de acá en adelante cada vez que registres una compra. Para el stock que ya tienes, ponla a mano en la ficha del producto (al lado del costo) o cárgala de golpe con el Excel de importación, columna **fecha_compra**.',
     },
     {
       q: 'El valor inmovilizado me sale en cero o muy bajo.',

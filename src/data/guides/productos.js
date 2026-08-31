@@ -59,6 +59,14 @@ export default {
         },
         {
           type: 'texto',
+          text: 'Al lado del costo está la **fecha de compra**: cuándo entró esa mercadería. No hace falta que la llenes — cada vez que registres una compra, el sistema la escribe solo con la fecha de la factura del proveedor.',
+        },
+        {
+          type: 'consejo',
+          text: 'Vale la pena ponerla a mano en dos casos: cuando cargaste el stock escribiéndolo directamente, y cuando subiste una importación que compraste hace meses (el producto entra hoy al sistema, pero la mercadería es vieja). Es lo que hace que el reporte de **Mercadería estancada** sepa hace cuánto está parada. En el Excel de importación masiva la columna se llama `fecha_compra`.',
+        },
+        {
+          type: 'texto',
           text: 'Hay dos campos que no vienen activados y que conviene conocer. La **ubicación física en el almacén** (pasillo, estante, góndola) le ahorra vueltas a quien va a buscar la mercadería, y sale en los reportes de inventario.',
         },
         {

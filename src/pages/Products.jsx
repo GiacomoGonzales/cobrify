@@ -21,6 +21,7 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { productSchema } from '@/utils/schemas'
+import { toDateInput, fromDateInput } from '@/utils/purchaseDate'
 import { UNITS, getUnitLabel, formatPresentationEquivalence } from '@/utils/units'
 import { getPresentationCostInfo } from '@/utils/presentationCost'
 import { formatCurrency, formatProductPrice, applyMarginToCost, matchesSearchQuery, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
@@ -588,6 +589,7 @@ export default function Products() {
       trackExpiration: false,
       trackSerials: false,
       expirationDate: '',
+      lastPurchaseDate: '',
       batchNumber: '',
     },
   })
@@ -917,6 +919,7 @@ export default function Products() {
       trackExpiration: false,
       trackSerials: false,
       expirationDate: '',
+      lastPurchaseDate: '',
       batchNumber: '',
     })
     setTrackSerials(false)
@@ -1096,6 +1099,7 @@ export default function Products() {
       hasVariants: productHasVariants,
       trackExpiration: hasExpiration,
       expirationDate: formattedExpirationDate,
+      lastPurchaseDate: toDateInput(product.lastPurchaseDate),
       batchNumber: product.batchNumber || '',
       minStock: product.minStock != null ? product.minStock.toString() : '',
       reminderDays: product.reminderDays != null ? product.reminderDays.toString() : '',
@@ -1458,6 +1462,9 @@ export default function Products() {
           ? {}
           : { cost: resolveCostToSave(data.cost) }),
         weight: data.weight && data.weight !== '' ? parseFloat(data.weight) : null,
+        // Fecha de compra: la escribe Compras sola, pero se puede corregir acá.
+        // Vaciar el campo la borra a propósito (dato mal cargado por Excel).
+        lastPurchaseDate: fromDateInput(data.lastPurchaseDate),
         hasVariants: hasVariants,
         // Con batches activos, forzar trackExpiration:true (los lotes lo implican).
         // Sin lotes, la bandera SIGUE al campo de fecha del formulario: si el usuario
@@ -2651,6 +2658,9 @@ export default function Products() {
             if (product.allowDecimalQuantity !== undefined) updates.allowDecimalQuantity = product.allowDecimalQuantity
             if (product.trackExpiration !== undefined) updates.trackExpiration = product.trackExpiration
             if (product.expirationDate) updates.expirationDate = product.expirationDate
+            // Fecha de compra: solo si la fila la trajo. Una plantilla sin la
+            // columna no debe borrar la que ya escribió Compras.
+            if (product.lastPurchaseDate) updates.lastPurchaseDate = product.lastPurchaseDate
             if (product.trackSerials !== undefined) updates.trackSerials = product.trackSerials
             // Imagen y peso
             if (product.imageUrl) updates.imageUrl = product.imageUrl
@@ -6874,6 +6884,22 @@ export default function Products() {
                   {...register('weight')}
                 />
                 <p className="text-xs text-gray-500 mt-1">Opcional</p>
+              </div>
+
+              {/* Fecha de compra: cuándo entró esta mercadería. La llena Compras
+                  sola con la fecha de la factura del proveedor; se corrige acá
+                  cuando el stock se cargó a mano o vino de una importación
+                  vieja. Es lo que alimenta el reporte de Mercadería Estancada. */}
+              <div>
+                <Input
+                  label="Fecha de compra"
+                  type="date"
+                  error={errors.lastPurchaseDate?.message}
+                  {...register('lastPurchaseDate')}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Opcional · Se llena sola al registrar una compra
+                </p>
               </div>
 
               {/* Precio principal - ocultar cuando tiene variantes (cada variante tiene su precio).

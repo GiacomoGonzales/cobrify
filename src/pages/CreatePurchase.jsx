@@ -2138,7 +2138,7 @@ export default function CreatePurchase() {
             // Bonificaciones (costo 0) no lo pisan.
             ...(newCost > 0 && {
               lastPurchasePrice: newCost,
-              lastPurchaseDate: Timestamp.fromDate(new Date(invoiceDate)),
+              lastPurchaseDate: Timestamp.fromDate(parseLocalDate(invoiceDate)),
             }),
             ...(selectedSupplier && {
               lastSupplier: {
@@ -2221,7 +2221,7 @@ export default function CreatePurchase() {
                   costPrice: itemCost || existing.costPrice || 0,
                   // Referencia a la última compra que tocó este lote
                   purchaseId: resultId || existing.purchaseId || null,
-                  purchaseDate: Timestamp.fromDate(new Date(invoiceDate)),
+                  purchaseDate: Timestamp.fromDate(parseLocalDate(invoiceDate)),
                 }
               } else {
                 updatedBatches.push({
@@ -2230,7 +2230,7 @@ export default function CreatePurchase() {
                   quantity: itemQty,
                   expirationDate: itemExpDate,
                   purchaseId: resultId || null,
-                  purchaseDate: Timestamp.fromDate(new Date(invoiceDate)),
+                  purchaseDate: Timestamp.fromDate(parseLocalDate(invoiceDate)),
                   costPrice: itemCost,
                   warehouseId: targetWarehouseId,
                   createdAt: Timestamp.fromDate(new Date())
@@ -2270,7 +2270,7 @@ export default function CreatePurchase() {
                     status: 'available',
                     warehouseId: selectedWarehouse?.id || null,
                     purchaseId: resultId || null,
-                    purchaseDate: Timestamp.fromDate(new Date(invoiceDate)),
+                    purchaseDate: Timestamp.fromDate(parseLocalDate(invoiceDate)),
                     saleId: null,
                     variantSku: item.variantSku || null,
                     createdAt: Timestamp.fromDate(new Date())
