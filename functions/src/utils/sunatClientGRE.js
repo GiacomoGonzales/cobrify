@@ -2,6 +2,21 @@ import axios from 'axios'
 import { XMLParser } from 'fast-xml-parser'
 import JSZip from 'jszip'
 
+
+/**
+ * Busca un nodo por su NOMBRE, sin importar el prefijo de namespace.
+ *
+ * SUNAT no usa siempre el mismo: 'soap-env:', 'soapenv:', 'S:' y también 's:'
+ * minúscula. Las listas fijas de prefijos dejaban fuera alguno y entonces el
+ * error real se perdía y salía un genérico "HTTP 500" — pasó el 31-ago-2026
+ * con un "El Usuario ingresado no existe" que quedó invisible.
+ */
+function nodoPorNombre(obj, nombre) {
+  if (!obj || typeof obj !== 'object') return undefined
+  const clave = Object.keys(obj).find(k => k === nombre || k.endsWith(`:${nombre}`))
+  return clave ? obj[clave] : undefined
+}
+
 /**
  * Cliente para comunicación con SUNAT via SOAP Web Services
  * ESPECÍFICO para Guías de Remisión Electrónica (GRE)
@@ -187,8 +202,9 @@ async function parseSunatResponseGRE(soapResponse) {
 
     const parsed = parser.parse(soapResponse)
 
-    // Navegar estructura SOAP
-    const envelope = parsed['soap:Envelope'] || parsed['soapenv:Envelope'] || parsed.Envelope || parsed['soap-env:Envelope'] || parsed['S:Envelope']
+    // Navegar estructura SOAP. Ver `nodoPorNombre`: el prefijo lo elige SUNAT
+    // y la lista fija dejaba fuera el 's:' minúscula.
+    const envelope = nodoPorNombre(parsed, 'Envelope')
 
     if (!envelope) {
       console.log('❌ [GRE] No se encontró SOAP Envelope. Keys:', Object.keys(parsed))
@@ -309,10 +325,10 @@ function parseSunatErrorGRE(soapResponse) {
 
     const parsed = parser.parse(soapResponse)
 
-    // Buscar faultstring en diferentes formatos
-    const envelope = parsed['soap-env:Envelope'] || parsed['soap:Envelope'] || parsed['soapenv:Envelope'] || parsed.Envelope || parsed['S:Envelope']
-    const body = envelope?.['soap-env:Body'] || envelope?.['soap:Body'] || envelope?.['soapenv:Body'] || envelope?.Body || envelope?.['S:Body']
-    const fault = body?.['soap-env:Fault'] || body?.['soap:Fault'] || body?.['soapenv:Fault'] || body?.Fault || body?.['S:Fault']
+    // Se busca por el NOMBRE del nodo, ignorando el prefijo de namespace.
+    const envelope = nodoPorNombre(parsed, 'Envelope')
+    const body = nodoPorNombre(envelope, 'Body')
+    const fault = nodoPorNombre(body, 'Fault')
 
     if (fault) {
       const faultcode = fault.faultcode || 'UNKNOWN'
