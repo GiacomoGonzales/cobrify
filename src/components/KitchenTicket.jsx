@@ -70,7 +70,7 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible: web
       <style>{`
         @media print {
           @page {
-            size: ${a4SheetPrint ? 'A4' : '80mm auto'};
+            ${a4SheetPrint ? 'size: A4;' : ''}
             margin: ${a4SheetPrint ? '8mm' : '0'};
           }
 

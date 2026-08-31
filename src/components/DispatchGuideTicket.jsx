@@ -157,7 +157,6 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
       <style>{`
         @media print {
           @page {
-            size: ${paperWidth}mm auto;
             margin: 0;
           }
 

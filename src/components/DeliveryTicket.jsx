@@ -22,7 +22,6 @@ const DeliveryTicket = forwardRef(({ delivery, companySettings, paperWidth = 80,
       <style>{`
         @media print {
           @page {
-            size: ${paperWidth}mm auto;
             margin: 0;
           }
           * { box-sizing: border-box; }

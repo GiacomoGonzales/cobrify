@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   Truck, Plus, Edit, Trash2, UserCheck, DollarSign, TrendingUp,
   Loader2, Search, Package, Clock, CheckCircle, XCircle, Filter,
@@ -23,6 +23,7 @@ import { previewDeliveryPDF } from '@/utils/deliveryPdfGenerator'
 import { Capacitor } from '@capacitor/core'
 import { useAppContext } from '@/hooks/useAppContext'
 import DeliveryTicket from '@/components/DeliveryTicket'
+import { aplicarTamanoDeHoja } from '@/utils/printPageSize'
 import { useToast } from '@/contexts/ToastContext'
 import MotoristaFormModal from '@/components/restaurant/MotoristaFormModal'
 import { matchesSearchQuery } from '@/lib/utils'
@@ -103,6 +104,7 @@ export default function Envios() {
   // Company settings (for PDF generation)
   const [companySettings, setCompanySettings] = useState(null)
   const [printingTicket, setPrintingTicket] = useState(null)
+  const ticketRef = useRef(null)   // para medir el alto y ajustar la hoja
   const [ticketPaperWidth, setTicketPaperWidth] = useState(80)
 
   // Tab Arqueo
@@ -381,8 +383,12 @@ export default function Envios() {
     // Fallback web o si falla la térmica: window.print() con componente ticket
     setPrintingTicket(delivery)
     setTimeout(() => {
+      const quitarTamano = aplicarTamanoDeHoja(ticketRef.current, ticketPaperWidth)
       window.print()
-      setTimeout(() => setPrintingTicket(null), 500)
+      setTimeout(() => {
+        quitarTamano()
+        setPrintingTicket(null)
+      }, 500)
     }, 100)
   }
 
@@ -585,6 +591,7 @@ export default function Envios() {
       {/* Componente de ticket para impresión web (hidden, visible solo en @media print) */}
       {printingTicket && (
         <DeliveryTicket
+          ref={ticketRef}
           delivery={printingTicket}
           companySettings={companySettings}
           paperWidth={ticketPaperWidth}

@@ -11,6 +11,7 @@ import { getDispatchGuides, sendDispatchGuideToSunat, getCompanySettings, getPro
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import EditDispatchGuideModal from '@/components/EditDispatchGuideModal'
 import DispatchGuideTicket from '@/components/DispatchGuideTicket'
+import { aplicarTamanoDeHoja } from '@/utils/printPageSize'
 import { generateDispatchGuidePDF, previewDispatchGuidePDF, shareDispatchGuidePDF } from '@/utils/dispatchGuidePdfGenerator'
 import { buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import { getActiveBranches } from '@/services/branchService'
@@ -441,8 +442,12 @@ export default function DispatchGuides() {
     // Fallback: impresión web (window.print)
     setPrintingTicket(guide)
     setTimeout(() => {
+      // La hoja se ajusta al ticket. Sin esto el navegador usa A4 y la guía
+      // sale chiquita arriba con media hoja en blanco.
+      const quitarTamano = aplicarTamanoDeHoja(ticketRef.current, ticketPaperWidth)
       window.print()
       setTimeout(() => {
+        quitarTamano()
         setPrintingTicket(null)
       }, 500)
     }, 100)

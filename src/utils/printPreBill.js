@@ -4,7 +4,7 @@ import { printHtmlIframe } from './printHtmlIframe'
 
 // La precuenta usa el helper compartido: antes tenia su propia copia, con el
 // borrado por temporizador que colgaba la vista previa del navegador.
-const printHTML = (html) => printHtmlIframe(html, 'print-iframe')
+const printHTML = (html, anchoMm) => printHtmlIframe(html, 'print-iframe', anchoMm)
 
 /**
  * Utility para imprimir precuenta de restaurante
@@ -106,7 +106,6 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
       <title>Precuenta - Mesa ${table.number}</title>
       <style>
         @page {
-          size: ${paperWidth}mm auto;
           margin: 0;
         }
 
@@ -572,7 +571,7 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
     </html>
   `
 
-  printHTML(html)
+  printHTML(html, paperWidth)
 }
 
 /**
@@ -754,5 +753,5 @@ export const printAllSplitPreBills = (table, order, splitData, businessInfo = {}
     </html>
   `
 
-  printHTML(html)
+  printHTML(html, paperWidth)
 }

@@ -1,3 +1,5 @@
+import { ticketPageSize, pxAMm } from '@/utils/printPageSize'
+
 /**
  * Imprime un HTML suelto (precuenta, ticket de compra) usando un iframe oculto
  * en la misma página, tanto en web como en la app.
@@ -25,16 +27,28 @@
  *     fallaba en una laptop y en otra no: era una carrera que se ganaba o se
  *     perdía según la máquina y la conexión.
  *
+ *  4. **Decirle al navegador de qué tamaño es la hoja.** Un ticket en rollo no
+ *     es A4, y si no se declara el tamaño el navegador usa el suyo y el ticket
+ *     sale chiquito arriba con media hoja en blanco. Como CSS no permite pedir
+ *     "este ancho y el alto que haga falta", el alto se MIDE del contenido ya
+ *     renderizado — para eso el iframe necesita tener el ancho real del papel,
+ *     aunque siga invisible.
+ *
  * @param {string} html - documento completo, SIN script de auto-impresión
  * @param {string} id - id del iframe; uno por tipo de documento
+ * @param {number} [anchoMm] - ancho del papel (58, 80...). Sin esto no se
+ *                             ajusta la hoja y manda el tamaño del navegador.
  */
-export const printHtmlIframe = (html, id = 'print-iframe') => {
+export const printHtmlIframe = (html, id = 'print-iframe', anchoMm = null) => {
   const existing = document.getElementById(id)
   if (existing) existing.remove()
 
   const iframe = document.createElement('iframe')
   iframe.id = id
-  iframe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;border:none;visibility:hidden;'
+  // Con ancho 0 el contenido se renderiza aplastado y no se puede medir. Se le
+  // da el ancho real del papel; sigue invisible por `visibility:hidden`.
+  const anchoPx = anchoMm ? Math.round(anchoMm / (25.4 / 96)) : 0
+  iframe.style.cssText = `position:fixed;top:0;left:0;width:${anchoPx}px;height:0;border:none;visibility:hidden;`
   document.body.appendChild(iframe)
 
   const doc = iframe.contentDocument || iframe.contentWindow.document
@@ -42,11 +56,30 @@ export const printHtmlIframe = (html, id = 'print-iframe') => {
   doc.write(html)
   doc.close()
 
+  /**
+   * Deja la hoja del alto del ticket. Se hace justo antes de imprimir, con el
+   * contenido ya pintado y las imágenes cargadas: medirlo antes daría un alto
+   * corto y cortaría el ticket.
+   */
+  const ajustarHoja = () => {
+    if (!anchoMm) return
+    try {
+      const alto = doc.documentElement?.scrollHeight || doc.body?.scrollHeight || 0
+      const estilo = doc.createElement('style')
+      estilo.textContent = `@page { size: ${ticketPageSize(anchoMm, pxAMm(alto))}; margin: 0; }`
+      doc.head?.appendChild(estilo)
+    } catch (e) {
+      // Sin el tamaño el ticket sale igual, solo que en la hoja del navegador.
+      console.warn('No se pudo ajustar el tamaño de hoja:', e)
+    }
+  }
+
   let printed = false
   const printOnce = () => {
     if (printed) return
     printed = true
     try {
+      ajustarHoja()
       const win = iframe.contentWindow
       win.addEventListener('afterprint', () => {
         setTimeout(() => iframe.remove(), 500)

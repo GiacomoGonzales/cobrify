@@ -69,6 +69,7 @@ import { storage, db } from '@/lib/firebase'
 import { prepareInvoiceXML, downloadCompressedXML, isSunatConfigured, voidDocument, canVoidDocument, checkVoidStatus } from '@/services/sunatService'
 import { generateInvoicesExcel } from '@/services/invoiceExportService'
 import InvoiceTicket from '@/components/InvoiceTicket'
+import { aplicarTamanoDeHoja } from '@/utils/printPageSize'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import { Capacitor } from '@capacitor/core'
 import { downloadFromUrl, downloadBlob } from '@/utils/nativeDownload'
@@ -472,13 +473,24 @@ export default function InvoiceList() {
     // no abrir el modal de detalle ni interferir con la impresión masiva.
     // Si viene del modal, viewingInvoice ya está seteado y se imprime
     // directamente.
+    // La hoja se ajusta al ticket: sin esto el navegador cae en A4 y el
+    // comprobante sale chiquito arriba con media hoja en blanco. En modo
+    // "hoja A4" el propio componente pide A4 y no hay que medir nada.
+    const ajustarHoja = () => a4SheetPrint
+      ? () => {}
+      : aplicarTamanoDeHoja(ticketRef.current, ticketPaperWidth)
+
     if (invoiceArg && viewingInvoice?.id !== invoice.id) {
       setRowPrintInvoice(invoice)
       await new Promise((r) => setTimeout(r, 120))
+      const quitar = ajustarHoja()
       window.print()
+      quitar()
       setRowPrintInvoice(null)
     } else {
+      const quitar = ajustarHoja()
       window.print()
+      quitar()
     }
   }
 

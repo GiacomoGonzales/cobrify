@@ -237,7 +237,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
       <style>{`
         @media print {
           @page {
-            size: ${a4SheetPrint ? 'A4' : `${paperWidth}mm auto`};
+            ${a4SheetPrint ? 'size: A4;' : ''}
             margin: ${a4SheetPrint ? '8mm' : '0'};
           }
 

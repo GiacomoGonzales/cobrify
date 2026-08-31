@@ -148,7 +148,6 @@ const CashClosureTicket = forwardRef(({
       <style>{`
         @media print {
           @page {
-            size: ${paperWidth}mm auto;
             margin: 0;
           }
 

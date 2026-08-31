@@ -16,7 +16,7 @@ import { printHtmlIframe } from '@/utils/printHtmlIframe'
 // una ventana emergente, que el navegador bloquea sin avisar.
 // ============================================================
 
-const printHTML = (html) => printHtmlIframe(html, 'print-iframe-purchase')
+const printHTML = (html, anchoMm) => printHtmlIframe(html, 'print-iframe-purchase', anchoMm)
 
 /**
  * Lee el ancho de papel guardado por el dispositivo (58 o 80mm)
@@ -266,5 +266,5 @@ export const printPurchaseTicket = (purchase, businessInfo = {}, paperWidth = nu
     </html>
   `
 
-  printHTML(html)
+  printHTML(html, width)
 }

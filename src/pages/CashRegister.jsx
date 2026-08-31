@@ -32,6 +32,7 @@ import {
 import { getManagedUsers } from '@/services/userManagementService'
 import { generateCashReportExcel, generateCashReportPDF } from '@/services/cashReportService'
 import CashClosureTicket from '@/components/CashClosureTicket'
+import { aplicarTamanoDeHoja } from '@/utils/printPageSize'
 import { getSessionMoneyTotals } from '@/utils/cashTotals'
 import { Capacitor } from '@capacitor/core'
 import { getPaymentBucketLabel, getCustomMethodByLabel, isCashLikePayment } from '@/utils/paymentMethods'
@@ -247,6 +248,7 @@ export default function CashRegister() {
   const [companySettings, setCompanySettings] = useState(null)
   // Estado para la sesión que se va a imprimir (puede ser cierre actual o historial)
   const [printSessionData, setPrintSessionData] = useState(null)
+  const cierreTicketRef = useRef(null)   // para medir el alto y ajustar la hoja
   const [printMovements, setPrintMovements] = useState([])
 
   // Estado para impresión térmica (Bluetooth/WiFi)
@@ -1310,7 +1312,9 @@ export default function CashRegister() {
     setPrintMovements(movements)
     // Esperar a que se actualice el estado y luego imprimir
     setTimeout(() => {
+      const quitarTamano = aplicarTamanoDeHoja(cierreTicketRef.current, printerConfig?.paperWidth || 80)
       window.print()
+      setTimeout(quitarTamano, 500)
     }, 100)
   }
 
@@ -1336,7 +1340,9 @@ export default function CashRegister() {
       setPrintMovements(historyMovements)
       // Esperar a que se actualice el estado y luego imprimir
       setTimeout(() => {
+        const quitarTamano = aplicarTamanoDeHoja(cierreTicketRef.current, printerConfig?.paperWidth || 80)
         window.print()
+        setTimeout(quitarTamano, 500)
       }, 100)
     } catch (error) {
       console.error('Error al imprimir ticket:', error)
@@ -5035,6 +5041,7 @@ export default function CashRegister() {
       {printSessionData && companySettings && (
         <div className="hidden print:block">
           <CashClosureTicket
+            ref={cierreTicketRef}
             hideExpected={hideExpectedForCashier}
             sessionData={printSessionData}
             movements={printMovements}
