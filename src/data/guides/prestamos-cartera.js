@@ -68,6 +68,36 @@ export default {
     },
 
     {
+      id: 'estado-de-cuenta',
+      title: 'Enviarle el estado de cuenta al cliente',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Cada tarjeta tiene el botón **Estado de cuenta**: abre el resumen completo de ese préstamo — cuánto pidió, los pagos que hizo, cuánto debe hoy y cuándo es el próximo vencimiento.',
+        },
+        {
+          type: 'texto',
+          text: 'Antes de mandar nada ves **el mensaje exacto** que va a recibir el cliente. Léelo: son tus números frente a tu cliente. Desde ahí puedes **enviarlo por WhatsApp** (se abre el chat con el texto ya escrito) o **imprimirlo / guardarlo en PDF** si te lo piden en papel.',
+        },
+        {
+          type: 'texto',
+          text: 'Se envía como mensaje de texto y no como archivo a propósito: el cliente lo lee en la notificación, sin descargar nada.',
+        },
+        {
+          type: 'texto',
+          text: 'Cuando un préstamo está **atrasado**, junto a ese botón aparece **Recordar**: manda un mensaje corto con cuánto debe y desde cuándo, sin el historial completo. Es para cobrar, no para informar.',
+        },
+        {
+          type: 'ojo',
+          text: 'Para enviar por WhatsApp el cliente tiene que tener **teléfono registrado** en el préstamo. Si no lo tiene, el botón queda deshabilitado y el sistema te avisa — pero igual puedes imprimir el estado de cuenta.',
+        },
+        {
+          type: 'ojo',
+          text: 'El estado de cuenta sigue disponible cuando el préstamo ya está **cancelado**: en ese caso el mensaje dice que no queda saldo. Sirve como constancia de que terminó de pagar.',
+        },
+      ],
+    },
+    {
       id: 'detalle',
       title: 'El detalle de cada préstamo',
       blocks: [
@@ -97,6 +127,10 @@ export default {
     {
       q: '¿Cómo se calcula la mora?',
       a: 'Como la configuraste en ese préstamo: un **%** sobre lo vencido por cada período de atraso, o un **monto fijo** por período. Se cobra primero, antes que el interés y el capital.',
+    },
+    {
+      q: 'El botón de WhatsApp está apagado.',
+      a: 'Ese cliente no tiene teléfono registrado en el préstamo. El estado de cuenta igual se puede imprimir o guardar en PDF.',
     },
     {
       q: '¿La constancia vale ante SUNAT?',

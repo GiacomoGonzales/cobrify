@@ -13,6 +13,7 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   HandCoins, Plus, Search, Loader2, Calendar, Percent, Wallet,
   AlertTriangle, CheckCircle, MoreVertical, Printer, XCircle, User,
+  FileText, MessageCircle,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -31,6 +32,10 @@ import {
 import { printHtmlIframe } from '@/utils/printHtmlIframe'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import GuideLink from '@/components/guide/GuideLink'
+import {
+  buildStatement, statementToWhatsApp, reminderToWhatsApp, whatsAppLink,
+  fmtFecha, fmtMonto,
+} from '@/utils/lendingStatement'
 
 const toJsDate = (v) => (v?.toDate ? v.toDate() : v ? new Date(v) : null)
 
@@ -73,6 +78,8 @@ export default function LendingPortfolio() {
 
   // Pago
   const [payingLoan, setPayingLoan] = useState(null)
+  // Estado de cuenta: el prestamo que se esta mirando para enviar o imprimir.
+  const [statementLoan, setStatementLoan] = useState(null)
   const [payAmount, setPayAmount] = useState('')
   const [payMethod, setPayMethod] = useState('Efectivo')
   const [isPaying, setIsPaying] = useState(false)
@@ -245,6 +252,107 @@ export default function LendingPortfolio() {
   }
 
   // ===== Pago + ticket =====
+  const nombreDelNegocio = () =>
+    companySettings?.tradeName || companySettings?.name || companySettings?.businessName || ''
+
+  /**
+   * Abre WhatsApp con el mensaje escrito.
+   *
+   * Sin telefono no se abre nada: mandar a WhatsApp sin destinatario le haria
+   * creer al prestamista que el mensaje salio.
+   */
+  const enviarPorWhatsApp = (loan, texto) => {
+    const link = whatsAppLink(loan.customerPhone, texto)
+    if (!link) {
+      toast.error(`${loan.customerName} no tiene teléfono registrado. Agrégalo al editar el préstamo.`)
+      return
+    }
+    window.open(link, '_blank')
+  }
+
+  /** El estado de cuenta impreso — mismo criterio que el mensaje. */
+  const buildStatementHtml = (st) => {
+    const biz = nombreDelNegocio() || 'MI NEGOCIO'
+    const fila = (etiqueta, valor, fuerte) => `
+      <tr>
+        <td style="padding:4px 0;color:#555">${etiqueta}</td>
+        <td style="padding:4px 0;text-align:right;${fuerte ? 'font-weight:700;font-size:15px' : ''}">${valor}</td>
+      </tr>`
+    const pagos = st.pagos.length === 0
+      ? '<p style="color:#777;font-size:12px">Sin pagos registrados.</p>'
+      : `<table style="width:100%;border-collapse:collapse;font-size:12px">
+           <tr style="border-bottom:1px solid #ddd">
+             <th style="text-align:left;padding:4px 0">Fecha</th>
+             <th style="text-align:right">Monto</th>
+             <th style="text-align:right">Capital</th>
+             <th style="text-align:right">Interés</th>
+             <th style="text-align:right">Mora</th>
+           </tr>
+           ${st.pagos.map(p => `
+             <tr style="border-bottom:1px solid #f0f0f0">
+               <td style="padding:4px 0">${fmtFecha(p.fecha)}</td>
+               <td style="text-align:right">${fmtMonto(p.monto)}</td>
+               <td style="text-align:right">${fmtMonto(p.capital)}</td>
+               <td style="text-align:right">${fmtMonto(p.interes)}</td>
+               <td style="text-align:right">${fmtMonto(p.mora)}</td>
+             </tr>`).join('')}
+         </table>`
+
+    return `<!DOCTYPE html><html><head><meta charset="utf-8">
+      <style>
+        @page { size: A4; margin: 18mm }
+        body { font-family: Arial, Helvetica, sans-serif; color:#222; font-size:13px }
+        h1 { font-size:18px; margin:0 0 2px }
+        h2 { font-size:13px; margin:18px 0 6px; text-transform:uppercase; letter-spacing:.5px; color:#666 }
+        .caja { border:1px solid #ddd; border-radius:6px; padding:10px 12px }
+      </style></head><body>
+      <h1>${biz}</h1>
+      <p style="margin:0;color:#666;font-size:12px">Estado de cuenta al ${fmtFecha(st.corte)}</p>
+
+      <h2>Cliente</h2>
+      <div class="caja">
+        <strong>${st.cliente}</strong>${st.documento ? ` — ${st.documento}` : ''}
+      </div>
+
+      <h2>Préstamo</h2>
+      <div class="caja">
+        <table style="width:100%;border-collapse:collapse">
+          ${fila('Fecha', fmtFecha(st.inicio))}
+          ${fila('Capital prestado', fmtMonto(st.capitalPrestado))}
+          ${fila('Interés', `${st.tasa}% ${st.modalidad.toLowerCase()}`)}
+          ${fila('Modalidad', st.tipo)}
+        </table>
+      </div>
+
+      <h2>Pagos</h2>
+      ${pagos}
+
+      <h2>Saldo</h2>
+      <div class="caja">
+        <table style="width:100%;border-collapse:collapse">
+          ${fila('Total pagado', fmtMonto(st.totalPagado))}
+          ${fila('Capital pendiente', fmtMonto(st.capital))}
+          ${st.interesPendiente > 0 ? fila('Interés pendiente', fmtMonto(st.interesPendiente)) : ''}
+          ${st.mora > 0 ? fila('Mora', fmtMonto(st.mora)) : ''}
+          ${fila('SALDO TOTAL', fmtMonto(st.saldo), true)}
+        </table>
+      </div>
+
+      ${st.proximoVence ? `
+      <h2>Próximo pago</h2>
+      <div class="caja">
+        ${st.atrasado
+          ? `<strong style="color:#b91c1c">Vencido el ${fmtFecha(st.proximoVence)}</strong> (${st.diasAtraso} día${st.diasAtraso === 1 ? '' : 's'} de atraso)`
+          : `Vence el <strong>${fmtFecha(st.proximoVence)}</strong>`}
+        ${st.proximoMonto != null ? `<br>Monto: <strong>${fmtMonto(st.proximoMonto)}</strong>` : ''}
+      </div>` : ''}
+
+      <p style="margin-top:22px;color:#888;font-size:10px">
+        Documento informativo, sin valor tributario.
+      </p>
+    </body></html>`
+  }
+
   const buildReceiptHtml = (loan, breakdown, after) => {
     const biz = companySettings?.tradeName || companySettings?.name || companySettings?.businessName || 'MI NEGOCIO'
     const fila = (label, val) => `<tr><td style="padding:2px 0">${label}</td><td style="text-align:right;font-weight:bold">${val}</td></tr>`
@@ -461,6 +569,30 @@ export default function LendingPortfolio() {
                       Agregar Pago
                     </Button>
                   )}
+                  {/* Estado de cuenta: disponible SIEMPRE, tambien en los ya
+                      cancelados — el cliente suele pedir el comprobante de que
+                      termino de pagar. El recordatorio, solo si esta atrasado. */}
+                  <div className="flex gap-2 mt-2">
+                    <Button
+                      variant="outline"
+                      className="flex-1 gap-1.5"
+                      onClick={() => setStatementLoan(loan)}
+                    >
+                      <FileText className="w-4 h-4" />
+                      Estado de cuenta
+                    </Button>
+                    {loan.status === 'active' && buildStatement(loan).atrasado && (
+                      <Button
+                        variant="outline"
+                        className="flex-1 gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50"
+                        onClick={() => enviarPorWhatsApp(loan, reminderToWhatsApp(buildStatement(loan), nombreDelNegocio()))}
+                        title="Enviar recordatorio por WhatsApp"
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        Recordar
+                      </Button>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             )
@@ -609,6 +741,56 @@ export default function LendingPortfolio() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* ===== Modal: Estado de cuenta ===== */}
+      <Modal
+        isOpen={!!statementLoan}
+        onClose={() => setStatementLoan(null)}
+        title={`Estado de cuenta — ${statementLoan?.customerName || ''}`}
+      >
+        {statementLoan && (() => {
+          const st = buildStatement(statementLoan)
+          const texto = statementToWhatsApp(st, nombreDelNegocio())
+          return (
+            <div className="space-y-4">
+              {/* Lo que se va a enviar, tal cual. Que el prestamista lo lea
+                  ANTES de mandarlo: son sus numeros frente a su cliente. */}
+              <div>
+                <p className="text-xs font-medium text-gray-700 mb-1">Mensaje que se enviará</p>
+                <pre className="whitespace-pre-wrap text-sm bg-gray-50 border border-gray-200 rounded-lg p-3 font-sans text-gray-800 max-h-64 overflow-y-auto">
+                  {texto}
+                </pre>
+              </div>
+
+              {!statementLoan.customerPhone && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+                  Este cliente no tiene teléfono registrado, así que no se puede enviar por
+                  WhatsApp. Sí puedes imprimirlo o guardarlo en PDF.
+                </p>
+              )}
+
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1 gap-2"
+                  onClick={() => printHtmlIframe(buildStatementHtml(st), 'estado-cuenta-iframe')}
+                >
+                  <Printer className="w-4 h-4" />
+                  Imprimir / PDF
+                </Button>
+                <Button
+                  className="flex-1 gap-2"
+                  disabled={!statementLoan.customerPhone}
+                  onClick={() => { enviarPorWhatsApp(statementLoan, texto); setStatementLoan(null) }}
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  Enviar por WhatsApp
+                </Button>
+              </div>
+            </div>
+          )
+        })()}
       </Modal>
 
       {/* ===== Modal: Agregar Pago ===== */}
