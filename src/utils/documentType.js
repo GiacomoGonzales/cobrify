@@ -48,5 +48,23 @@ export const documentLabel = (raw, numero = '') => {
   return 'Doc.'
 }
 
+const ETIQUETAS_LARGAS = { '6': 'RUC', '1': 'DNI', '4': 'Carnet de Extranjería', '7': 'Pasaporte' }
+
+/**
+ * La etiqueta completa, para PANTALLA.
+ *
+ * En una pantalla sobra el ancho y "CE: 001234567" no le dice nada a quien
+ * atiende. En los IMPRESOS se usa la corta a propósito: la etiqueta del PDF
+ * comparte columna con "RAZÓN SOCIAL:" (25.2 mm de ancho reservado) y
+ * "CARNET DE EXTRANJERÍA:" mide 42.7 mm — se encimaría con el valor. El ticket
+ * térmico tiene el mismo problema con líneas de 32 a 48 caracteres.
+ *
+ * RUC y DNI son iguales en las dos: ya son la palabra completa.
+ */
+export const documentLabelLong = (raw, numero = '') => {
+  const code = toSunatCode(raw)
+  return code ? ETIQUETAS_LARGAS[code] : documentLabel(raw, numero)
+}
+
 /** ¿Es una empresa? Decide "Razón Social" vs "Nombre". */
 export const esRuc = (raw, numero = '') => documentLabel(raw, numero) === 'RUC'

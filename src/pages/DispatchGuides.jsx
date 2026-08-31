@@ -18,7 +18,7 @@ import { canVoidDispatchGuide } from '@/services/sunatService'
 import { updateDispatchGuide, deleteDispatchGuide, getDispatchGuide } from '@/services/firestoreService'
 import { Capacitor } from '@capacitor/core'
 import GuideLink from '@/components/guide/GuideLink'
-import { documentLabel } from '@/utils/documentType'
+import { documentLabelLong } from '@/utils/documentType'
 
 const TRANSFER_REASONS = {
   '01': 'Venta',
@@ -1709,7 +1709,7 @@ export default function DispatchGuides() {
                   </div>
                   <div>
                     <span className="text-gray-500">
-                      {documentLabel(recipient.documentType, recipient.documentNumber)}:
+                      {documentLabelLong(recipient.documentType, recipient.documentNumber)}:
                     </span>
                     <p className="font-medium">{recipient.documentNumber || '-'}</p>
                   </div>
