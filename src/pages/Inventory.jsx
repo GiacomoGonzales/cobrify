@@ -84,6 +84,7 @@ import { buildProductHaystack, buildIngredientHaystack } from '@/utils/productSe
 import GuideLink from '@/components/guide/GuideLink'
 import { buscarLoteEnAlmacen, cantidadDeLote, lotesDelAlmacen, sumarLotes } from '@/utils/batchLookup'
 import { getLastSaleDates, evaluarEstancamiento } from '@/services/stagnantStockService'
+import { llevaStock } from '@/utils/stockTracking'
 
 // Helper functions for category hierarchy
 const migrateLegacyCategories = (cats) => {
@@ -1999,11 +2000,14 @@ export default function Inventory() {
       let matchesStockTracking = true
       const hasVariantStock = item.hasVariants && item.variants?.length > 0
       if (filterStockTracking === 'tracked') {
-        // Solo items que manejan stock (trackStock !== false y stock no es null, o tiene variantes con stock)
-        matchesStockTracking = item.trackStock !== false && (item.stock !== null && item.stock !== undefined || hasVariantStock)
+        // Solo items que manejan stock. `llevaStock` es el mismo criterio que
+        // usa el recuento físico (@/utils/stockTracking): cuando cada pantalla
+        // lo resolvía por su cuenta, Inventario mostraba 12 items y el recuento
+        // pedía contar 26.
+        matchesStockTracking = llevaStock(item) && (item.stock !== null && item.stock !== undefined || hasVariantStock)
       } else if (filterStockTracking === 'untracked') {
         // Solo items que NO manejan stock
-        matchesStockTracking = item.trackStock === false || (item.stock === null && item.stock === undefined && !hasVariantStock)
+        matchesStockTracking = !llevaStock(item) || (item.stock === null && item.stock === undefined && !hasVariantStock)
       }
 
       // Activo / desactivado. `isActive !== false` porque los productos

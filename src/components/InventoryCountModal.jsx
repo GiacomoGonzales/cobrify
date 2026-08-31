@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import { scanBarcode, scannerDisponible } from '@/utils/scanBarcode'
+import { entraAlRecuento } from '@/utils/stockTracking'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -133,6 +134,12 @@ export default function InventoryCountModal({
 
       if (hasStock || hasCurrentStock || hasVariants || isIngredient) {
         const warehouseStock = getWarehouseStock(product, warehouseId)
+
+        // Lo que NO lleva control de stock —platos, servicios— no se cuenta:
+        // contarlo generaría un ajuste sobre algo que el sistema no descuenta
+        // al vender. Salvo que tenga existencias acá, que sí hay que cuadrar.
+        // Mismo criterio que el listado de Inventario, en @/utils/stockTracking.
+        if (!entraAlRecuento(product, warehouseStock)) return
 
         // No listar productos ajenos a la sede de este almacen SALVO que tengan
         // stock aqui (huerfano, hay que poder contarlo). Sin esto el operario
