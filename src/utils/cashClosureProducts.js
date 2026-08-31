@@ -20,6 +20,45 @@ const cuenta = (inv) => {
   return true
 }
 
+/**
+ * Motivos del catalogo 09 en los que la mercaderia VUELVE al deposito.
+ *
+ * Los otros diez motivos corrigen el monto o los datos del comprobante —
+ * descuento global, disminucion en el valor, error en el RUC, error en la
+ * descripcion— y el producto se vendio igual. Restarlos aca haria desaparecer
+ * de la lista mercaderia que si salio.
+ */
+const MOTIVOS_QUE_DEVUELVEN = new Set([
+  '01', // Anulacion de la operacion
+  '06', // Devolucion total
+  '07', // Devolucion por item
+])
+
+/**
+ * ¿Esta nota de credito descuenta productos de ESTE turno?
+ *
+ * Dos condiciones, las dos necesarias:
+ *
+ * 1. Que el motivo implique devolucion fisica (arriba). Sin `discrepancyCode`
+ *    —notas viejas, cargadas antes de que se guardara el motivo— se asume que
+ *    SI devuelve: es el caso mas comun y el que el dueño espera ver reflejado.
+ *
+ * 2. Que el comprobante que corrige sea de este mismo turno. Una devolucion de
+ *    una venta de ayer no puede restarse de lo que se vendio hoy: dejaria la
+ *    lista por debajo de lo que realmente salio del deposito.
+ */
+const notaDevuelveDelTurno = (nc, numerosDelTurno) => {
+  const code = String(nc?.discrepancyCode || '').trim()
+  if (code && !MOTIVOS_QUE_DEVUELVEN.has(code)) return false
+
+  const ref = String(nc?.referencedDocumentId || '').trim().toUpperCase()
+  // Sin referencia no hay forma de ubicarla en el tiempo; no se resta, porque
+  // restar de mas es peor que no restar: al dueño le faltarian productos que
+  // sabe que vendio y dejaria de confiar en la lista.
+  if (!ref) return false
+  return numerosDelTurno.has(ref)
+}
+
 /** La clave con la que se agrupa: el producto, o su nombre si no tiene id. */
 const claveDe = (item) => {
   const id = item?.productId
@@ -33,11 +72,9 @@ const claveDe = (item) => {
 /**
  * Resume los productos vendidos en el turno.
  *
- * Las NOTAS DE CRÉDITO restan. Si en este turno se devolvió mercadería, esa
- * mercadería volvió al depósito en este turno: el ticket dice qué salió de
- * verdad. Puede dejar un producto en cero o en negativo cuando la nota
- * corresponde a una venta de otro día; esos no se listan, porque "vendí -2
- * gaseosas hoy" no es información útil para quien cierra la caja.
+ * Las NOTAS DE CRÉDITO restan SOLO cuando de verdad devolvieron mercadería:
+ * motivo de devolución (catálogo 09) y sobre un comprobante de este mismo
+ * turno. Ver `notaDevuelveDelTurno`.
  *
  * @param {Array} invoices comprobantes del turno
  * @returns {{lineas: Array<{nombre, codigo, cantidad, importe}>, totalUnidades: number, totalImporte: number}}
@@ -45,13 +82,26 @@ const claveDe = (item) => {
 export const resumirProductosVendidos = (invoices = []) => {
   const mapa = new Map()
 
+  // Los comprobantes del turno, para saber si una nota corrige una venta de
+  // hoy o una de otro día.
+  const numerosDelTurno = new Set()
+  for (const inv of invoices) {
+    const n = String(inv?.number || '').trim().toUpperCase()
+    if (n) numerosDelTurno.add(n)
+  }
+
   for (const inv of invoices) {
     if (!cuenta(inv)) continue
-    const items = Array.isArray(inv?.items) ? inv.items : []
-    // La nota de crédito devuelve mercadería: sus cantidades se restan.
-    const signo = inv?.documentType === 'nota_credito' ? -1 : 1
     // La nota de débito no mueve mercadería (es un cargo adicional).
     if (inv?.documentType === 'nota_debito') continue
+
+    let signo = 1
+    if (inv?.documentType === 'nota_credito') {
+      if (!notaDevuelveDelTurno(inv, numerosDelTurno)) continue
+      signo = -1
+    }
+
+    const items = Array.isArray(inv?.items) ? inv.items : []
 
     for (const item of items) {
       const cantidad = Number(item?.quantity) || 0

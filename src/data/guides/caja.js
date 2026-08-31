@@ -194,8 +194,12 @@ export default {
           label: 'Imprimir los productos vendidos en el cierre',
         },
         {
+          type: 'texto',
+          text: 'Sobre las **notas de crédito**: se descuentan de la lista solo cuando la mercadería volvió de verdad — motivo *Anulación de la operación*, *Devolución total* o *Devolución por ítem*— y sobre una venta del mismo turno. Una nota por *descuento global* o por *error en el RUC* no toca la lista: ahí el producto se vendió igual, solo cambió el monto o los datos.',
+        },
+        {
           type: 'ojo',
-          text: 'Ese total de productos puede **no coincidir** con el Total Ventas del turno, y es correcto: en las ventas entran los cobros de comprobantes de días anteriores, que no movieron mercadería hoy. Y si en el turno se emitió una nota de crédito, esos productos se restan porque volvieron al depósito.',
+          text: 'Ese total de productos puede **no coincidir** con el Total Ventas del turno, y es correcto: en las ventas entran los cobros de comprobantes de días anteriores, que no movieron mercadería hoy.',
         },
       ],
     },
@@ -238,8 +242,12 @@ export default {
 
   preguntas: [
     {
+      q: 'Anulé una venta con nota de crédito y el producto sigue apareciendo.',
+      a: 'Revisa el **motivo** de la nota. Solo se descuentan las de *Anulación de la operación*, *Devolución total* y *Devolución por ítem*, que son las que implican que la mercadería volvió. Una nota por *descuento global*, *disminución en el valor* o *error en el RUC* corrige el monto o los datos, pero el producto salió igual del depósito. Tampoco se descuenta si la nota corrige una venta de otro día: eso dejaría la lista de hoy por debajo de lo que realmente vendiste.',
+    },
+    {
       q: 'Los productos del cierre no suman lo mismo que el Total Ventas.',
-      a: 'Es lo esperado y las dos cifras son correctas: miden cosas distintas. El **Total Ventas** es la plata que entró al turno, e incluye cobros de comprobantes emitidos otros días. **Productos Vendidos** es la mercadería que salió hoy del depósito. Una nota de crédito del turno resta productos (volvieron), pero no toca lo cobrado antes.',
+      a: 'Es lo esperado y las dos cifras son correctas: miden cosas distintas. El **Total Ventas** es la plata que entró al turno, e incluye cobros de comprobantes emitidos otros días. **Productos Vendidos** es la mercadería que salió hoy del depósito.',
     },
     {
       q: '¿Tengo que abrir caja para poder vender?',
