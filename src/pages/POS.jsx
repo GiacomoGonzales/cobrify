@@ -4615,7 +4615,11 @@ export default function POS() {
         stock: variant.stock,
         quantity: 1,
         isVariant: true,
-        imageUrl: product.imageUrl, // Include product image
+        // La foto de la VARIANTE si la tiene; si no, la del producto. En el
+        // carrito el vendedor está mirando el color que eligió, no el producto
+        // genérico — y es la misma imagen que viaja al PDF del comprobante
+        // cuando está activa la opción de mostrar imágenes.
+        imageUrl: variant.imageUrl || product.imageUrl,
         description: product.description || '', // Descripción del producto para el PDF (opción showProductDescriptionInInvoice)
       }
       // Igual acá: agregar un color nuevo puede completar el mínimo del producto

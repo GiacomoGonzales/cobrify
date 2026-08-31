@@ -348,6 +348,13 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
         variantSku: selectedVariant.sku,
         variantAttributes: selectedVariant.attributes,
         isVariant: true,
+        // En el carrito se muestra el COLOR que el comprador eligió, no la
+        // foto genérica del producto. Si la variante no tiene foto propia se
+        // queda la del producto, que es lo que ya traía el spread de arriba.
+        ...(selectedVariant.imageUrl && {
+          imageUrl: selectedVariant.imageUrl,
+          imageUrls: [selectedVariant.imageUrl],
+        }),
       }
       onAddToCart(variantProduct, quantity, modifiersData, totalPrice, priceLevelLabel)
     } else {
