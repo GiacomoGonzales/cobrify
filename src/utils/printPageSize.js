@@ -22,6 +22,25 @@
 const MM_POR_PX = 25.4 / 96
 
 /**
+ * Holgura sobre el alto medido. La medición se hace en PANTALLA y el ticket no
+ * se imprime igual que como se ve: los estilos de impresión le cambian el
+ * padding lateral (2mm en pantalla, 2mm + los márgenes configurados al
+ * imprimir), y con `box-sizing: border-box` eso angosta el texto y lo hace más
+ * ALTO. Con letra grande hay además un `zoom` que amplifica la diferencia.
+ *
+ * El error no es simétrico y por eso se redondea SIEMPRE hacia arriba:
+ *
+ *   - hoja MÁS CORTA que el contenido → el navegador encoge TODO para que
+ *     quepa, y el ticket sale chiquito y centrado en el papel. Es el reporte
+ *     del 31-ago-2026: "al poner el tamaño de letra en máximo el comprobante
+ *     me sale en el medio".
+ *   - hoja MÁS LARGA → sobra un poco de papel al final. En un rollo continuo
+ *     no se nota, la impresora corta donde termina el ticket.
+ */
+const HOLGURA = 1.12
+const HOLGURA_MM = 12
+
+/**
  * Alto mínimo de la hoja. Por debajo de esto algunos visores de PDF y drivers
  * se confunden con la página, y un ticket de dos líneas tampoco se lee mejor
  * en una hoja de 8 mm.
@@ -49,7 +68,13 @@ export const pxAMm = (px) => (Number(px) || 0) * MM_POR_PX
 export const ticketPageSize = (anchoMm, altoMm) => {
   const w = Number(anchoMm) > 0 ? Number(anchoMm) : 80
   let h = Number(altoMm)
-  if (!Number.isFinite(h) || h <= 0) h = 297
+  if (!Number.isFinite(h) || h <= 0) {
+    h = 297
+  } else {
+    // Ver HOLGURA: quedarse corto arruina la impresión, pasarse solo gasta
+    // unos centímetros de papel.
+    h = h * HOLGURA + HOLGURA_MM
+  }
   h = Math.min(ALTO_MAXIMO_MM, Math.max(ALTO_MINIMO_MM, h))
   // Redondeado hacia arriba: cortar el ticket por medio milímetro empujaría la
   // última línea a una segunda hoja.
@@ -62,7 +87,9 @@ export const ticketPageSize = (anchoMm, altoMm) => {
  */
 export const medirAltoMm = (el) => {
   if (!el || typeof el.getBoundingClientRect !== 'function') return null
-  const alto = el.getBoundingClientRect().height
+  // scrollHeight además de la caja visible: si algo desborda el contenedor,
+  // getBoundingClientRect no lo cuenta y la hoja saldría corta.
+  const alto = Math.max(el.getBoundingClientRect().height || 0, el.scrollHeight || 0)
   if (!alto || alto <= 0) return null
   return pxAMm(alto)
 }
