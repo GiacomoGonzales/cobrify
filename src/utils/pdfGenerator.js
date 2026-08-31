@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf'
 import { contrastTextColor } from '@/utils/pdfColors'
 import { getNotaVentaLegend } from '@/utils/documentLegends'
-import { documentLabel, esRuc } from '@/utils/documentType'
+import { documentLabelLong, esRuc } from '@/utils/documentType'
 import { formatDate, formatQuantity } from '@/lib/utils'
 import { getCurrencySymbol, normalizeCurrency } from '@/utils/currency'
 import { getComprobanteBreakdown } from '@/utils/peruUtils'
@@ -1119,9 +1119,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     paymentForm = totalPaid === 0 ? 'CRÉDITO' : 'CONTADO'
   }
 
-  // El PDF rotula todo en mayusculas (RAZON SOCIAL:, DIRECCION:), asi que
-  // "Pasaporte" se sube; el criterio de QUE etiqueta va es compartido.
-  const docType = documentLabel(invoice.customer?.documentType, invoice.customer?.documentNumber).toUpperCase()
+  // El PDF rotula todo en mayusculas (RAZON SOCIAL:, DIRECCION:), asi que la
+  // etiqueta se sube; el criterio de CUAL va es compartido.
+  const docType = documentLabelLong(invoice.customer?.documentType, invoice.customer?.documentNumber).toUpperCase()
   const docNumber = invoice.customer?.documentNumber && invoice.customer.documentNumber !== '00000000'
                     ? invoice.customer.documentNumber : '-'
   const customerAddress = invoice.customer?.address || '-'
@@ -1160,23 +1160,41 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     })
   }
 
-  // RUC/DNI
+  // Tipo y numero de documento.
+  //
+  // "CARNET DE EXTRANJERIA:" mide 42.7 mm contra los 25.2 que reserva la
+  // columna. Meterla al calculo de anchos —como se hace con LICENCIA /
+  // RESOLUCION— dejaria la DIRECCION en 22.3 mm, y esa solo dibuja 2 lineas:
+  // una direccion normal se truncaria en silencio. Perder la direccion del
+  // cliente para alinear una etiqueta es mal negocio.
+  //
+  // Asi que cuando la etiqueta no entra en la columna, el numero va justo
+  // despues de ella en esa fila. Las demas conservan su alineacion y su ancho.
   doc.setFont('helvetica', 'bold')
-  doc.text(`${docType}:`, colLeftX, leftY)
+  const docLabelText = `${docType}:`
+  doc.text(docLabelText, colLeftX, leftY)
+  const docLabelWidth = doc.getTextWidth(docLabelText)
   doc.setFont('helvetica', 'normal')
-  doc.text(docNumber, leftValueX, leftY)
+  const docNumberX = docLabelWidth + 5 > maxLeftLabel + 5
+    ? colLeftX + docLabelWidth + 3
+    : leftValueX
+  doc.text(docNumber, docNumberX, leftY)
   leftY += dataLineHeight
 
   // Dirección
   doc.setFont('helvetica', 'bold')
   doc.text('DIRECCIÓN:', colLeftX, leftY)
   doc.setFont('helvetica', 'normal')
-  const addrLines = doc.splitTextToSize(customerAddress, colWidth - maxLeftLabel - 10)
-  doc.text(addrLines[0], leftValueX, leftY)
-  if (addrLines[1]) {
-    leftY += 10
-    doc.text(addrLines[1], leftValueX, leftY)
-  }
+  // Hasta 4 lineas, igual que la razon social. Antes se dibujaban 2 y el resto
+  // se perdia en silencio: "AV. PASEO DE LA REPUBLICA NRO. 1645 URB.
+  // BALCONCILLO, LIMA - LIMA - LA VICTORIA" da 4 y salia cortada en "LA",
+  // comiendose el distrito. Es el mismo bug que ya se arreglo arriba para el
+  // nombre; la direccion se habia quedado sin arreglar.
+  const addrLines = doc.splitTextToSize(customerAddress, colWidth - maxLeftLabel - 10).slice(0, 4)
+  addrLines.forEach((linea, i) => {
+    if (i > 0) leftY += 10
+    doc.text(linea, leftValueX, leftY)
+  })
   leftY += dataLineHeight
 
   // Teléfono del cliente (si existe)
