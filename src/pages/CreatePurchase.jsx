@@ -2172,14 +2172,33 @@ export default function CreatePurchase() {
           // un nuevo registro en vez de reusar el slot.
           const itemsWithBatch = grouped.items.filter(item => item.batchNumber || item.expirationDate)
           if (itemsWithBatch.length > 0) {
-            // #6: en EDICIÓN, quitar primero los lotes que esta MISMA compra había aportado
-            // antes de re-mergear las cantidades actuales (revert-then-apply). Antes se
-            // re-sumaban completas mientras el stock se ajustaba por diferencia → batches[]
-            // quedaba inflado vs warehouseStocks. En creación no cambia (no hay lotes previos
-            // de esta compra). El stock se ajusta por diferencia arriba, consistente con esto.
-            const updatedBatches = isEditMode
-              ? (product.batches || []).filter(b => b.purchaseId !== purchaseId)
-              : [...(product.batches || [])]
+            // En EDICIÓN los lotes se ajustan POR DIFERENCIA, igual que el stock.
+            //
+            // Antes se borraba el lote de esta compra y se re-creaba con la cantidad
+            // comprada. Eso le devolvía al lote todo lo que ya se había VENDIDO:
+            // caso real de LA PATOTA (31-ago-2026) — compra de 4, venta de 1 (lote
+            // 3), se edita la compra y el lote vuelve a 4 mientras el stock sigue
+            // en 3. Dos ventas más y el POS mostraba "Stock: 1" en la tarjeta y
+            // "2 disponibles" en el modal de lotes, para el mismo producto.
+            //
+            // El stock ya se ajusta por diferencia arriba, con el comentario "NO
+            // revertir todo (para no afectar ventas ya realizadas)". Los lotes
+            // tienen que seguir el MISMO criterio o se separan.
+            const updatedBatches = [...(product.batches || [])]
+
+            // Cuánto aportó esta compra a cada lote ANTES de editarla. Sirve para
+            // sumarle al lote solo el delta, en vez de la cantidad entera.
+            const aporteOriginalPorLote = {}
+            if (isEditMode && originalPurchase?.items) {
+              for (const it of originalPurchase.items) {
+                if (it.itemType === 'ingredient') continue
+                if (it.productId !== grouped.productId) continue
+                const bn = String(it.batchNumber || '').trim().toLowerCase()
+                if (!bn) continue
+                const baseQty = (parseFloat(it.quantity) || 0) * (Number(it.presentationFactor) || 1)
+                aporteOriginalPorLote[bn] = (aporteOriginalPorLote[bn] || 0) + baseQty
+              }
+            }
             const targetWarehouseId = selectedWarehouse?.id || null
             const normalizeBn = (s) => String(s || '').trim().toLowerCase()
             const expDateEqual = (a, b) => {
@@ -2213,9 +2232,19 @@ export default function CreatePurchase() {
 
               if (existingIdx >= 0) {
                 const existing = updatedBatches[existingIdx]
+                // En edición se suma solo el DELTA: si la compra ya aportaba 4 a
+                // este lote y sigue aportando 4, no se suma nada. Sumar itemQty
+                // entero le devolvería al lote lo que ya se vendió.
+                const yaAportado = isEditMode
+                  ? (aporteOriginalPorLote[normalizeBn(itemBatchNumber)] || 0)
+                  : 0
+                const aSumar = itemQty - yaAportado
                 updatedBatches[existingIdx] = {
                   ...existing,
-                  quantity: (parseFloat(existing.quantity) || 0) + itemQty,
+                  // Nunca por debajo de cero: si se bajó la cantidad de la compra
+                  // más de lo que queda en el lote, es que ya se vendió; el lote
+                  // se queda en cero y el faltante lo refleja el stock.
+                  quantity: Math.max(0, (parseFloat(existing.quantity) || 0) + aSumar),
                   // Actualizamos costo al último (sirve para futuros reportes
                   // de costo promedio si se necesita en otra iteración).
                   costPrice: itemCost || existing.costPrice || 0,
