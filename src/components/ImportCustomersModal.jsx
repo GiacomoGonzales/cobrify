@@ -24,6 +24,27 @@ const rowGet = (normalizedRow, candidates) => {
   return ''
 }
 
+/**
+ * Campos propios del negocio que el importador tambien trae.
+ *
+ * Se cargaban a mano cliente por cliente porque el Excel solo leia los seis
+ * basicos: quien tenia 500 clientes con numero de licencia no tenia forma de
+ * subirlos. Reporte de TODOTIRO (31-ago-2026): "no esta guardando el numero de
+ * licencia... registrando directamente en la hoja de cliente si lo guarda".
+ *
+ * Se importan SIEMPRE, esten o no activos en Configuracion: el dato no molesta
+ * a nadie guardado, y hacerlo depender de un interruptor obligaria a acertar el
+ * orden —prender la opcion y despues importar— para no perder la columna.
+ */
+const CAMPOS_DEL_NEGOCIO = [
+  { campo: 'licenseNumber',   alias: ['Licencia', 'Numero Licencia', 'Nro Licencia', 'N Licencia', 'Licencia / Resolucion', 'Resolucion', 'license'] },
+  { campo: 'propertyCard',    alias: ['Tarjeta Propiedad', 'Tarjeta de Propiedad', 'T Propiedad', 'propertycard'] },
+  { campo: 'vehiclePlate',    alias: ['Placa', 'Numero Placa', 'plate', 'vehicleplate'] },
+  { campo: 'studentName',     alias: ['Alumno', 'Nombre Alumno', 'Estudiante', 'student'] },
+  { campo: 'studentSchedule', alias: ['Horario', 'Horario Alumno', 'schedule'] },
+  { campo: 'birthDate',       alias: ['Fecha Nacimiento', 'Nacimiento', 'Cumpleanos', 'birthdate'] },
+]
+
 const mapDocType = (raw, docNumber) => {
   const t = norm(raw)
   if (t.includes('ruc')) return ID_TYPES.RUC
@@ -49,8 +70,8 @@ export default function ImportCustomersModal({ isOpen, onClose, onImported, exis
 
   const downloadTemplate = () => {
     const template = [
-      { 'Tipo Documento': 'DNI', 'Numero Documento': '12345678', 'Nombre / Razon Social': 'Juan Perez', 'Email': 'juan@correo.com', 'Telefono': '987654321', 'Direccion': 'Av. Ejemplo 123' },
-      { 'Tipo Documento': 'RUC', 'Numero Documento': '20123456789', 'Nombre / Razon Social': 'Mi Empresa S.A.C.', 'Email': 'ventas@miempresa.com', 'Telefono': '01 4567890', 'Direccion': 'Jr. Comercio 456' },
+      { 'Tipo Documento': 'DNI', 'Numero Documento': '12345678', 'Nombre / Razon Social': 'Juan Perez', 'Email': 'juan@correo.com', 'Telefono': '987654321', 'Direccion': 'Av. Ejemplo 123', 'Licencia': 'LIC-00123', 'Tarjeta Propiedad': '', 'Placa': '', 'Alumno': '', 'Horario': '', 'Fecha Nacimiento': '' },
+      { 'Tipo Documento': 'RUC', 'Numero Documento': '20123456789', 'Nombre / Razon Social': 'Mi Empresa S.A.C.', 'Email': 'ventas@miempresa.com', 'Telefono': '01 4567890', 'Direccion': 'Jr. Comercio 456', 'Licencia': '', 'Tarjeta Propiedad': '', 'Placa': '', 'Alumno': '', 'Horario': '', 'Fecha Nacimiento': '' },
     ]
     const ws = XLSX.utils.json_to_sheet(template)
     ws['!cols'] = [{ wch: 16 }, { wch: 18 }, { wch: 30 }, { wch: 24 }, { wch: 16 }, { wch: 30 }]
@@ -97,6 +118,13 @@ export default function ImportCustomersModal({ isOpen, onClose, onImported, exis
             email: rowGet(r, ['Email', 'correo']),
             phone: rowGet(r, ['Telefono', 'celular', 'phone', 'tel']),
             address: rowGet(r, ['Direccion', 'address']),
+            // Solo los que la fila trae: mandar '' borraria lo que el cliente
+            // ya tenga cargado al reimportar una plantilla sin esas columnas.
+            ...Object.fromEntries(
+              CAMPOS_DEL_NEGOCIO
+                .map(({ campo, alias }) => [campo, rowGet(r, alias)])
+                .filter(([, valor]) => valor !== '')
+            ),
           })
         }
         setParsed(valid)
@@ -146,6 +174,8 @@ export default function ImportCustomersModal({ isOpen, onClose, onImported, exis
               <p className="text-sm font-medium text-blue-900">1. Descarga la plantilla</p>
               <p className="text-xs text-blue-800 mt-0.5">
                 Columnas: Tipo Documento (DNI/RUC/CE/Pasaporte), Número Documento, Nombre / Razón Social, Email, Teléfono, Dirección. Llénala y guárdala.
+                Si tu negocio usa campos propios —<strong>Licencia</strong>, Tarjeta Propiedad, Placa, Alumno, Horario, Fecha Nacimiento— también se importan;
+                las columnas que dejes vacías no borran lo que el cliente ya tenga.
               </p>
               <Button variant="outline" size="sm" onClick={downloadTemplate} className="mt-3">
                 <Download className="w-4 h-4 mr-2" />
