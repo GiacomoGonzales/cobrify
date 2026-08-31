@@ -84,6 +84,7 @@ import { Capacitor } from '@capacitor/core'
 import { Share } from '@capacitor/share'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { scanBarcode, scannerDisponible } from '@/utils/scanBarcode'
+import { analizarRafaga, MS_ABANDONO } from '@/utils/scannerDetect'
 import { getDoc, doc, Timestamp, collection, query, where, getDocs, limit as fsLimit, updateDoc } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { db, storage } from '@/lib/firebase'
@@ -3480,25 +3481,24 @@ export default function POS() {
       const now = Date.now()
 
       if (e.key === 'Enter') {
-        if (buffer.length >= 3) {
-          const elapsed = lastCharTime - firstCharTime
-          const avgPerChar = buffer.length > 1 ? elapsed / (buffer.length - 1) : 0
-          // Velocidad humana típica: >80ms/char. Scanner: <30ms/char. Umbral 50ms.
-          if (avgPerChar < 50) {
-            e.preventDefault()
-            setSearchTerm(buffer)
-            // Marca que esto vino de la pistola (detector global): si el código no
-            // existe, el auto-agregado mostrará el aviso de "no registrado".
-            scanSubmitRef.current = true
-            // En desktop con mouse, llevar el foco al buscador para que el
-            // cajero pueda continuar editando con teclado. En tablets evitar
-            // el focus para no abrir el teclado virtual — la pistola escribe
-            // vía keydown global, no necesita que el input esté enfocado.
-            const hasFinePointer = typeof window !== 'undefined'
-              && window.matchMedia?.('(pointer: fine)').matches
-            if (hasFinePointer) {
-              searchInputRef.current?.focus()
-            }
+        // El criterio de "esto lo escribió una pistola" vive en
+        // @/utils/scannerDetect, compartido con la pantalla de prueba de
+        // Configuración: si la prueba usara otro umbral que el mostrador, no
+        // serviría para diagnosticar por qué un lector no anda.
+        if (analizarRafaga(buffer, lastCharTime - firstCharTime).esEscaneo) {
+          e.preventDefault()
+          setSearchTerm(buffer)
+          // Marca que esto vino de la pistola (detector global): si el código no
+          // existe, el auto-agregado mostrará el aviso de "no registrado".
+          scanSubmitRef.current = true
+          // En desktop con mouse, llevar el foco al buscador para que el
+          // cajero pueda continuar editando con teclado. En tablets evitar
+          // el focus para no abrir el teclado virtual — la pistola escribe
+          // vía keydown global, no necesita que el input esté enfocado.
+          const hasFinePointer = typeof window !== 'undefined'
+            && window.matchMedia?.('(pointer: fine)').matches
+          if (hasFinePointer) {
+            searchInputRef.current?.focus()
           }
         }
         buffer = ''
@@ -3513,9 +3513,11 @@ export default function POS() {
       buffer += e.key
       lastCharTime = now
 
-      // Si pasan >300ms sin completar, descartar el buffer (era tipeo humano, no scanner).
+      // Sin teclas por un rato, se descarta la ráfaga (era tipeo humano).
+      // El plazo sale del mismo módulo: con los tiempos de Bluetooth, 300 ms
+      // vaciaban el buffer a media lectura.
       clearTimeout(resetTimer)
-      resetTimer = setTimeout(() => { buffer = ''; firstCharTime = 0 }, 300)
+      resetTimer = setTimeout(() => { buffer = ''; firstCharTime = 0 }, MS_ABANDONO)
     }
 
     document.addEventListener('keydown', handleKeyDown)

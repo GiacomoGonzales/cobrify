@@ -77,7 +77,16 @@ export default {
         },
         {
           type: 'texto',
-          text: 'Con **pistola lectora** (computadora): dispara al código con el cursor en el buscador y el producto se agrega solo. Desde la **aplicación** (celular o tablet) tienes además un botón para escanear con la cámara, al costado del buscador.',
+          text: 'Con **pistola lectora**: dispara al código y el producto se agrega solo. **No hace falta que el cursor esté en el buscador** ni conectar nada al sistema: las pistolas —por cable, por Bluetooth o con su receptor USB— funcionan como un teclado, y si tu equipo ya reconoce la tuya, el punto de venta la usa. Desde la **aplicación** (celular o tablet) tienes además un botón para escanear con la cámara, al costado del buscador.',
+        },
+        {
+          type: 'consejo',
+          text: 'Si compraste una pistola y no te funciona, no adivines: en Configuración → Impresora hay una prueba que te dice qué está llegando y qué hacer. Distingue las tres fallas típicas — que el lector no envíe el Enter final, que escriba demasiado lento, o que esté en modo inventario en vez de modo teclado.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=impresora',
+          label: 'Probar mi pistola lectora',
         },
         {
           type: 'texto',
@@ -676,6 +685,10 @@ export default {
   ],
 
   preguntas: [
+    {
+      q: 'Compré una pistola lectora y no pasa nada al disparar.',
+      a: 'Entra a **Configuración → Impresora → Probar mi pistola lectora** y dispara ahí: te dice exactamente qué llegó. Lo más común es que el lector no envíe el **Enter** al final —se arregla escaneando un código del manual del propio aparato, no en el sistema— o que esté en **modo inventario**, guardando las lecturas en vez de escribirlas.',
+    },
     {
       q: 'Emití mal una venta, ¿cómo la corrijo?',
       a: 'Desde la página **Ventas**. Si fue una boleta o factura ya enviada a SUNAT, se corrige con una nota de crédito o se da de baja (según el caso). Si fue una Nota de Venta, puedes anularla, y si tu negocio tiene activada la edición de notas de venta, también editarla.',

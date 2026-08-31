@@ -6,6 +6,7 @@ import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, U
 import QRCode from 'qrcode'
 import { QRCodeSVG } from 'qrcode.react'
 import { useAppContext } from '@/hooks/useAppContext'
+import ScannerTester from '@/components/ScannerTester'
 import { useToast } from '@/contexts/ToastContext'
 import { invalidateLogoCache } from '@/utils/pdfGenerator'
 import { downloadDataUrl, saveFilesToDevice } from '@/utils/nativeDownload'
@@ -10215,6 +10216,11 @@ export default function Settings() {
       {/* Tab Content - Impresora */}
       {activeTab === 'impresora' && (
         <div className="space-y-6">
+          {/* Pistola lectora: no se conecta a nada, pero cuando "no funciona"
+              hay que poder decir POR QUE en un minuto y no en tres dias de
+              mensajes. */}
+          <ScannerTester />
+
           {/* Guía: qué impresora imprime qué (modelo por zonas) */}
           <Card>
             <CardHeader>
