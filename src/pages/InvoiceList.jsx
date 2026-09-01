@@ -375,6 +375,10 @@ export default function InvoiceList() {
   // Fecha en que se recibió el pago. Por defecto hoy; se puede fechar hacia
   // atrás para registrar cobros de días anteriores (formato YYYY-MM-DD).
   const [newPaymentDate, setNewPaymentDate] = useState(() => toDateString())
+  // N° de operación del depósito (voucher, constancia). Opcional, pero es lo
+  // que pide el contador para cruzar el cobro contra el extracto del banco:
+  // sin esto el pago quedaba sin ningún rastro del movimiento bancario.
+  const [newPaymentOperation, setNewPaymentOperation] = useState('')
 
   // Estado para configuración de impresión web legible y compacta
   const [webPrintLegible, setWebPrintLegible] = useState(false)
@@ -2151,7 +2155,10 @@ Gracias por tu preferencia.`
         date: fechaDePagoElegida(newPaymentDate),
         method: newPaymentMethod,
         recordedBy: user.email || user.uid,
-        recordedByName: user.displayName || user.email || 'Usuario'
+        recordedByName: user.displayName || user.email || 'Usuario',
+        // Solo si lo escribieron: un string vacío ensucia el historial y los
+        // reportes, y no significa lo mismo que "no hubo número".
+        ...((newPaymentOperation || '').trim() && { operationNumber: newPaymentOperation.trim() }),
       }
 
       // Actualizar el historial de pagos
@@ -2175,6 +2182,7 @@ Gracias por tu preferencia.`
         setNewPaymentAmount('')
         setNewPaymentMethod('Efectivo')
         setNewPaymentDate(toDateString())
+        setNewPaymentOperation('')
         loadInvoices()
       } else {
         throw new Error(result.error)
@@ -4087,6 +4095,7 @@ Gracias por tu preferencia.`
                           setPaymentInvoice(invoice)
                           setNewPaymentAmount('')
                           setNewPaymentMethod('Efectivo')
+                          setNewPaymentOperation('')
                         }}
                         className="w-full px-4 py-2 text-left text-sm hover:bg-green-50 flex items-center gap-3 text-green-600"
                       >
@@ -4663,6 +4672,11 @@ Gracias por tu preferencia.`
                                     {fechaTxt}
                                   </span>
                                 </div>
+                                {pago.operationNumber && (
+                                  <p className="text-xs text-gray-600 mt-1">
+                                    N° op. <span className="font-medium">{pago.operationNumber}</span>
+                                  </p>
+                                )}
                                 {(pago.recordedByName || pago.recordedBy) && (
                                   <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
                                     <User className="w-3 h-3" />
@@ -5314,6 +5328,24 @@ Gracias por tu preferencia.`
               </Select>
             </div>
 
+            {/* N° de operación del depósito */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                N° de operación <span className="text-gray-400 font-normal">(opcional)</span>
+              </label>
+              <Input
+                type="text"
+                value={newPaymentOperation}
+                onChange={(e) => setNewPaymentOperation(e.target.value)}
+                placeholder="Voucher, N° de operación o constancia"
+                maxLength={40}
+                disabled={isRegisteringPayment}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Sirve para cruzar el cobro con el movimiento del banco.
+              </p>
+            </div>
+
             {/* Fecha del pago */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -5374,6 +5406,7 @@ Gracias por tu preferencia.`
                   setNewPaymentAmount('')
                   setNewPaymentMethod('Efectivo')
                   setNewPaymentDate(toDateString())
+                  setNewPaymentOperation('')
                 }}
                 disabled={isRegisteringPayment}
               >

@@ -68,7 +68,7 @@ export default {
           type: 'pasos',
           items: [
             'Cuando el cliente paga (todo o una parte), ve a **Ventas** y busca su comprobante.',
-            'Usa **Registrar Pago**: monto, método (efectivo, Yape, transferencia) y fecha.',
+            'Usa **Registrar Pago**: monto, método (efectivo, Yape, transferencia), fecha y, si fue un depósito o transferencia, el **N° de operación**.',
             'El saldo baja solo. Cuando llega a cero, el comprobante pasa a **pagado**.',
           ],
         },
@@ -79,6 +79,10 @@ export default {
         {
           type: 'consejo',
           text: 'Registra el pago con el método REAL del día que cobras: ese cobro entra al arqueo de caja de ese día, no al de la venta original. Es lo que hace que caja y deuda cuadren a la vez.',
+        },
+        {
+          type: 'texto',
+          text: 'El **N° de operación** es opcional, pero anótalo cuando el cobro entra por banco: es lo que te permite cruzar cada pago con el movimiento del extracto cuando el contador o el cliente reclaman. Queda guardado en el historial del comprobante, y si cobras varias facturas con una sola transferencia, el mismo número se guarda en todas.',
         },
         { type: 'enlace', to: '/app/facturas', label: 'Ir a Ventas' },
       ],

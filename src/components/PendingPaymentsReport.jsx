@@ -104,6 +104,9 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
   const [selected, setSelected] = useState(() => new Set())
   const [groupPayOpen, setGroupPayOpen] = useState(false)
   const [groupPayMethod, setGroupPayMethod] = useState('Efectivo')
+  // Un solo N° de operación para todo el grupo: el caso real es una
+  // transferencia que cancela varias facturas del mismo cliente.
+  const [groupPayOperation, setGroupPayOperation] = useState('')
   const [isPayingGroup, setIsPayingGroup] = useState(false)
 
   // Cargar comprobantes al abrir (todos: las deudas antiguas son las que importan)
@@ -311,6 +314,7 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
         recordedBy: currentUser?.email || currentUser?.uid || '',
         recordedByName: currentUser?.displayName || currentUser?.email || 'Usuario',
         groupPayment: true,
+        ...((groupPayOperation || '').trim() && { operationNumber: groupPayOperation.trim() }),
       }
       try {
         const res = await updateInvoice(businessId, inv.id, {
@@ -336,6 +340,7 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
     }
     setIsPayingGroup(false)
     setGroupPayOpen(false)
+    setGroupPayOperation('')
     if (fail > 0) {
       toast.error(`${ok} pago(s) registrados; ${fail} fallaron. Revisa e intenta de nuevo.`)
     } else {
@@ -891,7 +896,7 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
               <Button variant="outline" size="sm" onClick={() => setSelected(new Set())}>
                 Limpiar
               </Button>
-              <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => setGroupPayOpen(true)}>
+              <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => { setGroupPayOperation(''); setGroupPayOpen(true) }}>
                 <Wallet className="w-4 h-4 mr-1.5" />
                 Registrar pago
               </Button>
@@ -1013,6 +1018,22 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
                     <option key={m.key} value={m.label}>{m.label}</option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  N° de operación <span className="text-gray-400 font-normal">(opcional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={groupPayOperation}
+                  onChange={(e) => setGroupPayOperation(e.target.value)}
+                  disabled={isPayingGroup}
+                  maxLength={40}
+                  placeholder="Voucher o N° de operación del depósito"
+                  className="w-full h-10 px-3 border border-gray-300 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">Se guarda igual en cada comprobante del grupo.</p>
               </div>
 
               <div className="flex items-center justify-between px-4 py-3 bg-green-50 border border-green-200 rounded-xl">
