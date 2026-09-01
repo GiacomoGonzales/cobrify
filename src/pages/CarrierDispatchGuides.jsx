@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useDeferredValue } from 'react'
-import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, X, Calendar, Weight, Hash, Pencil, Search, Building2, CreditCard, Car, Code, Edit3, MoreVertical, Printer, FileCheck, Trash2, PlayCircle } from 'lucide-react'
+import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, X, Calendar, Weight, Hash, Pencil, Search, Building2, CreditCard, Car, Code, Edit3, MoreVertical, Printer, FileCheck, Trash2, PlayCircle, AlertTriangle } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -1101,11 +1101,34 @@ export default function CarrierDispatchGuides() {
                 {getStatusBadge(selectedGuide.status, selectedGuide.sunatStatus)}
               </div>
 
+              {/* Por qué SUNAT la rechazó: antes solo se veía "Rechazada". */}
+              {(selectedGuide.sunatStatus === 'rejected' || selectedGuide.sunatStatus === 'error') && (selectedGuide.sunatDescription || selectedGuide.sunatResponseCode) && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                  <div className="flex gap-3">
+                    <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-red-800">
+                        {selectedGuide.sunatStatus === 'rejected' ? 'Rechazada por SUNAT' : 'No se pudo enviar a SUNAT'}
+                      </p>
+                      <p className="text-sm text-red-700 mt-1 break-words">
+                        {selectedGuide.sunatDescription || 'Sin detalle'}
+                      </p>
+                      {selectedGuide.sunatResponseCode && (
+                        <p className="text-xs text-red-600 mt-1">Código SUNAT {selectedGuide.sunatResponseCode}</p>
+                      )}
+                      <p className="text-xs text-red-600 mt-2">
+                        Una guía rechazada no existe para SUNAT: corrige el dato que reclama y emite una nueva.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* GRE Remitente Relacionada */}
               {selectedGuide.relatedGuides && selectedGuide.relatedGuides.length > 0 && (
-                <div className="bg-blue-50 rounded-lg p-4">
+                <div className="border border-gray-200 rounded-xl p-4">
                   <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-blue-600" />
+                    <FileText className="w-4 h-4 text-gray-400" />
                     GRE Remitente Relacionada(s)
                   </h3>
                   <div className="space-y-2">
@@ -1120,9 +1143,9 @@ export default function CarrierDispatchGuides() {
               )}
 
               {/* Datos del Traslado */}
-              <div className="bg-gray-50 rounded-lg p-4">
+              <div className="border border-gray-200 rounded-xl p-4">
                 <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-orange-600" />
+                  <Calendar className="w-4 h-4 text-gray-400" />
                   Datos del Traslado
                 </h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
@@ -1142,9 +1165,9 @@ export default function CarrierDispatchGuides() {
               </div>
 
               {/* Puntos de Traslado */}
-              <div className="bg-blue-50 rounded-lg p-4">
+              <div className="border border-gray-200 rounded-xl p-4">
                 <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-blue-600" />
+                  <MapPin className="w-4 h-4 text-gray-400" />
                   Puntos de Traslado
                 </h3>
                 <div className="space-y-3 text-sm">
@@ -1166,9 +1189,9 @@ export default function CarrierDispatchGuides() {
               </div>
 
               {/* Remitente */}
-              <div className="bg-indigo-50 rounded-lg p-4">
+              <div className="border border-gray-200 rounded-xl p-4">
                 <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-indigo-600" />
+                  <Building2 className="w-4 h-4 text-gray-400" />
                   Remitente
                 </h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
@@ -1184,9 +1207,9 @@ export default function CarrierDispatchGuides() {
               </div>
 
               {/* Destinatario */}
-              <div className="bg-green-50 rounded-lg p-4">
+              <div className="border border-gray-200 rounded-xl p-4">
                 <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <User className="w-4 h-4 text-green-600" />
+                  <User className="w-4 h-4 text-gray-400" />
                   Destinatario
                 </h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
@@ -1202,9 +1225,9 @@ export default function CarrierDispatchGuides() {
               </div>
 
               {/* Vehículo y Conductor */}
-              <div className="bg-orange-50 rounded-lg p-4">
+              <div className="border border-gray-200 rounded-xl p-4">
                 <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <Car className="w-4 h-4 text-orange-600" />
+                  <Car className="w-4 h-4 text-gray-400" />
                   Vehículo y Conductor
                 </h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
@@ -1234,15 +1257,15 @@ export default function CarrierDispatchGuides() {
               </div>
 
               {/* Bienes */}
-              <div className="bg-purple-50 rounded-lg p-4">
+              <div className="border border-gray-200 rounded-xl p-4">
                 <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <Package className="w-4 h-4 text-purple-600" />
+                  <Package className="w-4 h-4 text-gray-400" />
                   Bienes a Transportar ({selectedGuide.items?.length || 0})
                 </h3>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-purple-200">
+                      <tr className="border-b border-gray-200">
                         <th className="text-left py-2 px-2 text-gray-600">#</th>
                         <th className="text-left py-2 px-2 text-gray-600">Descripción</th>
                         <th className="text-center py-2 px-2 text-gray-600">Cantidad</th>
@@ -1251,7 +1274,7 @@ export default function CarrierDispatchGuides() {
                     </thead>
                     <tbody>
                       {(selectedGuide.items || []).map((item, index) => (
-                        <tr key={index} className="border-b border-purple-100">
+                        <tr key={index} className="border-b border-gray-100">
                           <td className="py-2 px-2 text-gray-500">{index + 1}</td>
                           <td className="py-2 px-2 font-medium">{item.description || item.name || '-'}</td>
                           <td className="py-2 px-2 text-center">{item.quantity || 1}</td>

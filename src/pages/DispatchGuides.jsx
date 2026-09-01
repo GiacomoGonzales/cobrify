@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useDeferredValue } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, AlertCircle, X, Calendar, Weight, Hash, Pencil, Store, Search, Code, Share2, Printer, MoreVertical, FileCheck, Receipt, Ban, ShoppingCart, Copy, RotateCcw, Trash2 } from 'lucide-react'
+import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, AlertCircle, AlertTriangle, X, Calendar, Weight, Hash, Pencil, Store, Search, Code, Share2, Printer, MoreVertical, FileCheck, Receipt, Ban, ShoppingCart, Copy, RotateCcw, Trash2 } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -1636,11 +1636,37 @@ export default function DispatchGuides() {
                 {getStatusBadge(selectedGuide.status, selectedGuide.sunatStatus)}
               </div>
 
+              {/* Por qué SUNAT la rechazó. Estaba solo en el comprobante, y en
+                  la guía había que adivinarlo: el usuario veía "Rechazada" y
+                  nada más. Se lee de sunatDescription/sunatResponseCode, que es
+                  donde la guarda el envío (el comprobante usa sunatResponse). */}
+              {(selectedGuide.sunatStatus === 'rejected' || selectedGuide.sunatStatus === 'error') && (selectedGuide.sunatDescription || selectedGuide.sunatResponseCode) && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                  <div className="flex gap-3">
+                    <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-red-800">
+                        {selectedGuide.sunatStatus === 'rejected' ? 'Rechazada por SUNAT' : 'No se pudo enviar a SUNAT'}
+                      </p>
+                      <p className="text-sm text-red-700 mt-1 break-words">
+                        {selectedGuide.sunatDescription || 'Sin detalle'}
+                      </p>
+                      {selectedGuide.sunatResponseCode && (
+                        <p className="text-xs text-red-600 mt-1">Código SUNAT {selectedGuide.sunatResponseCode}</p>
+                      )}
+                      <p className="text-xs text-red-600 mt-2">
+                        Una guía rechazada no existe para SUNAT: corrige el dato que reclama y emite una nueva.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Documento de Referencia */}
               {selectedGuide.referencedInvoice && (
-                <div className="bg-indigo-50 rounded-lg p-4">
+                <div className="border border-gray-200 rounded-xl p-4">
                   <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-indigo-600" />
+                    <FileText className="w-4 h-4 text-gray-400" />
                     Documento de Referencia
                   </h3>
                   <div className="text-sm">
@@ -1656,9 +1682,9 @@ export default function DispatchGuides() {
               )}
 
               {/* Datos del Traslado */}
-              <div className="bg-gray-50 rounded-lg p-4">
+              <div className="border border-gray-200 rounded-xl p-4">
                 <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-primary-600" />
+                  <Calendar className="w-4 h-4 text-gray-400" />
                   Datos del Traslado
                 </h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
@@ -1682,9 +1708,9 @@ export default function DispatchGuides() {
               </div>
 
               {/* Puntos de Traslado */}
-              <div className="bg-blue-50 rounded-lg p-4">
+              <div className="border border-gray-200 rounded-xl p-4">
                 <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-blue-600" />
+                  <MapPin className="w-4 h-4 text-gray-400" />
                   Puntos de Traslado
                 </h3>
                 <div className="space-y-3 text-sm">
@@ -1706,9 +1732,9 @@ export default function DispatchGuides() {
               </div>
 
               {/* Destinatario */}
-              <div className="bg-green-50 rounded-lg p-4">
+              <div className="border border-gray-200 rounded-xl p-4">
                 <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <User className="w-4 h-4 text-green-600" />
+                  <User className="w-4 h-4 text-gray-400" />
                   Destinatario
                 </h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
@@ -1727,9 +1753,9 @@ export default function DispatchGuides() {
 
               {/* Datos de Transporte - Privado */}
               {selectedGuide.transportMode === '02' && (
-                <div className="bg-orange-50 rounded-lg p-4">
+                <div className="border border-gray-200 rounded-xl p-4">
                   <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                    <Truck className="w-4 h-4 text-orange-600" />
+                    <Truck className="w-4 h-4 text-gray-400" />
                     Vehículo y Conductor
                   </h3>
                   <div className="grid grid-cols-2 gap-4 text-sm">
@@ -1755,9 +1781,9 @@ export default function DispatchGuides() {
 
               {/* Datos de Transporte - Público */}
               {selectedGuide.transportMode === '01' && (
-                <div className="bg-orange-50 rounded-lg p-4">
+                <div className="border border-gray-200 rounded-xl p-4">
                   <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                    <Truck className="w-4 h-4 text-orange-600" />
+                    <Truck className="w-4 h-4 text-gray-400" />
                     Transportista
                   </h3>
                   <div className="grid grid-cols-2 gap-4 text-sm">
@@ -1774,15 +1800,15 @@ export default function DispatchGuides() {
               )}
 
               {/* Bienes */}
-              <div className="bg-purple-50 rounded-lg p-4">
+              <div className="border border-gray-200 rounded-xl p-4">
                 <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <Package className="w-4 h-4 text-purple-600" />
+                  <Package className="w-4 h-4 text-gray-400" />
                   Bienes a Transportar ({selectedGuide.items?.length || 0})
                 </h3>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-purple-200">
+                      <tr className="border-b border-gray-200">
                         <th className="text-left py-2 px-2 text-gray-600">#</th>
                         <th className="text-left py-2 px-2 text-gray-600">Descripción</th>
                         {businessMode === 'pharmacy' && (
@@ -1798,7 +1824,7 @@ export default function DispatchGuides() {
                     </thead>
                     <tbody>
                       {(selectedGuide.items || []).map((item, index) => (
-                        <tr key={index} className="border-b border-purple-100">
+                        <tr key={index} className="border-b border-gray-100">
                           <td className="py-2 px-2 text-gray-500">{index + 1}</td>
                           <td className="py-2 px-2">
                             <span className="font-medium">{item.description || item.name || '-'}</span>
