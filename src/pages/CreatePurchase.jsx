@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { isPharmaLikeMode } from '@/utils/businessModes'
 import { filterProductsForBranch } from '@/utils/branchCatalog'
-import { Plus, Trash2, Save, ArrowLeft, Loader2, Search, X, PackagePlus, Package, Beaker, Store, RefreshCw, DollarSign, Gift, Tag, Upload } from 'lucide-react'
+import { Plus, Trash2, Save, ArrowLeft, Loader2, Search, X, PackagePlus, Package, Beaker, Store, RefreshCw, DollarSign, Gift, Tag, Upload, Wrench } from 'lucide-react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useAuth } from '@/contexts/AuthContext'
@@ -343,6 +343,10 @@ export default function CreatePurchase() {
 
           const isExemptOC = existingProduct?.taxAffectation === '20' || existingProduct?.taxAffectation === '30'
           const costOC = item.unitPrice || 0
+          // La orden de compra SÍ admite líneas escritas a mano. Si esa línea
+          // no cruza con ningún producto, la compra la recibe como producto
+          // personalizado en vez de exigir que se catalogue para poder guardar.
+          const libreOC = !existingProduct && !item.productId
           return {
             productId: existingProduct?.id || item.productId || '',
             productName: item.name || '',
@@ -352,8 +356,8 @@ export default function CreatePurchase() {
             costWithoutIGV: costOC > 0 ? (isExemptOC ? costOC : costOC / 1.18) : 0,
             batchNumber: '',
             expirationDate: '',
-            itemType: 'product',
-            unit: item.unit || 'NIU',
+            itemType: libreOC ? 'service' : 'product',
+            unit: libreOC ? 'ZZ' : (item.unit || 'NIU'),
             taxAffectation: existingProduct?.taxAffectation || '10',
             salePrice: existingProduct?.price || '',
             salePrice2: existingProduct?.price2 || '',
@@ -1085,6 +1089,66 @@ export default function CreatePurchase() {
     }
   }
 
+  /**
+   * Convierte la fila en un PRODUCTO PERSONALIZADO: una línea con descripción
+   * a mano, sin producto del catálogo.
+   *
+   * Es lo mismo que ya existe al vender (el "Producto Personalizado" del POS) y
+   * lo que ya aceptan las Órdenes de Compra y los Requerimientos; Compras era
+   * la única que obligaba a catalogar. Sirve para servicios (una reparación,
+   * un flete) que se compran una vez y no tiene sentido guardar como producto.
+   *
+   * La unidad queda en ZZ, que es el código de SUNAT para servicios y el mismo
+   * que traen las facturas electrónicas del proveedor.
+   */
+  const convertirEnPersonalizado = (index) => {
+    const nombre = (productSearches[index] || purchaseItems[index]?.productName || '').trim()
+    const newItems = [...purchaseItems]
+    newItems[index] = {
+      ...newItems[index],
+      productId: '',
+      productName: nombre,
+      itemType: 'service',
+      unit: 'ZZ',
+      // Gravado por defecto, que es lo normal en un servicio. Si el producto
+      // que estaba en la fila era exonerado, no se hereda: confunde mas que
+      // ayuda cuando la linea ya no es ese producto.
+      taxAffectation: '10',
+      // Nada de inventario: sin lote, sin vencimiento, sin series, sin
+      // presentaciones ni precios de venta sugeridos.
+      batchNumber: '',
+      expirationDate: '',
+      sanitaryRegistry: '',
+      trackSerials: false,
+      serialNumbers: [],
+      presentations: [],
+      presentationName: '',
+      presentationFactor: 1,
+      isVariant: false,
+      variantSku: undefined,
+      variantLabel: undefined,
+      hasVariants: false,
+      salePrice: '',
+      salePrice2: '',
+      salePrice3: '',
+      salePrice4: '',
+    }
+    setPurchaseItems(newItems)
+    setProductSearches(prev => ({ ...prev, [index]: nombre }))
+    setShowProductDropdowns(prev => ({ ...prev, [index]: false }))
+    setShowCreateMenu({})
+  }
+
+  /** Vuelve a convertir la fila en una búsqueda normal del catálogo. */
+  const volverABuscarProducto = (index) => {
+    const newItems = [...purchaseItems]
+    newItems[index] = { ...newItems[index], itemType: 'product', productId: '', unit: 'NIU' }
+    setPurchaseItems(newItems)
+    setShowCreateMenu({})
+  }
+
+  const esPersonalizado = (item) => item?.itemType === 'service'
+
   // Click fuera para cerrar dropdowns
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -1255,6 +1319,10 @@ export default function CreatePurchase() {
     for (let i = 0; i < parsed.lines.length; i++) {
       if (decisions[i]?.action !== 'create') continue
       const line = parsed.lines[i]
+      // Unidad ZZ = servicio (catálogo 03 de SUNAT). Si el usuario igual quiere
+      // catalogarlo, nace SIN manejar stock: antes se creaba con stock aunque
+      // el propio modal ya hubiera detectado que la factura era de servicios.
+      const esServicio = line.unitCode === 'ZZ'
       const productData = {
         code: '',
         sku: '',
@@ -1264,9 +1332,10 @@ export default function CreatePurchase() {
         unit: line.unitCode || 'NIU',
         category: '',
         description: '',
-        stock: 0,
-        initialStock: 0,
-        noStock: false,
+        stock: esServicio ? null : 0,
+        initialStock: esServicio ? null : 0,
+        noStock: esServicio,
+        trackStock: !esServicio,
         taxAffectation: line.taxAffectation || '10',
         allowDecimalQuantity: !Number.isInteger(line.quantity),
         trackExpiration: false,
@@ -1363,6 +1432,28 @@ export default function CreatePurchase() {
       // el modal de variantes). La validación del guardado exige resolverlo.
       if (d?.action === 'variant') {
         return { ...base, productId: '', productName: line.description, trackSerials: false }
+      }
+
+      // Línea de servicio que no se catalogó: entra como producto personalizado.
+      // Antes obligaba a crear un producto para poder guardar la factura.
+      if (d?.action === 'service') {
+        return {
+          ...base,
+          productId: '',
+          productName: line.description,
+          itemType: 'service',
+          unit: 'ZZ',
+          trackSerials: false,
+          batchNumber: '',
+          expirationDate: '',
+          presentations: [],
+          presentationName: '',
+          presentationFactor: 1,
+          salePrice: '',
+          salePrice2: '',
+          salePrice3: '',
+          salePrice4: '',
+        }
       }
 
       return {
@@ -1602,6 +1693,37 @@ export default function CreatePurchase() {
         continue
       }
 
+      // Producto personalizado: no apunta al catálogo, así que lo único
+      // exigible es la descripción. Todo el efecto de inventario ya lo saltea
+      // el guardado, y el Registro de Compras suma por el monto de la línea.
+      if (item.itemType === 'service') {
+        if (!(item.productName || '').trim()) {
+          setMessage({
+            type: 'error',
+            text: `Escribe la descripción del ítem ${i + 1}`,
+          })
+          return false
+        }
+        // Cantidad y costo se validan igual que en el resto: la línea suma al
+        // total y al Registro de Compras, así que un negativo lo descuadraría.
+        const qtyLibre = Number(item.quantity)
+        if (isNaN(qtyLibre) || qtyLibre <= 0) {
+          setMessage({
+            type: 'error',
+            text: `La cantidad del ítem ${i + 1} debe ser mayor a 0`,
+          })
+          return false
+        }
+        if ((Number(item.cost) || 0) < 0) {
+          setMessage({
+            type: 'error',
+            text: `El costo del ítem ${i + 1} no puede ser negativo`,
+          })
+          return false
+        }
+        continue
+      }
+
       // Validar campos obligatorios (cost puede ser 0 para bonificaciones)
       if (!item.productId || !item.productName) {
         setMessage({
@@ -1828,7 +1950,9 @@ export default function CreatePurchase() {
       // Separar items por tipo
       // Filtrar filas de variantes sin cantidad (no se compró de esa variante)
       const activeItems = purchaseItems.filter(item => !item.isVariant || (item.quantity && Number(item.quantity) > 0))
-      const productItems = activeItems.filter(item => item.itemType !== 'ingredient')
+      // Los personalizados ('service') quedan fuera de TODO lo de inventario:
+      // no tienen producto que actualizar. Van al documento y a los totales.
+      const productItems = activeItems.filter(item => item.itemType !== 'ingredient' && item.itemType !== 'service')
       const ingredientItems = activeItems.filter(item => item.itemType === 'ingredient')
 
       let resultId = purchaseId // Para modo edición
@@ -1841,7 +1965,7 @@ export default function CreatePurchase() {
       // Compras "solo registro" (affectsStock=false): no hay diferencias de
       // stock que calcular en edición (nunca tocaron el inventario).
       if (isEditMode && affectsStock && originalPurchase && originalPurchase.items) {
-        const originalProductItems = originalPurchase.items.filter(item => item.itemType !== 'ingredient')
+        const originalProductItems = originalPurchase.items.filter(item => item.itemType !== 'ingredient' && item.itemType !== 'service')
         const originalWarehouseId = originalPurchase.warehouseId || ''
         const newWarehouseId = selectedWarehouse?.id || ''
         warehouseChangedInEdit = originalWarehouseId !== newWarehouseId
@@ -3315,7 +3439,7 @@ export default function CreatePurchase() {
                             <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                             <input
                               type="text"
-                              placeholder={itemMode === 'ingredients' ? 'Buscar ingrediente...' : itemMode === 'all' ? 'Buscar producto o ingrediente...' : 'Buscar producto...'}
+                              placeholder={esPersonalizado(item) ? 'Descripción (ej. reparación de compresora)' : itemMode === 'ingredients' ? 'Buscar ingrediente...' : itemMode === 'all' ? 'Buscar producto o ingrediente...' : 'Buscar producto...'}
                               value={productSearches[index] || item.productName || ''}
                               onChange={e => {
                                 updateProductSearch(index, e.target.value)
@@ -3327,16 +3451,18 @@ export default function CreatePurchase() {
                                 setShowProductDropdowns(newDropdowns)
                               }}
                               className={`w-full pl-7 pr-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 ${
-                                item.productId
-                                  ? item.itemType === 'ingredient'
-                                    ? 'border-amber-500 bg-amber-50'
-                                    : 'border-green-500 bg-green-50'
-                                  : 'border-gray-300'
+                                esPersonalizado(item)
+                                  ? 'border-slate-400 bg-slate-50'
+                                  : item.productId
+                                    ? item.itemType === 'ingredient'
+                                      ? 'border-amber-500 bg-amber-50'
+                                      : 'border-green-500 bg-green-50'
+                                    : 'border-gray-300'
                               }`}
                             />
                           </div>
                           {/* Dropdown de productos e ingredientes */}
-                          {showProductDropdowns[index] && productSearches[index] && (
+                          {showProductDropdowns[index] && productSearches[index] && !esPersonalizado(item) && (
                             <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                               {getFilteredItems(index).length > 0 ? (
                                 getFilteredItems(index).map(searchItem => (
@@ -3380,7 +3506,7 @@ export default function CreatePurchase() {
                             <PackagePlus className="w-4 h-4" />
                           </button>
                           {showCreateMenu[index] && (
-                            <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg w-40">
+                            <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg w-52">
                               <button
                                 type="button"
                                 onClick={() => { setShowCreateMenu({}); openCreateProductModal(index) }}
@@ -3392,10 +3518,23 @@ export default function CreatePurchase() {
                               <button
                                 type="button"
                                 onClick={() => openCreateIngredientModal(index)}
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 rounded-b-lg border-t"
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 border-t"
                               >
                                 <Beaker className="w-3.5 h-3.5 text-amber-600" />
                                 Ingrediente
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => esPersonalizado(item) ? volverABuscarProducto(index) : convertirEnPersonalizado(index)}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-start gap-2 rounded-b-lg border-t"
+                              >
+                                <Wrench className="w-3.5 h-3.5 text-slate-600 mt-0.5 flex-shrink-0" />
+                                <span>
+                                  {esPersonalizado(item) ? 'Buscar en el catálogo' : 'Producto personalizado'}
+                                  {!esPersonalizado(item) && (
+                                    <span className="block text-xs text-gray-500">Servicio o concepto sin catalogar</span>
+                                  )}
+                                </span>
                               </button>
                             </div>
                           )}
@@ -3438,19 +3577,21 @@ export default function CreatePurchase() {
                         <td className="px-2 py-2">
                           <input
                             type="text"
-                            placeholder="Lote"
+                            placeholder={esPersonalizado(item) ? '-' : 'Lote'}
                             value={item.batchNumber || ''}
+                            disabled={esPersonalizado(item)}
                             onChange={e => updateItem(index, 'batchNumber', e.target.value)}
-                            className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                            className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:bg-gray-50 disabled:text-gray-400"
                           />
                         </td>
                         <td className="px-2 py-2">
                           <input
                             type="date"
                             value={item.expirationDate || ''}
+                            disabled={esPersonalizado(item)}
                             onChange={e => updateItem(index, 'expirationDate', e.target.value)}
                             style={{ height: '30px', minHeight: 0, paddingTop: 0, paddingBottom: 0 }}
-                            className="w-full px-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                            className="w-full px-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:bg-gray-50 disabled:text-gray-400"
                           />
                           {/* El input muestra el formato del navegador; esto confirma la fecha sin ambigüedad */}
                           {fechaLegible(item.expirationDate) && (
@@ -3620,7 +3761,7 @@ export default function CreatePurchase() {
                       <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                       <input
                         type="text"
-                        placeholder={itemMode === 'ingredients' ? 'Buscar ingrediente...' : itemMode === 'all' ? 'Buscar...' : 'Buscar producto...'}
+                        placeholder={esPersonalizado(item) ? 'Descripción (ej. reparación de compresora)' : itemMode === 'ingredients' ? 'Buscar ingrediente...' : itemMode === 'all' ? 'Buscar...' : 'Buscar producto...'}
                         value={productSearches[index] || item.productName || ''}
                         onChange={e => {
                           updateProductSearch(index, e.target.value)
@@ -3632,15 +3773,17 @@ export default function CreatePurchase() {
                           setShowProductDropdowns(newDropdowns)
                         }}
                         className={`w-full pl-8 pr-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 ${
-                          item.productId
-                            ? item.itemType === 'ingredient'
-                              ? 'border-amber-500 bg-amber-50'
-                              : 'border-green-500 bg-green-50'
-                            : 'border-gray-300'
+                          esPersonalizado(item)
+                            ? 'border-slate-400 bg-slate-50'
+                            : item.productId
+                              ? item.itemType === 'ingredient'
+                                ? 'border-amber-500 bg-amber-50'
+                                : 'border-green-500 bg-green-50'
+                              : 'border-gray-300'
                         }`}
                       />
                     </div>
-                    {showProductDropdowns[index] && productSearches[index] && (
+                    {showProductDropdowns[index] && productSearches[index] && !esPersonalizado(item) && (
                       <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                         {getFilteredItems(index).length > 0 ? (
                           getFilteredItems(index).map(searchItem => (
@@ -3708,7 +3851,7 @@ export default function CreatePurchase() {
                       <PackagePlus className="w-4 h-4" />
                     </button>
                     {showCreateMenu[`m${index}`] && (
-                      <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg w-40">
+                      <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg w-52">
                         <button
                           type="button"
                           onClick={() => { setShowCreateMenu({}); openCreateProductModal(index) }}
@@ -3720,10 +3863,23 @@ export default function CreatePurchase() {
                         <button
                           type="button"
                           onClick={() => openCreateIngredientModal(index)}
-                          className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 rounded-b-lg border-t"
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 border-t"
                         >
                           <Beaker className="w-3.5 h-3.5 text-amber-600" />
                           Ingrediente
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => esPersonalizado(item) ? volverABuscarProducto(index) : convertirEnPersonalizado(index)}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-start gap-2 rounded-b-lg border-t"
+                        >
+                          <Wrench className="w-3.5 h-3.5 text-slate-600 mt-0.5 flex-shrink-0" />
+                          <span>
+                            {esPersonalizado(item) ? 'Buscar en el catálogo' : 'Producto personalizado'}
+                            {!esPersonalizado(item) && (
+                              <span className="block text-xs text-gray-500">Servicio o concepto sin catalogar</span>
+                            )}
+                          </span>
                         </button>
                       </div>
                     )}
@@ -3748,7 +3904,7 @@ export default function CreatePurchase() {
                 )}
 
                 {/* Lote y Vencimiento - Farmacia o si está habilitado en config */}
-                {(isPharmaLikeMode(businessMode) || businessSettings?.posCustomFields?.showBatchExpiryInPurchase) && (
+                {(isPharmaLikeMode(businessMode) || businessSettings?.posCustomFields?.showBatchExpiryInPurchase) && !esPersonalizado(item) && (
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="block text-xs text-gray-500 mb-1">N° Lote</label>

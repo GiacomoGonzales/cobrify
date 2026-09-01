@@ -47,6 +47,10 @@ export default {
           text: 'La primera vez tendrás que decirle a qué producto tuyo corresponde cada línea del proveedor. El sistema **aprende ese emparejamiento**: la próxima compra de ese proveedor ya viene resuelta.',
         },
         {
+          type: 'texto',
+          text: 'Las líneas que el proveedor factura como **servicio** se marcan solas para entrar sin crear producto (dice "Servicio: entra a la compra sin crear producto"). Si igual quieres tenerlo en tu catálogo, ahí mismo puedes elegir **Crear producto**.',
+        },
+        {
           type: 'consejo',
           text: 'Es la forma más rápida y con menos errores de cargar compras grandes. Pídele el XML a tu proveedor, no solo el PDF.',
         },
@@ -72,6 +76,29 @@ export default {
         {
           type: 'ojo',
           text: 'Eliminar una compra ya registrada usa **Eliminar y Revertir Stock**: además de borrarla, devuelve el inventario a como estaba. Ojo con hacerlo si esa mercadería ya se vendió.',
+        },
+      ],
+    },
+
+    {
+      id: 'servicios',
+      title: 'Comprar un servicio (sin crear el producto)',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'La factura de una reparación, un flete o un mantenimiento no tiene productos que guardar en el catálogo. En la fila, presiona el botón **+** y elige **Producto personalizado**: escribes la descripción a mano y le pones cantidad y precio. Listo — no crea nada en tu catálogo.',
+        },
+        {
+          type: 'texto',
+          text: 'Esa línea no toca inventario: no suma stock, no cambia el costo promedio y no pide lote ni vencimiento. Pero sí suma al total, al IGV y al Registro de Compras, que es lo que necesita tu contador.',
+        },
+        {
+          type: 'consejo',
+          text: 'Como es por línea, una factura mixta se registra completa: los repuestos entran al inventario como productos normales y la mano de obra va como línea personalizada, todo en el mismo documento.',
+        },
+        {
+          type: 'ojo',
+          text: 'Si el servicio es **recurrente** — un mantenimiento mensual, por ejemplo — conviene sí tenerlo como producto: créalo con **No manejar stock** y márcalo como **Solo uso interno** para que no aparezca en el Punto de Venta. La línea personalizada es para lo que pasa una vez.',
         },
       ],
     },

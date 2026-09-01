@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo } from 'react'
-import { Upload, Loader2, CheckCircle, AlertTriangle, Plus, Search, X, FileText, Link2 } from 'lucide-react'
+import { Upload, Loader2, CheckCircle, AlertTriangle, Plus, Search, X, FileText, Link2, Wrench } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -29,7 +29,8 @@ export default function ImportPurchaseXmlModal({
   const [isParsing, setIsParsing] = useState(false)
   const [parseError, setParseError] = useState('')
   const [parsed, setParsed] = useState(null)
-  // Decisión por línea: { action: 'link'|'create'|'variant', productId, matchedBy, confidence }
+  // Decisión por línea: { action: 'link'|'create'|'variant'|'service', productId, matchedBy, confidence }
+  // 'service' = se registra como producto personalizado en la compra, sin crear nada en el catálogo.
   const [lineDecisions, setLineDecisions] = useState([])
   // Índice de línea con el buscador de producto abierto (null = ninguno)
   const [searchingIndex, setSearchingIndex] = useState(null)
@@ -92,7 +93,12 @@ export default function ImportPurchaseXmlModal({
       const decisions = data.lines.map(line => {
         const match = matchLineToProduct(line, products, data.supplier.ruc)
         if (!match.productId) {
-          return { action: 'create', productId: null, matchedBy: null, confidence: 'none' }
+          // Unidad ZZ = servicio (catálogo 03 de SUNAT). Crear un producto de
+          // catálogo por cada "reparación" o "flete" del proveedor ensucia el
+          // catálogo con cosas que no se venden ni se vuelven a comprar: entra
+          // como línea personalizada, y quien quiera catalogarla lo dice.
+          const accion = line.unitCode === 'ZZ' ? 'service' : 'create'
+          return { action: accion, productId: null, matchedBy: null, confidence: 'none' }
         }
         const product = productById.get(match.productId)
         // Producto con variantes: no podemos elegir la variante automáticamente.
@@ -148,13 +154,14 @@ export default function ImportPurchaseXmlModal({
   const totalMismatch = parsed && Math.abs(computedTotal - parsed.payableAmount) > 0.5
 
   const counts = useMemo(() => {
-    let linked = 0, created = 0, variants = 0
+    let linked = 0, created = 0, variants = 0, services = 0
     for (const d of lineDecisions) {
       if (d.action === 'link') linked++
       else if (d.action === 'variant') variants++
+      else if (d.action === 'service') services++
       else created++
     }
-    return { linked, created, variants }
+    return { linked, created, variants, services }
   }, [lineDecisions])
 
   const handleConfirm = async () => {
@@ -241,6 +248,31 @@ export default function ImportPurchaseXmlModal({
       )
     }
 
+    if (d.action === 'service') {
+      return (
+        <div className="flex items-center justify-between gap-2">
+          <span className="inline-flex items-center gap-1.5 text-sm text-slate-700 min-w-0">
+            <Wrench className="w-4 h-4 flex-shrink-0" />
+            <span className="truncate">Servicio: entra a la compra sin crear producto</span>
+          </span>
+          <span className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => setDecision(index, { action: 'create', productId: null, matchedBy: null, confidence: 'none' })}
+              className="text-xs font-medium text-primary-600 hover:text-primary-700"
+            >
+              Crear producto
+            </button>
+            <button
+              onClick={() => { setSearchingIndex(index); setProductSearch('') }}
+              className="text-xs font-medium text-primary-600 hover:text-primary-700"
+            >
+              Vincular
+            </button>
+          </span>
+        </div>
+      )
+    }
+
     if (d.action === 'create') {
       return (
         <div className="flex items-center justify-between gap-2">
@@ -248,12 +280,20 @@ export default function ImportPurchaseXmlModal({
             <Plus className="w-4 h-4 flex-shrink-0" />
             Se creará como producto nuevo
           </span>
-          <button
-            onClick={() => { setSearchingIndex(index); setProductSearch('') }}
-            className="text-xs font-medium text-primary-600 hover:text-primary-700 flex-shrink-0"
-          >
-            Vincular existente
-          </button>
+          <span className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => setDecision(index, { action: 'service', productId: null, matchedBy: null, confidence: 'none' })}
+              className="text-xs font-medium text-primary-600 hover:text-primary-700"
+            >
+              Sin catalogar
+            </button>
+            <button
+              onClick={() => { setSearchingIndex(index); setProductSearch('') }}
+              className="text-xs font-medium text-primary-600 hover:text-primary-700"
+            >
+              Vincular existente
+            </button>
+          </span>
         </div>
       )
     }
@@ -499,6 +539,7 @@ export default function ImportPurchaseXmlModal({
             <p className="text-sm text-gray-600 flex items-center gap-1.5">
               <Link2 className="w-4 h-4 text-gray-400" />
               {counts.linked} vinculado{counts.linked !== 1 ? 's' : ''} · {counts.created} nuevo{counts.created !== 1 ? 's' : ''}
+              {counts.services > 0 && ` · ${counts.services} sin catalogar`}
               {counts.variants > 0 && ` · ${counts.variants} con variantes por elegir`}
             </p>
             <div className="flex gap-2 justify-end">

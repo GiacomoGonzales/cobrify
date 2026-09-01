@@ -397,7 +397,7 @@ export default function Purchases() {
         // (se guarda APARTE de productCleanups para no contaminar los extraUpdates del producto).
         const lotRevertByProduct = new Map() // productId -> { purchaseAddedLots, removedLotQty }
         for (const item of deletingPurchase.items) {
-          if (item.itemType === 'ingredient' || !item.productId) continue
+          if (item.itemType === 'ingredient' || item.itemType === 'service' || !item.productId) continue
           if (productCleanups.has(item.productId)) continue
           const productData = products.find(p => p.id === item.productId)
           if (!productData) continue
@@ -477,8 +477,9 @@ export default function Purchases() {
 
         const lotProductsDone = new Set() // #7: productos cuyos lotes ya se revirtieron
         for (const item of deletingPurchase.items) {
-          // Solo procesar productos (no ingredientes)
-          if (item.itemType === 'ingredient') continue
+          // Solo procesar productos: ni ingredientes ni líneas personalizadas
+          // (estas ultimas no tienen producto que revertir)
+          if (item.itemType === 'ingredient' || item.itemType === 'service') continue
           if (!item.productId) continue
 
           try {
@@ -2094,8 +2095,11 @@ export default function Purchases() {
                           </span>
                         </TableCell>
                         <TableCell className="text-center">
-                          <Badge variant={item.itemType === 'ingredient' ? 'success' : 'default'} className="text-xs">
-                            {item.itemType === 'ingredient' ? 'Ingrediente' : 'Producto'}
+                          <Badge
+                            variant={item.itemType === 'ingredient' ? 'success' : item.itemType === 'service' ? 'warning' : 'default'}
+                            className="text-xs"
+                          >
+                            {item.itemType === 'ingredient' ? 'Ingrediente' : item.itemType === 'service' ? 'Personalizado' : 'Producto'}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-center">
