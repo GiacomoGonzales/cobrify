@@ -63,6 +63,14 @@ export default {
           text: 'Al pie del catálogo va tu **información de contacto** (WhatsApp, teléfono, dirección y horario) y tus **redes sociales**. Configura Instagram, Facebook y TikTok en Configuración > Mi Catálogo Online > Cómo te compran > **Redes sociales**: escribe el usuario o pega el enlace.',
         },
         {
+          type: 'texto',
+          text: 'Si un producto tiene **presentaciones** (Caja x12, Saco x49, Paquete x6), tu cliente las ve al abrirlo: elige entre comprar por unidad suelta o por la presentación, cada una con su precio. Lo que elija llega al pedido y al Punto de Venta, y el stock se descuenta por lo que trae dentro — una caja de 12 baja 12 del almacén, no 1.',
+        },
+        {
+          type: 'consejo',
+          text: 'Las presentaciones se cargan en la ficha del producto, en **Productos**. No hay nada que activar en el catálogo: apenas el producto tenga una, aparece sola.',
+        },
+        {
           type: 'ojo',
           text: 'Los productos sin foto se ven pobres en el catálogo. Si vas a compartirlo con clientes, vale la pena subir imágenes al menos de lo que más vendes.',
         },

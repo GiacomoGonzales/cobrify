@@ -118,6 +118,67 @@ export const getAvailableStock = (product, variant = null) => {
   return null
 }
 
+/**
+ * Opciones de compra de un producto: la unidad suelta y sus PRESENTACIONES
+ * ("Caja x12", "Saco x49"), en el orden en que se le ofrecen al comprador.
+ *
+ * La primera opción es siempre la unidad base con el precio del producto; las
+ * demás salen de `product.presentations` y traen su propio precio y su propia
+ * unidad (una presentación sin `unit` hereda la del producto).
+ *
+ * `factor` es cuántas unidades base entrega la presentación: es lo que hace que
+ * al vender una caja el stock baje 12 y no 1. Viaja con la línea del carrito
+ * hasta el POS, que ya sabe multiplicar por él al descontar.
+ *
+ * NO se consulta `business.presentationsEnabled`: las presentaciones están
+ * activas para todos los negocios (el sistema lo fuerza al iniciar sesión),
+ * pero 403 negocios tienen guardado un `false` que nadie eligió. El catálogo
+ * lee los flags crudos de Firestore, así que mirarlo dejaría a esos negocios
+ * con presentaciones en el POS y sin ellas en su tienda.
+ *
+ * Con VARIANTES no aplica: el producto se compra eligiendo la variante, y
+ * mezclar las dos cosas no está soportado en ninguna pantalla del sistema.
+ */
+export const getPurchaseOptions = (product) => {
+  if (!product) return []
+  const base = {
+    key: 'base',
+    name: '',
+    isBase: true,
+    factor: 1,
+    unit: product.unit || 'NIU',
+    price: Number(product.price) || 0,
+  }
+  if (product.hasVariants && product.variants?.length > 0) return [base]
+  const presentaciones = Array.isArray(product.presentations) ? product.presentations : []
+  const opciones = presentaciones
+    .filter(p => p && String(p.name || '').trim() && Number(p.factor) > 0 && Number(p.price) > 0)
+    .map(p => ({
+      key: `pres-${String(p.name).trim()}`,
+      name: String(p.name).trim(),
+      isBase: false,
+      factor: Number(p.factor),
+      unit: p.unit || product.unit || 'NIU',
+      price: Number(p.price),
+    }))
+  return [base, ...opciones]
+}
+
+/** ¿Vale la pena mostrar el selector? Solo si hay algo que elegir. */
+export const hasPurchaseOptions = (product) => getPurchaseOptions(product).length > 1
+
+/**
+ * Cuántas unidades de ESTA opción se pueden comprar con el stock que hay.
+ * Devuelve null cuando el producto no controla stock (sin tope).
+ * Una caja de 12 con 25 unidades en almacén son 2 cajas, no 25.
+ */
+export const getOptionMaxQty = (product, option) => {
+  const stock = getAvailableStock(product)
+  if (stock === null) return null
+  const factor = Number(option?.factor) > 0 ? Number(option.factor) : 1
+  return Math.floor(stock / factor)
+}
+
 // Helper: obtener precios disponibles de un producto (mayorista, VIP, etc.)
 export const getProductPrices = (product, business) => {
   if (!business?.multiplePricesEnabled) return []

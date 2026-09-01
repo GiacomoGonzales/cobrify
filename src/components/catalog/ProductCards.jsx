@@ -85,7 +85,7 @@ function QuickAddButton({ product, priceRange, setSelectedProduct, addToCart, la
     <button
       onClick={(e) => {
         e.stopPropagation()
-        if (product.hasVariants || product.modifiers?.length > 0 || priceRange) {
+        if (product.hasVariants || product.modifiers?.length > 0 || product.presentations?.length > 0 || priceRange) {
           setSelectedProduct(product)
         } else {
           addToCart(product)
@@ -250,7 +250,7 @@ export function GridCard({ product, index, uniform = false, ctx }) {
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  if (product.hasVariants || product.modifiers?.length > 0 || priceRange) {
+                  if (product.hasVariants || product.modifiers?.length > 0 || product.presentations?.length > 0 || priceRange) {
                     setSelectedProduct(product)
                   } else {
                     addToCart(product)
@@ -441,7 +441,7 @@ export function ListCard({ product, ctx }) {
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                if (product.hasVariants || product.modifiers?.length > 0 || priceRange) {
+                if (product.hasVariants || product.modifiers?.length > 0 || product.presentations?.length > 0 || priceRange) {
                   setSelectedProduct(product)
                 } else {
                   addToCart(product)

@@ -1057,7 +1057,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       const modifiersKey = selectedModifiers.length > 0
         ? JSON.stringify(selectedModifiers.map(m => ({ id: m.modifierId, opts: m.options.map(o => o.optionId).sort() })))
         : ''
-      const cartItemId = `${product.id}-${variantKey}-${modifiersKey}`
+      // La presentación es otra dimensión de la línea, igual que la variante:
+      // una caja y una unidad suelta del mismo producto son dos renglones.
+      const presKey = product.presentationName ? `-pres-${product.presentationName}` : ''
+      const cartItemId = `${product.id}-${variantKey}-${modifiersKey}${presKey}`
 
       const existing = prev.find(item => item.cartItemId === cartItemId)
       if (existing) {
@@ -1128,8 +1131,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       // mayorista solo por el mínimo global del negocio.
       exigirFlag: false,
       // Precio anclado en dólares: se fijó a propósito y los niveles están en
-      // soles.
-      excluir: (it) => !!it.fixedPriceUSD,
+      // soles. La presentación también queda fuera: su precio lo puso el
+      // vendedor para ESA caja y no se deriva del precio de la unidad, así que
+      // el mayorista por cantidad no tiene nada que recalcular ahí.
+      excluir: (it) => !!it.fixedPriceUSD || !!it.presentationName,
     })
 
     return repreciado.map(({ linea, precio, nivel }) => {
@@ -1198,6 +1203,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         ? `${formatQty(item.quantity)} ${getShortUnitLabel(item.unit)}`
         : `${formatQty(item.quantity)}x`
       let itemText = `• ${qtyDisplay} ${item.name}`
+      // La presentación primero: cambia QUÉ se pide, no solo el precio.
+      if (item.presentationName) itemText += ` (${item.presentationName})`
       // Agregar nivel de precio si no es el default
       if (item.priceLevelLabel) {
         itemText += ` (${item.priceLevelLabel})`

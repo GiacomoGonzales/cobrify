@@ -222,6 +222,12 @@ export default function OnlineOrders() {
           // Unidad real del producto (los pedidos nuevos la guardan); antes se
           // hardcodeaba NIU y un producto en kilos se facturaba como "unidad"
           unit: item.unit || 'NIU',
+        // La presentación viaja con la línea: el POS necesita el factor para
+        // descontar el stock correcto y la cotización, para nombrar el ítem.
+        ...(item.presentationName && {
+          presentationName: item.presentationName,
+          presentationFactor: Number(item.presentationFactor) || 1,
+        }),
           ...(item.isVariant && {
             isVariant: true,
             variantSku: item.variantSku,
@@ -254,6 +260,12 @@ export default function OnlineOrders() {
           price: item.price,
           quantity: item.quantity,
           unit: item.unit || 'UNIDAD',
+        // La presentación viaja con la línea: el POS necesita el factor para
+        // descontar el stock correcto y la cotización, para nombrar el ítem.
+        ...(item.presentationName && {
+          presentationName: item.presentationName,
+          presentationFactor: Number(item.presentationFactor) || 1,
+        }),
           ...(item.isVariant && {
             isVariant: true,
             variantSku: item.variantSku,

@@ -475,6 +475,13 @@ export default function CartDrawer({
           // Unidad SUNAT del producto: sin ella, al facturar el pedido todo
           // salía como NIU aunque el producto se venda en kilos
           ...(item.unit && { unit: item.unit }),
+        // Presentación elegida en el catálogo. `presentationFactor` es lo que
+        // el POS multiplica al descontar stock: sin él, vender una caja de 12
+        // descontaría 1 sola unidad del almacén.
+        ...(item.presentationName && {
+          presentationName: item.presentationName,
+          presentationFactor: Number(item.presentationFactor) || 1,
+        }),
           modifiers: item.selectedModifiers || [],
           ...(item.isVariant && { isVariant: true, variantSku: item.variantSku, variantAttributes: item.variantAttributes }),
           notes: item.notes || '',
@@ -807,6 +814,9 @@ export default function CartDrawer({
                       ? `${formatQty(item.quantity)} ${getShortUnitLabel(item.unit)}`
                       : `${formatQty(item.quantity)}x`
                     let line = `• ${qtyDisplay} ${item.name}`
+                    // Sin esto el mensaje decía "2x Arroz" sin aclarar que son
+                    // dos sacos y no dos kilos.
+                    if (item.presentationName) line += ` (${item.presentationName})`
                     if (item.modifiers?.length > 0) {
                       line += ` (${item.modifiers.map(m => m.options?.map(o => o.quantity > 1 ? `${o.quantity}x ${o.optionName}` : o.optionName).join(', ')).join(', ')})`
                     }
@@ -957,6 +967,10 @@ export default function CartDrawer({
                           <span className="text-xs font-normal text-gray-500 ml-1">({item.priceLevelLabel})</span>
                         )}
                       </h3>
+                      {/* Presentación elegida (caja, saco, paquete) */}
+                      {item.presentationName && (
+                        <p className="text-xs text-gray-500 mt-0.5">{item.presentationName}</p>
+                      )}
                       {/* Mostrar variante seleccionada */}
                       {item.isVariant && item.variantAttributes && (
                         <p className="text-xs text-gray-500 mt-0.5">

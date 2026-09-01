@@ -2231,6 +2231,16 @@ export default function POS() {
               variantSku: item.variantSku,
               variantAttributes: item.variantAttributes,
             }),
+            // Presentación elegida en el catálogo (caja, saco, paquete). El
+            // factor es el que se multiplica al descontar stock.
+            ...(item.presentationName && {
+              presentationName: item.presentationName,
+              presentationFactor: Number(item.presentationFactor) || 1,
+            }),
+            // `cartId` propio: sin esto dos líneas del MISMO producto —una
+            // suelta y una por caja— caían al fallback `item.id` y se pisaban
+            // entre ellas al cambiar cantidad o quitar una.
+            cartId: `${item.productId || item.id}${item.variantSku ? `-${item.variantSku}` : ''}${item.presentationName ? `-pres-${item.presentationName}` : ''}`,
           }
         })
         setCart(cartItems)

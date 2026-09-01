@@ -14,6 +14,8 @@ import {
   formatQty,
   isProductOutOfStock,
   getAvailableStock,
+  getPurchaseOptions,
+  getOptionMaxQty,
   getProductPrices,
   getVariantPriceForLevel,
   getVariantPrices,
@@ -59,6 +61,9 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
   const [selectedModifiers, setSelectedModifiers] = useState({})
   const [modifierErrors, setModifierErrors] = useState({})
   const [selectedVariant, setSelectedVariant] = useState(null)
+  // Presentación elegida ("Caja x12"). null = la unidad suelta, que es como
+  // se abre siempre: el comprador ve primero el precio que conoce.
+  const [selectedPresentation, setSelectedPresentation] = useState(null)
   const [variantError, setVariantError] = useState(false)
   const [selectedPriceLevel, setSelectedPriceLevel] = useState('price1')
   const [activeImageIdx, setActiveImageIdx] = useState(0)
@@ -201,6 +206,10 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
   }
 
   const hasVariants = product.hasVariants && product.variants?.length > 0
+  // Unidad suelta + presentaciones. Con variantes devuelve solo la base.
+  const purchaseOptions = getPurchaseOptions(product)
+  const hasPresentations = purchaseOptions.length > 1
+  const opcionActiva = selectedPresentation || purchaseOptions[0]
   // Badge -N% sobre la galeria (paridad shopifree): mismo criterio que las
   // tarjetas (comparacion > precio, sin variantes, >=5%).
   const discountPct = (() => {
@@ -243,6 +252,10 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
       } else {
         total = selectedVariant?.price || product.basePrice || 0
       }
+    } else if (selectedPresentation) {
+      // El precio de la presentación lo pone el vendedor y no se deriva del
+      // precio suelto: una caja de 12 no cuesta 12 veces la unidad.
+      total = selectedPresentation.price || 0
     } else if (hasMultiplePrices && selectedPriceLevel) {
       const selected = availablePrices.find(p => p.key === selectedPriceLevel)
       total = selected?.value || product.price || 0
@@ -342,6 +355,21 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
       ? availablePrices.find(p => p.key === selectedPriceLevel)?.label || null
       : null
     // Si tiene variante, pasar producto con datos de variante
+    if (selectedPresentation) {
+      // Mismo patrón que las variantes: se marca el producto con los datos de
+      // la presentación. `presentationFactor` es lo que hace que el POS
+      // descuente 12 del stock cuando se vende una caja de 12.
+      const presentationProduct = {
+        ...product,
+        isPresentation: true,
+        presentationName: selectedPresentation.name,
+        presentationFactor: selectedPresentation.factor,
+        unit: selectedPresentation.unit,
+      }
+      onAddToCart(presentationProduct, quantity, modifiersData, totalPrice, null)
+      onClose()
+      return
+    }
     if (hasVariants && selectedVariant) {
       const variantProduct = {
         ...product,
@@ -574,6 +602,57 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                   Precio aplica desde {getCatalogMinQty(business, selectedPriceLevel, product)} unidades
                 </p>
               )}
+            </div>
+          )}
+
+          {/* Presentaciones: unidad suelta vs caja/saco/paquete */}
+          {hasPresentations && (
+            <div className="mb-6">
+              <h3 className="font-semibold mb-3" style={{ color: tokens.colors.text }}>
+                Presentación
+              </h3>
+              <div className="grid grid-cols-1 gap-2">
+                {purchaseOptions.map((opcion) => {
+                  const isSelected = opcion.isBase ? !selectedPresentation : selectedPresentation?.name === opcion.name
+                  const tope = getOptionMaxQty(product, opcion)
+                  const agotada = !business?.catalogIgnoreStock && tope !== null && tope <= 0
+                  return (
+                    <button
+                      key={opcion.key}
+                      onClick={() => {
+                        if (agotada) return
+                        setSelectedPresentation(opcion.isBase ? null : opcion)
+                        setQuantity(1)
+                        setSelectedPriceLevel('price1')
+                      }}
+                      disabled={agotada}
+                      className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border-2 transition-colors text-left ${
+                        agotada ? 'opacity-40 cursor-not-allowed' : ''
+                      } ${isSelected ? '' : bordeOpcion}`}
+                      style={isSelected ? { borderColor: getCatalogAccent(business), backgroundColor: `${getCatalogAccent(business)}14` } : undefined}
+                    >
+                      <span className="min-w-0">
+                        <span className="block font-medium" style={{ color: tokens.colors.text }}>
+                          {opcion.isBase
+                            ? `Por ${getShortUnitLabel(product.unit) || 'unidad'}`
+                            : opcion.name}
+                        </span>
+                        {!opcion.isBase && (
+                          <span className="block text-xs" style={{ color: tokens.colors.textMuted }}>
+                            Contiene {formatQty(opcion.factor)} {getShortUnitLabel(product.unit)}
+                            {agotada ? ' · sin stock suficiente' : ''}
+                          </span>
+                        )}
+                      </span>
+                      {showPrices && (
+                        <span className="font-semibold whitespace-nowrap" style={{ color: tokens.colors.text }}>
+                          {fmtCatalog(opcion.price)}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           )}
 
@@ -855,7 +934,7 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
             const allowsDecimals = !!product.allowDecimalQuantity
             const step = allowsDecimals ? 0.5 : 1
             const minQty = allowsDecimals ? 0.01 : 1
-            const unitLabel = getShortUnitLabel(product.unit)
+            const unitLabel = getShortUnitLabel(opcionActiva?.unit || product.unit)
 
             // Stock disponible para limitar el selector. Si `catalogIgnoreStock` está
             // activo (trabajan bajo pedido) o el producto no trackea stock, queda null
@@ -863,7 +942,13 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
             // variante actualmente seleccionada (cae a null si aún no eligió).
             const ignoreStock = !!business?.catalogIgnoreStock
             const showStock = !!business?.catalogShowStock && !ignoreStock
-            const availableStock = ignoreStock ? null : getAvailableStock(product, hasVariants ? selectedVariant : null)
+            // Con una presentación elegida el tope no es el stock suelto: 25 kg
+            // son 5 bolsas de 5, no 25.
+            const availableStock = ignoreStock
+              ? null
+              : (selectedPresentation
+                ? getOptionMaxQty(product, selectedPresentation)
+                : getAvailableStock(product, hasVariants ? selectedVariant : null))
             const hasStockCap = availableStock !== null && Number.isFinite(availableStock) && availableStock > 0
 
             const applyQty = (newQty) => {
