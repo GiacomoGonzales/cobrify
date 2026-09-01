@@ -167,6 +167,8 @@ const ProductFormModal = ({
   const [trackExpiration, setTrackExpiration] = useState(false)
   const [trackSerials, setTrackSerials] = useState(false)
   const [catalogVisible, setCatalogVisible] = useState(false)
+  // Material de uso interno / obra: se compra e inventaria, pero no se vende.
+  const [soloUsoInterno, setSoloUsoInterno] = useState(false)
   const [catalogComparePrice, setCatalogComparePrice] = useState('')
 
   // ----- Edición manual de stock (modo edición, toggle businessSettings.enableManualStockEdit) -----
@@ -267,6 +269,7 @@ const ProductFormModal = ({
       setTrackExpiration(initialData.trackExpiration || false)
       setTrackSerials(initialData.trackSerials || false)
       setCatalogVisible(initialData.catalogVisible || false)
+      setSoloUsoInterno(initialData.soloUsoInterno === true)
       setCatalogComparePrice(initialData.catalogComparePrice?.toString() || '')
       setUseAutoPriceByQty(initialData.useAutoPriceByQty === true)
       setPriceMinQtys({
@@ -325,6 +328,7 @@ const ProductFormModal = ({
       setAllowDecimalQuantity(false)
       setTrackExpiration(false)
       setCatalogVisible(false)
+      setSoloUsoInterno(false)
       setUseAutoPriceByQty(false)
       setPriceMinQtys({ price2: '', price3: '', price4: '' })
       setTaxAffectation(isIgvExempt ? '20' : (businessSettings?.defaultTaxAffectation || '10'))
@@ -458,8 +462,9 @@ const ProductFormModal = ({
       allowDecimalQuantity,
       trackExpiration,
       trackSerials,
-      catalogVisible,
-      catalogComparePrice: catalogVisible && catalogComparePrice ? parseFloat(catalogComparePrice) : null,
+      soloUsoInterno,
+      catalogVisible: soloUsoInterno ? false : catalogVisible,
+      catalogComparePrice: !soloUsoInterno && catalogVisible && catalogComparePrice ? parseFloat(catalogComparePrice) : null,
       useAutoPriceByQty,
       priceMinQtys: cleanMinQtys && Object.keys(cleanMinQtys).length > 0 ? cleanMinQtys : null,
       taxAffectation,
@@ -1530,10 +1535,27 @@ const ProductFormModal = ({
               </label>
             )}
 
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={soloUsoInterno}
+                onChange={e => {
+                  setSoloUsoInterno(e.target.checked)
+                  // Si no se vende, tampoco se publica en la tienda online.
+                  if (e.target.checked) setCatalogVisible(false)
+                }}
+                className="w-4 h-4 text-slate-600 border-gray-300 rounded focus:ring-slate-500"
+              />
+              <span className="ml-2 text-sm text-gray-700" title="No se ofrece en venta, pero sigue en compras e inventario">
+                Solo uso interno
+              </span>
+            </label>
+
             {showCatalogVisibility && (
-              <label className="flex items-center cursor-pointer">
+              <label className={`flex items-center ${soloUsoInterno ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
                 <input
                   type="checkbox"
+                  disabled={soloUsoInterno}
                   checked={catalogVisible}
                   onChange={e => setCatalogVisible(e.target.checked)}
                   className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"

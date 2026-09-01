@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { filtrarVendibles } from '@/utils/productSale'
 import { Link, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -591,7 +592,7 @@ export default function Settings() {
   useEffect(() => {
     if (!appointmentsBooking.enabled || productosReservables !== null || isDemoMode) return
     getProducts(getBusinessId()).then(r => {
-      setProductosReservables(r?.success ? (r.data || []) : [])
+      setProductosReservables(r?.success ? filtrarVendibles(r.data) : [])
     }).catch(() => setProductosReservables([]))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appointmentsBooking.enabled])

@@ -11,6 +11,7 @@
  *    individual de GRE Transportista.
  */
 import { useState, useRef } from 'react'
+import { filtrarVendibles } from '@/utils/productSale'
 import {
   FileSpreadsheet, Upload, Download, Loader2, CheckCircle, XCircle,
   AlertTriangle, ChevronDown, ChevronUp, RefreshCw, Truck, Receipt, Send,
@@ -130,7 +131,9 @@ export default function BulkEmission() {
         ])
         const { parsearExcelComprobantes } = await import('@/services/bulkEmissionParserService')
         res = await parsearExcelComprobantes(buffer, {
-          products: prodRes.success ? prodRes.data : [],
+          // El Excel cruza por codigo contra lo VENDIBLE: si un material de
+          // uso interno entra en un lote, es un error del archivo.
+          products: prodRes.success ? filtrarVendibles(prodRes.data) : [],
           sellers: sellersRes.success ? sellersRes.data : [],
           // Cuenta del Banco de la Nación de Ajustes: es el respaldo cuando el
           // Excel no trae una propia.

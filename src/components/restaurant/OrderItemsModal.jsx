@@ -13,6 +13,7 @@ import VariantSelectorModal from '@/components/product/VariantSelectorModal'
 import PresentationSelectorModal from '@/components/product/PresentationSelectorModal'
 import { computeRecipeStockAlerts, hasAnyRecipe } from '@/utils/recipeAvailability'
 import { filterProductsForBranch } from '@/utils/branchCatalog'
+import { esVendible } from '@/utils/productSale'
 import { cn, matchesPrebuilt } from '@/lib/utils'
 import { buildProductHaystack } from '@/utils/productSearch'
 import { agregarItemsOrdenDemo } from '@/data/demo/operaciones'
@@ -235,8 +236,9 @@ export default function OrderItemsModal({
 
   // Filtrar productos por búsqueda y categoría
   useEffect(() => {
-    // Excluir productos desactivados (isActive === false) en cualquier origen (incl. demo).
-    let filtered = products.filter((p) => p.isActive !== false)
+    // Fuera lo que no se vende (desactivado o uso interno), en cualquier
+    // origen, incluido el demo.
+    let filtered = products.filter(esVendible)
 
     // Filtrar por categoría
     if (selectedCategory !== 'Todos') {
@@ -322,9 +324,9 @@ export default function OrderItemsModal({
         // En modo normal, cargar desde Firebase
         const result = await getProducts(businessId)
         if (result.success) {
-          // Excluir productos desactivados (isActive === false), igual que el POS, para que
-          // los mozos no puedan agregar a la mesa productos que estan ocultos del catalogo.
-          const activos = (result.data || []).filter((p) => p.isActive !== false)
+          // Igual que el POS: los mozos no pueden agregar a la mesa productos
+          // ocultos del catalogo ni material de uso interno.
+          const activos = (result.data || []).filter(esVendible)
           const allProducts = filterProductsForBranch(
             activos, orderBranchId, businessSettings?.branchCatalogEnabled === true
           )

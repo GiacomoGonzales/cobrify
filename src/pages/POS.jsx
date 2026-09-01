@@ -71,6 +71,7 @@ import { stockPorSucursal } from '@/utils/branchStockView'
 import { registrarVentaDemo } from '@/data/demo/operaciones'
 import { applyBranchPricing } from '@/utils/branchPricing'
 import { filterProductsForBranch, filterCategoriesForBranch, isProductInBranch } from '@/utils/branchCatalog'
+import { filtrarVendibles, esSoloUsoInterno } from '@/utils/productSale'
 import { getAvailableDocumentTypes, resolveDocumentType } from '@/utils/documentTypes'
 import { calculateInvoiceAmounts, calculateMixedInvoiceAmounts, calculateRecargoConsumo, ID_TYPES, DETRACTION_TYPES, DETRACTION_MIN_AMOUNT, calcularDetraccion } from '@/utils/peruUtils'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
@@ -719,10 +720,14 @@ export default function POS() {
   // cual (misma referencia, no invalida memos aguas abajo).
   const products = useMemo(() => {
     const branchId = selectedBranch?.id || null
+    // 0) Fuera lo que no se vende: desactivados y material de uso interno. Un
+    //    solo colador aqui cubre la grilla, la busqueda y el escaner, porque
+    //    todos leen `products`. `productsRaw` queda intacto para el checkout.
+    const alaVenta = filtrarVendibles(productsRaw)
     // 1) Catalogo por sucursal: saca del catalogo los productos que no aplican a
     //    esta sede. Va PRIMERO para no repreciar lo que igual no se va a mostrar.
     const visibles = filterProductsForBranch(
-      productsRaw, branchId, businessSettings?.branchCatalogEnabled === true, categories
+      alaVenta, branchId, businessSettings?.branchCatalogEnabled === true, categories
     )
     // 2) Precios por sucursal sobre lo que quedo visible.
     if (!businessSettings?.branchPricingEnabled) return visibles
@@ -989,6 +994,9 @@ export default function POS() {
   // sucursal, guardamos su nombre para avisarlo tal cual. Decir "no registrado"
   // seria falso y empuja al cajero a crear un duplicado con el mismo EAN.
   const [unknownScanProduct, setUnknownScanProduct] = useState(null)
+  // El codigo existe pero es material de uso interno: no es un error de la
+  // pistola ni un producto de otra sede, y el mensaje tiene que decirlo.
+  const [unknownScanInterno, setUnknownScanInterno] = useState(false)
   // Producto sin stock esperando confirmacion del cajero. Guarda que mostrar
   // ({ nombre, detalle }) y que hacer si dice que si ({ confirmar }).
   const [sinStockPendiente, setSinStockPendiente] = useState(null)
@@ -3655,6 +3663,7 @@ export default function POS() {
       if (exactMatches.length === 0 && !variantMatch && wasGunScan && products.length > 0) {
         const enOtraSede = findInFullCatalogByCode(searchTerm)
         setUnknownScanProduct(enOtraSede ? enOtraSede.name : null)
+        setUnknownScanInterno(esSoloUsoInterno(enOtraSede))
         setUnknownScanCode(searchTerm)
         setSearchTerm('')
       }
@@ -14010,15 +14019,20 @@ ${companySettings?.businessName || 'Tu Empresa'}`
       {/* Aviso: código escaneado/pegado que no está registrado en el sistema */}
       <Modal
         isOpen={!!unknownScanCode}
-        onClose={() => { setUnknownScanCode(null); setUnknownScanProduct(null) }}
-        title={unknownScanProduct ? 'Producto de otra sucursal' : 'Código no registrado'}
+        onClose={() => { setUnknownScanCode(null); setUnknownScanProduct(null); setUnknownScanInterno(false) }}
+        title={unknownScanInterno ? 'Producto de uso interno' : unknownScanProduct ? 'Producto de otra sucursal' : 'Código no registrado'}
         size="md"
       >
         <div className="space-y-4">
           <div className="flex items-start gap-3">
             <AlertTriangle className="w-6 h-6 text-red-500 flex-shrink-0 mt-0.5" />
             <div className="min-w-0">
-              {unknownScanProduct ? (
+              {unknownScanInterno ? (
+                <p className="text-sm text-gray-700">
+                  <span className="font-semibold">{unknownScanProduct}</span> está marcado como
+                  solo uso interno, así que no se vende:
+                </p>
+              ) : unknownScanProduct ? (
                 <p className="text-sm text-gray-700">
                   Este código pertenece a <span className="font-semibold">{unknownScanProduct}</span>,
                   que no está disponible en esta sucursal:
@@ -14031,7 +14045,12 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               <p className="mt-1 font-mono text-base font-semibold text-gray-900 break-all">
                 {unknownScanCode}
               </p>
-              {unknownScanProduct ? (
+              {unknownScanInterno ? (
+                <p className="mt-2 text-sm text-gray-600">
+                  No se agregó al carrito. Sigue en el inventario y se puede comprar y
+                  trasladar; si en realidad sí se vende, quítale "Solo uso interno" en Productos.
+                </p>
+              ) : unknownScanProduct ? (
                 <p className="mt-2 text-sm text-gray-600">
                   No se agregó al carrito. Si debería venderse aquí, actívalo en esta
                   sucursal desde la página Productos — no lo crees de nuevo.
@@ -14044,7 +14063,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             </div>
           </div>
           <div className="flex justify-end">
-            <Button onClick={() => { setUnknownScanCode(null); setUnknownScanProduct(null); searchInputRef.current?.focus() }}>
+            <Button onClick={() => { setUnknownScanCode(null); setUnknownScanProduct(null); setUnknownScanInterno(false); searchInputRef.current?.focus() }}>
               Entendido
             </Button>
           </div>

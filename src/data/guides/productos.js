@@ -422,6 +422,29 @@ export default {
     },
 
     {
+      id: 'uso-interno',
+      title: 'Productos que no se venden',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Hay cosas que compras pero nunca vendes: materiales para una obra, herramientas, uniformes, artículos de limpieza. Para eso está **Solo uso interno**, una casilla en la ficha del producto.',
+        },
+        {
+          type: 'texto',
+          text: 'Un producto marcado así **desaparece del Punto de Venta, del escáner, de las cotizaciones, de los comprobantes y del catálogo online**. Pero sigue igual en **Compras, Inventario, Movimientos, traslados entre almacenes y alertas de stock mínimo**: lo controlas como cualquier otro, solo que nadie te lo puede vender por error.',
+        },
+        {
+          type: 'consejo',
+          text: 'Si ya tienes muchos cargados, no los abras uno por uno: selecciónalos con las casillas de la lista y usa **Más acciones → Solo uso interno**. Para volver a encontrarlos después, escribe "uso interno" en el buscador, o filtra por **Solo uso interno** en Inventario.',
+        },
+        {
+          type: 'ojo',
+          text: 'No es lo mismo que **desactivar** un producto. Desactivado significa que ya no lo manejas: sale del inventario del día a día y deja de avisarte cuando se acaba. De uso interno significa lo contrario: lo manejas mucho, pero no se vende.',
+        },
+      ],
+    },
+
+    {
       id: 'catalogo-online',
       title: 'Qué se ve en tu tienda online',
       blocks: [

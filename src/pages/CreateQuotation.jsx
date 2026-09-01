@@ -27,6 +27,7 @@ import {
 import { getRateForDate } from '@/services/exchangeRateService'
 import { getCustomers, getProducts, createCustomer, getLaboratories } from '@/services/firestoreService'
 import { filterProductsForBranch } from '@/utils/branchCatalog'
+import { esVendible } from '@/utils/productSale'
 import { getUnitShortLabel } from '@/utils/units'
 import { applyBranchPricing } from '@/utils/branchPricing'
 import { createQuotation, getNextQuotationNumber, getQuotation, updateQuotation } from '@/services/quotationService'
@@ -972,11 +973,11 @@ export default function CreateQuotation() {
 
   // Filtrar productos según búsqueda
   const getFilteredProducts = (searchTerm) => {
-    // Excluir productos desactivados (isActive === false) de las búsquedas.
-    // pickerProducts: acotado a la sucursal elegida y con su precio por sede.
-    // Cotizar en la sede Norte un producto que solo existe en Sur es un
-    // compromiso comercial imposible de cumplir.
-    const activeProducts = pickerProducts.filter(p => p.isActive !== false)
+    // Fuera de las busquedas lo que no se vende: desactivados y material de
+    // uso interno. pickerProducts: acotado a la sucursal elegida y con su
+    // precio por sede. Cotizar en la sede Norte un producto que solo existe en
+    // Sur es un compromiso comercial imposible de cumplir.
+    const activeProducts = pickerProducts.filter(esVendible)
     if (!searchTerm) return activeProducts.slice(0, 5) // Mostrar primeros 5 si no hay búsqueda
 
     // Búsqueda flexible: cada palabra parcial debe aparecer en alguno de los

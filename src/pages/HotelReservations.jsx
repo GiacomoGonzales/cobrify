@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, Fragment } from 'react'
+import { esVendible } from '@/utils/productSale'
 import { useSearchParams } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useForm } from 'react-hook-form'
@@ -889,6 +890,9 @@ export default function HotelReservations() {
       })
     })
     products.forEach(p => {
+      // Cargar consumo a la habitación es vender: no se ofrece lo desactivado
+      // ni el material de uso interno.
+      if (!esVendible(p)) return
       items.push({
         kind: 'product',
         id: p.id,

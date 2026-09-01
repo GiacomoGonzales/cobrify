@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect } from 'react'
+import { esVendible } from '@/utils/productSale'
 import { useNavigate } from 'react-router-dom'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -407,8 +408,9 @@ export default function VeterinaryAgenda() {
     try {
       const rp = await getProducts(getBusinessId())
       if (rp.success) {
+        // Filtraba por `p.active`, un campo inexistente en el producto.
         setServiceOptions((rp.data || [])
-          .filter(p => p.active !== false)
+          .filter(esVendible)
           .sort((a, b) => (a.name || '').localeCompare(b.name || '')))
       }
     } catch (e) { /* sin servicios */ }

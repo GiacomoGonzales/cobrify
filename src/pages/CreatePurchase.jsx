@@ -1425,6 +1425,9 @@ export default function CreatePurchase() {
         taxAffectation: data.taxAffectation || '10',
         allowDecimalQuantity: data.allowDecimalQuantity || false,
         trackExpiration: data.trackExpiration || false,
+        // Sin esto el whitelist se comia la marca y un material creado
+        // desde la compra nacia a la venta.
+        soloUsoInterno: data.soloUsoInterno === true,
         catalogVisible: data.catalogVisible || false,
         presentations: data.presentations || [],
         imageUrl: data.imageUrl || null,

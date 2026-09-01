@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { esVendible } from '@/utils/productSale'
 import { optimizeImageUrl } from '@/utils/cloudinary'
 import ProductModal from '@/components/catalog/ProductModal'
 import CartDrawer, { TableAccountModal } from '@/components/catalog/CartDrawer'
@@ -673,8 +674,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
    */
   const publicProducts = useMemo(() => {
     return products.filter(product => {
-      // Excluir productos desactivados (isActive === false) del catálogo público.
-      if (product.isActive === false) return false
+      // Fuera del catálogo público lo que no se vende: desactivados y
+      // material de uso interno (la consulta ya filtra por catalogVisible).
+      if (!esVendible(product)) return false
 
       // Excluir productos sin stock si la opción está activa (y no se ignora el stock)
       if (hideOutOfStock && !ignoreStockSetting && isProductOutOfStock(product, false)) {

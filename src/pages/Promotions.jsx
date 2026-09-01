@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { esVendible } from '@/utils/productSale'
 import {
   Gift,
   Package,
@@ -310,6 +311,7 @@ export default function Promotions() {
     const q = promoProductSearch.trim().toLowerCase()
     if (!q) return []
     return products
+      .filter(esVendible)
       .filter((p) => !promoForm.productIds.includes(p.id))
       .filter((p) => (p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q))
       .slice(0, 8)
@@ -444,6 +446,7 @@ export default function Promotions() {
     const q = partSearch.trim().toLowerCase()
     if (!q) return []
     return products
+      .filter(esVendible)
       .filter((p) => !p.isCombo && !parts.some((x) => x.product.id === p.id))
       .filter((p) => (p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q))
       .slice(0, 8)

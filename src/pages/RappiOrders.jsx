@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { filtrarVendibles } from '@/utils/productSale'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useToast } from '@/contexts/ToastContext'
@@ -109,7 +110,7 @@ export default function RappiOrders() {
     const businessId = getBusinessId()
     if (!businessId) return
     getProducts(businessId).then(result => {
-      if (result.success) setProducts(result.data || [])
+      if (result.success) setProducts(filtrarVendibles(result.data))
     }).catch(err => console.error('Error cargando productos:', err))
   }, [mappingItem, getBusinessId])
 

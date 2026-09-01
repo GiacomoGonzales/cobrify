@@ -283,6 +283,8 @@ export default function Products() {
   const [allowDecimalQuantity, setAllowDecimalQuantity] = useState(false) // Venta por peso
   const [trackSerials, setTrackSerials] = useState(false) // Control de N° de serie
   const [catalogVisible, setCatalogVisible] = useState(false) // Visible en catálogo público
+  // Material de uso interno / obra: se compra y se inventaria, pero no se vende.
+  const [soloUsoInterno, setSoloUsoInterno] = useState(false)
   // Auto-precio según cantidad (opt-in por producto). Si está ON, el POS no
   // muestra el modal de elegir precio y el precio se ajusta solo al cambiar
   // la cantidad en el carrito, usando los mínimos configurados por producto.
@@ -472,7 +474,7 @@ export default function Products() {
   // Bulk actions state
   const [selectedProducts, setSelectedProducts] = useState(new Set())
   const [bulkActionModalOpen, setBulkActionModalOpen] = useState(false)
-  const [bulkAction, setBulkAction] = useState(null) // 'delete', 'changeCategory', 'toggleActive'
+  const [bulkAction, setBulkAction] = useState(null) // 'delete', 'changeCategory', 'toggleActive', 'usoInterno'
   const [bulkCategoryChange, setBulkCategoryChange] = useState('')
   const [isProcessingBulk, setIsProcessingBulk] = useState(false)
 
@@ -886,6 +888,7 @@ export default function Products() {
     setNoStock(false)
     setAllowDecimalQuantity(false)
     setCatalogVisible(false)
+    setSoloUsoInterno(false)
     // Producto nuevo: disponible en TODAS por defecto. Sin este reset heredaria
     // la seleccion del producto que se edito antes.
     setAvailableBranches([MAIN_BRANCH_TOKEN, ...branches.map(b => b.id)])
@@ -1039,6 +1042,7 @@ export default function Products() {
 
     // Load catalog visibility
     setCatalogVisible(product.catalogVisible || false)
+    setSoloUsoInterno(product.soloUsoInterno === true)
     setAvailableBranches(buildSelectionFromHidden(product, branches))
     setCatalogHidePrice(product.catalogHidePrice || false)
     setCatalogComparePrice(product.catalogComparePrice?.toString() || '')
@@ -1195,6 +1199,7 @@ export default function Products() {
     setSunatProductCode(product.sunatProductCode || '')
     setSunatProductName(product.sunatProductName || '')
     setCatalogVisible(product.catalogVisible || false)
+    setSoloUsoInterno(product.soloUsoInterno === true)
     setAvailableBranches(buildSelectionFromHidden(product, branches))
     setCatalogHidePrice(product.catalogHidePrice || false)
     setCatalogComparePrice(product.catalogComparePrice?.toString() || '')
@@ -1504,6 +1509,9 @@ export default function Products() {
         sunatProductCode: sunatProductCode || null,
         sunatProductName: sunatProductCode ? (sunatProductName || null) : null,
         ...(taxType === 'standard' && taxAffectation === '10' && { igvRate }), // Per-product IGV rate (18% or 10%)
+        // Solo uso interno: no se ofrece en ninguna pantalla de venta, pero
+        // sigue en compras, inventario, traslados y alertas de stock.
+        soloUsoInterno: soloUsoInterno,
         catalogVisible: catalogVisible, // Visible en catálogo público
         catalogHidePrice: catalogHidePrice, // Ocultar precio en catálogo (mostrar "Consultar")
         catalogComparePrice: catalogVisible && catalogComparePrice ? parseFloat(catalogComparePrice) : null, // Precio tachado en catálogo
@@ -4194,6 +4202,46 @@ export default function Products() {
     }
   }
 
+  /**
+   * Marcar/desmarcar "Solo uso interno" en lote. No invierte producto por
+   * producto como Activar/Desactivar: con cientos de materiales, el dueño
+   * quiere "estos son de obra", no que cada uno haga lo contrario del otro.
+   * Al marcarlos se apaga también el catálogo online: no se venden.
+   */
+  const handleBulkUsoInterno = async (valor) => {
+    if (selectedProducts.size === 0) return
+    setIsProcessingBulk(true)
+    try {
+      const businessId = getBusinessId()
+      let successCount = 0
+      let errorCount = 0
+      for (const productId of selectedProducts) {
+        try {
+          const cambios = valor
+            ? { soloUsoInterno: true, catalogVisible: false, showInCatalog: false, isFeatured: false }
+            : { soloUsoInterno: false }
+          const result = await updateProduct(businessId, productId, cambios)
+          if (result.success) successCount++
+          else errorCount++
+        } catch (error) {
+          console.error(`Error al actualizar producto ${productId}:`, error)
+          errorCount++
+        }
+      }
+      if (successCount > 0) {
+        toast.success(valor
+          ? `${successCount} producto${successCount !== 1 ? 's' : ''} marcado${successCount !== 1 ? 's' : ''} como solo uso interno`
+          : `${successCount} producto${successCount !== 1 ? 's' : ''} vuelve${successCount === 1 ? '' : 'n'} a estar a la venta`)
+      }
+      if (errorCount > 0) toast.error(`${errorCount} no se pudo actualizar`)
+      closeBulkActionModal()
+      setSelectedProducts(new Set())
+      await loadProducts()
+    } finally {
+      setIsProcessingBulk(false)
+    }
+  }
+
   const handleBulkToggleActive = async () => {
     if (selectedProducts.size === 0) return
 
@@ -5531,6 +5579,7 @@ export default function Products() {
                             <div className="border-t border-gray-100 my-1" />
                             <BulkMenuGroup title="Visibilidad" />
                             <BulkMenuItem icon={Package} label="Activar / Desactivar" onClick={() => { setBulkMenuOpen(false); openBulkActionModal('toggleActive') }} />
+                            <BulkMenuItem icon={Ban} label="Solo uso interno" onClick={() => { setBulkMenuOpen(false); openBulkActionModal('usoInterno') }} />
                             <BulkMenuItem icon={Eye} label="Mostrar en catálogo" onClick={() => { setBulkMenuOpen(false); openBulkActionModal('showInCatalog') }} />
                             <div className="border-t border-gray-100 my-1" />
                             <BulkMenuGroup title="Configuración de venta" />
@@ -5617,6 +5666,11 @@ export default function Products() {
                             {isInactive && (
                               <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-700 font-semibold tracking-wide" title="Producto inactivo: oculto del POS y del catálogo">
                                 INACTIVO
+                              </span>
+                            )}
+                            {product.soloUsoInterno === true && (
+                              <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700 font-semibold tracking-wide" title="Solo uso interno: no se vende, pero sigue en compras e inventario">
+                                USO INTERNO
                               </span>
                             )}
                           </div>
@@ -5950,6 +6004,11 @@ export default function Products() {
                             {isInactive && (
                               <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-700 font-semibold tracking-wide" title="Producto inactivo: oculto del POS y del catálogo">
                                 INACTIVO
+                              </span>
+                            )}
+                            {product.soloUsoInterno === true && (
+                              <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700 font-semibold tracking-wide" title="Solo uso interno: no se vende, pero sigue en compras e inventario">
+                                USO INTERNO
                               </span>
                             )}
                           </div>
@@ -7557,10 +7616,33 @@ export default function Products() {
                 </div>
               </label>
 
-              {/* Fila 3: catalogo */}
+              {/* Fila 3: donde se ofrece */}
               <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
                 <input
                   type="checkbox"
+                  checked={soloUsoInterno}
+                  onChange={e => {
+                    setSoloUsoInterno(e.target.checked)
+                    // Si no se vende, tampoco se publica: apagar el catálogo y
+                    // sus dependientes evita dejarlos en true a la espera.
+                    if (e.target.checked) {
+                      setCatalogVisible(false)
+                      setIsFeatured(false)
+                      setCatalogHidePrice(false)
+                    }
+                  }}
+                  className="w-4 h-4 mt-0.5 text-slate-600 border-gray-300 rounded focus:ring-slate-500"
+                />
+                <div>
+                  <span className="text-sm font-medium text-gray-700">Solo uso interno</span>
+                  <p className="text-xs text-gray-500 mt-0.5">Se compra e inventaría, pero no se vende</p>
+                </div>
+              </label>
+
+              <label className={`flex items-start gap-3 p-3 rounded-lg transition-colors ${soloUsoInterno ? 'bg-gray-50 opacity-50 cursor-not-allowed' : 'bg-gray-50 cursor-pointer hover:bg-gray-100'}`}>
+                <input
+                  type="checkbox"
+                  disabled={soloUsoInterno}
                   checked={catalogVisible}
                   onChange={e => {
                     setCatalogVisible(e.target.checked)
@@ -7575,7 +7657,9 @@ export default function Products() {
                 />
                 <div>
                   <span className="text-sm font-medium text-gray-700">Mostrar en catálogo</span>
-                  <p className="text-xs text-gray-500 mt-0.5">Visible en tienda online</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {soloUsoInterno ? 'No aplica: el producto no se vende' : 'Visible en tienda online'}
+                  </p>
                 </div>
               </label>
 
@@ -10450,6 +10534,45 @@ export default function Products() {
                     <>
                       <FolderEdit className="w-4 h-4 mr-2" />
                       Cambiar Categoría
+                    </>
+                  )}
+                </Button>
+              </div>
+            </>
+          )}
+
+          {bulkAction === 'usoInterno' && (
+            <>
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+                <p className="text-sm text-blue-800 font-medium">
+                  {selectedProducts.size} producto{selectedProducts.size !== 1 ? 's' : ''} seleccionado{selectedProducts.size !== 1 ? 's' : ''}.
+                </p>
+                <p className="text-xs text-blue-700">
+                  Un producto de <strong>solo uso interno</strong> desaparece del POS, de las cotizaciones,
+                  de los comprobantes y del catálogo online.
+                </p>
+                <p className="text-xs text-blue-700">
+                  Sigue igual en <strong>compras, inventario, movimientos, traslados y alertas de stock</strong>:
+                  es material que se controla, pero no se vende.
+                </p>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={closeBulkActionModal} disabled={isProcessingBulk}>
+                  Cancelar
+                </Button>
+                <Button variant="outline" onClick={() => handleBulkUsoInterno(false)} disabled={isProcessingBulk}>
+                  Quitar la marca
+                </Button>
+                <Button onClick={() => handleBulkUsoInterno(true)} disabled={isProcessingBulk}>
+                  {isProcessingBulk ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Actualizando...
+                    </>
+                  ) : (
+                    <>
+                      <Ban className="w-4 h-4 mr-2" />
+                      Marcar como uso interno
                     </>
                   )}
                 </Button>

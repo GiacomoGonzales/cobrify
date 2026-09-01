@@ -91,6 +91,9 @@ export function buildProductHaystack(product, opts = {}) {
     product.sanitaryRegistry,
     // Ubicación en estante: se usa para mandar a alguien a buscar el producto
     product.location,
+    // Material de uso interno: buscar "uso interno" en Productos o Inventario
+    // los junta a todos, que es como el dueño los revisa.
+    product.soloUsoInterno === true ? 'uso interno' : '',
     ...extraCodes,
     ...variantTokens,
     ...presentationTokens,

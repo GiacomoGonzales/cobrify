@@ -32,6 +32,7 @@ import {
 } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
 import { filterProductsForBranch } from '@/utils/branchCatalog'
+import { filtrarVendibles } from '@/utils/productSale'
 import { applyBranchPricing } from '@/utils/branchPricing'
 
 // Unidades de medida SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
@@ -123,8 +124,10 @@ export default function CreateInvoice() {
   // un documento puede traer items de otra sede y esos flujos no deben perderlos.
   const pickerProducts = useMemo(() => {
     const branchId = selectedBranch?.id || null
+    // Desactivados y material de uso interno no se ofrecen. Esta pantalla era
+    // la unica que no filtraba nada: un producto desactivado si aparecia aqui.
     const visibles = filterProductsForBranch(
-      products, branchId, businessSettings?.branchCatalogEnabled === true
+      filtrarVendibles(products), branchId, businessSettings?.branchCatalogEnabled === true
     )
     if (!businessSettings?.branchPricingEnabled) return visibles
     if (!branchId) return visibles

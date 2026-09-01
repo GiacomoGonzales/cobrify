@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { esVendible } from '@/utils/productSale'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { getAuth } from 'firebase/auth'
 import { Loader2, Send, Gift, MapPin, Search, Copy, Download, QrCode } from 'lucide-react'
@@ -202,8 +203,10 @@ export default function LoyaltyManager({ isOpen, onClose }) {
       try {
         const r = await getProducts(getBusinessId())
         if (!cancelado) {
+          // Filtraba por `p.active`, un campo que el producto nunca tuvo: no
+          // hacia nada. El estado real es isActive + soloUsoInterno.
           setProductos((r.success ? r.data : [])
-            .filter(p => p.active !== false)
+            .filter(esVendible)
             .sort((a, b) => (a.name || '').localeCompare(b.name || '')))
         }
       } finally {

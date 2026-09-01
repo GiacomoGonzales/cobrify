@@ -287,7 +287,7 @@ export default function Inventory() {
   // Activo / desactivado del producto. Arranca en 'active' porque es lo que se
   // mira a diario: un inventario mezclado con productos dados de baja infla los
   // conteos y ensucia la busqueda. Los desactivados siguen a un clic.
-  const [filterActivo, setFilterActivo] = useState('active') // 'all' | 'active' | 'inactive'
+  const [filterActivo, setFilterActivo] = useState('active') // 'all' | 'active' | 'inactive' | 'uso_interno'
   const [expandedProduct, setExpandedProduct] = useState(null)
   const [openMenuId, setOpenMenuId] = useState(null)
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: false })
@@ -2015,6 +2015,9 @@ export default function Inventory() {
       let matchesActivo = true
       if (filterActivo === 'active') matchesActivo = item.isActive !== false
       else if (filterActivo === 'inactive') matchesActivo = item.isActive === false
+      // "Solo uso interno" es un corte aparte: ese material esta ACTIVO (se
+      // compra, se cuenta y alerta por stock minimo), solo que no se vende.
+      else if (filterActivo === 'uso_interno') matchesActivo = item.soloUsoInterno === true
 
       // Sin vender hace más de X días. Se cruza con TODO lo demás (marca,
       // categoría, almacén): "muéstrame lo estancado de esta marca" es la
@@ -2922,6 +2925,7 @@ export default function Inventory() {
                 >
                   <option value="active">Solo activos</option>
                   <option value="inactive">Solo desactivados</option>
+                  <option value="uso_interno">Solo uso interno</option>
                   <option value="all">Activos y desactivados</option>
                 </select>
               </div>
