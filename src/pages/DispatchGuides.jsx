@@ -156,6 +156,9 @@ export default function DispatchGuides() {
   const [printMargins, setPrintMargins] = useState(8)
   const [simplePrint, setSimplePrint] = useState(false)
   const [ticketPaperWidth, setTicketPaperWidth] = useState(80)
+  // Ajustar la hoja al largo del ticket. Apagado, manda el papel elegido en
+  // la ventana de imprimir (Configuración > Impresora).
+  const [ajustarHoja, setAjustarHoja] = useState(true)
 
   // Estado para dropdown menu de acciones
   const [openMenuId, setOpenMenuId] = useState(null)
@@ -175,6 +178,7 @@ export default function DispatchGuides() {
           setPrintMargins(result.config.printMargins ?? 8)
           setSimplePrint(result.config.simplePrint || false)
           setTicketPaperWidth(result.config.paperWidth || 80)
+          setAjustarHoja(result.config.ajustarHojaAlTicket !== false)
         }
       } catch (error) {
         console.error('Error loading printer config:', error)
@@ -444,7 +448,7 @@ export default function DispatchGuides() {
     setTimeout(() => {
       // La hoja se ajusta al ticket. Sin esto el navegador usa A4 y la guía
       // sale chiquita arriba con media hoja en blanco.
-      const quitarTamano = aplicarTamanoDeHoja(ticketRef.current, ticketPaperWidth)
+      const quitarTamano = aplicarTamanoDeHoja(ticketRef.current, ticketPaperWidth, ajustarHoja)
       window.print()
       setTimeout(() => {
         quitarTamano()

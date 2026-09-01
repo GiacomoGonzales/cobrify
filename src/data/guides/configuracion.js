@@ -525,7 +525,17 @@ export default {
             ['Imprimir en hoja A4', 'Si imprimes en tinta o láser en vez de térmica'],
             ['Mostrar unidad de medida en el ticket', 'Agrega la unidad junto a la cantidad'],
             ['Impresión simple (sin fondos negros)', 'Quita los fondos oscuros. Úsala si tu impresora los saca borrosos o gasta mucho'],
+            ['Ajustar la hoja al largo del ticket', 'Viene activada. El sistema le pide al navegador una hoja del largo exacto del comprobante'],
           ],
+        },
+        {
+          type: 'ojo',
+          text: '**Cuándo apagar "Ajustar la hoja al largo del ticket":** si tu impresora ya tiene su propio tamaño de papel elegido en la ventana de imprimir —por ejemplo un rollo continuo tipo *72 × 3276 mm*— y el ticket te sale **chiquito y centrado** en el papel. Eso pasa cuando los dos tamaños no coinciden: el navegador achica el comprobante para que entre. Apagándola manda el papel que elegiste tú.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=impresora&opcion=ajustarHojaAlTicket',
+          label: 'Ajustar la hoja al largo del ticket',
         },
         {
           type: 'ojo',
@@ -588,6 +598,10 @@ export default {
   ],
 
   preguntas: [
+    {
+      q: 'El ticket me sale chiquito y centrado en el papel.',
+      a: 'Tu impresora tiene un tamaño de papel propio elegido en la ventana de imprimir y no coincide con el que pide el sistema, así que el navegador achica el comprobante para que entre. Apaga **Ajustar la hoja al largo del ticket** en Configuración → Impresora y volverá a mandar el papel que elegiste tú.',
+    },
     {
       q: 'Cambié una opción y no veo el efecto.',
       a: 'Primero, revisa que guardaste: cada pestaña tiene su propio botón de guardar. Después recarga la página. Y si la opción afecta al POS y lo tienes abierto en otra pestaña, en otra PC o en la app, ese también tiene que recargar — cada dispositivo lee la configuración al cargar.',

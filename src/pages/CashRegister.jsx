@@ -1312,7 +1312,7 @@ export default function CashRegister() {
     setPrintMovements(movements)
     // Esperar a que se actualice el estado y luego imprimir
     setTimeout(() => {
-      const quitarTamano = aplicarTamanoDeHoja(cierreTicketRef.current, printerConfig?.paperWidth || 80)
+      const quitarTamano = aplicarTamanoDeHoja(cierreTicketRef.current, printerConfig?.paperWidth || 80, printerConfig?.ajustarHojaAlTicket !== false)
       window.print()
       setTimeout(quitarTamano, 500)
     }, 100)
@@ -1340,7 +1340,7 @@ export default function CashRegister() {
       setPrintMovements(historyMovements)
       // Esperar a que se actualice el estado y luego imprimir
       setTimeout(() => {
-        const quitarTamano = aplicarTamanoDeHoja(cierreTicketRef.current, printerConfig?.paperWidth || 80)
+        const quitarTamano = aplicarTamanoDeHoja(cierreTicketRef.current, printerConfig?.paperWidth || 80, printerConfig?.ajustarHojaAlTicket !== false)
         window.print()
         setTimeout(quitarTamano, 500)
       }, 100)

@@ -10961,6 +10961,34 @@ export default function Settings() {
                 </div>
               </div>
 
+              {/* Ajustar la hoja al ticket */}
+              <SettingToggle
+                id="opcion-ajustarHojaAlTicket"
+                checked={printerConfig.ajustarHojaAlTicket !== false}
+                onChange={async (e) => {
+                  const newConfig = { ...printerConfig, ajustarHojaAlTicket: e.target.checked }
+                  setPrinterConfig(newConfig)
+                  await savePrinterConfig(getBusinessId(), newConfig)
+                  toast.success(e.target.checked
+                    ? 'El sistema ajustará la hoja al largo del ticket'
+                    : 'Manda el tamaño de papel de tu impresora')
+                }}
+                title="Ajustar la hoja al largo del ticket"
+                description={printerConfig.ajustarHojaAlTicket !== false
+                  ? '✓ Activado: el sistema le pide al navegador una hoja del largo exacto del comprobante, para que no sobre papel ni se parta en dos.'
+                  : '✗ Desactivado: manda el tamaño de papel que tengas elegido en la ventana de imprimir.'}
+              >
+                <div className="mt-2 inline-flex items-start gap-2 px-2.5 py-1.5 bg-amber-50 rounded-md border border-amber-200">
+                  <Info className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <span className="text-xs text-amber-800">
+                    Apágalo si tu impresora ya tiene su propio tamaño de papel configurado
+                    (por ejemplo un rollo continuo tipo 72&nbsp;×&nbsp;3276&nbsp;mm). Cuando los dos
+                    tamaños no coinciden, el navegador achica el ticket para que entre y lo deja
+                    centrado en el papel.
+                  </span>
+                </div>
+              </SettingToggle>
+
               {/* Impresión simple */}
               <SettingToggle
                 checked={printerConfig.simplePrint || false}

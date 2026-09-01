@@ -18,6 +18,9 @@
  * la hoja se ajuste al ticket en vez de sobrar papel.
  */
 
+/** El <style> que inyecta la regla. Uno solo, reutilizado. */
+const ID_ESTILO = 'cobrify-ticket-page-size'
+
 /** 1 px de CSS es 1/96 de pulgada; una pulgada son 25.4 mm. */
 const MM_POR_PX = 25.4 / 96
 
@@ -94,8 +97,6 @@ export const medirAltoMm = (el) => {
   return pxAMm(alto)
 }
 
-/** El <style> que inyecta la regla. Uno solo, reutilizado. */
-const ID_ESTILO = 'cobrify-ticket-page-size'
 
 /**
  * Deja la hoja del tamaño del ticket, justo antes de imprimir.
@@ -109,8 +110,17 @@ const ID_ESTILO = 'cobrify-ticket-page-size'
  * @param {number}      anchoMm ancho del papel
  * @returns {Function} llamarla para quitar la regla cuando termine la impresión
  */
-export const aplicarTamanoDeHoja = (el, anchoMm) => {
+export const aplicarTamanoDeHoja = (el, anchoMm, activo = true) => {
   if (typeof document === 'undefined') return () => {}
+  // Apagado: no se declara nada y manda el papel elegido en la ventana de
+  // imprimir. Hace falta porque desde la web no hay forma de saber qué papel
+  // tiene configurado el driver, y si los dos tamaños no coinciden el
+  // navegador achica el ticket para que entre. Caso real: una impresora con
+  // área imprimible de 72 mm contra los 80 mm que declarábamos.
+  if (!activo) {
+    document.getElementById(ID_ESTILO)?.remove()
+    return () => {}
+  }
 
   const size = ticketPageSize(anchoMm, medirAltoMm(el))
 

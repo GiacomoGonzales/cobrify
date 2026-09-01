@@ -106,6 +106,9 @@ export default function Envios() {
   const [printingTicket, setPrintingTicket] = useState(null)
   const ticketRef = useRef(null)   // para medir el alto y ajustar la hoja
   const [ticketPaperWidth, setTicketPaperWidth] = useState(80)
+  // Ajustar la hoja al largo del ticket. Apagado, manda el papel elegido en
+  // la ventana de imprimir (Configuración > Impresora).
+  const [ajustarHoja, setAjustarHoja] = useState(true)
 
   // Tab Arqueo
   const [arqueoMotoristaId, setArqueoMotoristaId] = useState('')
@@ -133,7 +136,10 @@ export default function Envios() {
       if (result.success && result.data) setCompanySettings(result.data)
       const { getPrinterConfig: getPC } = await import('@/services/thermalPrinterService')
       const pcResult = await getPC(getBusinessId())
-      if (pcResult.success && pcResult.config) setTicketPaperWidth(pcResult.config.paperWidth || 80)
+      if (pcResult.success && pcResult.config) {
+        setTicketPaperWidth(pcResult.config.paperWidth || 80)
+        setAjustarHoja(pcResult.config.ajustarHojaAlTicket !== false)
+      }
     } catch (error) {
       console.error('Error loading company settings:', error)
     }
@@ -383,7 +389,7 @@ export default function Envios() {
     // Fallback web o si falla la térmica: window.print() con componente ticket
     setPrintingTicket(delivery)
     setTimeout(() => {
-      const quitarTamano = aplicarTamanoDeHoja(ticketRef.current, ticketPaperWidth)
+      const quitarTamano = aplicarTamanoDeHoja(ticketRef.current, ticketPaperWidth, ajustarHoja)
       window.print()
       setTimeout(() => {
         quitarTamano()

@@ -385,6 +385,9 @@ export default function InvoiceList() {
   const [a4SheetPrint, setA4SheetPrint] = useState(false)
   const [showItemUnit, setShowItemUnit] = useState(false)
   const [ticketPaperWidth, setTicketPaperWidth] = useState(80)
+  // Ajustar la hoja al largo del ticket. Apagado, manda el papel elegido en
+  // la ventana de imprimir (Configuración > Impresora).
+  const [ajustarHoja, setAjustarHoja] = useState(true)
 
   // Cargar configuración de impresora para webPrintLegible y compactPrint
   useEffect(() => {
@@ -403,6 +406,7 @@ export default function InvoiceList() {
         setA4SheetPrint(printerConfigResult.config.a4SheetPrint || false)
         setShowItemUnit(printerConfigResult.config.showItemUnit || false)
         setTicketPaperWidth(printerConfigResult.config.paperWidth || 80)
+        setAjustarHoja(printerConfigResult.config.ajustarHojaAlTicket !== false)
       }
     }
     loadPrinterConfig()
@@ -463,6 +467,7 @@ export default function InvoiceList() {
         setSimplePrint(fresh.config.simplePrint || false)
         setA4SheetPrint(fresh.config.a4SheetPrint || false)
         setTicketPaperWidth(fresh.config.paperWidth || 80)
+        setAjustarHoja(fresh.config.ajustarHojaAlTicket !== false)
         // Dar un tick para que el ticket se re-renderice con los valores frescos
         await new Promise(resolve => setTimeout(resolve, 60))
       }
@@ -476,19 +481,19 @@ export default function InvoiceList() {
     // La hoja se ajusta al ticket: sin esto el navegador cae en A4 y el
     // comprobante sale chiquito arriba con media hoja en blanco. En modo
     // "hoja A4" el propio componente pide A4 y no hay que medir nada.
-    const ajustarHoja = () => a4SheetPrint
+    const prepararHoja = () => a4SheetPrint
       ? () => {}
-      : aplicarTamanoDeHoja(ticketRef.current, ticketPaperWidth)
+      : aplicarTamanoDeHoja(ticketRef.current, ticketPaperWidth, ajustarHoja)
 
     if (invoiceArg && viewingInvoice?.id !== invoice.id) {
       setRowPrintInvoice(invoice)
       await new Promise((r) => setTimeout(r, 120))
-      const quitar = ajustarHoja()
+      const quitar = prepararHoja()
       window.print()
       quitar()
       setRowPrintInvoice(null)
     } else {
-      const quitar = ajustarHoja()
+      const quitar = prepararHoja()
       window.print()
       quitar()
     }
