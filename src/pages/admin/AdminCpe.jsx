@@ -37,6 +37,11 @@ import {
  * Al avanzar de página se piden más tandas SOLO a la fuente que limita.
  * Así el primer pantallazo es liviano y "todas" las páginas son alcanzables.
  *
+ * La marca de agua se calcula sobre las fuentes RELEVANTES al filtro de tipo:
+ * al filtrar por GRE, las boletas no deben retener nada (caso HUAMAN PUSCAN,
+ * 31-ago-2026: su guía del 21-ago existía pero quedaba "no segura" porque las
+ * miles de boletas de otro negocio apenas cubrían los últimos días del mes).
+ *
  * Cero índices nuevos y cero cambios de reglas: el admin ya lee subcolecciones
  * de businesses (es lo que usan las stats de SUNAT de la página Usuarios), y
  * las descargas usan las URLs con token guardadas en el propio documento
@@ -102,7 +107,7 @@ export default function AdminCpe() {
   // Las fuentes y sus cursores viven en un ref (se mutan durante los fetch);
   // `vista` es la foto que se renderiza: filas ordenadas + marca de agua.
   const datosRef = useRef({ fuentes: [], filas: [] })
-  const [vista, setVista] = useState({ filas: [], watermark: Infinity, agotadoTodo: false })
+  const [vista, setVista] = useState({ filas: [], fuentes: [] })
   const [cargando, setCargando] = useState(false)     // carga inicial
   const [buscandoMas, setBuscandoMas] = useState(false) // tandas extra en curso
   const [sinNuevas, setSinNuevas] = useState(false)   // el último avance no encontró más
@@ -205,19 +210,31 @@ export default function AdminCpe() {
     }
   }
 
-  /** Publica la foto ordenada + marca de agua para el render. */
+  /** Publica la foto ordenada + el estado de las fuentes para el render. */
   const publicar = () => {
     const { fuentes, filas } = datosRef.current
     filas.sort((a, b) => tiempoDe(b) - tiempoDe(a))
-    const activas = fuentes.filter(f => !f.agotada)
     setVista({
       filas: [...filas],
-      // Una fila es segura si NINGUNA fuente activa puede traer algo más nuevo
-      // que ella: la marca es la más nueva de las "más viejas ya traídas".
-      watermark: activas.length ? Math.max(...activas.map(f => f.oldest ?? Infinity)) : -Infinity,
-      agotadoTodo: activas.length === 0,
+      fuentes: fuentes.map(f => ({ coleccion: f.coleccion, agotada: f.agotada, oldest: f.oldest })),
     })
   }
+
+  // El filtro de tipo mapea 1 a 1 con la colección de origen: al filtrar por
+  // GRE solo importan las fuentes de guías (que se agotan en la primera
+  // tanda), y las miles de boletas de otro negocio no retienen la marca.
+  const coleccionDelTipo = (tipo) => tipo === 'guia_remision' ? 'dispatchGuides'
+    : tipo === 'guia_transportista' ? 'carrierDispatchGuides'
+    : 'invoices'
+  const fuentesRelevantes = (fuentes) =>
+    fuentes.filter(f => tipoFiltro === 'all' || f.coleccion === coleccionDelTipo(tipoFiltro))
+  // Una fila es segura si NINGUNA fuente relevante activa puede traer algo más
+  // nuevo que ella: la marca es la más nueva de las "más viejas ya traídas".
+  const marcaDe = (fuentes) => {
+    const activas = fuentesRelevantes(fuentes).filter(f => !f.agotada)
+    return activas.length ? Math.max(...activas.map(f => f.oldest ?? Infinity)) : -Infinity
+  }
+  const agotadoRelevante = fuentesRelevantes(vista.fuentes).every(f => f.agotada)
 
   // Filtro compartido entre el render y el bucle de rondas (misma lógica,
   // para que "ya tengo suficientes" signifique lo mismo en los dos lados).
@@ -238,8 +255,7 @@ export default function AdminCpe() {
 
   const contarFiltradasSeguras = () => {
     const { fuentes, filas } = datosRef.current
-    const activas = fuentes.filter(f => !f.agotada)
-    const marca = activas.length ? Math.max(...activas.map(f => f.oldest ?? Infinity)) : -Infinity
+    const marca = marcaDe(fuentes)
     return filas.filter(f => tiempoDe(f) >= marca && pasaFiltros(f)).length
   }
 
@@ -254,7 +270,7 @@ export default function AdminCpe() {
     const { fuentes } = datosRef.current
     let rondas = 0
     while (rondas < MAX_RONDAS && contarFiltradasSeguras() < objetivo) {
-      const activas = fuentes.filter(f => !f.agotada)
+      const activas = fuentesRelevantes(fuentes).filter(f => !f.agotada)
       if (activas.length === 0) break
       // La fuente limitante: la de "más vieja traída" MÁS NUEVA. Las que aún
       // no trajeron nada (oldest undefined) limitan siempre — van primero.
@@ -280,7 +296,7 @@ export default function AdminCpe() {
       )),
       filas: [],
     }
-    setVista({ filas: [], watermark: Infinity, agotadoTodo: false })
+    setVista({ filas: [], fuentes: [] })
     try {
       // Primera tanda de TODAS las fuentes en paralelo: establece la marca de
       // agua global y suele alcanzar para varias páginas.
@@ -305,7 +321,7 @@ export default function AdminCpe() {
     setPagina(0)
     setSinNuevas(false)
     const t = setTimeout(async () => {
-      if (cargando || vista.agotadoTodo) return
+      if (cargando || agotadoRelevante) return
       if (contarFiltradasSeguras() < POR_PAGINA) {
         setBuscandoMas(true)
         try { await asegurar(POR_PAGINA) } finally { setBuscandoMas(false) }
@@ -317,10 +333,8 @@ export default function AdminCpe() {
 
   // -------------------------------------------------------- filas visibles
   const filtrados = useMemo(() => {
-    const seguras = vista.agotadoTodo
-      ? vista.filas
-      : vista.filas.filter(f => tiempoDe(f) >= vista.watermark)
-    return seguras.filter(pasaFiltros)
+    const marca = marcaDe(vista.fuentes)
+    return vista.filas.filter(f => tiempoDe(f) >= marca && pasaFiltros(f))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vista, tipoFiltro, estadoFiltro, busqueda, nombreEmpresa])
 
@@ -331,7 +345,7 @@ export default function AdminCpe() {
     // Apuntar a dejar la página siguiente COMPLETA (y una fila extra para
     // saber si habrá otra más).
     const objetivo = (pagina + 2) * POR_PAGINA + 1
-    if (filtrados.length < objetivo && !vista.agotadoTodo) {
+    if (filtrados.length < objetivo && !agotadoRelevante) {
       setBuscandoMas(true)
       try { await asegurar(objetivo) } finally { setBuscandoMas(false) }
     }
@@ -567,7 +581,7 @@ export default function AdminCpe() {
               </div>
             ))}
           </div>
-          {!vista.agotadoTodo && !cargando && (
+          {!agotadoRelevante && !cargando && (
             <p className="text-[11px] text-gray-400 mt-1">Conteos sobre lo cargado hasta ahora; avanza de página para traer más.</p>
           )}
         </div>
@@ -651,7 +665,7 @@ export default function AdminCpe() {
           ) : paginaFilas.length === 0 ? (
             <div className="py-16 text-center text-gray-400 text-sm">
               {vista.filas.length === 0 ? 'Sin comprobantes en este mes' : 'Nada coincide con los filtros'}
-              {!vista.agotadoTodo && vista.filas.length > 0 && (
+              {!agotadoRelevante && vista.filas.length > 0 && (
                 <button
                   onClick={avanzar}
                   disabled={buscandoMas}
@@ -741,7 +755,7 @@ export default function AdminCpe() {
               paginaActual={pagina}
               filasEnPagina={paginaFilas.length}
               totalFiltradas={filtrados.length}
-              completo={vista.agotadoTodo}
+              completo={agotadoRelevante}
               onAnterior={() => { setSinNuevas(false); setPagina(p => Math.max(0, p - 1)) }}
               onSiguiente={avanzar}
               avanzando={buscandoMas}
