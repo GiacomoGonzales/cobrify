@@ -130,6 +130,39 @@ export default {
     },
 
     {
+      id: 'gre-remitente',
+      title: 'GRE Remitente en lote',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'La pestaña **GRE Remitente** es para cuando la mercadería es tuya: tú la envías y tú declaras por qué se mueve. Tiene su propia plantilla y funciona igual que la de transportista — una fila por bien, la columna **N° OPERACIÓN** agrupa las filas de una misma guía.',
+        },
+        {
+          type: 'texto',
+          text: 'Tus datos de remitente no se escriben en el Excel: salen de tu configuración. Lo que sí llenas es a quién le llega, por dónde va y quién lo lleva.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'El **MOTIVO DE TRASLADO** se elige de la lista y viaja a SUNAT dentro de la guía. Si eliges **Otros**, la **DESCRIPCIÓN DEL MOTIVO** es obligatoria: sin ella SUNAT rechaza la guía.',
+            'La **MODALIDAD** decide qué columnas hacen falta. Con **PUBLICO** llenas el RUC y la razón social del transportista; con **PRIVADO**, la placa y los datos del conductor. Lo que no corresponde se puede dejar vacío.',
+            'El **peso bruto** admite **KGM o TNE**: escribe el número en la unidad que elijas. Va solo en la primera fila de cada guía.',
+            'Los **ubigeos** se escriben con nombres separados por barras, igual que en la otra plantilla: LIMA/LIMA/SURQUILLO.',
+          ],
+        },
+        {
+          type: 'ojo',
+          text: 'La emisión en lote **no descuenta stock**. Descontar es una decisión por guía, con su almacén, y por eso vive en la pantalla de GRE Remitente: si necesitas que una guía descuente inventario, emítela desde ahí.',
+        },
+        {
+          type: 'consejo',
+          text: 'Vale lo mismo que en transportista: puedes emitir aunque el archivo tenga errores (salen solo las guías válidas), y volver a subir el mismo archivo no duplica lo ya emitido.',
+        },
+        { type: 'enlace', to: '/app/guias-remision', label: 'Ver GRE Remitente' },
+      ],
+    },
+
+    {
       id: 'limites',
       title: 'Límites',
       blocks: [

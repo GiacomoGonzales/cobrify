@@ -14,90 +14,28 @@
 import { COLUMNAS_GRE_TRANSPORTISTA, VALORES_GRE_TRANSPORTISTA } from './bulkCarrierGuideTemplateService'
 import { codigoDeMotivo, MOTIVO_TRASLADO_POR_DEFECTO } from '@/utils/carrierTransferReasons'
 import { validateDocument, ID_TYPES } from '@/utils/peruUtils'
-import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 import { esUnidadValida, normalizeSunatUnit } from '@/data/sunatUnits'
+import {
+  LIMITE_GUIAS as LIMITE,
+  MAX_DIAS_ATRAS as MAX_DIAS,
+  DOCS_DE_EJEMPLO,
+  TIPO_DOC_A_SISTEMA,
+  TIPO_DOC_A_CODIGO,
+  normalizar,
+  valorDeCelda,
+  diaDeCelda,
+  diaANumero,
+  diaAFecha,
+  diaLegible,
+  diasEntre,
+  numeroDe,
+  resolverUbigeo,
+} from '@/utils/bulkGuideExcel'
 
-export const LIMITE_GUIAS = 500
-export const MAX_DIAS_ATRAS = 3
-
-// Firma de las filas de ejemplo de la plantilla (RUC/DNI de utilería).
-const DOCS_DE_EJEMPLO = new Set(['20100047218', '46997122'])
-
-const TIPO_DOC_A_SISTEMA = { RUC: ID_TYPES.RUC, DNI: ID_TYPES.DNI, CE: ID_TYPES.CE }
-// El modelo de guía guarda el CÓDIGO SUNAT del tipo de documento del conductor
-// y del destinatario ('1' DNI, '6' RUC, '4' CE) en algunos consumidores; el
-// modal usa '1' para conductor. Para el destinatario conserva el texto.
-const TIPO_DOC_A_CODIGO = { DNI: '1', CE: '4', RUC: '6' }
-
-const normalizar = (v) => String(v ?? '')
-  .trim()
-  .toUpperCase()
-  .normalize('NFD')
-  .replace(/[̀-ͯ]/g, '')
-
-const valorDeCelda = (celda) => {
-  const v = celda?.value
-  if (v === null || v === undefined) return ''
-  if (v instanceof Date) return v
-  if (typeof v === 'object') {
-    if (v.richText) return v.richText.map((t) => t.text).join('')
-    if (v.result !== undefined) return v.result
-    if (v.text !== undefined) return v.text
-    return ''
-  }
-  return v
-}
-
-// Fechas: exceljs entrega Date EN UTC; el texto "19/08/2026" se parsea a mano.
-const diaDeCelda = (v) => {
-  if (v instanceof Date) return { y: v.getUTCFullYear(), m: v.getUTCMonth() + 1, d: v.getUTCDate() }
-  const m = String(v ?? '').trim().match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/)
-  if (!m) return null
-  const dia = { y: Number(m[3]), m: Number(m[2]), d: Number(m[1]) }
-  const prueba = new Date(dia.y, dia.m - 1, dia.d)
-  return (prueba.getFullYear() === dia.y && prueba.getMonth() === dia.m - 1 && prueba.getDate() === dia.d) ? dia : null
-}
-const diaANumero = ({ y, m, d }) => y * 10000 + m * 100 + d
-const diaAFecha = ({ y, m, d }) => new Date(y, m - 1, d, 12, 0, 0)
-const diaLegible = ({ y, m, d }) => `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`
-const diasEntre = (a, b) => Math.round((diaAFecha(b) - diaAFecha(a)) / 86400000)
-
-const numeroDe = (v) => {
-  if (v === '' || v === null || v === undefined) return null
-  const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'))
-  return Number.isFinite(n) ? n : null
-}
-
-/**
- * "LIMA/LIMA/SURQUILLO" → { ubigeo: '150141', departamento: '15',
- * provincia: '01', distrito: '41' } o { error: 'texto explicando qué no calzó' }.
- * La comparación va sin tildes en ambos lados: el catálogo trae "ÁNCASH" y
- * la gente escribe "ANCASH".
- */
-export const resolverUbigeo = (texto) => {
-  const partes = String(texto ?? '').split('/').map((p) => normalizar(p)).filter(Boolean)
-  if (partes.length !== 3) {
-    return { error: 'Escríbelo como DEPARTAMENTO/PROVINCIA/DISTRITO. Ejemplo: LIMA/LIMA/SURQUILLO' }
-  }
-  const [depTexto, provTexto, distTexto] = partes
-
-  const dep = DEPARTAMENTOS.find((d) => normalizar(d.name) === depTexto)
-  if (!dep) return { error: `No existe el departamento "${depTexto}"` }
-
-  const prov = (PROVINCIAS[dep.code] || []).find((p) => normalizar(p.name) === provTexto)
-  if (!prov) return { error: `No existe la provincia "${provTexto}" en ${dep.name}` }
-
-  const dist = (DISTRITOS[`${dep.code}${prov.code}`] || []).find((d) => normalizar(d.name) === distTexto)
-  if (!dist) return { error: `No existe el distrito "${distTexto}" en ${dep.name}/${prov.name}` }
-
-  return {
-    ubigeo: `${dep.code}${prov.code}${dist.code}`,
-    departamento: dep.code,
-    provincia: prov.code,
-    distrito: dist.code,
-    legible: `${dep.name}/${prov.name}/${dist.name}`,
-  }
-}
+// Contrato público de siempre; el criterio vive en @/utils/bulkGuideExcel.
+export const LIMITE_GUIAS = LIMITE
+export const MAX_DIAS_ATRAS = MAX_DIAS
+export { resolverUbigeo }
 
 /**
  * Parsea y valida el Excel de GRE Transportista.

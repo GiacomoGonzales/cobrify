@@ -51,7 +51,11 @@ export default function BulkEmission() {
   const inputRef = useRef(null)
   const cancelarRef = useRef(false)
 
-  const [tipo, setTipo] = useState('comprobantes') // 'comprobantes' | 'gre'
+  const [tipo, setTipo] = useState('comprobantes') // 'comprobantes' | 'gre' | 'gre_remitente'
+  // Las dos guías comparten casi todo el circuito y casi toda la pantalla; solo
+  // se separan al elegir plantilla, parser y motor de emisión.
+  const esGuia = tipo === 'gre' || tipo === 'gre_remitente'
+  const esRemitente = tipo === 'gre_remitente'
   const [descargando, setDescargando] = useState(false)
   const [analizando, setAnalizando] = useState(false)
   const [nombreArchivo, setNombreArchivo] = useState('')
@@ -79,7 +83,10 @@ export default function BulkEmission() {
   const handleDescargarPlantilla = async () => {
     setDescargando(true)
     try {
-      if (tipo === 'gre') {
+      if (tipo === 'gre_remitente') {
+        const { descargarPlantillaGreRemitente } = await import('@/services/bulkSenderGuideTemplateService')
+        await descargarPlantillaGreRemitente()
+      } else if (tipo === 'gre') {
         const { descargarPlantillaGreTransportista } = await import('@/services/bulkCarrierGuideTemplateService')
         await descargarPlantillaGreTransportista()
       } else {
@@ -114,7 +121,10 @@ export default function BulkEmission() {
     try {
       const buffer = await archivo.arrayBuffer()
       let res
-      if (tipo === 'gre') {
+      if (tipo === 'gre_remitente') {
+        const { parsearExcelGreRemitente } = await import('@/services/bulkSenderGuideParserService')
+        res = await parsearExcelGreRemitente(buffer)
+      } else if (tipo === 'gre') {
         const { parsearExcelGreTransportista } = await import('@/services/bulkCarrierGuideParserService')
         res = await parsearExcelGreTransportista(buffer)
       } else {
@@ -152,7 +162,7 @@ export default function BulkEmission() {
       // Las operaciones con errores llegan ABIERTAS: son lo que hay que leer.
       setAbiertas(new Set(res.operaciones.filter((o) => o.errores.length > 0).map((o) => o.nOperacion)))
       if (res.resumen.conErrores === 0 && res.errores.length === 0) {
-        toast.success(`${res.resumen.operaciones} ${tipo === 'gre' ? 'guías leídas, todas válidas' : 'operaciones leídas, todas válidas'}`)
+        toast.success(`${res.resumen.operaciones} ${esGuia ? 'guías leídas, todas válidas' : 'operaciones leídas, todas válidas'}`)
       } else {
         toast.warning(`${res.resumen.conErrores} de ${res.resumen.operaciones} con errores`)
       }
@@ -178,8 +188,9 @@ export default function BulkEmission() {
     // comprobantes se avisa además del stock, que es lo que no se puede
     // deshacer con un clic.
     const ok = window.confirm(
-      tipo === 'gre'
-        ? `Se van a emitir ${listas.length} guías de remisión transportista ante SUNAT, una por una. `
+      esGuia
+        ? `Se van a emitir ${listas.length} guías de remisión ${esRemitente ? 'de remitente' : 'transportista'} ante SUNAT, una por una. `
+          + (esRemitente ? 'El lote NO descuenta stock. ' : '')
           + 'Las operaciones con errores no se tocan. ¿Continuar?'
         : `Se van a emitir ${listas.length} comprobantes ante SUNAT, uno por uno, por `
           + `${formatCurrency(resultado.resumen.totalEmitible)}. Se descontará el stock igual que en una `
@@ -193,7 +204,15 @@ export default function BulkEmission() {
     setProgreso({ indice: 0, total: listas.length, etapa: 'iniciando' })
     try {
       let res
-      if (tipo === 'gre') {
+      if (tipo === 'gre_remitente') {
+        const { emitirLoteGreRemitente, huellaDelLote } = await import('@/services/bulkSenderGuideEmitterService')
+        res = await emitirLoteGreRemitente(getBusinessId(), listas, {
+          loteKey: huellaDelLote(nombreArchivo, listas),
+          branchId: branchIdActivo,
+          onProgress: (p) => setProgreso(p),
+          debeCancelar: () => cancelarRef.current,
+        })
+      } else if (tipo === 'gre') {
         const { emitirLoteGreTransportista, huellaDelLote } = await import('@/services/bulkCarrierGuideEmitterService')
         res = await emitirLoteGreTransportista(getBusinessId(), listas, {
           loteKey: huellaDelLote(nombreArchivo, listas),
@@ -220,7 +239,7 @@ export default function BulkEmission() {
       const aceptados = res.resumen.aceptadas ?? res.resumen.aceptados ?? 0
       const rechazados = res.resumen.rechazadas ?? res.resumen.rechazados ?? 0
       const conError = res.resumen.conError ?? (res.resumen.erroresEnvio + res.resumen.erroresCreacion)
-      const nombre = tipo === 'gre' ? 'guías' : 'comprobantes'
+      const nombre = esGuia ? 'guías' : 'comprobantes'
 
       if (res.resumen.creados > 0 && aceptados === 0) {
         toast.success(`${res.resumen.creados} ${nombre} creados. No se enviaron a SUNAT porque tienes apagado el envío automático — puedes enviarlos desde Ventas.`, 9000)
@@ -234,7 +253,7 @@ export default function BulkEmission() {
       }
     } catch (error) {
       console.error('Error al emitir el lote:', error)
-      toast.error(tipo === 'gre'
+      toast.error(esGuia
         ? 'El lote se interrumpió. Revisa GRE Transportista: las guías ya creadas NO se duplican al reintentar.'
         : 'El lote se interrumpió. Revisa Ventas: los comprobantes ya emitidos NO se duplican al reintentar con el mismo archivo.')
     } finally {
@@ -289,13 +308,25 @@ export default function BulkEmission() {
           type="button"
           onClick={() => cambiarTipo('gre')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
-            tipo === 'gre'
+            esGuia
               ? 'bg-primary-600 text-white border-primary-700'
               : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
           }`}
         >
           <Truck className="w-4 h-4" />
           GRE Transportista
+        </button>
+        <button
+          type="button"
+          onClick={() => cambiarTipo('gre_remitente')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+            tipo === 'gre_remitente'
+              ? 'bg-primary-600 text-white border-primary-700'
+              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+          }`}
+        >
+          <Truck className="w-4 h-4" />
+          GRE Remitente
         </button>
       </div>
 
@@ -308,7 +339,7 @@ export default function BulkEmission() {
               <h2 className="font-semibold text-gray-900">Descarga la plantilla</h2>
             </div>
             <p className="text-sm text-gray-600">
-              {tipo === 'gre'
+              {esGuia
                 ? 'Una fila por carga; la columna N° OPERACIÓN agrupa las filas de una misma guía. Los ubigeos se escriben con nombres (LIMA/LIMA/SURQUILLO) y la serie la pone el sistema.'
                 : 'Una fila por producto o servicio; la columna N° OPERACIÓN agrupa las filas de un mismo comprobante. La serie y el número los pone el sistema.'}
             </p>
@@ -327,7 +358,7 @@ export default function BulkEmission() {
             </div>
             <p className="text-sm text-gray-600">
               El sistema valida todo y te muestra la vista previa con los errores por fila.
-              {tipo === 'gre' ? ' Emites recién cuando confirmas.' : ' Nada se emite en este paso.'}
+              {esGuia ? ' Emites recién cuando confirmas.' : ' Nada se emite en este paso.'}
             </p>
             <input ref={inputRef} type="file" accept=".xlsx" className="hidden" onChange={handleArchivo} />
             <div className="flex items-center gap-3 flex-wrap">
@@ -353,9 +384,9 @@ export default function BulkEmission() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <Card>
               <CardContent className="p-4">
-                <p className="text-xs text-gray-500">{tipo === 'gre' ? 'Guías' : 'Operaciones'}</p>
+                <p className="text-xs text-gray-500">{esGuia ? 'Guías' : 'Operaciones'}</p>
                 <p className="text-2xl font-bold text-gray-900">{resultado.resumen.operaciones}</p>
-                <p className="text-xs text-gray-500">{resultado.resumen.items} {tipo === 'gre' ? 'cargas' : 'ítems'}</p>
+                <p className="text-xs text-gray-500">{resultado.resumen.items} {esGuia ? 'cargas' : 'ítems'}</p>
               </CardContent>
             </Card>
             <Card>
@@ -422,7 +453,7 @@ export default function BulkEmission() {
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-sm font-medium text-gray-900 flex items-center gap-2">
                         <Loader2 className="w-4 h-4 animate-spin text-primary-600" />
-                        Emitiendo {tipo === 'gre' ? 'guía' : 'comprobante'} {Math.min(progreso.indice + 1, progreso.total)} de {progreso.total}
+                        Emitiendo {esGuia ? 'guía' : 'comprobante'} {Math.min(progreso.indice + 1, progreso.total)} de {progreso.total}
                         {progreso.numero ? ` — ${progreso.numero}` : ''}
                       </p>
                       <Button variant="outline" size="sm" onClick={() => { cancelarRef.current = true }}>
@@ -437,7 +468,7 @@ export default function BulkEmission() {
                       />
                     </div>
                     <p className="text-xs text-gray-500">
-                      El lote va {tipo === 'gre' ? 'guía por guía' : 'uno por uno'}, con pausa entre envíos. Si lo detienes,
+                      El lote va {esGuia ? 'guía por guía' : 'uno por uno'}, con pausa entre envíos. Si lo detienes,
                       lo ya emitido queda emitido y al volver a subir el mismo archivo no se duplica nada.
                     </p>
                   </>
@@ -449,7 +480,7 @@ export default function BulkEmission() {
                     const conError = r.conError ?? ((r.erroresEnvio || 0) + (r.erroresCreacion || 0))
                     const omitidos = r.omitidas ?? r.omitidos ?? 0
                     const cancelados = r.canceladas ?? r.cancelados ?? 0
-                    const g = tipo === 'gre'
+                    const g = esGuia
                     return (
                       <p className="text-sm text-gray-900">
                         <strong>Lote terminado:</strong> {aceptados} {g ? 'aceptadas' : 'aceptados'}
@@ -458,7 +489,7 @@ export default function BulkEmission() {
                         {omitidos > 0 && `, ${omitidos} ${g ? 'omitidas' : 'omitidos'} (ya se habían emitido)`}
                         {cancelados > 0 && `, ${cancelados} ${g ? 'canceladas' : 'cancelados'}`}.
                         {' '}El detalle está en cada operación de la lista de abajo y en{' '}
-                        {g ? 'la pantalla GRE Transportista' : 'Ventas'}.
+                        {g ? (esRemitente ? 'la pantalla GRE Remitente' : 'la pantalla GRE Transportista') : 'Ventas'}.
                       </p>
                     )
                 })()}
@@ -484,13 +515,18 @@ export default function BulkEmission() {
                       ? <XCircle className="w-5 h-5 text-red-500 shrink-0" />
                       : <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />}
                     <div className="flex-1 min-w-0">
-                      {tipo === 'gre' ? (
+                      {esGuia ? (
                         <>
                           <p className="text-sm font-medium text-gray-900 truncate">
-                            Guía {op.nOperacion} · {op.resumen.remitente || 'Sin remitente'} → {op.resumen.destinatario || 'Sin destinatario'}
+                            Guía {op.nOperacion} · {esRemitente
+                              ? (op.resumen.destinatario || 'Sin destinatario')
+                              : `${op.resumen.remitente || 'Sin remitente'} → ${op.resumen.destinatario || 'Sin destinatario'}`}
                           </p>
                           <p className="text-xs text-gray-500 truncate">
-                            {op.resumen.ruta} · {op.resumen.placa || 'sin placa'} · {op.resumen.cargas} {op.resumen.cargas === 1 ? 'carga' : 'cargas'} · {op.resumen.peso} kg
+                            {op.resumen.ruta}
+                            {esRemitente
+                              ? ` · ${op.resumen.modalidad}${op.resumen.transportista ? ` (${op.resumen.transportista})` : ''} · ${op.resumen.bienes} ${op.resumen.bienes === 1 ? 'bien' : 'bienes'} · ${op.resumen.peso} ${op.resumen.unidadPeso === 'TNE' ? 'TNE' : 'kg'}`
+                              : ` · ${op.resumen.placa || 'sin placa'} · ${op.resumen.cargas} ${op.resumen.cargas === 1 ? 'carga' : 'cargas'} · ${op.resumen.peso} kg`}
                           </p>
                         </>
                       ) : (
@@ -557,19 +593,19 @@ export default function BulkEmission() {
                               <th className="py-1.5 pr-3 font-medium">Descripción</th>
                               <th className="py-1.5 pr-3 font-medium text-right">Cant.</th>
                               {tipo === 'comprobantes' && <th className="py-1.5 pr-3 font-medium text-right">P. unit.</th>}
-                              <th className="py-1.5 pr-3 font-medium">{tipo === 'gre' ? 'Unidad' : 'Detalle'}</th>
+                              <th className="py-1.5 pr-3 font-medium">{esGuia ? 'Unidad' : 'Detalle'}</th>
                             </tr>
                           </thead>
                           <tbody>
                             {op.items.map((it, i) => (
                               <tr key={i} className="border-b border-gray-50 last:border-0">
-                                <td className="py-1.5 pr-3 text-gray-900">{tipo === 'gre' ? it.description : it.descripcion}</td>
-                                <td className="py-1.5 pr-3 text-right text-gray-700">{tipo === 'gre' ? it.quantity : it.cantidad}</td>
+                                <td className="py-1.5 pr-3 text-gray-900">{esGuia ? it.description : it.descripcion}</td>
+                                <td className="py-1.5 pr-3 text-right text-gray-700">{esGuia ? it.quantity : it.cantidad}</td>
                                 {tipo === 'comprobantes' && (
                                   <td className="py-1.5 pr-3 text-right text-gray-700">{formatCurrency(it.precioUnitario, monedaDe(op))}</td>
                                 )}
                                 <td className="py-1.5 pr-3">
-                                  {tipo === 'gre' ? (
+                                  {esGuia ? (
                                     <span className="text-xs text-gray-600">{it.unit}</span>
                                   ) : (
                                     <span className="inline-flex items-center gap-1.5 flex-wrap">
@@ -625,12 +661,12 @@ export default function BulkEmission() {
                   <RefreshCw className="w-4 h-4 mt-0.5 text-primary-600 shrink-0" />
                   Corrige los errores en tu archivo de Excel (las filas están indicadas arriba) y vuelve a
                   subirlo con <strong>Subir de nuevo</strong>.
-                  {tipo === 'gre' && resultado.resumen.listas > 0 && (
+                  {esGuia && resultado.resumen.listas > 0 && (
                     <> También puedes emitir ya las {resultado.resumen.listas} guías válidas: las que tienen
                     errores no se tocan.</>
                   )}
                 </p>
-              ) : tipo === 'gre' ? (
+              ) : esGuia ? (
                 <p className="text-sm text-gray-700 flex items-start gap-2">
                   <CheckCircle className="w-4 h-4 mt-0.5 text-green-600 shrink-0" />
                   Tu archivo está válido: {resultado.resumen.listas} guías listas para emitir.
@@ -647,7 +683,7 @@ export default function BulkEmission() {
                 <div className="mt-3">
                   <Button onClick={handleEmitirLote}>
                     <Send className="w-4 h-4 mr-2" />
-                    {tipo === 'gre'
+                    {esGuia
                       ? `Emitir ${resultado.resumen.listas} ${resultado.resumen.listas === 1 ? 'guía' : 'guías'} a SUNAT`
                       : `Emitir ${resultado.resumen.listas} ${resultado.resumen.listas === 1 ? 'comprobante' : 'comprobantes'} a SUNAT`}
                   </Button>
