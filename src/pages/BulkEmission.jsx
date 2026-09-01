@@ -290,92 +290,110 @@ export default function BulkEmission() {
         </p>
       </div>
 
-      {/* Selector de tipo de documento */}
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => cambiarTipo('comprobantes')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
-            tipo === 'comprobantes'
-              ? 'bg-primary-600 text-white border-primary-700'
-              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-          }`}
-        >
-          <Receipt className="w-4 h-4" />
-          Comprobantes
-        </button>
-        <button
-          type="button"
-          onClick={() => cambiarTipo('gre')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
-            esGuia
-              ? 'bg-primary-600 text-white border-primary-700'
-              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-          }`}
-        >
-          <Truck className="w-4 h-4" />
-          GRE Transportista
-        </button>
-        <button
-          type="button"
-          onClick={() => cambiarTipo('gre_remitente')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
-            tipo === 'gre_remitente'
-              ? 'bg-primary-600 text-white border-primary-700'
-              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-          }`}
-        >
-          <Truck className="w-4 h-4" />
-          GRE Remitente
-        </button>
-      </div>
+      {/* Todo el arranque en UNA tarjeta: qué emite esta pestaña y los tres
+          pasos en fila. Antes eran dos tarjetas sueltas al lado, y la página
+          se veía medio vacía sin decir qué hacía cada pestaña. */}
+      <Card>
+        {/* Pestañas */}
+        <div className="border-b border-gray-200 px-2 sm:px-4">
+          <div className="flex gap-1 overflow-x-auto">
+            {[
+              { key: 'comprobantes', label: 'Comprobantes', Icono: Receipt },
+              { key: 'gre', label: 'GRE Transportista', Icono: Truck },
+              { key: 'gre_remitente', label: 'GRE Remitente', Icono: Truck },
+            ].map(({ key, label, Icono }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => cambiarTipo(key)}
+                disabled={emitiendo}
+                className={`flex items-center gap-2 px-3 sm:px-4 py-3 text-sm font-medium border-b-2 -mb-px whitespace-nowrap transition-colors disabled:opacity-60 ${
+                  tipo === key
+                    ? 'border-primary-600 text-primary-700'
+                    : 'border-transparent text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                <Icono className="w-4 h-4" />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
 
-      {/* Paso 1 y 2 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card>
-          <CardContent className="p-5 space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary-100 text-primary-700 text-xs font-bold shrink-0">1</span>
-              <h2 className="font-semibold text-gray-900">Descarga la plantilla</h2>
-            </div>
-            <p className="text-sm text-gray-600">
-              {esGuia
-                ? 'Una fila por carga; la columna N° OPERACIÓN agrupa las filas de una misma guía. Los ubigeos se escriben con nombres (LIMA/LIMA/SURQUILLO) y la serie la pone el sistema.'
-                : 'Una fila por producto o servicio; la columna N° OPERACIÓN agrupa las filas de un mismo comprobante. La serie y el número los pone el sistema.'}
+        <CardContent className="p-0">
+          {/* Qué emite esta pestaña */}
+          <div className="px-5 py-4 bg-gray-50 border-b border-gray-100">
+            <p className="text-sm text-gray-700">
+              {tipo === 'comprobantes'
+                ? 'Facturas y boletas completas: cliente, ítems, forma de pago, cuotas y detracción. Al emitir descuenta stock igual que una venta del Punto de Venta.'
+                : esRemitente
+                  ? 'Guías donde la mercadería es TUYA y tú declaras por qué se mueve. El lote no descuenta stock.'
+                  : 'Guías donde tú haces el transporte y la mercadería es de tu cliente: él es el remitente.'}
             </p>
-            <Button variant="outline" onClick={handleDescargarPlantilla} disabled={descargando || emitiendo}>
-              {descargando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
-              Descargar plantilla
-            </Button>
-          </CardContent>
-        </Card>
+          </div>
 
-        <Card>
-          <CardContent className="p-5 space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary-100 text-primary-700 text-xs font-bold shrink-0">2</span>
-              <h2 className="font-semibold text-gray-900">Sube el archivo llenado</h2>
-            </div>
-            <p className="text-sm text-gray-600">
-              El sistema valida todo y te muestra la vista previa con los errores por fila.
-              {esGuia ? ' Emites recién cuando confirmas.' : ' Nada se emite en este paso.'}
-            </p>
-            <input ref={inputRef} type="file" accept=".xlsx" className="hidden" onChange={handleArchivo} />
-            <div className="flex items-center gap-3 flex-wrap">
-              <Button onClick={() => inputRef.current?.click()} disabled={analizando || emitiendo}>
+          {/* Los tres pasos, uno debajo del otro */}
+          <ol className="divide-y divide-gray-100">
+            <li className="flex flex-col sm:flex-row sm:items-center gap-3 px-5 py-4">
+              <span className="flex items-center justify-center w-7 h-7 rounded-full bg-primary-100 text-primary-700 text-xs font-bold shrink-0">1</span>
+              <div className="flex-1 min-w-0">
+                <h2 className="font-semibold text-gray-900">Descarga la plantilla</h2>
+                <p className="text-sm text-gray-600 mt-0.5">
+                  {esGuia
+                    ? 'Una fila por bien; la columna N° OPERACIÓN agrupa las filas de una misma guía. Los ubigeos se escriben con nombres (LIMA/LIMA/SURQUILLO) y la serie la pone el sistema.'
+                    : 'Una fila por producto o servicio; la columna N° OPERACIÓN agrupa las filas de un mismo comprobante. La serie y el número los pone el sistema.'}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={handleDescargarPlantilla}
+                disabled={descargando || emitiendo}
+                className="shrink-0 w-full sm:w-auto"
+              >
+                {descargando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+                Descargar plantilla
+              </Button>
+            </li>
+
+            <li className="flex flex-col sm:flex-row sm:items-center gap-3 px-5 py-4">
+              <span className="flex items-center justify-center w-7 h-7 rounded-full bg-primary-100 text-primary-700 text-xs font-bold shrink-0">2</span>
+              <div className="flex-1 min-w-0">
+                <h2 className="font-semibold text-gray-900">Llénala y súbela</h2>
+                <p className="text-sm text-gray-600 mt-0.5">
+                  Borra las filas de ejemplo en ámbar antes de subirla. Acá todavía no se emite nada.
+                </p>
+                {nombreArchivo && !analizando && (
+                  <p className="text-xs text-gray-500 flex items-center gap-1 mt-1.5 min-w-0">
+                    <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">{nombreArchivo}</span>
+                  </p>
+                )}
+              </div>
+              <input ref={inputRef} type="file" accept=".xlsx" className="hidden" onChange={handleArchivo} />
+              <Button
+                onClick={() => inputRef.current?.click()}
+                disabled={analizando || emitiendo}
+                className="shrink-0 w-full sm:w-auto"
+              >
                 {analizando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
                 {resultado ? 'Subir de nuevo' : 'Subir Excel'}
               </Button>
-              {nombreArchivo && !analizando && (
-                <span className="text-xs text-gray-500 flex items-center gap-1 min-w-0">
-                  <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">{nombreArchivo}</span>
-                </span>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </li>
+
+            <li className="flex flex-col sm:flex-row sm:items-start gap-3 px-5 py-4">
+              <span className="flex items-center justify-center w-7 h-7 rounded-full bg-primary-100 text-primary-700 text-xs font-bold shrink-0">3</span>
+              <div className="flex-1 min-w-0">
+                <h2 className="font-semibold text-gray-900">Revisa la vista previa y emite</h2>
+                <p className="text-sm text-gray-600 mt-0.5">
+                  El sistema valida fila por fila y te dice qué está listo y qué tiene errores, con la fila exacta.
+                  {' '}Emites solo lo válido, y recién cuando confirmas. Corregir el archivo y volver a subirlo
+                  {' '}no duplica lo que ya salió.
+                </p>
+              </div>
+            </li>
+          </ol>
+        </CardContent>
+      </Card>
 
       {/* Vista previa */}
       {resultado && (
