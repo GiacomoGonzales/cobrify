@@ -51,6 +51,7 @@ import AdminLayout from './layouts/AdminLayout'
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'))
 const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'))
 const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'))
+const AdminCpe = lazy(() => import('./pages/admin/AdminCpe'))
 const AdminAnalytics = lazy(() => import('./pages/admin/AdminAnalytics'))
 const AdminInvestorReport = lazy(() => import('./pages/admin/AdminInvestorReport'))
 const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'))
@@ -646,6 +647,7 @@ function App() {
               <Route path="expirations" element={<AdminExpirations />} />
               <Route path="plan-distribution" element={<AdminPlanDistribution />} />
               <Route path="payments" element={<AdminPayments />} />
+              <Route path="cpe" element={<AdminCpe />} />
               <Route path="analytics" element={<AdminAnalytics />} />
               <Route path="investor-report" element={<AdminInvestorReport />} />
               <Route path="notifications" element={<AdminNotifications />} />

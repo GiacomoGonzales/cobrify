@@ -21,6 +21,7 @@ import { formatCurrency, matchesSearchQuery } from '@/lib/utils'
 import { useBranding } from '@/contexts/BrandingContext'
 import { generarFormato131 } from '@/services/sunatInventoryFormatService'
 import { downloadFromUrl, downloadBlob } from '@/utils/nativeDownload'
+import { urlXmlDe, urlCdrDe, cdrEnLineaDe, tieneCdr, tieneXmlGuardado, tieneXml, estadoSunatDe, fechaDelComprobante } from '@/utils/sunatDocs'
 
 // Nombres de meses en español
 const MONTHS = [
@@ -214,25 +215,10 @@ export default function Accounting() {
     }
   }
 
-  // Helper: usar emissionDate (fecha de emisión del POS) en vez de createdAt
-  const getInvoiceDate = (invoice) => {
-    if (invoice?.emissionDate) {
-      if (invoice.emissionDate.toDate) return invoice.emissionDate.toDate()
-      if (typeof invoice.emissionDate === 'string') {
-        const createdAt = invoice.createdAt?.toDate?.() || (invoice.createdAt ? new Date(invoice.createdAt) : null)
-        if (createdAt) {
-          const [year, month, day] = invoice.emissionDate.split('-').map(Number)
-          const combined = new Date(createdAt)
-          combined.setFullYear(year, month - 1, day)
-          return combined
-        }
-        return new Date(invoice.emissionDate + 'T12:00:00')
-      }
-      return new Date(invoice.emissionDate)
-    }
-    if (!invoice?.createdAt) return null
-    return invoice.createdAt.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt)
-  }
+  // Criterio compartido con el panel admin de CPE (@/utils/sunatDocs):
+  // fecha de emisión, archivos XML/CDR y estado SUNAT se resuelven en UN solo
+  // lugar. Los nombres locales se conservan para no tocar los call sites.
+  const getInvoiceDate = fechaDelComprobante
 
   const formatDate = (timestamp) => {
     if (!timestamp) return '-'
@@ -241,39 +227,19 @@ export default function Accounting() {
     return d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
   }
 
-  const hasCdr = (inv) => {
-    return !!(inv.cdrStorageUrl || inv.cdrUrl || inv.sunatResponse?.cdrStorageUrl || inv.sunatResponse?.cdrUrl || inv.cdrData || inv.sunatResponse?.cdrData)
-  }
-
-  const hasStoredXml = (inv) => {
-    return !!(inv.xmlStorageUrl || inv.xmlUrl || inv.sunatResponse?.xmlStorageUrl || inv.sunatResponse?.xmlUrl)
-  }
-
-  // XML disponible: URL guardada o, si fue aceptado por SUNAT, podemos regenerarlo on-the-fly
-  const hasXml = (inv) => {
-    if (hasStoredXml(inv)) return true
-    // Si tiene CDR válido, implícitamente tuvo un XML firmado aceptado por SUNAT
-    const cdrUrl = inv.cdrStorageUrl || inv.cdrUrl || inv.sunatResponse?.cdrStorageUrl || inv.sunatResponse?.cdrUrl
-    const cdrData = inv.cdrData || inv.sunatResponse?.cdrData
-    return !!(cdrUrl || cdrData)
-  }
-
-  const getSunatStatus = (inv) => {
-    const status = inv.sunatStatus || 'pending'
-    if (status === 'accepted' || status === 'SIGNED' || status === 'signed') return 'accepted'
-    if (status === 'rejected') return 'rejected'
-    if (status === 'voided') return 'voided'
-    return 'pending'
-  }
+  const hasCdr = tieneCdr
+  const hasStoredXml = tieneXmlGuardado
+  const hasXml = tieneXml
+  const getSunatStatus = estadoSunatDe
 
   const downloadCdr = async (inv) => {
-    const url = inv.cdrStorageUrl || inv.cdrUrl || inv.sunatResponse?.cdrStorageUrl || inv.sunatResponse?.cdrUrl
+    const url = urlCdrDe(inv)
     try {
       if (url) {
         const cdrFilename = `CDR-${(inv.number || 'doc').replace(/\//g, '-')}.xml`
         await downloadFromUrl(url, cdrFilename)
-      } else if (inv.cdrData || inv.sunatResponse?.cdrData) {
-        const data = inv.cdrData || inv.sunatResponse.cdrData
+      } else if (cdrEnLineaDe(inv)) {
+        const data = cdrEnLineaDe(inv)
         const blob = new Blob([data], { type: 'application/xml' })
         await downloadBlob(blob, `CDR-${inv.number || 'doc'}.xml`)
       }
@@ -287,7 +253,7 @@ export default function Accounting() {
 
   const downloadXml = async (inv) => {
     // 1. Intentar URL guardada (XML firmado real)
-    const url = inv.xmlStorageUrl || inv.xmlUrl || inv.sunatResponse?.xmlStorageUrl || inv.sunatResponse?.xmlUrl
+    const url = urlXmlDe(inv)
     if (url) {
       try {
         const xmlFilename = `${(inv.number || 'doc').replace(/\//g, '-')}_XML.xml`
@@ -396,7 +362,7 @@ export default function Accounting() {
       const companySettingsData = settingsResult.success ? settingsResult.data : null
 
       for (const inv of invoicesWithXml) {
-        const url = inv.xmlStorageUrl || inv.xmlUrl || inv.sunatResponse?.xmlStorageUrl || inv.sunatResponse?.xmlUrl
+        const url = urlXmlDe(inv)
         if (url) {
           try {
             const response = await fetch(url)
@@ -476,7 +442,7 @@ export default function Accounting() {
       let downloaded = 0
 
       for (const inv of invoicesWithCdr) {
-        const url = inv.cdrStorageUrl || inv.cdrUrl || inv.sunatResponse?.cdrStorageUrl || inv.sunatResponse?.cdrUrl
+        const url = urlCdrDe(inv)
         if (url) {
           try {
             const response = await fetch(url)
@@ -487,8 +453,8 @@ export default function Accounting() {
           } catch (e) {
             console.warn(`Error descargando CDR de ${inv.number}:`, e)
           }
-        } else if (inv.cdrData || inv.sunatResponse?.cdrData) {
-          const data = inv.cdrData || inv.sunatResponse.cdrData
+        } else if (cdrEnLineaDe(inv)) {
+          const data = cdrEnLineaDe(inv)
           zip.file(`CDR-${inv.number || inv.id}.xml`, data)
           downloaded++
           setDownloadProgress(`Descargando CDRs: ${downloaded}/${invoicesWithCdr.length}`)
@@ -559,7 +525,7 @@ export default function Accounting() {
       // Descargar XMLs
       const invoicesWithXml = filtered.filter(inv => hasXml(inv))
       for (const inv of invoicesWithXml) {
-        const url = inv.xmlStorageUrl || inv.xmlUrl || inv.sunatResponse?.xmlStorageUrl || inv.sunatResponse?.xmlUrl
+        const url = urlXmlDe(inv)
         if (url) {
           try {
             setDownloadProgress(`Descargando XML: ${inv.number}`)
@@ -587,7 +553,7 @@ export default function Accounting() {
       // Descargar CDRs
       const invoicesWithCdr = filtered.filter(inv => hasCdr(inv))
       for (const inv of invoicesWithCdr) {
-        const url = inv.cdrStorageUrl || inv.cdrUrl || inv.sunatResponse?.cdrStorageUrl || inv.sunatResponse?.cdrUrl
+        const url = urlCdrDe(inv)
         if (url) {
           try {
             setDownloadProgress(`Descargando CDR: ${inv.number}`)
@@ -598,8 +564,8 @@ export default function Accounting() {
           } catch (e) {
             console.warn(`Error descargando CDR de ${inv.number}:`, e)
           }
-        } else if (inv.cdrData || inv.sunatResponse?.cdrData) {
-          const data = inv.cdrData || inv.sunatResponse.cdrData
+        } else if (cdrEnLineaDe(inv)) {
+          const data = cdrEnLineaDe(inv)
           cdrFolder.file(`CDR-${inv.number || inv.id}.xml`, data)
           cdrCount++
         }

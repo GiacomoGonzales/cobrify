@@ -1,6 +1,6 @@
 import { onRequest, onCall, HttpsError } from 'firebase-functions/v2/https'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
-import { onDocumentWritten } from 'firebase-functions/v2/firestore'
+import { onDocumentWritten, onDocumentUpdated } from 'firebase-functions/v2/firestore'
 import { initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore'
@@ -14578,3 +14578,57 @@ export const uploadWhatsappLibraryMedia = onRequest(
     }
   }
 )
+
+// ============================================================================
+// HISTORIAL DE ENVÍOS A SUNAT (sunatLog)
+// ============================================================================
+/**
+ * Cada intento de envío a SUNAT PISA la respuesta anterior (sunatResponse):
+ * un comprobante reintentado 5 veces solo conservaba el último mensaje, y el
+ * panel admin de CPE no podía mostrar el "Seguimiento" estilo QPse.
+ *
+ * En vez de tocar los ~12 puntos que escriben sunatResponse (facturas, notas,
+ * reintentos, anulaciones — y romper la emisión si uno queda mal), un trigger
+ * observa el documento: cuando cambia el estado, el código, el mensaje o el
+ * sello del último reintento, anexa la foto a `sunatLog`.
+ *
+ * Anti-bucle: la escritura del propio trigger solo cambia sunatLog, así que
+ * el refire cae en "sin cambios" y termina ahí. El historial se recorta a 60
+ * entradas (ningún flujo legítimo reintenta tanto; es un tope de seguridad).
+ */
+const crearLogeadorSunat = (coleccion, nombre) => onDocumentUpdated(
+  { document: `businesses/{businessId}/${coleccion}/{docId}`, retry: false },
+  async (event) => {
+    try {
+      const antes = event.data?.before?.data() || {}
+      const ahora = event.data?.after?.data() || {}
+      if (!ahora.sunatStatus) return
+
+      const rA = antes.sunatResponse || {}
+      const rB = ahora.sunatResponse || {}
+      const sinCambio =
+        antes.sunatStatus === ahora.sunatStatus &&
+        String(rA.code ?? '') === String(rB.code ?? '') &&
+        (rA.description || '') === (rB.description || '') &&
+        (antes.lastRetryError?.timestamp || '') === (ahora.lastRetryError?.timestamp || '')
+      if (sinCambio) return
+
+      const entrada = {
+        at: new Date().toISOString(),
+        status: ahora.sunatStatus,
+        code: rB.code != null ? String(rB.code) : (ahora.lastRetryError?.code != null ? String(ahora.lastRetryError.code) : null),
+        description: rB.description || ahora.lastRetryError?.description || null,
+        method: rB.method || null,
+      }
+      const log = Array.isArray(ahora.sunatLog) ? ahora.sunatLog : []
+      await event.data.after.ref.update({ sunatLog: [...log, entrada].slice(-60) })
+    } catch (e) {
+      // El historial nunca debe afectar la emisión: registrar y seguir.
+      console.error(`[${nombre}] Error anexando sunatLog:`, e.message)
+    }
+  }
+)
+
+export const logSunatInvoices = crearLogeadorSunat('invoices', 'logSunatInvoices')
+export const logSunatGuias = crearLogeadorSunat('dispatchGuides', 'logSunatGuias')
+export const logSunatGuiasTransp = crearLogeadorSunat('carrierDispatchGuides', 'logSunatGuiasTransp')

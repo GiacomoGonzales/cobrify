@@ -722,15 +722,29 @@ service cloud.firestore {
       }
 
       // Subcollection: Dispatch Guides (Guías de Remisión Electrónicas - Remitente)
+      // Admin: lectura para el panel de CPE (soporte descarga XML/CDR)
       match /dispatchGuides/{guideId} {
-        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
       // Subcollection: Carrier Dispatch Guides (Guías de Remisión Electrónicas - Transportista)
       match /carrierDispatchGuides/{guideId} {
-        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
+      // Subcollections de anulación ante SUNAT. Las ESCRIBE solo el servidor
+      // (Admin SDK, functions de voidInvoice): sin regla de write a propósito.
+      // Lectura: el panel admin de CPE y el propio negocio.
+      // - voidedDocuments: comunicaciones de baja RA (facturas y notas)
+      // - summaryDocuments: resúmenes diarios RC (anulación de boletas)
+      match /voidedDocuments/{voidId} {
+        allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+      }
+
+      match /summaryDocuments/{summaryId} {
+        allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
       }
 
       // Subcollection: Inventory Counts (Sesiones de Recuento de Inventario)

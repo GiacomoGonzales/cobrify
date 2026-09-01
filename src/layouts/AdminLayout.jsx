@@ -18,7 +18,8 @@ import {
   Bell,
   Sparkles,
   Package,
-  MessageCircle
+  MessageCircle,
+  FileCheck2
 } from 'lucide-react'
 
 const navItems = [
@@ -66,6 +67,12 @@ const navItems = [
     icon: CreditCard,
     label: 'Pagos',
     description: 'Historial de pagos'
+  },
+  {
+    path: '/app/admin/cpe',
+    icon: FileCheck2,
+    label: 'Comprobantes CPE',
+    description: 'XML y CDR de SUNAT directo'
   },
   {
     path: '/app/admin/analytics',
