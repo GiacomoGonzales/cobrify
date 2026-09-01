@@ -39,6 +39,8 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { matchesPrebuilt } from '@/lib/utils';
+import { buildAccountHaystack } from '@/utils/adminSearch';
 
 export default function UserManagement() {
   const { isAdmin, isLoading } = useAuth();
@@ -120,10 +122,8 @@ export default function UserManagement() {
       return false;
     }
 
-    const matchesSearch =
-      sub.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      sub.businessName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      sub.userId?.toLowerCase().includes(searchTerm.toLowerCase());
+    // Mismo criterio que la lista de Usuarios (@/utils/adminSearch).
+    const matchesSearch = matchesPrebuilt(searchTerm, buildAccountHaystack(sub));
 
     const matchesFilter =
       filterStatus === 'all' ||

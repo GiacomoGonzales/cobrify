@@ -3,6 +3,8 @@ import { collection, query, where, getDocs, doc, getDoc, updateDoc, serverTimest
 import { db } from '@/lib/firebase'
 import { PLANS, suspendUser, registerPayment } from '@/services/subscriptionService'
 import { useAuth } from '@/contexts/AuthContext'
+import { matchesPrebuilt } from '@/lib/utils'
+import { buildAccountHaystack } from '@/utils/adminSearch'
 import {
   Clock,
   RefreshCw,
@@ -181,12 +183,10 @@ export default function AdminExpirations() {
       return true
     })
 
+    // Mismo buscador que la lista de Usuarios: palabras sueltas, en cualquier
+    // orden y sin tildes (@/utils/adminSearch).
     if (searchTerm) {
-      const search = searchTerm.toLowerCase()
-      filtered = filtered.filter(sub =>
-        sub.email?.toLowerCase().includes(search) ||
-        sub.businessName?.toLowerCase().includes(search)
-      )
+      filtered = filtered.filter(sub => matchesPrebuilt(searchTerm, buildAccountHaystack(sub)))
     }
 
     // Sort by days until expiry (most urgent first)

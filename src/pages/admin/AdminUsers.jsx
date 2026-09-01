@@ -64,6 +64,8 @@ import {
 } from '@/services/branchService'
 import { createWarehouse, getWarehouses, deleteWarehouse } from '@/services/warehouseService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
+import { matchesPrebuilt } from '@/lib/utils'
+import { buildAccountHaystack } from '@/utils/adminSearch'
 
 const STATUS_COLORS = {
   active: 'bg-green-100 text-green-700',
@@ -616,28 +618,34 @@ export default function AdminUsers() {
   // (Las stats de SUNAT ya NO se cargan para todos los usuarios de golpe; se cargan solo
   // para la página visible — ver el efecto más abajo, junto a la paginación.)
 
+  /**
+   * Índice de búsqueda, uno por cuenta.
+   *
+   * El filtro de antes hacía un `includes()` de la frase completa contra cada
+   * campo por separado: pegar un correo con un espacio al final no encontraba
+   * nada, y la razón social solo aparecía si se escribía en el mismo orden y
+   * con las mismas tildes que en SUNAT. `buildAccountHaystack` arma un solo
+   * texto normalizado por cuenta —y agrega lo que faltaba: teléfono de
+   * contacto, reseller, sucursal principal, slug del catálogo y los correos de
+   * los sub-usuarios— y `matchesPrebuilt` exige que aparezcan todas las
+   * palabras, en el orden que sea.
+   *
+   * Se arma una sola vez por lista, no en cada tecla: son miles de cuentas.
+   */
+  const indiceDeBusqueda = useMemo(() => {
+    const map = new Map()
+    for (const u of users) map.set(u.id, buildAccountHaystack(u))
+    return map
+  }, [users])
+
   // Filtrar y ordenar usuarios
   const filteredUsers = useMemo(() => {
     let result = [...users]
 
-    // Filtro de búsqueda (por nombre, email, RUC, razón social, teléfono, dirección, departamento, etc.)
+    // Filtro de búsqueda: palabras sueltas, en cualquier orden y sin tildes
+    // (ver `indiceDeBusqueda` arriba para el porqué y para la lista de campos).
     if (searchTerm) {
-      const search = searchTerm.toLowerCase()
-      result = result.filter(u =>
-        u.email?.toLowerCase().includes(search) ||
-        u.businessName?.toLowerCase().includes(search) ||
-        u.ruc?.includes(search) ||
-        u.contactName?.toLowerCase().includes(search) ||
-        u.phone?.toLowerCase().includes(search) ||
-        u.address?.toLowerCase().includes(search) ||
-        u.department?.toLowerCase().includes(search) ||
-        u.province?.toLowerCase().includes(search) ||
-        u.district?.toLowerCase().includes(search) ||
-        u.planName?.toLowerCase().includes(search) ||
-        u.plan?.toLowerCase().includes(search) ||
-        u.id?.toLowerCase().includes(search) ||
-        String(u.userNumber || '').includes(search)
-      )
+      result = result.filter(u => matchesPrebuilt(searchTerm, indiceDeBusqueda.get(u.id) || ''))
     }
 
     // Filtro de estado
@@ -719,7 +727,7 @@ export default function AdminUsers() {
     })
 
     return result
-  }, [users, searchTerm, statusFilter, planFilter, sourceFilter, modeFilter, igvFilter, vendedorFilter, sortField, sortDirection])
+  }, [users, indiceDeBusqueda, searchTerm, statusFilter, planFilter, sourceFilter, modeFilter, igvFilter, vendedorFilter, sortField, sortDirection])
 
   // ── Paginación ──────────────────────────────────────────────────────────────
   // Renderizar SOLO la página actual evita un DOM gigante (cientos de filas) que

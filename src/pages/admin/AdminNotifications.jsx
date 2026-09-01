@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { createCampaign, sendCampaign, getCampaigns, getUsersWithTokens, previewAudience } from '@/services/pushCampaignService'
 import { DEPARTAMENTOS } from '@/data/peruUbigeos'
+import { matchesPrebuilt } from '@/lib/utils'
+import { buildAccountHaystack } from '@/utils/adminSearch'
 import {
   Bell,
   Send,
@@ -460,11 +462,8 @@ export default function AdminNotifications() {
   // Filtered users for manual selection
   const filteredUsers = useMemo(() => {
     if (!userSearch) return usersWithTokens
-    const term = userSearch.toLowerCase()
-    return usersWithTokens.filter(u =>
-      u.email?.toLowerCase().includes(term) ||
-      u.businessName?.toLowerCase().includes(term)
-    )
+    // Mismo criterio que la lista de Usuarios (@/utils/adminSearch).
+    return usersWithTokens.filter(u => matchesPrebuilt(userSearch, buildAccountHaystack(u)))
   }, [usersWithTokens, userSearch])
 
   // No dejar enviar a nadie: si la audiencia calculada es 0, el botón se bloquea

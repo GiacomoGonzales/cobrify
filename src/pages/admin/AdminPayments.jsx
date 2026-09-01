@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { getAllPayments, updatePayment, deletePayment } from '@/services/adminStatsService'
 import { PLANS } from '@/services/subscriptionService'
+import { matchesPrebuilt } from '@/lib/utils'
+import { buildAccountHaystack } from '@/utils/adminSearch'
 import {
   CreditCard,
   Search,
@@ -72,13 +74,10 @@ export default function AdminPayments() {
   const filteredPayments = useMemo(() => {
     let result = [...payments]
 
-    // Filtro de búsqueda
+    // Filtro de búsqueda — mismo criterio que la lista de Usuarios
+    // (@/utils/adminSearch): palabras sueltas, en cualquier orden, sin tildes.
     if (searchTerm) {
-      const search = searchTerm.toLowerCase()
-      result = result.filter(p =>
-        p.email?.toLowerCase().includes(search) ||
-        p.businessName?.toLowerCase().includes(search)
-      )
+      result = result.filter(p => matchesPrebuilt(searchTerm, buildAccountHaystack(p)))
     }
 
     // Filtro de método

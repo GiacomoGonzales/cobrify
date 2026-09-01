@@ -15,6 +15,8 @@ import {
 } from 'firebase/firestore'
 import { getTiersConfig, calculateTier } from '@/services/resellerTierService'
 import { normalizeCustomDomain } from '@/services/brandingService'
+import { matchesPrebuilt } from '@/lib/utils'
+import { buildAccountHaystack } from '@/utils/adminSearch'
 import {
   Users,
   Plus,
@@ -428,14 +430,8 @@ export default function AdminResellers() {
     }
   }
 
-  const filteredResellers = resellers.filter(r => {
-    const search = searchTerm.toLowerCase()
-    return (
-      r.email?.toLowerCase().includes(search) ||
-      r.companyName?.toLowerCase().includes(search) ||
-      r.ruc?.includes(search)
-    )
-  })
+  // Mismo criterio que la lista de Usuarios (@/utils/adminSearch).
+  const filteredResellers = resellers.filter(r => matchesPrebuilt(searchTerm, buildAccountHaystack(r)))
 
   const stats = {
     total: resellers.length,
