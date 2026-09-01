@@ -29,6 +29,8 @@ import { generateIngredientsExcel } from '@/services/ingredientExportService'
 import { getIngredientCategories, saveIngredientCategories } from '@/services/firestoreService'
 import ImportIngredientsModal from '@/components/ImportIngredientsModal'
 import GuideLink from '@/components/guide/GuideLink'
+import { UNIDADES_SELECT } from '@/data/sunatUnits'
+import { getUnitShortLabel } from '@/utils/units'
 
 // Categorías por defecto cuando un negocio usa el módulo por primera vez.
 // Se auto-siembra una sola vez; luego el dueño puede editarlas/eliminarlas.
@@ -61,22 +63,38 @@ const DEFAULT_CATEGORIES_GENERAL = [
   { id: 'otros', name: 'Otros', order: 10 },
 ]
 
-const UNITS = [
-  { value: 'kg', label: 'Kilogramos (kg)' },
-  { value: 'g', label: 'Gramos (g)' },
-  { value: 'L', label: 'Litros (L)' },
-  { value: 'ml', label: 'Mililitros (ml)' },
-  { value: 'unidades', label: 'Unidades' },
-  { value: 'cajas', label: 'Cajas' },
-  { value: 'sobres', label: 'Sobres' },
-  { value: 'piezas', label: 'Piezas' }
-]
+// Las unidades salen del catálogo SUNAT compartido, el mismo que usan
+// Productos, Compras y las guías: acá había una lista propia de ocho, y un
+// insumo que se compra por saco, galón o rollo no tenía cómo decirlo.
+//
+// Los insumos VIEJOS guardaron texto libre ('kg', 'cajas', 'unidades'). No se
+// migran: el valor guardado se inyecta como opción para que su ficha no se
+// abra en blanco ni les cambie la unidad sola al guardar. `getUnitShortLabel`
+// muestra bien las dos formas ('KGM' → kg, 'cajas' → cajas).
+const opcionesDeUnidad = (unidadActual) => {
+  const catalogo = UNIDADES_SELECT.map(u => ({ value: u.value, label: u.label }))
+  if (unidadActual && !catalogo.some(u => u.value === unidadActual)) {
+    return [{ value: unidadActual, label: `${unidadActual} (unidad guardada)` }, ...catalogo]
+  }
+  return catalogo
+}
 
 // Conversión automática al cambiar la unidad de compra de un insumo.
 // Solo se convierte entre unidades de la MISMA dimensión (masa kg↔g, volumen L↔ml).
 // Las unidades de conteo (unidades, cajas, etc.) no son convertibles entre sí.
-const UNIT_DIMENSION = { kg: 'mass', g: 'mass', l: 'volume', ml: 'volume' }
-const UNIT_TO_BASE = { kg: 1000, g: 1, l: 1000, ml: 1 } // a gramos / mililitros
+// Se comparan en minúsculas, así que las claves van en minúscula. Están las
+// dos formas: el texto libre viejo ('kg') y el código SUNAT nuevo ('KGM'), y
+// como ambos pesan lo mismo, pasar un insumo de 'kg' a 'KGM' no mueve números.
+const UNIT_DIMENSION = {
+  kg: 'mass', g: 'mass', l: 'volume', ml: 'volume',
+  kgm: 'mass', grm: 'mass', mgm: 'mass', tne: 'mass',
+  ltr: 'volume', mlt: 'volume',
+}
+const UNIT_TO_BASE = {
+  kg: 1000, g: 1, l: 1000, ml: 1, // a gramos / mililitros
+  kgm: 1000, grm: 1, mgm: 0.001, tne: 1000000,
+  ltr: 1000, mlt: 1,
+}
 
 // Cuántas unidades 'to' hay en 1 'from' (factor para el STOCK). null si no son convertibles.
 const getStockConversionFactor = (fromUnit, toUnit) => {
@@ -1238,10 +1256,10 @@ export default function Ingredients() {
                   <div className="flex items-center justify-between mt-2">
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-bold">
-                        {parseFloat(getStockForBranch(ingredient)).toFixed(2)} {ingredient.purchaseUnit}
+                        {parseFloat(getStockForBranch(ingredient)).toFixed(2)} {getUnitShortLabel(ingredient.purchaseUnit)}
                       </span>
                       <span className="text-xs text-gray-500">
-                        {formatCurrency(ingredient.averageCost)}/{ingredient.purchaseUnit}
+                        {formatCurrency(ingredient.averageCost)}/{getUnitShortLabel(ingredient.purchaseUnit)}
                       </span>
                     </div>
                     {getStockStatus(ingredient)}
@@ -1295,7 +1313,7 @@ export default function Ingredients() {
                       </TableCell>
                       <TableCell>
                         <div>
-                          <p className="font-semibold">{parseFloat(getStockForBranch(ingredient)).toFixed(2)} {ingredient.purchaseUnit}</p>
+                          <p className="font-semibold">{parseFloat(getStockForBranch(ingredient)).toFixed(2)} {getUnitShortLabel(ingredient.purchaseUnit)}</p>
                           <p className="text-xs text-gray-500">Mín: {parseFloat(ingredient.minimumStock || 0).toFixed(2)}</p>
                           {filterBranch !== 'all' && ingredient.currentStock !== getStockForBranch(ingredient) && (
                             <p className="text-xs text-blue-500">Total: {parseFloat(ingredient.currentStock || 0).toFixed(2)}</p>
@@ -1304,7 +1322,7 @@ export default function Ingredients() {
                       </TableCell>
                       <TableCell>
                         <span className="font-medium">{formatCurrency(ingredient.averageCost)}</span>
-                        <span className="text-xs text-gray-500">/{ingredient.purchaseUnit}</span>
+                        <span className="text-xs text-gray-500">/{getUnitShortLabel(ingredient.purchaseUnit)}</span>
                       </TableCell>
                       <TableCell>
                         {getStockStatus(ingredient)}
@@ -1447,7 +1465,7 @@ export default function Ingredients() {
               value={formData.purchaseUnit}
               onChange={e => handlePurchaseUnitChange(e.target.value)}
             >
-              {UNITS.map(unit => (
+              {opcionesDeUnidad(formData.purchaseUnit).map(unit => (
                 <option key={unit.value} value={unit.value}>{unit.label}</option>
               ))}
             </Select>
@@ -1460,7 +1478,7 @@ export default function Ingredients() {
 
           <div>
             <Input
-              label={`Costo por ${formData.purchaseUnit}`}
+              label={`Costo por ${getUnitShortLabel(formData.purchaseUnit)}`}
               type="text"
               inputMode="decimal"
               placeholder="Ej: 0.05"
@@ -1471,7 +1489,7 @@ export default function Ingredients() {
               }}
             />
             <p className="mt-1 text-xs text-gray-500">
-              Costo de 1 {formData.purchaseUnit}. Se usa para calcular el costo de tus {isRestaurantMode ? 'recetas' : 'composiciones'} y valorizar el inventario. Al registrar compras se recalcula como promedio.
+              Costo de 1 {getUnitShortLabel(formData.purchaseUnit)}. Se usa para calcular el costo de tus {isRestaurantMode ? 'recetas' : 'composiciones'} y valorizar el inventario. Al registrar compras se recalcula como promedio.
             </p>
           </div>
 
@@ -1507,7 +1525,7 @@ export default function Ingredients() {
                               <span className="text-sm font-medium text-gray-900 w-24 text-center">
                                 {parseFloat(warehouseInitialStocks[w.id] || 0)}
                               </span>
-                              <span className="text-xs text-gray-400 w-12">{formData.purchaseUnit}</span>
+                              <span className="text-xs text-gray-400 w-12">{getUnitShortLabel(formData.purchaseUnit)}</span>
                             </div>
                           ))}
                         </div>
@@ -1547,7 +1565,7 @@ export default function Ingredients() {
                               }}
                               className="w-24 px-3 py-1.5 text-sm text-center border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
                             />
-                            <span className="text-xs text-gray-400 w-12">{formData.purchaseUnit}</span>
+                            <span className="text-xs text-gray-400 w-12">{getUnitShortLabel(formData.purchaseUnit)}</span>
                           </div>
                         ))}
                       </div>

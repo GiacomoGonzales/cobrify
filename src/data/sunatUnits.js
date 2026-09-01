@@ -197,9 +197,14 @@ function resolverUnidad(input) {
     if (UNIT_ALIASES[upper]) return UNIT_ALIASES[upper]
 
     // 4. Alias sin puntos / espacios / acentos
-    const clean = upper.replace(/[\s.,]/g, '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+    const clean = upper.replace(/[\s.,]/g, '').normalize('NFD').replace(/\p{Diacritic}/gu, '')
     if (UNIT_ALIASES[clean]) return UNIT_ALIASES[clean]
     if (VALID_UNIT_CODES.has(clean)) return clean
+
+    // 5. El nombre tal como aparece en el propio catálogo. UNIT_ALIASES se
+    //    mantiene a mano y se le escapaban nombres que el desplegable SÍ
+    //    ofrece: "Saco" no resolvía a nada aunque está en la lista.
+    if (ALIAS_DESDE_CATALOGO[clean]) return ALIAS_DESDE_CATALOGO[clean]
   }
 
   return null
@@ -349,6 +354,28 @@ const UNIDADES_FRECUENTES = [
  * quien facturaba servicios ambientales no tenía cómo poner su unidad y la
  * fila le quedaba rechazada.
  */
+/**
+ * Los NOMBRES del propio catálogo como alias, derivados automáticamente.
+ *
+ * `UNIT_ALIASES` se escribe a mano y por eso se le escapan nombres: el
+ * desplegable ofrecía "Saco" pero escribir "Saco" en un Excel no resolvía a
+ * nada. Derivarlo de las dos listas hace que todo lo que el sistema OFRECE sea
+ * también algo que el sistema ENTIENDE, sin tener que acordarse de sumarlo en
+ * dos lugares. Los alias escritos a mano se consultan antes, así que mandan.
+ */
+const ALIAS_DESDE_CATALOGO = (() => {
+  const mapa = {}
+  const normalizar = (t) => String(t || '').trim().toUpperCase()
+    .normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[\s.,]/g, '')
+  const agregar = (nombre, code) => {
+    const k = normalizar(nombre)
+    if (k && !mapa[k]) mapa[k] = code
+  }
+  for (const u of SUNAT_UNITS) agregar(u.label.split(' - ')[1] || '', u.value)
+  for (const u of UNIDADES_SELECT) agregar(u.label, u.value)
+  return mapa
+})()
+
 export function etiquetasParaExcel() {
   const porCodigo = new Map(SUNAT_UNITS.map(u => [u.value, u]))
   // FT3 y FTQ son los dos "pie cúbico"; en un desplegable dos opciones con el

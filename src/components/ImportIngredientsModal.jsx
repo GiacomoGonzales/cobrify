@@ -4,6 +4,7 @@ import { Upload, Download, X, AlertCircle, CheckCircle, Loader2 } from 'lucide-r
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import { generateIngredientsTemplate } from '@/services/ingredientExportService'
+import { esUnidadValida, normalizeSunatUnit } from '@/data/sunatUnits'
 
 export default function ImportIngredientsModal({ isOpen, onClose, onImport }) {
   const [file, setFile] = useState(null)
@@ -76,7 +77,10 @@ export default function ImportIngredientsModal({ isOpen, onClose, onImport }) {
     const validIngredients = []
     const errors = []
 
-    const validUnits = ['kg', 'g', 'L', 'l', 'ml', 'unidades', 'cajas']
+    // Las de siempre (texto libre, como se guardaron los insumos viejos) MÁS
+    // todo el catálogo SUNAT: el formulario ya ofrece el catálogo completo, y
+    // sería raro poder elegir "saco" a mano pero no importarlo.
+    const validUnits = ['kg', 'g', 'L', 'l', 'ml', 'unidades', 'cajas', 'sobres', 'piezas']
 
     data.forEach((row, index) => {
       const rowNum = index + 2 // +2 porque Excel empieza en 1 y tiene header
@@ -96,8 +100,11 @@ export default function ImportIngredientsModal({ isOpen, onClose, onImport }) {
       }
 
       const unitLower = String(unit).trim().toLowerCase()
-      if (!validUnits.includes(unitLower) && unitLower !== 'l') {
-        errors.push(`Fila ${rowNum}: Unidad inválida "${unit}". Usa: kg, g, L, ml, unidades, cajas`)
+      // Del catálogo SUNAT se acepta tanto el código ('KGM') como su nombre
+      // ('Kilogramo'); se guarda el CÓDIGO, que es lo que usa el formulario.
+      const codigoSunat = esUnidadValida(unit) ? normalizeSunatUnit(unit) : null
+      if (!validUnits.includes(unitLower) && unitLower !== 'l' && !codigoSunat) {
+        errors.push(`Fila ${rowNum}: Unidad inválida "${unit}". Usa una del catálogo SUNAT (KGM, GRM, LTR, NIU, BX...) o las de siempre: kg, g, L, ml, unidades, cajas`)
         return
       }
 
@@ -108,7 +115,11 @@ export default function ImportIngredientsModal({ isOpen, onClose, onImport }) {
       const ingredient = {
         name: String(name).trim(),
         categoryName: String(categoryRaw).trim(),
-        purchaseUnit: unitLower === 'l' ? 'L' : unitLower,
+        // Si la celda traía una unidad del catálogo, se guarda su código; si
+        // traía una de las de siempre, se respeta tal cual.
+        purchaseUnit: validUnits.includes(unitLower) || unitLower === 'l'
+          ? (unitLower === 'l' ? 'L' : unitLower)
+          : normalizeSunatUnit(unit),
         currentStock: parseFloat(row['Stock Inicial'] || row.stock || row.Stock || 0),
         minimumStock: parseFloat(row['Stock Mínimo'] || row['Stock Minimo'] || row.stockMinimo || row.minStock || 0),
         averageCost: parseFloat(row['Costo Inicial'] || row.costo || row.Costo || row.cost || 0)

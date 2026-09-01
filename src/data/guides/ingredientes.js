@@ -35,7 +35,7 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'Con **Nuevo Ingrediente** (o **Nuevo Insumo** según tu rubro) lo das de alta con su unidad de medida, su categoría y su stock. El sistema lleva el **Costo Promedio** y te muestra el **Valor Total** de lo que tienes guardado.',
+          text: 'Con **Nuevo Ingrediente** (o **Nuevo Insumo** según tu rubro) lo das de alta con su unidad de medida, su categoría y su stock. La **Unidad de Compra** tiene el catálogo completo de SUNAT —kilos, litros, sacos, galones, bolsas, rollos, docenas—, el mismo que usan Productos y Compras. El sistema lleva el **Costo Promedio** y te muestra el **Valor Total** de lo que tienes guardado.',
         },
         {
           type: 'texto',
