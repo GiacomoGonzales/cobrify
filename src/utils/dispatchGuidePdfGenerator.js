@@ -785,7 +785,22 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     }
   })
 
-  currentY += (Math.ceil(TRANSFER_REASONS_FULL.length / 3) * checkRowHeight) + (spacious ? 15 : 10)
+  currentY += (Math.ceil(TRANSFER_REASONS_FULL.length / 3) * checkRowHeight) + (spacious ? 6 : 4)
+
+  // Con "Otros" marcado, el papel tiene que decir DE QUÉ otros se trata: es el
+  // mismo texto que viaja a SUNAT en la guía electrónica.
+  if (guide.transferReason === '13' && (guide.transferDescription || '').trim()) {
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(7)
+    doc.text('Detalle del motivo:', MARGIN_LEFT, currentY)
+    doc.setFont('helvetica', 'normal')
+    const anchoDetalle = CONTENT_WIDTH - 62
+    const lineas = doc.splitTextToSize(guide.transferDescription.trim(), anchoDetalle)
+    lineas.forEach((linea, i) => doc.text(linea, MARGIN_LEFT + 62, currentY + (i * 8)))
+    currentY += (lineas.length - 1) * 8
+  }
+
+  currentY += (spacious ? 9 : 6)
 
   // Línea divisoria
   doc.setLineWidth(0.5)

@@ -2809,9 +2809,13 @@ export function generateDispatchGuideXML(guideData, businessData) {
   // Obligatorio cuando el motivo es "13" (Otros), opcional para los demás
   // Error 3457: Si falta la descripción del motivo de traslado
   if (guideData.transferReason === '13') {
-    // Para motivo "Otros", usar descripción personalizada o valor por defecto
-    const otherReasonDescription = guideData.transferReasonDescription || 'OTROS MOTIVOS DE TRASLADO'
-    shipment.ele('cbc:HandlingInstructions').txt(otherReasonDescription)
+    // El texto lo escribe el usuario en el formulario ("Descripción del
+    // motivo"). Antes se leía `transferReasonDescription`, un campo que la app
+    // nunca guardó: TODA guía con motivo Otros salía como "OTROS MOTIVOS DE
+    // TRASLADO". El respaldo genérico queda solo para las guías viejas sin
+    // texto, porque mandarlo vacío es rechazo 3457.
+    const otherReasonDescription = (guideData.transferDescription || guideData.transferReasonDescription || '').trim()
+    shipment.ele('cbc:HandlingInstructions').txt((otherReasonDescription || 'OTROS MOTIVOS DE TRASLADO').slice(0, 100))
   }
 
   // Campo cbc:Information - Sustento de diferencia de peso bruto

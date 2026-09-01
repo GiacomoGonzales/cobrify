@@ -1632,6 +1632,12 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = 
       return
     }
 
+    // Motivo 13 (Otros): el detalle es obligatorio para SUNAT y va al XML.
+    if (transferReason === '13' && !(transferDescription || '').trim()) {
+      toast.error('Para el motivo Otros debes escribir la descripción del motivo de traslado')
+      return
+    }
+
     // Motivo 02 (Compra): SUNAT espera los datos del proveedor (SellerSupplierParty)
     if (transferReason === '02') {
       if (!/^\d{11}$/.test((supplierRuc || '').trim()) || !(supplierName || '').trim()) {
@@ -1981,6 +1987,19 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = 
               />
             </div>
 
+            {/* Motivo 13 (Otros): SUNAT pide el detalle en texto libre y ese
+                texto viaja al XML. Sin él la guía se rechaza (error 3457). */}
+            {transferReason === '13' && (
+              <Input
+                label="Descripción del motivo"
+                required
+                placeholder="Ej. Disposición final"
+                maxLength={100}
+                value={transferDescription}
+                onChange={(e) => setTransferDescription(e.target.value)}
+                helperText="Obligatoria para el motivo Otros: es el texto que recibe SUNAT."
+              />
+            )}
             {/* Motivo 02 (Compra): datos del PROVEEDOR (el destinatario es la propia empresa) */}
             {transferReason === '02' && (
               <>
@@ -2363,12 +2382,14 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = 
                 />
               )}
 
-              <Input
-                label="Descripción del traslado"
-                placeholder="Descripción opcional"
-                value={transferDescription}
-                onChange={(e) => setTransferDescription(e.target.value)}
-              />
+              {transferReason !== '13' && (
+                <Input
+                  label="Descripción del traslado"
+                  placeholder="Descripción opcional"
+                  value={transferDescription}
+                  onChange={(e) => setTransferDescription(e.target.value)}
+                />
+              )}
 
               <Select
                 label="Und. del peso bruto"

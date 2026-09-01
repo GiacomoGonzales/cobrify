@@ -34,6 +34,7 @@ export default {
           type: 'pasos',
           items: [
             'Crea la guía (o genérala desde el comprobante de venta, que arrastra cliente y productos).',
+            'Elige el **Motivo de traslado**. Si eliges **Otros**, aparece un campo obligatorio, **Descripción del motivo**: ahí escribes en tus palabras de qué se trata (por ejemplo, "Disposición final"). Ese texto es el que recibe SUNAT y el que sale impreso en la guía; sin él, SUNAT la rechaza.',
             'Completa **Origen y Destino**: el punto de partida y el punto de llegada con sus direcciones.',
             'Llena los **Datos de Transporte**: la **Modalidad**, la **Placa** del vehículo, el **Conductor** con su **DNI** y su **Licencia**.',
             'Revisa los **Bienes a Transportar** y el **Peso total**. Cada ítem tiene su **Peso unit. (kg)**: si el producto ya lo tiene cargado en su ficha, viene puesto solo; si no, lo escribes ahí. El sistema multiplica por la cantidad, suma todas las líneas y llena el peso bruto total — y si prefieres poner el total a mano, el tuyo manda. La unidad del peso puede ser **KGM o TNE** (toneladas): al cambiarla, el número se convierte solo y SUNAT recibe el valor en esa unidad.',
