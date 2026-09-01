@@ -10,15 +10,7 @@ import { getCarrierDispatchGuides, sendCarrierDispatchGuideToSunat, getCompanySe
 import CreateCarrierDispatchGuideModal from '@/components/CreateCarrierDispatchGuideModal'
 import { generateCarrierDispatchGuidePDF, previewCarrierDispatchGuidePDF } from '@/utils/carrierDispatchGuidePdfGenerator'
 import { buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
-
-const TRANSFER_REASONS = {
-  '01': 'Venta',
-  '02': 'Compra',
-  '04': 'Traslado entre establecimientos',
-  '08': 'Importación',
-  '09': 'Exportación',
-  '13': 'Otros',
-}
+import { etiquetaMotivo } from '@/utils/carrierTransferReasons'
 
 // Helper para formatear fecha sin problemas de zona horaria
 const formatTransferDate = (dateString) => {
@@ -1140,7 +1132,7 @@ export default function CarrierDispatchGuides() {
                   </div>
                   <div>
                     <span className="text-gray-500">Motivo:</span>
-                    <p className="font-medium">{TRANSFER_REASONS[selectedGuide.transferReason] || selectedGuide.transferReason}</p>
+                    <p className="font-medium">{etiquetaMotivo(selectedGuide.transferReason) || selectedGuide.transferReason}</p>
                   </div>
                   <div>
                     <span className="text-gray-500">Peso total:</span>

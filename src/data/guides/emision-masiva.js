@@ -108,6 +108,7 @@ export default {
             'Los **ubigeos se escriben con nombres**, separados por barras: LIMA/LIMA/SURQUILLO. El sistema los convierte al código oficial; si un nombre no calza, el error te dice exactamente cuál.',
             'La **placa** puede ir con o sin guion (ABC-123), y el **conductor** necesita DNI, nombres, apellidos y brevete.',
             'El **peso total en kilogramos** va solo en la primera fila de cada guía.',
+            'El **motivo de traslado** se elige de la lista de la plantilla y también va solo en la primera fila. Si lo dejas vacío sale como *Venta*. Al lado tienes **Descripción del traslado** para el detalle en tus palabras, útil sobre todo con el motivo *Otros*.',
             'Los tres códigos de la carga son opcionales: **CÓDIGO INTERNO** (el tuyo, el único que hoy viaja en el XML a SUNAT), **CÓD. SUNAT** y **GTIN** (se imprimen en la guía, todavía no se envían en el XML). Vacíos salen con un guion.',
             'Al presionar **Emitir**, las guías salen **una por una, con pausa entre envíos**, y ves el resultado de SUNAT al lado de cada una: aceptada, rechazada o con error.',
           ],
@@ -119,6 +120,10 @@ export default {
         {
           type: 'ojo',
           text: 'Si una guía se crea pero el envío falla (se cortó el internet, SUNAT no respondió), la guía queda en la pantalla **GRE Transportista** con su número asignado: reenvíala desde ahí con su botón, no vuelvas a subirla en el Excel.',
+        },
+        {
+          type: 'texto',
+          text: 'Sobre el motivo de traslado: en la guía del **transportista** SUNAT no lo pide, así que no viaja en el XML — sale impreso en la guía, que es donde lo leen el conductor y quien recibe la mercadería. El motivo que sí se declara a SUNAT es el de la guía del **remitente**, y ahí el motivo *Otros* obliga a escribir su descripción.',
         },
         { type: 'enlace', to: '/app/guias-transportista', label: 'Ver GRE Transportista' },
       ],

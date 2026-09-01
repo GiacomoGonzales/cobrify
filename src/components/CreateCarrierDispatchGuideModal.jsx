@@ -11,6 +11,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { createCarrierDispatchGuide, saveCarrierDispatchGuideDraft, deleteCarrierDispatchGuide, updateCarrierDispatchGuide, getCompanySettings, sendCarrierDispatchGuideToSunat, getCustomers } from '@/services/firestoreService'
 import { consultarRUC, consultarDNI, consultarEstablecimientos } from '@/services/documentLookupService'
 import { DEPARTAMENTOS, getProvincias, getDistritos, buildUbigeo, resolveUbigeoParts } from '@/data/peruUbigeos'
+import { MOTIVOS_TRASLADO_TRANSPORTISTA, etiquetaConCodigo } from '@/utils/carrierTransferReasons'
 
 /**
  * Los tres selectores de ubigeo: departamento → provincia → distrito.
@@ -64,15 +65,6 @@ function UbigeoSelects({ dept, prov, dist, onChange, required = false }) {
     </div>
   )
 }
-
-const TRANSFER_REASONS = [
-  { value: '01', label: '01 - Venta' },
-  { value: '02', label: '02 - Compra' },
-  { value: '04', label: '04 - Traslado entre establecimientos' },
-  { value: '08', label: '08 - Importación' },
-  { value: '09', label: '09 - Exportación' },
-  { value: '13', label: '13 - Otros' },
-]
 
 const DOCUMENT_TYPES = [
   { value: '1', label: 'DNI' },
@@ -1659,8 +1651,8 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
               value={transferReason}
               onChange={(e) => setTransferReason(e.target.value)}
             >
-              {TRANSFER_REASONS.map(reason => (
-                <option key={reason.value} value={reason.value}>{reason.label}</option>
+              {MOTIVOS_TRASLADO_TRANSPORTISTA.map(motivo => (
+                <option key={motivo.code} value={motivo.code}>{etiquetaConCodigo(motivo.code)}</option>
               ))}
             </Select>
             <div className="flex items-end">

@@ -12,6 +12,7 @@
  * se resuelven a CÓDIGOS contra el catálogo corregido.
  */
 import { COLUMNAS_GRE_TRANSPORTISTA, VALORES_GRE_TRANSPORTISTA } from './bulkCarrierGuideTemplateService'
+import { codigoDeMotivo, MOTIVO_TRASLADO_POR_DEFECTO } from '@/utils/carrierTransferReasons'
 import { validateDocument, ID_TYPES } from '@/utils/peruUtils'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 import { esUnidadValida, normalizeSunatUnit } from '@/data/sunatUnits'
@@ -252,6 +253,19 @@ export async function parsearExcelGreTransportista(buffer, { hoy = new Date() } 
       error(primera.fila, 'PESO TOTAL (KG)', 'Falta el peso bruto total de la guía en kilogramos (mayor a 0), en la primera fila de la operación.')
     }
 
+    // — Motivo del traslado (primera fila) —
+    // Opcional: la plantilla vieja no traía la columna y el masivo mandaba
+    // "Venta" fijo. Si viene vacía se mantiene ese valor; si viene escrita y
+    // no se entiende, se avisa en vez de emitir con un motivo equivocado.
+    const motivoCrudo = String(cab.MOTIVO_TRASLADO ?? '').trim()
+    let motivo = MOTIVO_TRASLADO_POR_DEFECTO
+    if (motivoCrudo) {
+      const reconocido = codigoDeMotivo(motivoCrudo)
+      if (reconocido) motivo = reconocido
+      else error(primera.fila, 'MOTIVO DE TRASLADO', `Motivo "${motivoCrudo}" no válido. Elígelo de la lista de la plantilla.`)
+    }
+    const descripcionTraslado = String(cab.DESCRIPCION_TRASLADO ?? '').trim().slice(0, 250)
+
     // — Cargas —
     const items = []
     for (const { fila, valores } of grupo.filas) {
@@ -327,8 +341,8 @@ export async function parsearExcelGreTransportista(buffer, { hoy = new Date() } 
         },
         freightPayer: 'remitente',
         thirdPartyPayer: null,
-        transferReason: '01',
-        transferDescription: '',
+        transferReason: motivo,
+        transferDescription: descripcionTraslado,
         totalWeight: peso ?? 0,
         observations: String(cab.OBSERVACIONES ?? '').trim(),
         origin: {

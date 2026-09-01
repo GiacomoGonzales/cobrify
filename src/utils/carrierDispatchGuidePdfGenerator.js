@@ -8,15 +8,7 @@ import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 import { medirTextoCentrado, dibujarTextoCentrado } from '@/utils/pdfCenteredText'
-
-const TRANSFER_REASONS = {
-  '01': 'Venta',
-  '02': 'Compra',
-  '04': 'Traslado entre establecimientos',
-  '08': 'Importación',
-  '09': 'Exportación',
-  '13': 'Otros',
-}
+import { etiquetaMotivo } from '@/utils/carrierTransferReasons'
 
 const TRANSPORT_TYPES = {
   '01': 'Público',
@@ -583,7 +575,7 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   doc.setFont('helvetica', 'bold')
   doc.text('Motivo de traslado:', MARGIN_LEFT + 180, currentY)
   doc.setFont('helvetica', 'normal')
-  doc.text(TRANSFER_REASONS[guide.transferReason] || guide.transferReason || '-', MARGIN_LEFT + 270, currentY)
+  doc.text(etiquetaMotivo(guide.transferReason) || guide.transferReason || '-', MARGIN_LEFT + 270, currentY)
 
   if (companySettings?.mtcRegistration) {
     doc.setFont('helvetica', 'bold')

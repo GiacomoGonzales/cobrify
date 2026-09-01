@@ -15,6 +15,7 @@
  * un transportista es pedirle errores.
  */
 import { etiquetasParaExcel } from '@/data/sunatUnits'
+import { ETIQUETAS_MOTIVO_EXCEL } from '@/utils/carrierTransferReasons'
 
 /** Columnas de la hoja GUIAS, en orden. `key` es el nombre técnico. */
 export const COLUMNAS_GRE_TRANSPORTISTA = [
@@ -42,12 +43,15 @@ export const COLUMNAS_GRE_TRANSPORTISTA = [
   { key: 'CANTIDAD', header: 'CANTIDAD', width: 10, nota: 'Cantidad de bultos/unidades de esta fila.' },
   { key: 'UNIDAD', header: 'UNIDAD', width: 16, nota: 'Unidad de medida SUNAT (catálogo 03). Las más usadas están arriba en la lista; NIU para unidades.' },
   { key: 'PESO_TOTAL_KG', header: 'PESO TOTAL (KG)', width: 14, nota: 'Peso bruto TOTAL de la guía en kilogramos. Solo en la primera fila de la operación.' },
+  { key: 'MOTIVO_TRASLADO', header: 'MOTIVO DE TRASLADO', width: 34, nota: 'Opcional (si se deja vacío: Venta). Solo en la primera fila de la operación. Sale impreso en la guía; SUNAT no lo pide en la guía del transportista.' },
+  { key: 'DESCRIPCION_TRASLADO', header: 'DESCRIPCIÓN DEL TRASLADO', width: 32, nota: 'Opcional. El detalle del motivo, en tus palabras. Úsalo sobre todo con el motivo Otros.' },
   { key: 'OBSERVACIONES', header: 'OBSERVACIONES', width: 26, nota: 'Opcional. Sale en la guía.' },
 ]
 
 /** Valores admitidos por columna. El parser valida contra ESTAS listas. */
 export const VALORES_GRE_TRANSPORTISTA = {
   TIPO_DOC_DESTINATARIO: ['RUC', 'DNI', 'CE'],
+  MOTIVO_TRASLADO: ETIQUETAS_MOTIVO_EXCEL,
   // Catálogo 03 completo, no una lista propia: ver etiquetasParaExcel().
   UNIDAD: etiquetasParaExcel(),
 }
@@ -130,8 +134,8 @@ export async function generarPlantillaGreTransportista() {
   // Filas de EJEMPLO (ámbar): guía simple y guía con dos cargas.
   const hoy = new Date()
   const ejemplos = [
-    { N_OPERACION: 1, FECHA_EMISION: hoy, FECHA_TRASLADO: hoy, RUC_REMITENTE: '20100047218', RAZON_SOCIAL_REMITENTE: 'COMERCIAL EJEMPLO S.A.C.', TIPO_DOC_DESTINATARIO: 'RUC', NUM_DOC_DESTINATARIO: '20100047218', NOMBRE_DESTINATARIO: 'DISTRIBUIDORA EJEMPLO S.A.', DIRECCION_PARTIDA: 'Av. Argentina 2020, Callao', UBIGEO_PARTIDA: 'CALLAO/CALLAO/CALLAO', DIRECCION_LLEGADA: 'Av. Ejercito 710', UBIGEO_LLEGADA: 'AREQUIPA/AREQUIPA/CAYMA', PLACA: 'ABC-123', DNI_CONDUCTOR: '46997122', NOMBRES_CONDUCTOR: 'JUAN CARLOS', APELLIDOS_CONDUCTOR: 'QUISPE MAMANI', LICENCIA_CONDUCTOR: 'Q46997122', CODIGO_ITEM: 'ABA-001', CODIGO_SUNAT: '50000000', GTIN: '7501234567890', DESCRIPCION_CARGA: 'Cajas de abarrotes', CANTIDAD: 120, UNIDAD: 'BX - CAJA', PESO_TOTAL_KG: 2400 },
-    { N_OPERACION: 2, FECHA_EMISION: hoy, FECHA_TRASLADO: hoy, RUC_REMITENTE: '20100047218', RAZON_SOCIAL_REMITENTE: 'COMERCIAL EJEMPLO S.A.C.', TIPO_DOC_DESTINATARIO: 'DNI', NUM_DOC_DESTINATARIO: '46997122', NOMBRE_DESTINATARIO: 'MARIA PEREZ TORRES', DIRECCION_PARTIDA: 'Av. Argentina 2020, Callao', UBIGEO_PARTIDA: 'CALLAO/CALLAO/CALLAO', DIRECCION_LLEGADA: 'Jr. Puno 350', UBIGEO_LLEGADA: 'CUSCO/CUSCO/WANCHAQ', PLACA: 'XYZ-789', DNI_CONDUCTOR: '46997122', NOMBRES_CONDUCTOR: 'PEDRO', APELLIDOS_CONDUCTOR: 'ROJAS HUAMAN', LICENCIA_CONDUCTOR: 'Q87654321', CODIGO_ITEM: 'ARR-050', DESCRIPCION_CARGA: 'Sacos de arroz', CANTIDAD: 50, UNIDAD: 'SA - SACO', PESO_TOTAL_KG: 2650 },
+    { N_OPERACION: 1, FECHA_EMISION: hoy, FECHA_TRASLADO: hoy, RUC_REMITENTE: '20100047218', RAZON_SOCIAL_REMITENTE: 'COMERCIAL EJEMPLO S.A.C.', TIPO_DOC_DESTINATARIO: 'RUC', NUM_DOC_DESTINATARIO: '20100047218', NOMBRE_DESTINATARIO: 'DISTRIBUIDORA EJEMPLO S.A.', DIRECCION_PARTIDA: 'Av. Argentina 2020, Callao', UBIGEO_PARTIDA: 'CALLAO/CALLAO/CALLAO', DIRECCION_LLEGADA: 'Av. Ejercito 710', UBIGEO_LLEGADA: 'AREQUIPA/AREQUIPA/CAYMA', PLACA: 'ABC-123', DNI_CONDUCTOR: '46997122', NOMBRES_CONDUCTOR: 'JUAN CARLOS', APELLIDOS_CONDUCTOR: 'QUISPE MAMANI', LICENCIA_CONDUCTOR: 'Q46997122', CODIGO_ITEM: 'ABA-001', CODIGO_SUNAT: '50000000', GTIN: '7501234567890', DESCRIPCION_CARGA: 'Cajas de abarrotes', CANTIDAD: 120, UNIDAD: 'BX - CAJA', PESO_TOTAL_KG: 2400, MOTIVO_TRASLADO: '01 - Venta' },
+    { N_OPERACION: 2, FECHA_EMISION: hoy, FECHA_TRASLADO: hoy, RUC_REMITENTE: '20100047218', RAZON_SOCIAL_REMITENTE: 'COMERCIAL EJEMPLO S.A.C.', TIPO_DOC_DESTINATARIO: 'DNI', NUM_DOC_DESTINATARIO: '46997122', NOMBRE_DESTINATARIO: 'MARIA PEREZ TORRES', DIRECCION_PARTIDA: 'Av. Argentina 2020, Callao', UBIGEO_PARTIDA: 'CALLAO/CALLAO/CALLAO', DIRECCION_LLEGADA: 'Jr. Puno 350', UBIGEO_LLEGADA: 'CUSCO/CUSCO/WANCHAQ', PLACA: 'XYZ-789', DNI_CONDUCTOR: '46997122', NOMBRES_CONDUCTOR: 'PEDRO', APELLIDOS_CONDUCTOR: 'ROJAS HUAMAN', LICENCIA_CONDUCTOR: 'Q87654321', CODIGO_ITEM: 'ARR-050', DESCRIPCION_CARGA: 'Sacos de arroz', CANTIDAD: 50, UNIDAD: 'SA - SACO', PESO_TOTAL_KG: 2650, MOTIVO_TRASLADO: '13 - Otros', DESCRIPCION_TRASLADO: 'Traslado a planta de tratamiento' },
     { N_OPERACION: 2, DESCRIPCION_CARGA: 'Cajas de conservas', CANTIDAD: 15, UNIDAD: 'BX - CAJA' },
   ]
   ejemplos.forEach((e) => {
