@@ -1686,6 +1686,10 @@ export default function DispatchGuides() {
                 </h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
+                    <span className="text-gray-500">Fecha de emisión:</span>
+                    <p className="font-medium">{formatTransferDate(selectedGuide.issueDate)}</p>
+                  </div>
+                  <div>
                     <span className="text-gray-500">Fecha de traslado:</span>
                     <p className="font-medium">{formatTransferDate(selectedGuide.transferDate)}</p>
                   </div>
@@ -1701,6 +1705,26 @@ export default function DispatchGuides() {
                     <span className="text-gray-500">Peso total:</span>
                     <p className="font-medium">{selectedGuide.totalWeight || '0'} {selectedGuide.weightUnit === 'TNE' ? 'TNE' : 'KG'}</p>
                   </div>
+                  {selectedGuide.transportMode === '01' && selectedGuide.carrierDeliveryDate && (
+                    <div>
+                      <span className="text-gray-500">Entrega al transportista:</span>
+                      <p className="font-medium">{formatTransferDate(selectedGuide.carrierDeliveryDate)}</p>
+                    </div>
+                  )}
+                  {selectedGuide.isM1LVehicle && (
+                    <div>
+                      <span className="text-gray-500">Vehículo:</span>
+                      <p className="font-medium">Categoría M1 o L</p>
+                    </div>
+                  )}
+                  {/* La descripción del motivo es lo que SUNAT exige con el
+                      motivo "Otros", y no se veía en ningún lado. */}
+                  {selectedGuide.transferDescription && (
+                    <div className="col-span-2">
+                      <span className="text-gray-500">Descripción del motivo:</span>
+                      <p className="font-medium break-words">{selectedGuide.transferDescription}</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1711,20 +1735,20 @@ export default function DispatchGuides() {
                   Puntos de Traslado
                 </h3>
                 <div className="space-y-3 text-sm">
-                  <div>
-                    <span className="text-gray-500">Punto de partida:</span>
-                    <p className="font-medium">{selectedGuide.origin?.address || companySettings?.address || '-'}</p>
-                    {selectedGuide.origin?.ubigeo && (
-                      <p className="text-xs text-gray-400">Ubigeo: {selectedGuide.origin.ubigeo}</p>
-                    )}
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Punto de llegada:</span>
-                    <p className="font-medium">{selectedGuide.destination?.address || '-'}</p>
-                    {selectedGuide.destination?.ubigeo && (
-                      <p className="text-xs text-gray-400">Ubigeo: {selectedGuide.destination.ubigeo}</p>
-                    )}
-                  </div>
+                  {[
+                    { etiqueta: 'Punto de partida', p: selectedGuide.origin, respaldo: companySettings?.address },
+                    { etiqueta: 'Punto de llegada', p: selectedGuide.destination, respaldo: null },
+                  ].map(({ etiqueta, p, respaldo }) => {
+                    const zona = [p?.district, p?.province, p?.department].filter(Boolean).join(' · ')
+                    return (
+                      <div key={etiqueta}>
+                        <span className="text-gray-500">{etiqueta}:</span>
+                        <p className="font-medium">{p?.address || respaldo || '-'}</p>
+                        {zona && <p className="text-xs text-gray-500">{zona}</p>}
+                        {p?.ubigeo && <p className="text-xs text-gray-400">Ubigeo: {p.ubigeo}</p>}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
 
@@ -1817,6 +1841,7 @@ export default function DispatchGuides() {
                         )}
                         <th className="text-center py-2 px-2 text-gray-600">Cantidad</th>
                         <th className="text-center py-2 px-2 text-gray-600">Unidad</th>
+                        <th className="text-center py-2 px-2 text-gray-600">Peso</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1825,6 +1850,15 @@ export default function DispatchGuides() {
                           <td className="py-2 px-2 text-gray-500">{index + 1}</td>
                           <td className="py-2 px-2">
                             <span className="font-medium">{item.description || item.name || '-'}</span>
+                            {(item.code || item.sunatCode || item.gtin) && (
+                              <span className="block text-xs text-gray-500">
+                                {[
+                                  item.code && `Cód. ${item.code}`,
+                                  item.sunatCode && `SUNAT ${item.sunatCode}`,
+                                  item.gtin && `GTIN ${item.gtin}`,
+                                ].filter(Boolean).join(' · ')}
+                              </span>
+                            )}
                             {item.serialNumber && (
                               <span className="block text-xs text-amber-700">S/N: {item.serialNumber}</span>
                             )}
@@ -1851,6 +1885,9 @@ export default function DispatchGuides() {
                           )}
                           <td className="py-2 px-2 text-center">{item.quantity || 1}</td>
                           <td className="py-2 px-2 text-center">{item.unit || 'UNIDAD'}</td>
+                          <td className="py-2 px-2 text-center text-gray-600">
+                            {item.weight != null && item.weight !== '' ? item.weight : '-'}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -1858,11 +1895,161 @@ export default function DispatchGuides() {
                 </div>
               </div>
 
+              {/* Proveedor — solo con motivo 02 (Compra), donde el
+                  destinatario es la propia empresa y el dato clave es de quién
+                  se compró. Nunca se había mostrado. */}
+              {selectedGuide.supplier && (selectedGuide.supplier.documentNumber || selectedGuide.supplier.name) && (
+                <div className="border border-gray-200 rounded-xl p-4">
+                  <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    <Store className="w-4 h-4 text-gray-400" />
+                    Proveedor
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-500">Razón social:</span>
+                      <p className="font-medium">{selectedGuide.supplier.name || '-'}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">RUC:</span>
+                      <p className="font-medium">{selectedGuide.supplier.documentNumber || '-'}</p>
+                    </div>
+                    {selectedGuide.supplier.address && (
+                      <div className="col-span-2">
+                        <span className="text-gray-500">Dirección:</span>
+                        <p className="font-medium">{selectedGuide.supplier.address}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Documentos relacionados (facturas del proveedor, etc.) */}
+              {selectedGuide.relatedDocuments?.length > 0 && (
+                <div className="border border-gray-200 rounded-xl p-4">
+                  <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-gray-400" />
+                    Documentos Relacionados ({selectedGuide.relatedDocuments.length})
+                  </h3>
+                  <ul className="space-y-1 text-sm">
+                    {selectedGuide.relatedDocuments.map((doc, i) => (
+                      <li key={i} className="flex flex-wrap gap-x-2 text-gray-700">
+                        <span className="font-medium">{doc.fullNumber || `${doc.series}-${doc.number}`}</span>
+                        {doc.supplierName && <span className="text-gray-500">· {doc.supplierName}</span>}
+                        {doc.supplierRuc && <span className="text-gray-400">({doc.supplierRuc})</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Vehículos y conductores adicionales */}
+              {(selectedGuide.transport?.additionalVehicles?.length > 0 || selectedGuide.transport?.additionalDrivers?.length > 0) && (
+                <div className="border border-gray-200 rounded-xl p-4">
+                  <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    <Truck className="w-4 h-4 text-gray-400" />
+                    Vehículos y Conductores Adicionales
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    {selectedGuide.transport?.additionalVehicles?.length > 0 && (
+                      <div>
+                        <span className="text-gray-500">Vehículos:</span>
+                        <ul className="mt-0.5 space-y-0.5">
+                          {selectedGuide.transport.additionalVehicles.map((v, i) => (
+                            <li key={i} className="font-medium">{v.plate}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {selectedGuide.transport?.additionalDrivers?.length > 0 && (
+                      <div>
+                        <span className="text-gray-500">Conductores:</span>
+                        <ul className="mt-0.5 space-y-0.5">
+                          {selectedGuide.transport.additionalDrivers.map((d, i) => (
+                            <li key={i} className="font-medium">
+                              {[d.name, d.lastName].filter(Boolean).join(' ') || 'Sin nombre'}
+                              <span className="text-gray-500 font-normal"> · DNI {d.documentNumber || '-'}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Observaciones */}
+              {selectedGuide.additionalInfo && (
+                <div className="border border-gray-200 rounded-xl p-4">
+                  <h3 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-gray-400" />
+                    Observaciones
+                  </h3>
+                  <p className="text-sm text-gray-700 whitespace-pre-line break-words">{selectedGuide.additionalInfo}</p>
+                </div>
+              )}
+
+              {/* Registro interno: de dónde salió la guía y qué hizo con el
+                  stock. No va en el documento que se imprime, pero es lo
+                  primero que uno quiere saber cuando algo no cuadra. */}
+              <div className="border border-gray-200 rounded-xl p-4">
+                <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <Hash className="w-4 h-4 text-gray-400" />
+                  Registro
+                </h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-500">Sucursal:</span>
+                    <p className="font-medium">{selectedGuide.branchName || 'Principal'}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Almacén:</span>
+                    <p className="font-medium">{selectedGuide.warehouseName || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Descontó stock:</span>
+                    <p className="font-medium">{selectedGuide.stockDeducted ? 'Sí' : 'No'}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Cómo se emitió:</span>
+                    <p className="font-medium">{selectedGuide.bulkSource === 'excel' ? 'Emisión masiva' : 'Individual'}</p>
+                  </div>
+                  {selectedGuide.sunatMethod && (
+                    <div>
+                      <span className="text-gray-500">Envío a SUNAT:</span>
+                      <p className="font-medium">{selectedGuide.sunatMethod}</p>
+                    </div>
+                  )}
+                  {selectedGuide.sunatResponseCode && (
+                    <div>
+                      <span className="text-gray-500">Código SUNAT:</span>
+                      <p className="font-medium">{selectedGuide.sunatResponseCode}</p>
+                    </div>
+                  )}
+                  {selectedGuide.createdAt && (
+                    <div>
+                      <span className="text-gray-500">Creada:</span>
+                      <p className="font-medium">
+                        {(selectedGuide.createdAt?.toDate
+                          ? selectedGuide.createdAt.toDate()
+                          : new Date(selectedGuide.createdAt?.seconds ? selectedGuide.createdAt.seconds * 1000 : selectedGuide.createdAt)
+                        ).toLocaleString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  )}
+                  {selectedGuide.convertedFrom?.number && (
+                    <div>
+                      <span className="text-gray-500">Viene de:</span>
+                      <p className="font-medium">Cotización {selectedGuide.convertedFrom.number}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Hash SUNAT */}
               {selectedGuide.sunatHash && (
-                <div className="bg-gray-100 rounded-lg p-4">
+                <div className="border border-gray-200 rounded-xl p-4">
                   <h3 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                    <Hash className="w-4 h-4 text-gray-600" />
+                    <Hash className="w-4 h-4 text-gray-400" />
                     Hash SUNAT
                   </h3>
                   <p className="text-sm font-mono text-gray-600 break-all">{selectedGuide.sunatHash}</p>
