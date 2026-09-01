@@ -28,13 +28,39 @@ import { calcularStockPorAlmacen } from '@/utils/warehouseStockMath'
 // ==================== FACTURAS ====================
 
 /**
+ * Garantiza la fecha FISCAL del comprobante (`emissionDate`, 'AAAA-MM-DD').
+ *
+ * Es la fecha que ve SUNAT, la del Registro de Ventas y la que usan Ventas y
+ * Reportes para ubicar el documento en su período. Un comprobante sin ella
+ * queda fuera de toda consulta por fecha de emisión y desaparece de los totales
+ * sin que nadie lo note — y Firestore no puede filtrar por campos ausentes, así
+ * que el respaldo tiene que ponerse AL ESCRIBIR.
+ *
+ * El orden es el MISMO que usa el generador del XML al emitir
+ * (`emissionDate` → `issueDate` → hoy), para que la fecha guardada y la que se
+ * le declara a SUNAT no puedan discrepar. Caso real: 70 negocios con
+ * comprobantes sin este campo, varios con la fecha correcta en `issueDate`.
+ */
+export const conFechaDeEmision = (invoiceData) => {
+  if (invoiceData?.emissionDate) return invoiceData
+  const desdeIssue = (v) => {
+    if (!v) return null
+    if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) return v
+    const d = v.toDate ? v.toDate() : new Date(v)
+    return isNaN(d.getTime()) ? null : new Date(d.getTime() - 5 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  }
+  const hoyLima = new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  return { ...invoiceData, emissionDate: desdeIssue(invoiceData?.issueDate) || hoyLima }
+}
+
+/**
  * Crear una nueva factura
  */
 export const createInvoice = async (userId, invoiceData) => {
   try {
     // Usar subcolección: businesses/{userId}/invoices
     const docRef = await addDoc(collection(db, 'businesses', userId, 'invoices'), {
-      ...invoiceData,
+      ...conFechaDeEmision(invoiceData),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     })
@@ -108,35 +134,10 @@ export const createInvoiceWithNumber = async (userId, invoiceData, documentType,
       const nextNumber = (typeData.lastNumber || 0) + 1
       const formattedNumber = `${typeData.serie}-${String(nextNumber).padStart(8, '0')}`
 
-      // 3. Crear la factura con el número generado
-      //
-      // `emissionDate` se garantiza ACÁ, que es el punto por donde pasa toda
-      // venta al crearse. Es la fecha FISCAL del comprobante —la que ve SUNAT,
-      // la del Registro de Ventas— y la que usan Ventas y Reportes para ubicar
-      // el documento en su período. Un comprobante sin ella queda fuera de
-      // cualquier consulta por fecha de emisión y desaparece de los totales sin
-      // que nadie lo note: JMC tenía 40 boletas de agosto por S/ 23,500 así,
-      // creadas por un camino que no la escribía. Firestore no puede consultar
-      // por campos ausentes, así que el respaldo tiene que ponerse al escribir.
-      const fechaEmisionLima = () => {
-        const ahora = new Date()
-        const lima = new Date(ahora.getTime() - 5 * 60 * 60 * 1000)
-        return lima.toISOString().slice(0, 10)
-      }
-      // El orden es el MISMO que usa el generador del XML al emitir
-      // (`emissionDate` → `issueDate` → hoy), para que la fecha guardada y la
-      // que se le declara a SUNAT no puedan discrepar. Las 40 boletas de JMC
-      // tenían la fecha en `issueDate` —por eso SUNAT las recibió bien— y la
-      // app, que solo mira `emissionDate`, no la encontraba.
-      const deIssueDate = (v) => {
-        if (!v) return null
-        if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) return v
-        const d = v.toDate ? v.toDate() : new Date(v)
-        return isNaN(d.getTime()) ? null : new Date(d.getTime() - 5 * 60 * 60 * 1000).toISOString().slice(0, 10)
-      }
+      // 3. Crear la factura con el número generado. `conFechaDeEmision`
+      //    garantiza la fecha fiscal (ver su comentario).
       const completeInvoiceData = {
-        ...invoiceData,
-        emissionDate: invoiceData.emissionDate || deIssueDate(invoiceData.issueDate) || fechaEmisionLima(),
+        ...conFechaDeEmision(invoiceData),
         number: formattedNumber,
         series: typeData.serie,
         correlativeNumber: nextNumber,
@@ -1610,7 +1611,13 @@ export const convertNotaVentaToComprobante = async (userId, notaVentaId, custome
     }
 
     // 8. Guardar el comprobante
-    const comprobanteRef = await addDoc(collection(db, 'businesses', userId, 'invoices'), comprobanteData)
+    // La boleta/factura que sale de convertir una nota de venta se emite HOY:
+    // lleva número nuevo y se envía a SUNAT ahora. Este camino escribe directo
+    // (no pasa por createInvoiceWithNumber) y nacía sin fecha de emisión.
+    const comprobanteRef = await addDoc(
+      collection(db, 'businesses', userId, 'invoices'),
+      conFechaDeEmision(comprobanteData),
+    )
 
     // 9. Actualizar la nota de venta para marcarla como convertida
     await updateDoc(notaRef, {
