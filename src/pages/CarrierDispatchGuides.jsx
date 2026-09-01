@@ -1147,6 +1147,10 @@ export default function CarrierDispatchGuides() {
                 </h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
+                    <span className="text-gray-500">Fecha de emisión:</span>
+                    <p className="font-medium">{formatTransferDate(selectedGuide.issueDate)}</p>
+                  </div>
+                  <div>
                     <span className="text-gray-500">Fecha de traslado:</span>
                     <p className="font-medium">{formatTransferDate(selectedGuide.transferDate)}</p>
                   </div>
@@ -1158,6 +1162,29 @@ export default function CarrierDispatchGuides() {
                     <span className="text-gray-500">Peso total:</span>
                     <p className="font-medium">{selectedGuide.totalWeight || '0'} {selectedGuide.weightUnit === 'TNE' ? 'TNE' : 'KG'}</p>
                   </div>
+                  {selectedGuide.freightPayer && (
+                    <div>
+                      <span className="text-gray-500">Paga el flete:</span>
+                      <p className="font-medium">
+                        {selectedGuide.freightPayer === 'remitente' ? 'El remitente'
+                          : selectedGuide.freightPayer === 'destinatario' ? 'El destinatario'
+                          : selectedGuide.freightPayer === 'tercero' ? `Un tercero${selectedGuide.thirdPartyPayer?.businessName ? `: ${selectedGuide.thirdPartyPayer.businessName}` : ''}`
+                          : selectedGuide.freightPayer}
+                      </p>
+                    </div>
+                  )}
+                  {selectedGuide.isM1OrLVehicle && (
+                    <div>
+                      <span className="text-gray-500">Vehículo:</span>
+                      <p className="font-medium">Categoría M1 o L</p>
+                    </div>
+                  )}
+                  {selectedGuide.transferDescription && (
+                    <div className="col-span-2">
+                      <span className="text-gray-500">Descripción del traslado:</span>
+                      <p className="font-medium break-words">{selectedGuide.transferDescription}</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1168,20 +1195,26 @@ export default function CarrierDispatchGuides() {
                   Puntos de Traslado
                 </h3>
                 <div className="space-y-3 text-sm">
-                  <div>
-                    <span className="text-gray-500">Punto de partida:</span>
-                    <p className="font-medium">{selectedGuide.origin?.address || '-'}</p>
-                    {selectedGuide.origin?.ubigeo && (
-                      <p className="text-xs text-gray-400">Ubigeo: {selectedGuide.origin.ubigeo}</p>
-                    )}
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Punto de llegada:</span>
-                    <p className="font-medium">{selectedGuide.destination?.address || '-'}</p>
-                    {selectedGuide.destination?.ubigeo && (
-                      <p className="text-xs text-gray-400">Ubigeo: {selectedGuide.destination.ubigeo}</p>
-                    )}
-                  </div>
+                  {[
+                    { etiqueta: 'Punto de partida', p: selectedGuide.origin },
+                    { etiqueta: 'Punto de llegada', p: selectedGuide.destination },
+                  ].map(({ etiqueta, p }) => {
+                    // Las guías cargadas por Excel guardan los nombres en
+                    // español; las del formulario, en inglés. Se aceptan las dos.
+                    const zona = [
+                      p?.district || p?.distrito,
+                      p?.province || p?.provincia,
+                      p?.department || p?.departamento,
+                    ].filter(Boolean).join(' · ')
+                    return (
+                      <div key={etiqueta}>
+                        <span className="text-gray-500">{etiqueta}:</span>
+                        <p className="font-medium">{p?.address || '-'}</p>
+                        {zona && <p className="text-xs text-gray-500">{zona}</p>}
+                        {p?.ubigeo && <p className="text-xs text-gray-400">Ubigeo: {p.ubigeo}</p>}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
 
@@ -1273,7 +1306,18 @@ export default function CarrierDispatchGuides() {
                       {(selectedGuide.items || []).map((item, index) => (
                         <tr key={index} className="border-b border-gray-100">
                           <td className="py-2 px-2 text-gray-500">{index + 1}</td>
-                          <td className="py-2 px-2 font-medium">{item.description || item.name || '-'}</td>
+                          <td className="py-2 px-2">
+                            <span className="font-medium">{item.description || item.name || '-'}</span>
+                            {(item.code || item.sunatCode || item.gtin) && (
+                              <span className="block text-xs text-gray-500">
+                                {[
+                                  item.code && `Cód. ${item.code}`,
+                                  item.sunatCode && `SUNAT ${item.sunatCode}`,
+                                  item.gtin && `GTIN ${item.gtin}`,
+                                ].filter(Boolean).join(' · ')}
+                              </span>
+                            )}
+                          </td>
                           <td className="py-2 px-2 text-center">{item.quantity || 1}</td>
                           <td className="py-2 px-2 text-center">{item.unit || 'UNIDAD'}</td>
                         </tr>
@@ -1283,11 +1327,88 @@ export default function CarrierDispatchGuides() {
                 </div>
               </div>
 
+              {/* Guías del remitente relacionadas: es el vínculo con el
+                  documento del dueño de la mercadería. */}
+              {selectedGuide.relatedGuides?.length > 0 && (
+                <div className="border border-gray-200 rounded-xl p-4">
+                  <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-gray-400" />
+                    Guías de Remisión Relacionadas ({selectedGuide.relatedGuides.length})
+                  </h3>
+                  <ul className="space-y-1 text-sm">
+                    {selectedGuide.relatedGuides.map((g, i) => (
+                      <li key={i} className="flex flex-wrap gap-x-2 text-gray-700">
+                        <span className="font-medium">{g.fullNumber || `${g.series || ''}-${g.number || ''}`}</span>
+                        {g.issuerRuc && <span className="text-gray-500">· RUC {g.issuerRuc}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Observaciones */}
+              {selectedGuide.observations && (
+                <div className="border border-gray-200 rounded-xl p-4">
+                  <h3 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-gray-400" />
+                    Observaciones
+                  </h3>
+                  <p className="text-sm text-gray-700 whitespace-pre-line break-words">{selectedGuide.observations}</p>
+                </div>
+              )}
+
+              {/* Registro interno */}
+              <div className="border border-gray-200 rounded-xl p-4">
+                <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <Hash className="w-4 h-4 text-gray-400" />
+                  Registro
+                </h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  {selectedGuide.mtcRegistration && (
+                    <div>
+                      <span className="text-gray-500">Registro MTC:</span>
+                      <p className="font-medium">{selectedGuide.mtcRegistration}</p>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-gray-500">Sucursal:</span>
+                    <p className="font-medium">{selectedGuide.branchName || 'Principal'}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Cómo se emitió:</span>
+                    <p className="font-medium">{selectedGuide.bulkSource === 'excel' ? 'Emisión masiva' : 'Individual'}</p>
+                  </div>
+                  {selectedGuide.sunatMethod && (
+                    <div>
+                      <span className="text-gray-500">Envío a SUNAT:</span>
+                      <p className="font-medium">{selectedGuide.sunatMethod}</p>
+                    </div>
+                  )}
+                  {selectedGuide.sunatResponseCode && (
+                    <div>
+                      <span className="text-gray-500">Código SUNAT:</span>
+                      <p className="font-medium">{selectedGuide.sunatResponseCode}</p>
+                    </div>
+                  )}
+                  {selectedGuide.createdAt && (
+                    <div>
+                      <span className="text-gray-500">Creada:</span>
+                      <p className="font-medium">
+                        {(selectedGuide.createdAt?.toDate
+                          ? selectedGuide.createdAt.toDate()
+                          : new Date(selectedGuide.createdAt?.seconds ? selectedGuide.createdAt.seconds * 1000 : selectedGuide.createdAt)
+                        ).toLocaleString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Hash SUNAT */}
               {selectedGuide.sunatHash && (
-                <div className="bg-gray-100 rounded-lg p-4">
+                <div className="border border-gray-200 rounded-xl p-4">
                   <h3 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                    <Hash className="w-4 h-4 text-gray-600" />
+                    <Hash className="w-4 h-4 text-gray-400" />
                     Hash SUNAT
                   </h3>
                   <p className="text-sm font-mono text-gray-600 break-all">{selectedGuide.sunatHash}</p>
@@ -1296,7 +1417,7 @@ export default function CarrierDispatchGuides() {
             </div>
 
             {/* Footer */}
-            <div className="border-t px-6 py-4 bg-gray-50 flex flex-wrap justify-end gap-3">
+            <div className="border-t border-gray-200 px-6 py-4 bg-white flex flex-wrap justify-end gap-3">
               <Button variant="outline" onClick={() => setSelectedGuide(null)}>
                 Cerrar
               </Button>
