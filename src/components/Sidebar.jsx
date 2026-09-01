@@ -356,6 +356,51 @@ function Sidebar() {
       ],
     },
 
+    // === GRUPO: Obras (opt-in `obrasEnabled`) ===
+    // Son las MISMAS paginas del modo Logistica. Se ofrecen aqui porque un
+    // negocio en modo General que manda material a obra no deberia tener que
+    // migrar de modo: el menu de Logistica no trae GRE Transportista,
+    // Cotizaciones ni Emision Masiva, y perderlas sale mas caro que ganar esto.
+    {
+      groupId: 'obras',
+      icon: HardHat,
+      label: 'Obras',
+      children: [
+        {
+          path: '/proyectos',
+          icon: HardHat,
+          label: 'Proyectos / Obras',
+          pageId: 'projects',
+          menuId: 'projects',
+          requiresObras: true,
+        },
+        {
+          path: '/salidas-almacen',
+          icon: ArrowUpFromLine,
+          label: 'Salidas de Almacén',
+          pageId: 'warehouse-exits',
+          menuId: 'warehouse-exits',
+          requiresObras: true,
+        },
+        {
+          path: '/retornos-almacen',
+          icon: ArrowDownToLine,
+          label: 'Retornos a Almacén',
+          pageId: 'warehouse-returns',
+          menuId: 'warehouse-returns',
+          requiresObras: true,
+        },
+        {
+          path: '/reportes-logisticos',
+          icon: BarChart3,
+          label: 'Reportes de Obra',
+          pageId: 'logistics-reports',
+          menuId: 'logistics-reports',
+          requiresObras: true,
+        },
+      ],
+    },
+
     // === GRUPO: Equipo y Operaciones ===
     {
       groupId: 'equipo',
@@ -2051,6 +2096,11 @@ function Sidebar() {
     }
     if (item.requiresCatalog) {
       if (businessSettings?.catalogEnabled !== true) return false
+    }
+    if (item.requiresObras) {
+      // Modulo apagado por defecto: la mayoria de los negocios en modo General
+      // no manda material a obras y no tiene por que ver estas paginas.
+      if (businessSettings?.obrasEnabled !== true && !saltarFiltros) return false
     }
     if (item.requiresAppointments) {
       const appointmentsEnabled = businessSettings?.appointmentsEnabled === true

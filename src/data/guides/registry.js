@@ -158,6 +158,16 @@ export const GUIDES = [
     load: () => import('./productos.js'),
   },
   {
+    id: 'obras',
+    route: '/app/salidas-almacen',
+    title: 'Obras y proyectos',
+    category: 'Inventario',
+    description: 'Material que sale a una obra, lo que vuelve y cuánto costó cada proyecto.',
+    keywords: 'obra obras proyecto proyectos construccion salida de almacen salidas retorno retornos devolucion material herramientas despacho uso interno oficina trabajador consumo interno reporte por obra costo por proyecto logistica guia de remision',
+    modos: ['retail', 'logistics'],
+    load: () => import('./obras.js'),
+  },
+  {
     id: 'inventario',
     route: '/app/inventario',
     title: 'Inventario',

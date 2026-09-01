@@ -266,7 +266,14 @@ export const LENDING_PAGES = [
   { id: 'lending', name: 'Préstamos (Cartera)', path: '/prestamos-cartera', category: 'principal' },
 ]
 
-export const getAvailablePagesByMode = (businessMode) => {
+/**
+ * @param {object} [opciones]
+ * @param {boolean} [opciones.obrasEnabled] Modo General con el modulo de obras
+ *   encendido: sus paginas (las mismas del modo Logistica) entran al catalogo
+ *   de permisos. Sin esto, el dueno veia las paginas en su menu pero no podia
+ *   dar acceso a ellas a un sub-usuario.
+ */
+export const getAvailablePagesByMode = (businessMode, opciones = {}) => {
   if (businessMode === 'restaurant') {
     return [...COMMON_PAGES, ...RESTAURANT_PAGES]
   } else if (businessMode === 'pharmacy') {
@@ -285,7 +292,10 @@ export const getAvailablePagesByMode = (businessMode) => {
     return [...COMMON_PAGES, ...LENDING_PAGES]
   } else {
     // Modo retail o por defecto
-    return [...COMMON_PAGES, ...RETAIL_PAGES]
+    const obras = opciones.obrasEnabled
+      ? LOGISTICS_PAGES.filter(p => p.category === 'logistica')
+      : []
+    return [...COMMON_PAGES, ...RETAIL_PAGES, ...obras]
   }
 }
 

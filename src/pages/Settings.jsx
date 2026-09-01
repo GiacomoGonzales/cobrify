@@ -509,6 +509,9 @@ export default function Settings() {
   // Precios de venta por sucursal (overrides por producto; ver src/utils/branchPricing.js)
   const [branchPricingEnabled, setBranchPricingEnabled] = useState(false)
   const [branchCatalogEnabled, setBranchCatalogEnabled] = useState(false)
+  // Obras y proyectos en modo General: reusa las paginas del modo Logistica
+  // sin obligar al negocio a migrar de modo. Apagado por defecto.
+  const [obrasEnabled, setObrasEnabled] = useState(false)
   // Aca vive lo que NOMBRA los niveles de precio. El CALCULO (base, formula y
   // porcentajes) se configura en Productos > Ajuste de precios, junto al ajuste
   // masivo: las dos cosas responden a de donde sale el numero de un precio.
@@ -1399,6 +1402,7 @@ export default function Settings() {
         // Cargar configuración de múltiples precios
         setBranchPricingEnabled(businessData.branchPricingEnabled || false)
         setBranchCatalogEnabled(businessData.branchCatalogEnabled || false)
+        setObrasEnabled(businessData.obrasEnabled === true)
         // Presentaciones y niveles de precio: `?? true` para reflejar el mismo
         // default que aplica AuthContext (encendidas si nunca se configuraron).
         // Con `|| false` el interruptor salía apagado mientras la función estaba
@@ -4008,6 +4012,26 @@ export default function Settings() {
                 )}
               </div>
 
+              {/* Obras y proyectos. Son las páginas del modo Logística
+                  ofrecidas como módulo: migrar de modo haría perder GRE
+                  Transportista, Cotizaciones y Emisión Masiva. */}
+              {businessMode === 'retail' && (
+                <>
+                  <div className="border-t border-gray-200"></div>
+                  <div>
+                    <SettingToggle
+                      id="opcion-obrasEnabled"
+                      checked={obrasEnabled}
+                      onChange={(e) => setObrasEnabled(e.target.checked)}
+                      title="Obras y proyectos"
+                      description={obrasEnabled
+                        ? '✓ Habilitado: en el menú aparece el grupo "Obras", con Proyectos / Obras, Salidas de Almacén, Retornos a Almacén y Reportes de Obra. Sirve para controlar qué material sale a cada obra, qué vuelve y cuánto costó — sin cambiar tu modo de negocio.'
+                        : '✗ Deshabilitado: no se muestran las páginas de obras. Actívalo si envías materiales o herramientas a obras, proyectos o sedes de tus clientes.'}
+                    />
+                  </div>
+                </>
+              )}
+
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
 
@@ -4054,6 +4078,12 @@ export default function Settings() {
                           { id: 'bulk-emission', label: 'Emisión Masiva', description: 'Crear muchos comprobantes o guías de una vez desde un Excel' },
                           { id: 'envios', label: 'Envíos', description: 'Gestión de repartidores y entregas' },
                         ] },
+                        ...(obrasEnabled ? [{ title: 'Obras y proyectos', items: [
+                          { id: 'projects', label: 'Proyectos / Obras', description: 'Obras y proyectos activos' },
+                          { id: 'warehouse-exits', label: 'Salidas de Almacén', description: 'Material que sale hacia una obra' },
+                          { id: 'warehouse-returns', label: 'Retornos a Almacén', description: 'Material que vuelve de la obra' },
+                          { id: 'logistics-reports', label: 'Reportes de Obra', description: 'Consumo y costo por obra' },
+                        ] }] : []),
                         { title: 'Finanzas', items: [
                           { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
                           { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
@@ -6209,6 +6239,7 @@ export default function Settings() {
                       cardCommissionRate: Number(cardCommissionRate) || 0,
                       branchPricingEnabled: branchPricingEnabled,
                       branchCatalogEnabled: branchCatalogEnabled,
+                      obrasEnabled: obrasEnabled,
                       multiplePricesEnabled: multiplePricesEnabled,
                       priceLabels: priceLabels,
                       // OJO: pricePercentages, priceCalculationBase y marginFormula
