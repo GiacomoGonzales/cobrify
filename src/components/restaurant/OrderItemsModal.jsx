@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { ShoppingCart, Plus, Minus, Search, Loader2, X, ChevronDown, ChevronRight } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
@@ -13,7 +13,8 @@ import VariantSelectorModal from '@/components/product/VariantSelectorModal'
 import PresentationSelectorModal from '@/components/product/PresentationSelectorModal'
 import { computeRecipeStockAlerts, hasAnyRecipe } from '@/utils/recipeAvailability'
 import { filterProductsForBranch } from '@/utils/branchCatalog'
-import { cn } from '@/lib/utils'
+import { cn, matchesPrebuilt } from '@/lib/utils'
+import { buildProductHaystack } from '@/utils/productSearch'
 import { agregarItemsOrdenDemo } from '@/data/demo/operaciones'
 
 export default function OrderItemsModal({
@@ -205,6 +206,33 @@ export default function OrderItemsModal({
     return result
   }
 
+  /**
+   * Índice de búsqueda, uno por producto, con el MISMO texto que arma el POS.
+   *
+   * Este buscador solo miraba `name` y `code`, y con un `includes()` de la
+   * frase entera: "ju le fre" no encontraba "Jugo de leche de fresa" y buscar
+   * "cafe" no traía "Café". El POS ya resuelve las dos cosas —palabras sueltas
+   * en cualquier orden y sin tildes— y además busca por categoría, descripción,
+   * marca, presentación y los atributos de las variantes. Reusar
+   * `buildProductHaystack` es lo que evita que los dos buscadores vuelvan a
+   * separarse; el mozo escribe igual que el cajero.
+   *
+   * Se arma una sola vez por catálogo (no en cada tecla): cada letra cuesta un
+   * `includes()` por producto en vez de re-normalizar diez campos.
+   *
+   * `categoryMap` es {id: nombre}. Se devuelve '' cuando el id no está en el
+   * mapa para que `buildProductHaystack` aplique su propio criterio con las
+   * categorías viejas guardadas como texto libre, en vez de indexar un id.
+   */
+  const indiceDeBusqueda = useMemo(() => {
+    const map = new Map()
+    const nombreDeCategoria = (id) => categoryMap[id] || ''
+    for (const p of products) {
+      map.set(p.id, buildProductHaystack(p, { getCategoryName: nombreDeCategoria }))
+    }
+    return map
+  }, [products, categoryMap])
+
   // Filtrar productos por búsqueda y categoría
   useEffect(() => {
     // Excluir productos desactivados (isActive === false) en cualquier origen (incl. demo).
@@ -218,17 +246,13 @@ export default function OrderItemsModal({
       })
     }
 
-    // Filtrar por búsqueda
+    // Filtrar por búsqueda — mismo motor que el POS (ver el índice de arriba)
     if (searchTerm.trim() !== '') {
-      filtered = filtered.filter(
-        (p) =>
-          p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          p.code?.toLowerCase().includes(searchTerm.toLowerCase())
-      )
+      filtered = filtered.filter((p) => matchesPrebuilt(searchTerm, indiceDeBusqueda.get(p.id) || ''))
     }
 
     setFilteredProducts(filtered)
-  }, [searchTerm, selectedCategory, products, categoryMap])
+  }, [searchTerm, selectedCategory, products, categoryMap, indiceDeBusqueda])
 
   const loadProducts = async () => {
     setIsLoading(true)

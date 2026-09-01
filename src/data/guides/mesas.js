@@ -88,6 +88,10 @@ export default {
         },
         {
           type: 'texto',
+          text: 'El buscador de la carta funciona igual que el del POS: escribe pedazos de palabras, en el orden que sea y sin tildes. "ju le fre" encuentra "Jugo de leche de fresa", y también busca por código, categoría, presentación o el color y la talla de una variante.',
+        },
+        {
+          type: 'texto',
           text: 'Puedes seguir agregando a lo largo de la comida: cada agregado se suma a la cuenta y va a cocina como pedido nuevo, sin repetir lo ya enviado.',
         },
         {
