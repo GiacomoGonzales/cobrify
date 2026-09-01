@@ -1561,14 +1561,19 @@ export default function Products() {
           presentation: pharmacyData.presentation || null,
           laboratoryId: pharmacyData.laboratoryId || null,
           laboratoryName: pharmacyData.laboratoryName || null,
-          // Marca: igual al flujo no-pharmacy, derivamos texto desde brandId si aplica.
-          ...((() => {
+          // Marca: SOLO en farmacia. En veterinaria la marca se elige en el
+          // campo de arriba (el general), y este bloque —que se arma después—
+          // la pisaba con su propio valor vacío: el usuario elegía la marca,
+          // guardaba, y el producto salía sin marca. Reportado por LA PATOTA
+          // (1-sep-2026): creaba la marca, se creaba bien, pero nunca quedaba
+          // pegada al producto, ni creándolo ni editándolo.
+          ...(businessMode === 'pharmacy' ? (() => {
             const brand = brands.find(b => b.id === pharmacyData.brandId)
             return {
               brandId: pharmacyData.brandId || null,
               marca: brand ? brand.name : (pharmacyData.marca || null),
             }
-          })()),
+          })() : {}),
           // Mismo razonamiento que expirationDate: si hay batches activos
           // (lote gestionado por Compras), no tocar batchNumber — preservar
           // el valor del lote más cercano vía merge.
@@ -8392,8 +8397,9 @@ export default function Products() {
                   )}
                 </div>
 
-                {/* Marca */}
-                {(() => {
+                {/* Marca — solo farmacia: en veterinaria vive en el campo
+                    general de arriba, y tener los dos hacía que se pisaran. */}
+                {businessMode === 'pharmacy' && (() => {
                   const sortedBrands = [...brands].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' }))
                   const hasOrphanText = !!(pharmacyData.marca && !pharmacyData.brandId)
                   return (
