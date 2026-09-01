@@ -14,6 +14,38 @@
 import { PRINCIPAL, claveDeSucursal } from './sellerBranches'
 
 /**
+ * El stock por almacén EFECTIVO de un producto.
+ *
+ * Con variantes el stock vive en cada variante y el `warehouseStocks` del padre
+ * es una copia que no siempre está: de los 2,505 productos con variantes de la
+ * base, 810 no tienen el campo y otros 162 lo tienen desfasado. Leyendo el del
+ * padre, esos 810 salían como "sin stock en ninguna sucursal" y los 162 con un
+ * número distinto al que muestra su propia tarjeta en el POS.
+ *
+ * Sumar desde las variantes es lo que hace el POS para pintar la tarjeta, así
+ * que el desglose y el número de al lado no pueden discrepar.
+ *
+ * @param {object} producto - producto (con o sin variantes) o una variante suelta
+ * @returns {Array<{warehouseId: string, stock: number}>}
+ */
+export function almacenesDelProducto(producto) {
+  const variantes = producto?.hasVariants && Array.isArray(producto?.variants) ? producto.variants : []
+  if (variantes.length === 0) {
+    return Array.isArray(producto?.warehouseStocks) ? producto.warehouseStocks : []
+  }
+
+  const porAlmacen = new Map()
+  for (const v of variantes) {
+    const lista = Array.isArray(v?.warehouseStocks) ? v.warehouseStocks : []
+    for (const ws of lista) {
+      if (!ws?.warehouseId) continue
+      porAlmacen.set(ws.warehouseId, (porAlmacen.get(ws.warehouseId) || 0) + (Number(ws.stock) || 0))
+    }
+  }
+  return [...porAlmacen.entries()].map(([warehouseId, stock]) => ({ warehouseId, stock }))
+}
+
+/**
  * Desglose de stock por sucursal.
  *
  * @param {object} producto            - producto o variante (lo que tenga warehouseStocks)
@@ -29,7 +61,7 @@ export function stockPorSucursal(producto, warehouses, branches, {
   nombrePrincipal = 'Principal',
   sucursalActual = null,
 } = {}) {
-  const lista = Array.isArray(producto?.warehouseStocks) ? producto.warehouseStocks : []
+  const lista = almacenesDelProducto(producto)
   if (lista.length === 0) return []
 
   // almacén -> sucursal

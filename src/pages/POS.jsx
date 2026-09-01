@@ -9241,7 +9241,12 @@ ${companySettings?.businessName || 'Tu Empresa'}`
     && todasLasSucursales.length > 0
 
   const getStockBadge = product => {
-    // Obtener stock del almacén seleccionado
+    // Vale también para los productos CON variantes. Antes cada vista les
+    // pintaba su propio texto plano —tres copias del mismo número con tres
+    // colores distintos— y como ese texto no era el badge, no se podía tocar:
+    // en un producto con variantes no había forma de consultar las otras
+    // sucursales. `getCurrentWarehouseStock` ya suma las variantes, así que el
+    // número es el mismo de siempre.
     const warehouseStock = getCurrentWarehouseStock(product)
 
     // Un producto sin control de stock lo dice, venga por `stock: null` o por
@@ -9827,6 +9832,16 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   // querer saber que se acaba el pollo no es lo mismo que
                   // querer que lo bloqueen.
                   const lowIngredients = !noIngredients && insumosBajos.has(product.id)
+                  // La tarjeta NO lleva el atributo `disabled`: un botón
+                  // deshabilitado se traga los clics de todo lo que tiene
+                  // dentro, y acá dentro va el botón que consulta el stock de
+                  // las otras sucursales. Con `disabled` ese botón quedaba
+                  // muerto justo cuando el producto está agotado, que es el
+                  // único caso para el que la consulta existe ("acá no me
+                  // queda, ¿hay en la otra tienda?"). Se resuelve con
+                  // `aria-disabled` más una guarda en el onClick: no se puede
+                  // agregar al carrito, y lo gris sigue saliendo de las clases,
+                  // no del atributo, así que no cambia nada a la vista.
                   const isDisabled = isOutOfStock || isExpired || noIngredients
                   const quantityInCart = cart
                     .filter(item => item.id === product.id)
@@ -9835,8 +9850,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   return (
                     <button
                       key={product.id}
-                      onClick={() => addToCart(product)}
-                      disabled={isDisabled}
+                      onClick={() => { if (isDisabled) return; addToCart(product) }}
+                      aria-disabled={isDisabled}
                       className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors touch-no-hover ${
                         isExpired
                           ? 'bg-red-50 opacity-60 cursor-not-allowed'
@@ -9915,10 +9930,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         )}
                         {!hideStockInPOS && (
                           <div className="text-[11px] sm:text-xs mt-0.5">
-                            {!product.hasVariants
-                              ? getStockBadge(product)
-                              : <span className="text-gray-500">Stock: <span className="font-semibold">{getCurrentWarehouseStock(product)}</span></span>
-                            }
+                            {getStockBadge(product)}
                           </div>
                         )}
                       </div>
@@ -9973,6 +9985,16 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   // querer saber que se acaba el pollo no es lo mismo que
                   // querer que lo bloqueen.
                   const lowIngredients = !noIngredients && insumosBajos.has(product.id)
+                  // La tarjeta NO lleva el atributo `disabled`: un botón
+                  // deshabilitado se traga los clics de todo lo que tiene
+                  // dentro, y acá dentro va el botón que consulta el stock de
+                  // las otras sucursales. Con `disabled` ese botón quedaba
+                  // muerto justo cuando el producto está agotado, que es el
+                  // único caso para el que la consulta existe ("acá no me
+                  // queda, ¿hay en la otra tienda?"). Se resuelve con
+                  // `aria-disabled` más una guarda en el onClick: no se puede
+                  // agregar al carrito, y lo gris sigue saliendo de las clases,
+                  // no del atributo, así que no cambia nada a la vista.
                   const isDisabled = isOutOfStock || isExpired || noIngredients
 
                   // Calcular cantidad en carrito (suma de todas las variantes/lotes del producto)
@@ -9987,8 +10009,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   return (
                 <button
                   key={product.id}
-                  onClick={() => addToCart(product)}
-                  disabled={isDisabled}
+                  onClick={() => { if (isDisabled) return; addToCart(product) }}
+                  aria-disabled={isDisabled}
                   style={{ overflow: 'visible' }}
                   className={`w-full p-2 sm:p-3 bg-white border-2 rounded-lg transition-all text-left relative touch-no-hover ${
                     isExpired
@@ -10135,7 +10157,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                               </div>
                             ))}
                           </div>
-                          {!hideStockInPOS && !product.hasVariants && getStockBadge(product)}
+                          {!hideStockInPOS && getStockBadge(product)}
                         </>
                       ) : (
                         <>
@@ -10147,12 +10169,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             {posMultiCurrencyOn && exchangeRate > 1 && (
                               <p className="text-[10px] font-medium text-gray-400 leading-tight whitespace-nowrap">≈ {formatCatalogPriceIn(product, currency === 'USD' ? 'PEN' : 'USD')}</p>
                             )}
-                            {!hideStockInPOS && !product.hasVariants && getStockBadge(product)}
-                            {product.hasVariants && !hideStockInPOS && (
-                              <span className="text-[10px] text-gray-500">
-                                Stock: <span className="font-semibold">{getCurrentWarehouseStock(product)}</span>
-                              </span>
-                            )}
+                            {!hideStockInPOS && getStockBadge(product)}
                           </div>
                           {/* Tablet/Desktop: precio arriba, stock abajo */}
                           <div className="hidden sm:block overflow-hidden">
@@ -10163,16 +10180,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                               <p className="text-[10px] font-medium text-gray-400 leading-tight truncate">≈ {formatCatalogPriceIn(product, currency === 'USD' ? 'PEN' : 'USD')}</p>
                             )}
                             <div className="flex items-center justify-between mt-1">
-                              {!hideStockInPOS && !product.hasVariants && getStockBadge(product)}
+                              {!hideStockInPOS && getStockBadge(product)}
                               {product.hasVariants && (
-                                <>
-                                  {!hideStockInPOS && (
-                                    <span className={`text-xs font-semibold ${getCurrentWarehouseStock(product) > (product?.minStock ?? 3) ? 'text-green-600' : getCurrentWarehouseStock(product) > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                      Stock: {getCurrentWarehouseStock(product)}
-                                    </span>
-                                  )}
-                                  <span className="text-[10px] text-purple-500 font-medium">Ver opciones</span>
-                                </>
+                                <span className="text-[10px] text-purple-500 font-medium">Ver opciones</span>
                               )}
                             </div>
                           </div>
