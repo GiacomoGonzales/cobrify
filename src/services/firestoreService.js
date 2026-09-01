@@ -109,8 +109,23 @@ export const createInvoiceWithNumber = async (userId, invoiceData, documentType,
       const formattedNumber = `${typeData.serie}-${String(nextNumber).padStart(8, '0')}`
 
       // 3. Crear la factura con el número generado
+      //
+      // `emissionDate` se garantiza ACÁ, que es el punto por donde pasa toda
+      // venta al crearse. Es la fecha FISCAL del comprobante —la que ve SUNAT,
+      // la del Registro de Ventas— y la que usan Ventas y Reportes para ubicar
+      // el documento en su período. Un comprobante sin ella queda fuera de
+      // cualquier consulta por fecha de emisión y desaparece de los totales sin
+      // que nadie lo note: JMC tenía 40 boletas de agosto por S/ 23,500 así,
+      // creadas por un camino que no la escribía. Firestore no puede consultar
+      // por campos ausentes, así que el respaldo tiene que ponerse al escribir.
+      const fechaEmisionLima = () => {
+        const ahora = new Date()
+        const lima = new Date(ahora.getTime() - 5 * 60 * 60 * 1000)
+        return lima.toISOString().slice(0, 10)
+      }
       const completeInvoiceData = {
         ...invoiceData,
+        emissionDate: invoiceData.emissionDate || fechaEmisionLima(),
         number: formattedNumber,
         series: typeData.serie,
         correlativeNumber: nextNumber,

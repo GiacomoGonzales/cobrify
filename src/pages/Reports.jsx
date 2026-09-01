@@ -545,10 +545,88 @@ export default function Reports() {
     return typeof id === 'string' && (id.startsWith('custom-') || id.startsWith('appointment-'))
   }, [])
 
+  /**
+   * Los límites del período elegido, en un solo lugar.
+   *
+   * Se calculan aparte porque los usan DOS listas: las ventas y las notas de
+   * crédito/débito, que no son ventas pero sí se cuentan en Vendedores. Antes
+   * el rango vivía dentro del memo de las ventas y no había forma de reusarlo.
+   *
+   * `null` = sin tope (el rango "todo" y el personalizado sin fechas).
+   */
+  const rangoDelPeriodo = useMemo(() => {
+    const now = new Date()
+
+    if (dateRange === 'custom') {
+      if (!customStartDate || !customEndDate) return null
+      const desde = parseLocalDate(customStartDate)
+      desde.setHours(0, 0, 0, 0)
+      const hasta = parseLocalDate(customEndDate)
+      hasta.setHours(23, 59, 59, 999)
+      return { desde, hasta }
+    }
+
+    // TOPE SUPERIOR del período. Antes solo existía el inicio y el filtro era
+    // `invoiceDate >= filterDate`, sin fin: un comprobante fechado a FUTURO se
+    // colaba en todos los rangos (uno de agosto aparecía en "Este mes" de
+    // julio, y uno de mañana en "Hoy"). Cada rango se cierra en su límite
+    // natural, así que los documentos fechados dentro del período —aunque sean
+    // posteriores a hoy— siguen contando, que es lo correcto.
+    const finDeHoy = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
+    switch (dateRange) {
+      case 'today':
+        return { desde: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0), hasta: finDeHoy }
+      case 'week': {
+        const desde = new Date()
+        desde.setDate(now.getDate() - 7)
+        return { desde, hasta: finDeHoy }
+      }
+      case 'month':
+        // Mes calendárico completo (incluye días del mes aún por venir)
+        return {
+          desde: new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0),
+          hasta: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999),
+        }
+      case 'quarter':
+        // Últimos 3 meses completos desde el 1ero
+        return {
+          desde: new Date(now.getFullYear(), now.getMonth() - 2, 1, 0, 0, 0, 0),
+          hasta: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999),
+        }
+      case 'year':
+        return {
+          desde: new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0),
+          hasta: new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999),
+        }
+      default:
+        return null
+    }
+  }, [dateRange, customStartDate, customEndDate])
+
+  /** ¿Este comprobante cae dentro del período elegido? */
+  const enElPeriodo = useCallback((invoice) => {
+    if (!rangoDelPeriodo) return true
+    const fecha = getInvoiceDate(invoice)
+    if (!fecha) return false
+    return fecha >= rangoDelPeriodo.desde && fecha <= rangoDelPeriodo.hasta
+  }, [rangoDelPeriodo])
+
+  /**
+   * Notas de crédito y débito del período.
+   *
+   * NO son ventas —por eso salen de `validInvoices`— pero Vendedores las
+   * cuenta, así que se arman aparte con el mismo período y los mismos permisos.
+   */
+  const notasDelPeriodo = useMemo(() => invoices.filter(inv => (
+    ['nota_credito', 'nota_debito'].includes(inv.documentType)
+    && canAccess(inv) && canSeeSale(inv)
+    && inv.archived !== true
+    && !['cancelled', 'voided', 'pending_cancellation', 'partial_refund_pending'].includes(inv.status)
+    && enElPeriodo(inv)
+  )), [invoices, canAccess, canSeeSale, enElPeriodo])
+
   // Filtrar facturas por rango de fecha y calcular costos
   const filteredInvoices = useMemo(() => {
-    const now = new Date()
-    let filterDate = new Date()
 
     // Primero filtrar facturas para evitar duplicados:
     // - Excluir notas de venta que ya fueron convertidas a boleta/factura (para no duplicar ingresos)
@@ -568,9 +646,26 @@ export default function Reports() {
       if (invoice.convertedTo) {
         return false
       }
+      // Las notas de crédito y débito NO son ventas. Estaban entrando acá y su
+      // importe se SUMABA a los ingresos —el documento que debería restar los
+      // estaba inflando—, además de contarse como comprobantes, de sumar sus
+      // ítems a Productos y de inflar la comisión del vendedor. Caso real: LA
+      // PATOTA, agosto 2026, 4 notas por S/ 246 que se convertían en S/ 492 de
+      // diferencia contra la pantalla de Ventas.
+      // Se cuentan aparte en `notasDelPeriodo`, que es lo que usa Vendedores.
+      if (invoice.documentType === 'nota_credito' || invoice.documentType === 'nota_debito') {
+        return false
+      }
       // Si el documento está anulado o en proceso de anulación SUNAT, no contar
       // Nota: rechazados por SUNAT (sunatStatus === 'rejected') SÍ se cuentan porque la venta ocurrió
-      if (invoice.status === 'cancelled' || invoice.status === 'voided' || invoice.sunatStatus === 'voiding' || invoice.sunatStatus === 'voided') {
+      // `pending_cancellation` y `partial_refund_pending` van acá también:
+      // Ventas y el Dashboard ya los descartaban y Reportes no, y ese solo
+      // desacuerdo dejaba los tres números distintos aunque todo lo demás
+      // coincidiera. Una anulación pedida y no confirmada no es una venta que
+      // se pueda reportar como firme.
+      if (invoice.status === 'cancelled' || invoice.status === 'voided'
+        || invoice.status === 'pending_cancellation' || invoice.status === 'partial_refund_pending'
+        || invoice.sunatStatus === 'voiding' || invoice.sunatStatus === 'voided') {
         return false
       }
       // Filtrar por sucursal
@@ -620,70 +715,8 @@ export default function Reports() {
       }
     }
 
-    // Para fechas personalizadas
-    if (dateRange === 'custom') {
-      if (!customStartDate || !customEndDate) {
-        return validInvoices.map(addCostCalculations)
-      }
-      const startDate = parseLocalDate(customStartDate)
-      startDate.setHours(0, 0, 0, 0)
-      const endDate = parseLocalDate(customEndDate)
-      endDate.setHours(23, 59, 59, 999)
-
-      return validInvoices
-        .filter(invoice => {
-          const invoiceDate = getInvoiceDate(invoice)
-          if (!invoiceDate) return false
-          return invoiceDate >= startDate && invoiceDate <= endDate
-        })
-        .map(addCostCalculations)
-    }
-
-    // TOPE SUPERIOR del período. Antes solo existía `filterDate` (inicio) y el
-    // filtro era `invoiceDate >= filterDate`, sin fin: un comprobante fechado a
-    // FUTURO se colaba en todos los rangos (uno de agosto aparecía en "Este
-    // mes" de julio, y uno de mañana en "Hoy"). Cada rango se cierra en su
-    // límite natural, así que los documentos fechados dentro del período —aunque
-    // sean posteriores a hoy— siguen contando, que es lo correcto.
-    let filterEndDate
-    switch (dateRange) {
-      case 'today':
-        filterDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
-        filterEndDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
-        break
-      case 'week':
-        filterDate.setDate(now.getDate() - 7)
-        filterEndDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
-        break
-      case 'month':
-        // Mes calendárico completo (incluye días del mes aún por venir)
-        filterDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
-        filterEndDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
-        break
-      case 'quarter':
-        // Últimos 3 meses completos desde el 1ero
-        filterDate = new Date(now.getFullYear(), now.getMonth() - 2, 1, 0, 0, 0, 0)
-        filterEndDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
-        break
-      case 'year':
-        // Año calendárico completo
-        filterDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0)
-        filterEndDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999)
-        break
-      case 'all':
-        return validInvoices.map(addCostCalculations)
-      default:
-        return validInvoices.map(addCostCalculations)
-    }
-
-    return validInvoices
-      .filter(invoice => {
-        const invoiceDate = getInvoiceDate(invoice)
-        if (!invoiceDate) return false
-        return invoiceDate >= filterDate && invoiceDate <= filterEndDate
-      })
-      .map(addCostCalculations)
-  }, [invoices, dateRange, customStartDate, customEndDate, calculateItemCost, isCustomItem, filterBranch, canAccess, canSeeSale])
+    return validInvoices.filter(enElPeriodo).map(addCostCalculations)
+  }, [invoices, enElPeriodo, calculateItemCost, isCustomItem, filterBranch, canAccess, canSeeSale])
 
   // Función helper para calcular revenue del período anterior
   const getPreviousPeriodRevenue = useCallback(() => {
@@ -1318,8 +1351,16 @@ export default function Reports() {
       if (invoice.documentType === 'factura') sellers[sellerId].facturas += 1
       else if (invoice.documentType === 'boleta') sellers[sellerId].boletas += 1
       else if (invoice.documentType === 'nota_venta') sellers[sellerId].notasVenta += 1
-      else if (invoice.documentType === 'nota_credito') sellers[sellerId].notasCredito += 1
-      else if (invoice.documentType === 'nota_debito') sellers[sellerId].notasDebito += 1
+    })
+
+    // Las notas de crédito/débito ya no viajan con las ventas (no lo son), así
+    // que sus contadores se llenan desde su propia lista. Solo cuentan: su
+    // importe no toca ingresos, utilidad ni comisiones.
+    notasDelPeriodo.forEach(nota => {
+      const sellerId = nota.sellerId || nota.createdBy
+      if (!sellerId || !sellers[sellerId]) return
+      if (nota.documentType === 'nota_credito') sellers[sellerId].notasCredito += 1
+      else sellers[sellerId].notasDebito += 1
     })
 
     return Object.values(sellers)
@@ -1336,7 +1377,7 @@ export default function Reports() {
         }
       })
       .sort((a, b) => b.totalRevenue - a.totalRevenue)
-  }, [filteredInvoices, calculateItemCost, isCustomItem, sellersList])
+  }, [filteredInvoices, notasDelPeriodo, calculateItemCost, isCustomItem, sellersList])
 
   // Estadísticas por método de pago
   const paymentMethodStats = useMemo(() => {
