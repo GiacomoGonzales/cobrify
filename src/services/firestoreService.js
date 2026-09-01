@@ -19,6 +19,7 @@ import {
 import { db, auth } from '@/lib/firebase'
 import { generatePetId, normalizePets } from '@/utils/petUtils'
 import { buscarLoteEnAlmacen, cantidadDeLote, idDeLote } from '@/utils/batchLookup'
+import { calcularStockPorAlmacen } from '@/utils/warehouseStockMath'
 
 /**
  * Servicio para interactuar con Firestore
@@ -1129,45 +1130,16 @@ export const updateProductStockTransaction = async (userId, productId, warehouse
         return
       }
 
-      // Producto normal: actualizar stock a nivel de producto
-      const warehouseStocks = [...(product.warehouseStocks || [])]
-      const currentGeneralStock = product.stock || 0
-
-      let newStock, newWarehouseStocks
-
-      if (warehouseStocks.length === 0 && !warehouseId) {
-        newStock = allowNegative ? (currentGeneralStock + quantity) : Math.max(0, currentGeneralStock + quantity)
-        newWarehouseStocks = []
-      } else {
-        const existingIndex = warehouseStocks.findIndex(ws => ws.warehouseId === warehouseId)
-        if (existingIndex >= 0) {
-          const wsStock = (warehouseStocks[existingIndex].stock || 0) + quantity
-          warehouseStocks[existingIndex] = { ...warehouseStocks[existingIndex], stock: allowNegative ? wsStock : Math.max(0, wsStock) }
-        } else if (quantity > 0) {
-          warehouseStocks.push({ warehouseId, stock: quantity, minStock: 0 })
-        } else if (quantity < 0 && warehouseStocks.length === 0) {
-          newStock = allowNegative ? (currentGeneralStock + quantity) : Math.max(0, currentGeneralStock + quantity)
-          newWarehouseStocks = []
-        } else if (quantity < 0 && allowNegative && warehouseId) {
-          // Vender sin stock: el almacén indicado no tenía entrada previa, crear una negativa
-          warehouseStocks.push({ warehouseId, stock: quantity, minStock: 0 })
-        } else if (quantity < 0) {
-          let remaining = Math.abs(quantity)
-          for (let i = 0; i < warehouseStocks.length && remaining > 0; i++) {
-            const ws = warehouseStocks[i].stock || 0
-            const deduct = Math.min(ws, remaining)
-            if (deduct > 0) {
-              warehouseStocks[i] = { ...warehouseStocks[i], stock: ws - deduct }
-              remaining -= deduct
-            }
-          }
-        }
-
-        if (newWarehouseStocks === undefined) {
-          newWarehouseStocks = warehouseStocks
-          newStock = warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
-        }
-      }
+      // Producto normal: el reparto entre almacenes vive en una función pura
+      // (src/utils/warehouseStockMath.js) para poder probarlo — es el cálculo
+      // más delicado del sistema.
+      const { newStock, newWarehouseStocks } = calcularStockPorAlmacen({
+        warehouseStocks: product.warehouseStocks,
+        warehouseId,
+        quantity,
+        allowNegative,
+        currentGeneralStock: product.stock || 0,
+      })
 
       transaction.update(docRef, {
         stock: newStock,
