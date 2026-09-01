@@ -187,7 +187,7 @@ function createSoapEnvelope(fileName, zipBase64, ruc, solUser, solPassword) {
 /**
  * Parsea respuesta exitosa de SUNAT
  */
-async function parseSunatResponse(soapResponse) {
+export async function parseSunatResponse(soapResponse) {
   try {
     const parser = new XMLParser({
       ignoreAttributes: false,
@@ -309,8 +309,16 @@ async function parseSunatResponse(soapResponse) {
       const docResponse = cdr.ApplicationResponse?.DocumentResponse
       if (docResponse) {
         const response = docResponse.Response
-        // CRÍTICO: Si el ResponseCode no estaba en el nivel superior, buscarlo aquí
-        if ((responseCode === null || responseCode === undefined) && response?.ResponseCode) {
+        // CRÍTICO: Si el ResponseCode no estaba en el nivel superior, buscarlo aquí.
+        // OJO con el 0: "aceptado" es ResponseCode 0, y los CDR nuevos de SUNAT
+        // (cbc:ID con UUID) lo traen SIN atributos, así que fast-xml-parser lo
+        // entrega como el número 0 — que es falsy. Con `response?.ResponseCode`
+        // como condición, justamente el caso ACEPTADO se saltaba la lectura,
+        // quedaba code=UNKNOWN/accepted=false y el documento solo se salvaba
+        // por el rescate de texto "ha sido aceptado" en index.js (31-ago-2026,
+        // RUC 10701658201). Los CDR viejos no lo sufrían: su ResponseCode trae
+        // atributos y llega como objeto {'#text': 0, ...}, que sí es truthy.
+        if ((responseCode === null || responseCode === undefined) && response?.ResponseCode !== undefined) {
           responseCode = extractText(response.ResponseCode)
           console.log(`📋 ResponseCode encontrado en DocumentResponse/Response: ${responseCode}`)
         }
