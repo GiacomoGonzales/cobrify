@@ -23,6 +23,19 @@ import {
  * visita al Dashboard desalojaba productos, clientes y configuración. Por eso
  * "todo" se sentía lento, no solo esta pantalla.
  *
+ * QUÉ FECHA MANDA: la de EMISIÓN, no la de creación. Son cosas distintas y en
+ * varias cuentas difieren mucho: LA PATOTA registra sus notas de venta días
+ * después, con la fecha real hacia atrás, y tenía 77 comprobantes creados en
+ * agosto pero emitidos en julio. El Dashboard los sumaba a agosto y las
+ * páginas de Ventas y Reportes a julio: S/ 23,036 contra S/ 17,638 por el mismo
+ * mes. La fecha de emisión es la que vale —es la que se le declara a SUNAT y la
+ * que usa `getInvoiceDate` en todo el resto del sistema—, así que es la que se
+ * consulta acá también.
+ *
+ * `emissionDate` se guarda como texto 'YYYY-MM-DD', no como marca de tiempo, así
+ * que los límites del período se comparan como texto. El orden alfabético de ese
+ * formato es el orden cronológico, por eso funciona.
+ *
  * CUÁNDO NO SE PUEDE USAR (el llamador debe verificarlo):
  *  - Multi-divisa: `sum('total')` sumaría dólares como si fueran soles.
  *  - Usuario limitado a sucursales/almacenes o a un vendedor: la agregación no
@@ -37,10 +50,14 @@ const SUNAT_EXCLUIDOS = ['voiding', 'voided']
 
 const invoicesRef = (businessId) => collection(db, 'businesses', businessId, 'invoices')
 
+/** Una fecha -> 'YYYY-MM-DD' en hora de Perú, que es como se guarda `emissionDate`. */
+const diaLima = (fecha) => new Date(fecha).toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
+
+/** El período, con el fin EXCLUSIVO (los llamadores pasan la medianoche siguiente). */
 const enRango = (businessId, desde, hasta) => [
   invoicesRef(businessId),
-  where('createdAt', '>=', desde),
-  where('createdAt', '<', hasta),
+  where('emissionDate', '>=', diaLima(desde)),
+  where('emissionDate', '<', diaLima(hasta)),
 ]
 
 /**
@@ -67,7 +84,7 @@ const traerExcluidos = async (businessId, desde, hasta) => {
       const data = d.data()
       porId.set(d.id, {
         total: Number(data.total) || 0,
-        fecha: data.createdAt?.toDate ? data.createdAt.toDate() : null,
+        fecha: typeof data.emissionDate === 'string' ? data.emissionDate : null,
       })
     })
   }
@@ -88,20 +105,23 @@ export const getMonthSalesAggregated = async (businessId, monthStart, monthEnd, 
     const fin = hasta && hasta < monthEnd ? hasta : monthEnd
 
     // Un tramo por día: sirve para el total (sumando) y para el gráfico diario.
+    // Como `emissionDate` tiene granularidad de día, cada tramo es una igualdad
+    // contra su fecha, no un rango de horas. El cursor se mueve al mediodía para
+    // que sumar un día nunca caiga en el borde por la zona horaria del navegador.
+    const finExclusivo = diaLima(fin)
     const dias = []
-    const cursor = new Date(monthStart)
-    while (cursor < fin) {
-      const siguiente = new Date(cursor)
-      siguiente.setDate(siguiente.getDate() + 1)
-      dias.push({ dia: cursor.getDate(), desde: new Date(cursor), hasta: siguiente > fin ? new Date(fin) : siguiente })
-      cursor.setTime(siguiente.getTime())
+    const cursor = new Date(`${diaLima(monthStart)}T12:00:00-05:00`)
+    while (diaLima(cursor) < finExclusivo) {
+      const fecha = diaLima(cursor)
+      dias.push({ dia: Number(fecha.slice(8, 10)), fecha })
+      cursor.setDate(cursor.getDate() + 1)
     }
     if (dias.length === 0) return { ok: true, sales: 0, count: 0, daily: {} }
 
     const [agregados, excluidos] = await Promise.all([
       Promise.all(dias.map(d =>
         getAggregateFromServer(
-          query(...enRango(businessId, d.desde, d.hasta)),
+          query(invoicesRef(businessId), where('emissionDate', '==', d.fecha)),
           { total: sum('total'), n: count() }
         )
       )),
@@ -124,7 +144,7 @@ export const getMonthSalesAggregated = async (businessId, monthStart, monthEnd, 
       sales -= ex.total
       cantidad -= 1
       if (ex.fecha) {
-        const dia = ex.fecha.getDate()
+        const dia = Number(ex.fecha.slice(8, 10))
         if (daily[dia] != null) daily[dia] = daily[dia] - ex.total
       }
     }
