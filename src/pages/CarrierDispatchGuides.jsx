@@ -1075,22 +1075,19 @@ export default function CarrierDispatchGuides() {
       {selectedGuide && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-orange-600 to-orange-700 px-6 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-white/20 rounded-lg">
-                  <Truck className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-white">GRE Transportista</h2>
-                  <p className="text-orange-100 text-sm">{selectedGuide.number}</p>
-                </div>
+            {/* Header — la misma chrome que el resto de los modales del
+                sistema (blanco, titulo oscuro, X gris). La barra naranja con
+                el icono en un cuadro no se parecia a ninguna otra pantalla. */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-white">
+              <div className="min-w-0">
+                <h3 className="text-xl font-semibold text-gray-900">Guía de Transportista</h3>
+                <p className="text-sm text-gray-500 mt-0.5">{selectedGuide.number}</p>
               </div>
               <button
                 onClick={() => setSelectedGuide(null)}
-                className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0 ml-2"
               >
-                <X className="w-5 h-5 text-white" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
