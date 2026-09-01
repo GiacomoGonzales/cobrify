@@ -123,9 +123,20 @@ export const createInvoiceWithNumber = async (userId, invoiceData, documentType,
         const lima = new Date(ahora.getTime() - 5 * 60 * 60 * 1000)
         return lima.toISOString().slice(0, 10)
       }
+      // El orden es el MISMO que usa el generador del XML al emitir
+      // (`emissionDate` → `issueDate` → hoy), para que la fecha guardada y la
+      // que se le declara a SUNAT no puedan discrepar. Las 40 boletas de JMC
+      // tenían la fecha en `issueDate` —por eso SUNAT las recibió bien— y la
+      // app, que solo mira `emissionDate`, no la encontraba.
+      const deIssueDate = (v) => {
+        if (!v) return null
+        if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) return v
+        const d = v.toDate ? v.toDate() : new Date(v)
+        return isNaN(d.getTime()) ? null : new Date(d.getTime() - 5 * 60 * 60 * 1000).toISOString().slice(0, 10)
+      }
       const completeInvoiceData = {
         ...invoiceData,
-        emissionDate: invoiceData.emissionDate || fechaEmisionLima(),
+        emissionDate: invoiceData.emissionDate || deIssueDate(invoiceData.issueDate) || fechaEmisionLima(),
         number: formattedNumber,
         series: typeData.serie,
         correlativeNumber: nextNumber,
