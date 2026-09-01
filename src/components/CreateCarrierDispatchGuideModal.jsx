@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { UNIDADES_PESO, convertirPeso } from '@/utils/weightUnits'
 import { X, Truck, MapPin, User, Package, Calendar, FileText, Building2, Car, Plus, Trash2, Search, Loader2, Save, Info, Store } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import { validatePlate, normalizePlate, PLATE_MAX_LENGTH, PLATE_EXAMPLE } from '@/utils/vehiclePlate'
@@ -175,6 +176,9 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
   const [issueDate, setIssueDate] = useState('') // Fecha de emisión del documento
   const [transferDate, setTransferDate] = useState('')
   const [totalWeight, setTotalWeight] = useState('')
+  // KGM o TNE: el valor se declara EN la unidad elegida (pedido de JMC, que
+  // mueve materiales por toneladas).
+  const [weightUnit, setWeightUnit] = useState('KGM')
   const [transferDescription, setTransferDescription] = useState('')
   const [observations, setObservations] = useState('')
 
@@ -318,6 +322,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
         setIssueDate(prefillGuide.issueDate || getLocalDateString())
         setTransferDate(prefillGuide.transferDate || getLocalDateString())
         setTotalWeight(prefillGuide.totalWeight ? String(prefillGuide.totalWeight) : '')
+        setWeightUnit(prefillGuide.weightUnit || 'KGM')
         setTransferDescription(prefillGuide.transferDescription || '')
         setObservations(prefillGuide.observations || '')
 
@@ -947,6 +952,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
         transferDate,
         transferDescription,
         totalWeight: parseFloat(totalWeight),
+        weightUnit,
         observations,
         origin: {
           address: originAddress,
@@ -1115,6 +1121,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
         transferDate,
         transferDescription,
         totalWeight: parseFloat(totalWeight) || 0,
+        weightUnit,
         observations,
         origin: {
           address: originAddress,
@@ -1622,10 +1629,16 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
             />
             <Select
               label="Unid. del peso bruto"
-              value="KGM"
-              disabled
+              value={weightUnit}
+              onChange={(e) => {
+                // Al cambiar la unidad el numero se convierte solo
+                // (2500 KGM <-> 2.5 TNE), como en la pagina de SUNAT.
+                const nueva = e.target.value
+                setTotalWeight(prev => convertirPeso(prev, weightUnit, nueva))
+                setWeightUnit(nueva)
+              }}
             >
-              <option value="KGM">KGM</option>
+              {UNIDADES_PESO.map(u => <option key={u.code} value={u.code}>{u.label}</option>)}
             </Select>
             <Input
               type="number"

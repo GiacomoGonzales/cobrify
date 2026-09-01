@@ -1220,7 +1220,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     doc.text('TRANSPORTE PÚBLICO', leftValueX + 5, currentY)
 
     doc.setFont('helvetica', 'bold')
-    doc.text('Peso Total Aprox. (KGM):', rightLabelX, currentY)
+    doc.text(`Peso Total Aprox. (${guide.weightUnit === 'TNE' ? 'TNE' : 'KGM'}):`, rightLabelX, currentY)
     doc.setFont('helvetica', 'normal')
     doc.text(`${guide.totalWeight || '0'}`, rightValueX, currentY)
 
@@ -1389,7 +1389,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     const dniDisplay = dniValue === '-' && guide.isM1LVehicle ? 'N/A' : dniValue
     doc.text(dniDisplay, leftValueX + 5, currentY)
 
-    doc.text('Peso Total Aprox. (KGM):', rightLabelX, currentY)
+    doc.text(`Peso Total Aprox. (${guide.weightUnit === 'TNE' ? 'TNE' : 'KGM'}):`, rightLabelX, currentY)
     doc.setFont('helvetica', 'bold')
     doc.text(`${guide.totalWeight || '0'}`, rightValueX, currentY)
 

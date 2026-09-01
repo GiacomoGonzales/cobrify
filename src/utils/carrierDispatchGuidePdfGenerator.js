@@ -578,7 +578,7 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   doc.setFont('helvetica', 'bold')
   doc.text('Peso bruto total:', MARGIN_LEFT, currentY)
   doc.setFont('helvetica', 'normal')
-  doc.text(`${(guide.totalWeight || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 })} KGM`, MARGIN_LEFT + 75, currentY)
+  doc.text(`${(guide.totalWeight || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 })} ${guide.weightUnit === 'TNE' ? 'TNE' : 'KGM'}`, MARGIN_LEFT + 75, currentY)
 
   doc.setFont('helvetica', 'bold')
   doc.text('Motivo de traslado:', MARGIN_LEFT + 180, currentY)

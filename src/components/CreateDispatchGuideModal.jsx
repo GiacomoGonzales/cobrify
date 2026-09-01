@@ -12,6 +12,7 @@ import { getBranch, getActiveBranches } from '@/services/branchService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS, resolveUbigeoParts } from '@/data/peruUbigeos'
 import SUNAT_UNITS, { normalizeSunatUnit } from '@/data/sunatUnits'
 import { matchesSearchQuery } from '@/lib/utils'
+import { UNIDADES_PESO, convertirPeso } from '@/utils/weightUnits'
 import { consultarRUC, consultarDNI, consultarEstablecimientos } from '@/services/documentLookupService'
 import { validatePlate, normalizePlate, PLATE_MAX_LENGTH, PLATE_EXAMPLE } from '@/utils/vehiclePlate'
 
@@ -738,11 +739,11 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = 
     }, 0)
 
     if (estimated > 0) {
-      // Redondear a 2 decimales
-      const rounded = Math.round(estimated * 100) / 100
-      setTotalWeight(String(rounded))
+      // El estimado sale en KILOS (los pesos de ficha/item son kg); si la guia
+      // esta en toneladas se convierte antes de pintarlo.
+      setTotalWeight(convertirPeso(String(estimated), 'KGM', weightUnit) || String(Math.round(estimated * 100) / 100))
     }
-  }, [items, productsMap, weightManuallyEdited])
+  }, [items, productsMap, weightManuallyEdited, weightUnit])
 
   // Cargar configuración de envío automático al abrir el modal (no aplica para clonación)
   useEffect(() => {
@@ -2372,10 +2373,15 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = 
               <Select
                 label="Und. del peso bruto"
                 value={weightUnit}
-                onChange={(e) => setWeightUnit(e.target.value)}
+                onChange={(e) => {
+                  // Al cambiar la unidad el numero se convierte solo
+                  // (2500 KGM <-> 2.5 TNE), como en la pagina de SUNAT.
+                  const nueva = e.target.value
+                  setTotalWeight(prev => convertirPeso(prev, weightUnit, nueva))
+                  setWeightUnit(nueva)
+                }}
               >
-                <option value="KGM">KGM</option>
-                <option value="TNE">TNE</option>
+                {UNIDADES_PESO.map(u => <option key={u.code} value={u.code}>{u.label}</option>)}
               </Select>
 
               <Input

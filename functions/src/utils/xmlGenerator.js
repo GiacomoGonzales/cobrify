@@ -2826,10 +2826,13 @@ export function generateDispatchGuideXML(guideData, businessData) {
     shipment.ele('cbc:Information').txt(transferReasonNames[guideData.transferReason])
   }
 
-  // Peso bruto total
+  // Peso bruto total. La unidad la elige el usuario (KGM o TNE, catalogo de
+  // SUNAT): el valor se declara EN esa unidad. Antes el KGM estaba harcodeado
+  // y elegir TNE en el formulario declaraba 2.5 "kilos" en vez de toneladas.
+  const unidadPeso = guideData.weightUnit === 'TNE' ? 'TNE' : 'KGM'
   shipment.ele('cbc:GrossWeightMeasure', {
-    'unitCode': 'KGM'
-  }).txt((guideData.totalWeight || 0).toFixed(2))
+    'unitCode': unidadPeso
+  }).txt((guideData.totalWeight || 0).toFixed(unidadPeso === 'TNE' ? 3 : 2))
 
   // === INDICADORES SUNAT (cbc:SpecialInstructions) ===
   // Tag: /DespatchAdvice/cac:Shipment/cbc:SpecialInstructions (puede ir varias veces)
@@ -3381,10 +3384,13 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   const shipment = root.ele('cac:Shipment')
   shipment.ele('cbc:ID').txt('SUNAT_Envio')
 
-  // Peso bruto total
+  // Peso bruto total. La unidad la elige el usuario (KGM o TNE, catalogo de
+  // SUNAT): el valor se declara EN esa unidad. Antes el KGM estaba harcodeado
+  // y elegir TNE en el formulario declaraba 2.5 "kilos" en vez de toneladas.
+  const unidadPeso = guideData.weightUnit === 'TNE' ? 'TNE' : 'KGM'
   shipment.ele('cbc:GrossWeightMeasure', {
-    'unitCode': 'KGM'
-  }).txt((guideData.totalWeight || 0).toFixed(2))
+    'unitCode': unidadPeso
+  }).txt((guideData.totalWeight || 0).toFixed(unidadPeso === 'TNE' ? 3 : 2))
 
   // === INDICADOR DE PAGADOR DE FLETE (DEBE ir antes de ShipmentStage según UBL 2.1) ===
   // Warning 4388: "Debe consignar el Indicador de pagador de flete"

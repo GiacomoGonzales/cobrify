@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
+import { UNIDADES_PESO, convertirPeso } from '@/utils/weightUnits'
 import { X, Truck, MapPin, User, Package, Calendar, FileText, Plus, Trash2, ChevronDown, ChevronUp, Store, AlertTriangle, Search, Loader2 } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import { validatePlate, normalizePlate, PLATE_MAX_LENGTH, PLATE_EXAMPLE } from '@/utils/vehiclePlate'
@@ -1569,10 +1570,14 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
               <Select
                 label="Und. del peso bruto"
                 value={weightUnit}
-                onChange={(e) => setWeightUnit(e.target.value)}
+                onChange={(e) => {
+                  // Al cambiar la unidad el numero se convierte solo.
+                  const nueva = e.target.value
+                  setTotalWeight(prev => convertirPeso(prev, weightUnit, nueva))
+                  setWeightUnit(nueva)
+                }}
               >
-                <option value="KGM">KGM</option>
-                <option value="TNE">TNE</option>
+                {UNIDADES_PESO.map(u => <option key={u.code} value={u.code}>{u.label}</option>)}
               </Select>
 
               <Input

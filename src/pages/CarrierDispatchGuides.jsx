@@ -1144,7 +1144,7 @@ export default function CarrierDispatchGuides() {
                   </div>
                   <div>
                     <span className="text-gray-500">Peso total:</span>
-                    <p className="font-medium">{selectedGuide.totalWeight || '0'} KG</p>
+                    <p className="font-medium">{selectedGuide.totalWeight || '0'} {selectedGuide.weightUnit === 'TNE' ? 'TNE' : 'KG'}</p>
                   </div>
                 </div>
               </div>
