@@ -296,7 +296,12 @@ export default function BulkEmission() {
       <Card>
         {/* Pestañas */}
         <div className="border-b border-gray-200 px-2 sm:px-4">
-          <div className="flex gap-1 overflow-x-auto">
+          {/* `flex-wrap`, NO `overflow-x-auto`: con overflow en un eje el otro
+              pasa a auto, y el pixel que el `-mb-px` de las pestañas se sale
+              del contenedor alcanzaba para que el navegador dibujara una barra
+              de scroll vertical al costado. Con tres pestañas cortas, envolver
+              en pantalla angosta es mejor que hacerlas deslizar. */}
+          <div className="flex flex-wrap gap-1">
             {[
               { key: 'comprobantes', label: 'Comprobantes', Icono: Receipt },
               { key: 'gre', label: 'GRE Transportista', Icono: Truck },
