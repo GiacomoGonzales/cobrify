@@ -245,71 +245,66 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
           <label className="block text-sm font-medium text-gray-700 mb-3">
             Tipo de Orden
           </label>
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={() => setOrderType('takeaway')}
-              className={`p-4 rounded-xl border-2 transition-all ${
-                orderType === 'takeaway'
-                  ? 'border-green-500 bg-green-50'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              <ShoppingBag className={`w-8 h-8 mx-auto mb-2 ${
-                orderType === 'takeaway' ? 'text-green-600' : 'text-gray-400'
-              }`} />
-              <p className={`font-semibold ${
-                orderType === 'takeaway' ? 'text-green-700' : 'text-gray-700'
-              }`}>
-                Para Llevar
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                Cliente recoge en el local
-              </p>
-            </button>
-
-            <button
-              onClick={() => setOrderType('delivery')}
-              className={`p-4 rounded-xl border-2 transition-all ${
-                orderType === 'delivery'
-                  ? 'border-blue-500 bg-blue-50'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              <Bike className={`w-8 h-8 mx-auto mb-2 ${
-                orderType === 'delivery' ? 'text-blue-600' : 'text-gray-400'
-              }`} />
-              <p className={`font-semibold ${
-                orderType === 'delivery' ? 'text-blue-700' : 'text-gray-700'
-              }`}>
-                Delivery
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                Entrega a domicilio
-              </p>
-            </button>
-
-            {/* En Local: come ahí pero SIN mesa (patio de comidas, barra de
-                mostrador). No es Para Llevar: no lleva táper ni envío. */}
-            <button
-              onClick={() => setOrderType('counter')}
-              className={`p-4 rounded-xl border-2 transition-all col-span-2 ${
-                orderType === 'counter'
-                  ? 'border-amber-500 bg-amber-50'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              <UtensilsCrossed className={`w-8 h-8 mx-auto mb-2 ${
-                orderType === 'counter' ? 'text-amber-600' : 'text-gray-400'
-              }`} />
-              <p className={`font-semibold ${
-                orderType === 'counter' ? 'text-amber-700' : 'text-gray-700'
-              }`}>
-                En Local
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                Come aquí, sin mesa (patio de comidas, mostrador)
-              </p>
-            </button>
+          {/*
+            Los tres en una sola fila, del mismo tamaño.
+            Antes eran dos arriba y el tercero cruzado a lo ancho: comían media
+            pantalla del modal y daban a entender que "En Local" era otra cosa,
+            de otra jerarquía. Son tres opciones equivalentes.
+            La aclaración de cada una aparece desde tablet; en el celular no
+            entra y el nombre alcanza.
+          */}
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              {
+                valor: 'takeaway',
+                Icono: ShoppingBag,
+                titulo: 'Para Llevar',
+                detalle: 'Recoge en el local',
+                borde: 'border-green-500 bg-green-50',
+                icono: 'text-green-600',
+                texto: 'text-green-700',
+              },
+              {
+                valor: 'delivery',
+                Icono: Bike,
+                titulo: 'Delivery',
+                detalle: 'Entrega a domicilio',
+                borde: 'border-blue-500 bg-blue-50',
+                icono: 'text-blue-600',
+                texto: 'text-blue-700',
+              },
+              {
+                // Come ahí pero SIN mesa (patio de comidas, barra de mostrador).
+                // No es Para Llevar: no lleva táper ni envío.
+                valor: 'counter',
+                Icono: UtensilsCrossed,
+                titulo: 'En Local',
+                detalle: 'Sin mesa (mostrador)',
+                borde: 'border-amber-500 bg-amber-50',
+                icono: 'text-amber-600',
+                texto: 'text-amber-700',
+              },
+            ].map(({ valor, Icono, titulo, detalle, borde, icono, texto }) => {
+              const activo = orderType === valor
+              return (
+                <button
+                  key={valor}
+                  type="button"
+                  onClick={() => setOrderType(valor)}
+                  className={`px-2 py-3 rounded-lg border-2 text-center transition-all ${
+                    activo ? borde : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <Icono className={`w-5 h-5 mx-auto mb-1.5 ${activo ? icono : 'text-gray-400'}`} />
+                  <p className={`text-xs sm:text-sm font-semibold leading-tight ${activo ? texto : 'text-gray-700'}`}>
+                    {titulo}
+                  </p>
+                  <p className="hidden sm:block text-[11px] text-gray-500 mt-0.5 leading-tight">
+                    {detalle}
+                  </p>
+                </button>
+              )
+            })}
           </div>
         </div>
 
