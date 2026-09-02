@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { filtrarVendibles } from '@/utils/productSale'
+import { buildProductHaystack } from '@/utils/productSearch'
+import { formatCurrency, matchesPrebuilt } from '@/lib/utils'
 import { Link, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -599,6 +601,23 @@ export default function Settings() {
     }).catch(() => setProductosReservables([]))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appointmentsBooking.enabled])
+  // Modo estacion de servicio (grifo): vender combustible por monto.
+  // `fuelIds` son los productos que salen como botones grandes en el POS,
+  // en el orden en que se eligieron.
+  const [serviceStationConfig, setServiceStationConfig] = useState({ enabled: false, fuelIds: [] })
+  const [productosCombustible, setProductosCombustible] = useState(null) // null = sin cargar
+  const [busquedaCombustible, setBusquedaCombustible] = useState('')
+
+  // Igual que el picker de servicios reservables: el catalogo se trae recien
+  // cuando la seccion se abre, porque Settings no lo necesita para nada mas.
+  useEffect(() => {
+    if (!serviceStationConfig.enabled || productosCombustible !== null || isDemoMode) return
+    getProducts(getBusinessId()).then(r => {
+      setProductosCombustible(r?.success ? filtrarVendibles(r.data) : [])
+    }).catch(() => setProductosCombustible([]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serviceStationConfig.enabled])
+
   const [catalogSlug, setCatalogSlug] = useState('')
   const [catalogCustomDomain, setCatalogCustomDomain] = useState('')
 
@@ -1518,6 +1537,12 @@ export default function Settings() {
         if (businessData.posCustomFields) {
           setPosCustomFields(businessData.posCustomFields)
         }
+        if (businessData.serviceStationConfig) {
+          setServiceStationConfig(prev => ({
+            ...prev,
+            ...businessData.serviceStationConfig,
+          }))
+        }
         if (businessData.notificationPreferences) {
           setNotificationPreferences(prev => ({ ...prev, ...businessData.notificationPreferences }))
         }
@@ -2061,6 +2086,7 @@ export default function Settings() {
         businessMode: businessMode,
         restaurantConfig: restaurantConfig,
         posCustomFields: posCustomFields,
+        serviceStationConfig: serviceStationConfig,
         mtcRegistration: data.mtcRegistration || '',
         establishments: establishments,
         updatedAt: serverTimestamp(),
@@ -5579,6 +5605,109 @@ export default function Settings() {
                       : '✗ Deshabilitado: El POS muestra los productos por partes y carga el resto con el botón "Ver más".'}
                   />
 
+                  {/* Modo estacion de servicio (grifo). No es un modo de negocio:
+                      es un atajo ENCIMA del POS normal, porque el grifo tambien
+                      tiene minimarket y necesita el catalogo de siempre. */}
+                  <SettingToggle
+                    id="opcion-serviceStation"
+                    checked={serviceStationConfig.enabled}
+                    onChange={(e) => setServiceStationConfig({ ...serviceStationConfig, enabled: e.target.checked })}
+                    title="Modo estación de servicio (grifo)"
+                    description={serviceStationConfig.enabled
+                      ? '✓ Habilitado: Arriba del catálogo del POS aparecen los combustibles como botones grandes. Al tocar uno se abre un teclado para cobrar por monto ("50 soles") y los galones se calculan solos. El resto del POS no cambia: el minimarket, el cobro y la impresión siguen igual.'
+                      : '✗ Deshabilitado: El POS funciona normal, vendiendo por cantidad.'}
+                  />
+
+                  {/* Que productos son combustible */}
+                  {serviceStationConfig.enabled && (
+                    <div className="p-4 border border-gray-200 rounded-lg">
+                      <span className="text-sm font-medium text-gray-900">
+                        Combustibles que vendes
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 mb-3 leading-relaxed">
+                        Elige los productos que aparecen como botones en el POS. Salen en el
+                        <strong> orden en que los marcas</strong>, y el precio del galón es el del producto:
+                        cuando lo cambies en Productos, el botón cambia solo.
+                      </p>
+
+                      {/* Los elegidos, en orden */}
+                      {serviceStationConfig.fuelIds.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {serviceStationConfig.fuelIds.map((id, i) => {
+                            const p = (productosCombustible || []).find(x => x.id === id)
+                            return (
+                              <span
+                                key={id}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-primary-50 border border-primary-200 rounded-md text-sm text-primary-800"
+                              >
+                                <span className="text-xs font-bold text-primary-500">{i + 1}</span>
+                                {p?.name || 'Producto eliminado'}
+                                <button
+                                  type="button"
+                                  onClick={() => setServiceStationConfig({
+                                    ...serviceStationConfig,
+                                    fuelIds: serviceStationConfig.fuelIds.filter(x => x !== id),
+                                  })}
+                                  className="text-primary-400 hover:text-red-600"
+                                  aria-label={'Quitar ' + (p?.name || '')}
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </span>
+                            )
+                          })}
+                        </div>
+                      )}
+
+                      <Input
+                        placeholder="Buscar producto..."
+                        value={busquedaCombustible}
+                        onChange={(e) => setBusquedaCombustible(e.target.value)}
+                        className="mb-2"
+                      />
+
+                      {productosCombustible === null ? (
+                        <p className="text-sm text-gray-500 py-3">Cargando productos...</p>
+                      ) : productosCombustible.length === 0 ? (
+                        <p className="text-sm text-gray-500 py-3">
+                          No hay productos todavía. Crea uno por cada combustible en Productos,
+                          con unidad <strong>Galón</strong> y su precio por galón.
+                        </p>
+                      ) : (
+                        <div className="max-h-56 overflow-y-auto border border-gray-200 rounded-md divide-y divide-gray-100">
+                          {productosCombustible
+                            .filter(p => matchesPrebuilt(busquedaCombustible, buildProductHaystack(p)))
+                            .slice(0, 50)
+                            .map(p => {
+                            const marcado = serviceStationConfig.fuelIds.includes(p.id)
+                            return (
+                              <label
+                                key={p.id}
+                                className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={marcado}
+                                  onChange={() => setServiceStationConfig({
+                                    ...serviceStationConfig,
+                                    fuelIds: marcado
+                                      ? serviceStationConfig.fuelIds.filter(x => x !== p.id)
+                                      : [...serviceStationConfig.fuelIds, p.id],
+                                  })}
+                                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                />
+                                <span className="flex-1 min-w-0 truncate text-gray-800">{p.name}</span>
+                                <span className="text-xs text-gray-500 flex-shrink-0">
+                                  {formatCurrency(p.price)}
+                                </span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Comprobantes: cuales estan disponibles y cual viene por
                       defecto. Sin el tinte azul del hover — el color queda solo
                       en el check y en el boton elegido. El id es el ancla del
@@ -5851,6 +5980,7 @@ export default function Settings() {
                     description="Muestra un campo para ingresar el nombre del alumno en el POS y comprobantes"
                   />
                   <SettingToggle
+                    id="opcion-showVehiclePlateField"
                     checked={posCustomFields.showVehiclePlateField}
                     onChange={(e) => setPosCustomFields({ ...posCustomFields, showVehiclePlateField: e.target.checked })}
                     title={'Campo "Placa de Vehículo"'}
@@ -6259,6 +6389,7 @@ export default function Settings() {
                     await setDoc(businessRef, {
                       restaurantConfig: restaurantConfig,
                       posCustomFields: posCustomFields,
+                      serviceStationConfig: serviceStationConfig,
                       allowNegativeStock: allowNegativeStock,
                       showOtherBranchesStock: showOtherBranchesStock,
                       confirmSaleWithoutStock: confirmSaleWithoutStock,

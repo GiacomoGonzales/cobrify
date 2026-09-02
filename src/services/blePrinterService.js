@@ -13,6 +13,7 @@ import { buildKitchenLines } from '@/utils/kitchenComandaFormat';
 import { formatQuantity } from '@/lib/utils'
 import { nibbleDeTamano } from '@/utils/escposCharSize';
 import { getItemPriceBreakdown } from '@/utils/modifierHelpers';
+import { getUnitShortLabel } from '@/utils/units'
 
 // Estado de conexión
 let connectedDeviceId = null;
@@ -960,7 +961,7 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
 
         // Línea 2: cantidad x precio -> total
         const qtyFormatted = formatQuantity(item.quantity);
-        const unitSuffix = item.unit && item.allowDecimalQuantity ? item.unit.toLowerCase() : '';
+        const unitSuffix = item.unit && item.allowDecimalQuantity ? getUnitShortLabel(item.unit) : '';
         // Precio de LISTA; los adicionales bajan como líneas que suman.
         // El guardado ya los incluye, y mostrarlo junto a un "(+S/2.00)"
         // hacía que el cliente sumara de más. Ver getItemPriceBreakdown.

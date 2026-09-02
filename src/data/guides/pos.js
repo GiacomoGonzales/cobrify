@@ -17,7 +17,7 @@
  */
 export default {
   id: 'pos',
-  actualizado: '12/08/2026',
+  actualizado: '02/09/2026',
   intro:
     'El Punto de Venta es la pantalla para cobrar en el día a día. A la izquierda están tus productos; a la derecha, el **Carrito de Compras** y los datos de la venta. Esta guía recorre el flujo completo y las dudas más comunes.',
 
@@ -682,9 +682,75 @@ export default {
         },
       ],
     },
+
+    {
+      id: 'estacion-servicio',
+      title: 'Grifos: cobrar por monto, no por galones',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'En un grifo nadie pide "tres galones con treinta": pide **cincuenta soles**. Con el **modo estación de servicio** activado, arriba del catálogo del POS aparecen tus combustibles como botones grandes. Tocas uno, escribes 50, y los galones se calculan solos.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Crea un producto por cada combustible en **Productos**, con unidad **Galón** y su precio por galón.',
+            'Activa **Modo estación de servicio** en Configuración → Ventas y marca ahí cuáles de tus productos son combustible.',
+            'En el POS, toca el combustible, escribe el monto y presiona **Agregar**.',
+            'De ahí sigue todo igual: eliges Boleta, Factura o Nota de Venta, el método de pago, y cobras.',
+          ],
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=ventas&opcion=serviceStation',
+          label: 'Modo estación de servicio',
+        },
+        {
+          type: 'texto',
+          text: 'El teclado abre en **SOLES**, que es como se pide. El interruptor a **GALONES** queda a la vista para el que llena un balde o pide el tanque por galonaje. Abajo se ven los tres números del surtidor: soles, galones y precio por galón.',
+        },
+        {
+          type: 'consejo',
+          text: 'Los botones de 20, 30, 50 y 100 son atajos: un toque y listo, sin teclear.',
+        },
+        {
+          type: 'texto',
+          text: 'El **precio del galón sale del producto**. Cuando lo cambies en Productos, el botón del POS cambia solo — no hay que tocar la configuración de nuevo. Y las ventas ya emitidas conservan el precio que tenían.',
+        },
+        {
+          type: 'ojo',
+          text: 'Manda el **monto**. Si el cliente entrega 50 soles, el comprobante dice 50.00 exactos y los galones salen a tres decimales (3.030), igual que el contómetro de la manguera. Por eso el ticket puede decir 3.030 galones a 16.50: la diferencia de milésimas se acomoda para que el total sea el que pagó el cliente.',
+        },
+        {
+          type: 'texto',
+          text: 'El catálogo normal queda justo debajo de los botones: el aceite, la gaseosa y todo lo del minimarket se venden como siempre, en la misma boleta si hace falta.',
+        },
+        {
+          type: 'consejo',
+          text: 'Si le vendes a empresas, activa el campo **Placa de Vehículo**: aparece en el POS y se imprime en la factura, que es lo que necesitan para sustentar el gasto.',
+        },
+        {
+          type: 'enlace',
+          to: '/app/configuracion?tab=ventas&opcion=showVehiclePlateField',
+          label: 'Campo "Placa de Vehículo"',
+        },
+      ],
+    },
   ],
 
   preguntas: [
+    {
+      q: 'Vendo combustible. ¿Por qué el ticket dice 3.030 galones y no un número redondo?',
+      a: 'Porque el cliente pidió por monto, no por galones. Si entregó 50 soles y el galón está a 16.50, le tocan 3.030 galones — los mismos que le marcaría el contómetro de la manguera. El total del comprobante es siempre lo que pagó: 50.00 exactos.',
+    },
+    {
+      q: 'Cambié el precio del galón. ¿Tengo que actualizar algo más?',
+      a: 'No. El botón del POS lee el precio del producto, así que basta con cambiarlo en **Productos**. Las ventas ya emitidas conservan el precio que tenían cuando se hicieron.',
+    },
+    {
+      q: 'Activé el modo estación de servicio y no veo los botones.',
+      a: 'Falta marcar cuáles de tus productos son combustible. Entra a Configuración → Ventas → **Modo estación de servicio** y elígelos ahí. Aparecen en el POS en el mismo orden en que los marques.',
+    },
     {
       q: 'Compré una pistola lectora y no pasa nada al disparar.',
       a: 'Entra a **Configuración → Impresora → Probar mi pistola lectora** y dispara ahí: te dice exactamente qué llegó. Lo más común es que el lector no envíe el **Enter** al final —se arregla escaneando un código del manual del propio aparato, no en el sistema— o que esté en **modo inventario**, guardando las lecturas en vez de escribirlas.',

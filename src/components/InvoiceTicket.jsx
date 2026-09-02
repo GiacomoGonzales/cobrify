@@ -9,6 +9,7 @@ import { getComprobanteBreakdown } from '@/utils/peruUtils'
 import { formatQuantity } from '@/lib/utils'
 import { getTicketFooterParts } from '@/utils/ticketFooter'
 import { vinculoDe } from '@/utils/documentLinks'
+import { getUnitShortLabel } from '@/utils/units'
 
 /**
  * Componente de Ticket Imprimible según formato SUNAT
@@ -944,7 +945,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           {invoice.items?.map((item, index) => {
             // Formatear cantidad: con decimales si tiene, sino entero
             const qtyFormatted = formatQuantity(item.quantity);
-            const unitSuffix = item.unit && item.allowDecimalQuantity ? ` ${item.unit.toLowerCase()}` : '';
+            const unitSuffix = item.unit && item.allowDecimalQuantity ? ` ${getUnitShortLabel(item.unit)}` : '';
 
             // Usar 'name' como nombre principal, o 'description' si 'name' no existe (compatibilidad con datos antiguos)
             const itemName = item.name || item.description || '';

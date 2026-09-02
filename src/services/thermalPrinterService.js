@@ -14,6 +14,7 @@ import { getTicketFooterParts, justifyTicketText } from '@/utils/ticketFooter';
 import { formatQuantity } from '@/lib/utils'
 import { nibbleDeTamano } from '@/utils/escposCharSize';
 import { vinculoDe } from '@/utils/documentLinks';
+import { getUnitShortLabel } from '@/utils/units'
 
 /**
  * Servicio para manejar impresoras térmicas WiFi/Bluetooth
@@ -860,7 +861,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
         // Línea 2: "cantidad X precio unitario" (izq) y "total" (der) - CON ESPACIOS PARA ALINEAR
         // Formatear cantidad: con decimales si tiene, sino entero
         const qtyFormatted = formatQuantity(item.quantity);
-        const unitSuffix = item.unit && item.allowDecimalQuantity ? item.unit.toLowerCase() : '';
+        const unitSuffix = item.unit && item.allowDecimalQuantity ? getUnitShortLabel(item.unit) : '';
         // Precio de LISTA y cada adicional como una línea que suma. Antes se
         // mostraba el precio ya con adicionales y debajo "+ Grande (+S/2.00)":
         // el cliente sumaba los dos números, no le cuadraba con el total y
@@ -928,7 +929,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
         // Línea 2: "cantidad x precio unitario" (izq) y "total" (der) - CON ESPACIOS PARA ALINEAR
         // Formatear cantidad: con decimales si tiene, sino entero
         const qtyFormatted = formatQuantity(item.quantity);
-        const unitSuffix = item.unit && item.allowDecimalQuantity ? item.unit.toLowerCase() : '';
+        const unitSuffix = item.unit && item.allowDecimalQuantity ? getUnitShortLabel(item.unit) : '';
         const desglose58 = getItemPriceBreakdown(item, unitPrice, item.quantity);
         const qtyAndPrice = `${qtyFormatted}${unitSuffix}x ${currencySymbol} ${desglose58.baseUnit.toFixed(2)}`;
         const totalStr = `${currencySymbol} ${desglose58.baseTotal.toFixed(2)}`;
@@ -2722,7 +2723,7 @@ const buildTicketEscPos = async (invoice, business, paperWidth = 58) => {
 
       // Formatear cantidad: con decimales si tiene, sino entero
       const qtyFormatted = formatQuantity(item.quantity);
-      const unitSuffix = item.unit && item.allowDecimalQuantity ? item.unit.toLowerCase() : '';
+      const unitSuffix = item.unit && item.allowDecimalQuantity ? getUnitShortLabel(item.unit) : '';
 
       // Precio de LISTA; los adicionales van debajo, cada uno con su monto.
       // Ver getItemPriceBreakdown: el precio guardado ya los incluye, y

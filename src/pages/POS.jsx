@@ -41,6 +41,7 @@ import {
   List,
   Gift,
   Percent,
+  Fuel,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -52,6 +53,8 @@ import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
 import PostSaleModal from '@/components/pos/PostSaleModal'
+import DespachoCombustibleModal from '@/components/pos/DespachoCombustibleModal'
+import { estacionActiva, combustiblesDe, factorDeAjuste } from '@/utils/serviceStation'
 import { WALLET_EN_APROBACION, programaVigente, vigenciaLegible } from '@/services/loyaltyService'
 import { promoParaProducto, CANAL_POS } from '@/services/scheduledDiscountService'
 import { formatCurrency, formatUnitPrice, formatLineAmount, formatProductPrice, applyMarginToCost, matchesSearchQuery, buildSearchHaystack, matchesPrebuilt, cleanText } from '@/lib/utils'
@@ -736,6 +739,30 @@ export default function POS() {
     if (!branchId) return visibles
     return visibles.map(p => applyBranchPricing(p, branchId))
   }, [productsRaw, selectedBranch, businessSettings?.branchPricingEnabled, businessSettings?.branchCatalogEnabled, categories])
+
+  // ═══ Modo estación de servicio (grifo) ═══
+  //
+  // Es un ATAJO encima del POS normal, no un POS aparte: el modal solo arma
+  // la línea del carrito y de ahí sigue el flujo de siempre (comprobante,
+  // cliente, método de pago, impresión, SUNAT). Un POS paralelo obligaría a
+  // hacer cada arreglo de emisión dos veces.
+  //
+  // El grifo además tiene minimarket, así que el catálogo normal queda justo
+  // abajo: no hay pantalla que cambiar para vender un aceite.
+  const modoEstacion = estacionActiva(companySettings)
+  const combustibles = useMemo(
+    () => (modoEstacion ? combustiblesDe(companySettings, products) : []),
+    [modoEstacion, companySettings, products],
+  )
+  const [combustibleElegido, setCombustibleElegido] = useState(null)
+
+  // Los combustibles NO se repiten abajo en el catalogo. Ademas de verse dos
+  // veces, la tarjeta del catalogo agregaria UN galon al precio de lista,
+  // saltandose el teclado del monto — que es justo lo que el modo evita.
+  const idsDeCombustible = useMemo(
+    () => new Set(combustibles.map(c => c.id)),
+    [combustibles],
+  )
 
   const categoriasVisibles = useMemo(
     () => filterCategoriesForBranch(
@@ -3387,6 +3414,8 @@ export default function POS() {
       // Excluir productos desactivados (isActive === false).
       // Si el campo no existe (undefined) se considera activo por retrocompatibilidad.
       if (p.isActive === false) return false
+      // Los combustibles viven en su barra de arriba, no en el catalogo.
+      if (idsDeCombustible.has(p.id)) return false
       const matchesSearch = matchesPrebuilt(deferredSearchTerm, productSearchIndex.get(p.id) || '')
 
       // Filtro de categoría: incluye productos de subcategorías cuando se selecciona categoría padre
@@ -3429,7 +3458,7 @@ export default function POS() {
       if (va !== vb) return va ? 1 : -1
       return (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' })
     })
-  }, [products, deferredSearchTerm, productSearchIndex, selectedCategoryFilter, selectedBrandFilter, categories, businessSettings?.posCustomFields?.hideOutOfStockInPOS, selectedWarehouse, agotado])
+  }, [products, idsDeCombustible, deferredSearchTerm, productSearchIndex, selectedCategoryFilter, selectedBrandFilter, categories, businessSettings?.posCustomFields?.hideOutOfStockInPOS, selectedWarehouse, agotado])
 
   // Cap del render para que el grid no explote en pantallas con miles de
   // productos. Antes al buscar mostraba TODAS las coincidencias (con 4k
@@ -4118,6 +4147,43 @@ export default function POS() {
       }
       setCart([...cart, cartItem])
     }
+  }
+
+  /**
+   * El despacho ya resuelto entra al carrito como una línea normal.
+   *
+   * `price` es el unitario DERIVADO (monto / galones), no el precio
+   * publicado: así cantidad x precio da el monto exacto que entregó el
+   * cliente y la línea cierra para SUNAT. `basePrice` (PEN) se mueve con el
+   * mismo factor para que la conversión de moneda no los desalinee.
+   *
+   * Cada despacho es su propia línea —nunca se suma a una anterior— porque
+   * dos autos seguidos del mismo combustible son dos ventas distintas.
+   */
+  const agregarCombustible = ({ galones, monto, unitario }) => {
+    const producto = combustibleElegido
+    if (!producto) return
+    if (saleCompleted) {
+      toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
+      return
+    }
+
+    const precioPen = Number(producto.price) || 0
+    const factor = factorDeAjuste(unitario, toSessionCurrency(precioPen))
+
+    setCart(prev => [...prev, {
+      ...producto,
+      quantity: galones,
+      price: unitario,
+      basePrice: precioPen * factor,
+      // El carrito necesita el permiso explícito para mostrar decimales.
+      allowDecimalQuantity: true,
+      unit: producto.unit || 'GLL',
+      cartId: `${producto.id}-comb-${Date.now()}`,
+    }])
+
+    setCombustibleElegido(null)
+    toast.success(`${producto.name}: ${galones.toFixed(3)} gal por ${formatCurrency(monto, currency)}`)
   }
 
   // Construye el cartItem de una serie (helper compartido por single y bulk).
@@ -6793,6 +6859,7 @@ ${textoDeErrores(revision.errores)}`, 9000)
           name: item.presentationName ? `${item.name} (${item.presentationName})` : item.name,
           quantity: Number(item.quantity) || 0,
           unit: item.unit || 'NIU',
+          ...(item.allowDecimalQuantity && { allowDecimalQuantity: true }),
           unitPrice: item.price,
           ...(() => { const c = computeItemCostAtSale(item); return c != null ? { costAtSale: c } : {} })(), // costo congelado al momento de la venta (reportes de margen)
           ...(item.imageUrl && { imageUrl: item.imageUrl }), // imagen del producto para el PDF de comprobante (opción showImagesInInvoices)
@@ -7027,6 +7094,10 @@ ${textoDeErrores(revision.errores)}`, 9000)
         // imprimir para siempre (reporte 17-ago-2026, N001-00000535).
         quantity: Number(item.quantity) || 0,
         unit: item.unit || 'NIU',
+        // El comprobante necesita saber que la cantidad lleva decimales: sin
+        // esto el ticket imprime "3.03" a secas, sin la unidad. Los cinco
+        // formatos de impresion ya lo leian, pero el mapeo nunca lo guardaba.
+        ...(item.allowDecimalQuantity && { allowDecimalQuantity: true }),
         unitPrice: item.price,
         ...(() => { const c = computeItemCostAtSale(item); return c != null ? { costAtSale: c } : {} })(), // costo congelado al momento de la venta (reportes de margen)
         ...(item.imageUrl && { imageUrl: item.imageUrl }), // imagen del producto para el PDF de comprobante (opción showImagesInInvoices)
@@ -9834,6 +9905,28 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             </>
           )}
           </div>
+          )}
+
+          {/* Combustibles: arriba del catálogo, no en lugar de él. El grifo
+              vende aceite y gaseosa por la misma caja. */}
+          {modoEstacion && combustibles.length > 0 && (
+            <div className={`grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 mb-4 ${saleCompleted ? 'opacity-50 pointer-events-none' : ''}`}>
+              {combustibles.map(combustible => (
+                <button
+                  key={combustible.id}
+                  onClick={() => { if (saleCompleted) return; setCombustibleElegido(combustible) }}
+                  className="flex flex-col items-start gap-1 p-3 sm:p-4 bg-white border-2 border-gray-200 rounded-lg hover:border-primary-400 hover:bg-primary-50 active:bg-primary-100 transition-colors text-left touch-no-hover"
+                >
+                  <Fuel className="w-5 h-5 text-primary-600" />
+                  <span className="font-semibold text-sm sm:text-base text-gray-900 leading-tight line-clamp-2">
+                    {combustible.name}
+                  </span>
+                  <span className="text-xs sm:text-sm text-gray-600">
+                    {formatCurrency(toSessionCurrency(Number(combustible.price) || 0), currency)} / gal
+                  </span>
+                </button>
+              ))}
+            </div>
           )}
 
           {/* Products Grid */}
@@ -13479,6 +13572,16 @@ ${companySettings?.businessName || 'Tu Empresa'}`
         warehouse={selectedWarehouse}
         allowNegativeStock={permiteSinStock}
         formatCurrency={formatCurrency}
+      />
+
+      {/* Despachar combustible por monto (modo estación de servicio) */}
+      <DespachoCombustibleModal
+        isOpen={!!combustibleElegido}
+        onClose={() => setCombustibleElegido(null)}
+        producto={combustibleElegido}
+        precio={toSessionCurrency(Number(combustibleElegido?.price) || 0)}
+        moneda={currency}
+        onConfirmar={agregarCombustible}
       />
 
       {/* Modal de opciones post-venta (Ticket/Preview/PDF/WhatsApp/Nueva venta) */}
