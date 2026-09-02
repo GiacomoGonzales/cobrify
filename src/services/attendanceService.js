@@ -5,6 +5,7 @@ import {
   getDocs,
   addDoc,
   updateDoc,
+  setDoc,
   query,
   where,
   orderBy,
@@ -13,6 +14,7 @@ import {
   Timestamp,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { MARCA_ENTRADA, MARCA_SALIDA, siguienteMarca } from '@/utils/attendanceMarks'
 import { getScheduleForDate } from './scheduleService'
 import { fetchApprovedTimeOffForDate } from './timeOffService'
 
@@ -82,6 +84,11 @@ const buildScheduleEnrichment = async (businessId, userId, timestamp, type, grac
  * Modelo:
  * - businesses/{bid}/branches/{branchId}.attendance = { enabled, token, gpsLat, gpsLng, gpsRadius, tokenGeneratedAt, tokenGeneratedBy }
  * - businesses/{bid}/attendance/{recordId}        = { userId, userName, branchId, branchName, type, timestamp, gps, gpsValid, approvalStatus, createdBy, notes, autoClosed }
+ *
+ * `type` puede ser 'in', 'out' y —si el negocio activó los breaks—
+ * 'break_start' y 'break_end'. Qué marca corresponde en cada momento lo
+ * decide src/utils/attendanceMarks.js, que es también donde se calculan las
+ * horas del día.
  */
 
 const getAttendanceColRef = (businessId) => collection(db, 'businesses', businessId, 'attendance')
@@ -133,6 +140,26 @@ export const regenerateAttendanceToken = async (businessId, branchId, userId) =>
     return { success: true, token: newToken }
   } catch (error) {
     console.error('Error regenerando token de asistencia:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Prende o apaga la marcación de BREAK para todo el negocio.
+ *
+ * Va en el negocio y no en cada sucursal a propósito: un trabajador puede
+ * entrar en una sede y salir en otra, así que si una tuviera breaks y la
+ * otra no, el mismo turno se mediría de dos formas distintas.
+ */
+export const setAttendanceBreaksEnabled = async (businessId, enabled) => {
+  try {
+    await setDoc(getBusinessDocRef(businessId), {
+      attendanceBreaksEnabled: !!enabled,
+      updatedAt: serverTimestamp(),
+    }, { merge: true })
+    return { success: true }
+  } catch (error) {
+    console.error('Error al cambiar la marcación de break:', error)
     return { success: false, error: error.message }
   }
 }
@@ -245,9 +272,15 @@ export const getLastAttendance = async (businessId, userId) => {
  * - Valida token contra la sucursal.
  * - Calcula gpsValid con Haversine si hay geofence configurado.
  * - Si la última marcación del usuario fue `in` de un día anterior, la marca autoClosed y crea un nuevo `in`.
- * - Auto-detecta type (in/out) basado en la última marcación del día.
+ * - Auto-detecta el type según la última marcación del día
+ *   (src/utils/attendanceMarks.js).
+ *
+ * @param {boolean} [quiereBreak]  el trabajador pulsó el botón de break en
+ *        vez del principal. Solo cambia algo cuando está trabajando: en
+ *        break, cualquier marca lo termina, e irse a la casa con el break
+ *        abierto dejaría un tiempo que nadie puede medir.
  */
-export const markAttendanceFromQR = async (businessId, { scannedToken, user, gps }) => {
+export const markAttendanceFromQR = async (businessId, { scannedToken, user, gps, quiereBreak = false }) => {
   try {
     if (!businessId || !scannedToken || !user?.uid) {
       return { success: false, error: 'Datos incompletos' }
@@ -284,11 +317,14 @@ export const markAttendanceFromQR = async (businessId, { scannedToken, user, gps
     const last = await getLastAttendance(businessId, user.uid)
     const now = new Date()
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    let type = 'in'
+    let type = MARCA_ENTRADA
     if (last.success && last.data) {
       const lastTs = last.data.timestamp?.toDate ? last.data.timestamp.toDate() : new Date(last.data.timestamp)
       const sameDay = lastTs >= todayStart
-      if (last.data.type === 'in' && !sameDay) {
+      // Turno sin cerrar: entró y no salió, o se fue de break y no volvió.
+      // Las tres marcas dejan la jornada abierta.
+      const jornadaAbierta = last.data.type !== MARCA_SALIDA
+      if (jornadaAbierta && !sameDay) {
         // Cerrar el turno anterior al final de ese día
         const endOfLastDay = new Date(lastTs.getFullYear(), lastTs.getMonth(), lastTs.getDate(), 23, 59, 59)
         await addDoc(getAttendanceColRef(businessId), {
@@ -307,11 +343,11 @@ export const markAttendanceFromQR = async (businessId, { scannedToken, user, gps
           notes: 'Cierre automático por cambio de día',
           createdAt: serverTimestamp(),
         })
-        type = 'in'
-      } else if (last.data.type === 'in' && sameDay) {
-        type = 'out'
+        type = MARCA_ENTRADA
+      } else if (sameDay) {
+        type = siguienteMarca(last.data.type, quiereBreak)
       } else {
-        type = 'in'
+        type = MARCA_ENTRADA
       }
     }
 

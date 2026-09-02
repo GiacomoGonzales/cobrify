@@ -8,7 +8,7 @@ import {
   UserCheck, Clock, MapPin, Scan, Loader2, QrCode, RefreshCw,
   CheckCircle2, AlertTriangle, Calendar, Filter, Download, Plus, X,
   ShieldCheck, XCircle, Briefcase, Phone, Mail, MapPinned, CreditCard, Search,
-  Store,
+  Store, Coffee,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -28,6 +28,7 @@ import {
   markAttendanceFromQR,
   regenerateAttendanceToken,
   setAttendanceApproval,
+  setAttendanceBreaksEnabled,
   setAttendanceEnabled,
   updateBranchGeofence,
   updateBranchGracePeriod,
@@ -40,6 +41,10 @@ import {
 } from '@/services/personnelService'
 import SchedulePlanner, { ALL_BRANCHES } from '@/components/personnel/SchedulePlanner'
 import VacationManager from '@/components/personnel/VacationManager'
+import {
+  resumenDelDia, etiquetaDeMarca, estadoDelDia, esMarcaDeBreak,
+  MARCA_ENTRADA, MARCA_SALIDA, MARCA_BREAK_INICIO, MARCA_BREAK_FIN,
+} from '@/utils/attendanceMarks'
 
 const formatDateTime = (ts) => {
   if (!ts) return '-'
@@ -76,17 +81,18 @@ const groupRecordsByDay = (records) => {
   return groups
 }
 
-// Resumen por día: primera entrada, última salida, total trabajado
-const summaryForDay = (group) => {
-  if (!group) return { inMark: null, outMark: null, totalMs: null, marks: [] }
-  const marks = group.marks
-  const inMark = marks.find((m) => m.type === 'in') || null
-  const outMark = [...marks].reverse().find((m) => m.type === 'out') || null
-  let totalMs = null
-  if (inMark && outMark && outMark._ts > inMark._ts) {
-    totalMs = outMark._ts - inMark._ts
-  }
-  return { inMark, outMark, totalMs, marks }
+// Resumen por día: primera entrada, última salida, break acumulado y total
+// trabajado neto. El cálculo vive en src/utils/attendanceMarks.js porque lo
+// usan la tarjeta del trabajador, la lista del administrador y la
+// exportación.
+const summaryForDay = resumenDelDia
+
+// El color de la etiqueta de cada marca. El break va en ámbar: en gris se
+// confundía con una salida, que es justo lo que no es.
+const colorDeMarca = (type) => {
+  if (type === MARCA_ENTRADA) return 'bg-green-100 text-green-700'
+  if (esMarcaDeBreak(type)) return 'bg-amber-100 text-amber-700'
+  return 'bg-gray-100 text-gray-700'
 }
 
 const formatTime = (date) => date.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: false })
@@ -127,7 +133,7 @@ const statusBadge = (record) => {
 }
 
 export default function Attendance() {
-  const { user, isBusinessOwner, isAdmin, getBusinessId, filterBranchesByAccess, hasMainBranchAccess, isDemoMode, demoData, businessSettings, hasPageAccess , branchScope } = useAppContext()
+  const { user, isBusinessOwner, isAdmin, getBusinessId, filterBranchesByAccess, hasMainBranchAccess, isDemoMode, demoData, businessSettings, refreshBusinessSettings, hasPageAccess , branchScope } = useAppContext()
   const canManage = !!(isBusinessOwner || isAdmin)
   // Sub-usuario con permiso "Horarios": puede usar SOLO el planificador de
   // horarios (no el resto de la gestión de personal). Requiere también el
@@ -184,6 +190,10 @@ export default function Attendance() {
 
   // Modal de fallback web (pegar contenido del QR)
   const [showPasteModal, setShowPasteModal] = useState(false)
+  // En web el QR se pega a mano, y entre que se pulsa el botón y se pega el
+  // texto hay un modal de por medio: sin esto se perdía la intención y un
+  // break terminaba registrado como salida.
+  const [breakPendiente, setBreakPendiente] = useState(false)
   const [pastedQr, setPastedQr] = useState('')
 
   // Tab "Personal" (Capa 1 del módulo Personal)
@@ -413,7 +423,7 @@ export default function Attendance() {
   // modulo de Android, permisos y stopScan estan resueltos ahi una sola vez).
   const scanQrNative = async () => scanBarcode({ avisar: toast })
 
-  const handleMark = async () => {
+  const handleMark = async (quiereBreak = false) => {
     if (marking || scanningRef.current) return
     if (!businessId || !user?.uid) {
       toast.error('Sesión no válida')
@@ -433,24 +443,25 @@ export default function Attendance() {
           return
         }
       } else {
+        setBreakPendiente(quiereBreak)
         setShowPasteModal(true)
         return
       }
-      await performMark(qrContent)
+      await performMark(qrContent, quiereBreak)
     } finally {
       scanningRef.current = false
       setMarking(false)
     }
   }
 
-  const performMark = async (qrContent) => {
+  const performMark = async (qrContent, quiereBreak = false) => {
     const gps = await getCurrentPosition()
-    const res = await markAttendanceFromQR(businessId, { scannedToken: qrContent, user, gps })
+    const res = await markAttendanceFromQR(businessId, { scannedToken: qrContent, user, gps, quiereBreak })
     if (!res.success) {
       toast.error(res.error || 'No se pudo registrar la marcación')
       return
     }
-    const typeLabel = res.type === 'in' ? 'Entrada' : 'Salida'
+    const typeLabel = etiquetaDeMarca(res.type)
     if (res.gpsValid === false) {
       toast.warning(`${typeLabel} registrada. Fuera de zona — pendiente de aprobación.`)
     } else {
@@ -476,8 +487,9 @@ export default function Attendance() {
     setShowPasteModal(false)
     setMarking(true)
     try {
-      await performMark(pastedQr.trim())
+      await performMark(pastedQr.trim(), breakPendiente)
       setPastedQr('')
+      setBreakPendiente(false)
     } finally {
       setMarking(false)
     }
@@ -511,6 +523,29 @@ export default function Attendance() {
     } else {
       toast.error(res.error || 'Error')
     }
+  }
+
+  /**
+   * Prender o apagar los breaks.
+   *
+   * Va en el negocio y no en cada sucursal: un trabajador puede entrar en
+   * una sede y salir en otra, asi que si una tuviera breaks y la otra no,
+   * el mismo turno se mediria de dos formas.
+   */
+  const handleToggleBreaks = async (enabled) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+    const res = await setAttendanceBreaksEnabled(businessId, enabled)
+    if (!res.success) {
+      toast.error('No se pudo actualizar')
+      return
+    }
+    if (refreshBusinessSettings) await refreshBusinessSettings()
+    toast.success(enabled
+      ? 'Los trabajadores ya pueden marcar su break'
+      : 'Se desactivó la marcación de break')
   }
 
   const handleSaveGracePeriod = async (branchId, minutes) => {
@@ -606,7 +641,7 @@ export default function Attendance() {
       r.userName || '',
       r.userEmail || '',
       r.branchName || '',
-      r.type === 'in' ? 'Entrada' : 'Salida',
+      etiquetaDeMarca(r.type),
       r.autoClosed ? 'Auto-cerrado' : (r.approvalStatus || ''),
       r.gpsValid ? 'Sí' : 'No',
       (r.notes || '').replace(/\n/g, ' '),
@@ -727,8 +762,8 @@ export default function Attendance() {
                         <div className="text-sm text-gray-600 mb-4">
                           <p className="font-medium text-gray-900">Última marcación</p>
                           <p className="mt-1">
-                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${lastMark.type === 'in' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
-                              {lastMark.type === 'in' ? 'Entrada' : 'Salida'}
+                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${colorDeMarca(lastMark.type)}`}>
+                              {etiquetaDeMarca(lastMark.type)}
                             </span>
                             <span className="ml-2">{formatDateTime(lastMark.timestamp)}</span>
                           </p>
@@ -764,6 +799,7 @@ export default function Attendance() {
                     onMark={handleMark}
                     marking={marking}
                     isNative={isNative}
+                    breaksActivos={businessSettings?.attendanceBreaksEnabled === true}
                   />
                 )}
               </TabsContent>
@@ -832,8 +868,8 @@ export default function Attendance() {
                                     </td>
                                     <td className="px-3 py-2 text-gray-700">{r.branchName || '—'}</td>
                                     <td className="px-3 py-2">
-                                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${r.type === 'in' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
-                                        {r.type === 'in' ? 'Entrada' : 'Salida'}
+                                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${colorDeMarca(r.type)}`}>
+                                        {etiquetaDeMarca(r.type)}
                                       </span>
                                     </td>
                                     <td className="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">
@@ -883,8 +919,8 @@ export default function Attendance() {
                                     <div className="font-medium text-gray-900 truncate">{r.userName || '—'}</div>
                                     <div className="text-xs text-gray-500 truncate">{r.userEmail || ''}</div>
                                   </div>
-                                  <span className={`flex-shrink-0 inline-block px-2 py-0.5 rounded-full text-xs font-medium ${r.type === 'in' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
-                                    {r.type === 'in' ? 'Entrada' : 'Salida'}
+                                  <span className={`flex-shrink-0 inline-block px-2 py-0.5 rounded-full text-xs font-medium ${colorDeMarca(r.type)}`}>
+                                    {etiquetaDeMarca(r.type)}
                                   </span>
                                 </div>
                                 <div className="flex items-center justify-between text-xs text-gray-600">
@@ -1164,6 +1200,34 @@ export default function Attendance() {
               {canManage && (
                 <TabsContent value="config" activeTab={at} className="mt-4">
                   <div className="space-y-4">
+                    {/* Break: opcional, y del negocio entero (ver handleToggleBreaks) */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-4">
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={businessSettings?.attendanceBreaksEnabled === true}
+                          onChange={(e) => handleToggleBreaks(e.target.checked)}
+                          className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        />
+                        <div className="flex-1">
+                          <span className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                            <Coffee className="w-4 h-4 text-amber-600" />
+                            Permitir marcar break
+                          </span>
+                          <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                            Al activarlo, el trabajador ve un botón para marcar el inicio de su
+                            break y otro para terminarlo. Los minutos se acumulan y se
+                            descuentan del total trabajado del día. Por ejemplo: entra 9:00,
+                            marca break 14:00, vuelve 14:45 y sale 18:00 = 45 minutos de break
+                            y 8 h 15 min trabajadas.
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1.5">
+                            Con la opción apagada nada cambia: solo se marca entrada y salida.
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+
                     {branches.length === 0 && (
                       <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-900">
                         <AlertTriangle className="w-5 h-5 inline mr-2" />
@@ -1218,8 +1282,16 @@ export default function Attendance() {
               ))}
             </Select>
             <Select label="Tipo *" value={manualForm.type} onChange={e => setManualForm({ ...manualForm, type: e.target.value })}>
-              <option value="in">Entrada</option>
-              <option value="out">Salida</option>
+              <option value={MARCA_ENTRADA}>Entrada</option>
+              <option value={MARCA_SALIDA}>Salida</option>
+              {/* Solo si el negocio usa breaks: si no, son dos opciones que
+                  no significan nada y ensucian el desplegable. */}
+              {businessSettings?.attendanceBreaksEnabled === true && (
+                <>
+                  <option value={MARCA_BREAK_INICIO}>Inicio de break</option>
+                  <option value={MARCA_BREAK_FIN}>Fin de break</option>
+                </>
+              )}
             </Select>
             <Input type="datetime-local" label="Fecha y hora *" value={manualForm.timestamp} onChange={e => setManualForm({ ...manualForm, timestamp: e.target.value })} />
             <Input label="Motivo / Notas" value={manualForm.notes} onChange={e => setManualForm({ ...manualForm, notes: e.target.value })} placeholder="Ej: La app no abrió, corte de internet..." />
@@ -1463,7 +1535,7 @@ function BranchAttendanceCard({ branch, onToggle, onRegenerate, onSaveGeofence, 
  *  - Card "Hoy" con entrada/salida/total y botón contextual
  *  - Mini historial de últimos 6 días con resumen por jornada
  */
-function SubUserAttendanceView({ weekRecords, onMark, marking, isNative }) {
+function SubUserAttendanceView({ weekRecords, onMark, marking, isNative, breaksActivos = false }) {
   const grouped = useMemo(() => groupRecordsByDay(weekRecords || []), [weekRecords])
 
   const today = new Date()
@@ -1471,18 +1543,20 @@ function SubUserAttendanceView({ weekRecords, onMark, marking, isNative }) {
   const todayGroup = grouped[todayKey]
   const todaySummary = summaryForDay(todayGroup)
 
-  // Estado: 'idle' (no fichó), 'in' (entró pero no salió), 'done' (jornada completa)
-  let state = 'idle'
-  if (todaySummary.inMark && todaySummary.outMark) state = 'done'
-  else if (todaySummary.inMark) state = 'in'
+  // 'idle' (no fichó), 'in' (trabajando), 'break' (almorzando), 'done'
+  const state = estadoDelDia(todaySummary.marks)
 
   const buttonLabel = marking
     ? 'Registrando…'
     : state === 'idle'
       ? 'Marcar entrada'
-      : state === 'in'
-        ? 'Marcar salida'
-        : '✓ Jornada completa'
+      : state === 'break'
+        // En break el botón principal lo TERMINA. Irse a la casa sin volver
+        // del almuerzo dejaría un break abierto que nadie puede medir.
+        ? 'Terminar break'
+        : state === 'in'
+          ? 'Marcar salida'
+          : '✓ Jornada completa'
 
   // Días anteriores ordenados: descendente, excluyendo hoy
   const previousDays = Object.entries(grouped)
@@ -1550,17 +1624,44 @@ function SubUserAttendanceView({ weekRecords, onMark, marking, isNative }) {
                 )}
               </div>
 
+              {breaksActivos && (todaySummary.breakMs > 0 || state === 'break') && (
+                <div className={`flex items-center justify-between p-3 rounded-lg border ${
+                  state === 'break' ? 'bg-amber-50 border-amber-300' : 'bg-amber-50/50 border-amber-200'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-amber-500 text-white flex items-center justify-center">
+                      <Coffee className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-amber-700 font-medium">
+                        {state === 'break' ? 'En break ahora' : 'Break acumulado'}
+                      </p>
+                      <p className="text-base font-semibold text-amber-900">
+                        {todaySummary.breakMs > 0 ? formatDuration(todaySummary.breakMs) : 'Corriendo…'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {todaySummary.totalMs != null && (
                 <div className="text-center pt-1">
-                  <p className="text-xs text-gray-500">Total trabajado</p>
+                  <p className="text-xs text-gray-500">
+                    Total trabajado{todaySummary.breakMs > 0 ? ' (sin el break)' : ''}
+                  </p>
                   <p className="text-2xl font-bold text-gray-900">{formatDuration(todaySummary.totalMs)}</p>
+                  {todaySummary.breakAbierto && (
+                    <p className="text-xs text-amber-700 mt-1">
+                      Quedó un break sin cerrar: no se descontó del total.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
           )}
 
           <Button
-            onClick={onMark}
+            onClick={() => onMark(false)}
             disabled={marking || state === 'done'}
             className={`w-full py-5 text-base ${
               state === 'done' ? 'bg-gray-300 text-gray-500 hover:bg-gray-300' : ''
@@ -1569,6 +1670,20 @@ function SubUserAttendanceView({ weekRecords, onMark, marking, isNative }) {
             {marking ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : (state !== 'done' && <Scan className="w-5 h-5 mr-2" />)}
             {buttonLabel}
           </Button>
+
+          {/* Solo mientras trabaja: en break, el botón de arriba ya dice
+              "Terminar break", y sin fichar no hay break que empezar. */}
+          {breaksActivos && state === 'in' && (
+            <Button
+              variant="outline"
+              onClick={() => onMark(true)}
+              disabled={marking}
+              className="w-full py-4 text-base border-amber-400 text-amber-700 hover:bg-amber-50"
+            >
+              <Coffee className="w-5 h-5 mr-2" />
+              Iniciar break
+            </Button>
+          )}
 
           {!isNative && state !== 'done' && (
             <p className="text-xs text-gray-500 text-center">
@@ -1678,8 +1793,8 @@ function MyHistory({ businessId, userId }) {
                 <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{formatDateTime(r.timestamp)}</td>
                 <td className="px-3 py-2 text-gray-700">{r.branchName || '—'}</td>
                 <td className="px-3 py-2">
-                  <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${r.type === 'in' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
-                    {r.type === 'in' ? 'Entrada' : 'Salida'}
+                  <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${colorDeMarca(r.type)}`}>
+                    {etiquetaDeMarca(r.type)}
                   </span>
                 </td>
                 <td className="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">
@@ -1719,8 +1834,8 @@ function MyHistory({ businessId, userId }) {
                   <div className="text-xs text-gray-500 truncate mt-0.5">{r.branchName}</div>
                 )}
               </div>
-              <span className={`flex-shrink-0 inline-block px-2 py-0.5 rounded-full text-xs font-medium ${r.type === 'in' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
-                {r.type === 'in' ? 'Entrada' : 'Salida'}
+              <span className={`flex-shrink-0 inline-block px-2 py-0.5 rounded-full text-xs font-medium ${colorDeMarca(r.type)}`}>
+                {etiquetaDeMarca(r.type)}
               </span>
             </div>
             {r.scheduledStart && (
