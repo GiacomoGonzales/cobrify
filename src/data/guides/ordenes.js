@@ -11,7 +11,7 @@
  */
 export default {
   id: 'ordenes',
-  actualizado: '25/08/2026',
+  actualizado: '01/09/2026',
   intro:
     'Órdenes es la bandeja de todo lo que está en curso, venga de donde venga: las mesas del salón, los pedidos para llevar, los delivery y los de mostrador. Si Mesas es el mapa del salón, Órdenes es la lista de trabajo pendiente.',
 
@@ -94,7 +94,7 @@ export default {
     // ─────────────────────────────────────────────────────────────────────
     {
       id: 'delivery',
-      title: 'Delivery: asignar repartidor',
+      title: 'Delivery: repartidor y costo del envío',
       blocks: [
         {
           type: 'texto',
@@ -103,6 +103,26 @@ export default {
         {
           type: 'consejo',
           text: 'Asignar el repartidor toma dos segundos y es lo único que después te permite responder "¿quién llevó ese pedido?" cuando un cliente reclama. Sin eso, la orden solo dice que salió.',
+        },
+        {
+          type: 'texto',
+          text: 'Al crear el pedido, debajo de la dirección aparece **Costo del envío**. Lo escribes ahí y listo: al cobrar, el POS agrega solo una línea "Delivery" al final del carrito con ese monto.',
+        },
+        {
+          type: 'consejo',
+          text: 'Esto sirve sobre todo si tienes **apagada la edición de precios en el POS**. El monto se decide al tomar el pedido, así que el cajero no necesita poder cambiar precios para cobrar un envío que varía según la distancia.',
+        },
+        {
+          type: 'texto',
+          text: 'Si casi siempre cobras lo mismo, deja el monto en **Configuración → Restaurante → Delivery** y viene precargado en cada pedido. Se puede cambiar en el momento, o borrar si esa entrega no cobra envío.',
+        },
+        {
+          type: 'texto',
+          text: 'Si te equivocaste —la dirección resultó más lejos, el cliente la cambió— lo corriges desde la tarjeta del pedido: haz clic en el monto que dice **Envío**, escribe el nuevo y guarda. El total se recalcula solo.',
+        },
+        {
+          type: 'ojo',
+          text: 'Si ya tenías un producto llamado "Delivery" en tu catálogo y lo sigues agregando a mano, al cobrar te avisamos para que no lo cobres dos veces. Con el costo en el pedido ya no hace falta agregarlo.',
         },
       ],
     },

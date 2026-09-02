@@ -72,6 +72,7 @@ import { registrarVentaDemo } from '@/data/demo/operaciones'
 import { applyBranchPricing } from '@/utils/branchPricing'
 import { filterProductsForBranch, filterCategoriesForBranch, isProductInBranch } from '@/utils/branchCatalog'
 import { filtrarVendibles, esSoloUsoInterno } from '@/utils/productSale'
+import { lineaDeEnvio, yaHayEnvioEnElCarrito } from '@/utils/deliveryFee'
 import { getAvailableDocumentTypes, resolveDocumentType } from '@/utils/documentTypes'
 import { calculateInvoiceAmounts, calculateMixedInvoiceAmounts, calculateRecargoConsumo, ID_TYPES, DETRACTION_TYPES, DETRACTION_MIN_AMOUNT, calcularDetraccion } from '@/utils/peruUtils'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
@@ -2044,6 +2045,26 @@ export default function POS() {
           id: item.productId || item.id,
           // Mantener todos los datos del item
         }))
+
+        /**
+         * El envío, como última línea.
+         *
+         * Viene decidido desde el pedido, así que el cajero no tiene que
+         * teclear un precio: es lo que permite cobrarlo con la edición de
+         * precios apagada. Va al final para que se lea como lo que es —un
+         * cargo aparte— y no mezclado entre los platos.
+         */
+        const envio = lineaDeEnvio(orderInfo.deliveryFee, businessSettings?.defaultTaxAffectation || '10')
+        if (envio) {
+          if (yaHayEnvioEnElCarrito(cartItems)) {
+            // Muchos negocios resolvieron esto con un producto llamado
+            // "Delivery" que agregan a mano. Si además viene el costo del
+            // pedido se cobraría dos veces: mejor avisar antes de emitir.
+            toast.warning('Este pedido ya trae un producto de delivery. Revisa que no se cobre dos veces.')
+          }
+          cartItems.push(envio)
+        }
+
         setCart(cartItems)
 
         const orderLabel = ORDER_TYPES[orderInfo.orderType] || 'Para Llevar'

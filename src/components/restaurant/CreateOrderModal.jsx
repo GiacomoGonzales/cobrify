@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { getCustomers } from '@/services/firestoreService'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import { getVisibleOrderSources } from '@/utils/orderSources'
+import { montoDeEnvio } from '@/utils/deliveryFee'
 
 export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = [] }) {
   const toast = useToast()
@@ -29,6 +30,13 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
   const [customerAddress, setCustomerAddress] = useState('') // dirección de entrega (delivery)
+  /**
+   * Costo del envío. Se decide acá y viaja con el pedido: al cobrar, el POS lo
+   * agrega como una línea más. Así se puede cobrar un envío variable sin
+   * abrirle la edición de precios a todos los cajeros —que es justo lo que
+   * estos negocios no quieren—.
+   */
+  const [deliveryFee, setDeliveryFee] = useState('')
   // Documento para el comprobante (opcional). Se arrastra al POS al cobrar, así
   // no se re-teclea. Con lupita RENIEC/SUNAT (mismo servicio que el POS).
   const [documentType, setDocumentType] = useState('DNI') // 'DNI' | 'RUC'
@@ -46,6 +54,14 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
   // Estado de pago del pedido: false = por cobrar (el repartidor/cajero cobra), true = pagado
   const [paid, setPaid] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState('efectivo')
+
+  // El monto que casi siempre cobran, precargado desde Configuración. Se puede
+  // pisar en cada pedido: es un punto de partida, no una tarifa fija.
+  const envioPorDefecto = montoDeEnvio(businessSettings?.defaultDeliveryFee)
+  useEffect(() => {
+    if (!isOpen) return
+    setDeliveryFee(envioPorDefecto > 0 ? String(envioPorDefecto) : '')
+  }, [isOpen, envioPorDefecto])
 
   // Auto-select brand if there's only one
   useEffect(() => {
@@ -146,6 +162,10 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
       customerPhone: customerPhone.trim() || null,
       // La dirección solo aplica a delivery
       customerAddress: orderType === 'delivery' ? (customerAddress.trim() || null) : null,
+      // Solo los delivery cobran envío. En los otros tipos la casilla ni se
+      // muestra, pero igual se limpia por si se cambió de tipo con el monto ya
+      // escrito.
+      deliveryFee: orderType === 'delivery' ? montoDeEnvio(deliveryFee) : 0,
       // Documento para el comprobante (se arrastra al POS). businessName = razón
       // social cuando es RUC; fiscalAddress = dirección SUNAT (para factura).
       documentType,
@@ -171,6 +191,7 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
     setCustomerName('')
     setCustomerPhone('')
     setCustomerAddress('')
+    setDeliveryFee(envioPorDefecto > 0 ? String(envioPorDefecto) : '')
     setDocumentType('DNI')
     setDocumentNumber('')
     setFiscalAddress('')
@@ -188,6 +209,7 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
     setCustomerName('')
     setCustomerPhone('')
     setCustomerAddress('')
+    setDeliveryFee(envioPorDefecto > 0 ? String(envioPorDefecto) : '')
     setDocumentType('DNI')
     setDocumentNumber('')
     setFiscalAddress('')
@@ -497,6 +519,32 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = 
                 placeholder="Ej: Av. Las Viñas 123, Ref. frente al parque"
                 className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
               />
+            </div>
+          )}
+
+          {/* Costo del envío (solo delivery) */}
+          {orderType === 'delivery' && (
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1.5">
+                <Bike className="w-4 h-4 text-gray-400" />
+                Costo del envío
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">S/</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.10"
+                  inputMode="decimal"
+                  value={deliveryFee}
+                  onChange={(e) => setDeliveryFee(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Se agrega solo al cobrar, como una línea más. Déjalo en blanco si no cobras envío.
+              </p>
             </div>
           )}
         </div>

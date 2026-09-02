@@ -8,7 +8,7 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
-import { getActiveOrders, getClosedOrders, getOrdersStats, updateOrderStatus, createOrder, completeOrder, markOrderAsPaid, updateOrder, getOrder } from '@/services/orderService'
+import { getActiveOrders, getClosedOrders, getOrdersStats, updateOrderStatus, createOrder, completeOrder, markOrderAsPaid, updateOrder, updateOrderDeliveryFee, getOrder } from '@/services/orderService'
 import { getActiveBranches } from '@/services/branchService'
 import { getProducts } from '@/services/firestoreService'
 import { getWarehouses } from '@/services/warehouseService'
@@ -33,6 +33,7 @@ import { printPreBill, printAllSplitPreBills } from '@/utils/printPreBill'
 import { getActiveMotoristas, createDeliveryRecord, updateOperationalStatus } from '@/services/motoristaService'
 import { resumirItemsParaEnvio } from '@/utils/deliveryShare'
 import { stationsForOrder } from '@/utils/kitchenComandaFormat'
+import { montoDeEnvio } from '@/utils/deliveryFee'
 import GuideLink from '@/components/guide/GuideLink'
 
 /**
@@ -321,6 +322,8 @@ export default function Orders() {
   // Estado para modal de cierre de orden
   const [showCloseOrderModal, setShowCloseOrderModal] = useState(false)
   const [orderToClose, setOrderToClose] = useState(null)
+  // Correccion del costo del envio: {id, valor} del pedido que se esta editando
+  const [envioEnEdicion, setEnvioEnEdicion] = useState(null)
   const [isClosingOrder, setIsClosingOrder] = useState(false)
   const [showCloseWithoutReceipt, setShowCloseWithoutReceipt] = useState(false)
   const [closeReason, setCloseReason] = useState('')
@@ -771,6 +774,30 @@ export default function Orders() {
     setShowCreateOrderModal(true)
   }
 
+  /**
+   * Guardar el costo del envío corregido.
+   *
+   * Recalcula el total del pedido, que es de donde sale el "POR COBRAR" de la
+   * comanda y lo que el repartidor sale a cobrar.
+   */
+  const guardarEnvio = async () => {
+    if (!envioEnEdicion) return
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      setEnvioEnEdicion(null)
+      return
+    }
+    const { id, valor } = envioEnEdicion
+    const monto = montoDeEnvio(valor)
+    setEnvioEnEdicion(null)
+    const result = await updateOrderDeliveryFee(getBusinessId(), id, monto)
+    if (result.success) {
+      toast.success(monto > 0 ? `Envío: S/ ${monto.toFixed(2)}` : 'Pedido sin costo de envío')
+    } else {
+      toast.error('No se pudo actualizar el costo del envío')
+    }
+  }
+
   // Crear una cuenta de barra desde Órdenes: crea la mesa efímera, la ocupa
   // (eso genera la orden) y abre el pedido de una. Las rondas siguientes y el
   // cobro se manejan desde Mesas > Barra, donde vive la cuenta.
@@ -830,8 +857,10 @@ export default function Orders() {
     }
 
     try {
-      // Calcular total
-      const total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+      // Calcular total. El envío suma aparte: no es un plato, pero el
+      // repartidor tiene que cobrarlo y la comanda lo imprime.
+      const envio = montoDeEnvio(newOrderData?.deliveryFee)
+      const total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0) + envio
 
       // Crear la orden
       const orderPayload = {
@@ -891,6 +920,10 @@ export default function Orders() {
         orderNumber: orderToClose.orderNumber,
         items: orderToClose.items,
         orderType: orderToClose.orderType,
+        // El costo del envío viaja aparte de los items: el POS lo agrega como
+        // una línea al final del carrito. Así se cobra sin que el cajero tenga
+        // que teclear un precio —que es lo que estos negocios tienen apagado—.
+        deliveryFee: montoDeEnvio(orderToClose.deliveryFee),
         markAsPaidOnComplete: true,
         // Sede de la orden: el POS fija sucursal+almacén (comprobante/serie/caja/stock correctos)
         branchId: orderToClose.branchId ?? null,
@@ -1916,6 +1949,57 @@ export default function Orders() {
                     <div className="flex items-center gap-2 text-sm text-blue-600 pb-2">
                       <Bike className="w-4 h-4" />
                       <span>Repartidor: {order.deliveryPersonName}</span>
+                    </div>
+                  )}
+
+                  {/* Costo del envío: se pone al crear el pedido y se corrige acá
+                      (la dirección resultó más lejos, el cliente lo cambió...). */}
+                  {order.orderType === 'delivery' && (
+                    <div className="flex items-center gap-2 text-sm pb-2">
+                      <Bike className="w-4 h-4 text-gray-400 shrink-0" />
+                      <span className="text-gray-600">Envío:</span>
+                      {envioEnEdicion?.id === order.id ? (
+                        <>
+                          <div className="relative w-28">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">S/</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.10"
+                              inputMode="decimal"
+                              autoFocus
+                              value={envioEnEdicion.valor}
+                              onChange={(e) => setEnvioEnEdicion({ id: order.id, valor: e.target.value })}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') guardarEnvio()
+                                if (e.key === 'Escape') setEnvioEnEdicion(null)
+                              }}
+                              className="w-full pl-7 pr-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            />
+                          </div>
+                          <button
+                            onClick={guardarEnvio}
+                            className="text-xs font-medium text-primary-600 hover:text-primary-700"
+                          >
+                            Guardar
+                          </button>
+                          <button
+                            onClick={() => setEnvioEnEdicion(null)}
+                            className="text-xs text-gray-500 hover:text-gray-700"
+                          >
+                            Cancelar
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => setEnvioEnEdicion({ id: order.id, valor: String(montoDeEnvio(order.deliveryFee) || '') })}
+                          className="text-gray-900 font-medium hover:text-primary-600 hover:underline"
+                        >
+                          {montoDeEnvio(order.deliveryFee) > 0
+                            ? `S/ ${montoDeEnvio(order.deliveryFee).toFixed(2)}`
+                            : 'Sin costo'}
+                        </button>
+                      )}
                     </div>
                   )}
 

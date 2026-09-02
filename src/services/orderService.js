@@ -18,6 +18,7 @@ import {
 import { db } from '@/lib/firebase'
 import { updateTableAmount, updateTableServedStatus } from './tableService'
 import { getPrecuentaSnapshot, saveOrderModification } from './firestoreService'
+import { montoDeEnvio } from '@/utils/deliveryFee'
 
 /**
  * Helper: Calcular totales (subtotal, IGV, total) según configuración fiscal del negocio
@@ -55,12 +56,19 @@ const calculateOrderTotals = (total, taxConfig = { igvRate: 18, igvExempt: false
  * @param {number} billableTotal - Suma de items NO cortesía (con IGV)
  * @param {Object|null} discount - {type, value, ...} existente
  * @param {Object} taxConfig
+ * @param {number} envio - Costo del envío (delivery). Se suma DESPUÉS del
+ *        descuento: un 10% sobre la comida no tiene por qué rebajar el flete.
+ *        Va acá y no en el total de una sola vez porque estos cuatro caminos
+ *        recalculan desde los items: sin esto, agregar o quitar un plato
+ *        borraba el envío y el repartidor salía a cobrar de menos.
  * @returns {Object} - {subtotal, tax, total, discount} (discount puede recortarse)
  */
-const applyDiscountAndRecalc = (billableTotal, discount, taxConfig) => {
+const applyDiscountAndRecalc = (billableTotal, discount, taxConfig, envio = 0) => {
+  const flete = montoDeEnvio(envio)
   if (!discount || billableTotal <= 0) {
-    const { subtotal, tax } = calculateOrderTotals(billableTotal, taxConfig)
-    return { subtotal, tax, total: billableTotal, discount: billableTotal <= 0 ? null : discount }
+    const conFlete = billableTotal + flete
+    const { subtotal, tax } = calculateOrderTotals(conFlete, taxConfig)
+    return { subtotal, tax, total: conFlete, discount: billableTotal <= 0 ? null : discount }
   }
   let discountAmount = discount.type === 'percent'
     ? billableTotal * ((discount.value || 0) / 100)
@@ -68,7 +76,7 @@ const applyDiscountAndRecalc = (billableTotal, discount, taxConfig) => {
   discountAmount = Math.min(discountAmount, billableTotal)
   discountAmount = Math.round(discountAmount * 100) / 100
 
-  const newTotal = Math.max(0, billableTotal - discountAmount)
+  const newTotal = Math.max(0, billableTotal - discountAmount) + flete
   const { subtotal, tax } = calculateOrderTotals(newTotal, taxConfig)
   return {
     subtotal,
@@ -506,7 +514,7 @@ export const addOrderItems = async (businessId, orderId, newItems) => {
 
     // Recalcular totales reaplicando descuento existente si lo hay
     const billableTotal = updatedItems.reduce((sum, item) => sum + item.total, 0)
-    const { subtotal, tax, total, discount } = applyDiscountAndRecalc(billableTotal, orderData.discount || null, taxConfig)
+    const { subtotal, tax, total, discount } = applyDiscountAndRecalc(billableTotal, orderData.discount || null, taxConfig, orderData.deliveryFee)
 
     // Si se agregan nuevos items, la orden vuelve a estar activa
     const overallStatus = 'active'
@@ -621,6 +629,52 @@ export const updateItemStatus = async (businessId, orderId, itemId, newStatus) =
 }
 
 /**
+ * Corregir el costo del envío de un pedido ya creado.
+ *
+ * El monto se decide al crear el pedido, pero se equivocan: la dirección
+ * resulta más lejos, o el cliente pide que se lo dejen en otro lado. Cambiarlo
+ * recalcula el total, porque de ahí sale lo que la comanda imprime como "POR
+ * COBRAR" y lo que el repartidor sale a cobrar.
+ */
+export const updateOrderDeliveryFee = async (businessId, orderId, fee) => {
+  try {
+    const orderRef = doc(db, 'businesses', businessId, 'orders', orderId)
+    const orderSnap = await getDoc(orderRef)
+    if (!orderSnap.exists()) {
+      return { success: false, error: 'Orden no encontrada' }
+    }
+    const orderData = orderSnap.data()
+
+    const businessSnap = await getDoc(doc(db, 'businesses', businessId))
+    const taxConfig = businessSnap.exists() && businessSnap.data().emissionConfig?.taxConfig
+      ? businessSnap.data().emissionConfig.taxConfig
+      : { igvRate: 18, igvExempt: false }
+
+    const envio = montoDeEnvio(fee)
+    const billableTotal = (orderData.items || []).reduce((sum, it) => sum + (it.total || 0), 0)
+    const { subtotal, tax, total, discount } = applyDiscountAndRecalc(
+      billableTotal, orderData.discount || null, taxConfig, envio
+    )
+
+    await updateDoc(orderRef, {
+      deliveryFee: envio,
+      subtotal,
+      tax,
+      total,
+      discount: discount || null,
+      updatedAt: serverTimestamp(),
+    })
+
+    // La mesa no aplica: el envío solo existe en pedidos de delivery, que no
+    // tienen mesa asociada.
+    return { success: true, total }
+  } catch (error) {
+    console.error('Error al actualizar el costo del envío:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * Eliminar un item de una orden existente y actualizar la mesa
  */
 export const removeOrderItem = async (businessId, orderId, itemIndex, modifiedBy = null) => {
@@ -653,7 +707,7 @@ export const removeOrderItem = async (businessId, orderId, itemIndex, modifiedBy
 
     // Recalcular totales reaplicando descuento existente si lo hay
     const billableTotal = updatedItems.reduce((sum, item) => sum + item.total, 0)
-    const { subtotal, tax, total, discount } = applyDiscountAndRecalc(billableTotal, orderData.discount || null, taxConfig)
+    const { subtotal, tax, total, discount } = applyDiscountAndRecalc(billableTotal, orderData.discount || null, taxConfig, orderData.deliveryFee)
 
     // Actualizar la orden
     await updateDoc(orderRef, {
@@ -752,7 +806,7 @@ export const updateOrderItemQuantity = async (businessId, orderId, itemIndex, ne
 
     // Recalcular totales reaplicando descuento existente si lo hay
     const billableTotal = updatedItems.reduce((sum, item) => sum + item.total, 0)
-    const { subtotal, tax, total, discount } = applyDiscountAndRecalc(billableTotal, orderData.discount || null, taxConfig)
+    const { subtotal, tax, total, discount } = applyDiscountAndRecalc(billableTotal, orderData.discount || null, taxConfig, orderData.deliveryFee)
 
     // Actualizar la orden
     await updateDoc(orderRef, {
@@ -881,7 +935,7 @@ export const toggleItemCourtesy = async (businessId, orderId, itemIndex, markAsC
       : { igvRate: 18, igvExempt: false }
 
     const billableTotal = items.reduce((sum, it) => sum + (it.total || 0), 0)
-    const { subtotal, tax, total, discount } = applyDiscountAndRecalc(billableTotal, orderData.discount || null, taxConfig)
+    const { subtotal, tax, total, discount } = applyDiscountAndRecalc(billableTotal, orderData.discount || null, taxConfig, orderData.deliveryFee)
 
     await updateDoc(orderRef, {
       items,

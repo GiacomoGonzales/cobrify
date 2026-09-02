@@ -4610,6 +4610,59 @@ export default function Settings() {
                       </div>
                     </label>
                   </div>
+
+                  <div className="border-t border-gray-200"></div>
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900 mb-1">Delivery</h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                      El costo del envío se pone en cada pedido y se cobra como una línea más.
+                    </p>
+                    <div className="p-4 border border-gray-200 rounded-lg">
+                      <label className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                        <Bike className="w-4 h-4 text-primary-600" />
+                        Costo de envío sugerido
+                      </label>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        Viene precargado al crear un pedido de delivery, para no volver a
+                        escribirlo cada vez. Se puede cambiar en cada pedido, o borrar si esa
+                        entrega no cobra envío. Déjalo en 0 si prefieres escribirlo siempre a mano.
+                      </p>
+                      <div className="relative mt-3 max-w-[180px]">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">S/</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.10"
+                          inputMode="decimal"
+                          defaultValue={Number(businessSettings?.defaultDeliveryFee) || ''}
+                          placeholder="0.00"
+                          onBlur={async (e) => {
+                            if (isDemoMode) {
+                              toast.error('No disponible en modo demo')
+                              return
+                            }
+                            const monto = Math.max(0, Math.round((Number(e.target.value) || 0) * 100) / 100)
+                            if (monto === (Number(businessSettings?.defaultDeliveryFee) || 0)) return
+                            try {
+                              const businessRef = doc(db, 'businesses', getBusinessId())
+                              await setDoc(businessRef, {
+                                defaultDeliveryFee: monto,
+                                updatedAt: serverTimestamp(),
+                              }, { merge: true })
+                              if (refreshBusinessSettings) await refreshBusinessSettings()
+                              toast.success(monto > 0
+                                ? `Costo de envío sugerido: S/ ${monto.toFixed(2)}`
+                                : 'Sin costo de envío sugerido')
+                            } catch (error) {
+                              console.error('Error al guardar el costo de envío:', error)
+                              toast.error('No se pudo guardar')
+                            }
+                          }}
+                          className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </>
               )}
 
