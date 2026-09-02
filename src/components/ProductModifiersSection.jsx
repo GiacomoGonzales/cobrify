@@ -253,8 +253,8 @@ export default function ProductModifiersSection({
                 className="bg-white border border-gray-200 rounded-lg overflow-hidden"
               >
                 {/* Header del modificador */}
-                <div className="bg-gray-50 px-4 py-3 flex items-center justify-between">
-                  <div className="flex items-center gap-3 flex-1">
+                <div className="bg-gray-50 px-3 sm:px-4 py-3 flex items-start sm:items-center justify-between gap-2">
+                  <div className="flex items-start sm:items-center gap-2 sm:gap-3 flex-1 min-w-0">
                     <button
                       type="button"
                       onClick={() => toggleExpand(modifier.id)}
@@ -277,11 +277,14 @@ export default function ProductModifiersSection({
                         autoFocus
                       />
                     ) : (
-                      <div className="flex-1">
-                        <span className="font-medium text-gray-900 text-sm">
+                      <div className="flex-1 min-w-0">
+                        <span className="font-medium text-gray-900 text-sm break-words">
                           {modifier.name || `Modificador ${modIndex + 1}`}
                         </span>
-                        <div className="flex items-center gap-2 mt-0.5">
+                        {/* Los datos del grupo, en fila que ENVUELVE. Sin
+                            esto, en el celular se apretaban hasta partir
+                            palabras ("3" arriba y "opciones" abajo). */}
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 [&>span]:whitespace-nowrap">
                           <span className={`text-xs ${modifier.required ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
                             {modifier.required ? 'Obligatorio' : 'Opcional'}
                           </span>
@@ -340,7 +343,10 @@ export default function ProductModifiersSection({
                 {isExpanded && (
                   <div className="p-4 space-y-4">
                     {/* Configuración del modificador */}
-                    <div className="grid grid-cols-2 gap-4">
+                    {/* Una columna en el celular: los textos de ayuda son
+                        largos y a media pantalla quedaban en tiras de dos
+                        palabras. Desde tablet vuelven las dos columnas. */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-3">
                         <div>
                           <label className="flex items-center gap-2">
@@ -399,7 +405,7 @@ export default function ProductModifiersSection({
                             const val = parseInt(e.target.value)
                             if (!val || val < 1) handleUpdateModifier(modifier.id, 'maxSelection', 1)
                           }}
-                          className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          className="w-full max-w-[160px] px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                         />
                         <p className="text-xs text-gray-500 mt-1">
                           Cantidad máxima de opciones que puede elegir
@@ -436,7 +442,7 @@ export default function ProductModifiersSection({
                             <div
                               key={option.id}
                               onDragOver={(e) => handleDragOver(e, modifier.id, optIndex)}
-                              className={`flex items-center gap-1.5 p-2 bg-gray-50 rounded border transition-colors ${
+                              className={`flex items-start gap-1.5 p-2 bg-gray-50 rounded border transition-colors ${
                                 dragOptionData?.modifierId === modifier.id && dragOptionData?.optionIndex === optIndex
                                   ? 'border-primary-400 bg-primary-50'
                                   : 'border-gray-200'
@@ -446,12 +452,16 @@ export default function ProductModifiersSection({
                                   Solo el grip es draggable: antes lo era toda la fila, y
                                   al intentar seleccionar el texto del precio se disparaba
                                   el arrastre. */}
-                              <div className="flex items-center gap-0.5">
+                              <div className="flex items-center gap-0.5 shrink-0">
+                                {/* El arrastre es de escritorio: en tactil
+                                    no funciona y solo le robaba ancho al
+                                    nombre. En el celular se reordena con
+                                    las flechas. */}
                                 <span
                                   draggable
                                   onDragStart={() => handleDragStart(modifier.id, optIndex)}
                                   onDragEnd={handleDragEnd}
-                                  className="cursor-grab active:cursor-grabbing flex-shrink-0"
+                                  className="hidden sm:block cursor-grab active:cursor-grabbing flex-shrink-0"
                                   title="Arrastrar para reordenar"
                                 >
                                   <GripVertical className="w-3.5 h-3.5 text-gray-300" />
@@ -477,14 +487,19 @@ export default function ProductModifiersSection({
                                 </button>
                                 </div>
                               </div>
-                              <input
-                                type="text"
-                                value={option.name}
-                                onChange={(e) => handleUpdateOption(modifier.id, option.id, 'name', e.target.value)}
-                                placeholder="Ej: Término Medio"
-                                className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                              />
-                              <div className="flex items-center gap-1">
+                              {/* Nombre y precio: uno debajo del otro en el
+                                  celular, en la misma fila desde tablet.
+                                  Juntos en una sola fila, el nombre quedaba
+                                  en un hilo de dos palabras. */}
+                              <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-1.5">
+                                <input
+                                  type="text"
+                                  value={option.name}
+                                  onChange={(e) => handleUpdateOption(modifier.id, option.id, 'name', e.target.value)}
+                                  placeholder="Ej: Término Medio"
+                                  className="w-full sm:flex-1 min-w-0 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                />
+                              <div className="flex items-center gap-1 shrink-0">
                                 <span className="text-xs text-gray-500">+S/</span>
                                 <input
                                   type="text"
@@ -506,10 +521,11 @@ export default function ProductModifiersSection({
                                   className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                                 />
                               </div>
+                              </div>
                               <button
                                 type="button"
                                 onClick={() => handleDeleteOption(modifier.id, option.id)}
-                                className="text-gray-400 hover:text-red-600"
+                                className="text-gray-400 hover:text-red-600 shrink-0 mt-1 sm:mt-0"
                                 title="Eliminar opción"
                               >
                                 <X className="w-4 h-4" />
@@ -525,13 +541,15 @@ export default function ProductModifiersSection({
             )
           })}
 
-          <div className="flex items-center gap-2">
+          {/* Uno debajo del otro en el celular: lado a lado, "Agregar Otro
+              Modificador" no entraba y salia en dos renglones. */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={handleAddModifier}
-              className="flex-1"
+              className="w-full sm:flex-1"
             >
               <Plus className="w-4 h-4 mr-2" />
               Agregar Otro Modificador
