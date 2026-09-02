@@ -73,7 +73,7 @@ function fechaDeVenta(v) {
  * El plazo más largo que alguien haya configurado manda: con una vacuna a 365
  * días, una venta de hace un año todavía tiene que aparecer.
  */
-function ventanaDeVentas(products, businessSettings, daysAhead) {
+export function ventanaDeVentas(products, businessSettings, daysAhead) {
   const plazos = (products || [])
     .map(p => Number(p?.reminderDays))
     .filter(n => Number.isFinite(n) && n > 0)
@@ -85,10 +85,18 @@ function ventanaDeVentas(products, businessSettings, daysAhead) {
 /**
  * @param {object} p
  * @param {string} p.businessId
- * @param {Array}  p.products          catálogo (para el plazo de cada producto)
+ * @param {Array|Promise} p.products    catálogo (para el plazo de cada producto).
+ *   Se admite una PROMESA a propósito: no hace falta hasta después de tener
+ *   las ventas, así que la pantalla lo pide en paralelo en vez de esperarlo
+ *   antes de arrancar.
  * @param {object} p.businessSettings  ajustes del negocio (plazo por defecto)
  * @param {number} p.daysAhead         cuántos días hacia adelante mirar
- * @param {Set}    p.descartados       claves ya marcadas como atendidas
+ * @param {Set|Promise} p.descartados   claves ya marcadas como atendidas (igual
+ *   que `products`: se puede pasar la promesa).
+ * @param {Date}   [p.desde]           desde cuándo leer ventas. Sin esto se
+ *   calcula del catálogo, que es leer SIEMPRE el plazo más largo que alguien
+ *   haya configurado — con una vacuna a 365 días, 425 días de ventas en cada
+ *   apertura. La pantalla lo pasa según el rango que eligió el usuario.
  * @param {Function} p.onProgress
  * @returns {Promise<{overdue: Array, pending: Array}>}
  */
@@ -98,6 +106,7 @@ export async function getRemindersFromSales({
   businessSettings = {},
   daysAhead = 30,
   descartados = new Set(),
+  desde: desdeElegido = null,
   onProgress = null,
 }) {
   if (!businessId) return { overdue: [], pending: [] }
@@ -108,11 +117,13 @@ export async function getRemindersFromSales({
   hasta.setDate(hasta.getDate() + daysAhead)
   hasta.setHours(23, 59, 59, 999)
 
-  const desde = new Date(hoy)
-  desde.setDate(desde.getDate() - ventanaDeVentas(products, businessSettings, daysAhead))
-
-  const plazoPorProducto = new Map()
-  for (const p of products) plazoPorProducto.set(p.id, p)
+  // La ventana la manda quien llama. Sin indicación hay que mirar el catálogo,
+  // y ahí sí toca esperarlo antes de pedir nada.
+  let desde = desdeElegido
+  if (!desde) {
+    desde = new Date(hoy)
+    desde.setDate(desde.getDate() - ventanaDeVentas(await products, businessSettings, daysAhead))
+  }
 
   // Traer las ventas del período, paginadas. Es UNA consulta por página sobre
   // un índice que ya existe, no una por cliente.
@@ -120,7 +131,7 @@ export async function getRemindersFromSales({
   let cursor = null
   let vuelta = 0
   do {
-    const r = await getInvoicesPage(businessId, { pageSize: 300, startAfterDoc: cursor, sinceDate: desde })
+    const r = await getInvoicesPage(businessId, { pageSize: 1000, startAfterDoc: cursor, sinceDate: desde })
     if (!r.success) break
     ventas.push(...r.data)
     cursor = r.hasMore ? r.lastDoc : null
@@ -128,7 +139,14 @@ export async function getRemindersFromSales({
     if (onProgress) onProgress({ revisados: ventas.length, total: null })
     // Tope de seguridad: 15.000 ventas en el período ya es muchísimo, y sin
     // esto un negocio enorme dejaría la pantalla girando.
-  } while (cursor && vuelta < 50)
+  } while (cursor && vuelta < 15)
+
+  // Acá sí hacen falta. Si vinieron como promesa, ya se resolvieron mientras
+  // se leían las ventas.
+  const catalogo = await products
+  const yaAtendidos = await descartados
+  const plazoPorProducto = new Map()
+  for (const p of catalogo) plazoPorProducto.set(p.id, p)
 
   // Un cliente que vuelve a comprar lo mismo RENUEVA su recordatorio: solo
   // interesa la última vez que se llevó cada cosa. Sin esto, doce baños del
@@ -178,7 +196,7 @@ export async function getRemindersFromSales({
   const overdue = []
   const pending = []
   for (const r of ultimaCompra.values()) {
-    if (descartados.has(r.clave)) continue
+    if (yaAtendidos.has(r.clave)) continue
     const alerta = {
       ...r,
       dueDate: r.vence,

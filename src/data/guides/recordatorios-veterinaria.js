@@ -6,7 +6,7 @@
  */
 export default {
   id: 'recordatorios-veterinaria',
-  actualizado: '26/08/2026',
+  actualizado: '02/09/2026',
   intro:
     'El baño, el alimento y la desparasitación se repiten cada tanto, pero el cliente no lleva la cuenta: el que tiene que acordarse eres tú. Esta pantalla toma tus ventas y te dice a quién llamar — qué se llevó cada cliente, cuándo, y a quién ya se le pasó la fecha.',
 
@@ -68,13 +68,13 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'La pantalla abre en **Hoy**: las personas a las que hoy se les cumple el plazo desde su última compra. Esa es la rutina — entras, ves quiénes son y les escribes.',
+          text: 'La pantalla abre en **Esta semana**: las personas a las que se les cumple el plazo en los próximos siete días. Esa es la rutina — entras, ves quiénes son y les escribes.',
         },
         {
           type: 'tabla',
           encabezados: ['Filtro', 'Qué muestra'],
           filas: [
-            ['**Hoy**', 'A quiénes se les cumple el plazo hoy.'],
+            ['**Hoy**', 'Solo los de hoy: quien compró hace exactamente el plazo de ese producto. Es un día, así que muy seguido está vacío.'],
             ['**Esta semana**', 'Los de hoy más los de los próximos 7 días, para adelantarte.'],
             ['**Este mes**', 'Los próximos 30 días.'],
             ['**Vencidos**', 'A los que ya se les pasó la fecha, empezando por los que se vencieron recién.'],
@@ -83,6 +83,10 @@ export default {
         {
           type: 'consejo',
           text: 'Cada filtro va por su lado: **Hoy** muestra solo los de hoy, sin mezclar lo vencido de meses atrás. Y en Vencidos, primero aparece lo que se pasó ayer o anteayer — que es lo que todavía se recupera con una llamada — y al final lo más viejo.',
+        },
+        {
+          type: 'ojo',
+          text: '**Hoy en cero no es un error.** Para entrar ahí, un cliente tiene que haber comprado hace exactamente el plazo de ese producto: con el plazo en 30 días, los que compraron hace justo 30 días. Si ese día no vendiste, o esos clientes ya volvieron después, no hay nadie. Lo que sirve para la rutina es **Esta semana**.',
         },
         {
           type: 'texto',
@@ -109,6 +113,38 @@ export default {
     },
 
     {
+      id: 'filtros',
+      title: 'Filtrar: ver solo lo que te interesa',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Arriba de la lista hay tres filtros. Dos recortan lo que ya está en pantalla y son instantáneos; el primero es distinto, porque decide **cuántas ventas se leen** y por lo tanto cuánto tarda la pantalla en abrir.',
+        },
+        {
+          type: 'tabla',
+          encabezados: ['Filtro', 'Qué hace'],
+          filas: [
+            ['**Ventas desde**', 'Hasta dónde mirar hacia atrás. Menos rango, menos espera. Empieza en 3 meses.'],
+            ['**Servicio o producto**', 'Marca solo los que te interesan: el baño, la desparasitación. Lo demás desaparece de la lista.'],
+            ['**Cliente o paciente**', 'Busca por nombre del cliente, nombre de la mascota o teléfono.'],
+          ],
+        },
+        {
+          type: 'ojo',
+          text: '**Ventas desde** es el que hay que entender. Si tienes plazos largos —una vacuna que se repite al año— y el rango está en 3 meses, esa venta de hace diez meses no se leyó y su recordatorio no aparece. Para verlo, amplía el rango a **Último año** o **Todo el historial**.',
+        },
+        {
+          type: 'consejo',
+          text: 'El desplegable de servicios no ofrece tu catálogo entero: solo lo que de verdad está generando recordatorios, con el número de cuántos hay de cada uno al lado. Así se ve de un vistazo cuál conviene trabajar hoy.',
+        },
+        {
+          type: 'texto',
+          text: 'Los filtros de servicio y de cliente **no vuelven a consultar nada**: la lista ya está en memoria, así que marcarlos y desmarcarlos es inmediato. Solo cambiar **Ventas desde** vuelve a leer.',
+        },
+      ],
+    },
+
+    {
       id: 'vacunas',
       title: 'Vacunas y controles del historial',
       blocks: [
@@ -119,6 +155,14 @@ export default {
         {
           type: 'consejo',
           text: 'Sirve para lo que no pasa por caja: un refuerzo que corresponde en seis meses, un control post-operatorio.',
+        },
+        {
+          type: 'texto',
+          text: 'Estos llegan **unos segundos después** que el resto: viven dentro de la ficha de cada cliente, así que hay que recorrerlas una por una. La pantalla no espera por ellos — muestra primero lo de las ventas y los suma cuando terminan. Mientras tanto verás el aviso *sumando vacunas y controles* abajo de los filtros.',
+        },
+        {
+          type: 'ojo',
+          text: 'Si tu negocio tiene **muchos clientes**, ese recorrido tarda de más y no se hace solo: aparece un aviso con un botón **Traerlas igual**. Los recordatorios de ventas —que son la mayoría— ya están completos en pantalla sin esperar nada.',
         },
       ],
     },

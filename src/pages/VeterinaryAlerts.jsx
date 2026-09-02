@@ -1,8 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
-import { getVeterinaryReminders, markServiceCompleted } from '@/services/veterinaryService'
-import { getRemindersFromSales, getDescartados, descartarRecordatorio, escucharVentasNuevas } from '@/services/salesRemindersService'
+import { getVeterinaryReminders, markServiceCompleted, contarClientes } from '@/services/veterinaryService'
+import { getRemindersFromSales, getDescartados, descartarRecordatorio, escucharVentasNuevas, ventanaDeVentas } from '@/services/salesRemindersService'
+import {
+  RANGOS, RANGO_POR_DEFECTO, desdeDeLectura, aplicarFiltros, serviciosDisponibles,
+} from '@/utils/reminderFilters'
+import Input from '@/components/ui/Input'
+import { leerCache, guardarCache, limpiarCache } from '@/utils/reminderCache'
 import { getProducts } from '@/services/firestoreService'
 import Card, { CardContent } from '@/components/ui/Card'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
@@ -20,20 +25,78 @@ import {
   CheckCircle2,
   Loader2,
   MessageCircle,
+  Search,
+  SlidersHorizontal,
+  X,
 } from 'lucide-react'
+
+/**
+ * Hasta cuántos clientes se recorren las fichas sin preguntar.
+ *
+ * Son dos consultas por cliente (vacunas + controles). Doscientos es un
+ * momento; tres mil son seis mil consultas y el navegador se queda sin aire
+ * justo cuando el usuario quiere filtrar.
+ */
+const TOPE_FICHAS_AUTOMATICAS = 250
 
 export default function VeterinaryAlerts() {
   const { user, getBusinessId, isDemoMode, businessSettings } = useAppContext()
   const toast = useToast()
-  const [pendingAlerts, setPendingAlerts] = useState([])
-  const [overdueAlerts, setOverdueAlerts] = useState([])
+  // Las DOS fuentes viven separadas en el estado y se juntan al renderizar.
+  // Así el tramo lento (las fichas de los pacientes) puede llegar después sin
+  // pisar lo que ya se mostró ni duplicarse al recargar.
+  const [ventasPend, setVentasPend] = useState([])
+  const [ventasVenc, setVentasVenc] = useState([])
+  const [fichasPend, setFichasPend] = useState([])
+  const [fichasVenc, setFichasVenc] = useState([])
   const [isLoading, setIsLoading] = useState(true)
+  const [cargandoFichas, setCargandoFichas] = useState(false)
+  const [ventasLeidas, setVentasLeidas] = useState(null)
+  // Cuántos clientes hay que recorrer para las vacunas y controles. Decide si
+  // ese barrido se hace solo o queda detrás de un botón.
+  const [cuantosClientes, setCuantosClientes] = useState(null)
+  // Lo que se ve es lo guardado de la vez anterior y todavia se esta releyendo.
+  const [desdeCache, setDesdeCache] = useState(false)
+
+  // ═══ Filtros ═══
+  // El rango de VENTAS es lo único que decide cuánto se lee de Firestore; los
+  // otros dos recortan en memoria y son instantáneos.
+  const [rango, setRango] = useState(RANGO_POR_DEFECTO)
+  const [desdeManual, setDesdeManual] = useState('')
+  const [servicios, setServicios] = useState(() => new Set())
+  const [buscaCliente, setBuscaCliente] = useState('')
+  const [panelServicios, setPanelServicios] = useState(false)
+  const [buscaServicio, setBuscaServicio] = useState('')
+
+  // Las fichas de pacientes cuestan DOS consultas por cliente, así que se
+  // traen una sola vez por sesión: cambiar de rango no las vuelve a pedir.
+  const fichasCargadas = useRef(false)
+
+  // La recarga en vivo, siempre apuntando a la version actual: el listener
+  // se monta una sola vez y sin esto se quedaria con el rango del primer
+  // render.
+  const recargarRef = useRef(null)
+
+  // El barrido de fichas avisa cada 20 clientes. Con tres mil, eso son ciento
+  // cincuenta repintados de una tabla larga mientras el usuario intenta
+  // filtrar. Se deja pasar uno cada medio segundo.
+  const ultimoAvance = useRef(0)
+  const avanceLento = (v) => {
+    const ahora = Date.now()
+    if (v && ahora - ultimoAvance.current < 500 && v.revisados < v.total) return
+    ultimoAvance.current = ahora
+    setAvance(v)
+  }
   /**
    * Filtro por período. La carga SIEMPRE trae el mes completo y el filtro se
    * aplica en memoria: cambiar de "hoy" a "este mes" es instantáneo en vez de
    * volver a leer las ventas.
    */
-  const [periodo, setPeriodo] = useState('hoy')
+  // Abre en "Esta semana", no en "Hoy". "Hoy" es una rebanada de UN solo dia
+  // —solo entra aquel a quien se le cumple el plazo exactamente hoy— y que
+  // este vacio es lo habitual. Abrir en una lista vacia hacia parecer rota
+  // una pantalla que tenia doscientos avisos.
+  const [periodo, setPeriodo] = useState('semana')
   const [pagina, setPagina] = useState(1)
   const POR_PAGINA = 25
   const daysAhead = 30
@@ -52,7 +115,7 @@ export default function VeterinaryAlerts() {
   useEffect(() => {
     loadAlerts()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessId, isDemoMode])
+  }, [businessId, isDemoMode, rango, desdeManual])
 
   /**
    * En vivo: al cobrar una venta, la lista se entera sola.
@@ -66,52 +129,128 @@ export default function VeterinaryAlerts() {
     let pendiente = null
     const cortar = escucharVentasNuevas(businessId, () => {
       clearTimeout(pendiente)
-      pendiente = setTimeout(() => loadAlerts({ silencioso: true }), 2500)
+      pendiente = setTimeout(() => recargarRef.current?.({ silencioso: true }), 2500)
     })
     return () => { clearTimeout(pendiente); cortar() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId, isDemoMode])
 
-  const loadAlerts = async ({ silencioso = false } = {}) => {
+  /**
+   * La carga va en DOS TRAMOS, y ese es el arreglo de fondo.
+   *
+   * Antes esperaba a las dos fuentes juntas con `Promise.all`, así que la
+   * pantalla tardaba lo que tardara la MÁS LENTA — y la más lenta lee las
+   * vacunas y controles de la ficha, que son dos consultas por cada cliente
+   * del negocio. Con dos mil clientes son cuatro mil consultas antes de pintar
+   * la primera fila.
+   *
+   * Ahora primero se muestran los recordatorios de VENTAS, que salen de una
+   * consulta paginada y llegan en un momento, y las fichas se suman después
+   * sin tapar nada. Además se guardan: cambiar el rango no las vuelve a pedir.
+   */
+  const loadAlerts = async ({ silencioso = false, recargarFichas = false } = {}) => {
     if (!user?.uid || isDemoMode || !businessId) {
       setIsLoading(false)
       return
     }
 
-    // Al recargarse sola por una venta nueva NO se tapa la pantalla: quien está
-    // mirando la lista no tiene por qué ver un spinner encima.
-    if (!silencioso) setIsLoading(true)
+    // Lo ultimo que se supo, de entrada. El piso de esta pantalla es el peso
+    // de las ventas y no hay forma de pedir menos campos; con conexion lenta
+    // son varios segundos de spinner para ver una lista que casi siempre es
+    // la de ayer. Se muestra y se corrige en cuanto llega lo fresco.
+    if (!silencioso) {
+      const guardado = leerCache(businessId, rango, desdeManual)
+      if (guardado) {
+        setVentasPend(guardado.pending)
+        setVentasVenc(guardado.overdue)
+        setVentasLeidas(guardado.ventasLeidas)
+        setDesdeCache(true)
+        setIsLoading(false)
+      } else {
+        setIsLoading(true)
+      }
+    }
     setAvance(null)
     const t0 = performance.now()
     try {
-      // DOS fuentes, que responden preguntas distintas:
-      //  - las VENTAS: qué se llevó cada cliente y hace cuánto (lo normal)
-      //  - las vacunas y controles cargados a mano en la ficha del paciente
-      const [catalogo, descartados] = await Promise.all([
-        getProducts(businessId),
-        getDescartados(businessId),
-      ])
-      const products = catalogo?.success ? (catalogo.data || []) : []
+      // ── Tramo 1: las ventas ──
+      //
+      // Las TRES lecturas salen a la vez. Antes el catálogo y los descartes se
+      // esperaban PRIMERO y recién después se pedía la primera página de
+      // ventas: tres viajes en fila para algo que no depende del anterior.
+      const pCatalogo = getProducts(businessId).then(r => (r?.success ? (r.data || []) : []))
+      const pDescartados = getDescartados(businessId)
 
-      const [deVentas, deFichas] = await Promise.all([
-        getRemindersFromSales({ businessId, products, businessSettings, daysAhead, descartados, onProgress: setAvance }),
-        getVeterinaryReminders(businessId, daysAhead).catch(() => ({ pending: [], overdue: [] })),
-      ])
+      // La ventana de lectura sale del rango elegido, no del plazo más largo
+      // del catálogo. Es la diferencia entre leer 90 días de ventas y 425.
+      // Solo "Todo el historial" necesita el catálogo para decidirla.
+      const desde = desdeDeLectura(
+        rango,
+        desdeManual,
+        rango === 'todo' ? ventanaDeVentas(await pCatalogo, businessSettings, daysAhead) : 0,
+      )
 
-      console.log(`Recordatorios: ${Math.round(performance.now() - t0)} ms · ${deVentas.ventasLeidas ?? 0} ventas leídas`)
-      // Lo próximo: lo que vence antes, primero.
-      // Lo vencido: al revés — el que se pasó ayer todavía se recupera con una
-      // llamada, el de hace cinco meses ya es historia. Con el orden al revés,
-      // lo accionable quedaba en la última página.
-      setPendingAlerts([...deVentas.pending, ...deFichas.pending].sort((a, b) => a.dueDate - b.dueDate))
-      setOverdueAlerts([...deVentas.overdue, ...deFichas.overdue].sort((a, b) => b.dueDate - a.dueDate))
+      const deVentas = await getRemindersFromSales({
+        businessId,
+        products: pCatalogo,
+        descartados: pDescartados,
+        businessSettings,
+        daysAhead,
+        desde,
+      })
+
+      console.log(`Recordatorios (ventas): ${Math.round(performance.now() - t0)} ms · ${deVentas.ventasLeidas ?? 0} ventas leídas`)
+      setVentasLeidas(deVentas.ventasLeidas ?? 0)
+      setVentasPend(deVentas.pending)
+      setVentasVenc(deVentas.overdue)
+      setDesdeCache(false)
+      setIsLoading(false)   // ← la pantalla ya sirve
+      guardarCache(businessId, rango, desdeManual, {
+        pending: deVentas.pending,
+        overdue: deVentas.overdue,
+        ventasLeidas: deVentas.ventasLeidas ?? 0,
+      })
+
+      // ── Tramo 2: las fichas de los pacientes ──
+      //
+      // Cuesta DOS consultas por cliente, así que primero se pregunta cuántos
+      // hay (una sola consulta de agregación, sin traer documentos). Pasado el
+      // tope, el barrido no arranca solo: queda detrás de un botón, porque
+      // dejar al navegador haciendo miles de consultas de fondo hace que toda
+      // la pantalla se sienta trabada aunque las filas ya estén pintadas.
+      if (fichasCargadas.current && !recargarFichas) return
+      const n = cuantosClientes ?? await contarClientes(businessId)
+      setCuantosClientes(n)
+      if (n > TOPE_FICHAS_AUTOMATICAS && !recargarFichas) return
+      await cargarFichas()
     } catch (error) {
       console.error('Error al cargar alertas:', error)
       toast.error('Error al cargar las alertas')
-    } finally {
       setIsLoading(false)
     }
   }
+
+  /** El barrido de fichas, aparte para que el botón pueda pedirlo a mano. */
+  const cargarFichas = async () => {
+    setCargandoFichas(true)
+    const t0 = performance.now()
+    try {
+      const deFichas = await getVeterinaryReminders(businessId, daysAhead, avanceLento)
+      console.log(`Recordatorios (fichas): ${Math.round(performance.now() - t0)} ms`)
+      setFichasPend(deFichas.pending)
+      setFichasVenc(deFichas.overdue)
+      fichasCargadas.current = true
+    } catch {
+      // Que fallen las fichas no debe borrar los recordatorios de ventas, que
+      // son la mayoría y ya están en pantalla.
+    } finally {
+      setCargandoFichas(false)
+      setAvance(null)
+    }
+  }
+
+  // Se actualiza en cada render, ya con loadAlerts definido arriba.
+  useEffect(() => { recargarRef.current = loadAlerts })
 
   const handleMarkCompleted = async (alert) => {
     if (alert.type !== 'service' && alert.type !== 'sale') return
@@ -128,7 +267,13 @@ export default function VeterinaryAlerts() {
         await markServiceCompleted(businessId, alert.customerId, alert.id)
       }
       toast.success('Servicio marcado como completado')
-      loadAlerts()
+      // El guardado de TODOS los rangos quedó viejo: en otro rango este aviso
+      // seguiría apareciendo, y algo ya resuelto que reaparece es lo que hace
+      // que el usuario deje de creerle a la lista.
+      limpiarCache(businessId)
+      // Lo de la ficha cambió en Firestore: hay que releerla. Lo de una
+      // venta solo agrega un descarte, y eso se recalcula sin las fichas.
+      loadAlerts({ recargarFichas: alert.type !== 'sale' })
     } catch (error) {
       console.error('Error:', error)
       toast.error('Error al marcar el servicio')
@@ -275,22 +420,68 @@ export default function VeterinaryAlerts() {
     )
   }
 
+  // ═══ Las dos fuentes, juntas ═══
+  //
+  // Los hooks van ANTES del early return de `isLoading`: debajo de un `return`
+  // condicional, React los ve aparecer y desaparecer entre renders (error #310).
+  const pendingAlerts = useMemo(
+    () => [...ventasPend, ...fichasPend].sort((a, b) => a.dueDate - b.dueDate),
+    [ventasPend, fichasPend],
+  )
+  // Lo vencido al revés: el que se pasó ayer se recupera con una llamada, el de
+  // hace cinco meses ya es historia.
+  const overdueAlerts = useMemo(
+    () => [...ventasVenc, ...fichasVenc].sort((a, b) => b.dueDate - a.dueDate),
+    [ventasVenc, fichasVenc],
+  )
+
+  // Las opciones del selector salen de TODO lo cargado, no de lo ya filtrado:
+  // si no, al elegir un servicio los demás desaparecían del propio selector y
+  // no había forma de cambiar de opinión sin limpiar el filtro.
+  const opcionesDeServicio = useMemo(
+    () => serviciosDisponibles([pendingAlerts, overdueAlerts]),
+    [pendingAlerts, overdueAlerts],
+  )
+
+  const pendFiltradas = useMemo(
+    () => aplicarFiltros(pendingAlerts, { servicios, cliente: buscaCliente }),
+    [pendingAlerts, servicios, buscaCliente],
+  )
+  const vencFiltradas = useMemo(
+    () => aplicarFiltros(overdueAlerts, { servicios, cliente: buscaCliente }),
+    [overdueAlerts, servicios, buscaCliente],
+  )
+
+  const hayFiltros = servicios.size > 0 || buscaCliente.trim() !== ''
+
+  const alternarServicio = (id) => {
+    setServicios(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+    setPagina(1)
+  }
+
+  const limpiarFiltros = () => {
+    setServicios(new Set())
+    setBuscaCliente('')
+    setPagina(1)
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-primary-600 mx-auto mb-2" />
-          <p className="text-gray-600">
-            {avance && avance.total > 0
-              ? `Revisando ${avance.revisados} de ${avance.total} pacientes...`
-              : 'Cargando recordatorios...'}
-          </p>
+          <p className="text-gray-600">Cargando recordatorios...</p>
         </div>
       </div>
     )
   }
 
-  const totalAlerts = pendingAlerts.length + overdueAlerts.length
+  const totalAlerts = pendFiltradas.length + vencFiltradas.length
 
   const finDe = (dias) => {
     const d = new Date()
@@ -316,8 +507,8 @@ export default function VeterinaryAlerts() {
    */
   const delPeriodo = (id) =>
     id === 'vencidos'
-      ? overdueAlerts
-      : pendingAlerts.filter(a => a.dueDate <= limiteDelPeriodo(id))
+      ? vencFiltradas
+      : pendFiltradas.filter(a => a.dueDate <= limiteDelPeriodo(id))
 
   const cuantosEn = (id) => delPeriodo(id).length
   const visibles = delPeriodo(periodo)
@@ -360,6 +551,156 @@ export default function VeterinaryAlerts() {
         </p>
       </div>
 
+      {/* Filtros.
+          El rango de VENTAS es el unico que cuesta: decide cuanto se lee de
+          Firestore. Los otros dos recortan lo que ya esta en memoria. */}
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {/* Rango de ventas */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Ventas desde</label>
+              <select
+                value={rango}
+                onChange={(e) => { setRango(e.target.value); setPagina(1) }}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                {RANGOS.map(r => (
+                  <option key={r.id} value={r.id}>{r.label}</option>
+                ))}
+                <option value="personalizado">Desde una fecha...</option>
+              </select>
+              {rango === 'personalizado' && (
+                <input
+                  type="date"
+                  value={desdeManual}
+                  onChange={(e) => { setDesdeManual(e.target.value); setPagina(1) }}
+                  className="mt-2 w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              )}
+            </div>
+
+            {/* Servicio o producto */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Servicio o producto</label>
+              <button
+                type="button"
+                onClick={() => setPanelServicios(v => !v)}
+                className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white hover:border-gray-400 transition-colors"
+              >
+                <span className={servicios.size ? 'text-gray-900 font-medium' : 'text-gray-500'}>
+                  {servicios.size === 0 ? 'Todos' : servicios.size + (servicios.size === 1 ? ' elegido' : ' elegidos')}
+                </span>
+                <SlidersHorizontal className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              </button>
+            </div>
+
+            {/* Cliente */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Cliente o paciente</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  value={buscaCliente}
+                  onChange={(e) => { setBuscaCliente(e.target.value); setPagina(1) }}
+                  placeholder="Nombre, mascota o telefono"
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* El desplegable de servicios ofrece lo que DE VERDAD genera
+              recordatorios, no el catalogo entero: en una veterinaria son
+              cientos de productos y la mayoria nunca aparece aca. El numero de
+              al lado dice cuantos hay de cada uno. */}
+          {panelServicios && (
+            <div className="border border-gray-200 rounded-lg p-3">
+              <Input
+                placeholder="Buscar servicio..."
+                value={buscaServicio}
+                onChange={(e) => setBuscaServicio(e.target.value)}
+                className="mb-2"
+              />
+              {opcionesDeServicio.length === 0 ? (
+                <p className="text-sm text-gray-500 py-2">
+                  Todavia no hay recordatorios en este rango de ventas.
+                </p>
+              ) : (
+                <div className="max-h-52 overflow-y-auto divide-y divide-gray-100">
+                  {opcionesDeServicio
+                    .filter(op => op.label.toLowerCase().includes(buscaServicio.trim().toLowerCase()))
+                    .map(op => (
+                      <label key={op.id} className="flex items-center gap-2 py-2 px-1 text-sm cursor-pointer hover:bg-gray-50">
+                        <input
+                          type="checkbox"
+                          checked={servicios.has(op.id)}
+                          onChange={() => alternarServicio(op.id)}
+                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        />
+                        <span className="flex-1 min-w-0 truncate text-gray-800">{op.label}</span>
+                        <span className="text-xs text-gray-400 flex-shrink-0">{op.total}</span>
+                      </label>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Las vacunas y controles viven dentro de la ficha de cada cliente, asi
+              que traerlos cuesta dos consultas por cliente. Pasado el tope no se
+              hace solo: se ofrece, con el numero a la vista para que la espera no
+              sea una sorpresa. */}
+          {!fichasCargadas.current && !cargandoFichas && cuantosClientes > TOPE_FICHAS_AUTOMATICAS && (
+            <div className="flex items-start gap-3 flex-wrap p-3 bg-gray-50 border border-gray-200 rounded-lg">
+              <Syringe className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-gray-700">
+                  Faltan las vacunas y controles cargados a mano en las fichas.
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Hay que revisar {cuantosClientes.toLocaleString('es-PE')} fichas una por una, asi que tarda.
+                  Lo de arriba sale de las ventas y ya esta completo.
+                </p>
+              </div>
+              <button
+                onClick={cargarFichas}
+                className="px-3 py-1.5 text-sm font-medium text-primary-700 bg-white border border-primary-300 rounded-lg hover:bg-primary-50 transition-colors flex-shrink-0"
+              >
+                Traerlas igual
+              </button>
+            </div>
+          )}
+
+          {/* Que se esta mirando, y a que costo */}
+          <div className="flex items-center justify-between gap-3 flex-wrap text-xs text-gray-500">
+            <span>
+              {desdeCache
+                ? 'Mostrando lo guardado, actualizando...'
+                : ventasLeidas !== null && ventasLeidas.toLocaleString('es-PE') + ' ventas leidas'}
+              {cargandoFichas && (
+                <span className="ml-2 inline-flex items-center gap-1 text-gray-400">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  {avance && avance.total > 0
+                    ? 'sumando vacunas y controles (' + avance.revisados + ' de ' + avance.total + ')'
+                    : 'sumando vacunas y controles'}
+                </span>
+              )}
+            </span>
+            {hayFiltros && (
+              <button
+                onClick={limpiarFiltros}
+                className="inline-flex items-center gap-1 text-gray-600 hover:text-gray-900"
+              >
+                <X className="w-3 h-3" />
+                Quitar filtros
+              </button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Filtros por período. Cada uno lleva su conteo, así que hacen de
           resumen y las tres tarjetas de estadísticas dejaron de hacer falta. */}
       <div className="flex flex-wrap gap-2">
@@ -384,21 +725,46 @@ export default function VeterinaryAlerts() {
         })}
       </div>
 
+      {/* "Hoy" es UN dia: solo entra aquel a quien se le cumple el plazo
+          exactamente hoy, o sea el que compro hace justo 30 dias (o el plazo que
+          tenga ese producto). Que de cero es lo habitual, y sin decirlo la
+          pantalla parece rota. */}
+      {periodo === 'hoy' && cuantosEn('hoy') === 0 && (
+        <p className="text-sm text-gray-500 -mt-2">
+          <strong>Hoy</strong> es un solo dia: aparece quien compro hace exactamente el
+          plazo de ese producto. Que este vacio es normal.
+          {cuantosEn('semana') > 0 && ' Prueba con Esta semana.'}
+        </p>
+      )}
+
       {visibles.length === 0 ? (
         <Card>
           <CardContent className="p-12 text-center">
             <Bell className="w-10 h-10 text-gray-300 mx-auto mb-3" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">
-              No hay recordatorios en este periodo
+              {hayFiltros ? 'Nada con estos filtros' : 'No hay recordatorios en este periodo'}
             </h3>
             {/* Antes decía solo "no hay recordatorios pendientes" y ahí se
                 terminaba la ayuda: quien nunca vendió con cliente no tenía cómo
-                saber de qué depende esta pantalla, y la leía como rota. */}
+                saber de qué depende esta pantalla, y la leía como rota.
+                Con filtros encima hay que decir CUÁL de los tres sobra, porque
+                mandar a "ampliar el periodo" cuando lo que sobra es el filtro
+                de servicio no lleva a ninguna parte. */}
             <p className="text-gray-600 max-w-md mx-auto">
-              {totalAlerts > 0
-                ? 'Prueba con un periodo más amplio.'
-                : 'Aquí aparecen las ventas hechas a un cliente con nombre, pasado el plazo que definas en Configuración > Ventas. Las ventas de mostrador, sin cliente, no generan recordatorio.'}
+              {hayFiltros
+                ? 'Prueba quitando el filtro de servicio o de cliente, o amplía el rango de ventas.'
+                : totalAlerts > 0
+                  ? 'Prueba con un periodo más amplio.'
+                  : 'Aquí aparecen las ventas hechas a un cliente con nombre, pasado el plazo que definas en Configuración > Ventas. Las ventas de mostrador, sin cliente, no generan recordatorio.'}
             </p>
+            {/* El rango de ventas es el que sorprende: un plazo de 365 días no
+                puede aparecer si solo se leyeron 90 días de ventas. */}
+            {!hayFiltros && totalAlerts === 0 && rango !== 'todo' && (
+              <p className="text-sm text-gray-500 max-w-md mx-auto mt-3">
+                Ojo con <strong>Ventas desde</strong>: si tus plazos son largos (una vacuna
+                anual, por ejemplo), amplía el rango para que esas ventas entren.
+              </p>
+            )}
           </CardContent>
         </Card>
       ) : (

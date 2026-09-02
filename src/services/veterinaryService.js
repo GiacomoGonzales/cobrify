@@ -15,7 +15,29 @@ import {
   query,
   orderBy,
   Timestamp,
+  getCountFromServer,
 } from 'firebase/firestore'
+
+/**
+ * Cuántos clientes tiene el negocio.
+ *
+ * Existe para decidir ANTES si conviene recorrer las fichas: los recordatorios
+ * de vacunas y controles viven dentro de cada cliente, así que leerlos cuesta
+ * DOS consultas por cliente. Con doscientos es un momento; con tres mil son
+ * seis mil consultas y el navegador se queda sin aire.
+ *
+ * Esta cuenta es una sola consulta de agregación y no trae ningún documento.
+ */
+export const contarClientes = async (businessId) => {
+  if (!businessId) return 0
+  try {
+    const snap = await getCountFromServer(collection(db, 'businesses', businessId, 'customers'))
+    return snap.data().count || 0
+  } catch (error) {
+    console.error('No se pudo contar los clientes:', error)
+    return 0
+  }
+}
 
 // ==================== HISTORIAL MÉDICO ====================
 
