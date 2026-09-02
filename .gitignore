@@ -86,3 +86,8 @@ logs_temp.txt
 .firebase/
 
 .vercel
+
+# Exportaciones del sistema que caen en la raiz (no son del proyecto).
+# Los xlsx dentro de carpetas, como public/, si se versionan.
+/*.xlsx
+/*.csv
