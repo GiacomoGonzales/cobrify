@@ -3263,6 +3263,26 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       || String(invoice.sunatStatus || '').toLowerCase() === 'voided'
       || !!invoice.voidedAt
     if (isVoided) {
+      // POR QUÉ está anulado. El sello solo dice que lo está; en el portal de
+      // SUNAT figura además con qué documento y por qué motivo, y eso es lo que
+      // el contador necesita al archivar (reclamo de A&S COPIERS, 02-sep-2026).
+      //
+      // Sale de lo que se congeló en la factura al emitir la nota de crédito.
+      // Las anuladas de antes no tienen el motivo guardado pero sí el número de
+      // la nota, así que igual se imprime lo que haya.
+      const partesDelMotivo = []
+      if (invoice.pendingCreditNoteNumber) {
+        partesDelMotivo.push(`Anulado por Nota de Crédito ${invoice.pendingCreditNoteNumber}`)
+      } else if (invoice.voidedAt) {
+        partesDelMotivo.push('Anulado por comunicación de baja')
+      }
+      const codigoMotivo = invoice.voidDiscrepancyCode || ''
+      const textoMotivo = invoice.voidDiscrepancyReason || ''
+      if (codigoMotivo || textoMotivo) {
+        partesDelMotivo.push(`Motivo ${[codigoMotivo, textoMotivo].filter(Boolean).join(' - ')}`)
+      }
+      const leyendaAnulado = partesDelMotivo.join('  ·  ')
+
       const totalPages = doc.getNumberOfPages()
       for (let p = 1; p <= totalPages; p++) {
         doc.setPage(p)
@@ -3273,6 +3293,20 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
         doc.setFontSize(80)
         doc.text('ANULADO', PAGE_WIDTH / 2, PAGE_HEIGHT / 2, { align: 'center', angle: 45 })
         doc.restoreGraphicsState()
+
+        // La leyenda va OPACA y horizontal: el sello es decoración, esto es el
+        // dato. Debajo del sello para no taparlo, y centrada.
+        if (leyendaAnulado) {
+          doc.setTextColor(220, 38, 38)
+          doc.setFont('helvetica', 'bold')
+          doc.setFontSize(9)
+          const lineas = doc.splitTextToSize(leyendaAnulado, CONTENT_WIDTH - 20)
+          let y = PAGE_HEIGHT / 2 + 60
+          lineas.forEach(l => {
+            doc.text(l, PAGE_WIDTH / 2, y, { align: 'center' })
+            y += 11
+          })
+        }
       }
       doc.setTextColor(0, 0, 0)
     }

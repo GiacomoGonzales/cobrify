@@ -1070,6 +1070,11 @@ export default function CreateCreditNote() {
           pendingCreditNoteId: editingNC.id,
           pendingCreditNoteNumber: editingNC.number,
           pendingCreditNoteTotal: total,
+          // El motivo, congelado en la FACTURA. Sin esto el PDF de la factura
+          // anulada solo puede decir "ANULADO", que es lo que se reclamo: en el
+          // portal de SUNAT figura por que y con que documento.
+          voidDiscrepancyCode: formData.discrepancyCode || '',
+          voidDiscrepancyReason: formData.discrepancyReason || '',
           ...((isFullCancellation && ['01', '06', '07'].includes(formData.discrepancyCode)) ? { stockRestored: true } : {})
         })
 
@@ -1229,6 +1234,11 @@ export default function CreateCreditNote() {
           pendingCreditNoteId: result.id,
           pendingCreditNoteNumber: creditNoteNumber,
           pendingCreditNoteTotal: total,
+          // El motivo, congelado en la FACTURA. Sin esto el PDF de la factura
+          // anulada solo puede decir "ANULADO", que es lo que se reclamo: en el
+          // portal de SUNAT figura por que y con que documento.
+          voidDiscrepancyCode: formData.discrepancyCode || '',
+          voidDiscrepancyReason: formData.discrepancyReason || '',
           // Idempotencia (Fase 2): si esta NC devuelve TODO el stock, marcar la factura
           // para que una anulación posterior no lo devuelva otra vez (doble restauración).
           ...((isFullCancellation && ['01', '06', '07'].includes(formData.discrepancyCode)) ? { stockRestored: true } : {})
