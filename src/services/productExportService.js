@@ -190,55 +190,57 @@ export const exportProductsForImport = async (products, categories, businessMode
     if (!Array.isArray(product.variants) || product.variants.length === 0) {
       const batches = Array.isArray(product.batches) ? product.batches.filter(b => b) : []
 
-      // Caso A: múltiples lotes → una fila por lote
-      // Las filas adicionales solo llenan sku/nombre/stock/lote/fecha; los demás
-      // campos compartidos quedan vacíos. Al reimportar, ImportProductsModal los
-      // fusiona por SKU y reconstruye batches[].
+      // Caso A: múltiples lotes → una fila por lote.
+      // Cada fila lleva TODOS los campos del producto repetidos; lo único que
+      // cambia entre filas es la cantidad, el vencimiento y el número de lote.
+      // Al reimportar, ImportProductsModal fusiona por SKU, suma las cantidades
+      // y reconstruye batches[].
       if (batches.length > 1) {
-        return batches.map((batch, idx) => {
-          const isFirst = idx === 0
+        return batches.map((batch) => {
           const batchQty = safeNum(batch.quantity ?? batch.stock)
           const batchLote = batch.batchNumber || ''
           const batchExp = formatYmd(batch.expirationDate)
-          const emptyPharma = isFirst ? pharmacyValues : pharmacyValues.map(() => '')
-
+          // Los compartidos, en TODAS las filas — mismo criterio que la rama de
+          // variantes. Lo único por fila es lo del lote: su cantidad, su
+          // vencimiento y su número. El importador suma las cantidades y toma
+          // los demás campos de la primera fila, así que repetirlos no molesta.
           return [
             product.sku || '',
-            isFirst ? codeColumn : '',
+            codeColumn,
             product.name || '',
-            isFirst ? (product.description || '') : '',
-            isFirst ? (product.marca || '') : '',
-            isFirst ? categoria : '',
-            isFirst ? subcategoria : '',
-            isFirst ? (product.unit || 'UNIDAD') : '',
-            ...emptyPharma,
-            isFirst ? safeNum(product.cost) : '',
-            isFirst ? formatYmd(product.lastPurchaseDate) : '',
-            isFirst ? safeNum(product.price) : '',
+            product.description || '',
+            product.marca || '',
+            categoria,
+            subcategoria,
+            product.unit || 'UNIDAD',
+            ...pharmacyValues,
+            safeNum(product.cost),
+            formatYmd(product.lastPurchaseDate),
+            safeNum(product.price),
             // Ancla en dolares, con el MISMO nombre de columna que lee el
             // importador: exportar -> editar -> reimportar no debe perderlo.
-            isFirst ? safeNum(product.priceUSD) : '',
-            isFirst ? safeNum(product.price2) : '',
-            isFirst ? safeNum(product.price3) : '',
-            isFirst ? safeNum(product.price4) : '',
+            safeNum(product.priceUSD),
+            safeNum(product.price2),
+            safeNum(product.price3),
+            safeNum(product.price4),
             batchQty,
-            isFirst ? safeNum(product.minStock) : '',
-            isFirst ? (product.trackStock === false ? 'NO' : 'SI') : '',
-            isFirst ? yn(product.allowDecimalQuantity) : '',
-            isFirst ? 'SI' : '', // control_vencimiento siempre SI cuando hay lotes
+            safeNum(product.minStock),
+            product.trackStock === false ? 'NO' : 'SI',
+            yn(product.allowDecimalQuantity),
+            'SI', // control_vencimiento siempre SI cuando hay lotes
             batchExp,
             batchLote,
-            isFirst ? yn(product.trackSerials) : '',
-            isFirst ? (product.catalogVisible === false ? 'NO' : 'SI') : '',
-            isFirst ? safeNum(product.catalogComparePrice) : '',
-            isFirst ? (product.imageUrl || '') : '',
-            isFirst ? safeNum(product.weight) : '',
-            isFirst ? (product.location || '') : '',
-            isFirst ? getTaxAffectationText(product.taxAffectation) : '',
-            isFirst ? safeNum(product.igvRate) : '',
-            isFirst ? (p1.name || '') : '', isFirst ? safeNum(p1.factor) : '', isFirst ? safeNum(p1.price) : '',
-            isFirst ? (p2.name || '') : '', isFirst ? safeNum(p2.factor) : '', isFirst ? safeNum(p2.price) : '',
-            isFirst ? (p3.name || '') : '', isFirst ? safeNum(p3.factor) : '', isFirst ? safeNum(p3.price) : '',
+            yn(product.trackSerials),
+            product.catalogVisible === false ? 'NO' : 'SI',
+            safeNum(product.catalogComparePrice),
+            product.imageUrl || '',
+            safeNum(product.weight),
+            product.location || '',
+            getTaxAffectationText(product.taxAffectation),
+            safeNum(product.igvRate),
+            p1.name || '', safeNum(p1.factor), safeNum(p1.price),
+            p2.name || '', safeNum(p2.factor), safeNum(p2.price),
+            p3.name || '', safeNum(p3.factor), safeNum(p3.price),
             '', '', '', '', '', '',
           ]
         })
@@ -289,50 +291,63 @@ export const exportProductsForImport = async (products, categories, businessMode
     }
 
     // CON variantes: una fila por variante (los lotes solo en el raíz, fila 1)
-    return product.variants.map((variant, idx) => {
-      const isFirst = idx === 0
+    return product.variants.map((variant) => {
       const attrs = variant.attributes || {}
       const attrKeys = Object.keys(attrs)
       const attrNames = attrKeys.join(',')
       const attrValues = attrKeys.map(k => attrs[k]).join(',')
 
-      const emptyOrPharma = isFirst ? pharmacyValues : pharmacyValues.map(() => '')
+      // Los datos compartidos van en TODAS las filas, no solo en la primera.
+      //
+      // Dejar en blanco lo repetido es una convención de impresión, no de
+      // datos: en un Excel que se filtra, se ordena o va a una tabla dinámica,
+      // cada fila tiene que valerse sola. Filtrando por marca salía UNA talla
+      // por modelo, porque el resto de las filas tenían la marca vacía
+      // (reporte de WAQTA, 02-sep-2026).
+      //
+      // No rompe la reimportación: el importador agrupa las filas por nombre y
+      // conserva los campos del PRIMER producto encontrado, así que los
+      // valores repetidos de las siguientes los ignora.
 
       return [
         '', '', product.name || '', // padre sin SKU/code, nombre siempre
-        isFirst ? (product.description || '') : '',
-        isFirst ? (product.marca || '') : '',
-        isFirst ? categoria : '',
-        isFirst ? subcategoria : '',
-        isFirst ? (product.unit || 'UNIDAD') : '',
-        ...emptyOrPharma,
-        isFirst ? safeNum(product.cost) : '',
-        isFirst ? formatYmd(product.lastPurchaseDate) : '',
+        product.description || '',
+        product.marca || '',
+        categoria,
+        subcategoria,
+        product.unit || 'UNIDAD',
+        ...pharmacyValues,
+        safeNum(product.cost),
+        formatYmd(product.lastPurchaseDate),
         // CINCO columnas: precio, precio_usd, precio2, precio3, precio4.
         // Eran cuatro —faltaba precio_usd, que se sumó a la cabecera y no
         // acá— y TODO lo que venía después salía corrido una columna: el
         // atributo de la variante caía en presentacion3_precio, el color en
         // variante_atributo, el SKU en variante_valor... Reimportar ese Excel
         // metía los datos en los campos equivocados.
+        //
+        // Estas dos SÍ quedan vacías a propósito: en un producto con variantes
+        // el precio y el stock viven en `variante_precio` / `variante_stock`.
+        // Repetir acá el del padre sería un dato falso.
         '', '', '', '', '', // precio* no van en padre con variantes
         '', // stock padre vacío
-        isFirst ? safeNum(product.minStock) : '', // stock_minimo
-        isFirst ? (product.trackStock === false ? 'NO' : 'SI') : '',
-        isFirst ? yn(product.allowDecimalQuantity) : '',
-        isFirst ? yn(product.trackExpiration) : '',
-        isFirst ? formatYmd(product.expirationDate) : '',
-        isFirst ? (product.batchNumber || '') : '', // numero_lote
-        isFirst ? yn(product.trackSerials) : '',
-        isFirst ? (product.catalogVisible === false ? 'NO' : 'SI') : '',
-        isFirst ? safeNum(product.catalogComparePrice) : '',
-        isFirst ? (product.imageUrl || '') : '',
-        isFirst ? safeNum(product.weight) : '',
-        isFirst ? (product.location || '') : '',
-        isFirst ? getTaxAffectationText(product.taxAffectation) : '',
-        isFirst ? safeNum(product.igvRate) : '',
-        isFirst ? (p1.name || '') : '', isFirst ? safeNum(p1.factor) : '', isFirst ? safeNum(p1.price) : '',
-        isFirst ? (p2.name || '') : '', isFirst ? safeNum(p2.factor) : '', isFirst ? safeNum(p2.price) : '',
-        isFirst ? (p3.name || '') : '', isFirst ? safeNum(p3.factor) : '', isFirst ? safeNum(p3.price) : '',
+        safeNum(product.minStock), // stock_minimo
+        product.trackStock === false ? 'NO' : 'SI',
+        yn(product.allowDecimalQuantity),
+        yn(product.trackExpiration),
+        formatYmd(product.expirationDate),
+        product.batchNumber || '', // numero_lote
+        yn(product.trackSerials),
+        product.catalogVisible === false ? 'NO' : 'SI',
+        safeNum(product.catalogComparePrice),
+        product.imageUrl || '',
+        safeNum(product.weight),
+        product.location || '',
+        getTaxAffectationText(product.taxAffectation),
+        safeNum(product.igvRate),
+        p1.name || '', safeNum(p1.factor), safeNum(p1.price),
+        p2.name || '', safeNum(p2.factor), safeNum(p2.price),
+        p3.name || '', safeNum(p3.factor), safeNum(p3.price),
         attrNames, attrValues, variant.sku || '', safeNum(variant.price), safeNum(variant.stock),
         // Foto de la variante. Sale para que exportar -> editar -> reimportar
         // no la pierda; el importador lee esta misma columna.
