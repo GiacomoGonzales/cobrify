@@ -37,9 +37,8 @@ import {
  * leerle `warehouseStocks`.
  */
 const filasDeProducto = (product) => {
-  const variantes = product?.hasVariants && Array.isArray(product.variants)
-    ? product.variants
-    : []
+  // Igual que en la plantilla de importación: manda el array, no la bandera.
+  const variantes = Array.isArray(product?.variants) ? product.variants : []
 
   const codigoDelPadre = [
     product?.code || '',
@@ -181,8 +180,14 @@ export const exportProductsForImport = async (products, categories, businessMode
       ...(Array.isArray(product.barcodes) ? product.barcodes : []),
     ].filter(Boolean).join('|')
 
-    // SIN variantes
-    if (!product.hasVariants || !Array.isArray(product.variants) || product.variants.length === 0) {
+    // SIN variantes.
+    //
+    // Manda el ARRAY, no la bandera `hasVariants`: la escriben varios
+    // caminos —la ficha, la importación masiva, la API— y basta que uno la
+    // deje sin poner para que el producto tenga tallas de verdad y el Excel
+    // salga con una sola fila (reporte de WAQTA, 02-sep-2026). Para exportar,
+    // la bandera no agrega nada que el array no diga.
+    if (!Array.isArray(product.variants) || product.variants.length === 0) {
       const batches = Array.isArray(product.batches) ? product.batches.filter(b => b) : []
 
       // Caso A: múltiples lotes → una fila por lote
