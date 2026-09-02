@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { isPharmaLikeMode } from '@/utils/businessModes'
 import { filterProductsForBranch } from '@/utils/branchCatalog'
+import { conPrecioDeSucursal, applyBranchPricing } from '@/utils/branchPricing'
 import { Plus, Trash2, Save, ArrowLeft, Loader2, Search, X, PackagePlus, Package, Beaker, Store, RefreshCw, DollarSign, Gift, Tag, Upload, Wrench } from 'lucide-react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
@@ -193,7 +194,26 @@ export default function CreatePurchase() {
   // Warehouses y Branches
   const [warehouses, setWarehouses] = useState([])
   const [selectedWarehouse, setSelectedWarehouse] = useState(null)
+
+  // La sucursal de la compra sale del ALMACEN elegido. Con precios por
+  // sucursal encendidos, el precio de venta que se escriba acá va al override
+  // de ESA sucursal y no al precio base, que es el de la Principal.
+  // Sin sucursal (almacén de la Principal) manda el precio base, como siempre.
+  const sucursalDeLaCompra = selectedWarehouse?.branchId || null
+  const precioPorSucursal = businessSettings?.branchPricingEnabled === true && !!sucursalDeLaCompra
+
+  // El producto con los precios que RIGEN en la sucursal de la compra. Lo usa
+  // el precargado del formulario: mostrar el precio de la Principal mientras se
+  // compra para otra sede hace que el usuario lo dé por bueno y termine
+  // pisándole a la sucursal su propio precio.
+  const conPreciosDeLaSede = (prod) =>
+    precioPorSucursal ? applyBranchPricing(prod, sucursalDeLaCompra) : prod
   const [branches, setBranches] = useState([])
+
+  // Va acá y no junto a `sucursalDeLaCompra` porque necesita `branches`, que se
+  // declara en esta línea: más arriba sería un ReferenceError en cada render.
+  const nombreDeLaSucursalDeLaCompra =
+    branches.find(b => b.id === sucursalDeLaCompra)?.name || 'esta sucursal'
 
   // Estados para el autocompletado de proveedor
   const [supplierSearch, setSupplierSearch] = useState('')
@@ -359,10 +379,10 @@ export default function CreatePurchase() {
             itemType: libreOC ? 'service' : 'product',
             unit: libreOC ? 'ZZ' : (item.unit || 'NIU'),
             taxAffectation: existingProduct?.taxAffectation || '10',
-            salePrice: existingProduct?.price || '',
-            salePrice2: existingProduct?.price2 || '',
-            salePrice3: existingProduct?.price3 || '',
-            salePrice4: existingProduct?.price4 || '',
+            salePrice: conPreciosDeLaSede(existingProduct)?.price || '',
+            salePrice2: conPreciosDeLaSede(existingProduct)?.price2 || '',
+            salePrice3: conPreciosDeLaSede(existingProduct)?.price3 || '',
+            salePrice4: conPreciosDeLaSede(existingProduct)?.price4 || '',
           }
         })
         setPurchaseItems(newItems)
@@ -577,10 +597,10 @@ export default function CreatePurchase() {
                 variantSku: item.variantSku || null,
                 isVariant: !!item.variantSku,
                 hasVariants: !!item.variantSku,
-                salePrice: variant ? (variant.price || '') : (prod?.price || ''),
-                salePrice2: variant ? (variant.price2 || '') : (prod?.price2 || ''),
-                salePrice3: variant ? (variant.price3 || '') : (prod?.price3 || ''),
-                salePrice4: variant ? (variant.price4 || '') : (prod?.price4 || ''),
+                salePrice: variant ? (variant.price || '') : (conPreciosDeLaSede(prod)?.price || ''),
+                salePrice2: variant ? (variant.price2 || '') : (conPreciosDeLaSede(prod)?.price2 || ''),
+                salePrice3: variant ? (variant.price3 || '') : (conPreciosDeLaSede(prod)?.price3 || ''),
+                salePrice4: variant ? (variant.price4 || '') : (conPreciosDeLaSede(prod)?.price4 || ''),
               }
             })
             setPurchaseItems(loadedItems)
@@ -1046,11 +1066,12 @@ export default function CreatePurchase() {
         newItems[index].cost = costValue
         newItems[index].costWithoutIGV = isExempt ? costValue : costValue / 1.18
       }
-      // Hidratar precios de venta
-      newItems[index].salePrice = item.price || ''
-      newItems[index].salePrice2 = item.price2 || ''
-      newItems[index].salePrice3 = item.price3 || ''
-      newItems[index].salePrice4 = item.price4 || ''
+      // Hidratar precios de venta — los de la sucursal de la compra
+      const paraLaSede = conPreciosDeLaSede(item)
+      newItems[index].salePrice = paraLaSede.price || ''
+      newItems[index].salePrice2 = paraLaSede.price2 || ''
+      newItems[index].salePrice3 = paraLaSede.price3 || ''
+      newItems[index].salePrice4 = paraLaSede.price4 || ''
       // Rubros con medicamento: hidratar registro sanitario para que el usuario lo verifique
       // y lo pueda actualizar si cambió. Guardamos el original para detectar cambios al guardar.
       if (isPharmaLikeMode(businessMode)) {
@@ -2753,18 +2774,36 @@ export default function CreatePurchase() {
             const p4 = salePriceToBase(item.salePrice4)
             if (useUsdAnchor) {
               // Precio de venta fijo en dólares: guardar priceUSD (ancla) y price = USD × TC.
+              // El ancla en dólares es GLOBAL por diseño (utils/branchPricing), así que
+              // este camino no admite precio por sucursal.
               const usd1 = salePriceUsdRaw(item.salePrice)
               if (usd1 != null) {
                 updates.priceUSD = usd1
                 updates.price = Math.round(convertToBase(usd1, 'USD', exchangeRate) * 1e6) / 1e6
               }
+              if (p2 != null) updates.price2 = p2
+              if (p3 != null) updates.price3 = p3
+              if (p4 != null) updates.price4 = p4
+            } else if (precioPorSucursal) {
+              // Comprando para una SUCURSAL con precios por sucursal encendidos.
+              //
+              // Antes esto escribía `price`, que es el precio BASE: el que usa la
+              // Principal y el que heredan las sucursales sin precio propio. O sea
+              // que cargar una compra en un local cambiaba el precio del otro
+              // (reporte de GARIBAY, 02-sep-2026). Ahora va al override de ESTA
+              // sucursal y ninguna otra se entera.
+              const p1 = salePriceToBase(item.salePrice)
+              const mapa = conPrecioDeSucursal(product, sucursalDeLaCompra, {
+                price: p1, price2: p2, price3: p3, price4: p4,
+              })
+              if (mapa) updates.branchPrices = mapa
             } else {
               const p1 = salePriceToBase(item.salePrice)
               if (p1 != null) updates.price = p1
+              if (p2 != null) updates.price2 = p2
+              if (p3 != null) updates.price3 = p3
+              if (p4 != null) updates.price4 = p4
             }
-            if (p2 != null) updates.price2 = p2
-            if (p3 != null) updates.price3 = p3
-            if (p4 != null) updates.price4 = p4
             // Precios de presentaciones editados en la compra (mismo método que el precio base:
             // ancla USD si aplica, si no conversión a base PEN). Solo las que se ingresaron.
             if (item.presentationPrices && product.presentations?.length > 0) {
@@ -4461,6 +4500,29 @@ export default function CreatePurchase() {
               {currency !== 'PEN' && (
                 <p className="text-xs text-gray-500">
                   Los precios se guardarán convertidos a PEN con el tipo de cambio {Number(exchangeRate || 0).toFixed(2)}.
+                </p>
+              )}
+
+              {/* A QUE local va este precio. El reporte que originó esto fue
+                  justamente no saberlo: se cargó una compra en una sucursal y el
+                  precio cambió en la principal. */}
+              {businessSettings?.branchPricingEnabled === true && (
+                <p className={`text-xs rounded-lg px-3 py-2 ${
+                  precioPorSucursal
+                    ? 'bg-blue-50 text-blue-800 border border-blue-200'
+                    : 'bg-gray-50 text-gray-600 border border-gray-200'
+                }`}>
+                  {precioPorSucursal ? (
+                    <>
+                      Este precio es solo para <strong>{nombreDeLaSucursalDeLaCompra}</strong>.
+                      Los demás locales no cambian.
+                    </>
+                  ) : (
+                    <>
+                      Este precio vale para <strong>todos los locales</strong> que no tengan
+                      uno propio. Para cambiar solo uno, elige un almacén de esa sucursal.
+                    </>
+                  )}
                 </p>
               )}
               <div className="grid grid-cols-2 gap-3">

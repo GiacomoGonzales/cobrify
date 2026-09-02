@@ -46,6 +46,42 @@ export const applyBranchPricing = (product, branchId) => {
   }
 }
 
+
+/**
+ * El mapa `branchPrices` con el precio de UNA sucursal cambiado.
+ *
+ * Nace de un reporte real (GARIBAY, 02-sep-2026): al registrar una compra en
+ * una sucursal y poner ahi el precio de venta, el precio cambiaba en la
+ * PRINCIPAL. La compra escribia `product.price` —el precio base, que es
+ * justamente el que usa la Principal y el que heredan las sucursales sin
+ * override—, sin enterarse de que el negocio tiene precios por sucursal.
+ *
+ * Ojo con lo que NO hace: si `branchId` es null (Principal) devuelve el mapa
+ * intacto, porque la Principal se maneja con el precio base, no con overrides.
+ * Quien llame decide: con sucursal, este mapa; sin sucursal, el precio base.
+ *
+ * @param {object} product   ficha del producto
+ * @param {string} branchId  sucursal; null o vacio = Principal
+ * @param {object} precios   { price, price2, price3, price4 } — los que vengan
+ *   null o undefined NO se tocan (se conserva lo que ya tuviera la sucursal)
+ * @returns {object|null} el mapa completo para guardar, o null si queda vacio
+ */
+export const conPrecioDeSucursal = (product, branchId, precios = {}) => {
+  const mapa = { ...(product?.branchPrices || {}) }
+  if (!branchId) return Object.keys(mapa).length > 0 ? mapa : null
+
+  const entrada = { ...(mapa[branchId] || {}) }
+  for (const key of ['price', 'price2', 'price3', 'price4']) {
+    const n = positive(precios?.[key])
+    if (n != null) entrada[key] = n
+  }
+
+  if (Object.keys(entrada).length === 0) delete mapa[branchId]
+  else mapa[branchId] = entrada
+
+  return Object.keys(mapa).length > 0 ? mapa : null
+}
+
 /**
  * Limpia el estado del formulario ({ [branchId]: { price: '12', ... } } con
  * strings) para persistir: solo entradas con al menos un número > 0.

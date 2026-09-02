@@ -6,7 +6,7 @@
  */
 export default {
   id: 'compras',
-  actualizado: '12/08/2026',
+  actualizado: '02/09/2026',
   intro:
     'Compras es por donde entra la mercadería: registras lo que le compraste a tu proveedor y el sistema suma el stock y actualiza el costo de cada producto. Es lo que hace que después tus reportes de utilidad digan la verdad.',
 
@@ -76,6 +76,33 @@ export default {
         {
           type: 'ojo',
           text: 'Eliminar una compra ya registrada usa **Eliminar y Revertir Stock**: además de borrarla, devuelve el inventario a como estaba. Ojo con hacerlo si esa mercadería ya se vendió.',
+        },
+      ],
+    },
+
+    {
+      id: 'precio-venta-sucursal',
+      title: 'El precio de venta al comprar (y con varios locales)',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Al cargar una compra puedes aprovechar y actualizar el **precio de venta** del producto: es el momento en que ves el costo nuevo, así que es cuando conviene decidir a cuánto lo vendes. Se edita desde el botón de precios de cada fila.',
+        },
+        {
+          type: 'texto',
+          text: 'Si tienes **precios por sucursal** activados, ese precio va al local del **almacén que elegiste** para la compra. Compras para el almacén de Miraflores, y solo cambia el precio de Miraflores.',
+        },
+        {
+          type: 'ojo',
+          text: 'La **Sucursal Principal** no funciona con precios propios: usa el precio general, que es también el que heredan los locales a los que no les pusiste uno. Por eso, si compras para un almacén de la Principal, el precio que escribas vale para todos los locales que no tengan el suyo.',
+        },
+        {
+          type: 'consejo',
+          text: 'El modal de precios te lo dice antes de guardar: en azul cuando el precio es solo para ese local, en gris cuando vale para todos. Si dice lo que no querías, cambia el almacén de la compra.',
+        },
+        {
+          type: 'texto',
+          text: 'El precio que aparece precargado también es el de esa sucursal, no el general: lo que ves es lo que se va a guardar.',
         },
       ],
     },
