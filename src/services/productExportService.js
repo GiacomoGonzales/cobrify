@@ -26,6 +26,60 @@ import {
 
 // =================== HELPERS COMUNES ===================
 
+/**
+ * Una fila por producto — salvo que tenga variantes, y ahí una por variante.
+ *
+ * Cada variante trae su propio SKU, su código, su precio y su stock. Antes el
+ * reporte mostraba una sola fila por producto, con el precio de la PRIMERA
+ * variante y el stock del padre: los colores no salían por ningún lado.
+ *
+ * Devuelve también la variante cruda, porque la hoja de almacenes necesita
+ * leerle `warehouseStocks`.
+ */
+const filasDeProducto = (product) => {
+  const variantes = product?.hasVariants && Array.isArray(product.variants)
+    ? product.variants
+    : []
+
+  const codigoDelPadre = [
+    product?.code || '',
+    ...(Array.isArray(product?.barcodes) ? product.barcodes : []),
+  ].filter(Boolean).join('|')
+
+  if (variantes.length === 0) {
+    return [{
+      producto: product,
+      variante: null,
+      sku: product?.sku || '',
+      codigo: codigoDelPadre,
+      nombre: product?.name || 'N/A',
+      precio: Number(product?.price) || 0,
+      stock: Number(product?.stock) || 0,
+      warehouseStocks: product?.warehouseStocks || [],
+    }]
+  }
+
+  return variantes.map((v) => {
+    const etiqueta = Object.values(v?.attributes || {}).filter(Boolean).join(' / ')
+    const base = product?.name || 'N/A'
+    return {
+      producto: product,
+      variante: v,
+      // El SKU de la variante es el específico; sin él, el del padre.
+      sku: v?.sku || product?.sku || '',
+      codigo: v?.barcode || codigoDelPadre,
+      nombre: etiqueta ? (base + ' - ' + etiqueta) : base,
+      precio: Number(v?.price ?? product?.price) || 0,
+      stock: Number(v?.stock) || 0,
+      warehouseStocks: v?.warehouseStocks || [],
+    }
+  })
+}
+
+/** Todas las filas de una lista de productos, con las variantes ya abiertas. */
+const filasDeProductos = (products = []) => products.flatMap(filasDeProducto)
+
+
 const safeNum = (val) => {
   if (val === undefined || val === null || val === '') return ''
   const n = Number(val)
@@ -409,11 +463,13 @@ export const generateProductsExcel = async (products, categories, businessData, 
     let lowStockCount = 0
     let outOfStockCount = 0
 
-    products.forEach(product => {
-      const stock = Number(product.stock) || 0
-      const price = product.hasVariants && product.variants?.length > 0
-        ? (Number(product.variants[0].price) || 0)
-        : (Number(product.price) || 0)
+    // Una fila por variante: el producto de cinco colores sale con sus cinco
+    // filas, cada una con su SKU, su precio y su stock.
+    const filas = filasDeProductos(products)
+    filas.forEach(f => {
+      const product = f.producto
+      const stock = f.stock
+      const price = f.precio
 
       let stockStatus = 'Normal'
       if (stock === 0) {
@@ -426,16 +482,10 @@ export const generateProductsExcel = async (products, categories, businessData, 
       totalStock += stock
       totalValue += stock * price
 
-      // Concatenar código principal + códigos alternativos con "|" para
-      // que el reporte también muestre múltiples EANs del mismo producto.
-      const codeCol = [
-        product.code || '',
-        ...(Array.isArray(product.barcodes) ? product.barcodes : []),
-      ].filter(Boolean).join('|')
       aoa.push([
-        product.sku || '',
-        codeCol,
-        product.name || 'N/A',
+        f.sku,
+        f.codigo,
+        f.nombre,
         getCategoryHierarchy(product.category),
         product.description || '',
         UNIT_LABELS[product.unit] || product.unit || 'Unidad',
@@ -462,6 +512,11 @@ export const generateProductsExcel = async (products, categories, businessData, 
     const statsStart = aoa.length
     aoa.push(['ESTADÍSTICAS'])
     aoa.push(['Total de productos', products.length])
+    // Con variantes hay más líneas que productos; sin este número, el
+    // "Total de productos" no cuadra con lo que se ve en la hoja.
+    if (filas.length !== products.length) {
+      aoa.push(['Líneas listadas (con variantes)', filas.length])
+    }
     aoa.push(['Productos sin stock', outOfStockCount])
     aoa.push(['Productos con stock bajo', lowStockCount])
     aoa.push(['Unidades en stock', totalStock])
@@ -679,21 +734,16 @@ function appendStockByWarehouseSheet(wb, products, warehouses, businessData) {
   const stockPerWarehouse = warehouses.map(() => 0)
   let totalUnits = 0
 
-  products.forEach(p => {
+  // Una fila por variante. Sumadas en una sola fila se veía cuánto hay en cada
+  // almacén pero no DE QUÉ color, que es lo que uno viene a buscar acá.
+  filasDeProductos(products).forEach(f => {
+    const p = f.producto
     if (p.trackStock === false) return
-    const row = [p.sku || '', p.name || 'N/A']
+    const row = [f.sku, f.nombre]
     let productTotal = 0
     warehouses.forEach((w, wIdx) => {
-      let stock = 0
-      if (p.hasVariants && p.variants?.length > 0) {
-        stock = p.variants.reduce((sum, v) => {
-          const ws = (v.warehouseStocks || []).find(s => s.warehouseId === w.id)
-          return sum + (ws?.stock || 0)
-        }, 0)
-      } else {
-        const ws = (p.warehouseStocks || []).find(s => s.warehouseId === w.id)
-        stock = ws?.stock || 0
-      }
+      const ws = (f.warehouseStocks || []).find(s => s.warehouseId === w.id)
+      const stock = ws?.stock || 0
       row.push(Number(stock))
       productTotal += stock
       stockPerWarehouse[wIdx] += stock

@@ -330,6 +330,10 @@ export default {
           text: 'Desde **Opciones** puedes exportar el inventario a Excel para revisarlo fuera del sistema, pasárselo a tu contador o usarlo como planilla de conteo en papel.',
         },
         {
+          type: 'texto',
+          text: 'Los productos con **variantes** salen con una fila por variante —cada color o talla con su propio código, su precio y su stock—, tanto en la hoja **Productos** como en **Stock por Almacén**. Las hojas de resumen (Por Marca, Valor por Categoría) siguen agrupando por producto, que es de lo que hablan.',
+        },
+        {
           type: 'consejo',
           text: 'Antes de un recuento grande, exportar la lista y salir a contar con ella impresa suele ser más rápido que ir con el celular estante por estante.',
         },
