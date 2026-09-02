@@ -13,6 +13,8 @@ import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
 const { rubros } = require('../data/rubros.json')
 
+import { normalizarTexto, rubroPorActividad, sugerirRubroDeCuenta } from '../data/clasificador.js'
+
 export const PRIMER_CODIGO_CLIENTE = 1000001
 
 /** Siguiente código libre. Úsalo dentro de una transacción `tx`. */
@@ -25,29 +27,21 @@ export async function siguienteCodigoCliente(db, tx) {
   return siguiente
 }
 
-/** Sin tildes y en mayúsculas, que es como compara SUNAT. */
-export const normalizarTexto = (t) =>
-  String(t || '')
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toUpperCase()
+/**
+ * Las reglas para adivinar el rubro viven en `../data/clasificador.js`, junto
+ * al catálogo, porque las usa también el admin en el navegador. Aquí solo se
+ * les pasa el catálogo ya cargado.
+ */
+export { normalizarTexto }
 
 /**
  * Propone un rubro a partir del texto de actividad económica de SUNAT.
- * Devuelve el id del rubro o null si nada calza (queda "sin clasificar").
- * Los patrones más específicos van antes en el catálogo; "otro-comercio"
- * (VENTA AL POR MENOR) va al final para no ganarle a ferretería o ropa.
+ * Se mantiene por si algún día conseguimos esa actividad de otra fuente:
+ * apiperu.dev no la entrega. Devuelve el id del rubro o null.
  */
-export function sugerirRubro(actividadSunat) {
-  const texto = normalizarTexto(actividadSunat)
-  if (!texto) return null
-  for (const r of rubros) {
-    if (r.id === 'otro-comercio') continue
-    if (r.patronesSunat.some((p) => texto.includes(normalizarTexto(p)))) return r.id
-  }
-  const generico = rubros.find((r) => r.id === 'otro-comercio')
-  if (generico && generico.patronesSunat.some((p) => texto.includes(normalizarTexto(p)))) return generico.id
-  return null
-}
+export const sugerirRubro = (actividadSunat) => rubroPorActividad(rubros, actividadSunat)
+
+/** La sugerencia buena: nombre del negocio + modo (+ actividad si la hubiera). */
+export const sugerirRubroDeNegocio = (negocio) => sugerirRubroDeCuenta(rubros, negocio)
 
 export const catalogoRubros = rubros

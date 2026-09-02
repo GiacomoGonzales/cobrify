@@ -239,6 +239,10 @@ export const registerBusinessAsAdmin = async (email, password, displayName, busi
         ubigeo: businessData?.ubigeo || '',
         // Preferencias de arranque elegidas en el onboarding (modo + catálogo + menú)
         businessMode: businessData?.businessMode || 'retail',
+        // Rubro elegido en el alta. Va como CONFIRMADO —lo dijo quien conoce el
+        // negocio— y de él sale el `businessMode` de arriba. Las reglas dejan
+        // escribirlo solo aquí, al crear.
+        ...(businessData?.rubro && { rubro: businessData.rubro, rubroConfirmadoEn: new Date() }),
         enableProductLocation: businessData?.enableProductLocation || false,
         enableManualStockEdit: businessData?.enableManualStockEdit || false,
         defaultTaxAffectation: businessData?.defaultTaxAffectation || '10',

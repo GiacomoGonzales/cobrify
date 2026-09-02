@@ -50,6 +50,8 @@ export function buildAccountHaystack(u) {
     u.companyName,      // resellers
     u.contactName,
     String(u.userNumber || ''),
+    String(u.codigoCliente || ''),   // código de cliente (1000001…)
+    u.rubroNombre,                   // "ferretería", "botica"… confirmado o sugerido
     u.id,
     u.userId,
     // Documentos y teléfonos

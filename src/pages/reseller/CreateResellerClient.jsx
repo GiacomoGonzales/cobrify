@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { RUBROS } from '@/data/rubros'
 import { useAuth } from '@/contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { doc, setDoc, updateDoc, addDoc, collection, Timestamp } from 'firebase/firestore'
@@ -45,7 +46,9 @@ export default function CreateResellerClient() {
     businessName: '',  // Razón Social
     tradeName: '',     // Nombre Comercial
     ruc: '',
-    phone: '',
+    rubro: '',         // Decide el modo del negocio y sus páginas
+    phone: '',         // Teléfono del LOCAL (sale en el ticket)
+    contactPhone: '',  // WhatsApp del DUEÑO (para contactarlo)
     address: '',
     plan: 'qpse_1_month',
     useSunatDirect: false // v2: certificado propio = comprobantes ilimitados
@@ -124,6 +127,13 @@ export default function CreateResellerClient() {
     // Validations
     if (!formData.email || !formData.password || !formData.businessName) {
       setError('Por favor completa los campos obligatorios')
+      return
+    }
+
+    // Sin rubro la cuenta cae en retail por descarte y después hay que
+    // adivinarla desde el admin. Se pregunta ahora, que es cuando se sabe.
+    if (!formData.rubro) {
+      setError('Elige el rubro del negocio')
       return
     }
 
@@ -209,8 +219,16 @@ export default function CreateResellerClient() {
         tradeName: formData.tradeName || formData.businessName,  // Nombre comercial o razón social por defecto
         ruc: formData.ruc || '',
         phone: formData.phone || '',
+        // WhatsApp del dueño: el número al que se le escribe, distinto del
+        // teléfono del local que se imprime en el comprobante.
+        contactPhone: formData.contactPhone || formData.phone || '',
         address: formData.address || '',
-        businessMode: 'retail',
+        // Rubro elegido por el reseller, que le preguntó al cliente. Va como
+        // confirmado, y de él sale el modo: una botica arranca en modo
+        // farmacia y no en retail como caían todas hasta ahora.
+        rubro: formData.rubro,
+        rubroConfirmadoEn: Timestamp.now(),
+        businessMode: RUBROS.find(r => r.id === formData.rubro)?.modo || 'retail',
         createdAt: Timestamp.now(),
         createdByReseller: true,
         resellerId: resellerId
@@ -451,6 +469,40 @@ export default function CreateResellerClient() {
                         type="tel"
                         name="phone"
                         value={formData.phone}
+                        onChange={handleChange}
+                        placeholder="987654321"
+                        className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Rubro *
+                    </label>
+                    <select
+                      name="rubro"
+                      value={formData.rubro}
+                      onChange={handleChange}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    >
+                      <option value="">Seleccione el rubro</option>
+                      {RUBROS.map(r => (
+                        <option key={r.id} value={r.id}>{r.nombre}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      WhatsApp del dueño (opcional)
+                    </label>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="tel"
+                        name="contactPhone"
+                        value={formData.contactPhone}
                         onChange={handleChange}
                         placeholder="987654321"
                         className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"

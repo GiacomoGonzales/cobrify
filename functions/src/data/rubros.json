@@ -1,5 +1,5 @@
 {
-  "_doc": "Catálogo de rubros. Cada rubro pertenece a un modo (businessMode) y define qué páginas se suman a las comunes el primer día, qué opciones cambian respecto a la semilla, y qué patrones del texto de actividad económica de SUNAT lo sugieren (se comparan sin tildes, en mayúsculas). Agregar un rubro = agregar una fila aquí, no código.",
+  "_doc": "Catalogo de rubros. Cada rubro pertenece a un modo (businessMode) y define que paginas se suman a las comunes el primer dia, que opciones cambian respecto a la semilla, y como se adivina el rubro de una cuenta que ya existe: por el nombre del negocio (patronesNombre), por lo que vende (patronesProducto, se cuenta cuantos productos calzan con cada rubro y gana el mas votado) o por el texto de actividad economica de SUNAT (patronesSunat), cuando lo haya. Todo se compara sin tildes, en mayusculas, como palabra completa y sin importar el plural. Agregar un rubro = agregar una fila aqui, no codigo.",
   "rubros": [
     {
       "id": "ferreteria",
@@ -24,6 +24,62 @@
         "VIDRIO",
         "SANITARI",
         "ELECTRIC"
+      ],
+      "patronesNombre": [
+        "FERRETERIA",
+        "FERRETERA",
+        "FERRETERO",
+        "VIDRIERIA",
+        "CERRAJERIA",
+        "MADERERA",
+        "MADERAS",
+        "ACEROS",
+        "PINTURAS",
+        "SANITARIOS",
+        "GASFITERIA",
+        "AGREGADOS",
+        "MATERIALES DE CONSTRUCCION",
+        "DEPOSITO DE MATERIALES",
+        "EXTINTOR",
+        "LED",
+        "ILUMINACION",
+        "LUMINARIA"
+      ],
+      "patronesProducto": [
+        "CEMENTO",
+        "FIERRO",
+        "VARILLA",
+        "CLAVO",
+        "TORNILLO",
+        "TUBO",
+        "PVC",
+        "PINTURA",
+        "BROCHA",
+        "LIJA",
+        "SILICONA",
+        "CERAMICO",
+        "LADRILLO",
+        "YESO",
+        "TRIPLAY",
+        "CANDADO",
+        "BISAGRA",
+        "ALAMBRE",
+        "SOLDADURA",
+        "TALADRO",
+        "MARTILLO",
+        "INTERRUPTOR",
+        "TOMACORRIENTE",
+        "MANGUERA",
+        "CALAMINA",
+        "ESMALTE",
+        "THINNER",
+        "PEGAMENTO",
+        "CODO",
+        "NIPLE",
+        "VALVULA",
+        "CERROJO",
+        "ESCUADRA",
+        "DISCO DE CORTE"
       ]
     },
     {
@@ -45,6 +101,49 @@
         "ABARROTES",
         "BODEGA",
         "BEBIDAS Y TABACO"
+      ],
+      "patronesNombre": [
+        "ABARROTES",
+        "BODEGA",
+        "MINIMARKET",
+        "MINI MARKET",
+        "MARKET",
+        "SUPERMERCADO",
+        "AUTOSERVICIO",
+        "LICORERIA",
+        "ORGANICO",
+        "DULCE",
+        "PRODUCTOS NATURALES"
+      ],
+      "patronesProducto": [
+        "ARROZ",
+        "AZUCAR",
+        "ACEITE",
+        "FIDEO",
+        "LECHE",
+        "ATUN",
+        "GASEOSA",
+        "GALLETA",
+        "HARINA",
+        "MENESTRA",
+        "LENTEJA",
+        "FRIJOL",
+        "CONSERVA",
+        "PANETON",
+        "CARAMELO",
+        "PAPEL HIGIENICO",
+        "DETERGENTE",
+        "JABON",
+        "YOGURT",
+        "AVENA",
+        "MAYONESA",
+        "KETCHUP",
+        "VINAGRE",
+        "SAZONADOR",
+        "LEJIA",
+        "SERVILLETA",
+        "ENCENDEDOR",
+        "GOLOSINA"
       ]
     },
     {
@@ -63,6 +162,103 @@
         "CALZADO",
         "ARTICULOS DE CUERO",
         "TEXTIL"
+      ],
+      "patronesNombre": [
+        "BOUTIQUE",
+        "MODA",
+        "CONFECCIONES",
+        "TEXTIL",
+        "CALZADO",
+        "ZAPATERIA",
+        "ROPA",
+        "JEANS",
+        "UNIFORMES",
+        "LENCERIA",
+        "TIENDA DE ROPA",
+        "KIDS",
+        "BABY"
+      ],
+      "patronesProducto": [
+        "POLO",
+        "PANTALON",
+        "CAMISA",
+        "BLUSA",
+        "VESTIDO",
+        "CASACA",
+        "ZAPATO",
+        "ZAPATILLA",
+        "SANDALIA",
+        "MEDIA",
+        "JEAN",
+        "SHORT",
+        "FALDA",
+        "CHOMPA",
+        "GORRA",
+        "CARTERA",
+        "BUZO",
+        "BIVIRI",
+        "LEGGING",
+        "PIJAMA",
+        "CALCETIN",
+        "ROPA INTERIOR",
+        "BRASIER",
+        "TRUSA"
+      ]
+    },
+    {
+      "id": "muebles",
+      "nombre": "Muebles y hogar",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "warehouses",
+        "stock-movements",
+        "purchases",
+        "suppliers",
+        "quotations",
+        "dispatch-guides"
+      ],
+      "ajustes": {
+        "dispatchGuidesEnabled": true
+      },
+      "patronesSunat": [
+        "MUEBLE",
+        "COLCHON",
+        "CARPINTERIA",
+        "ARTICULOS PARA EL HOGAR"
+      ],
+      "patronesNombre": [
+        "MUEBLE",
+        "MUEBLERIA",
+        "COLCHON",
+        "DECORACION",
+        "HOGAR",
+        "TAPICERIA",
+        "CARPINTERIA",
+        "MELAMINA",
+        "SOFA",
+        "DORMITORIO"
+      ],
+      "patronesProducto": [
+        "SOFA",
+        "COLCHON",
+        "CAMA",
+        "ROPERO",
+        "COMODA",
+        "VELADOR",
+        "SILLA",
+        "ESCRITORIO",
+        "ESTANTE",
+        "REPISA",
+        "CAJONERA",
+        "SILLON",
+        "MUEBLE",
+        "CORTINA",
+        "ALFOMBRA",
+        "MELAMINA",
+        "CABECERA",
+        "JUEGO DE COMEDOR",
+        "MESA DE CENTRO"
       ]
     },
     {
@@ -85,6 +281,45 @@
         "ELECTRODOMESTICO",
         "EQUIPO DE AUDIO",
         "VIDEO"
+      ],
+      "patronesNombre": [
+        "CELULAR",
+        "COMPUTO",
+        "COMPUTADORAS",
+        "TECNOLOGIA",
+        "TECNOLOGICA",
+        "ELECTRONICA",
+        "INFORMATICA",
+        "SISTEMAS",
+        "ELECTRODOMESTICOS",
+        "SOFTWARE",
+        "GAMER",
+        "TECH",
+        "REPAIR"
+      ],
+      "patronesProducto": [
+        "CELULAR",
+        "LAPTOP",
+        "MOUSE",
+        "TECLADO",
+        "MONITOR",
+        "IMPRESORA",
+        "CARGADOR",
+        "AUDIFONO",
+        "USB",
+        "MEMORIA",
+        "PARLANTE",
+        "TABLET",
+        "MICA",
+        "PROTECTOR DE PANTALLA",
+        "ROUTER",
+        "TELEVISOR",
+        "HDMI",
+        "COOLER",
+        "DISCO DURO",
+        "LICUADORA",
+        "MICROONDAS",
+        "VENTILADOR"
       ]
     },
     {
@@ -105,6 +340,35 @@
         "TRATAMIENTOS DE BELLEZA",
         "BARBERIA",
         "SPA"
+      ],
+      "patronesNombre": [
+        "SALON",
+        "BELLEZA",
+        "BARBERIA",
+        "PELUQUERIA",
+        "SPA",
+        "ESTETICA",
+        "NAILS",
+        "COSMETICOS",
+        "BEAUTY"
+      ],
+      "patronesProducto": [
+        "TINTE",
+        "CORTE DE CABELLO",
+        "MANICURE",
+        "PEDICURE",
+        "KERATINA",
+        "DEPILACION",
+        "PEINADO",
+        "MAQUILLAJE",
+        "LABIAL",
+        "PESTANA",
+        "ALISADO",
+        "BOTOX CAPILAR",
+        "MECHA",
+        "SECADO",
+        "LIMPIEZA FACIAL",
+        "MASAJE"
       ]
     },
     {
@@ -129,6 +393,47 @@
         "INGENIERIA",
         "PUBLICIDAD",
         "FOTOGRAF"
+      ],
+      "patronesNombre": [
+        "CONSULTORIO",
+        "ODONTOLOGIA",
+        "DENTAL",
+        "CLINICA",
+        "MEDICO",
+        "MEDICA",
+        "ESTUDIO CONTABLE",
+        "CONTABLE",
+        "CONTADORES",
+        "ASESORIA",
+        "ASESORES",
+        "CONSULTORES",
+        "CONSULTORIA",
+        "ABOGADOS",
+        "LABORATORIO",
+        "PSICOLOGIA",
+        "SERVICIOS PROFESIONALES",
+        "OPTICA",
+        "NOTARIA",
+        "POLICLINICO",
+        "CENTRO MEDICO",
+        "ODONTOLOGICO",
+        "ESTUDIO JURIDICO"
+      ],
+      "patronesProducto": [
+        "CONSULTA",
+        "TERAPIA",
+        "LIMPIEZA DENTAL",
+        "EXTRACCION",
+        "RADIOGRAFIA",
+        "HONORARIO",
+        "SESION",
+        "TRATAMIENTO",
+        "EXAMEN",
+        "CURACION",
+        "PROFILAXIS",
+        "BRACKET",
+        "LENTE",
+        "MONTURA"
       ]
     },
     {
@@ -150,6 +455,80 @@
         "PARTES, PIEZAS",
         "REPUESTOS",
         "MOTOCICLETAS"
+      ],
+      "patronesNombre": [
+        "TALLER",
+        "MECANICA",
+        "AUTOMOTRIZ",
+        "REPUESTOS",
+        "AUTOPARTES",
+        "LLANTAS",
+        "LUBRICANTES",
+        "MOTOS",
+        "PLANCHADO Y PINTURA",
+        "AUTOSERVICE",
+        "CAR",
+        "AUTO"
+      ],
+      "patronesProducto": [
+        "FILTRO",
+        "BUJIA",
+        "PASTILLA DE FRENO",
+        "AMORTIGUADOR",
+        "LLANTA",
+        "EMBRAGUE",
+        "RADIADOR",
+        "ALINEAMIENTO",
+        "BALANCEO",
+        "CAMBIO DE ACEITE",
+        "REFRIGERANTE",
+        "RETEN",
+        "RODAJE",
+        "FAJA",
+        "ACEITE DE MOTOR",
+        "PLUMILLA",
+        "FOCO HALOGENO",
+        "ZAPATA"
+      ]
+    },
+    {
+      "id": "grifo",
+      "nombre": "Grifo y estación de servicio",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "warehouses",
+        "stock-movements",
+        "purchases",
+        "suppliers",
+        "dispatch-guides"
+      ],
+      "ajustes": {
+        "dispatchGuidesEnabled": true
+      },
+      "patronesSunat": [
+        "COMBUSTIBLE",
+        "GASOLINA",
+        "ESTACION DE SERVICIO",
+        "GRIFO"
+      ],
+      "patronesNombre": [
+        "GRIFO",
+        "ESTACION DE SERVICIO",
+        "SERVICENTRO",
+        "GASOCENTRO",
+        "COMBUSTIBLES",
+        "PETROLEOS"
+      ],
+      "patronesProducto": [
+        "GASOLINA",
+        "DIESEL",
+        "GASOHOL",
+        "PETROLEO",
+        "GLP",
+        "GNV",
+        "KEROSENE",
+        "COMBUSTIBLE"
       ]
     },
     {
@@ -168,6 +547,40 @@
         "PAPELERIA",
         "IMPRESION",
         "UTILES DE OFICINA"
+      ],
+      "patronesNombre": [
+        "LIBRERIA",
+        "IMPRENTA",
+        "GRAFICA",
+        "EDITORA",
+        "EDITORIAL",
+        "SERIGRAFIA",
+        "IMPRESIONES",
+        "UTILES ESCOLARES",
+        "COPIAS",
+        "PUBLICIDAD"
+      ],
+      "patronesProducto": [
+        "CUADERNO",
+        "LAPICERO",
+        "LAPIZ",
+        "BORRADOR",
+        "PAPEL BOND",
+        "FOLDER",
+        "ARCHIVADOR",
+        "PLUMON",
+        "CARTULINA",
+        "IMPRESION",
+        "FOTOCOPIA",
+        "ANILLADO",
+        "EMPASTADO",
+        "TINTA",
+        "RESALTADOR",
+        "CORRECTOR",
+        "TIJERA",
+        "GOMA",
+        "REGLA",
+        "MOTA"
       ]
     },
     {
@@ -192,7 +605,18 @@
       "patronesSunat": [
         "VENTA AL POR MAYOR",
         "DISTRIBUCION"
-      ]
+      ],
+      "patronesNombre": [
+        "DISTRIBUIDORA",
+        "DISTRIBUCIONES",
+        "DISTRIBUIDOR",
+        "MAYORISTA",
+        "POR MAYOR",
+        "IMPORTADORA",
+        "IMPORTACIONES",
+        "COMERCIALIZADORA"
+      ],
+      "patronesProducto": []
     },
     {
       "id": "otro-comercio",
@@ -206,7 +630,18 @@
       "ajustes": {},
       "patronesSunat": [
         "VENTA AL POR MENOR"
-      ]
+      ],
+      "patronesNombre": [
+        "COMERCIAL",
+        "INVERSIONES",
+        "NEGOCIOS",
+        "MULTISERVICIO",
+        "REPRESENTACIONES",
+        "CORPORACION",
+        "TRADING",
+        "BAZAR"
+      ],
+      "patronesProducto": []
     },
     {
       "id": "restaurante",
@@ -230,6 +665,55 @@
         "POLLERIA",
         "CEVICHERIA",
         "CHIFA"
+      ],
+      "patronesNombre": [
+        "RESTAURANT",
+        "RESTAURANTE",
+        "POLLERIA",
+        "CEVICHERIA",
+        "CEVICHERA",
+        "CHIFA",
+        "PARRILLA",
+        "PARRILLADAS",
+        "MARISQUERIA",
+        "PICANTERIA",
+        "RECREO",
+        "CAMPESTRE",
+        "ANTICUCHERIA",
+        "BROASTER",
+        "CATERING",
+        "COMIDA CRIOLLA",
+        "GRILL",
+        "CHICHARRONERIA",
+        "CEVICHE"
+      ],
+      "patronesProducto": [
+        "CEVICHE",
+        "POLLO A LA BRASA",
+        "CHAUFA",
+        "LOMO SALTADO",
+        "CHICHARRON",
+        "ANTICUCHO",
+        "CAUSA",
+        "TALLARIN",
+        "SOPA",
+        "CALDO",
+        "MENU",
+        "SEGUNDO",
+        "PORCION",
+        "MOSTRITO",
+        "BROASTER",
+        "AJI DE GALLINA",
+        "SECO",
+        "ADOBO",
+        "JALEA",
+        "TIRADITO",
+        "PARRILLA",
+        "CHULETA",
+        "BISTEC",
+        "ENTRADA",
+        "GUARNICION",
+        "CHICHARRONES"
       ]
     },
     {
@@ -251,6 +735,48 @@
         "COMIDA RAPIDA",
         "PANADERIA",
         "PASTELERIA"
+      ],
+      "patronesNombre": [
+        "CAFETERIA",
+        "CAFE",
+        "JUGUERIA",
+        "HELADERIA",
+        "PASTELERIA",
+        "PANADERIA",
+        "PANIFICADORA",
+        "HELADOS",
+        "SANGUCHERIA",
+        "PIZZERIA",
+        "BURGER",
+        "SNACK",
+        "DULCERIA",
+        "COMIDA RAPIDA",
+        "COFFEE"
+      ],
+      "patronesProducto": [
+        "CAPUCCINO",
+        "AMERICANO",
+        "LATTE",
+        "EXPRESO",
+        "FRAPPE",
+        "JUGO",
+        "BATIDO",
+        "SANDWICH",
+        "EMPANADA",
+        "TORTA",
+        "KEKE",
+        "ALFAJOR",
+        "HELADO",
+        "CROISSANT",
+        "PIZZA",
+        "HAMBURGUESA",
+        "HOT DOG",
+        "SALCHIPAPA",
+        "CHOCOLATE CALIENTE",
+        "MILKSHAKE",
+        "WAFFLE",
+        "CHURRO",
+        "PAN FRANCES"
       ]
     },
     {
@@ -269,6 +795,33 @@
         "SUMINISTRO DE BEBIDAS",
         "BAR",
         "DISCOTECA"
+      ],
+      "patronesNombre": [
+        "BAR",
+        "DISCOTECA",
+        "CERVECERIA",
+        "PUB",
+        "KARAOKE",
+        "LOUNGE",
+        "NIGHT CLUB"
+      ],
+      "patronesProducto": [
+        "PISCO",
+        "RON",
+        "WHISKY",
+        "VODKA",
+        "CHILCANO",
+        "MOJITO",
+        "PISCO SOUR",
+        "CUBA LIBRE",
+        "TEQUILA",
+        "VINO",
+        "MICHELADA",
+        "BALDE",
+        "TRAGO",
+        "CERVEZA",
+        "JARRA DE CERVEZA",
+        "SHOT"
       ]
     },
     {
@@ -290,6 +843,36 @@
         "MEDICINALES",
         "BOTICA",
         "FARMACIA"
+      ],
+      "patronesNombre": [
+        "FARMACIA",
+        "BOTICA",
+        "DROGUERIA"
+      ],
+      "patronesProducto": [
+        "PARACETAMOL",
+        "IBUPROFENO",
+        "AMOXICILINA",
+        "NAPROXENO",
+        "OMEPRAZOL",
+        "LORATADINA",
+        "DICLOFENACO",
+        "AMPOLLA",
+        "JARABE",
+        "TABLETA",
+        "CAPSULA",
+        "GASA",
+        "ALGODON",
+        "JERINGA",
+        "VITAMINA",
+        "SUERO",
+        "PANAL",
+        "PRESERVATIVO",
+        "ALCOHOL MEDICINAL",
+        "AZITROMICINA",
+        "METFORMINA",
+        "CETIRIZINA",
+        "BOTIQUIN"
       ]
     },
     {
@@ -309,6 +892,30 @@
         "VETERINARIA",
         "ANIMALES DE COMPAÑIA",
         "MASCOTAS"
+      ],
+      "patronesNombre": [
+        "VETERINARIA",
+        "VETERINARIO",
+        "AGROVETERINARIA",
+        "PET",
+        "PET SHOP",
+        "MASCOTAS"
+      ],
+      "patronesProducto": [
+        "DESPARASITANTE",
+        "ANTIPULGA",
+        "RASCADOR",
+        "ARENA PARA GATO",
+        "CROQUETA",
+        "RICOCAN",
+        "DOG CHOW",
+        "ALIMENTO PARA PERRO",
+        "ALIMENTO PARA GATO",
+        "BANO Y CORTE",
+        "VACUNA",
+        "MASCOTA",
+        "COLLAR PARA PERRO",
+        "PIPETA"
       ]
     },
     {
@@ -323,6 +930,26 @@
         "ACTIVIDADES DE CREDITO",
         "PRESTAMOS",
         "CASA DE EMPEÑO"
+      ],
+      "patronesNombre": [
+        "PRESTAMOS",
+        "CREDITOS",
+        "FINANCIERA",
+        "PRESTAMISTA",
+        "EMPENO",
+        "CASA DE EMPENO",
+        "COOPERATIVA",
+        "SERVICIOS FINANCIEROS",
+        "MICROFINANZAS"
+      ],
+      "patronesProducto": [
+        "PRESTAMO",
+        "INTERES",
+        "CUOTA",
+        "MORA",
+        "DESEMBOLSO",
+        "EMPENO",
+        "GARANTIA"
       ]
     },
     {
@@ -336,6 +963,25 @@
         "HOTEL",
         "HOSPEDAJE",
         "HOSTAL"
+      ],
+      "patronesNombre": [
+        "HOTEL",
+        "HOSPEDAJE",
+        "HOSTAL",
+        "ALOJAMIENTO",
+        "LODGE",
+        "RESORT",
+        "BUNGALOWS"
+      ],
+      "patronesProducto": [
+        "HABITACION",
+        "MATRIMONIAL",
+        "SUITE",
+        "NOCHE",
+        "DESAYUNO",
+        "HOSPEDAJE",
+        "CHECK IN",
+        "BUNGALOW"
       ]
     },
     {
@@ -350,6 +996,27 @@
         "TRANSPORTE DE CARGA",
         "TRANSPORTE DE PASAJEROS",
         "TRANSPORTE TERRESTRE"
+      ],
+      "patronesNombre": [
+        "TRANSPORTE",
+        "TRANSPORTES",
+        "TRANSPORTISTA",
+        "CARGA",
+        "LOGISTICA",
+        "MUDANZAS",
+        "COURIER",
+        "FLETES",
+        "TURISMO",
+        "TURISTICO"
+      ],
+      "patronesProducto": [
+        "FLETE",
+        "PASAJE",
+        "ENCOMIENDA",
+        "VIAJE",
+        "TONELADA",
+        "ALQUILER DE CAMION",
+        "GUIA DE REMISION"
       ]
     },
     {
@@ -373,6 +1040,27 @@
         "CONSTRUCCION DE EDIFICIOS",
         "INGENIERIA CIVIL",
         "OBRAS"
+      ],
+      "patronesNombre": [
+        "CONSTRUCTORA",
+        "CONSTRUCCIONES",
+        "CONSTRUCCION",
+        "INGENIERIA",
+        "INGENIEROS",
+        "CONTRATISTAS",
+        "CONTRATISTA",
+        "EDIFICACIONES",
+        "OBRAS CIVILES"
+      ],
+      "patronesProducto": [
+        "PARTIDA",
+        "METRADO",
+        "VALORIZACION",
+        "EXCAVACION",
+        "ENCOFRADO",
+        "VACIADO",
+        "ACABADO",
+        "OBRA CIVIL"
       ]
     },
     {
@@ -385,6 +1073,20 @@
         "INMOBILIARIA",
         "BIENES RAICES",
         "ALQUILER DE INMUEBLES"
+      ],
+      "patronesNombre": [
+        "INMOBILIARIA",
+        "INMOBILIARIO",
+        "BIENES RAICES"
+      ],
+      "patronesProducto": [
+        "DEPARTAMENTO",
+        "LOTE",
+        "TERRENO",
+        "CUOTA INICIAL",
+        "SEPARACION",
+        "ESTACIONAMIENTO",
+        "COCHERA"
       ]
     }
   ]

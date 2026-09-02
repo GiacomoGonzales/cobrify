@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { RUBROS } from '@/data/rubros'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate, Link } from 'react-router-dom'
@@ -25,7 +26,12 @@ const registerSchema = z.object({
   ruc: z.string().length(11, 'El RUC debe tener 11 dígitos').regex(/^\d+$/, 'El RUC solo debe contener números'),
   businessName: z.string().min(2, 'La razón social es requerida'),
   tradeName: z.string().optional(),
+  // El rubro decide el modo del negocio y las páginas que ve el primer día,
+  // así que no puede quedar en blanco: una cuenta sin rubro cae en retail
+  // por descarte y después hay que adivinarla desde el admin.
+  rubro: z.string().min(1, 'Elige el rubro del negocio'),
   phone: z.string().optional(),
+  contactPhone: z.string().optional(),
   address: z.string().min(5, 'La dirección es requerida'),
 }).refine(data => data.password === data.confirmPassword, {
   message: 'Las contraseñas no coinciden',
@@ -239,7 +245,15 @@ export default function Register() {
         ruc: data.ruc,
         businessName: data.businessName,
         tradeName: data.tradeName,
+        // El rubro manda sobre el modo: una botica arranca en modo farmacia,
+        // no en retail como caía todo el mundo hasta ahora.
+        rubro: data.rubro,
+        businessMode: RUBROS.find(r => r.id === data.rubro)?.modo || 'retail',
         phone: data.phone,
+        // Teléfono del local (sale en el ticket) y WhatsApp del dueño (para
+        // contactarlo) son cosas distintas. Si no ponen el segundo, se asume
+        // que el número que dieron es el del dueño, que en la práctica lo es.
+        contactPhone: data.contactPhone || data.phone,
         address: data.address,
         district: locationNames.district,
         province: locationNames.province,
@@ -402,12 +416,32 @@ export default function Register() {
                     {...register('tradeName')}
                   />
 
+                  <Select
+                    label="Rubro"
+                    required
+                    error={errors.rubro?.message}
+                    {...register('rubro')}
+                  >
+                    <option value="">Seleccione el rubro</option>
+                    {RUBROS.map(r => (
+                      <option key={r.id} value={r.id}>{r.nombre}</option>
+                    ))}
+                  </Select>
+
                   <Input
-                    label="Teléfono"
+                    label="Teléfono del local"
                     type="tel"
                     placeholder="01-2345678 o 987654321"
                     error={errors.phone?.message}
                     {...register('phone')}
+                  />
+
+                  <Input
+                    label="WhatsApp del dueño (opcional)"
+                    type="tel"
+                    placeholder="987654321"
+                    error={errors.contactPhone?.message}
+                    {...register('contactPhone')}
                   />
 
                   <Input

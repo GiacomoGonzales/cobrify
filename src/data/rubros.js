@@ -5,6 +5,7 @@
  * rubro es agregar una fila allá, no tocar código.
  */
 import catalogo from '../../functions/src/data/rubros.json'
+import { sugerirRubroDeCuenta as sugerirRubroBase } from '../../functions/src/data/clasificador.js'
 
 export const RUBROS = catalogo.rubros
 
@@ -14,3 +15,11 @@ export const nombreRubro = (id) => RUBROS.find((r) => r.id === id)?.nombre || RU
 
 /** Rubros de un modo, para el selector (p.ej. solo los de retail). */
 export const rubrosDelModo = (modo) => RUBROS.filter((r) => r.modo === modo)
+
+/**
+ * Rubro sugerido para una cuenta que ya existe. Las reglas están junto al
+ * catálogo (mismo archivo que usan las Functions) para que la web y el
+ * servidor no se contradigan.
+ */
+export { normalizarTexto } from '../../functions/src/data/clasificador.js'
+export const sugerirRubroDeCuenta = (negocio) => sugerirRubroBase(RUBROS, negocio)
