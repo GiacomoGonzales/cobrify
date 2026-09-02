@@ -6,7 +6,7 @@
  */
 export default {
   id: 'cotizaciones',
-  actualizado: '12/08/2026',
+  actualizado: '02/09/2026',
   intro:
     'Una cotización es la propuesta de precio que le pasas a un cliente antes de vender. No va a SUNAT ni descuenta stock: es un documento comercial. Si el cliente acepta, se convierte en comprobante con un clic.',
 
@@ -20,7 +20,7 @@ export default {
           items: [
             'Presiona **Nueva Cotización**.',
             'Elige el cliente (o escribe sus datos si es nuevo).',
-            'Agrega los productos con sus cantidades y precios.',
+            'Agrega los productos con sus cantidades y precios. Si algo no está en tu catálogo, escribe el nombre a mano.',
             'Define hasta cuándo es válida: aparece como **Válida Hasta** en el documento.',
             'Guarda y compártela.',
           ],
@@ -29,6 +29,38 @@ export default {
         {
           type: 'consejo',
           text: 'Pon siempre una fecha de validez. Es tu protección cuando el cliente vuelve tres meses después pidiendo el precio de entonces.',
+        },
+      ],
+    },
+
+    {
+      id: 'producto-libre',
+      title: 'Cotizar algo que no está en tu catálogo',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'No hace falta crear el producto antes. En la línea de la cotización, **escribe el nombre** en vez de elegir uno de la lista: el buscador te ofrece usarlo tal cual, y tú pones la cantidad, la unidad y el precio a mano.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Presiona **Agregar producto** para sumar una línea.',
+            'En vez de buscar, escribe el nombre: *"Instalación en obra"*, *"Flete a Trujillo"*, *"Diseño de plano"*.',
+            'Aparece la opción **Usar "..." como producto libre**. Tócala.',
+            'Completa la cantidad, la unidad y el precio unitario.',
+          ],
+        },
+        {
+          type: 'consejo',
+          text: 'Sirve para lo que se cotiza una sola vez: un servicio a medida, un flete, un trabajo especial. Si es algo que vas a cotizar seguido, conviene crearlo en Productos y elegirlo de la lista.',
+        },
+        {
+          type: 'ojo',
+          text: 'El producto libre **no descuenta stock** ni queda guardado en tu catálogo: existe solo dentro de esa cotización. Si después la conviertes en venta, entra al Punto de Venta igual, con su nombre y su precio.',
+        },
+        {
+          type: 'texto',
+          text: 'Puedes mezclar sin problema: unas líneas del catálogo y otras escritas a mano, en la misma cotización.',
         },
       ],
     },

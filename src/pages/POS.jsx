@@ -2141,6 +2141,10 @@ export default function POS() {
           sku: item.sku || '',
           code: item.code || '',
           observations: item.observations || '',
+          // Cotizado a mano, sin producto del catálogo: mismo trato que el
+          // Producto Personalizado del POS. Sin stock que descontar y fuera
+          // de las validaciones que buscan una ficha que no existe.
+          ...(!item.productId && { isCustom: true, stock: null }),
           ...(item.isVariant && {
             isVariant: true,
             variantSku: item.variantSku || '',

@@ -2018,9 +2018,25 @@ export default function CreateQuotation() {
                                         </button>
                                       )
                                     })
+                                  ) : item.searchTerm?.trim() ? (
+                                    // No esta en el catalogo, y esta bien: la cotizacion
+                                    // acepta el nombre escrito a mano. Decirlo acá evita
+                                    // que parezca que no se puede.
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowProductSearch(null)}
+                                      className="w-full px-3 py-2.5 text-left hover:bg-primary-50 transition-colors"
+                                    >
+                                      <span className="text-sm text-gray-900">
+                                        Usar <strong>{'\u201C'}{item.searchTerm.trim()}{'\u201D'}</strong> como producto libre
+                                      </span>
+                                      <span className="block text-xs text-gray-500 mt-0.5">
+                                        No está en tu catálogo. Escribe la cantidad y el precio a mano.
+                                      </span>
+                                    </button>
                                   ) : (
                                     <div className="px-3 py-2 text-sm text-gray-500 text-center">
-                                      No se encontraron productos
+                                      Escribe para buscar en tu catálogo
                                     </div>
                                   )}
                                 </div>
@@ -2259,9 +2275,22 @@ export default function CreateQuotation() {
                                   </button>
                                 )
                               })
+                            ) : item.searchTerm?.trim() ? (
+                              <button
+                                type="button"
+                                onClick={() => setShowProductSearch(null)}
+                                className="w-full px-3 py-2.5 text-left hover:bg-primary-50 transition-colors"
+                              >
+                                <span className="text-sm text-gray-900">
+                                  Usar <strong>{'\u201C'}{item.searchTerm.trim()}{'\u201D'}</strong> como producto libre
+                                </span>
+                                <span className="block text-xs text-gray-500 mt-0.5">
+                                  No está en tu catálogo. Escribe la cantidad y el precio a mano.
+                                </span>
+                              </button>
                             ) : (
                               <div className="px-3 py-2 text-sm text-gray-500 text-center">
-                                No se encontraron productos
+                                Escribe para buscar en tu catálogo
                               </div>
                             )}
                           </div>
