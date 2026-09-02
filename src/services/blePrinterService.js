@@ -11,7 +11,7 @@ import { BleClient, numbersToDataView, numberToUUID } from '@capacitor-community
 import { prepareLogoForPrinting } from './imageProcessingService';
 import { buildKitchenLines } from '@/utils/kitchenComandaFormat';
 import { formatQuantity } from '@/lib/utils'
-import { altoDeLinea } from '@/utils/escposCharSize';
+import { nibbleDeTamano } from '@/utils/escposCharSize';
 import { getItemPriceBreakdown } from '@/utils/modifierHelpers';
 
 // Estado de conexión
@@ -1282,17 +1282,19 @@ export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58)
   try {
     const commands = [ESCPOSCommands.init()];
 
-    // Tamaño de letra de la comanda: GS ! n (nibble bajo = alto-1). Va DESPUES
-    // del init, que resetea el formato. 0 = sin cambios.
+    // Tamaño de letra de la comanda: GS ! n (nibble alto = ancho-1, nibble
+    // bajo = alto-1). Va DESPUES del init, que resetea el formato.
     const escala = kitchenSizeScaleFromConfig();
-    if (escala > 0) commands.push(new Uint8Array([0x1D, 0x21, escala & 0x07]));
+    if (escala > 0) commands.push(new Uint8Array([0x1D, 0x21, nibbleDeTamano(escala, false)]));
 
     // Formato ÚNICO de comanda (mismo que Bluetooth / WiFi / estación / HTML)
-    const lines = buildKitchenLines(order, table, paperWidth, null);
+    const lines = buildKitchenLines(order, table, paperWidth, null, escala);
     for (const ln of lines) {
       if (ln.sep) {
+        // El separador va SIEMPRE en tamaño normal: agrandado ocupaba dos
+        // renglones y separaba menos de lo que estorbaba.
         commands.push(ESCPOSCommands.align(0), ESCPOSCommands.bold(false));
-        commands.push(new Uint8Array([0x1D, 0x21, altoDeLinea(escala, false)]));
+        commands.push(new Uint8Array([0x1D, 0x21, 0x00]));
         commands.push(ESCPOSCommands.text('-'.repeat(paperWidth === 58 ? 24 : 42) + '\n'));
         continue;
       }
@@ -1300,7 +1302,7 @@ export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58)
       commands.push(ESCPOSCommands.align(ln.a === 'C' ? 1 : 0));
       // doubleHeight escribe ESC ! y pisaria la escala; se recompone el byte
       // completo con el criterio compartido (src/utils/escposCharSize.js).
-      commands.push(new Uint8Array([0x1D, 0x21, altoDeLinea(escala, ln.big)]));
+      commands.push(new Uint8Array([0x1D, 0x21, nibbleDeTamano(escala, ln.big, ln.xl)]));
       commands.push(ESCPOSCommands.bold(!!ln.b));
       commands.push(ESCPOSCommands.text(convertSpanishText(ln.t) + '\n'));
     }
