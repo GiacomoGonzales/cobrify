@@ -32,6 +32,7 @@ import DeliveryAddressesEditor, { limpiarDireccionesParaGuardar } from '@/compon
 import LoyaltyManager from '@/components/loyalty/LoyaltyManager'
 import GuideLink from '@/components/guide/GuideLink'
 import { sucursalParaGuardar } from '@/utils/branchScope'
+import { CAMPOS_EN_MAYUSCULA, enMayuscula } from '@/utils/posCustomerData'
 
 // Etiquetas cortas por tipo de comprobante (para el modal de pedidos)
 const DOC_TYPE_LABELS = {
@@ -1095,6 +1096,13 @@ export default function Customers() {
 
   const onSubmit = async data => {
     if (!user?.uid) return
+
+    // Los códigos van en MAYÚSCULA de verdad. El campo los mostraba así con
+    // `className="uppercase"`, que es solo CSS: se veían en mayúscula y se
+    // guardaban como se escribieron, y el POS después mostraba el crudo.
+    for (const campo of CAMPOS_EN_MAYUSCULA) {
+      if (data[campo]) data[campo] = enMayuscula(data[campo])
+    }
 
     const businessId = getBusinessId()
     setIsSaving(true)

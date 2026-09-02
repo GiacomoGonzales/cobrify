@@ -54,11 +54,37 @@ export const CAMPOS_EXTRA = [
   'goodsServiceCode',
 ]
 
+/**
+ * Códigos del cliente que van SIEMPRE en mayúscula.
+ *
+ * Una licencia o una resolución son un código, no un nombre: "pe25-0317796" y
+ * "PE25-0317796" son el mismo, y mostrarlos distinto según la pantalla obliga a
+ * mirar dos veces para confirmar que es el mismo dato.
+ */
+export const CAMPOS_EN_MAYUSCULA = ['licenseNumber', 'propertyCard']
+
+export const enMayuscula = (v) => String(v ?? '').toUpperCase()
+
+/**
+ * Pasa a mayúscula los códigos de un objeto de cliente, sin tocar lo demás.
+ *
+ * Se aplica también al LEER, no solo al guardar: las fichas cargadas antes de
+ * esto tienen el valor en minúscula y nadie va a editarlas una por una.
+ */
+export const conCodigosEnMayuscula = (obj) => {
+  if (!obj) return obj
+  const out = { ...obj }
+  for (const campo of CAMPOS_EN_MAYUSCULA) {
+    if (out[campo]) out[campo] = enMayuscula(out[campo])
+  }
+  return out
+}
+
 /** Solo los extra, listos para mezclar con `...` sobre lo que ya haya. */
 export const camposExtraDe = (customer) => {
   const out = {}
   for (const campo of CAMPOS_EXTRA) out[campo] = customer?.[campo] || ''
-  return out
+  return conCodigosEnMayuscula(out)
 }
 
 /**
@@ -78,7 +104,7 @@ export const camposExtraConRespaldo = (customer, previo, conservar) => {
   for (const campo of CAMPOS_EXTRA) {
     out[campo] = customer?.[campo] || conservar(previo?.[campo])
   }
-  return out
+  return conCodigosEnMayuscula(out)
 }
 
 /**
