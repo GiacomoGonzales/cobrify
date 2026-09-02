@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useAppNavigate, useAppPath } from '@/hooks/useAppNavigate'
 import { convieneOtraPestana } from '@/utils/appPath'
+import { esDeSucursal } from '@/utils/branchScope'
 import {
   Plus,
   Search,
@@ -2604,16 +2605,10 @@ Gracias por tu preferencia.`
       const matchesType = filterType === 'all' || invoice.documentType === filterType
       const matchesSeller = filterSeller === 'all' || matchesSaleSeller(invoice, filterSeller)
 
-      // Filtrar por sucursal
-      let matchesBranch = true
-      if (filterBranch !== 'all') {
-        if (filterBranch === 'main') {
-          // Sucursal Principal = sin branchId o branchId null
-          matchesBranch = !invoice.branchId
-        } else {
-          matchesBranch = invoice.branchId === filterBranch
-        }
-      }
+      // Filtrar por sucursal — mismo criterio que las tarjetas de arriba
+      // (utils/branchScope). Estaba escrito a mano acá, así que solo la
+      // lista lo aplicaba.
+      const matchesBranch = esDeSucursal(invoice, filterBranch)
 
       // Filtrar por método de pago (métodos reales: prioriza pagos registrados,
       // así una venta al crédito cobrada por Yape aparece al filtrar por Yape)
@@ -2790,8 +2785,12 @@ Gracias por tu preferencia.`
   const dateFilteredInvoices = useMemo(() => {
     return invoices
       .filter(inv => showArchived ? inv.archived === true : inv.archived !== true)
+      // La sucursal del header manda también acá. Sin esto, las tarjetas de
+      // arriba sumaban TODOS los locales mientras la lista de abajo sí
+      // cambiaba al saltar de sucursal, y los dos números no coincidían.
+      .filter(inv => esDeSucursal(inv, filterBranch))
       .filter(filterByDateRange)
-  }, [invoices, dateFilter, filterStartDate, filterEndDate, showArchived])
+  }, [invoices, dateFilter, filterStartDate, filterEndDate, showArchived, filterBranch])
 
   // Estadísticas (basadas en el período seleccionado)
   // Solo contar ventas reales: boletas, facturas, notas de venta (no convertidas)
@@ -2815,7 +2814,13 @@ Gracias por tu preferencia.`
     paid: salesInvoices.filter(i => i.status === 'paid').length,
     pending: salesInvoices.filter(i => i.status === 'pending').length,
     totalAmount: salesInvoices.reduce((sum, i) => sum + getDocumentTotalInBase(i), 0),
-    totalAll: invoices.filter(i => i.archived !== true).filter(isValidSale).length,
+    // El "de N en total" es el universo SIN filtro de fecha, pero dentro de
+    // la misma sucursal: comparar 5 de una sede contra el total de todas no
+    // dice nada.
+    totalAll: invoices
+      .filter(i => i.archived !== true)
+      .filter(i => esDeSucursal(i, filterBranch))
+      .filter(isValidSale).length,
   }
 
   // Moneda de visualización de los totales (PEN por defecto; USD si el negocio lo
