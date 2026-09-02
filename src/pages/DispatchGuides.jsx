@@ -12,7 +12,7 @@ import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import EditDispatchGuideModal from '@/components/EditDispatchGuideModal'
 import DispatchGuideTicket from '@/components/DispatchGuideTicket'
 import { aplicarTamanoDeHoja } from '@/utils/printPageSize'
-import { generateDispatchGuidePDF, previewDispatchGuidePDF, shareDispatchGuidePDF } from '@/utils/dispatchGuidePdfGenerator'
+import { generateDispatchGuidePDF, previewDispatchGuidePDF, shareDispatchGuidePDF, getDispatchGuidePDFBlob } from '@/utils/dispatchGuidePdfGenerator'
 import { buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import { getActiveBranches } from '@/services/branchService'
 import { canVoidDispatchGuide } from '@/services/sunatService'
@@ -334,6 +334,91 @@ export default function DispatchGuides() {
       toast.error(`Error al enviar guía: ${error.message}`)
     } finally {
       setSendingToSunat(null)
+    }
+  }
+
+  // Descargar TODAS las guías filtradas en un ZIP.
+  //
+  // Emitir cincuenta guías desde Excel y después abrir el menú de cada una para
+  // bajar su PDF es el trabajo que este botón se lleva. Va sobre las FILTRADAS,
+  // igual que "Exportar Excel" que está al lado: lo que se ve es lo que baja.
+  //
+  // Los PDF se arman acá en el navegador, así que igual hay que generarlos uno
+  // por uno; lo que se evita es el clic por cada uno. Con muchas guías tarda, y
+  // por eso se muestra el avance en vez de dejar el botón mudo.
+  const [zipeando, setZipeando] = useState(false)
+  const [avanceZip, setAvanceZip] = useState('')
+
+  const handleDownloadZip = async () => {
+    if (zipeando) return
+    if (!companySettings) {
+      toast.error('Cargando datos de empresa, intente de nuevo')
+      return
+    }
+    if (filteredGuides.length === 0) {
+      toast.error('No hay guías para descargar')
+      return
+    }
+
+    setZipeando(true)
+    setAvanceZip(`0 de ${filteredGuides.length}`)
+    try {
+      const JSZip = (await import('jszip')).default
+      const zip = new JSZip()
+      const usados = new Set()
+      let listas = 0
+      let fallidas = 0
+
+      for (const guide of filteredGuides) {
+        try {
+          const blob = await getDispatchGuidePDFBlob(guide, companySettings, allProducts, branding)
+          // Dos guías pueden compartir número (series distintas, datos viejos):
+          // sin desempatar, JSZip pisa la anterior y el ZIP sale corto.
+          let nombre = `${guide.number || guide.id}.pdf`
+          let n = 2
+          while (usados.has(nombre)) nombre = `${guide.number || guide.id} (${n++}).pdf`
+          usados.add(nombre)
+          zip.file(nombre, blob)
+          listas++
+        } catch (e) {
+          console.warn(`No se pudo generar el PDF de ${guide.number}:`, e)
+          fallidas++
+        }
+        setAvanceZip(`${listas + fallidas} de ${filteredGuides.length}`)
+        // Ceder el hilo: jsPDF dibuja de forma sincrónica y sin esto el
+        // navegador no llega a repintar, así que el contador de avance se
+        // quedaría clavado en 0 hasta que termine todo.
+        await new Promise(r => setTimeout(r, 0))
+      }
+
+      if (listas === 0) {
+        toast.error('No se pudo generar ningún PDF')
+        return
+      }
+
+      const contenido = await zip.generateAsync({ type: 'blob' })
+      const url = URL.createObjectURL(contenido)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `guias-de-remision-${new Date().toISOString().slice(0, 10)}.zip`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+
+      // Si alguna falló hay que decirlo: un ZIP con menos archivos de los
+      // esperados, sin aviso, se descubre cuando ya se archivó.
+      if (fallidas > 0) {
+        toast.warning(`${listas} guía(s) en el ZIP. ${fallidas} no se pudieron generar.`, 7000)
+      } else {
+        toast.success(`${listas} guía(s) descargadas`)
+      }
+    } catch (error) {
+      console.error('Error al armar el ZIP:', error)
+      toast.error('Error al armar el archivo ZIP')
+    } finally {
+      setZipeando(false)
+      setAvanceZip('')
     }
   }
 
@@ -699,6 +784,16 @@ export default function DispatchGuides() {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <Button
+            variant="outline"
+            className="w-full sm:w-auto"
+            onClick={handleDownloadZip}
+            disabled={zipeando || filteredGuides.length === 0}
+            title="Descarga el PDF de todas las guías que estás viendo, en un solo archivo ZIP"
+          >
+            {zipeando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+            {zipeando ? `Armando ZIP ${avanceZip}` : 'Descargar PDFs (ZIP)'}
+          </Button>
           <Button
             variant="outline"
             className="w-full sm:w-auto"

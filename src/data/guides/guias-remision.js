@@ -49,6 +49,25 @@ export default {
     },
 
     {
+      id: 'descargar-todas',
+      title: 'Bajar varias guías de una vez',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Arriba de la lista está **Descargar PDFs (ZIP)**: arma un solo archivo con el PDF de todas las guías que estás viendo. Sirve sobre todo después de una emisión masiva, para no entrar guía por guía.',
+        },
+        {
+          type: 'consejo',
+          text: 'Baja **lo que está filtrado**, igual que Exportar Excel. Si primero filtras por fecha o por estado, el ZIP trae solo esas.',
+        },
+        {
+          type: 'ojo',
+          text: 'Los PDF se arman en tu computadora, uno por uno, así que con muchas guías tarda: el botón te va mostrando cuántas lleva. No cierres la pestaña mientras trabaja.',
+        },
+      ],
+    },
+
+    {
       id: 'conductores-vehiculos',
       title: 'Guardar tus conductores y vehículos',
       blocks: [
