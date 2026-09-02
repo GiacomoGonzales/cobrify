@@ -460,6 +460,31 @@ function BatchControl() {
       const product = products.find(p => p.id === editingProductId)
       if (!product) return
 
+      // TOPE: un lote no puede tener más de lo que hay en SU almacén.
+      //
+      // El almacén es la verdad —es contra lo que el POS vende y descuenta— y
+      // un lote por encima autoriza traslados de mercadería que no existe. Así
+      // empezó el descuadre de InduHealth: un lote de 20.000 sobre un almacén
+      // de 10.000 dejó pasar una transferencia de 20.000.
+      const cantidadPedida = parseFloat(batchData.quantity) || 0
+      const almacenDelLote = editingBatch.warehouseId || null
+      const stockDelAlmacen = (product.warehouseStocks || [])
+        .filter(ws => (ws.warehouseId || null) === almacenDelLote)
+        .reduce((sum, ws) => sum + (Number(ws.stock) || 0), 0)
+      const otrosLotesDelAlmacen = (product.batches || [])
+        .filter(b => b.id !== editingBatch.id && (b.warehouseId || null) === almacenDelLote)
+        .reduce((sum, b) => sum + (Number(b.quantity) || 0), 0)
+      const tope = stockDelAlmacen - otrosLotesDelAlmacen
+
+      if (almacenDelLote && cantidadPedida > tope) {
+        toast.error(
+          `Ese almacén tiene ${stockDelAlmacen} en total y sus otros lotes ya ocupan ${otrosLotesDelAlmacen}. ` +
+          `Este lote no puede pasar de ${tope < 0 ? 0 : tope}. Para cambiar el stock usa Recuento físico.`,
+          9000,
+        )
+        return
+      }
+
       const updatedBatches = product.batches.map(b => {
         if (b.id === editingBatch.id) {
           return {
@@ -472,8 +497,16 @@ function BatchControl() {
         return b
       })
 
-      // Recalcular stock total
-      const newTotalStock = updatedBatches.reduce((sum, b) => sum + (b.quantity || 0), 0)
+      // El stock del producto NO se toca acá.
+      //
+      // Antes se escribía `stock: suma de los lotes`, sin tocar
+      // `warehouseStocks` y sin dejar movimiento. Eso rompía el invariante
+      // `stock == suma de almacenes`, y como el POS vende contra los almacenes,
+      // el número que cambiaba en pantalla no era el que descuenta: el usuario
+      // creía haber corregido el stock y no había corregido nada.
+      //
+      // Para mover stock están Recuento físico, Ajuste de inventario y
+      // Traslados, que sí dejan rastro.
 
       // Recalcular vencimiento más próximo
       const activeBatches = updatedBatches.filter(b => b.quantity > 0 && b.expirationDate)
@@ -493,7 +526,6 @@ function BatchControl() {
       const productRef = doc(db, 'businesses', businessId, 'products', editingProductId)
       await updateDoc(productRef, {
         batches: updatedBatches,
-        stock: newTotalStock,
         expirationDate: nearestExpiration,
         batchNumber: nearestBatchNumber,
         updatedAt: new Date()
@@ -502,7 +534,8 @@ function BatchControl() {
       // Actualizar lista local
       setProducts(products.map(p =>
         p.id === editingProductId
-          ? { ...p, batches: updatedBatches, stock: newTotalStock, expirationDate: nearestExpiration, batchNumber: nearestBatchNumber }
+          // El stock del producto queda como estaba: acá solo cambiaron los lotes.
+          ? { ...p, batches: updatedBatches, expirationDate: nearestExpiration, batchNumber: nearestBatchNumber }
           : p
       ))
 
@@ -531,7 +564,9 @@ function BatchControl() {
       if (!product) return
 
       const updatedBatches = product.batches.filter(b => b.id !== batchId)
-      const newTotalStock = updatedBatches.reduce((sum, b) => sum + (b.quantity || 0), 0)
+      // Igual que al editar: borrar un lote NO cambia el stock del producto.
+      // El almacén sigue teniendo la mercadería; lo que se pierde es el rastro
+      // del lote. Si además se quiere sacar el stock, va por Recuento físico.
 
       // Recalcular vencimiento más próximo
       const activeBatches = updatedBatches.filter(b => b.quantity > 0 && b.expirationDate)
@@ -551,7 +586,6 @@ function BatchControl() {
       const productRef = doc(db, 'businesses', businessId, 'products', productId)
       await updateDoc(productRef, {
         batches: updatedBatches,
-        stock: newTotalStock,
         expirationDate: nearestExpiration,
         batchNumber: nearestBatchNumber,
         updatedAt: new Date()
@@ -559,7 +593,8 @@ function BatchControl() {
 
       setProducts(products.map(p =>
         p.id === productId
-          ? { ...p, batches: updatedBatches, stock: newTotalStock, expirationDate: nearestExpiration, batchNumber: nearestBatchNumber }
+          // El stock del producto queda como estaba: acá solo cambiaron los lotes.
+          ? { ...p, batches: updatedBatches, expirationDate: nearestExpiration, batchNumber: nearestBatchNumber }
           : p
       ))
 
@@ -928,7 +963,7 @@ function BatchControl() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Cantidad en Stock
+              Cantidad de este lote
             </label>
             <input
               type="number"
@@ -938,6 +973,15 @@ function BatchControl() {
               onChange={(e) => setBatchData({ ...batchData, quantity: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             />
+            {/* Antes esta pantalla reescribia el stock del producto con la suma de
+                los lotes, sin tocar los almacenes: el numero cambiaba pero el POS
+                seguia vendiendo contra otro. Ahora solo reparte, y hay que decirlo
+                o el usuario cree que corrigio el stock. */}
+            <p className="text-xs text-gray-500 mt-1.5">
+              Reparte entre lotes lo que ya hay en el almacén. <strong>No cambia el stock
+              del producto</strong>: para eso usa Recuento físico o un Ajuste de inventario,
+              que dejan el movimiento registrado.
+            </p>
           </div>
 
           <div className="flex gap-3 pt-4">
