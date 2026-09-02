@@ -6712,9 +6712,22 @@ ${textoDeErrores(revision.errores)}`, 9000)
         })
     }
 
+    /**
+     * ¿Queda algo por cobrar?
+     *
+     * Un comprobante 100% gratuito —todo bonificación, una transferencia
+     * gratuita— totaliza 0, y también queda en 0 cuando los anticipos ya
+     * cubrieron la factura entera.
+     */
+    const nadaQueCobrar = amountToPay <= PAYMENT_EPSILON
+
     // Validar que haya al menos un método de pago
-    // EXCEPCIÓN: Si es venta al crédito, no requiere método de pago
-    if (!isCreditSale && allPayments.length === 0) {
+    // EXCEPCIÓN 1: venta al crédito, no requiere pago inmediato.
+    // EXCEPCIÓN 2: no hay nada que cobrar. Exigir un método de pago acá es
+    //   pedirle al cajero que declare cómo cobró nada: la casilla del monto
+    //   solo acepta un número mayor a cero, así que la venta quedaba trabada y
+    //   no había forma de emitir una boleta de transferencia gratuita.
+    if (!isCreditSale && !nadaQueCobrar && allPayments.length === 0) {
       abortCheckout('Debes seleccionar al menos un método de pago')
       return
     }
@@ -6888,7 +6901,10 @@ ${textoDeErrores(revision.errores)}`, 9000)
           cardCommissionRate: cardSurchargeFactor > 1 ? (Number(cardCommissionConfig.rate) || 0) : 0,
           cardCommissionAmount: cardSurchargeFactor > 1 ? Number((amounts.total - amounts.total / cardSurchargeFactor).toFixed(2)) : 0,
           payments: allPayments,
-          paymentMethod: allPayments.length > 0 ? allPayments[0].method : 'Crédito',
+          // Sin pagos: o queda debiendo, o no había nada que cobrar. Poner
+          // 'Crédito' en el segundo caso ensucia el ticket y los reportes con
+          // una deuda de S/ 0 que nadie va a cobrar nunca.
+          paymentMethod: allPayments.length > 0 ? allPayments[0].method : (nadaQueCobrar ? 'Gratuito' : 'Crédito'),
           // Vuelto (cambio que se devuelve al cliente). Solo aplica a pagos al contado.
           change: (!isCreditSaleDemo && totalPaid > amounts.total)
             ? Math.round((totalPaid - amounts.total) * 100) / 100
@@ -7201,7 +7217,7 @@ ${textoDeErrores(revision.errores)}`, 9000)
         // venta AL CRÉDITO: decía 'Efectivo' y el ticket la imprimía como
         // pagada en efectivo (reporte 17-ago-2026). Rellenar un campo con un
         // valor que no ocurrió es peor que dejarlo describir la realidad.
-        paymentMethod: allPayments.length > 0 ? allPayments[0].method : 'Crédito',
+        paymentMethod: allPayments.length > 0 ? allPayments[0].method : (nadaQueCobrar ? 'Gratuito' : 'Crédito'),
         // Vuelto (cambio que se devuelve al cliente, si pagó más que el total)
         change,
         // Monto entregado por el cliente (solo guardamos cuando hay vuelto, para mostrar
