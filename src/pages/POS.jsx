@@ -137,6 +137,7 @@ import InvoiceTicket from '@/components/InvoiceTicket'
 import KitchenTicket from '@/components/KitchenTicket'
 import { useReactToPrint } from 'react-to-print'
 import { getPrimaryPet } from '@/utils/petUtils'
+import { datosDeCliente, camposExtraConRespaldo } from '@/utils/posCustomerData'
 import { getVisiblePaymentMethods, getPaymentLabel, getPaymentKeyByLabel } from '@/utils/paymentMethods'
 import GuideLink from '@/components/guide/GuideLink'
 import { diasDeRecordatorio } from '@/utils/vetReminders'
@@ -2388,29 +2389,7 @@ export default function POS() {
           setSelectedCustomer(existingCustomer)
         }
         // Siempre llenar los campos del formulario
-        setCustomerData({
-          documentType: inferDocumentType(customer.documentType, customer.documentNumber),
-          documentNumber: customer.documentNumber || '',
-          name: customer.name || '',
-          businessName: customer.businessName || '',
-          address: customer.address || '',
-          email: customer.email || '',
-          phone: customer.phone || '',
-          studentName: customer.studentName || '',
-          studentSchedule: customer.studentSchedule || '',
-          petName: getPrimaryPet(customer)?.name || customer.petName || '',
-          vehiclePlate: customer.vehiclePlate || '',
-          vehicleModel: customer.vehicleModel || '',
-          vehicleYear: customer.vehicleYear || '',
-          licenseNumber: customer.licenseNumber || '',
-          propertyCard: customer.propertyCard || '',
-          originAddress: customer.originAddress || '',
-          destinationAddress: customer.destinationAddress || '',
-          tripDetail: customer.tripDetail || '',
-          serviceReferenceValue: customer.serviceReferenceValue || '',
-          effectiveLoadValue: customer.effectiveLoadValue || '',
-          usefulLoadValue: customer.usefulLoadValue || '',
-        })
+        setCustomerData(datosDeCliente(customer))
       }
 
       // Cargar método de pago (convertir del formato guardado al formato del formulario)
@@ -5570,13 +5549,10 @@ export default function POS() {
               phone: existingCustomer.phone || conservar(prev.phone),
               email: existingCustomer.email || conservar(prev.email),
               address: existingCustomer.address || conservar(prev.address),
-              studentName: existingCustomer.studentName || conservar(prev.studentName),
-              studentSchedule: existingCustomer.studentSchedule || conservar(prev.studentSchedule),
-              vehiclePlate: existingCustomer.vehiclePlate || conservar(prev.vehiclePlate),
-              vehicleModel: existingCustomer.vehicleModel || conservar(prev.vehicleModel),
-              vehicleYear: existingCustomer.vehicleYear || conservar(prev.vehicleYear),
-              licenseNumber: existingCustomer.licenseNumber || conservar(prev.licenseNumber),
-              propertyCard: existingCustomer.propertyCard || conservar(prev.propertyCard),
+              // Mismo criterio que el desplegable (utils/posCustomerData): acá la
+              // lista estaba escrita a mano y se quedó sin los campos de
+              // transporte, que se agregaron después.
+              ...camposExtraConRespaldo(existingCustomer, prev, conservar),
               // Veterinaria: traer la mascota del cliente local (si la tiene).
               petName: getPrimaryPet(existingCustomer)?.name || existingCustomer.petName || conservar(prev.petName),
             }),
@@ -5593,13 +5569,10 @@ export default function POS() {
             ...(existingCustomer && {
               phone: existingCustomer.phone || conservar(prev.phone),
               email: existingCustomer.email || conservar(prev.email),
-              studentName: existingCustomer.studentName || conservar(prev.studentName),
-              studentSchedule: existingCustomer.studentSchedule || conservar(prev.studentSchedule),
-              vehiclePlate: existingCustomer.vehiclePlate || conservar(prev.vehiclePlate),
-              vehicleModel: existingCustomer.vehicleModel || conservar(prev.vehicleModel),
-              vehicleYear: existingCustomer.vehicleYear || conservar(prev.vehicleYear),
-              licenseNumber: existingCustomer.licenseNumber || conservar(prev.licenseNumber),
-              propertyCard: existingCustomer.propertyCard || conservar(prev.propertyCard),
+              // Mismo criterio que el desplegable (utils/posCustomerData): acá la
+              // lista estaba escrita a mano y se quedó sin los campos de
+              // transporte, que se agregaron después.
+              ...camposExtraConRespaldo(existingCustomer, prev, conservar),
               // Veterinaria: traer la mascota del cliente local (si la tiene).
               petName: getPrimaryPet(existingCustomer)?.name || existingCustomer.petName || conservar(prev.petName),
             }),
@@ -5623,13 +5596,7 @@ export default function POS() {
             address: existingCustomer.address || conservar(prev.address),
             email: existingCustomer.email || conservar(prev.email),
             phone: existingCustomer.phone || conservar(prev.phone),
-            studentName: existingCustomer.studentName || conservar(prev.studentName),
-            studentSchedule: existingCustomer.studentSchedule || conservar(prev.studentSchedule),
-            vehiclePlate: existingCustomer.vehiclePlate || conservar(prev.vehiclePlate),
-            vehicleModel: existingCustomer.vehicleModel || conservar(prev.vehicleModel),
-            vehicleYear: existingCustomer.vehicleYear || conservar(prev.vehicleYear),
-            licenseNumber: existingCustomer.licenseNumber || conservar(prev.licenseNumber),
-            propertyCard: existingCustomer.propertyCard || conservar(prev.propertyCard),
+            ...camposExtraConRespaldo(existingCustomer, prev, conservar),
             // Sin mascota heredada del cliente anterior.
             petName: getPrimaryPet(existingCustomer)?.name || existingCustomer.petName || conservar(prev.petName),
           }))
@@ -10786,19 +10753,12 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                 setSelectedCustomer(customer)
                                 setCustomerSearchTerm('')
                                 setShowCustomerDropdown(false)
-                                setCustomerData({
-                                  documentType: customer.documentType || (customer.documentNumber?.length === 11 ? ID_TYPES.RUC : ID_TYPES.DNI),
-                                  documentNumber: customer.documentNumber || '',
-                                  name: customer.name || '',
-                                  businessName: customer.businessName || '',
-                                  address: customer.address || '',
-                                  email: customer.email || '',
-                                  phone: customer.phone || '',
-                                  studentName: customer.studentName || '',
-                                  studentSchedule: customer.studentSchedule || '',
-                                  // Veterinaria: hidratar nombre de mascota (primera del array o legacy)
-                                  petName: getPrimaryPet(customer)?.name || customer.petName || '',
-                                })
+                                // Criterio unico (utils/posCustomerData): esta lista
+                                // estaba escrita a mano y le faltaban la licencia, la
+                                // tarjeta de propiedad y los datos del vehiculo. El
+                                // cliente los tenia guardados y salian vacios, asi que
+                                // habia que teclearlos en cada venta.
+                                setCustomerData(datosDeCliente(customer))
                               }}
                               className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0"
                             >
