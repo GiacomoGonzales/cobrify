@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { collection, query, where, orderBy, limit, startAfter, getDocs } from 'firebase/firestore'
+import { collection, collectionGroup, documentId, query, where, orderBy, limit, startAfter, getDocs } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { formatCurrency, matchesPrebuilt, buildSearchHaystack } from '@/lib/utils'
 import { urlXmlDe, urlCdrDe, cdrEnLineaDe, tieneCdr, tieneXmlGuardado, estadoSunatDe, fechaDelComprobante } from '@/utils/sunatDocs'
@@ -8,6 +8,7 @@ import {
   FileCheck2, Search, RefreshCw, Download, Code, Eye, X, Loader2,
   CheckCircle, XCircle, Clock, Ban, ChevronLeft, ChevronRight
 } from 'lucide-react'
+import { Pagina, Filtros, FiltroSelect, Buscador, Boton, Entrada, Seccion, Tabla, Th, Td, Fila, FilaVacia, Estado, Aviso } from '@/components/admin/ui'
 
 /**
  * Panel de CPE de los negocios con SUNAT DIRECTO — la vista de soporte.
@@ -55,19 +56,94 @@ const MAX_RONDAS = 12  // tope de fetches por avance (filtros muy estrechos)
 // Lista blanca de lo que se muestra: lo que se declara ante SUNAT. Las guías
 // no traen documentType en su doc — se les estampa al leerlas de su colección.
 const TIPOS = {
-  factura: { label: 'Factura', color: 'bg-blue-100 text-blue-700' },
-  boleta: { label: 'Boleta', color: 'bg-purple-100 text-purple-700' },
-  nota_credito: { label: 'Nota de Crédito', color: 'bg-amber-100 text-amber-700' },
-  nota_debito: { label: 'Nota de Débito', color: 'bg-cyan-100 text-cyan-700' },
-  guia_remision: { label: 'GRE Remitente', color: 'bg-teal-100 text-teal-700' },
-  guia_transportista: { label: 'GRE Transportista', color: 'bg-indigo-100 text-indigo-700' },
+  factura: { label: 'Factura', color: 'bg-gray-100 text-gray-700' },
+  boleta: { label: 'Boleta', color: 'bg-gray-100 text-gray-700' },
+  nota_credito: { label: 'Nota de Crédito', color: 'bg-gray-100 text-gray-700' },
+  nota_debito: { label: 'Nota de Débito', color: 'bg-gray-100 text-gray-700' },
+  guia_remision: { label: 'GRE Remitente', color: 'bg-gray-100 text-gray-700' },
+  guia_transportista: { label: 'GRE Transportista', color: 'bg-gray-100 text-gray-700' },
 }
 
 const ESTADOS = {
-  accepted: { label: 'Aceptado', color: 'bg-green-100 text-green-700', Icon: CheckCircle },
+  accepted: { label: 'Aceptado', color: 'bg-gray-100 text-gray-700', Icon: CheckCircle },
   rejected: { label: 'Rechazado', color: 'bg-red-100 text-red-700', Icon: XCircle },
-  pending: { label: 'Pendiente', color: 'bg-amber-100 text-amber-700', Icon: Clock },
+  pending: { label: 'Pendiente', color: 'bg-gray-100 text-gray-700', Icon: Clock },
   voided: { label: 'Anulado', color: 'bg-gray-100 text-gray-600', Icon: Ban },
+}
+
+// Corre `fn` sobre `items` de a `tam` en paralelo (para no disparar cientos
+// de consultas de golpe).
+async function enTandas(items, tam, fn) {
+  for (let i = 0; i < items.length; i += tam) {
+    await Promise.all(items.slice(i, i + tam).map(fn))
+  }
+}
+
+// Alertas 1033. SUNAT responde 1033 ("registrado previamente con otros datos")
+// en dos situaciones que NO se distinguen por el mensaje:
+//   a) reintento de un documento nuestro que ya habia llegado (inofensivo);
+//   b) el negocio repite una serie-correlativo que ya uso antes, por ejemplo
+//      en otro sistema: SUNAT tiene otro documento con ese numero y el nuestro
+//      no existe alla, aunque en Cobrify figure aceptado.
+// Lo que delata (b) es el PATRON: muchos 1033 en el mismo negocio, con
+// correlativos seguidos. Por eso las alertas se agrupan por negocio.
+const ES_1033 = e => String(e?.code ?? '') === '1033' || /registrado previamente|informado anteriormente/i.test(e?.description || '')
+
+const clasificarAlerta = h => {
+  if (h.gemelos?.length || h.borrados?.length) return { clave: 'repetido', texto: 'Número repetido en Cobrify' }
+  const log = Array.isArray(h.sunatLog) ? h.sunatLog : []
+  const idx = log.findIndex(ES_1033)
+  const previos = idx > 0 ? log.slice(0, idx).filter(e => e.status && e.status !== 'created') : []
+  const huboEnvioPrevio = previos.length > 0 || (h.retryCount || 0) > 0 || !!h.lastRetryError
+  if (huboEnvioPrevio) return { clave: 'reintento', texto: 'Reintento: hubo un envío anterior' }
+  return { clave: 'primero', texto: 'Primer envío ya dio 1033' }
+}
+
+const correlativoDe = d => Number(d.correlativeNumber) || Number(String(d.number || '').split('-')[1]) || 0
+const serieDe = d => d.series || String(d.number || '').split('-')[0] || '?'
+
+const PESO_VEREDICTO = { repetido: 3, patron: 2, aislado: 1 }
+
+const agruparAlertas = (hits, negocios) => {
+  const porNegocio = new Map()
+  for (const h of hits) {
+    if (!porNegocio.has(h.bizId)) porNegocio.set(h.bizId, [])
+    porNegocio.get(h.bizId).push(h)
+  }
+  return [...porNegocio.entries()].map(([bizId, docs]) => {
+    // Corrida mas larga de correlativos seguidos con 1033, por serie
+    const porSerie = new Map()
+    for (const d of docs) {
+      const serie = serieDe(d)
+      if (!porSerie.has(serie)) porSerie.set(serie, [])
+      porSerie.get(serie).push(correlativoDe(d))
+    }
+    let corridaMax = 1
+    for (const nums of porSerie.values()) {
+      const u = [...new Set(nums)].sort((a, b) => a - b)
+      let run = 1
+      for (let i = 1; i < u.length; i++) {
+        run = u[i] === u[i - 1] + 1 ? run + 1 : 1
+        corridaMax = Math.max(corridaMax, run)
+      }
+    }
+    const repetidos = docs.filter(d => clasificarAlerta(d).clave === 'repetido').length
+    const primeros = docs.filter(d => clasificarAlerta(d).clave === 'primero').length
+    let veredicto
+    if (repetidos > 0) veredicto = { clave: 'repetido', texto: `${repetidos} con el número repetido en Cobrify` }
+    else if (docs.length >= 3 || corridaMax >= 2) veredicto = { clave: 'patron', texto: `Patrón: ${docs.length} en el mes${corridaMax >= 2 ? `, ${corridaMax} correlativos seguidos` : ''}` }
+    else veredicto = { clave: 'aislado', texto: 'Caso aislado, probable reintento' }
+    return {
+      bizId,
+      negocio: negocios.get(bizId) || { id: bizId, nombre: bizId, ruc: '', metodo: '' },
+      docs: docs.sort((a, b) => tiempoDe(b) - tiempoDe(a)),
+      series: [...porSerie.keys()],
+      corridaMax,
+      repetidos,
+      primeros,
+      veredicto,
+    }
+  }).sort((a, b) => (PESO_VEREDICTO[b.veredicto.clave] - PESO_VEREDICTO[a.veredicto.clave]) || (b.docs.length - a.docs.length))
 }
 
 const mesActual = () => {
@@ -120,14 +196,25 @@ export default function AdminCpe() {
   const [detalle, setDetalle] = useState(null)
   const [detalleTab, setDetalleTab] = useState('info') // 'info' | 'seguimiento'
   const [descargando, setDescargando] = useState(null)
+  // Metodo de emision de las empresas que se listan. Con SUNAT directo son
+  // pocas y se pueden mirar todas juntas; con QPse son cientos, asi que se
+  // elige una empresa por vez.
+  const [metodo, setMetodo] = useState('sunat_direct')
+  // Alertas 1033 (todas las empresas, cualquier metodo)
+  const [alertas, setAlertas] = useState(null)
+  const [cargandoAlertas, setCargandoAlertas] = useState(false)
+  const [errorAlertas, setErrorAlertas] = useState(null)
+  const [grupoAbierto, setGrupoAbierto] = useState(null)
 
   // ------------------------------------------------------------ los negocios
   useEffect(() => {
     const cargar = async () => {
+      setCargandoEmpresas(true)
+      setEmpresaSel('all')
       try {
         const snap = await getDocs(query(
           collection(db, 'businesses'),
-          where('emissionConfig.method', '==', 'sunat_direct')
+          where('emissionConfig.method', '==', metodo)
         ))
         const lista = snap.docs.map(d => {
           const b = d.data()
@@ -139,13 +226,18 @@ export default function AdminCpe() {
         }).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
         setEmpresas(lista)
       } catch (e) {
-        console.error('Error cargando negocios sunat_direct:', e)
+        console.error(`Error cargando negocios ${metodo}:`, e)
       } finally {
         setCargandoEmpresas(false)
       }
     }
     cargar()
-  }, [])
+  }, [metodo])
+
+  // Con QPse no se cargan "todas": hay que elegir una empresa.
+  const faltaElegirEmpresa = metodo === 'qpse' && empresaSel === 'all'
+
+  const empresaDe = (bizId) => nombreEmpresa.get(bizId) || alertas?.negocios?.get(bizId)
 
   const nombreEmpresa = useMemo(() => {
     const m = new Map()
@@ -284,6 +376,11 @@ export default function AdminCpe() {
 
   const cargaInicial = async () => {
     if (cargandoEmpresas) return
+    if (faltaElegirEmpresa) {
+      datosRef.current = { fuentes: [], filas: [] }
+      setVista({ filas: [], fuentes: [] })
+      return
+    }
     setCargando(true)
     setPagina(0)
     setSinNuevas(false)
@@ -313,6 +410,75 @@ export default function AdminCpe() {
     else setBajas(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [empresaSel, mes, cargandoEmpresas])
+
+  // ---------------------------------------------------------- alertas 1033
+  // Una sola consulta de grupo sobre TODAS las subcolecciones `invoices`
+  // (necesita la regla con comodin y el indice de grupo). Los casos son pocos,
+  // asi que despues se busca por cada uno si el numero esta repetido en
+  // Cobrify (otro comprobante vivo o uno eliminado con el mismo numero).
+  const cargarAlertas = async () => {
+    setCargandoAlertas(true)
+    setErrorAlertas(null)
+    try {
+      const [desde, hasta] = rangoDelMes()
+      const snap = await getDocs(query(
+        collectionGroup(db, 'invoices'),
+        // El codigo se guardo como texto casi siempre; por si acaso, tambien numero
+        where('sunatResponse.code', 'in', ['1033', 1033]),
+        where('createdAt', '>=', desde),
+        where('createdAt', '<', hasta),
+        orderBy('createdAt', 'desc'),
+        limit(2000),
+      ))
+      const hits = snap.docs.map(d => ({ id: d.id, bizId: d.ref.parent.parent.id, coleccion: 'invoices', ...d.data() }))
+
+      const negocios = new Map()
+      const ids = [...new Set(hits.map(h => h.bizId))]
+      for (let i = 0; i < ids.length; i += 30) {
+        const s = await getDocs(query(collection(db, 'businesses'), where(documentId(), 'in', ids.slice(i, i + 30))))
+        s.forEach(d => {
+          const b = d.data()
+          negocios.set(d.id, {
+            id: d.id,
+            nombre: b.razonSocial || b.businessName || d.id,
+            ruc: b.ruc || '',
+            metodo: b.emissionConfig?.method || b.emissionMethod || '',
+          })
+        })
+      }
+
+      await enTandas(hits, 10, async h => {
+        if (!h.number) return
+        const [otros, borrados] = await Promise.all([
+          getDocs(query(collection(db, 'businesses', h.bizId, 'invoices'), where('number', '==', h.number), limit(5))).catch(() => null),
+          getDocs(query(collection(db, 'businesses', h.bizId, 'deletedInvoices'), where('number', '==', h.number), limit(5))).catch(() => null),
+        ])
+        h.gemelos = (otros?.docs || []).filter(d => d.id !== h.id).map(d => ({ id: d.id, ...d.data() }))
+        h.borrados = (borrados?.docs || []).map(d => ({ id: d.id, ...d.data() }))
+      })
+
+      setAlertas({ hits, negocios, grupos: agruparAlertas(hits, negocios), truncado: snap.size >= 2000 })
+      setGrupoAbierto(null)
+    } catch (e) {
+      console.error('Error cargando alertas 1033:', e)
+      setErrorAlertas(e.message || 'No se pudieron cargar las alertas')
+    } finally {
+      setCargandoAlertas(false)
+    }
+  }
+
+  useEffect(() => {
+    if (seccion === 'alertas') cargarAlertas()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seccion, mes])
+
+  const gruposFiltrados = useMemo(() => {
+    if (!alertas) return []
+    if (!busqueda) return alertas.grupos
+    return alertas.grupos.filter(g =>
+      matchesPrebuilt(busqueda, buildSearchHaystack(g.negocio.nombre, g.negocio.ruc, ...g.docs.map(d => d.number)))
+    )
+  }, [alertas, busqueda])
 
   // Cambió un filtro en memoria: volver a la página 1 y, si lo cargado no da
   // ni para una página, salir a buscar más (con un pequeño debounce para no
@@ -512,7 +678,7 @@ export default function AdminCpe() {
           {totalFiltradas === 0 ? 'Sin resultados' : `${desde}–${hasta}`}
           {completo ? ` de ${totalFiltradas}` : ' · hay más por cargar'}
           {avisoSinNuevas && (
-            <span className="block text-amber-600 mt-0.5">
+            <span className="block text-gray-700 mt-0.5">
               Se revisó una tanda más sin nuevas coincidencias — presiona Siguiente otra vez para seguir revisando el mes.
             </span>
           )}
@@ -540,124 +706,73 @@ export default function AdminCpe() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
-          <FileCheck2 className="w-6 h-6 text-primary-600" />
-          Comprobantes SUNAT directo
-        </h1>
-        <p className="text-sm text-gray-500 mt-1">
-          XML firmados y CDR de los {empresas.length} negocios que emiten directo contra SUNAT: facturas, boletas, notas, guías de remisión y comunicaciones de baja.
-        </p>
-      </div>
-
-      {/* Pestañas */}
-      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
-        {[['cpe', 'Comprobantes y guías'], ['bajas', 'Resúmenes diarios']].map(([k, label]) => (
-          <button
-            key={k}
-            onClick={() => setSeccion(k)}
-            className={`px-4 py-1.5 text-sm rounded-md font-medium transition-colors ${seccion === k ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+      <Pagina
+        resumen={seccion === 'alertas'
+          ? (alertas
+            ? `${alertas.hits.length} comprobantes con código 1033 en ${alertas.grupos.length} negocios · ${alertas.grupos.filter(g => g.veredicto.clave !== 'aislado').length} con patrón sospechoso${alertas.truncado ? ' · lista recortada a 2000' : ''}`
+            : cargandoAlertas ? 'Buscando comprobantes con código 1033 en todos los negocios…' : '')
+          : `${empresas.length} negocios ${metodo === 'qpse' ? 'emiten por QPse' : 'emiten directo contra SUNAT'}${faltaElegirEmpresa ? ' · elige una empresa para ver sus comprobantes' : ''}${seccion === 'cpe' && !faltaElegirEmpresa
+            ? ` · ${stats.total} comprobantes cargados · ${stats.accepted} aceptados · ${stats.rejected} rechazados · ${stats.pending} pendientes · ${stats.voided} anulados${!agotadoRelevante && !cargando ? ' (avanza de página para traer más)' : ''}`
+            : ''}`}
+        acciones={
+          <Boton
+            tamano="sm"
+            onClick={() => (seccion === 'alertas' ? cargarAlertas() : seccion === 'cpe' ? cargaInicial() : cargarBajas())}
+            disabled={cargando || cargandoBajas || cargandoAlertas}
           >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {/* Stats (solo comprobantes) */}
-      {seccion === 'cpe' && (
-        <div>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-4">
-            {[
-              ['Total', stats.total, 'text-gray-900'],
-              ['Aceptados', stats.accepted, 'text-green-600'],
-              ['Rechazados', stats.rejected, 'text-red-600'],
-              ['Pendientes', stats.pending, 'text-amber-600'],
-              ['Anulados', stats.voided, 'text-gray-500'],
-            ].map(([label, valor, color]) => (
-              <div key={label} className="bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-gray-200">
-                <p className="text-xs sm:text-sm font-medium text-gray-500">{label}</p>
-                <p className={`text-xl sm:text-2xl font-bold ${color}`}>{valor}</p>
-              </div>
-            ))}
-          </div>
-          {!agotadoRelevante && !cargando && (
-            <p className="text-[11px] text-gray-400 mt-1">Conteos sobre lo cargado hasta ahora; avanza de página para traer más.</p>
-          )}
-        </div>
-      )}
-
-      {/* Toolbar */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-4">
-        <div className="flex flex-col gap-3">
-          <div className="flex gap-2">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder={seccion === 'cpe'
-                  ? 'Buscar por número, cliente, empresa o RUC...'
-                  : 'Buscar por identificador, documento, ticket, empresa...'}
-                value={busqueda}
-                onChange={e => setBusqueda(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-            </div>
+            {cargando || cargandoBajas || cargandoAlertas ? 'Cargando…' : 'Recargar'}
+          </Boton>
+        }
+      />
+      <Filtros>
+        <div className="inline-flex rounded-md border border-gray-300 bg-white p-0.5">
+          {[['cpe', 'Comprobantes y guías'], ['bajas', 'Resúmenes diarios'], ['alertas', 'Alertas 1033']].map(([k, label]) => (
             <button
-              onClick={() => (seccion === 'cpe' ? cargaInicial() : cargarBajas())}
-              disabled={cargando || cargandoBajas}
-              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Recargar"
+              key={k}
+              type="button"
+              onClick={() => setSeccion(k)}
+              className={`h-7 px-3 rounded text-[12.5px] ${seccion === k ? 'bg-gray-900 text-white' : 'text-gray-600 hover:text-gray-900'}`}
             >
-              <RefreshCw className={`w-5 h-5 ${(cargando || cargandoBajas) ? 'animate-spin' : ''}`} />
+              {label}
             </button>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <select
-              value={empresaSel}
-              onChange={e => setEmpresaSel(e.target.value)}
-              className="flex-1 sm:flex-none sm:max-w-xs px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="all">Todas las empresas ({empresas.length})</option>
-              {empresas.map(e => (
-                <option key={e.id} value={e.id}>{e.nombre} {e.ruc ? `(${e.ruc})` : ''}</option>
-              ))}
-            </select>
-
-            <input
-              type="month"
-              value={mes}
-              onChange={e => e.target.value && setMes(e.target.value)}
-              className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-
-            {seccion === 'cpe' && (<>
-              <select
-                value={tipoFiltro}
-                onChange={e => setTipoFiltro(e.target.value)}
-                className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="all">Todos los tipos</option>
-                {Object.entries(TIPOS).map(([k, t]) => <option key={k} value={k}>{t.label}</option>)}
-              </select>
-
-              <select
-                value={estadoFiltro}
-                onChange={e => setEstadoFiltro(e.target.value)}
-                className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="all">Todos los estados</option>
-                {Object.entries(ESTADOS).map(([k, est]) => <option key={k} value={k}>{est.label}</option>)}
-              </select>
-            </>)}
-          </div>
+          ))}
         </div>
-      </div>
+        <Buscador
+          ancho="w-full sm:w-80"
+          placeholder={seccion === 'cpe' ? 'Número, cliente, empresa o RUC' : seccion === 'alertas' ? 'Empresa, RUC o número' : 'Identificador, documento, ticket, empresa'}
+          value={busqueda}
+          onChange={e => setBusqueda(e.target.value)}
+        />
+        {seccion !== 'alertas' && (
+          <>
+            <FiltroSelect value={metodo} onChange={e => setMetodo(e.target.value)} valorTodos="sunat_direct">
+              <option value="sunat_direct">SUNAT directo</option>
+              <option value="qpse">QPse</option>
+            </FiltroSelect>
+            <FiltroSelect value={empresaSel} onChange={e => setEmpresaSel(e.target.value)} className="max-w-xs">
+              <option value="all">{metodo === 'qpse' ? `Elige una empresa (${empresas.length})` : `Todas las empresas (${empresas.length})`}</option>
+              {empresas.map(e => <option key={e.id} value={e.id}>{e.nombre} {e.ruc ? `(${e.ruc})` : ''}</option>)}
+            </FiltroSelect>
+          </>
+        )}
+        <Entrada type="month" value={mes} onChange={e => e.target.value && setMes(e.target.value)} className="w-40" />
+        {seccion === 'cpe' && (
+          <>
+            <FiltroSelect value={tipoFiltro} onChange={e => setTipoFiltro(e.target.value)}>
+              <option value="all">Tipo</option>
+              {Object.entries(TIPOS).map(([k, t]) => <option key={k} value={k}>{t.label}</option>)}
+            </FiltroSelect>
+            <FiltroSelect value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)}>
+              <option value="all">Estado</option>
+              {Object.entries(ESTADOS).map(([k, est]) => <option key={k} value={k}>{est.label}</option>)}
+            </FiltroSelect>
+          </>
+        )}
+      </Filtros>
 
       {/* ------------------------------------------------ tabla comprobantes */}
       {seccion === 'cpe' && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           {cargando ? (
             <div className="flex items-center justify-center py-16 text-gray-400">
               <Loader2 className="w-6 h-6 animate-spin mr-2" /> Cargando comprobantes...
@@ -719,7 +834,7 @@ export default function AdminCpe() {
                               <button
                                 onClick={() => descargarXml(inv)}
                                 title="Descargar XML firmado"
-                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
+                                className="p-1.5 text-gray-700 hover:bg-gray-50 rounded"
                               >
                                 {descargando === `${inv.id}-xml` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Code className="w-4 h-4" />}
                               </button>
@@ -728,7 +843,7 @@ export default function AdminCpe() {
                               <button
                                 onClick={() => descargarCdr(inv)}
                                 title="Descargar CDR"
-                                className="p-1.5 text-green-600 hover:bg-green-50 rounded"
+                                className="p-1.5 text-gray-700 hover:bg-gray-50 rounded"
                               >
                                 {descargando === `${inv.id}-cdr` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                               </button>
@@ -767,7 +882,7 @@ export default function AdminCpe() {
 
       {/* --------------------------------------------------- tabla de bajas */}
       {seccion === 'bajas' && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           {cargandoBajas || bajas === null ? (
             <div className="flex items-center justify-center py-16 text-gray-400">
               <Loader2 className="w-6 h-6 animate-spin mr-2" /> Cargando resúmenes diarios...
@@ -828,7 +943,7 @@ export default function AdminCpe() {
                               <button
                                 onClick={() => bajar(`${b.id}-xml`, b.voidXmlStorageUrl, `${b.voidedDocId || b.summaryDocId || b.id}.xml`, b.xmlSent)}
                                 title="Descargar XML de la baja"
-                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
+                                className="p-1.5 text-gray-700 hover:bg-gray-50 rounded"
                               >
                                 {descargando === `${b.id}-xml` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Code className="w-4 h-4" />}
                               </button>
@@ -837,7 +952,7 @@ export default function AdminCpe() {
                               <button
                                 onClick={() => bajar(`${b.id}-cdr`, b.voidCdrStorageUrl, `CDR-${b.voidedDocId || b.summaryDocId || b.id}.xml`, b.cdrData)}
                                 title="Descargar CDR de la baja"
-                                className="p-1.5 text-green-600 hover:bg-green-50 rounded"
+                                className="p-1.5 text-gray-700 hover:bg-gray-50 rounded"
                               >
                                 {descargando === `${b.id}-cdr` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                               </button>
@@ -867,14 +982,129 @@ export default function AdminCpe() {
         </div>
       )}
 
+      {/* ------------------------------------------------------ alertas 1033 */}
+      {seccion === 'alertas' && (
+        <div className="space-y-4">
+          <Aviso>
+            SUNAT responde 1033 tanto cuando reintentamos un comprobante que ya había llegado (inofensivo) como cuando el negocio
+            repite una serie y correlativo que ya usó antes, por ejemplo en otro sistema (SUNAT tiene otro documento con ese número).
+            El mensaje es el mismo; lo que delata el segundo caso es el patrón: varios en el mismo negocio, con correlativos seguidos.
+          </Aviso>
+          {errorAlertas && (
+            <Aviso tono="rojo" titulo="No se pudieron cargar las alertas">
+              {errorAlertas}. Si es la primera vez, faltan desplegar la regla y el índice de grupo de `invoices`.
+            </Aviso>
+          )}
+          <Seccion sinRelleno className="overflow-hidden">
+            <Tabla>
+              <thead>
+                <tr>
+                  <Th>Negocio</Th>
+                  <Th>Método</Th>
+                  <Th alinear="der">Con 1033</Th>
+                  <Th>Series</Th>
+                  <Th alinear="der">Seguidos</Th>
+                  <Th alinear="der">Sin envío previo</Th>
+                  <Th>Veredicto</Th>
+                  <Th ancho={90}></Th>
+                </tr>
+              </thead>
+              <tbody>
+                {cargandoAlertas ? (
+                  <FilaVacia colSpan={8}>Buscando en todos los negocios…</FilaVacia>
+                ) : !alertas ? (
+                  <FilaVacia colSpan={8}>Sin datos</FilaVacia>
+                ) : gruposFiltrados.length === 0 ? (
+                  <FilaVacia colSpan={8}>Ningún comprobante con código 1033 en este mes</FilaVacia>
+                ) : (
+                  gruposFiltrados.map(g => (
+                    <Fila key={g.bizId} onClick={() => setGrupoAbierto(grupoAbierto === g.bizId ? null : g.bizId)} seleccionada={grupoAbierto === g.bizId}>
+                      <Td className="max-w-[280px]">
+                        <div className="truncate font-medium">{g.negocio.nombre}</div>
+                        <div className="text-[11.5px] text-gray-500">{g.negocio.ruc || g.bizId}</div>
+                      </Td>
+                      <Td apagado>{g.negocio.metodo === 'qpse' ? 'QPse' : g.negocio.metodo === 'sunat_direct' ? 'SUNAT directo' : g.negocio.metodo || '—'}</Td>
+                      <Td numero className="font-medium">{g.docs.length}</Td>
+                      <Td apagado>{g.series.join(', ')}</Td>
+                      <Td numero className={g.corridaMax >= 2 ? 'text-red-600 font-medium' : ''}>{g.corridaMax >= 2 ? g.corridaMax : '—'}</Td>
+                      <Td numero apagado>{g.primeros}</Td>
+                      <Td>
+                        <Estado valor={g.veredicto.clave === 'aislado' ? 'ok' : 'rejected'} etiqueta={g.veredicto.texto} />
+                      </Td>
+                      <Td alinear="der" onClick={e => e.stopPropagation()}>
+                        <Boton tamano="sm" onClick={() => setGrupoAbierto(grupoAbierto === g.bizId ? null : g.bizId)}>
+                          {grupoAbierto === g.bizId ? 'Cerrar' : 'Ver'}
+                        </Boton>
+                      </Td>
+                    </Fila>
+                  ))
+                )}
+              </tbody>
+            </Tabla>
+          </Seccion>
+
+          {alertas && grupoAbierto && (() => {
+            const g = alertas.grupos.find(x => x.bizId === grupoAbierto)
+            if (!g) return null
+            return (
+              <Seccion
+                titulo={`${g.negocio.nombre} · ${g.docs.length} comprobantes con 1033`}
+                descripcion={g.veredicto.texto}
+                sinRelleno
+                acciones={<a href={`/app/admin/users/${g.bizId}`} className="text-[12.5px] text-primary-700 hover:underline">Ver ficha de la cuenta</a>}
+              >
+                <Tabla>
+                  <thead>
+                    <tr>
+                      <Th>Creado</Th>
+                      <Th>Número</Th>
+                      <Th>Tipo</Th>
+                      <Th>En Cobrify</Th>
+                      <Th>Lectura</Th>
+                      <Th alinear="der">Reintentos</Th>
+                      <Th>CDR</Th>
+                      <Th>Mismo número en Cobrify</Th>
+                      <Th>Mensaje de SUNAT</Th>
+                      <Th ancho={70}></Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {g.docs.map(d => {
+                      const lectura = clasificarAlerta(d)
+                      const gemelos = [...(d.gemelos || []).map(x => `${x.number} (vivo, S/ ${Number(x.total || 0).toFixed(2)})`), ...(d.borrados || []).map(x => `${x.number} (eliminado)`)]
+                      return (
+                        <Fila key={d.id}>
+                          <Td apagado>{formatFechaHora(d.createdAt)}</Td>
+                          <Td className="font-medium">{d.number || d.id}</Td>
+                          <Td apagado>{TIPOS[d.documentType]?.label || d.documentType || '—'}</Td>
+                          <Td><Estado valor={estadoSunatDe(d)} etiqueta={ESTADOS[estadoSunatDe(d)]?.label || d.sunatStatus} /></Td>
+                          <Td><Estado valor={lectura.clave === 'reintento' ? 'ok' : 'rejected'} etiqueta={lectura.texto} /></Td>
+                          <Td numero apagado>{d.retryCount || 0}</Td>
+                          <Td apagado>{tieneCdr(d) ? 'Sí' : 'No'}</Td>
+                          <Td className={gemelos.length ? 'text-red-600' : 'text-gray-400'}>{gemelos.length ? gemelos.join(' · ') : '—'}</Td>
+                          <Td apagado className="max-w-[320px] truncate" title={d.sunatResponse?.description || ''}>{d.sunatResponse?.description || '—'}</Td>
+                          <Td alinear="der">
+                            <Boton tamano="sm" onClick={() => { setDetalle(d); setDetalleTab('seguimiento') }}>Detalle</Boton>
+                          </Td>
+                        </Fila>
+                      )
+                    })}
+                  </tbody>
+                </Tabla>
+              </Seccion>
+            )
+          })()}
+        </div>
+      )}
+
       {/* Detalle de comprobante */}
       {detalle && (() => {
-        const emp = nombreEmpresa.get(detalle.bizId)
+        const emp = empresaDe(detalle.bizId)
         const resp = detalle.sunatResponse || {}
         return (
           <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setDetalle(null)}>
             <div
-              className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto"
+              className="bg-white rounded-lg shadow-lg w-full max-w-lg max-h-[85vh] overflow-y-auto"
               onClick={e => e.stopPropagation()}
             >
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white">
@@ -902,11 +1132,11 @@ export default function AdminCpe() {
 
               {detalleTab === 'seguimiento' ? (() => {
                 const { eventos, parcial } = historialDe(detalle)
-                const puntoColor = (st) => st === 'accepted' ? 'bg-green-500'
+                const puntoColor = (st) => st === 'accepted' ? 'bg-primary-600'
                   : st === 'rejected' ? 'bg-red-500'
                   : st === 'voided' || st === 'voiding' ? 'bg-gray-400'
                   : st === 'created' ? 'bg-gray-300'
-                  : 'bg-amber-400'
+                  : 'bg-primary-600'
                 return (
                   <div className="p-5 text-sm">
                     {parcial && (
@@ -975,7 +1205,7 @@ export default function AdminCpe() {
                   </div>
                 )}
                 {detalle.lastRetryError?.description && (
-                  <div className="rounded-lg p-3 text-xs bg-amber-50 text-amber-800">
+                  <div className="rounded-lg p-3 text-xs bg-gray-50 text-gray-900">
                     <p className="font-medium mb-0.5">Último error de reintento ({detalle.lastRetryError.timestamp?.slice(0, 19).replace('T', ' ')})</p>
                     <p>{detalle.lastRetryError.description}</p>
                   </div>
@@ -985,7 +1215,7 @@ export default function AdminCpe() {
                   {tieneXmlGuardado(detalle) && (
                     <button
                       onClick={() => descargarXml(detalle)}
-                      className="flex items-center gap-1.5 px-3 py-2 text-sm border border-blue-200 text-blue-700 rounded-lg hover:bg-blue-50"
+                      className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50"
                     >
                       {descargando === `${detalle.id}-xml` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Code className="w-4 h-4" />} XML firmado
                     </button>
@@ -993,7 +1223,7 @@ export default function AdminCpe() {
                   {tieneCdr(detalle) && (
                     <button
                       onClick={() => descargarCdr(detalle)}
-                      className="flex items-center gap-1.5 px-3 py-2 text-sm border border-green-200 text-green-700 rounded-lg hover:bg-green-50"
+                      className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50"
                     >
                       {descargando === `${detalle.id}-cdr` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} CDR
                     </button>

@@ -313,6 +313,13 @@ service cloud.firestore {
       allow read: if isAdmin();
     }
 
+    // CollectionGroup: comprobantes de TODOS los negocios de una vez (panel
+    // admin de Alertas 1033). El admin ya lee businesses/{id}/invoices, pero
+    // una consulta de grupo se rechaza si no hay una regla con comodín.
+    match /{path=**}/invoices/{invoiceId} {
+      allow read: if isAdmin();
+    }
+
     // Notifications collection
     match /notifications/{notificationId} {
       // Users can only read/write their own notifications
@@ -377,12 +384,21 @@ service cloud.firestore {
       allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       // El negocio puede editar lo suyo, pero NO los campos que administra
       // Cobrify: el código de cliente (lo entrega el servidor y no cambia),
-      // el rubro, la actividad de SUNAT y los datos del dueño. Esos los
-      // escribe el admin o el servidor.
+      // la actividad de SUNAT y los datos del dueño. Esos los escribe el admin
+      // o el servidor.
+      //
+      // El `rubro` es la excepción: se elige AL CREAR la cuenta (el formulario
+      // de alta lo pide y lo escribe el propio usuario recién creado), pero
+      // después ya no se puede cambiar desde el negocio. La segmentación la
+      // corrige el admin desde la ficha. `codigoCliente` sigue bloqueado
+      // también al crear: si el cliente pudiera ponérselo, el trigger
+      // `asignarCodigoCliente` lo respetaría y podría autoasignarse el 1.
       allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId)
         && (request.resource == null
             || !request.resource.data.diff(resource == null ? {} : resource.data).affectedKeys()
-                 .hasAny(['codigoCliente', 'codigoClienteAsignadoEn', 'rubro', 'actividadSunat', 'dueno']));
+                 .hasAny(resource == null
+                         ? ['codigoCliente', 'codigoClienteAsignadoEn', 'actividadSunat', 'dueno']
+                         : ['codigoCliente', 'codigoClienteAsignadoEn', 'rubro', 'rubroConfirmadoEn', 'actividadSunat', 'dueno']));
 
       // Resellers pueden crear negocios para sus clientes.
       // SEGURIDAD: antes cualquier autenticado podía crear businesses/{cualquierUID}
