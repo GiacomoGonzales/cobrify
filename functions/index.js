@@ -14737,21 +14737,35 @@ export const numerarClientes = onRequest(
       }
       const todos = snap.docs.map((d) => ({ id: d.id, data: d.data() }))
       const yaNumerados = todos.filter((b) => b.data.codigoCliente)
-      const pendientes = todos
-        .filter((b) => !b.data.codigoCliente)
-        .sort((a, b) => fecha(a.data) - fecha(b.data) || a.id.localeCompare(b.id))
-      const sinFecha = pendientes.filter((b) => !b.data.createdAt).length
+      const candidatos = todos.filter((b) => !b.data.codigoCliente)
+
+      // El código es para siempre, así que el orden importa. Si el negocio no
+      // guardó `createdAt`, la fecha real de alta está en Firebase Auth (el
+      // doc del negocio se llama como el uid). Solo se consulta para esos.
+      const origenFecha = { negocio: 0, auth: 0, ninguna: 0 }
+      for (const b of candidatos) {
+        if (b.data.createdAt) { b.alta = fecha(b.data); origenFecha.negocio += 1; continue }
+        try {
+          const u = await auth.getUser(b.id)
+          const t = new Date(u.metadata.creationTime).getTime()
+          if (Number.isFinite(t)) { b.alta = t; origenFecha.auth += 1; continue }
+        } catch (e) { /* sin usuario en Auth: va al final */ }
+        b.alta = Number.MAX_SAFE_INTEGER
+        origenFecha.ninguna += 1
+      }
+      const pendientes = candidatos.sort((a, b) => a.alta - b.alta || a.id.localeCompare(b.id))
 
       const muestra = pendientes.slice(0, 8).map((b) => ({
         id: b.id,
         nombre: b.data.businessName || b.data.razonSocial || b.data.name || b.data.tradeName || '(sin nombre)',
         ruc: b.data.ruc || '',
-        alta: b.data.createdAt?.toDate ? b.data.createdAt.toDate().toISOString().slice(0, 10) : (b.data.createdAt || null),
+        alta: b.alta === Number.MAX_SAFE_INTEGER ? null : new Date(b.alta).toISOString().slice(0, 10),
       }))
 
       if (dryRun) {
         res.json({ success: true, dryRun: true, total: todos.length, yaNumerados: yaNumerados.length,
-                   porNumerar: pendientes.length, sinFechaDeAlta: sinFecha, muestra })
+                   porNumerar: pendientes.length, sinFechaDeAlta: origenFecha.ninguna,
+                   fechaDesdeAuth: origenFecha.auth, muestra })
         return
       }
 

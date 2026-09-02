@@ -1341,7 +1341,7 @@ function CodigoClienteCard() {
                     {result.dryRun ? 'Simulación: ' : 'Listo: '}
                     <b>{result.total}</b> cuentas en total ·{' '}
                     {result.dryRun
-                      ? <><b>{result.yaNumerados}</b> ya tenían código · <b>{result.porNumerar}</b> por numerar{result.sinFechaDeAlta ? <> · <b>{result.sinFechaDeAlta}</b> sin fecha de alta (van al final)</> : null}</>
+                      ? <><b>{result.yaNumerados}</b> ya tenían código · <b>{result.porNumerar}</b> por numerar{result.fechaDesdeAuth ? <> · <b>{result.fechaDesdeAuth}</b> con fecha tomada de Auth</> : null}{result.sinFechaDeAlta ? <> · <b>{result.sinFechaDeAlta}</b> sin fecha de alta (van al final)</> : null}</>
                       : <><b>{result.asignados}</b> numeradas · último código <b>{result.ultimoCodigo}</b></>}
                   </p>
                   {Array.isArray(result.muestra) && result.muestra.length > 0 && (
