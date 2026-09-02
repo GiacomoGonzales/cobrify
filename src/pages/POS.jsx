@@ -2656,30 +2656,16 @@ export default function POS() {
       // Cargar datos en el formulario
       setDocumentType(invoice.documentType)
 
-      // Cargar cliente
-      setCustomerData({
-        documentType: inferDocumentType(invoice.customer?.documentType, invoice.customer?.documentNumber),
-        documentNumber: invoice.customer?.documentNumber || '',
-        businessName: invoice.customer?.businessName || '',
-        name: invoice.customer?.name || '',
-        address: invoice.customer?.address || '',
-        email: invoice.customer?.email || '',
-        phone: invoice.customer?.phone || '',
-        studentName: invoice.customer?.studentName || '',
-        studentSchedule: invoice.customer?.studentSchedule || '',
-        petName: invoice.customer?.petName || '',
-        vehiclePlate: invoice.customer?.vehiclePlate || '',
-        vehicleModel: invoice.customer?.vehicleModel || '',
-        vehicleYear: invoice.customer?.vehicleYear || '',
-        licenseNumber: invoice.customer?.licenseNumber || '',
-        propertyCard: invoice.customer?.propertyCard || '',
-        originAddress: invoice.customer?.originAddress || '',
-        destinationAddress: invoice.customer?.destinationAddress || '',
-        tripDetail: invoice.customer?.tripDetail || '',
-        serviceReferenceValue: invoice.customer?.serviceReferenceValue || '',
-        effectiveLoadValue: invoice.customer?.effectiveLoadValue || '',
-        usefulLoadValue: invoice.customer?.usefulLoadValue || '',
-      })
+      // Cargar cliente — mismo criterio que el resto del POS
+      // (utils/posCustomerData). Esta lista estaba escrita a mano DOS veces,
+      // una acá y otra en el otro cargador, y ya se había quedado corta antes.
+      setCustomerData(datosDeCliente(invoice.customer))
+
+      // Observaciones del comprobante: se guardan en `notes` y no se
+      // restauraban. Al duplicar, la copia nacía sin ellas; al editar era
+      // peor, porque guardar escribe `notes: generalNotes || ''` y las
+      // borraba.
+      setGeneralNotes(invoice.notes || '')
 
       // Cargar items al carrito.
       // IMPORTANTE: el campo se llama `itemDiscount` en Firestore (no `discount`).
@@ -2836,30 +2822,16 @@ export default function POS() {
       // Cargar tipo de documento
       setDocumentType(invoice.documentType)
 
-      // Cargar cliente
-      setCustomerData({
-        documentType: inferDocumentType(invoice.customer?.documentType, invoice.customer?.documentNumber),
-        documentNumber: invoice.customer?.documentNumber || '',
-        businessName: invoice.customer?.businessName || '',
-        name: invoice.customer?.name || '',
-        address: invoice.customer?.address || '',
-        email: invoice.customer?.email || '',
-        phone: invoice.customer?.phone || '',
-        studentName: invoice.customer?.studentName || '',
-        studentSchedule: invoice.customer?.studentSchedule || '',
-        petName: invoice.customer?.petName || '',
-        vehiclePlate: invoice.customer?.vehiclePlate || '',
-        vehicleModel: invoice.customer?.vehicleModel || '',
-        vehicleYear: invoice.customer?.vehicleYear || '',
-        licenseNumber: invoice.customer?.licenseNumber || '',
-        propertyCard: invoice.customer?.propertyCard || '',
-        originAddress: invoice.customer?.originAddress || '',
-        destinationAddress: invoice.customer?.destinationAddress || '',
-        tripDetail: invoice.customer?.tripDetail || '',
-        serviceReferenceValue: invoice.customer?.serviceReferenceValue || '',
-        effectiveLoadValue: invoice.customer?.effectiveLoadValue || '',
-        usefulLoadValue: invoice.customer?.usefulLoadValue || '',
-      })
+      // Cargar cliente — mismo criterio que el resto del POS
+      // (utils/posCustomerData). Esta lista estaba escrita a mano DOS veces,
+      // una acá y otra en el otro cargador, y ya se había quedado corta antes.
+      setCustomerData(datosDeCliente(invoice.customer))
+
+      // Observaciones del comprobante: se guardan en `notes` y no se
+      // restauraban. Al duplicar, la copia nacía sin ellas; al editar era
+      // peor, porque guardar escribe `notes: generalNotes || ''` y las
+      // borraba.
+      setGeneralNotes(invoice.notes || '')
 
       // Cargar items al carrito (mismo mapeo que en loadInvoiceForEdit)
       const cartItems = (invoice.items || []).map((item, index) => ({

@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useMemo, useDeferredValue } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { useAppNavigate } from '@/hooks/useAppNavigate'
+import { useAppNavigate, useAppPath } from '@/hooks/useAppNavigate'
+import { convieneOtraPestana } from '@/utils/appPath'
 import {
   Plus,
   Search,
@@ -104,6 +105,7 @@ export default function InvoiceList() {
   const { branding } = useBranding()
   const navigate = useNavigate()
   const appNavigate = useAppNavigate()
+  const appPath = useAppPath()
   const toast = useToast()
   const [invoices, setInvoices] = useState([])
   const [companySettings, setCompanySettings] = useState(null)
@@ -3716,7 +3718,17 @@ Gracias por tu preferencia.`
                     <button
                       onClick={() => {
                         setOpenMenuId(null)
-                        appNavigate(`pos?duplicateInvoiceId=${invoice.id}`)
+                        // En escritorio va a OTRA PESTAÑA: duplicar es sacar una
+                        // copia de algo que se sigue consultando, y navegar en la
+                        // misma obliga a volver al listado y buscarlo de nuevo.
+                        // En la app y en pantallas chicas no: ahí una pestaña
+                        // nueva saca al usuario del sistema o no se ve.
+                        const ruta = appPath(`pos?duplicateInvoiceId=${invoice.id}`)
+                        if (convieneOtraPestana(Capacitor.isNativePlatform(), window.innerWidth)) {
+                          window.open(ruta, '_blank', 'noopener,noreferrer')
+                        } else {
+                          appNavigate(`pos?duplicateInvoiceId=${invoice.id}`)
+                        }
                       }}
                       className="w-full px-4 py-2 text-left text-sm hover:bg-purple-50 flex items-center gap-3"
                     >

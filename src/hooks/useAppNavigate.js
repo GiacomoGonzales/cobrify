@@ -1,48 +1,26 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAppContext } from './useAppContext'
+import { rutaDeApp } from '@/utils/appPath'
 
 /**
- * Hook personalizado para navegación que agrega automáticamente
- * el prefijo /app, /demo, /demorestaurant o /demopharmacy según el contexto
+ * Navegación con el prefijo del contexto (/app, /demo, /demorestaurant…).
+ *
+ * El cálculo del prefijo vive en utils/appPath, para que quien necesite la URL
+ * —abrir en otra pestaña, armar un enlace— no tenga que repetir la lista de
+ * demos y quedarse viejo al agregar el próximo.
  */
 export function useAppNavigate() {
   const navigate = useNavigate()
   const location = useLocation()
   const { isDemoMode } = useAppContext()
 
-  const appNavigate = (path, options) => {
-    // Si la ruta ya tiene un prefijo absoluto (/, /app, /demo), usarla tal cual
-    if (path.startsWith('/app') || path.startsWith('/demo') || path === '/') {
-      navigate(path, options)
-      return
-    }
+  return (path, options) => navigate(rutaDeApp(path, isDemoMode, location.pathname), options)
+}
 
-    // Determinar el prefijo según el contexto
-    let prefix = '/app'
+/** La misma ruta, pero devuelta en vez de navegada. */
+export function useAppPath() {
+  const location = useLocation()
+  const { isDemoMode } = useAppContext()
 
-    if (isDemoMode) {
-      // Detectar qué tipo de demo estamos usando
-      if (location.pathname.startsWith('/demorestaurant')) {
-        prefix = '/demorestaurant'
-      } else if (location.pathname.startsWith('/demopharmacy')) {
-        prefix = '/demopharmacy'
-      } else if (location.pathname.startsWith('/demohotel')) {
-        prefix = '/demohotel'
-      } else if (location.pathname.startsWith('/demoveterinary')) {
-        prefix = '/demoveterinary'
-      } else if (location.pathname.startsWith('/demologistics')) {
-        prefix = '/demologistics'
-      } else {
-        prefix = '/demo'
-      }
-    }
-
-    // Asegurar que la ruta comience con /
-    const normalizedPath = path.startsWith('/') ? path : `/${path}`
-
-    // Navegar con el prefijo apropiado
-    navigate(`${prefix}${normalizedPath}`, options)
-  }
-
-  return appNavigate
+  return (path) => rutaDeApp(path, isDemoMode, location.pathname)
 }
