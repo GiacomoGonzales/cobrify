@@ -47,6 +47,7 @@ import {
   ExternalLink,
   Smartphone,
 } from 'lucide-react'
+import { Pagina, Filtros, Buscador, Boton } from '@/components/admin/ui'
 
 // URL de las Cloud Functions (Cloud Run)
 const FUNCTIONS_BASE_URL = 'https://us-central1-cobrify-395fe.cloudfunctions.net'
@@ -452,86 +453,22 @@ export default function AdminResellers() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Resellers</h1>
-          <p className="text-gray-500">Gestiona tu red de revendedores</p>
-        </div>
-        <button
-          onClick={openCreateModal}
-          className="flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-        >
-          <Plus className="w-5 h-5" />
-          Nuevo Reseller
-        </button>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
-        <div className="bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-gray-200">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <Users className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600 flex-shrink-0" />
-            <div className="min-w-0">
-              <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.total}</p>
-              <p className="text-xs sm:text-sm font-medium text-gray-500">Total Resellers</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-gray-200">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <CheckCircle className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 flex-shrink-0" />
-            <div className="min-w-0">
-              <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.active}</p>
-              <p className="text-xs sm:text-sm font-medium text-gray-500">Activos</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-gray-200">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <Wallet className="w-6 h-6 sm:w-8 sm:h-8 text-amber-600 flex-shrink-0" />
-            <div className="min-w-0 flex-1">
-              <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">S/ {stats.totalBalance.toFixed(2)}</p>
-              <p className="text-xs sm:text-sm font-medium text-gray-500">Saldo Total</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-gray-200">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 flex-shrink-0" />
-            <div className="min-w-0">
-              <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.totalClients}</p>
-              <p className="text-xs sm:text-sm font-medium text-gray-500">Clientes Totales</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Search */}
-      <div className="bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-gray-200">
-        <div className="flex gap-2">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Buscar..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-9 sm:pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-          </div>
-          <button
-            onClick={loadResellers}
-            className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <RefreshCw className="w-5 h-5" />
-          </button>
-        </div>
-      </div>
+    <div className="space-y-4">
+      <Pagina
+        resumen={`${stats.total} resellers · ${stats.active} activos · S/ ${stats.totalBalance.toFixed(2)} de saldo · ${stats.totalClients} clientes`}
+        acciones={
+          <>
+            <Boton tamano="sm" onClick={loadResellers}>Recargar</Boton>
+            <Boton tamano="sm" variante="primario" onClick={openCreateModal}>Nuevo reseller</Boton>
+          </>
+        }
+      />
+      <Filtros>
+        <Buscador ancho="w-full sm:w-80" placeholder="Nombre, correo, RUC, dominio" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+      </Filtros>
 
       {/* Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         {filteredResellers.length === 0 ? (
           <div className="p-12 text-center">
             <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
@@ -563,7 +500,7 @@ export default function AdminResellers() {
                     </div>
                     <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
                       reseller.isActive !== false
-                        ? 'bg-green-100 text-green-700'
+                        ? 'bg-gray-100 text-gray-700'
                         : 'bg-red-100 text-red-700'
                     }`}>
                       {reseller.isActive !== false ? 'Activo' : 'Inactivo'}
@@ -572,22 +509,22 @@ export default function AdminResellers() {
                   <div className="flex items-center justify-between text-xs mb-2">
                     <div className="flex items-center gap-3">
                       <span className="text-lg">{reseller.currentTier?.icon}</span>
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-medium">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full font-medium">
                         <Percent className="w-3 h-3" />
                         {reseller.effectiveDiscount}%
                         {reseller.hasOverride && <Crown className="w-3 h-3 text-primary-500" />}
                       </span>
                       {reseller.pricingModel === 'v2'
-                        ? <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-medium">v2</span>
+                        ? <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full font-medium">v2</span>
                         : <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full font-medium">Legacy</span>}
                       <span className="text-gray-500">{reseller.activeClientsCount || 0} activos</span>
                     </div>
-                    <span className="font-bold text-gray-900">S/ {(reseller.balance || 0).toFixed(2)}</span>
+                    <span className="font-semibold text-gray-900">S/ {(reseller.balance || 0).toFixed(2)}</span>
                   </div>
                   <div className="flex items-center justify-end gap-1 pt-2 border-t border-gray-100">
                     <button
                       onClick={() => openDepositModal(reseller)}
-                      className="p-2 text-green-600 hover:bg-green-50 rounded-lg text-xs flex items-center gap-1 transition-colors"
+                      className="p-2 text-gray-700 hover:bg-gray-50 rounded-lg text-xs flex items-center gap-1 transition-colors"
                     >
                       <Plus className="w-4 h-4" /> Saldo
                     </button>
@@ -602,7 +539,7 @@ export default function AdminResellers() {
                       className={`p-2 rounded-lg transition-colors ${
                         reseller.isActive !== false
                           ? 'text-red-500 hover:bg-red-50'
-                          : 'text-green-500 hover:bg-green-50'
+                          : 'text-gray-500 hover:bg-gray-50'
                       }`}
                     >
                       {reseller.isActive !== false ? (
@@ -666,11 +603,11 @@ export default function AdminResellers() {
                                 <Crown className="w-3 h-3 text-primary-500" title="Descuento manual" />
                               )}
                             </div>
-                            <span className="text-sm text-green-600 font-medium">{reseller.effectiveDiscount}% desc.</span>
+                            <span className="text-sm text-gray-700 font-medium">{reseller.effectiveDiscount}% desc.</span>
                             <div className="mt-0.5">
                               {reseller.pricingModel === 'v2'
-                                ? <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-medium">v2</span>
-                                : <span className="px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded text-[10px] font-medium">Legacy</span>}
+                                ? <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded text-[11px] font-medium">v2</span>
+                                : <span className="px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded text-[11px] font-medium">Legacy</span>}
                             </div>
                           </div>
                         </div>
@@ -680,7 +617,7 @@ export default function AdminResellers() {
                           <span className="font-medium text-gray-900">S/ {(reseller.balance || 0).toFixed(2)}</span>
                           <button
                             onClick={() => openDepositModal(reseller)}
-                            className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors"
+                            className="p-1 text-gray-700 hover:bg-gray-50 rounded transition-colors"
                             title="Agregar saldo"
                           >
                             <Plus className="w-4 h-4" />
@@ -696,7 +633,7 @@ export default function AdminResellers() {
                       <td className="px-4 py-3">
                         <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
                           reseller.isActive !== false
-                            ? 'bg-green-100 text-green-700'
+                            ? 'bg-gray-100 text-gray-700'
                             : 'bg-red-100 text-red-700'
                         }`}>
                           {reseller.isActive !== false ? 'Activo' : 'Inactivo'}
@@ -708,7 +645,7 @@ export default function AdminResellers() {
                             onClick={() => openApkModal(reseller)}
                             className={`p-2 rounded-lg transition-colors ${
                               reseller.androidApp?.url
-                                ? 'text-emerald-600 hover:bg-emerald-50'
+                                ? 'text-gray-700 hover:bg-gray-50'
                                 : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
                             }`}
                             title={reseller.androidApp?.url
@@ -728,7 +665,7 @@ export default function AdminResellers() {
                             className={`p-2 rounded-lg transition-colors ${
                               reseller.isActive !== false
                                 ? 'text-red-500 hover:bg-red-50'
-                                : 'text-green-500 hover:bg-green-50'
+                                : 'text-gray-500 hover:bg-gray-50'
                             }`}
                           >
                             {reseller.isActive !== false ? (
@@ -751,7 +688,7 @@ export default function AdminResellers() {
       {/* Create/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-lg border border-gray-200 w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-xl font-semibold text-gray-900">
                 {selectedReseller ? 'Editar Reseller' : 'Nuevo Reseller'}
@@ -808,18 +745,18 @@ export default function AdminResellers() {
 
                   {/* Usuario encontrado */}
                   {foundUser && (
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                       <div className="flex items-start gap-3">
-                        <div className="bg-green-100 p-2 rounded-full">
-                          <UserCheck className="w-5 h-5 text-green-600" />
+                        <div className="bg-gray-100 p-2 rounded-full">
+                          <UserCheck className="w-5 h-5 text-gray-700" />
                         </div>
                         <div className="flex-1">
-                          <p className="font-medium text-green-800">Usuario encontrado</p>
-                          <p className="text-sm text-green-700">{foundUser.user.email}</p>
-                          <p className="text-xs text-green-600 mt-1">UID: {foundUser.user.uid}</p>
+                          <p className="font-medium text-gray-900">Usuario encontrado</p>
+                          <p className="text-sm text-gray-700">{foundUser.user.email}</p>
+                          <p className="text-xs text-gray-700 mt-1">UID: {foundUser.user.uid}</p>
                           {foundUser.subscription && (
-                            <div className="mt-2 text-xs text-green-700">
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-200 rounded-full">
+                            <div className="mt-2 text-xs text-gray-700">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-200 rounded-full">
                                 Plan: {foundUser.subscription.plan} • {foundUser.subscription.status}
                               </span>
                               {foundUser.subscription.businessName && (
@@ -833,7 +770,7 @@ export default function AdminResellers() {
                             setFoundUser(null)
                             setFormData({ ...formData, email: '', companyName: '' })
                           }}
-                          className="text-green-600 hover:text-green-800"
+                          className="text-gray-700 hover:text-gray-900"
                         >
                           <X className="w-4 h-4" />
                         </button>
@@ -981,7 +918,7 @@ export default function AdminResellers() {
                         placeholder="facturacion.miempresa.com"
                       />
                       {formData.customDomain && (
-                        <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
+                        <div className="mt-2 p-2 bg-gray-50 border border-gray-200 rounded text-xs text-gray-700">
                           <strong>Configuración requerida:</strong>
                           <ol className="list-decimal ml-4 mt-1 space-y-0.5">
                             <li>Se guardará como: <strong>{normalizeCustomDomain(formData.customDomain)}</strong></li>
@@ -997,8 +934,8 @@ export default function AdminResellers() {
 
               {/* Información */}
               {!selectedReseller && !foundUser && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <p className="text-sm text-blue-800">
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                  <p className="text-sm text-gray-900">
                     <strong>¿Cómo funciona?</strong><br />
                     1. Busca un usuario existente por su email<br />
                     2. El usuario debe tener una cuenta activa en Cobrify<br />
@@ -1046,7 +983,7 @@ export default function AdminResellers() {
           reemplaza la anterior, asi el reseller siempre reparte la ultima. */}
       {apkReseller && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md">
+          <div className="bg-white rounded-lg shadow-lg border border-gray-200 w-full max-w-md">
             <div className="p-6 border-b border-gray-200 flex items-center justify-between">
               <div className="min-w-0">
                 <h2 className="text-xl font-semibold text-gray-900">App Android</h2>
@@ -1062,7 +999,7 @@ export default function AdminResellers() {
 
             <div className="p-6 space-y-4">
               {apkReseller.androidApp?.url && (
-                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm">
+                <div className="p-3 rounded-lg bg-gray-50 border border-gray-200 text-sm">
                   <p className="font-medium text-gray-900">Ya tiene una publicada</p>
                   <p className="text-xs text-gray-600 mt-0.5">
                     {[
@@ -1152,7 +1089,7 @@ export default function AdminResellers() {
 
       {showDepositModal && selectedReseller && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md">
+          <div className="bg-white rounded-lg shadow-lg border border-gray-200 w-full max-w-md">
             <div className="p-6 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-xl font-semibold text-gray-900">Agregar Saldo</h2>
               <button
@@ -1168,7 +1105,7 @@ export default function AdminResellers() {
                 <p className="text-sm text-gray-500">Reseller</p>
                 <p className="font-medium text-gray-900">{selectedReseller.companyName}</p>
                 <p className="text-sm text-gray-500 mt-2">Saldo actual</p>
-                <p className="text-2xl font-bold text-gray-900">S/ {(selectedReseller.balance || 0).toFixed(2)}</p>
+                <p className="text-2xl font-semibold text-gray-900">S/ {(selectedReseller.balance || 0).toFixed(2)}</p>
               </div>
 
               <div>
@@ -1208,7 +1145,7 @@ export default function AdminResellers() {
                 <button
                   onClick={addDeposit}
                   disabled={saving || !depositAmount}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
                 >
                   {saving ? (
                     <>

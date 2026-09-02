@@ -48,16 +48,13 @@ const MySubscription = lazy(() => import('./pages/MySubscription'))
 const Manual = lazy(() => import('./pages/Manual'))
 const UserManagement = lazy(() => import('./pages/admin/UserManagement'))
 import AdminLayout from './layouts/AdminLayout'
-const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'))
+const AdminResumen = lazy(() => import('./pages/admin/AdminResumen'))
 const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'))
+const AdminCuenta = lazy(() => import('./pages/admin/AdminCuenta'))
 const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'))
 const AdminCpe = lazy(() => import('./pages/admin/AdminCpe'))
-const AdminAnalytics = lazy(() => import('./pages/admin/AdminAnalytics'))
-const AdminInvestorReport = lazy(() => import('./pages/admin/AdminInvestorReport'))
 const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'))
 const AdminResellers = lazy(() => import('./pages/admin/AdminResellers'))
-const AdminExpirations = lazy(() => import('./pages/admin/AdminExpirations'))
-const AdminPlanDistribution = lazy(() => import('./pages/admin/AdminPlanDistribution'))
 const AdminNotifications = lazy(() => import('./pages/admin/AdminNotifications'))
 // Reseller pages
 import ResellerLayout from './layouts/ResellerLayout'
@@ -649,16 +646,20 @@ function App() {
 
             {/* Panel de Administración (nuevo) */}
             <Route path="/app/admin" element={<AdminLayout />}>
-              <Route index element={<AdminDashboard />} />
-              <Route path="dashboard" element={<AdminDashboard />} />
+              <Route index element={<AdminResumen />} />
+              <Route path="resumen" element={<AdminResumen />} />
               <Route path="users" element={<AdminUsers />} />
+              <Route path="users/:id" element={<AdminCuenta />} />
               <Route path="resellers" element={<AdminResellers />} />
-              <Route path="expirations" element={<AdminExpirations />} />
-              <Route path="plan-distribution" element={<AdminPlanDistribution />} />
               <Route path="payments" element={<AdminPayments />} />
               <Route path="cpe" element={<AdminCpe />} />
-              <Route path="analytics" element={<AdminAnalytics />} />
-              <Route path="investor-report" element={<AdminInvestorReport />} />
+              {/* Rutas viejas: todo lo global vive en Resumen y los
+                  vencimientos son un filtro de Usuarios. */}
+              <Route path="dashboard" element={<Navigate to="/app/admin/resumen" replace />} />
+              <Route path="analytics" element={<Navigate to="/app/admin/resumen#adquisicion" replace />} />
+              <Route path="plan-distribution" element={<Navigate to="/app/admin/resumen#planes" replace />} />
+              <Route path="investor-report" element={<Navigate to="/app/admin/resumen#inversores" replace />} />
+              <Route path="expirations" element={<Navigate to="/app/admin/users?vence=week" replace />} />
               <Route path="notifications" element={<AdminNotifications />} />
               <Route path="settings" element={<AdminSettings />} />
             </Route>

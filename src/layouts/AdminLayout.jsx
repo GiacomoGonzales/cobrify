@@ -1,129 +1,149 @@
-import React, { useState, useEffect } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Outlet, NavLink, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { Capacitor } from '@capacitor/core'
 import { StatusBar, Style } from '@capacitor/status-bar'
-import {
-  LayoutDashboard,
-  Users,
-  CreditCard,
-  BarChart3,
-  Settings,
-  LogOut,
-  Shield,
-  Menu,
-  X,
-  Building2,
-  CalendarClock,
-  Bell,
-  Sparkles,
-  Package,
-  MessageCircle,
-  FileCheck2
-} from 'lucide-react'
+import { Search, Menu, X } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { TituloAdminContext } from '@/components/admin/ui/tituloAdmin'
 
-const navItems = [
+// Menu del panel: cuatro bloques, solo texto. El orden es el del dia a dia:
+// primero las cuentas, despues el dinero, los numeros globales y lo operativo.
+const GRUPOS = [
   {
-    // La bandeja de WhatsApp vive FUERA del panel (a pantalla completa), asi
-    // que se marca como externa: sale del layout en vez de renderizarse dentro.
-    path: '/chat',
-    icon: MessageCircle,
-    label: 'WhatsApp',
-    description: 'Conversaciones con clientes',
-    fuera: true
+    titulo: 'Cuentas',
+    items: [
+      { path: '/app/admin/users', label: 'Usuarios' },
+      { path: '/app/admin/resellers', label: 'Resellers' },
+    ],
   },
   {
-    path: '/app/admin/dashboard',
-    icon: LayoutDashboard,
-    label: 'Dashboard',
-    description: 'Métricas y KPIs'
+    titulo: 'Dinero',
+    items: [{ path: '/app/admin/payments', label: 'Pagos' }],
   },
   {
-    path: '/app/admin/users',
-    icon: Users,
-    label: 'Usuarios',
-    description: 'Gestión de cuentas'
+    titulo: 'Global',
+    items: [{ path: '/app/admin/resumen', label: 'Resumen' }],
   },
   {
-    path: '/app/admin/resellers',
-    icon: Building2,
-    label: 'Resellers',
-    description: 'Red de revendedores'
+    titulo: 'Operación',
+    items: [
+      { path: '/app/admin/cpe', label: 'Comprobantes CPE' },
+      { path: '/app/admin/notifications', label: 'Notificaciones' },
+      { path: '/app/admin/settings', label: 'Configuración' },
+    ],
   },
-  {
-    path: '/app/admin/expirations',
-    icon: CalendarClock,
-    label: 'Vencimientos',
-    description: 'Gestión de vencimientos'
-  },
-  {
-    path: '/app/admin/plan-distribution',
-    icon: Package,
-    label: 'Distribución de planes',
-    description: 'Clientes por plan (ordenar catálogo)'
-  },
-  {
-    path: '/app/admin/payments',
-    icon: CreditCard,
-    label: 'Pagos',
-    description: 'Historial de pagos'
-  },
-  {
-    path: '/app/admin/cpe',
-    icon: FileCheck2,
-    label: 'Comprobantes CPE',
-    description: 'XML y CDR de SUNAT directo'
-  },
-  {
-    path: '/app/admin/analytics',
-    icon: BarChart3,
-    label: 'Analytics',
-    description: 'Reportes y gráficos'
-  },
-  {
-    path: '/app/admin/investor-report',
-    icon: Sparkles,
-    label: 'Reporte Inversores',
-    description: 'Métricas consolidadas (bajo demanda)'
-  },
-  {
-    path: '/app/admin/notifications',
-    icon: Bell,
-    label: 'Notificaciones',
-    description: 'Campañas push'
-  },
-  {
-    path: '/app/admin/settings',
-    icon: Settings,
-    label: 'Configuración',
-    description: 'Ajustes del sistema'
-  }
 ]
+
+// Rutas que ya no estan en el menu pero siguen existiendo (o redirigen):
+// asi la cabecera les pone nombre igual.
+const TITULOS_SUELTOS = {
+  '/app/admin/dashboard': 'Resumen',
+  '/app/admin/analytics': 'Resumen',
+  '/app/admin/investor-report': 'Resumen',
+  '/app/admin/plan-distribution': 'Resumen',
+  '/app/admin/expirations': 'Usuarios',
+}
+
+const ITEMS = GRUPOS.flatMap(g => g.items)
+
+function Item({ item, onClick }) {
+  return (
+    <NavLink
+      to={item.path}
+      onClick={onClick}
+      className={({ isActive }) =>
+        cn(
+          'block px-2.5 py-1.5 rounded-md text-[13px] transition-colors',
+          isActive ? 'bg-primary-50 text-primary-700 font-medium' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+        )
+      }
+    >
+      {item.label}
+    </NavLink>
+  )
+}
+
+function Menu_({ onNavegar }) {
+  return (
+    <nav className="px-3 py-3">
+      {/* La bandeja de WhatsApp vive fuera del panel, a pantalla completa. */}
+      <NavLink
+        to="/chat"
+        onClick={onNavegar}
+        className="block px-2.5 py-1.5 rounded-md text-[13px] text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+      >
+        WhatsApp <span className="text-gray-400">↗</span>
+      </NavLink>
+      {GRUPOS.map(grupo => (
+        <div key={grupo.titulo} className="mt-4">
+          <p className="px-2.5 mb-1 text-[11px] font-medium uppercase tracking-wider text-gray-400">{grupo.titulo}</p>
+          <div className="space-y-px">
+            {grupo.items.map(item => (
+              <Item key={item.path} item={item} onClick={onNavegar} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </nav>
+  )
+}
 
 export default function AdminLayout() {
   const { isAdmin, isLoading, user, logout } = useAuth()
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [menuAbierto, setMenuAbierto] = useState(false)
+  const [tituloPagina, setTituloPagina] = useState(null)
+  const [busqueda, setBusqueda] = useState('')
+  const buscadorRef = useRef(null)
   const location = useLocation()
   const navigate = useNavigate()
 
-  // Iconos del status bar en claro (Style.Dark = contenido claro sobre fondo
-  // oscuro). El COLOR de fondo ya no se pide por la API: setBackgroundColor
-  // quedo obsoleto en Android 15 y en Android 16 no hace nada, asi que la
-  // franja salia sin pintar y el reloj blanco quedaba invisible. Se pinta con
-  // CSS mas abajo, igual que en MainLayout.
+  // Cabecera blanca: iconos del status bar en oscuro. El color de fondo se
+  // pinta con CSS (setBackgroundColor no hace nada desde Android 15).
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return
-    StatusBar.setStyle({ style: Style.Dark })
+    StatusBar.setStyle({ style: Style.Light })
       .catch(error => console.warn('Error configurando StatusBar admin:', error))
   }, [])
 
+  // "/" enfoca el buscador de cuentas, salvo que ya se este escribiendo en un campo.
+  useEffect(() => {
+    const alTeclear = e => {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return
+      const t = e.target
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
+      e.preventDefault()
+      buscadorRef.current?.focus()
+    }
+    document.addEventListener('keydown', alTeclear)
+    return () => document.removeEventListener('keydown', alTeclear)
+  }, [])
+
+  useEffect(() => {
+    setMenuAbierto(false)
+  }, [location.pathname])
+
+  const setTitulo = useCallback(t => setTituloPagina(t), [])
+  const contextoTitulo = useMemo(() => ({ setTitulo }), [setTitulo])
+
+  const tituloMenu = useMemo(() => {
+    const item = ITEMS.find(i => location.pathname.startsWith(i.path))
+    if (item) return item.label
+    const suelto = Object.keys(TITULOS_SUELTOS).find(p => location.pathname.startsWith(p))
+    return suelto ? TITULOS_SUELTOS[suelto] : 'Admin'
+  }, [location.pathname])
+
+  const buscar = e => {
+    e.preventDefault()
+    const q = busqueda.trim()
+    navigate(q ? `/app/admin/users?q=${encodeURIComponent(q)}` : '/app/admin/users')
+    buscadorRef.current?.blur()
+  }
+
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
-          <p className="text-gray-500">Cargando panel de administración...</p>
-        </div>
+      <div className="flex items-center justify-center min-h-screen bg-gray-50 font-admin text-[13px] text-gray-500">
+        Cargando el panel…
       </div>
     )
   }
@@ -132,193 +152,106 @@ export default function AdminLayout() {
     return <Navigate to="/app/dashboard" replace />
   }
 
-  const currentPage = navItems.find(item => location.pathname.startsWith(item.path))
+  const titulo = tituloPagina || tituloMenu
 
   return (
-    <div className="bg-gray-50 overflow-x-hidden max-w-full" style={{ zoom: 0.8, minHeight: '125vh' }}>
-      {/* Franja del status bar, pintada con CSS (safe-area).
-          - Sin `lg:hidden`: una tablet grande entra en el breakpoint lg y
-            tambien tiene status bar; sin la franja el reloj blanco quedaba
-            sobre la cabecera blanca, ilegible.
-          - El `zoom: 0.8` del contenedor tambien escala esta franja, asi que
-            se divide entre 0.8 para que mida el safe-area REAL; si no, queda
-            una tira sin pintar arriba. */}
-      {Capacitor.isNativePlatform() && (
-        <div
-          className="bg-gray-900 flex-shrink-0"
-          style={{ height: 'calc(env(safe-area-inset-top, 0px) / 0.8)' }}
-        />
-      )}
+    <TituloAdminContext.Provider value={contextoTitulo}>
+      <div className="admin min-h-screen bg-gray-50 font-admin text-[13px] text-gray-900 antialiased">
+        {/* Franja del status bar (safe-area), del mismo color que la cabecera. */}
+        {Capacitor.isNativePlatform() && (
+          <div className="bg-white" style={{ height: 'env(safe-area-inset-top, 0px)' }} />
+        )}
 
-      {/* Mobile Header */}
-      <div className="lg:hidden bg-gray-900 text-white p-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+        {/* Cabecera movil */}
+        <div className="lg:hidden sticky top-0 z-40 h-12 bg-white border-b border-gray-200 px-3 flex items-center gap-2">
           <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-2 hover:bg-white/10 rounded-lg transition-colors -ml-2"
+            type="button"
+            onClick={() => setMenuAbierto(v => !v)}
+            className="p-2 -ml-1 rounded-md text-gray-600 hover:bg-gray-100"
+            aria-label={menuAbierto ? 'Cerrar menú' : 'Abrir menú'}
           >
-            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            {menuAbierto ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
-          <div className="flex items-center gap-2">
-            <Shield className="w-5 h-5 text-blue-300" />
-            <span className="font-semibold">Admin</span>
-          </div>
+          <span className="text-[14px] font-semibold text-gray-900 truncate">{titulo}</span>
         </div>
-        <NavLink
-          to="/app/dashboard"
-          className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-          title="Ir al Dashboard"
-        >
-          <LayoutDashboard className="w-5 h-5" />
-        </NavLink>
-      </div>
 
-      {/* Mobile Menu Overlay */}
-      {mobileMenuOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 bg-black/60 pt-safe" onClick={() => setMobileMenuOpen(false)}>
-          <div
-            className="bg-gray-900 w-80 h-full pt-safe shadow-2xl flex flex-col"
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Mobile Menu Header */}
-            <div className="p-5 border-b border-white/10">
-              <div className="flex items-center gap-3">
-                <Shield className="w-6 h-6 text-blue-300 flex-shrink-0" />
-                <div>
-                  <span className="font-semibold text-lg text-white">Admin Panel</span>
-                  <p className="text-xs text-white/50">Cobrify</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Mobile Nav Items */}
-            <nav className="p-4 space-y-1 flex-1 overflow-y-auto sidebar-scrollbar">
-              {navItems.map((item) => {
-                const isActive = item.fuera
-                  ? location.pathname === item.path
-                  : location.pathname.startsWith(item.path)
-                return (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                      isActive
-                        ? 'bg-white/10 text-white'
-                        : 'text-white/60 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    <item.icon className="w-5 h-5 flex-shrink-0" />
-                    <span className="font-medium text-sm">{item.label}</span>
-                  </NavLink>
-                )
-              })}
-            </nav>
-
-            {/* Mobile User Info */}
-            <div className="p-4 border-t border-white/10">
-              <div className="px-3 py-2.5 mb-3">
-                <p className="text-sm font-medium text-white truncate">{user?.email}</p>
-                <p className="text-xs text-white/50">Super Administrador</p>
-              </div>
-              <button
-                onClick={logout}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm text-white/60 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-              >
-                <LogOut className="w-4 h-4" />
-                Cerrar sesión
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="w-full">
-        {/* Sidebar - Desktop (fixed) */}
-        <aside
-          className="hidden lg:flex flex-col bg-gray-900 text-white fixed top-0 left-0 z-30 w-72"
-          style={{ height: '125vh' }}
-        >
-          {/* Logo */}
-          <div className="p-5 border-b border-white/10">
-            <div className="flex items-center gap-3">
-              <Shield className="w-7 h-7 text-blue-300 flex-shrink-0" />
-              <div>
-                <span className="font-semibold text-lg">Admin Panel</span>
-                <p className="text-xs text-white/50 mt-0.5">Cobrify</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Navigation */}
-          <nav className="flex-1 p-4 space-y-1 overflow-y-auto sidebar-scrollbar">
-            {navItems.map((item) => {
-              const isActive = location.pathname.startsWith(item.path)
-              return (
-                <NavLink
-                  key={item.path}
-                  to={item.path}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                    isActive
-                      ? 'bg-white/10 text-white'
-                      : 'text-white/60 hover:text-white hover:bg-white/5'
-                  }`}
+        {menuAbierto && (
+          <div className="lg:hidden fixed inset-0 z-50 bg-gray-900/40 pt-safe" onClick={() => setMenuAbierto(false)}>
+            <div
+              className="bg-white w-64 h-full pt-safe flex flex-col border-r border-gray-200"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="h-12 flex items-center justify-between px-4 border-b border-gray-200">
+                <span className="text-[13px] font-semibold text-gray-900">
+                  Cobrify <span className="font-normal text-gray-400">Admin</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setMenuAbierto(false)}
+                  className="p-1.5 -mr-1.5 rounded-md text-gray-500 hover:bg-gray-100"
+                  aria-label="Cerrar menú"
                 >
-                  <item.icon className="w-5 h-5 flex-shrink-0" />
-                  <span className="font-medium text-sm">{item.label}</span>
-                </NavLink>
-              )
-            })}
-          </nav>
-
-          {/* User Info */}
-          <div className="p-4 border-t border-white/10">
-            <div className="mb-3 px-3 py-2.5">
-              <p className="text-sm font-medium truncate">{user?.email}</p>
-              <p className="text-xs text-white/50 mt-0.5">Super Administrador</p>
-            </div>
-
-            <div className="flex items-center justify-between gap-2">
-              <button
-                onClick={() => navigate('/app')}
-                className="p-2.5 text-white/60 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-                title="Ir al Dashboard"
-              >
-                <LayoutDashboard className="w-5 h-5" />
-              </button>
-
-              <button
-                onClick={logout}
-                className="flex items-center gap-2 px-4 py-2.5 text-sm text-white/60 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-              >
-                <LogOut className="w-4 h-4" />
-                Salir
-              </button>
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto sidebar-scrollbar">
+                <Menu_ onNavegar={() => setMenuAbierto(false)} />
+              </div>
+              <PieMenu user={user} logout={logout} irApp={() => navigate('/app')} />
             </div>
           </div>
+        )}
+
+        {/* Menu lateral (escritorio) */}
+        <aside className="hidden lg:flex flex-col fixed inset-y-0 left-0 z-30 w-56 bg-white border-r border-gray-200">
+          <div className="h-12 flex items-center px-5 border-b border-gray-200">
+            <span className="text-[13px] font-semibold text-gray-900">Cobrify</span>
+            <span className="text-[13px] text-gray-400 ml-1.5">Admin</span>
+          </div>
+          <div className="flex-1 overflow-y-auto sidebar-scrollbar">
+            <Menu_ />
+          </div>
+          <PieMenu user={user} logout={logout} irApp={() => navigate('/app')} />
         </aside>
 
-        {/* Main Content */}
-        <main className="min-h-screen min-w-0 overflow-x-hidden lg:ml-72">
-          {/* Top Bar */}
-          <header className="bg-white sticky top-0 z-40 border-b border-gray-200 px-4 lg:px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div className="min-w-0 flex-1">
-                <h1 className="text-lg lg:text-xl font-semibold text-gray-900 truncate">
-                  {currentPage?.label || 'Admin'}
-                </h1>
-                <p className="text-xs lg:text-sm text-gray-500 hidden sm:block">
-                  {currentPage?.description || 'Panel de administración'}
-                </p>
-              </div>
-            </div>
+        <main className="lg:pl-56 min-h-screen min-w-0">
+          {/* Cabecera: titulo de la pagina y buscador global de cuentas */}
+          <header className="hidden lg:flex sticky top-0 z-20 h-12 bg-white border-b border-gray-200 px-5 items-center justify-between gap-4">
+            <h1 className="text-[14px] font-semibold text-gray-900 truncate">{titulo}</h1>
+            <form onSubmit={buscar} className="relative w-80">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+              <input
+                ref={buscadorRef}
+                type="search"
+                value={busqueda}
+                onChange={e => setBusqueda(e.target.value)}
+                placeholder="Buscar cuenta, RUC, teléfono…   /"
+                className="h-8 w-full rounded-md border border-gray-300 bg-white pl-8 pr-2.5 text-[12.5px] text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500/40 focus:border-primary-500"
+                aria-label="Buscar cuenta"
+              />
+            </form>
           </header>
 
-          {/* Page Content */}
-          <div className="p-3 sm:p-4 lg:p-6 w-full max-w-full overflow-x-hidden">
+          <div className="p-4 lg:p-5 w-full max-w-full overflow-x-hidden">
             <Outlet />
           </div>
         </main>
+      </div>
+    </TituloAdminContext.Provider>
+  )
+}
+
+function PieMenu({ user, logout, irApp }) {
+  return (
+    <div className="border-t border-gray-200 px-5 py-3 text-[12px]">
+      <p className="truncate text-gray-500" title={user?.email}>{user?.email}</p>
+      <div className="mt-1.5 flex items-center justify-between">
+        <button type="button" onClick={irApp} className="text-gray-500 hover:text-gray-900">
+          Ir a la app
+        </button>
+        <button type="button" onClick={logout} className="text-gray-500 hover:text-gray-900">
+          Salir
+        </button>
       </div>
     </div>
   )

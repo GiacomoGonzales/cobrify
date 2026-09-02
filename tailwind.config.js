@@ -47,6 +47,8 @@ export default {
       },
       fontFamily: {
         sans: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', 'sans-serif'],
+        // Solo el panel de administracion: mas neutra y mejor en cifras.
+        admin: ['Inter', 'system-ui', 'sans-serif'],
         serif: ['"Playfair Display"', 'Georgia', 'serif'],
         display: ['"Bebas Neue"', 'Impact', 'sans-serif'],
       },

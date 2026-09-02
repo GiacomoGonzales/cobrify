@@ -1,56 +1,46 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { getAllPayments, updatePayment, deletePayment } from '@/services/adminStatsService'
 import { PLANS } from '@/services/subscriptionService'
 import { matchesPrebuilt } from '@/lib/utils'
 import { buildAccountHaystack } from '@/utils/adminSearch'
+import { useToast } from '@/contexts/ToastContext'
 import {
-  CreditCard,
-  Search,
-  Download,
-  RefreshCw,
-  ChevronDown,
-  ChevronUp,
-  Calendar,
-  DollarSign,
-  TrendingUp,
-  Filter,
-  X,
-  CheckCircle,
-  Clock,
-  AlertCircle,
-  Building2,
-  Pencil,
-  Trash2,
-  Save,
-  Loader2
-} from 'lucide-react'
+  Pagina, Seccion, Tabla, Th, Td, Fila, FilaVacia, Filtros, FiltroSelect, Buscador, Estado, Boton, Modal,
+  Campo, Entrada, Selector, AreaTexto,
+} from '@/components/admin/ui'
 
-const PAYMENT_METHODS = {
-  yape: { name: 'Yape', color: 'bg-primary-100 text-primary-700' },
-  plin: { name: 'Plin', color: 'bg-green-100 text-green-700' },
-  transferencia: { name: 'Transferencia', color: 'bg-blue-100 text-blue-700' },
-  efectivo: { name: 'Efectivo', color: 'bg-amber-100 text-amber-700' },
-  tarjeta: { name: 'Tarjeta', color: 'bg-cyan-100 text-cyan-700' },
-  otro: { name: 'Otro', color: 'bg-gray-100 text-gray-700' }
+// Historial de pagos de todas las cuentas: un pago por cada renovacion.
+// Los totales y el CSV se calculan sobre TODOS los filtrados, no sobre la
+// pagina visible.
+
+const METODOS = { yape: 'Yape', plin: 'Plin', transferencia: 'Transferencia', efectivo: 'Efectivo', tarjeta: 'Tarjeta', otro: 'Otro' }
+const ESTADOS = { completed: 'Completado', pending: 'Pendiente', failed: 'Fallido' }
+const PAGE_SIZE = 50
+
+const moneda = v => new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(v) || 0)
+const fechaHora = d => (d ? d.toLocaleString('es-PE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—')
+const aFechaInput = d => {
+  const x = d?.toDate ? d.toDate() : d instanceof Date ? d : new Date(d)
+  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`
 }
 
 export default function AdminPayments() {
+  const toast = useToast()
   const [payments, setPayments] = useState([])
   const [loading, setLoading] = useState(true)
+  const [totalAmount, setTotalAmount] = useState(0)
+  const [totalCount, setTotalCount] = useState(0)
   const [searchTerm, setSearchTerm] = useState('')
   const [methodFilter, setMethodFilter] = useState('all')
   const [dateRange, setDateRange] = useState({ start: '', end: '' })
   const [sortField, setSortField] = useState('date')
   const [sortDirection, setSortDirection] = useState('desc')
-  const [totalAmount, setTotalAmount] = useState(0)
-  const [totalCount, setTotalCount] = useState(0)
-
-  // Estados para editar/eliminar
-  const [editingPayment, setEditingPayment] = useState(null)
-  const [editForm, setEditForm] = useState({})
-  const [savingEdit, setSavingEdit] = useState(false)
-  const [deletingPayment, setDeletingPayment] = useState(null)
-  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [editando, setEditando] = useState(null)
+  const [form, setForm] = useState({})
+  const [guardando, setGuardando] = useState(false)
+  const [eliminando, setEliminando] = useState(null)
 
   useEffect(() => {
     loadPayments()
@@ -64,92 +54,57 @@ export default function AdminPayments() {
       setTotalAmount(result.totalAmount)
       setTotalCount(result.totalCount)
     } catch (error) {
-      console.error('Error loading payments:', error)
+      console.error('Error cargando pagos:', error)
+      toast.error('No se pudieron cargar los pagos')
     } finally {
       setLoading(false)
     }
   }
 
-  // Filtrar pagos
   const filteredPayments = useMemo(() => {
     let result = [...payments]
-
-    // Filtro de búsqueda — mismo criterio que la lista de Usuarios
-    // (@/utils/adminSearch): palabras sueltas, en cualquier orden, sin tildes.
-    if (searchTerm) {
-      result = result.filter(p => matchesPrebuilt(searchTerm, buildAccountHaystack(p)))
-    }
-
-    // Filtro de método
-    if (methodFilter !== 'all') {
-      result = result.filter(p => p.method === methodFilter)
-    }
-
-    // Filtro de fecha
-    if (dateRange.start) {
-      result = result.filter(p => p.date >= new Date(dateRange.start))
-    }
+    // Mismo buscador que Usuarios: palabras sueltas, en cualquier orden, sin tildes
+    if (searchTerm) result = result.filter(p => matchesPrebuilt(searchTerm, buildAccountHaystack(p)))
+    if (methodFilter !== 'all') result = result.filter(p => p.method === methodFilter)
+    if (dateRange.start) result = result.filter(p => p.date >= new Date(dateRange.start))
     if (dateRange.end) {
-      const endDate = new Date(dateRange.end)
-      endDate.setHours(23, 59, 59)
-      result = result.filter(p => p.date <= endDate)
+      const fin = new Date(dateRange.end)
+      fin.setHours(23, 59, 59)
+      result = result.filter(p => p.date <= fin)
     }
-
-    // Ordenar
     result.sort((a, b) => {
       let aVal = a[sortField]
       let bVal = b[sortField]
-
       if (aVal instanceof Date) aVal = aVal.getTime()
       if (bVal instanceof Date) bVal = bVal.getTime()
-
       if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1
       if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1
       return 0
     })
-
     return result
   }, [payments, searchTerm, methodFilter, dateRange, sortField, sortDirection])
 
-  // Paginación: renderizar SOLO la página actual. Un pago por cada renovación de
-  // cada cliente son miles de filas; pintarlas todas dejaba la página trabada.
-  // OJO: los totales y el CSV siguen calculándose sobre TODOS los filtrados, no
-  // sobre la página visible.
-  const PAGE_SIZE = 50
-  const [currentPage, setCurrentPage] = useState(1)
   const pageCount = Math.max(1, Math.ceil(filteredPayments.length / PAGE_SIZE))
   const displayedPayments = useMemo(
     () => filteredPayments.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
     [filteredPayments, currentPage]
   )
+  useEffect(() => { setCurrentPage(1) }, [searchTerm, methodFilter, dateRange, sortField, sortDirection])
+  useEffect(() => { if (currentPage > pageCount) setCurrentPage(1) }, [pageCount, currentPage])
 
-  // Volver a la página 1 cuando cambian filtros/búsqueda/orden
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [searchTerm, methodFilter, dateRange, sortField, sortDirection])
-
-  // Si la página queda fuera de rango tras filtrar, corregir
-  useEffect(() => {
-    if (currentPage > pageCount) setCurrentPage(1)
-  }, [pageCount, currentPage])
-
-  // Estadísticas filtradas
   const filteredStats = useMemo(() => {
     const total = filteredPayments.reduce((sum, p) => sum + p.amount, 0)
     const byMethod = {}
-
     filteredPayments.forEach(p => {
-      const method = p.method || 'otro'
-      byMethod[method] = (byMethod[method] || 0) + p.amount
+      const m = p.method || 'otro'
+      byMethod[m] = (byMethod[m] || 0) + p.amount
     })
-
     return { total, count: filteredPayments.length, byMethod }
   }, [filteredPayments])
 
   function handleSort(field) {
-    if (sortField === field) {
-      setSortDirection(d => d === 'asc' ? 'desc' : 'asc')
-    } else {
+    if (sortField === field) setSortDirection(d => (d === 'asc' ? 'desc' : 'asc'))
+    else {
       setSortField(field)
       setSortDirection('desc')
     }
@@ -162,682 +117,210 @@ export default function AdminPayments() {
       p.email,
       p.businessName,
       p.amount,
-      PAYMENT_METHODS[p.method]?.name || p.method,
+      METODOS[p.method] || p.method,
       p.planName || PLANS[p.plan]?.name || p.plan,
       p.status,
-      p.notes || ''
+      p.notes || '',
     ])
-
     const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
     a.download = `pagos_${new Date().toISOString().split('T')[0]}.csv`
     a.click()
   }
 
-  function formatDate(date) {
-    if (!date) return 'N/A'
-    return date.toLocaleDateString('es-PE', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
+  function abrirEdicion(payment) {
+    setEditando(payment)
+    setForm({ amount: payment.amount, method: payment.method, status: payment.status, notes: payment.notes || '', date: aFechaInput(payment.date) })
   }
 
-  function formatCurrency(amount) {
-    return new Intl.NumberFormat('es-PE', {
-      style: 'currency',
-      currency: 'PEN'
-    }).format(amount)
-  }
-
-  function clearFilters() {
-    setSearchTerm('')
-    setMethodFilter('all')
-    setDateRange({ start: '', end: '' })
-  }
-
-  // Funciones para editar pago
-  function openEditModal(payment) {
-    setEditingPayment(payment)
-    setEditForm({
-      amount: payment.amount,
-      method: payment.method,
-      status: payment.status,
-      notes: payment.notes || '',
-      date: (() => {
-        const d = payment.date?.toDate ? payment.date.toDate() : (payment.date instanceof Date ? payment.date : new Date(payment.date))
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-      })()
-    })
-  }
-
-  async function handleSaveEdit() {
-    if (!editingPayment) return
-
-    setSavingEdit(true)
+  async function guardarEdicion() {
+    setGuardando(true)
     try {
-      await updatePayment(editingPayment.subscriptionId, editingPayment.paymentIndex, {
-        amount: parseFloat(editForm.amount),
-        method: editForm.method,
-        status: editForm.status,
-        notes: editForm.notes,
-        date: new Date(editForm.date)
+      await updatePayment(editando.subscriptionId, editando.paymentIndex, {
+        amount: parseFloat(form.amount),
+        method: form.method,
+        status: form.status,
+        notes: form.notes,
+        date: new Date(form.date),
       })
-      setEditingPayment(null)
+      toast.success('Pago actualizado')
+      setEditando(null)
       loadPayments()
     } catch (error) {
-      console.error('Error al actualizar pago:', error)
-      alert('Error al actualizar el pago: ' + error.message)
+      console.error('Error actualizando el pago:', error)
+      toast.error(error.message || 'No se pudo actualizar el pago')
     } finally {
-      setSavingEdit(false)
+      setGuardando(false)
     }
   }
 
-  // Funciones para eliminar pago
-  function openDeleteConfirm(payment) {
-    setDeletingPayment(payment)
-    setConfirmDelete(true)
-  }
-
-  async function handleDeletePayment() {
-    if (!deletingPayment) return
-
-    setSavingEdit(true)
+  async function confirmarEliminar() {
+    setGuardando(true)
     try {
-      await deletePayment(deletingPayment.subscriptionId, deletingPayment.paymentIndex)
-      setConfirmDelete(false)
-      setDeletingPayment(null)
+      await deletePayment(eliminando.subscriptionId, eliminando.paymentIndex)
+      toast.success('Pago eliminado')
+      setEliminando(null)
       loadPayments()
     } catch (error) {
-      console.error('Error al eliminar pago:', error)
-      alert('Error al eliminar el pago: ' + error.message)
+      console.error('Error eliminando el pago:', error)
+      toast.error(error.message || 'No se pudo eliminar el pago')
     } finally {
-      setSavingEdit(false)
+      setGuardando(false)
     }
   }
 
-  const hasFilters = searchTerm || methodFilter !== 'all' || dateRange.start || dateRange.end
-
-  const SortIcon = ({ field }) => {
-    if (sortField !== field) return null
-    return sortDirection === 'asc' ?
-      <ChevronUp className="w-4 h-4" /> :
-      <ChevronDown className="w-4 h-4" />
-  }
+  const hayFiltros = Boolean(searchTerm) || methodFilter !== 'all' || Boolean(dateRange.start) || Boolean(dateRange.end)
+  const orden = { campo: sortField, direccion: sortDirection }
+  const desglose = Object.entries(filteredStats.byMethod).sort((a, b) => b[1] - a[1])
+  const resumen = loading
+    ? 'Cargando pagos…'
+    : hayFiltros
+      ? `${filteredStats.count} de ${totalCount} pagos · ${moneda(filteredStats.total)} filtrados · promedio ${moneda(filteredStats.count ? filteredStats.total / filteredStats.count : 0)}`
+      : `${totalCount} pagos · ${moneda(totalAmount)} en total · promedio ${moneda(totalCount ? totalAmount / totalCount : 0)}`
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
-        <div className="bg-white rounded-xl p-3 sm:p-5 shadow-sm border border-gray-200">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <DollarSign className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 flex-shrink-0" />
-            <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm font-medium text-gray-500">Total</p>
-              <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{formatCurrency(totalAmount)}</p>
-            </div>
-          </div>
-        </div>
+    <Pagina
+      resumen={resumen}
+      acciones={
+        <>
+          <Boton tamano="sm" onClick={loadPayments} disabled={loading}>{loading ? 'Cargando…' : 'Recargar'}</Boton>
+          <Boton tamano="sm" onClick={exportToCSV}>Exportar CSV</Boton>
+        </>
+      }
+    >
+      <Filtros>
+        <Buscador ancho="w-full sm:w-80" placeholder="Negocio, correo, RUC…" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+        <FiltroSelect value={methodFilter} onChange={e => setMethodFilter(e.target.value)}>
+          <option value="all">Método</option>
+          {Object.entries(METODOS).map(([k, n]) => <option key={k} value={k}>{n}</option>)}
+        </FiltroSelect>
+        <Entrada type="date" value={dateRange.start} onChange={e => setDateRange(r => ({ ...r, start: e.target.value }))} className="w-40" aria-label="Desde" />
+        <span className="text-gray-400">–</span>
+        <Entrada type="date" value={dateRange.end} onChange={e => setDateRange(r => ({ ...r, end: e.target.value }))} className="w-40" aria-label="Hasta" />
+        {hayFiltros && (
+          <button type="button" onClick={() => { setSearchTerm(''); setMethodFilter('all'); setDateRange({ start: '', end: '' }) }} className="h-8 px-2 text-[12.5px] text-gray-500 hover:text-gray-900">
+            Limpiar
+          </button>
+        )}
+      </Filtros>
 
-        <div className="bg-white rounded-xl p-3 sm:p-5 shadow-sm border border-gray-200">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <CreditCard className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 flex-shrink-0" />
-            <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm font-medium text-gray-500">Pagos</p>
-              <p className="text-xl sm:text-2xl font-bold text-gray-900">{totalCount}</p>
-            </div>
-          </div>
-        </div>
+      {desglose.length > 1 && (
+        <p className="text-[12.5px] text-gray-500">
+          Por método: {desglose.map(([m, monto]) => `${METODOS[m] || m} ${moneda(monto)}`).join(' · ')}
+        </p>
+      )}
 
-        <div className="bg-white rounded-xl p-3 sm:p-5 shadow-sm border border-gray-200">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600 flex-shrink-0" />
-            <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm font-medium text-gray-500">Filtrado</p>
-              <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{formatCurrency(filteredStats.total)}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl p-3 sm:p-5 shadow-sm border border-gray-200">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <Calendar className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-600 flex-shrink-0" />
-            <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm font-medium text-gray-500">Promedio</p>
-              <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
-                {formatCurrency(filteredStats.count > 0 ? filteredStats.total / filteredStats.count : 0)}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Toolbar */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-4">
-        <div className="flex flex-col gap-3">
-          {/* Search + Actions Row */}
-          <div className="flex gap-2">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Buscar..."
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-9 sm:pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-            </div>
-            <button
-              onClick={loadPayments}
-              disabled={loading}
-              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Recargar"
-            >
-              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-            </button>
-            <button
-              onClick={exportToCSV}
-              className="flex items-center gap-1.5 px-3 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">Exportar</span>
-            </button>
-          </div>
-
-          {/* Filters Row */}
-          <div className="flex flex-wrap gap-2">
-            <select
-              value={methodFilter}
-              onChange={e => setMethodFilter(e.target.value)}
-              className="flex-1 sm:flex-none px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="all">Todos los métodos</option>
-              {Object.entries(PAYMENT_METHODS).map(([key, method]) => (
-                <option key={key} value={key}>{method.name}</option>
-              ))}
-            </select>
-
-            <div className="flex items-center gap-1 sm:gap-2 flex-1 sm:flex-none">
-              <input
-                type="date"
-                value={dateRange.start}
-                onChange={e => setDateRange(r => ({ ...r, start: e.target.value }))}
-                className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-              <span className="text-gray-400 text-sm">-</span>
-              <input
-                type="date"
-                value={dateRange.end}
-                onChange={e => setDateRange(r => ({ ...r, end: e.target.value }))}
-                className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-            </div>
-
-            {hasFilters && (
-              <button
-                onClick={clearFilters}
-                className="flex items-center gap-1 px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X className="w-4 h-4" /> Limpiar
-              </button>
+      <Seccion sinRelleno className="overflow-hidden">
+        <Tabla alto="lg:max-h-[calc(100vh-12rem)]">
+          <thead>
+            <tr>
+              <Th campo="date" orden={orden} onOrdenar={handleSort} ancho={150}>Fecha</Th>
+              <Th campo="businessName" orden={orden} onOrdenar={handleSort}>Cuenta</Th>
+              <Th campo="amount" orden={orden} onOrdenar={handleSort} alinear="der">Monto</Th>
+              <Th>Método</Th>
+              <Th>Plan</Th>
+              <Th>Estado</Th>
+              <Th>Notas</Th>
+              <Th ancho={150}><span className="sr-only">Acciones</span></Th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <FilaVacia colSpan={8}>Cargando pagos…</FilaVacia>
+            ) : filteredPayments.length === 0 ? (
+              <FilaVacia colSpan={8}>Ningún pago coincide con los filtros</FilaVacia>
+            ) : (
+              displayedPayments.map(p => (
+                <Fila key={p.id}>
+                  <Td apagado>{fechaHora(p.date)}</Td>
+                  <Td className="max-w-[280px]">
+                    <Link to={`/app/admin/users/${p.subscriptionId}`} className="block truncate font-medium hover:underline">{p.businessName}</Link>
+                    <div className="truncate text-[11.5px] text-gray-500">{p.email}</div>
+                  </Td>
+                  <Td numero className="font-medium">{moneda(p.amount)}</Td>
+                  <Td apagado>{METODOS[p.method] || p.method}</Td>
+                  <Td apagado>{p.planName || PLANS[p.plan]?.name || p.plan}</Td>
+                  <Td><Estado valor={p.status} etiqueta={ESTADOS[p.status] || p.status} /></Td>
+                  <Td apagado className="max-w-[240px] truncate" title={p.notes || undefined}>{p.notes || '—'}</Td>
+                  <Td alinear="der">
+                    <div className="flex justify-end gap-1">
+                      <Boton tamano="sm" onClick={() => abrirEdicion(p)}>Editar</Boton>
+                      <Boton tamano="sm" variante="peligro" onClick={() => setEliminando(p)}>Eliminar</Boton>
+                    </div>
+                  </Td>
+                </Fila>
+              ))
             )}
-          </div>
-        </div>
-
-        {/* Results count */}
-        <div className="mt-3 text-xs sm:text-sm text-gray-500">
-          Mostrando {filteredPayments.length} de {payments.length} pagos
-        </div>
-      </div>
-
-      {/* Method breakdown (when filtered) */}
-      {Object.keys(filteredStats.byMethod).length > 1 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">Desglose por método</h3>
-          <div className="flex flex-wrap gap-3">
-            {Object.entries(filteredStats.byMethod).map(([method, amount]) => (
-              <div
-                key={method}
-                className={`px-3 py-2 rounded-lg ${PAYMENT_METHODS[method]?.color || 'bg-gray-100 text-gray-700'}`}
-              >
-                <span className="font-medium">{PAYMENT_METHODS[method]?.name || method}:</span>
-                <span className="ml-2">{formatCurrency(amount)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Payments Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        {/* Loading state */}
-        {loading && (
-          <div className="px-4 py-12 text-center">
-            <RefreshCw className="w-8 h-8 text-primary-600 animate-spin mx-auto mb-2" />
-            <p className="text-gray-500">Cargando pagos...</p>
-          </div>
-        )}
-
-        {/* Empty state */}
-        {!loading && filteredPayments.length === 0 && (
-          <div className="px-4 py-12 text-center">
-            <CreditCard className="w-12 h-12 text-gray-300 mx-auto mb-2" />
-            <p className="text-gray-500">No se encontraron pagos</p>
-          </div>
-        )}
-
-        {/* Mobile Card View */}
-        {!loading && filteredPayments.length > 0 && (
-          <div className="sm:hidden divide-y divide-gray-100">
-            {displayedPayments.map(payment => (
-              <div key={payment.id} className="p-3 hover:bg-gray-50 transition-colors">
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-primary-50 rounded-full flex items-center justify-center flex-shrink-0">
-                      <Building2 className="w-4 h-4 text-primary-600" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-medium text-gray-900 text-sm truncate">{payment.businessName}</p>
-                      <p className="text-xs text-gray-500 truncate">{payment.email}</p>
-                    </div>
-                  </div>
-                  <span className="font-bold text-green-600 text-sm">
-                    {formatCurrency(payment.amount)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${PAYMENT_METHODS[payment.method]?.color || 'bg-gray-100 text-gray-700'}`}>
-                      {PAYMENT_METHODS[payment.method]?.name || payment.method}
-                    </span>
-                    <span className="text-gray-500">{payment.planName || PLANS[payment.plan]?.name || payment.plan}</span>
-                  </div>
-                  {payment.status === 'completed' ? (
-                    <span className="inline-flex items-center gap-1 text-green-600">
-                      <CheckCircle className="w-3 h-3" /> OK
-                    </span>
-                  ) : payment.status === 'pending' ? (
-                    <span className="inline-flex items-center gap-1 text-amber-600">
-                      <Clock className="w-3 h-3" /> Pend.
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-gray-600">
-                      <AlertCircle className="w-3 h-3" /> {payment.status}
-                    </span>
-                  )}
-                </div>
-                <div className="mt-1 text-xs text-gray-400">
-                  {formatDate(payment.date)}
-                </div>
-                {payment.notes && (
-                  <div className="mt-1 text-xs text-gray-500 truncate">
-                    {payment.notes}
-                  </div>
-                )}
-                {/* Botones móvil */}
-                <div className="mt-2 flex items-center justify-end gap-2 border-t border-gray-100 pt-2">
-                  <button
-                    onClick={() => openEditModal(payment)}
-                    className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                  >
-                    <Pencil className="w-3 h-3" /> Editar
-                  </button>
-                  <button
-                    onClick={() => openDeleteConfirm(payment)}
-                    className="flex items-center gap-1 px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded transition-colors"
-                  >
-                    <Trash2 className="w-3 h-3" /> Eliminar
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Desktop Table View */}
-        {!loading && filteredPayments.length > 0 && (
-          <div className="hidden sm:block overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th
-                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('date')}
-                  >
-                    <div className="flex items-center gap-1">
-                      Fecha <SortIcon field="date" />
-                    </div>
-                  </th>
-                  <th
-                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('businessName')}
-                  >
-                    <div className="flex items-center gap-1">
-                      Cliente <SortIcon field="businessName" />
-                    </div>
-                  </th>
-                  <th
-                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('amount')}
-                  >
-                    <div className="flex items-center gap-1">
-                      Monto <SortIcon field="amount" />
-                    </div>
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Método
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Plan
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Estado
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Notas
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {displayedPayments.map(payment => (
-                  <tr key={payment.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 text-sm text-gray-900">
-                      {formatDate(payment.date)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-primary-50 rounded-full flex items-center justify-center">
-                          <Building2 className="w-4 h-4 text-primary-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900 text-sm">{payment.businessName}</p>
-                          <p className="text-xs text-gray-500">{payment.email}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="font-semibold text-green-600">
-                        {formatCurrency(payment.amount)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${PAYMENT_METHODS[payment.method]?.color || 'bg-gray-100 text-gray-700'}`}>
-                        {PAYMENT_METHODS[payment.method]?.name || payment.method}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-sm text-gray-600">
-                        {payment.planName || PLANS[payment.plan]?.name || payment.plan}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {payment.status === 'completed' ? (
-                        <span className="inline-flex items-center gap-1 text-green-600 text-sm">
-                          <CheckCircle className="w-4 h-4" /> Completado
-                        </span>
-                      ) : payment.status === 'pending' ? (
-                        <span className="inline-flex items-center gap-1 text-amber-600 text-sm">
-                          <Clock className="w-4 h-4" /> Pendiente
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-gray-600 text-sm">
-                          <AlertCircle className="w-4 h-4" /> {payment.status}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-500 max-w-xs truncate">
-                      {payment.notes || '-'}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => openEditModal(payment)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Editar pago"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => openDeleteConfirm(payment)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Eliminar pago"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Paginación (los totales de arriba y el CSV siguen sobre todos los filtrados) */}
+          </tbody>
+        </Tabla>
         {!loading && filteredPayments.length > PAGE_SIZE && (
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 border-t border-gray-200">
-            <p className="text-xs text-gray-500">
-              Mostrando {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredPayments.length)} de {filteredPayments.length}
-            </p>
-            <div className="flex items-center justify-center gap-2">
-              <button
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage <= 1}
-                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
-              >
-                Anterior
-              </button>
-              <span className="text-sm text-gray-700">Página {currentPage} de {pageCount}</span>
-              <button
-                onClick={() => setCurrentPage(p => Math.min(pageCount, p + 1))}
-                disabled={currentPage >= pageCount}
-                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
-              >
-                Siguiente
-              </button>
+          <div className="flex items-center justify-between gap-3 px-4 py-2 border-t border-gray-200 text-[12.5px] text-gray-500">
+            <span>{(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredPayments.length)} de {filteredPayments.length}</span>
+            <div className="flex items-center gap-2">
+              <Boton tamano="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage <= 1}>Anterior</Boton>
+              <span>Página {currentPage} de {pageCount}</span>
+              <Boton tamano="sm" onClick={() => setCurrentPage(p => Math.min(pageCount, p + 1))} disabled={currentPage >= pageCount}>Siguiente</Boton>
             </div>
           </div>
         )}
-      </div>
+      </Seccion>
 
-      {/* Modal de Editar Pago */}
-      {editingPayment && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl border border-gray-200 max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">Editar Pago</h3>
-              <button
-                onClick={() => setEditingPayment(null)}
-                className="p-1 text-gray-400 hover:text-gray-600 rounded"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-4 space-y-4">
-              {/* Info del negocio */}
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-sm text-gray-600">
-                  <span className="font-medium">{editingPayment.businessName}</span>
-                  <br />
-                  <span className="text-xs text-gray-500">{editingPayment.email}</span>
-                </p>
-              </div>
-
-              {/* Monto */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Monto (S/)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={editForm.amount}
-                  onChange={e => setEditForm({ ...editForm, amount: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
-              </div>
-
-              {/* Método */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Método de Pago
-                </label>
-                <select
-                  value={editForm.method}
-                  onChange={e => setEditForm({ ...editForm, method: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                  {Object.entries(PAYMENT_METHODS).map(([key, method]) => (
-                    <option key={key} value={key}>{method.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Fecha */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Fecha
-                </label>
-                <input
-                  type="date"
-                  value={editForm.date}
-                  onChange={e => setEditForm({ ...editForm, date: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
-              </div>
-
-              {/* Estado */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Estado
-                </label>
-                <select
-                  value={editForm.status}
-                  onChange={e => setEditForm({ ...editForm, status: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                  <option value="completed">Completado</option>
-                  <option value="pending">Pendiente</option>
-                  <option value="failed">Fallido</option>
-                </select>
-              </div>
-
-              {/* Notas */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Notas
-                </label>
-                <textarea
-                  value={editForm.notes}
-                  onChange={e => setEditForm({ ...editForm, notes: e.target.value })}
-                  rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  placeholder="Notas adicionales..."
-                />
-              </div>
-            </div>
-
-            <div className="p-4 border-t border-gray-200 flex gap-3">
-              <button
-                onClick={() => setEditingPayment(null)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                disabled={savingEdit}
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                disabled={savingEdit}
-                className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {savingEdit ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Guardando...
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4" />
-                    Guardar
-                  </>
-                )}
-              </button>
-            </div>
+      {editando && (
+        <Modal
+          titulo="Editar pago"
+          subtitulo={`${editando.businessName} · ${editando.email}`}
+          onClose={() => setEditando(null)}
+          ancho="sm"
+          pie={
+            <>
+              <Boton onClick={() => setEditando(null)} disabled={guardando}>Cancelar</Boton>
+              <Boton variante="primario" onClick={guardarEdicion} disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar'}</Boton>
+            </>
+          }
+        >
+          <div className="space-y-3">
+            <Campo etiqueta="Monto (S/)">
+              <Entrada type="number" step="0.01" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
+            </Campo>
+            <Campo etiqueta="Método">
+              <Selector value={form.method} onChange={e => setForm({ ...form, method: e.target.value })}>
+                {Object.entries(METODOS).map(([k, n]) => <option key={k} value={k}>{n}</option>)}
+              </Selector>
+            </Campo>
+            <Campo etiqueta="Fecha">
+              <Entrada type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
+            </Campo>
+            <Campo etiqueta="Estado">
+              <Selector value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
+                {Object.entries(ESTADOS).map(([k, n]) => <option key={k} value={k}>{n}</option>)}
+              </Selector>
+            </Campo>
+            <Campo etiqueta="Notas">
+              <AreaTexto rows={2} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
+            </Campo>
           </div>
-        </div>
+        </Modal>
       )}
 
-      {/* Modal de Confirmar Eliminación */}
-      {confirmDelete && deletingPayment && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl border border-gray-200 max-w-sm w-full">
-            <div className="p-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">Eliminar Pago</h3>
-            </div>
-
-            <div className="p-4">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                  <Trash2 className="w-6 h-6 text-red-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">
-                    ¿Estás seguro de eliminar este pago?
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Esta acción no se puede deshacer.
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-gray-50 rounded-lg p-3 text-sm">
-                <p><span className="font-medium">Negocio:</span> {deletingPayment.businessName}</p>
-                <p><span className="font-medium">Monto:</span> {formatCurrency(deletingPayment.amount)}</p>
-                <p><span className="font-medium">Fecha:</span> {formatDate(deletingPayment.date)}</p>
-              </div>
-            </div>
-
-            <div className="p-4 border-t border-gray-200 flex gap-3">
-              <button
-                onClick={() => {
-                  setConfirmDelete(false)
-                  setDeletingPayment(null)
-                }}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                disabled={savingEdit}
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleDeletePayment}
-                disabled={savingEdit}
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {savingEdit ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Eliminando...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="w-4 h-4" />
-                    Eliminar
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
+      {eliminando && (
+        <Modal
+          titulo="Eliminar pago"
+          subtitulo="No se puede deshacer"
+          onClose={() => setEliminando(null)}
+          ancho="sm"
+          pie={
+            <>
+              <Boton onClick={() => setEliminando(null)} disabled={guardando}>Cancelar</Boton>
+              <Boton variante="peligro" onClick={confirmarEliminar} disabled={guardando}>{guardando ? 'Eliminando…' : 'Eliminar'}</Boton>
+            </>
+          }
+        >
+          <p className="text-gray-700">
+            {eliminando.businessName} · {moneda(eliminando.amount)} · {fechaHora(eliminando.date)}
+          </p>
+        </Modal>
       )}
-    </div>
+    </Pagina>
   )
 }

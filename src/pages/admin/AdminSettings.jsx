@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { db, auth } from '@/lib/firebase'
-import { consultarEstablecimientos } from '@/services/documentLookupService'
-import { nombreRubro } from '@/data/rubros'
-import { doc, getDoc, setDoc, updateDoc, collection, getDocs, deleteDoc } from 'firebase/firestore'
+import { nombreRubro, sugerirRubroDeCuenta } from '@/data/rubros'
+import { doc, getDoc, setDoc, updateDoc, collection, getDocs, deleteDoc, writeBatch, query, limit } from 'firebase/firestore'
 import { PLANS } from '@/services/subscriptionService'
 import { getCustomPlans, createCustomPlan, updateCustomPlan, deleteCustomPlan, getHiddenPlans, hidePlan, unhidePlan } from '@/services/customPlanService'
 import {
@@ -30,7 +29,7 @@ import {
   Image as ImageIcon, Hash, Tag } from 'lucide-react'
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '@/lib/firebase'
-
+import { Boton } from '@/components/admin/ui'
 export default function AdminSettings() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -133,44 +132,24 @@ export default function AdminSettings() {
   return (
     <div className="space-y-6">
       {/* Section Tabs */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-        <div className="flex border-b border-gray-200 overflow-x-auto">
+      <div className="bg-white rounded-lg border border-gray-200">
+        <div className="flex items-center gap-1 border-b border-gray-200 px-2 overflow-x-auto">
           {sections.map(section => (
             <button
               key={section.id}
+              type="button"
               onClick={() => setActiveSection(section.id)}
-              className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                activeSection === section.id
-                  ? 'border-primary-600 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              className={`px-3 py-2.5 text-[13px] border-b-2 -mb-px whitespace-nowrap ${
+                activeSection === section.id ? 'border-gray-900 text-gray-900 font-medium' : 'border-transparent text-gray-500 hover:text-gray-900'
               }`}
             >
-              <section.icon className="w-4 h-4" />
-              <span className="hidden sm:inline">{section.label}</span>
+              {section.label}
             </button>
           ))}
-
           <div className="flex-1" />
-
-          <div className="flex items-center gap-2 p-2">
-            {saved && (
-              <span className="flex items-center gap-1 text-green-600 text-xs sm:text-sm">
-                <CheckCircle className="w-4 h-4" />
-                <span className="hidden sm:inline">Guardado</span>
-              </span>
-            )}
-            <button
-              onClick={saveSettings}
-              disabled={saving}
-              className="flex items-center gap-1.5 px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 text-sm"
-            >
-              {saving ? (
-                <RefreshCw className="w-4 h-4 animate-spin" />
-              ) : (
-                <Save className="w-4 h-4" />
-              )}
-              <span className="hidden sm:inline">Guardar</span>
-            </button>
+          <div className="flex items-center gap-2 py-1.5">
+            {saved && <span className="text-[12.5px] text-gray-500">Guardado</span>}
+            <Boton tamano="sm" variante="primario" onClick={saveSettings} disabled={saving}>{saving ? 'Guardando…' : 'Guardar'}</Boton>
           </div>
         </div>
 
@@ -328,7 +307,7 @@ function PlansSection({ plans }) {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="flex items-start gap-2 text-amber-600 bg-amber-50 p-3 sm:p-4 rounded-lg">
+      <div className="flex items-start gap-2 text-gray-700 bg-gray-50 p-3 sm:p-4 rounded-lg">
         <Info className="w-5 h-5 flex-shrink-0 mt-0.5" />
         <p className="text-xs sm:text-sm">
           Los planes estándar se configuran en el código. Los planes personalizados se gestionan abajo.
@@ -357,7 +336,7 @@ function PlansSection({ plans }) {
         {visiblePlanEntries.map(([key, plan]) => (
           <div
             key={key}
-            className={`rounded-xl border shadow-sm p-3 sm:p-5 ${
+            className={`rounded-lg border p-3 sm:p-5 ${
               hiddenPlanKeys.includes(key) ? 'bg-gray-50 border-dashed border-gray-300 opacity-60' : 'bg-white border-gray-200'
             }`}
           >
@@ -365,8 +344,8 @@ function PlansSection({ plans }) {
               <h3 className="font-semibold text-gray-900 text-sm sm:text-base">{plan.name}</h3>
               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                 key === 'trial' || key === 'free'
-                  ? 'bg-blue-100 text-blue-800'
-                  : 'bg-green-100 text-green-800'
+                  ? 'bg-gray-100 text-gray-900'
+                  : 'bg-gray-100 text-gray-900'
               }`}>
                 {key === 'trial' || key === 'free' ? 'Gratis' : 'Pago'}
               </span>
@@ -393,7 +372,7 @@ function PlansSection({ plans }) {
                 <span className="text-gray-500 flex items-center gap-1.5">
                   <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Multi-user
                 </span>
-                <span className={`font-medium ${plan.limits?.multiUser ? 'text-green-600' : 'text-gray-400'}`}>
+                <span className={`font-medium ${plan.limits?.multiUser ? 'text-gray-700' : 'text-gray-400'}`}>
                   {plan.limits?.multiUser ? 'Sí' : 'No'}
                 </span>
               </div>
@@ -425,7 +404,7 @@ function PlansSection({ plans }) {
                 <ul className="space-y-1">
                   {plan.features.slice(0, 3).map((feature, idx) => (
                     <li key={idx} className="text-xs text-gray-600 flex items-center gap-1">
-                      <CheckCircle className="w-3 h-3 text-green-500" />
+                      <CheckCircle className="w-3 h-3 text-gray-500" />
                       {feature}
                     </li>
                   ))}
@@ -442,7 +421,7 @@ function PlansSection({ plans }) {
               {hiddenPlanKeys.includes(key) ? (
                 <button
                   onClick={() => handleUnhidePlan(key)}
-                  className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs bg-green-50 text-green-700 rounded-lg hover:bg-green-100"
+                  className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100"
                 >
                   <CheckCircle className="w-3.5 h-3.5" /> Restaurar
                 </button>
@@ -466,7 +445,7 @@ function PlansSection({ plans }) {
           <h3 className="text-base font-semibold text-gray-900">Planes Personalizados</h3>
           <button
             onClick={() => { resetForm(); setShowForm(true) }}
-            className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm"
+            className="flex items-center gap-1.5 px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
           >
             <Plus className="w-4 h-4" />
             Crear Plan
@@ -475,9 +454,9 @@ function PlansSection({ plans }) {
 
         {/* Formulario inline */}
         {showForm && (
-          <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg space-y-3">
+          <div className="mb-4 p-4 bg-gray-50 border border-gray-200 rounded-lg space-y-3">
             <div className="flex items-center justify-between">
-              <h4 className="font-semibold text-amber-900">
+              <h4 className="font-semibold text-gray-900">
                 {editingPlan ? 'Editar Plan' : 'Nuevo Plan Personalizado'}
               </h4>
               <button onClick={resetForm} className="text-gray-400 hover:text-gray-600">
@@ -586,7 +565,7 @@ function PlansSection({ plans }) {
             </div>
 
             {form.months > 0 && form.totalPrice > 0 && (
-              <div className="text-xs text-amber-700 space-y-0.5">
+              <div className="text-xs text-gray-700 space-y-0.5">
                 <p>Precio por mes: S/ {(parseFloat(form.totalPrice) / parseInt(form.months)).toFixed(2)}</p>
                 {form.includesIgv ? (
                   <p>Desglose: Base S/ {(parseFloat(form.totalPrice) / 1.18).toFixed(2)} + IGV S/ {(parseFloat(form.totalPrice) - parseFloat(form.totalPrice) / 1.18).toFixed(2)} = Total S/ {parseFloat(form.totalPrice).toFixed(2)}</p>
@@ -600,7 +579,7 @@ function PlansSection({ plans }) {
               <button
                 onClick={handleSave}
                 disabled={saving || !form.name.trim()}
-                className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 text-sm"
+                className="flex items-center gap-1.5 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 text-sm"
               >
                 {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 {editingPlan ? 'Actualizar' : 'Crear'}
@@ -625,11 +604,11 @@ function PlansSection({ plans }) {
             {Object.entries(customPlans).map(([key, plan]) => (
               <div
                 key={key}
-                className="bg-white rounded-xl shadow-sm border border-amber-200 p-3 sm:p-5"
+                className="bg-white rounded-lg border border-gray-200 p-3 sm:p-5"
               >
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-semibold text-gray-900 text-sm sm:text-base truncate flex-1 mr-2">{plan.name}</h3>
-                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 flex-shrink-0">
+                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-900 flex-shrink-0">
                     Custom
                   </span>
                 </div>
@@ -638,8 +617,8 @@ function PlansSection({ plans }) {
                   <div className="flex items-center justify-between text-xs sm:text-sm">
                     <span className="text-gray-500">Precio total</span>
                     <div className="text-right">
-                      <span className="font-bold text-amber-700">S/ {plan.totalPrice?.toFixed?.(2) || plan.totalPrice}</span>
-                      <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${plan.includesIgv ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                      <span className="font-semibold text-gray-700">S/ {plan.totalPrice?.toFixed?.(2) || plan.totalPrice}</span>
+                      <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[11px] font-medium ${plan.includesIgv ? 'bg-gray-100 text-gray-700' : 'bg-gray-100 text-gray-600'}`}>
                         {plan.includesIgv ? 'Inc. IGV' : '+ IGV'}
                       </span>
                     </div>
@@ -674,10 +653,10 @@ function PlansSection({ plans }) {
                   )}
                 </div>
 
-                <div className="flex gap-2 mt-3 pt-3 border-t border-amber-100">
+                <div className="flex gap-2 mt-3 pt-3 border-t border-gray-200">
                   <button
                     onClick={() => openEdit(key, plan)}
-                    className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs bg-amber-50 text-amber-700 rounded-lg hover:bg-amber-100"
+                    className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100"
                   >
                     <Edit2 className="w-3.5 h-3.5" /> Editar
                   </button>
@@ -700,7 +679,7 @@ function PlansSection({ plans }) {
 function NotificationsSection({ settings, onChange }) {
   return (
     <div className="space-y-6 max-w-2xl">
-      <div className="flex items-center gap-2 text-blue-600 bg-blue-50 p-4 rounded-lg">
+      <div className="flex items-center gap-2 text-gray-700 bg-gray-50 p-4 rounded-lg">
         <Info className="w-5 h-5 flex-shrink-0" />
         <p className="text-sm">
           Estas configuraciones controlan las notificaciones que aparecen en la campanita del panel de administración.
@@ -729,7 +708,7 @@ function NotificationsSection({ settings, onChange }) {
 
           <label className="flex items-center justify-between p-4 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100">
             <div className="flex items-center gap-3">
-              <CreditCard className="w-5 h-5 text-green-600" />
+              <CreditCard className="w-5 h-5 text-gray-700" />
               <div>
                 <p className="font-medium text-gray-900">Nuevo pago recibido</p>
                 <p className="text-sm text-gray-500">Mostrar notificación cuando se registra un pago</p>
@@ -745,7 +724,7 @@ function NotificationsSection({ settings, onChange }) {
 
           <label className="flex items-center justify-between p-4 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100">
             <div className="flex items-center gap-3">
-              <AlertTriangle className="w-5 h-5 text-amber-600" />
+              <AlertTriangle className="w-5 h-5 text-gray-700" />
               <div>
                 <p className="font-medium text-gray-900">Suscripción por vencer</p>
                 <p className="text-sm text-gray-500">Mostrar alertas de suscripciones próximas a vencer</p>
@@ -822,7 +801,7 @@ function ExceptionsList({ exceptions, onChange }) {
   }
 
   return (
-    <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+    <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
       <p className="font-medium text-gray-900 mb-1">Excepciones a la pausa</p>
       <p className="text-sm text-gray-500 mb-3">Negocios con IGV reducido que SÍ pueden enviar a SUNAT (ej: ya compraron comprobantes)</p>
       <div className="flex gap-2 mb-3">
@@ -836,7 +815,7 @@ function ExceptionsList({ exceptions, onChange }) {
         />
         <button
           onClick={addException}
-          className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium flex items-center gap-1"
+          className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium flex items-center gap-1"
         >
           <Plus className="w-4 h-4" /> Agregar
         </button>
@@ -846,7 +825,7 @@ function ExceptionsList({ exceptions, onChange }) {
       ) : (
         <div className="space-y-2">
           {exceptions.map(id => (
-            <div key={id} className="flex items-center justify-between bg-white p-2 rounded-lg border border-green-100">
+            <div key={id} className="flex items-center justify-between bg-white p-2 rounded-lg border border-gray-200">
               <div>
                 <p className="text-sm font-medium text-gray-800">{businessNames[id] || 'Cargando...'}</p>
                 <p className="text-xs text-gray-400 font-mono">{id}</p>
@@ -948,7 +927,7 @@ function SystemSection({ settings, onChange }) {
         <div className="space-y-4">
           <label className="flex items-center justify-between p-4 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100">
             <div className="flex items-center gap-3">
-              <Globe className="w-5 h-5 text-green-600" />
+              <Globe className="w-5 h-5 text-gray-700" />
               <div>
                 <p className="font-medium text-gray-900">Permitir nuevos registros</p>
                 <p className="text-sm text-gray-500">Permitir que nuevos usuarios se registren en la plataforma</p>
@@ -978,14 +957,14 @@ function SystemSection({ settings, onChange }) {
             />
           </label>
 
-          <label className={`flex items-center justify-between p-4 rounded-lg cursor-pointer ${settings.pauseSunatRestaurants ? 'bg-amber-50 hover:bg-amber-100 border border-amber-300' : 'bg-gray-50 hover:bg-gray-100'}`}>
+          <label className={`flex items-center justify-between p-4 rounded-lg cursor-pointer ${settings.pauseSunatRestaurants ? 'bg-gray-50 hover:bg-gray-100 border border-gray-300' : 'bg-gray-50 hover:bg-gray-100'}`}>
             <div className="flex items-center gap-3">
-              <Shield className="w-5 h-5 text-amber-600" />
+              <Shield className="w-5 h-5 text-gray-700" />
               <div>
                 <p className="font-medium text-gray-900">Pausar envío de facturas a SUNAT (IGV 10.5%)</p>
                 <p className="text-sm text-gray-500">Suspende el envío automático de facturas a SUNAT para negocios con IGV reducido (Ley 31556). Las boletas se envían normalmente. Las facturas se generan pero quedan pendientes de envío.</p>
                 {settings.pauseSunatRestaurants && (
-                  <p className="text-xs text-amber-700 font-medium mt-1">ACTIVO: Las facturas de negocios con IGV 10.5% NO se envían automáticamente a SUNAT. Las boletas SÍ se envían.</p>
+                  <p className="text-xs text-gray-700 font-medium mt-1">ACTIVO: Las facturas de negocios con IGV 10.5% NO se envían automáticamente a SUNAT. Las boletas SÍ se envían.</p>
                 )}
               </div>
             </div>
@@ -993,7 +972,7 @@ function SystemSection({ settings, onChange }) {
               type="checkbox"
               checked={settings.pauseSunatRestaurants}
               onChange={e => onChange('pauseSunatRestaurants', e.target.checked)}
-              className="w-5 h-5 text-amber-600 rounded focus:ring-amber-500"
+              className="w-5 h-5 text-gray-700 rounded focus:ring-primary-500"
             />
           </label>
 
@@ -1006,7 +985,7 @@ function SystemSection({ settings, onChange }) {
           )}
 
           {/* Detectar productos IGV 10% → 10.5% */}
-          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+          <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-medium text-gray-900">Productos con IGV 10% (deben ser 10.5%)</p>
@@ -1025,7 +1004,7 @@ function SystemSection({ settings, onChange }) {
             {scanResult !== null && (
               <div className="mt-3 p-3 bg-white rounded-lg border text-sm max-h-80 overflow-y-auto">
                 {scanResult.length === 0 ? (
-                  <p className="text-green-700 font-medium">Todo correcto. No hay productos con IGV 10%.</p>
+                  <p className="text-gray-700 font-medium">Todo correcto. No hay productos con IGV 10%.</p>
                 ) : (
                   <>
                     <div className="flex items-center justify-between mb-3">
@@ -1035,7 +1014,7 @@ function SystemSection({ settings, onChange }) {
                       <button
                         onClick={fixAll}
                         disabled={migrating}
-                        className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-xs font-medium"
+                        className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 text-xs font-medium"
                       >
                         {migrating ? 'Corrigiendo...' : 'Corregir todos'}
                       </button>
@@ -1050,14 +1029,14 @@ function SystemSection({ settings, onChange }) {
                           <button
                             onClick={() => fixProducts(biz.businessId, biz.products.map(p => p.id))}
                             disabled={migrating}
-                            className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200 disabled:opacity-50 shrink-0"
+                            className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200 disabled:opacity-50 shrink-0"
                           >
                             Corregir
                           </button>
                         </div>
                         <div className="flex flex-wrap gap-1 mt-1">
                           {biz.products.map(p => (
-                            <span key={p.id} className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{p.name}</span>
+                            <span key={p.id} className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded">{p.name}</span>
                           ))}
                         </div>
                       </div>
@@ -1069,7 +1048,7 @@ function SystemSection({ settings, onChange }) {
 
             {/* Mensaje */}
             {migrateMsg && (
-              <div className={`mt-3 p-3 rounded-lg text-sm ${migrateMsg.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+              <div className={`mt-3 p-3 rounded-lg text-sm ${migrateMsg.success ? 'bg-gray-50 text-gray-900' : 'bg-red-50 text-red-800'}`}>
                 <p className="font-medium">{migrateMsg.message}</p>
               </div>
             )}
@@ -1115,7 +1094,7 @@ function SystemSection({ settings, onChange }) {
           <div className="flex items-center justify-between">
             <span className="text-sm text-gray-500">Base de datos</span>
             <span className="font-mono text-sm flex items-center gap-1">
-              <Database className="w-4 h-4 text-green-500" />
+              <Database className="w-4 h-4 text-gray-500" />
               Firebase Firestore
             </span>
           </div>
@@ -1199,9 +1178,9 @@ function MaintenanceSection() {
 
         <div className="space-y-4">
           {/* Limpieza de suscripciones de sub-usuarios */}
-          <div className="bg-amber-50 rounded-xl p-5 border border-amber-200">
+          <div className="bg-gray-50 rounded-lg p-5 border border-gray-200">
             <div className="flex items-start gap-3">
-              <Trash2 className="w-6 h-6 text-amber-600 flex-shrink-0 mt-1" />
+              <Trash2 className="w-6 h-6 text-gray-700 flex-shrink-0 mt-1" />
               <div className="flex-1">
                 <h4 className="font-medium text-gray-900">Limpiar suscripciones de sub-usuarios</h4>
                 <p className="text-sm text-gray-600 mt-1">
@@ -1212,7 +1191,7 @@ function MaintenanceSection() {
                 <button
                   onClick={cleanupSubUserSubscriptions}
                   disabled={cleaning}
-                  className="mt-3 flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
+                  className="mt-3 flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
                 >
                   {cleaning ? (
                     <>
@@ -1228,7 +1207,7 @@ function MaintenanceSection() {
                 </button>
 
                 {result && (
-                  <div className={`mt-3 p-3 rounded-lg ${result.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                  <div className={`mt-3 p-3 rounded-lg ${result.success ? 'bg-gray-100 text-gray-900' : 'bg-red-100 text-red-800'}`}>
                     <p className="font-medium">{result.message}</p>
                     {result.details && result.details.length > 0 && (
                       <ul className="mt-2 text-sm">
@@ -1255,11 +1234,11 @@ function MaintenanceSection() {
           {/* Migración de credenciales SUNAT a subcolección protegida (cierre de exposición pública) */}
           <EmissionSecretsMigrationCard />
           <CodigoClienteCard />
-          <ActividadSunatCard />
+          <RubroSugeridoCard />
 
           {/* Info */}
-          <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-            <div className="flex items-center gap-2 text-blue-800">
+          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+            <div className="flex items-center gap-2 text-gray-900">
               <Info className="w-5 h-5" />
               <p className="text-sm">
                 Estas herramientas son para uso administrativo. Úsalas con precaución.
@@ -1314,9 +1293,9 @@ function CodigoClienteCard() {
   }
 
   return (
-    <div className="bg-emerald-50 rounded-xl p-5 border border-emerald-200">
+    <div className="bg-gray-50 rounded-lg p-5 border border-gray-200">
       <div className="flex items-start gap-3">
-        <Hash className="w-6 h-6 text-emerald-600 flex-shrink-0 mt-1" />
+        <Hash className="w-6 h-6 text-gray-700 flex-shrink-0 mt-1" />
         <div className="flex-1">
           <h4 className="font-medium text-gray-900">Códigos de cliente</h4>
           <p className="text-sm text-gray-600 mt-1">
@@ -1325,16 +1304,16 @@ function CodigoClienteCard() {
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button onClick={() => run('dry')} disabled={!!busy}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-emerald-300 text-emerald-800 rounded-lg hover:bg-emerald-100 disabled:opacity-50">
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-900 rounded-lg hover:bg-gray-100 disabled:opacity-50">
               {busy === 'dry' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Info className="w-4 h-4" />} Simular
             </button>
             <button onClick={() => run('real')} disabled={!!busy}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50">
+              className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50">
               {busy === 'real' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Hash className="w-4 h-4" />} Numerar ahora
             </button>
           </div>
           {result && (
-            <div className={`mt-3 p-3 rounded-lg text-sm ${result.success ? 'bg-white border border-emerald-200' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+            <div className={`mt-3 p-3 rounded-lg text-sm ${result.success ? 'bg-white border border-gray-200' : 'bg-red-50 border border-red-200 text-red-700'}`}>
               {result.success ? (
                 <>
                   <p className="text-gray-800">
@@ -1363,118 +1342,269 @@ function CodigoClienteCard() {
 }
 
 /**
- * Actividad de SUNAT y rubro sugerido. Recorre las cuentas con RUC, consulta
- * el establecimiento principal en SUNAT, guarda la actividad económica tal
- * cual llega y anota el rubro que sugiere el catálogo. NO fija el rubro:
- * eso se confirma a mano en la ficha. Va despacio (una consulta cada 400 ms)
- * para no reventar la cuota de la API; se puede detener y retomar, porque
- * las que ya tienen actividad se saltan.
+ * Rubro sugerido. Propone el rubro de cada cuenta con lo que ya tenemos: el
+ * modo de negocio, el nombre y, para las que no se dejan adivinar, lo que
+ * venden. No consulta a nadie de afuera: es gratis.
+ *
+ * La versión anterior le preguntaba la actividad económica a SUNAT vía
+ * apiperu.dev y devolvía 709 de 709 "sin datos": esa API no entrega el CIIU
+ * por ningún endpoint, y cada intento gastaba un crédito. Ver el comentario
+ * de `functions/src/data/clasificador.js`.
+ *
+ * Escribe solo `rubroSugerido`. El rubro de verdad (`rubro`) se confirma a
+ * mano en la ficha del cliente: esto es para llegar ahí con la mayoría ya
+ * resuelta, no para decidir por el dueño.
  */
-function ActividadSunatCard() {
-  const [busy, setBusy] = useState(false)
-  const [stopRef] = useState({ stop: false })
-  const [progress, setProgress] = useState(null)
+function RubroSugeridoCard() {
+  const [busy, setBusy] = useState('')
   const [result, setResult] = useState(null)
-  const [rehacer, setRehacer] = useState(false)
-  const SUGERIR_URL = 'https://us-central1-cobrify-395fe.cloudfunctions.net/sugerirRubroSunat'
+  const [progreso, setProgreso] = useState(null)
+  const [conProductos, setConProductos] = useState(true)
 
-  const esperar = (ms) => new Promise((r) => setTimeout(r, ms))
-
-  async function run(mode) {
-    if (mode === 'save' && !window.confirm('¿Consultar SUNAT y guardar la actividad y el rubro sugerido en cada cuenta con RUC? No cambia el rubro confirmado.')) return
-    setBusy(true); stopRef.stop = false; setResult(null)
-    const cuenta = { total: 0, procesadas: 0, conActividad: 0, sinDatosSunat: 0, errores: 0, sugeridos: {}, sinSugerencia: 0, guardadas: 0 }
+  /** Lee hasta 60 nombres de producto de una cuenta. Con eso sobra para votar. */
+  async function nombresDeProductos(businessId) {
     try {
-      const idToken = await auth.currentUser.getIdToken()
-      const snap = await getDocs(collection(db, 'businesses'))
-      const pendientes = snap.docs.filter((d) => {
-        const b = d.data()
-        const ruc = String(b.ruc || '').trim()
-        return /^\d{11}$/.test(ruc) && (rehacer || !b.actividadSunat)
-      })
-      cuenta.total = pendientes.length
-      setProgress({ hecho: 0, total: pendientes.length })
-      for (const d of pendientes) {
-        if (stopRef.stop) break
-        const b = d.data()
-        try {
-          const est = await consultarEstablecimientos(String(b.ruc).trim())
-          const lista = est?.success && Array.isArray(est.data) ? est.data : []
-          const principal = lista.find((x) => /PRINCIPAL/i.test(x.tipo || '')) || lista[0]
-          const actividad = (principal?.actividad || '').trim()
-          if (!actividad) { cuenta.sinDatosSunat += 1 } else {
-            cuenta.conActividad += 1
-            const r = await fetch(SUGERIR_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` }, body: JSON.stringify({ actividad }) })
-            const j = await r.json()
-            const rubro = j?.rubro || null
-            if (rubro) cuenta.sugeridos[rubro] = (cuenta.sugeridos[rubro] || 0) + 1; else cuenta.sinSugerencia += 1
-            if (mode === 'save') {
-              await updateDoc(doc(db, 'businesses', d.id), { actividadSunat: actividad, rubroSugerido: rubro, rubroSugeridoEn: new Date() })
-              cuenta.guardadas += 1
-            }
-          }
-        } catch (e) {
-          cuenta.errores += 1
-        }
-        cuenta.procesadas += 1
-        setProgress({ hecho: cuenta.procesadas, total: pendientes.length })
-        await esperar(400)
-      }
-      setResult({ success: true, mode, detenido: stopRef.stop, ...cuenta })
-    } catch (e) {
-      setResult({ success: false, error: e.message })
-    } finally {
-      setBusy(false); setProgress(null)
+      const snap = await getDocs(query(collection(db, 'businesses', businessId, 'products'), limit(60)))
+      return snap.docs.map((d) => d.data()?.name).filter(Boolean)
+    } catch {
+      return []
     }
   }
 
+  /** De a 10 en paralelo: 700 cuentas de una sola vez ahoga al navegador. */
+  async function enTandas(items, tam, fn, alAvanzar) {
+    const salida = []
+    for (let i = 0; i < items.length; i += tam) {
+      salida.push(...await Promise.all(items.slice(i, i + tam).map(fn)))
+      alAvanzar?.(Math.min(i + tam, items.length))
+    }
+    return salida
+  }
+
+  async function run(mode) {
+    if (mode === 'save' && !window.confirm('¿Guardar el rubro sugerido en cada cuenta? No toca el rubro confirmado, solo la sugerencia.')) return
+    setBusy(mode)
+    setResult(null)
+    setProgreso(null)
+    try {
+      // El nombre del negocio está repartido en tres colecciones según por
+      // dónde se creó la cuenta: el reseller escribe `razonSocial`/`tradeName`
+      // en businesses, el alta normal deja `businessName` en users, y
+      // subscriptions guarda su propia copia. Leer solo businesses dejaba
+      // decenas de cuentas "sin nombre" que sí lo tienen. Es la misma cadena
+      // que usa el listado de Admin > Usuarios.
+      const [snap, usersSnap, subsSnap] = await Promise.all([
+        getDocs(collection(db, 'businesses')),
+        getDocs(collection(db, 'users')),
+        getDocs(collection(db, 'subscriptions')),
+      ])
+      const porId = (s) => new Map(s.docs.map((d) => [d.id, d.data()]))
+      const usuarios = porId(usersSnap)
+      const suscripciones = porId(subsSnap)
+
+      // Primera pasada: nombre y modo. Es instantánea y resuelve la mayoría.
+      const cuentas = snap.docs.map((d) => {
+        const b = d.data()
+        const u = usuarios.get(d.id) || {}
+        const sub = suscripciones.get(d.id) || {}
+        const nombre = [b.razonSocial, b.tradeName, b.businessName, b.nombreComercial, b.name,
+                        u.businessName, u.razonSocial, sub.businessName]
+          .filter(Boolean)
+          .filter((v, i, a) => a.indexOf(v) === i)
+          .join(' · ')
+        const base = { nombre, modo: b.businessMode, actividadSunat: b.actividadSunat, estacionServicio: b.serviceStationConfig?.enabled === true }
+        // `nombre` y `correo` van también aquí afuera: el reporte los lee de
+        // este nivel, y tenerlos solo dentro de `base` hacía que la lista de
+        // sin clasificar saliera entera como "(cuenta sin nombre)".
+        return {
+          id: d.id,
+          nombre,
+          correo: u.email || sub.email || b.email || '',
+          ruc: String(b.ruc || u.ruc || '').trim(),
+          rubroSugerido: b.rubroSugerido || null,
+          base,
+          ...sugerirRubroDeCuenta(base),
+        }
+      })
+
+      // Segunda pasada: solo las que quedaron sin rubro o con una suposición.
+      // Al resto no hay para qué leerle el inventario.
+      let mirados = 0
+      if (conProductos) {
+        const dudosas = cuentas.filter((c) => !c.rubro || c.motivo === 'modo-supuesto' || c.motivo === 'nombre-generico')
+        mirados = dudosas.length
+        setProgreso({ hecho: 0, total: dudosas.length })
+        await enTandas(dudosas, 10, async (c) => {
+          const productos = await nombresDeProductos(c.id)
+          c.cuantosProductos = productos.length
+          c.ejemplos = productos.slice(0, 4)
+          Object.assign(c, sugerirRubroDeCuenta({ ...c.base, productos }))
+        }, (hecho) => setProgreso({ hecho, total: dudosas.length }))
+        setProgreso(null)
+      }
+
+      const cuenta = { total: cuentas.length, sugeridos: {}, motivos: {}, sinClasificar: 0, guardadas: 0, mirados }
+      // Las que quedan sin rubro se parten en dos, porque no tienen arreglo
+      // parecido: al RUC 10 (persona natural) la razón social ES el nombre de
+      // la persona y ningún patrón lo va a sacar; el RUC 20 sin pistas sí se
+      // rescata agregando patrones al catálogo.
+      const huerfanas = { persona: 0, empresa: 0, sinRuc: 0 }
+      // ¿El techo es que falta vocabulario o que la cuenta no vendió nunca?
+      // Sin esto uno se pone a inventar patrones para inventarios vacíos.
+      const inventario = { vacio: 0, pocos: 0, sinMayoria: 0 }
+      // Qué venden las que sí tienen inventario y aun así no se dejan
+      // clasificar. Es lo único que hace falta para ampliar el vocabulario.
+      const muestraInventarios = []
+      const sinPistas = []
+      const cambios = []
+
+      for (const c of cuentas) {
+        if (c.rubro) {
+          cuenta.sugeridos[c.rubro] = (cuenta.sugeridos[c.rubro] || 0) + 1
+          cuenta.motivos[c.motivo] = (cuenta.motivos[c.motivo] || 0) + 1
+        } else {
+          cuenta.sinClasificar += 1
+          if (c.cuantosProductos === 0) inventario.vacio += 1
+          else if (c.cuantosProductos < 3) inventario.pocos += 1
+          else if (c.cuantosProductos >= 3) {
+            inventario.sinMayoria += 1
+            if (muestraInventarios.length < 14) {
+              muestraInventarios.push({ nombre: c.nombre || c.correo || c.id, productos: c.ejemplos })
+            }
+          }
+          if (c.ruc.startsWith('10')) huerfanas.persona += 1
+          else if (c.ruc.startsWith('20')) {
+            huerfanas.empresa += 1
+            if (sinPistas.length < 25) sinPistas.push(c.nombre || `sin nombre · ${c.correo || c.id}`)
+          } else huerfanas.sinRuc += 1
+        }
+        if (c.rubroSugerido !== c.rubro) cambios.push({ id: c.id, rubro: c.rubro })
+      }
+
+      if (mode === 'save' && cambios.length) {
+        // De a 400 por lote: el tope de Firestore es 500 operaciones.
+        for (let i = 0; i < cambios.length; i += 400) {
+          const lote = writeBatch(db)
+          for (const c of cambios.slice(i, i + 400)) {
+            lote.update(doc(db, 'businesses', c.id), { rubroSugerido: c.rubro, rubroSugeridoEn: new Date() })
+          }
+          await lote.commit()
+          cuenta.guardadas += Math.min(400, cambios.length - i)
+        }
+      }
+
+      setResult({ success: true, mode, porGuardar: cambios.length, sinPistas, huerfanas, inventario, muestraInventarios, ...cuenta })
+    } catch (e) {
+      setResult({ success: false, error: e.message })
+    } finally {
+      setBusy('')
+      setProgreso(null)
+    }
+  }
+
+  const etiquetaMotivo = {
+    nombre: 'por el nombre',
+    modo: 'por el modo (solo admite ese rubro)',
+    productos: 'por lo que venden',
+    'nombre-generico': 'por una palabra genérica del nombre (flojo)',
+    'modo-supuesto': 'ASUMIDOS por el modo, sin más pistas',
+    grifo: 'por tener el modo grifo prendido',
+    sunat: 'por la actividad de SUNAT',
+  }
+
   return (
-    <div className="bg-sky-50 rounded-xl p-5 border border-sky-200">
+    <div className="bg-gray-50 rounded-lg p-5 border border-gray-200">
       <div className="flex items-start gap-3">
-        <Tag className="w-6 h-6 text-sky-600 flex-shrink-0 mt-1" />
+        <Tag className="w-6 h-6 text-gray-700 flex-shrink-0 mt-1" />
         <div className="flex-1">
-          <h4 className="font-medium text-gray-900">Actividad SUNAT y rubro sugerido</h4>
+          <h4 className="font-medium text-gray-900">Rubro sugerido</h4>
           <p className="text-sm text-gray-600 mt-1">
-            Consulta en SUNAT la actividad económica de cada cuenta con RUC, la guarda tal cual, y anota el rubro
-            que sugiere el catálogo. <b>No cambia el rubro</b>: la sugerencia se confirma después en la ficha.
-            Salta las que ya tienen actividad, así se puede detener y retomar.
+            Propone el rubro de cada cuenta leyendo el <b>nombre del negocio</b> y su modo. No consulta SUNAT
+            ni gasta créditos: es instantáneo. <b>No cambia el rubro confirmado</b>, solo deja la sugerencia
+            para revisarla en la ficha.
           </p>
-          <label className="mt-2 flex items-center gap-2 text-sm text-gray-700">
-            <input type="checkbox" checked={rehacer} onChange={(e) => setRehacer(e.target.checked)} disabled={busy} />
-            Volver a consultar también las que ya tienen actividad
-          </label>
           <div className="mt-3 flex flex-wrap gap-2">
-            <button onClick={() => run('dry')} disabled={busy}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-sky-300 text-sky-800 rounded-lg hover:bg-sky-100 disabled:opacity-50">
-              <Info className="w-4 h-4" /> Simular
+            <button onClick={() => run('dry')} disabled={!!busy}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-900 rounded-lg hover:bg-gray-100 disabled:opacity-50">
+              {busy === 'dry' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Info className="w-4 h-4" />} Simular
             </button>
-            <button onClick={() => run('save')} disabled={busy}
-              className="flex items-center gap-2 px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 disabled:opacity-50">
-              <Tag className="w-4 h-4" /> Consultar y guardar
+            <button onClick={() => run('save')} disabled={!!busy}
+              className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50">
+              {busy === 'save' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Tag className="w-4 h-4" />} Guardar sugerencias
             </button>
-            {busy && (
-              <button onClick={() => { stopRef.stop = true }}
-                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100">
-                <X className="w-4 h-4" /> Detener
-              </button>
-            )}
           </div>
-          {progress && <p className="mt-2 text-sm text-gray-600"><RefreshCw className="inline w-4 h-4 animate-spin mr-1" />{progress.hecho} de {progress.total}…</p>}
+          {progreso && (
+            <p className="mt-2 text-sm text-gray-600">
+              <RefreshCw className="inline w-4 h-4 animate-spin mr-1" />
+              Revisando inventarios: {progreso.hecho} de {progreso.total}…
+            </p>
+          )}
           {result && (
-            <div className={`mt-3 p-3 rounded-lg text-sm ${result.success ? 'bg-white border border-sky-200' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+            <div className={`mt-3 p-3 rounded-lg text-sm ${result.success ? 'bg-white border border-gray-200' : 'bg-red-50 border border-red-200 text-red-700'}`}>
               {result.success ? (
                 <>
                   <p className="text-gray-800">
-                    {result.mode === 'dry' ? 'Simulación' : 'Guardado'}{result.detenido ? ' (detenido a medias)' : ''}: <b>{result.procesadas}</b> de {result.total} cuentas con RUC ·{' '}
-                    <b>{result.conActividad}</b> con actividad en SUNAT · <b>{result.sinDatosSunat}</b> sin datos · <b>{result.errores}</b> errores
-                    {result.mode === 'save' ? <> · <b>{result.guardadas}</b> guardadas</> : null}
+                    {result.mode === 'dry' ? 'Simulación: ' : 'Listo: '}
+                    <b>{result.total}</b> cuentas · <b>{result.total - result.sinClasificar}</b> con rubro sugerido ·{' '}
+                    <b>{result.sinClasificar}</b> sin clasificar
+                    {result.mode === 'dry'
+                      ? <> · <b>{result.porGuardar}</b> por guardar</>
+                      : <> · <b>{result.guardadas}</b> guardadas</>}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    {Object.entries(result.motivos).map(([m, n]) => `${n} ${etiquetaMotivo[m] || m}`).join(' · ')}
                   </p>
                   <ul className="mt-2 text-xs text-gray-600 space-y-0.5">
                     {Object.entries(result.sugeridos).sort((a, b) => b[1] - a[1]).map(([id, n]) => (
                       <li key={id}><b>{n}</b> · {nombreRubro(id)} <span className="text-gray-400">({id})</span></li>
                     ))}
-                    {result.sinSugerencia > 0 && <li><b>{result.sinSugerencia}</b> · Sin clasificar (SUNAT dice algo que el catálogo no reconoce)</li>}
                   </ul>
+                  {result.sinClasificar > 0 && (
+                    <div className="mt-3 pt-3 border-t border-gray-100">
+                      <p className="text-xs text-gray-700">
+                        Sin clasificar: <b>{result.huerfanas.persona}</b> personas naturales (RUC 10, la razón social
+                        es el nombre de la persona: no hay patrón que valga) · <b>{result.huerfanas.empresa}</b> empresas
+                        · <b>{result.huerfanas.sinRuc}</b> sin RUC.
+                      </p>
+                      {result.mirados > 0 && (
+                        <p className="mt-1 text-xs text-gray-700">
+                          Y por inventario: <b>{result.inventario.vacio}</b> nunca cargaron un producto ·{' '}
+                          <b>{result.inventario.pocos}</b> tienen menos de tres ·{' '}
+                          <b>{result.inventario.sinMayoria}</b> sí venden pero el catálogo no reconoce lo suficiente
+                          (esas son las que se arreglan con más patrones).
+                        </p>
+                      )}
+                      {result.muestraInventarios?.length > 0 && (
+                        <>
+                          <p className="mt-3 text-xs text-gray-500">
+                            Qué venden las que tienen inventario y aun así no se dejan clasificar. Esto es lo que sirve para
+                            ampliar el vocabulario:
+                          </p>
+                          <ul className="mt-1 text-xs text-gray-600 space-y-1">
+                            {result.muestraInventarios.map((m, i) => (
+                              <li key={i}>
+                                <span className="text-gray-400">{m.nombre}</span><br />
+                                {m.productos.join(' · ')}
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                      {result.sinPistas.length > 0 && (
+                        <>
+                          <p className="mt-3 text-xs text-gray-500">
+                            Empresas cuyo nombre no dice a qué se dedican. Si aquí ves un patrón que falta, se agrega al catálogo:
+                          </p>
+                          <ul className="mt-1 text-xs text-gray-600 space-y-0.5">
+                            {result.sinPistas.map((n, i) => <li key={i}>· {n}</li>)}
+                            {result.huerfanas.empresa > result.sinPistas.length && (
+                              <li className="text-gray-400">… y {result.huerfanas.empresa - result.sinPistas.length} más</li>
+                            )}
+                          </ul>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </>
               ) : <p>{result.error || 'Error'}</p>}
             </div>
@@ -1517,7 +1647,7 @@ function EmissionSecretsMigrationCard() {
   }
 
   return (
-    <div className="bg-red-50 rounded-xl p-5 border border-red-200">
+    <div className="bg-red-50 rounded-lg p-5 border border-red-200">
       <div className="flex items-start gap-3">
         <Shield className="w-6 h-6 text-red-600 flex-shrink-0 mt-1" />
         <div className="flex-1">
@@ -1540,7 +1670,7 @@ function EmissionSecretsMigrationCard() {
               {busy === 'dryRun' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Info className="w-4 h-4" />} Probar (dry-run)
             </button>
             <button onClick={() => run('copy')} disabled={!!busy}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+              className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50">
               {busy === 'copy' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />} Copiar al subcolección
             </button>
             <button onClick={() => run('delete')} disabled={!!busy}
@@ -1549,7 +1679,7 @@ function EmissionSecretsMigrationCard() {
             </button>
           </div>
           {result && (
-            <div className={`mt-3 p-3 rounded-lg text-sm ${result.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+            <div className={`mt-3 p-3 rounded-lg text-sm ${result.success ? 'bg-gray-100 text-gray-900' : 'bg-red-100 text-red-800'}`}>
               <p className="font-medium">{result.success ? `OK (${result.mode})` : `Error: ${result.error}`}</p>
               {result.stats && (
                 <p className="mt-1">Total: {result.stats.total} · con secretos: {result.stats.withSecrets} · copiados: {result.stats.copied} · borrados: {result.stats.deleted} · sin secretos: {result.stats.skipped}</p>
@@ -1612,7 +1742,7 @@ function CloudinaryCleanupCard() {
   }
 
   return (
-    <div className="bg-red-50 rounded-xl p-5 border border-red-200">
+    <div className="bg-red-50 rounded-lg p-5 border border-red-200">
       <div className="flex items-start gap-3">
         <Trash2 className="w-6 h-6 text-red-600 flex-shrink-0 mt-1" />
         <div className="flex-1">
@@ -1674,14 +1804,14 @@ function CloudinaryCleanupCard() {
           )}
 
           {cleanResult && (
-            <div className="mt-3 p-3 bg-emerald-50 rounded-lg border border-emerald-200 text-sm space-y-1">
-              <p className="font-medium text-emerald-900">
+            <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200 text-sm space-y-1">
+              <p className="font-medium text-gray-900">
                 {cleanResult.doneAt ? '✓ Cleanup completado' : 'Cleanup en progreso'}
               </p>
               <p>Borrados: <strong>{cleanResult.orphansDeleted}</strong> de {cleanResult.orphansFound} huérfanos</p>
               <p>Storage liberado: <strong>{formatBytes(cleanResult.bytesFreed)}</strong></p>
               {cleanResult.errors > 0 && (
-                <p className="text-amber-700">⚠ Errores: {cleanResult.errors} (revisá los logs)</p>
+                <p className="text-gray-700">⚠ Errores: {cleanResult.errors} (revisá los logs)</p>
               )}
             </div>
           )}
@@ -1725,9 +1855,9 @@ function CloudinaryInventoryCard() {
   const candidates = result?.perBusiness?.filter(b => b.cloudinaryImages > 0) || []
 
   return (
-    <div className="bg-amber-50 rounded-lg p-5 border border-amber-200">
+    <div className="bg-gray-50 rounded-lg p-5 border border-gray-200">
       <div className="flex items-start gap-3">
-        <ImageIcon className="w-6 h-6 text-amber-600 flex-shrink-0 mt-1" />
+        <ImageIcon className="w-6 h-6 text-gray-700 flex-shrink-0 mt-1" />
         <div className="flex-1">
           <h4 className="font-medium text-gray-900">Inventario Cloudinary → Cloudflare R2 (solo lectura)</h4>
           <p className="text-sm text-gray-600 mt-1">
@@ -1740,7 +1870,7 @@ function CloudinaryInventoryCard() {
             <button
               onClick={runInventory}
               disabled={analyzing}
-              className="flex items-center gap-2 px-4 py-2 border border-amber-600 text-amber-700 bg-white rounded-lg hover:bg-amber-50 disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 border border-primary-600 text-gray-700 bg-white rounded-lg hover:bg-gray-50 disabled:opacity-50"
             >
               {analyzing ? (
                 <><RefreshCw className="w-4 h-4 animate-spin" /> Analizando...</>
@@ -1751,7 +1881,7 @@ function CloudinaryInventoryCard() {
           </div>
 
           {progress && (
-            <div className="mt-3 p-3 bg-white rounded-lg border border-amber-200 text-sm">
+            <div className="mt-3 p-3 bg-white rounded-lg border border-gray-200 text-sm">
               <p>
                 <strong>Analizando {progress.businessIndex} / {progress.totalBusinesses}:</strong>{' '}
                 <span className="text-gray-700">{progress.businessName}</span>
@@ -1766,8 +1896,8 @@ function CloudinaryInventoryCard() {
           )}
 
           {result && !analyzing && (
-            <div className="mt-3 p-3 bg-white rounded-lg border border-amber-200 text-sm space-y-1">
-              <p className="font-medium text-amber-900">Resultado</p>
+            <div className="mt-3 p-3 bg-white rounded-lg border border-gray-200 text-sm space-y-1">
+              <p className="font-medium text-gray-900">Resultado</p>
               <p>Negocios analizados: <strong>{result.totalBusinesses}</strong></p>
               <p>Negocios con imágenes en Cloudinary: <strong>{result.businessesWithCloudinary}</strong></p>
               <p>Imágenes en Cloudinary (total): <strong>{result.totalCloudinaryImages}</strong></p>
@@ -1806,7 +1936,7 @@ function CloudinaryInventoryCard() {
                   </div>
                 </div>
               ) : (
-                <p className="text-emerald-700 mt-1">✓ Ningún negocio tiene imágenes en Cloudinary.</p>
+                <p className="text-gray-700 mt-1">✓ Ningún negocio tiene imágenes en Cloudinary.</p>
               )}
             </div>
           )}
@@ -2040,9 +2170,9 @@ function R2MigrationCard() {
   const busy = scanningAll || batchRunning || anyBusy
 
   return (
-    <div className="bg-cyan-50 rounded-xl p-5 border border-cyan-200">
+    <div className="bg-gray-50 rounded-lg p-5 border border-gray-200">
       <div className="flex items-start gap-3">
-        <ImageIcon className="w-6 h-6 text-cyan-600 flex-shrink-0 mt-1" />
+        <ImageIcon className="w-6 h-6 text-gray-700 flex-shrink-0 mt-1" />
         <div className="flex-1 min-w-0">
           <h4 className="font-medium text-gray-900">Migrar imágenes a Cloudflare R2 (tablero por negocio)</h4>
           <p className="text-sm text-gray-600 mt-1">
@@ -2058,7 +2188,7 @@ function R2MigrationCard() {
               <button
                 onClick={loadBusinesses}
                 disabled={loadingList}
-                className="flex items-center gap-2 px-4 py-2 bg-white border border-cyan-300 text-cyan-700 rounded-lg hover:bg-cyan-50 disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
               >
                 {loadingList ? (
                   <><RefreshCw className="w-4 h-4 animate-spin" /> Cargando negocios...</>
@@ -2080,7 +2210,7 @@ function R2MigrationCard() {
                 <button
                   onClick={scanAll}
                   disabled={busy}
-                  className="flex items-center gap-2 px-3 py-2 bg-white border border-cyan-300 text-cyan-700 rounded-lg hover:bg-cyan-50 disabled:opacity-50 text-sm"
+                  className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-sm"
                 >
                   {scanningAll ? (
                     <><RefreshCw className="w-4 h-4 animate-spin" /> Escaneando {scanProgress.done}/{scanProgress.total}...</>
@@ -2106,16 +2236,16 @@ function R2MigrationCard() {
               </div>
 
               {/* Selección rápida + migrar seleccionadas */}
-              <div className="flex flex-wrap items-center gap-2 p-2 bg-white rounded-lg border border-cyan-200">
+              <div className="flex flex-wrap items-center gap-2 p-2 bg-white rounded-lg border border-gray-200">
                 <span className="text-sm text-gray-600">Seleccionar:</span>
-                <button onClick={() => selectFirst(2)} disabled={busy} className="px-2 py-1 text-xs rounded border border-cyan-300 text-cyan-700 hover:bg-cyan-50 disabled:opacity-50">primeras 2</button>
-                <button onClick={() => selectFirst(3)} disabled={busy} className="px-2 py-1 text-xs rounded border border-cyan-300 text-cyan-700 hover:bg-cyan-50 disabled:opacity-50">primeras 3</button>
+                <button onClick={() => selectFirst(2)} disabled={busy} className="px-2 py-1 text-xs rounded border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50">primeras 2</button>
+                <button onClick={() => selectFirst(3)} disabled={busy} className="px-2 py-1 text-xs rounded border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50">primeras 3</button>
                 <button onClick={clearSelection} disabled={busy || selectedCount === 0} className="px-2 py-1 text-xs rounded border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50">limpiar</button>
                 <div className="flex-1" />
                 <button
                   onClick={migrateSelected}
                   disabled={busy || selectedCount === 0}
-                  className="flex items-center gap-2 px-3 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 disabled:opacity-50 text-sm"
+                  className="flex items-center gap-2 px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 text-sm"
                 >
                   {batchRunning ? (
                     <><RefreshCw className="w-4 h-4 animate-spin" /> Migrando {batchProgress.done}/{batchProgress.total}...</>
@@ -2132,10 +2262,10 @@ function R2MigrationCard() {
               {/* Dos columnas */}
               <div className="grid md:grid-cols-2 gap-3">
                 {/* Pendientes */}
-                <div className="bg-white rounded-lg border border-cyan-200 overflow-hidden">
-                  <div className="px-3 py-2 bg-cyan-100 text-cyan-900 text-sm font-medium flex items-center justify-between">
+                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-100 text-gray-900 text-sm font-medium flex items-center justify-between">
                     <span className="flex items-center gap-1"><Clock className="w-4 h-4" /> Pendientes</span>
-                    <span className="text-cyan-700">{totalPending}</span>
+                    <span className="text-gray-700">{totalPending}</span>
                   </div>
                   <div className="max-h-80 overflow-y-auto divide-y divide-gray-100">
                     {pendingItems.length === 0 ? (
@@ -2153,9 +2283,9 @@ function R2MigrationCard() {
                           <p className="truncate text-gray-900" title={it.businessName}>{it.businessName}</p>
                           <p className="text-xs">
                             {it.status === 'idle' && <span className="text-gray-400">sin escanear</span>}
-                            {it.status === 'scanning' && <span className="text-cyan-600">escaneando...</span>}
-                            {it.status === 'pending' && <span className="text-amber-600">{it.candidates} imagen(es) a copiar</span>}
-                            {it.status === 'migrating' && <span className="text-cyan-600">copiando... ({it.migrated})</span>}
+                            {it.status === 'scanning' && <span className="text-gray-700">escaneando...</span>}
+                            {it.status === 'pending' && <span className="text-gray-700">{it.candidates} imagen(es) a copiar</span>}
+                            {it.status === 'migrating' && <span className="text-gray-700">copiando... ({it.migrated})</span>}
                             {it.status === 'error' && <span className="text-red-600" title={it.error}>error: {it.error}</span>}
                           </p>
                         </div>
@@ -2163,7 +2293,7 @@ function R2MigrationCard() {
                           onClick={() => scanOne(it.businessId)}
                           disabled={busy || it.status === 'scanning' || it.status === 'migrating'}
                           title="Escanear (ver cuántas faltan)"
-                          className="flex-shrink-0 px-2 py-1 text-xs rounded border border-cyan-300 text-cyan-700 hover:bg-cyan-50 disabled:opacity-40"
+                          className="flex-shrink-0 px-2 py-1 text-xs rounded border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-40"
                         >
                           <Info className="w-3.5 h-3.5" />
                         </button>
@@ -2171,7 +2301,7 @@ function R2MigrationCard() {
                           onClick={() => migrateOne(it.businessId)}
                           disabled={busy || it.status === 'migrating'}
                           title="Migrar este negocio a R2"
-                          className="flex-shrink-0 px-2 py-1 text-xs rounded bg-cyan-600 text-white hover:bg-cyan-700 disabled:opacity-40"
+                          className="flex-shrink-0 px-2 py-1 text-xs rounded bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-40"
                         >
                           {it.status === 'migrating' ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : 'Migrar'}
                         </button>
@@ -2181,17 +2311,17 @@ function R2MigrationCard() {
                 </div>
 
                 {/* Migradas */}
-                <div className="bg-white rounded-lg border border-emerald-200 overflow-hidden">
-                  <div className="px-3 py-2 bg-emerald-100 text-emerald-900 text-sm font-medium flex items-center justify-between">
+                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-100 text-gray-900 text-sm font-medium flex items-center justify-between">
                     <span className="flex items-center gap-1"><CheckCircle className="w-4 h-4" /> Migradas</span>
-                    <span className="text-emerald-700">{totalDone}</span>
+                    <span className="text-gray-700">{totalDone}</span>
                   </div>
                   <div className="max-h-80 overflow-y-auto divide-y divide-gray-100">
                     {doneItems.length === 0 ? (
                       <p className="px-3 py-4 text-xs text-gray-500 text-center">Todavía ninguna</p>
                     ) : doneItems.map((it) => (
                       <div key={it.businessId} className="px-3 py-2 flex items-center gap-2 text-sm">
-                        <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                        <CheckCircle className="w-4 h-4 text-gray-500 flex-shrink-0" />
                         <div className="flex-1 min-w-0">
                           <p className="truncate text-gray-900" title={it.businessName}>{it.businessName}</p>
                           <p className="text-xs text-gray-500">
@@ -2213,7 +2343,7 @@ function R2MigrationCard() {
               </div>
 
               <p className="text-xs text-gray-500">
-                💡 Después de migrar un negocio, abrí su catálogo y verificá que las imágenes se vean
+                Después de migrar un negocio, abrí su catálogo y verificá que las imágenes se vean
                 igual (ya servidas desde R2). El original sigue en Cloudinary/Storage como respaldo
                 hasta el cleanup. El tablero recuerda lo migrado aunque cierres la página.
               </p>

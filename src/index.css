@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
 /* Escala de la marca (tripletas RGB). Por defecto, el azul de Cobrify: son
    los mismos hex que vivian en tailwind.config.js. aplicarEscalaPrimary
@@ -101,6 +102,21 @@
 }
 
 @layer components {
+  /* Panel de administracion (.admin): Inter, 13px y cifras tabulares. Sin
+     zoom: la densidad sale del tamano de letra y de las filas, no de encoger
+     la pagina. En pantallas con mouse los campos van a 13px; en tactiles se
+     quedan en 16px para que iOS no haga zoom al enfocar. */
+  .admin {
+    font-variant-numeric: tabular-nums;
+  }
+  @media (pointer: fine) {
+    .admin input,
+    .admin select,
+    .admin textarea {
+      font-size: 13px;
+    }
+  }
+
   /* Deshabilitar hover en dispositivos táctiles (evita hover al hacer scroll) */
   @media (hover: none) {
     .touch-no-hover:hover {

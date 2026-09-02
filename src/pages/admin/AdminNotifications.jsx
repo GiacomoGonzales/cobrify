@@ -22,12 +22,13 @@ import {
   ChevronDown,
   ChevronUp
 } from 'lucide-react'
+import { Pagina, Filtros, Buscador, Boton } from '@/components/admin/ui'
 
 const STATUS_CONFIG = {
   draft: { label: 'Borrador', color: 'bg-gray-100 text-gray-700', icon: Clock },
   sending: { label: 'Enviando', color: 'bg-primary-100 text-primary-700', icon: Loader2 },
-  sent: { label: 'Enviada', color: 'bg-green-100 text-green-700', icon: CheckCircle },
-  partial: { label: 'Parcial', color: 'bg-amber-100 text-amber-700', icon: AlertCircle },
+  sent: { label: 'Enviada', color: 'bg-gray-100 text-gray-700', icon: CheckCircle },
+  partial: { label: 'Parcial', color: 'bg-gray-100 text-gray-700', icon: AlertCircle },
   failed: { label: 'Fallida', color: 'bg-red-100 text-red-700', icon: AlertCircle }
 }
 
@@ -474,68 +475,21 @@ export default function AdminNotifications() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <StatCard
-          icon={Bell}
-          label="Total Campañas"
-          value={stats.total}
-          color="text-primary-600"
-        />
-        <StatCard
-          icon={Send}
-          label="Enviadas"
-          value={stats.sent}
-          color="text-green-600"
-        />
-        <StatCard
-          icon={CheckCircle}
-          label="Tasa de Éxito"
-          value={`${stats.successRate}%`}
-          color="text-cyan-600"
-        />
-        <StatCard
-          icon={Users}
-          label="Destinatarios Total"
-          value={stats.totalRecipients}
-          color="text-primary-600"
-        />
-      </div>
-
-      {/* Toolbar */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-        <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Buscar campañas..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={loadCampaigns}
-              className="flex items-center gap-2 px-4 py-2.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">Actualizar</span>
-            </button>
-            <button
-              onClick={openCreateModal}
-              className="flex items-center gap-2 px-4 py-2.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Nueva Campaña
-            </button>
-          </div>
-        </div>
-      </div>
+      <Pagina
+        resumen={`${stats.total} campañas · ${stats.sent} enviadas · ${stats.successRate} % de éxito · ${stats.totalRecipients} destinatarios`}
+        acciones={
+          <>
+            <Boton tamano="sm" onClick={loadCampaigns} disabled={loading}>{loading ? 'Cargando…' : 'Recargar'}</Boton>
+            <Boton tamano="sm" variante="primario" onClick={openCreateModal}>Nueva campaña</Boton>
+          </>
+        }
+      />
+      <Filtros>
+        <Buscador ancho="w-full sm:w-80" placeholder="Título o mensaje" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+      </Filtros>
 
       {/* Campaigns Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
@@ -586,7 +540,7 @@ export default function AdminNotifications() {
                         {campaign.totalRecipients || 0}
                       </td>
                       <td className="px-4 py-3 text-center hidden md:table-cell">
-                        <span className="text-green-600 font-medium">{campaign.successCount || 0}</span>
+                        <span className="text-gray-700 font-medium">{campaign.successCount || 0}</span>
                         {campaign.failureCount > 0 && (
                           <span className="text-red-500 text-xs ml-1">/ {campaign.failureCount} err</span>
                         )}
@@ -993,7 +947,7 @@ export default function AdminNotifications() {
                   />
                 )}
                 {action === 'review' && (
-                  <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
+                  <p className="text-[11px] text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 mt-2">
                     Requiere la app actualizada. Quien tenga una versión anterior recibirá la
                     notificación igual, pero al tocarla solo se abrirá la app.
                   </p>
@@ -1044,7 +998,7 @@ export default function AdminNotifications() {
             {/* Vista previa de audiencia: a cuántos llega ANTES de enviar */}
             <div className={`rounded-lg border p-4 ${
               audience && audience.usuarios === 0
-                ? 'bg-amber-50 border-amber-200'
+                ? 'bg-gray-50 border-gray-200'
                 : 'bg-primary-50 border-primary-200'
             }`}>
               {loadingAudience ? (
@@ -1055,14 +1009,14 @@ export default function AdminNotifications() {
                 <>
                   <p className="text-sm text-gray-800">
                     Esta campaña llegará a{' '}
-                    <span className="font-bold text-lg">{audience.usuarios}</span>{' '}
+                    <span className="font-semibold text-lg">{audience.usuarios}</span>{' '}
                     {audience.usuarios === 1 ? 'usuario' : 'usuarios'}
                     {audience.tokens > 0 && (
                       <span className="text-gray-500"> · {audience.tokens} dispositivo{audience.tokens === 1 ? '' : 's'}</span>
                     )}
                   </p>
                   {audience.usuarios === 0 && (
-                    <p className="text-xs text-amber-700 mt-1">
+                    <p className="text-xs text-gray-700 mt-1">
                       Ningún usuario cumple estos filtros. Revisá la combinación antes de enviar.
                     </p>
                   )}
@@ -1084,7 +1038,7 @@ export default function AdminNotifications() {
             {/* Actions */}
             <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-200">
               {showConfirm && (
-                <p className="text-sm text-amber-600 mr-auto font-medium">
+                <p className="text-sm text-gray-700 mr-auto font-medium">
                   ¿Confirmas el envío?
                 </p>
               )}
@@ -1168,8 +1122,8 @@ export default function AdminNotifications() {
  */
 function NotificationPreview({ title, message }) {
   return (
-    <div className="rounded-xl bg-gradient-to-br from-gray-700 to-gray-900 p-4">
-      <div className="bg-white/95 backdrop-blur rounded-xl p-3 shadow-lg max-w-sm mx-auto">
+    <div className="rounded-lg bg-gray-100 p-4">
+      <div className="bg-white/95 rounded-lg p-3 shadow-lg max-w-sm mx-auto">
         <div className="flex items-start gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center flex-shrink-0">
             <Bell className="w-4 h-4 text-white" />
@@ -1195,25 +1149,11 @@ function NotificationPreview({ title, message }) {
   )
 }
 
-function StatCard({ icon: Icon, label, value, color }) {
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-      <div className="flex items-center gap-3">
-        <Icon className={`w-6 h-6 sm:w-8 sm:h-8 ${color} flex-shrink-0`} />
-        <div className="min-w-0">
-          <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">{label}</p>
-          <p className="text-xl sm:text-2xl font-bold text-gray-900">{value}</p>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 function Modal({ onClose, title, children }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
       <div
-        className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-lg max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-lg shadow-lg border border-gray-200 w-full max-w-lg max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-5 border-b border-gray-200">
@@ -1299,19 +1239,19 @@ function CampaignDetail({ campaign }) {
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-primary-50 rounded-lg p-3 text-center">
             <p className="text-xs text-primary-600">Destinatarios</p>
-            <p className="text-xl font-bold text-primary-700">{campaign.totalRecipients || 0}</p>
+            <p className="text-xl font-semibold text-primary-700">{campaign.totalRecipients || 0}</p>
           </div>
-          <div className="bg-cyan-50 rounded-lg p-3 text-center">
-            <p className="text-xs text-cyan-600">Tokens</p>
-            <p className="text-xl font-bold text-cyan-700">{campaign.totalTokens || 0}</p>
+          <div className="bg-gray-50 rounded-lg p-3 text-center">
+            <p className="text-xs text-gray-700">Tokens</p>
+            <p className="text-xl font-semibold text-gray-700">{campaign.totalTokens || 0}</p>
           </div>
-          <div className="bg-green-50 rounded-lg p-3 text-center">
-            <p className="text-xs text-green-600">Exitosos</p>
-            <p className="text-xl font-bold text-green-700">{campaign.successCount || 0}</p>
+          <div className="bg-gray-50 rounded-lg p-3 text-center">
+            <p className="text-xs text-gray-700">Exitosos</p>
+            <p className="text-xl font-semibold text-gray-700">{campaign.successCount || 0}</p>
           </div>
           <div className="bg-red-50 rounded-lg p-3 text-center">
             <p className="text-xs text-red-600">Fallidos</p>
-            <p className="text-xl font-bold text-red-700">{campaign.failureCount || 0}</p>
+            <p className="text-xl font-semibold text-red-700">{campaign.failureCount || 0}</p>
           </div>
         </div>
       )}

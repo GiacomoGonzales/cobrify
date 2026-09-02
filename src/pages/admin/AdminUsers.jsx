@@ -1,137 +1,110 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react'
-import { db, auth } from '@/lib/firebase'
-import { collection, getDocs, query, where, doc, getDoc, updateDoc, setDoc, deleteDoc, Timestamp, increment, serverTimestamp } from 'firebase/firestore'
-import { PLANS, SELLABLE_PLAN_IDS, updateUserFeatures, updateMaxBranches, registerPayment } from '@/services/subscriptionService'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { doc, updateDoc, serverTimestamp, Timestamp } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
+import { PLANS, SELLABLE_PLAN_IDS, registerPayment } from '@/services/subscriptionService'
 import { getCustomPlans } from '@/services/customPlanService'
-import { getVendedores, createVendedor, updateVendedor, deleteVendedor } from '@/services/vendedorService'
-import { getEmissionSecrets, saveEmissionSecrets } from '@/services/emissionSecretsService'
-import UserDetailsModal from '@/components/admin/UserDetailsModal'
-import PeruUsersMap from '@/components/admin/PeruUsersMap'
+import { getVendedores } from '@/services/vendedorService'
+import { cargarCuentas, diasParaVencer, enlaceRecordatorioWhatsapp } from '@/services/adminCuentasService'
+import { RUBROS, nombreRubro } from '@/data/rubros'
 import { useToast } from '@/contexts/ToastContext'
 import { useAuth } from '@/contexts/AuthContext'
-import {
-  Users,
-  Search,
-  Filter,
-  Download,
-  RefreshCw,
-  ChevronDown,
-  ChevronUp,
-  Eye,
-  Ban,
-  CheckCircle,
-  Check,
-  Clock,
-  AlertTriangle,
-  Mail,
-  Building2,
-  Calendar,
-  CreditCard,
-  MoreVertical,
-  X,
-  Plus,
-  Edit2,
-  Trash2,
-  UserPlus,
-  Shield,
-  Settings,
-  Key,
-  FileKey,
-  Save,
-  Loader2,
-  Image,
-  Sparkles,
-  DollarSign,
-  Receipt,
-  Upload,
-  Landmark,
-  Store,
-  MapPin,
-  Phone,
-  FileText,
-  PlusCircle,
-  TrendingUp,
-  TrendingDown,
-  ChevronRight,
-  UserCheck,
-  Globe
-} from 'lucide-react'
-import {
-  getBranches,
-  createBranch,
-  updateBranch,
-  deleteBranch
-} from '@/services/branchService'
-import { createWarehouse, getWarehouses, deleteWarehouse } from '@/services/warehouseService'
-import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 import { matchesPrebuilt } from '@/lib/utils'
 import { buildAccountHaystack } from '@/utils/adminSearch'
+import UserDetailsModal from '@/components/admin/UserDetailsModal'
+import SunatModal from '@/components/admin/cuenta/SunatModal'
+import FuncionesModal from '@/components/admin/cuenta/FuncionesModal'
+import SucursalesModal from '@/components/admin/cuenta/SucursalesModal'
+import ContactoModal from '@/components/admin/cuenta/ContactoModal'
+import AsignarVendedorModal from '@/components/admin/cuenta/AsignarVendedorModal'
+import EliminarCuentaModal from '@/components/admin/cuenta/EliminarCuentaModal'
+import VendedoresModal from '@/components/admin/cuenta/VendedoresModal'
+import HuerfanasModal from '@/components/admin/cuenta/HuerfanasModal'
+import { Pagina, Seccion, Tabla, Th, Td, Fila, FilaVacia, Filtros, FiltroSelect, Buscador, Estado, Pastilla, Boton } from '@/components/admin/ui'
 
-const STATUS_COLORS = {
-  active: 'bg-green-100 text-green-700',
-  trial: 'bg-blue-100 text-blue-700',
-  suspended: 'bg-red-100 text-red-700',
-  expired: 'bg-amber-100 text-amber-700'
-}
+// Lista de cuentas: buscador, filtros y tabla. Clic en una fila abre la ficha
+// (/app/admin/users/:id); el menu de la derecha tiene los atajos.
 
-const STATUS_LABELS = {
-  active: 'Activo',
-  trial: 'Trial',
-  suspended: 'Suspendido',
-  expired: 'Vencido'
-}
+const STATUS_LABELS = { active: 'Activo', trial: 'Trial', suspended: 'Suspendido', expired: 'Vencido' }
+const PAGE_SIZE = 50
 
-// Helper para mostrar nombre del plan con precio
-const getPlanDisplay = (user) => {
+// Nombre del plan con su precio
+const getPlanDisplay = user => {
   const plan = PLANS[user.plan]
   const name = user.planName || plan?.name || user.plan
   const price = plan?.totalPrice
-  if (price && price > 0) {
-    return `${name} - S/${price.toFixed(2)}`
-  }
-  return name
+  return price && price > 0 ? `${name} · S/ ${price.toFixed(2)}` : name
+}
+
+const formatDate = date => (date ? date.toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' }) : '—')
+
+function ItemMenu({ rojo = false, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full px-3 py-1.5 text-left text-[12.5px] hover:bg-gray-50 ${rojo ? 'text-red-600' : 'text-gray-700'}`}
+    >
+      {children}
+    </button>
+  )
 }
 
 export default function AdminUsers() {
   const toast = useToast()
+  const navigate = useNavigate()
   const { user: currentUser } = useAuth()
+  const [searchParams] = useSearchParams()
+
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
-  const [sunatStats, setSunatStats] = useState({}) // { odWp: { accepted: 10, rejected: 2, pending: 1, salesNotes: 5 } }
-  const [loadingSunatStats, setLoadingSunatStats] = useState(false)
-  const [searchTerm, setSearchTerm] = useState('')
+  const [resellers, setResellers] = useState([])
+  const [vendedores, setVendedores] = useState([])
+  const [customPlans, setCustomPlans] = useState({})
+  const [huerfanas, setHuerfanas] = useState([])
+
+  // El buscador de la cabecera del admin manda aqui con ?q=; si cambia estando
+  // ya en la pagina (otra busqueda), tambien se aplica.
+  const [searchTerm, setSearchTerm] = useState(() => searchParams.get('q') || '')
+  useEffect(() => {
+    const q = searchParams.get('q')
+    if (q !== null) setSearchTerm(q)
+  }, [searchParams])
+
   const [statusFilter, setStatusFilter] = useState('all')
   const [planFilter, setPlanFilter] = useState('all')
-  const [sourceFilter, setSourceFilter] = useState('all') // 'all' | 'cobrify' | 'reseller' | 'reseller:ID'
-  const [modeFilter, setModeFilter] = useState('all') // 'all' | 'retail' | 'restaurant' | 'pharmacy' | etc.
-  const [igvFilter, setIgvFilter] = useState('all') // 'all' | 'reduced' | 'exempt' | 'standard'
-  const [resellers, setResellers] = useState([]) // Lista de resellers para el filtro
+  const [sourceFilter, setSourceFilter] = useState('all') // 'all' | 'cobrify' | 'reseller' | 'reseller:<id>'
+  const [modeFilter, setModeFilter] = useState('all')
+  const [rubroFilter, setRubroFilter] = useState('all')
+  const [igvFilter, setIgvFilter] = useState('all') // 'all' | 'reduced' | 'exempt' | 'nrus' | 'standard'
+  const [vendedorFilter, setVendedorFilter] = useState('all') // 'all' | 'none' | vendedorId
+  // Vencimientos: antes era una pagina aparte; ahora es este filtro
+  // (la ruta vieja /expirations llega con ?vence=week).
+  const [venceFilter, setVenceFilter] = useState(() => searchParams.get('vence') || 'all')
+  const [editandoRubro, setEditandoRubro] = useState(null)
   const [sortField, setSortField] = useState('createdAt')
   const [sortDirection, setSortDirection] = useState('desc')
-  const [selectedUser, setSelectedUser] = useState(null)
-  const [showFilters, setShowFilters] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+
+  // Un solo modal abierto a la vez: { tipo, cuenta }
+  const [modal, setModal] = useState(null)
+  const [processingPayment, setProcessingPayment] = useState(false)
+
+  // Menu de acciones de una fila. Es `position: fixed` (para salir del
+  // overflow de la tabla), asi que al hacer scroll se recalcula contra su boton.
   const [actionMenuUser, setActionMenuUser] = useState(null)
   const [actionMenuPosition, setActionMenuPosition] = useState({ top: 0, left: 0 })
-  // Botón que abrió el menú. El menú es `position: fixed` (para salir del
-  // overflow de la tabla), así que al hacer scroll hay que RECALCULAR su
-  // posición contra este botón; si no, se queda flotando donde estaba.
   const actionMenuTriggerRef = useRef(null)
 
-  // Posición del menú a partir de su botón. null si el botón ya no se ve.
-  const computeActionMenuPosition = (triggerEl) => {
+  const computeActionMenuPosition = triggerEl => {
     if (!triggerEl) return null
     const rect = triggerEl.getBoundingClientRect()
     if (rect.bottom < 0 || rect.top > window.innerHeight) return null
-    const menuHeight = 180
-    const spaceBelow = window.innerHeight - rect.bottom
-    const openUp = spaceBelow < menuHeight
-    return {
-      top: openUp ? rect.top - menuHeight : rect.bottom + 4,
-      left: rect.right - 176,
-    }
+    const menuHeight = 470
+    const openUp = window.innerHeight - rect.bottom < menuHeight && rect.top > menuHeight
+    return { top: openUp ? rect.top - menuHeight : rect.bottom + 4, left: rect.right - 208 }
   }
 
-  // Abre/cierra el menú de acciones de un usuario anclándolo a su botón.
   const toggleActionMenu = (userId, triggerEl) => {
     if (actionMenuUser === userId) {
       setActionMenuUser(null)
@@ -145,8 +118,6 @@ export default function AdminUsers() {
     setActionMenuUser(userId)
   }
 
-  // Mientras el menú está abierto, seguirlo al botón en scroll/resize.
-  // `capture: true` para captar también el scroll de contenedores internos.
   useEffect(() => {
     if (!actionMenuUser) return
     const reposition = () => {
@@ -158,6 +129,7 @@ export default function AdminUsers() {
       }
       setActionMenuPosition(pos)
     }
+    // capture: true para captar tambien el scroll de contenedores internos
     window.addEventListener('scroll', reposition, true)
     window.addEventListener('resize', reposition)
     return () => {
@@ -166,148 +138,20 @@ export default function AdminUsers() {
     }
   }, [actionMenuUser])
 
-  // Estados para modal de configuración SUNAT
-  const [showSunatModal, setShowSunatModal] = useState(false)
-  const [sunatUserToEdit, setSunatUserToEdit] = useState(null)
-  const [savingSunat, setSavingSunat] = useState(false)
-  const [loadingSunatConfig, setLoadingSunatConfig] = useState(false)
-  const [sunatForm, setSunatForm] = useState({
-    emissionMethod: 'none',
-    // QPse
-    qpseUsuario: '',
-    qpsePassword: '',
-    qpseEnvironment: 'demo',
-    // SUNAT Directo
-    solUser: '',
-    solPassword: '',
-    clientId: '',
-    clientSecret: '',
-    certificatePassword: '',
-    certificateName: '',
-    sunatEnvironment: 'beta',
-    // Configuración tributaria
-    igvExempt: false,
-    igvRate: 18,
-    taxType: 'standard', // 'standard' (18%), 'reduced' (10.5% Ley 31556), 'exempt' (0% Ley 27037), 'nrus' (Nuevo RUS: boleta 0113 con IGV 0)
-    // Override admin: permitir boleta/factura en el POS aunque NO haya conexión SUNAT.
-    allowInvoicingWithoutSunat: false
-  })
-  const [showPasswords, setShowPasswords] = useState({
-    qpse: false,
-    sol: false,
-    cert: false,
-    api: false
-  })
-  const [certificateFile, setCertificateFile] = useState(null)
+  // ── Carga ──────────────────────────────────────────────────────────────────
 
-  // Estados para modal de features
-  const [showFeaturesModal, setShowFeaturesModal] = useState(false)
-  const [featuresUserToEdit, setFeaturesUserToEdit] = useState(null)
-  const [savingFeatures, setSavingFeatures] = useState(false)
-  const [featuresForm, setFeaturesForm] = useState({
-    productImages: false,
-    hidePaymentMethods: false,
-    certificates: false,
-    // expenseManagement eliminado 14-ago-2026: Gastos/Rentabilidad son para todos; el toggle era fantasma
-    loans: false,
-    bulkDelete: false
-  })
-
-  // Estados para modal de pagos y planes
-  const [showPaymentModal, setShowPaymentModal] = useState(false)
-  const [showPlanModal, setShowPlanModal] = useState(false)
-  const [showExpiryModal, setShowExpiryModal] = useState(false)
-  const [paymentUserToEdit, setPaymentUserToEdit] = useState(null)
-  const [processingPayment, setProcessingPayment] = useState(false)
-
-  // Estado para editar límite de comprobantes
-  const [editingInvoiceLimit, setEditingInvoiceLimit] = useState(false)
-  const [newInvoiceLimit, setNewInvoiceLimit] = useState(0)
-  const [savingInvoiceLimit, setSavingInvoiceLimit] = useState(false)
-
-  // Estados para modal de sucursales
-  const [showBranchesModal, setShowBranchesModal] = useState(false)
-  const [branchesUserToEdit, setBranchesUserToEdit] = useState(null)
-  const [branches, setBranches] = useState([])
-  const [loadingBranches, setLoadingBranches] = useState(false)
-  const [savingBranch, setSavingBranch] = useState(false)
-  const [mainBranchName, setMainBranchName] = useState('Sucursal Principal')
-  const [editingMainBranch, setEditingMainBranch] = useState(false)
-  const [savingMainBranch, setSavingMainBranch] = useState(false)
-  const [editingBranch, setEditingBranch] = useState(null)
-  const [branchForm, setBranchForm] = useState({
-    name: '',
-    address: '',
-    phone: '',
-    email: '',
-    location: '',
-    businessMode: '', // '' = hereda el modo del negocio
-    isDefault: false,
-    department: '',
-    province: '',
-    district: '',
-    ubigeo: ''
-  })
-  // Estados para editar límite de sucursales
-  const [showEditLimitModal, setShowEditLimitModal] = useState(false)
-  const [editingMaxBranches, setEditingMaxBranches] = useState(1)
-  const [savingMaxBranches, setSavingMaxBranches] = useState(false)
-
-  // Estados para eliminar usuario
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [userToDelete, setUserToDelete] = useState(null)
-  const [deletingUser, setDeletingUser] = useState(false)
-  const [deleteWithData, setDeleteWithData] = useState(false)
-
-  // Estados para editar nombre de contacto
-  const [showContactModal, setShowContactModal] = useState(false)
-  const [userToEditContact, setUserToEditContact] = useState(null)
-  const [contactNameInput, setContactNameInput] = useState('')
-  const [contactPhoneInput, setContactPhoneInput] = useState('')
-  const [savingContact, setSavingContact] = useState(false)
-  const [assigningNumbers, setAssigningNumbers] = useState(false)
-  const [showNumberModal, setShowNumberModal] = useState(false)
-  const [userToEditNumber, setUserToEditNumber] = useState(null)
-  const [numberInput, setNumberInput] = useState('')
-  const [savingNumber, setSavingNumber] = useState(false)
-
-  const [showRenewalDetails, setShowRenewalDetails] = useState(false)
-  const [showMap, setShowMap] = useState(false)
-
-  // Estados para vendedores (agentes de venta)
-  const [vendedores, setVendedores] = useState([])
-  const [vendedorFilter, setVendedorFilter] = useState('all') // 'all' | 'none' | vendedorId
-  const [showVendedorModal, setShowVendedorModal] = useState(false) // CRUD modal
-  const [editingVendedor, setEditingVendedor] = useState(null) // null = crear, obj = editar
-  const [savingVendedor, setSavingVendedor] = useState(false)
-  const [vendedorForm, setVendedorForm] = useState({
-    name: '', phone: '', yapeNumber: '', yapeName: '', bcpAccount: '', bcpCci: '', titular: ''
-  })
-  const [showAssignVendedorModal, setShowAssignVendedorModal] = useState(false)
-  const [userToAssignVendedor, setUserToAssignVendedor] = useState(null)
-  const [selectedVendedorId, setSelectedVendedorId] = useState('')
-  const [savingAssignment, setSavingAssignment] = useState(false)
-
-  // Planes personalizados
-  const [customPlans, setCustomPlans] = useState({})
-
-  // Subscriptions huérfanas (sin user doc ni business asociado)
-  const [orphanSubscriptions, setOrphanSubscriptions] = useState([])
-  const [showOrphansModal, setShowOrphansModal] = useState(false)
-  const [deletingOrphanId, setDeletingOrphanId] = useState(null)
-
-  useEffect(() => {
-    loadUsers()
-    loadCustomPlansData()
-    loadVendedores()
-  }, [])
-
-  async function loadCustomPlansData() {
+  async function loadUsers(planes = customPlans) {
+    setLoading(true)
     try {
-      const plans = await getCustomPlans()
-      setCustomPlans(plans)
-    } catch (e) {
-      console.error('Error loading custom plans:', e)
+      const { cuentas, huerfanas: sinDueno, resellers: lista } = await cargarCuentas({ customPlans: planes })
+      setUsers(cuentas)
+      setHuerfanas(sinDueno)
+      setResellers(lista)
+    } catch (error) {
+      console.error('Error cargando cuentas:', error)
+      toast.error('No se pudieron cargar las cuentas')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -316,4487 +160,612 @@ export default function AdminUsers() {
       const result = await getVendedores()
       if (result.success) setVendedores(result.data)
     } catch (e) {
-      console.error('Error loading vendedores:', e)
+      console.error('Error cargando vendedores:', e)
     }
   }
 
-  async function loadUsers() {
-    setLoading(true)
-    try {
-      // Obtener subscriptions, businesses, users y resellers en paralelo
-      const [subscriptionsSnapshot, businessesSnapshot, usersSnapshot, resellersSnapshot] = await Promise.all([
-        getDocs(collection(db, 'subscriptions')),
-        getDocs(collection(db, 'businesses')),
-        getDocs(collection(db, 'users')),
-        getDocs(collection(db, 'resellers'))
-      ])
-
-      // Crear mapa de resellers por ID para obtener nombres y lista para el filtro
-      const resellersMap = {}
-      const resellersList = []
-      resellersSnapshot.forEach(doc => {
-        const data = doc.data()
-        const name = data.branding?.companyName || data.companyName || data.email || doc.id
-        resellersMap[doc.id] = name
-        resellersList.push({ id: doc.id, name })
-      })
-      // Ordenar resellers alfabéticamente
-      resellersList.sort((a, b) => a.name.localeCompare(b.name))
-      setResellers(resellersList)
-
-      // Crear mapa de businesses por ID para acceso rápido
-      const businessesMap = {}
-      businessesSnapshot.forEach(doc => {
-        businessesMap[doc.id] = doc.data()
-      })
-
-      // Crear mapa de usuarios por ID para obtener displayName
-      const usersMap = {}
-      usersSnapshot.forEach(doc => {
-        const data = doc.data()
-        usersMap[doc.id] = data
-      })
-
-      // Contar sub-usuarios por ownerId
-      const subUsersCountMap = {}
-      const subUsersByOwner = {}
-      usersSnapshot.forEach(doc => {
-        const data = doc.data()
-        if (data.ownerId) {
-          subUsersCountMap[data.ownerId] = (subUsersCountMap[data.ownerId] || 0) + 1
-          if (!subUsersByOwner[data.ownerId]) {
-            subUsersByOwner[data.ownerId] = []
-          }
-          subUsersByOwner[data.ownerId].push({
-            id: doc.id,
-            email: data.email,
-            displayName: data.displayName,
-            isActive: data.isActive,
-            allowedPages: data.allowedPages || [],
-            createdAt: data.createdAt?.toDate?.()
-          })
-        }
-      })
-
-      const usersData = []
-      const orphans = []
-      const now = new Date()
-
-      subscriptionsSnapshot.forEach(doc => {
-        const data = doc.data()
-
-        // Excluir sub-usuarios (verificar en subscriptions, users collection y businesses)
-        if (data.ownerId) return
-        if (usersMap[doc.id]?.ownerId) return
-        // Si tiene documento en users pero no es business owner y no tiene negocio, es sub-usuario huérfano
-        if (usersMap[doc.id] && !usersMap[doc.id]?.isBusinessOwner && !businessesMap[doc.id]) {
-          orphans.push({
-            id: doc.id,
-            email: data.email || usersMap[doc.id]?.email || '',
-            displayName: usersMap[doc.id]?.displayName || '',
-            plan: data.plan || '',
-            status: data.status || '',
-            createdAt: data.createdAt?.toDate?.() || data.startDate?.toDate?.() || null,
-            reason: 'Tiene user doc sin isBusinessOwner y sin negocio',
-          })
-          return
-        }
-        // Subscription huérfana: sin doc en users y sin negocio asociado -> sub-usuario cuyo doc fue eliminado
-        if (!usersMap[doc.id] && !businessesMap[doc.id]) {
-          orphans.push({
-            id: doc.id,
-            email: data.email || '',
-            displayName: data.businessName || '',
-            plan: data.plan || '',
-            status: data.status || '',
-            createdAt: data.createdAt?.toDate?.() || data.startDate?.toDate?.() || null,
-            reason: 'Sin doc en users y sin negocio',
-          })
-          return
-        }
-
-        // Obtener datos del negocio
-        const business = businessesMap[doc.id] || {}
-
-        const createdAt = data.createdAt?.toDate?.() || data.startDate?.toDate?.()
-        const periodEnd = data.currentPeriodEnd?.toDate?.()
-
-        // Determinar estado real
-        let status = 'active'
-        if (data.status === 'suspended' || data.accessBlocked) {
-          status = 'suspended'
-        } else if (data.plan === 'trial' || data.plan === 'free') {
-          status = 'trial'
-        } else if (periodEnd && periodEnd < now) {
-          status = 'expired'
-        }
-
-        // Determinar método de emisión
-        // Prioridad: qpse/sunat raíz > emissionConfig.method > emissionConfig.qpse/sunat
-        let emissionMethod = 'none'
-        if (business.qpse?.enabled || business.qpse?.usuario) {
-          emissionMethod = 'qpse'
-        } else if (business.sunat?.enabled || business.sunat?.solUser) {
-          emissionMethod = 'sunat_direct'
-        } else if (business.emissionConfig?.method) {
-          emissionMethod = business.emissionConfig.method
-        } else if (business.emissionConfig?.qpse?.enabled || business.emissionConfig?.qpse?.usuario) {
-          emissionMethod = 'qpse'
-        } else if (business.emissionConfig?.sunat?.enabled || business.emissionConfig?.sunat?.solUser) {
-          emissionMethod = 'sunat_direct'
-        } else if (business.emissionMethod) {
-          emissionMethod = business.emissionMethod
-        }
-
-        usersData.push({
-          id: doc.id,
-          userId: doc.id, // Alias para compatibilidad con UserDetailsModal
-          userNumber: data.userNumber || null,
-          email: data.email || 'N/A',
-          businessName: business.razonSocial || business.businessName || data.businessName || 'Sin nombre',
-          ruc: business.ruc || data.ruc || null,
-          phone: business.phone || null,
-          // Teléfono de contacto del dueño (uso interno admin). Distinto del
-          // `phone` del negocio (ese imprime en el ticket).
-          contactPhone: business.contactPhone || null,
-          address: business.address || null,
-          // Ubicación
-          department: business.department || null,
-          province: business.province || null,
-          district: business.district || null,
-          // Contacto - obtener de users collection, business, o extraer del email
-          contactName: usersMap[doc.id]?.displayName || business.contactName || business.ownerName ||
-            (data.email ? data.email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : null),
-          emissionMethod: emissionMethod,
-          businessMode: business.businessMode || 'retail',
-          // Nombre personalizado de la Sucursal Principal (editable desde Gestionar Sucursales).
-          // Se persiste en businesses/{id} y users/{id}; sin esto el admin no lo leía de vuelta
-          // y siempre mostraba "Sucursal Principal".
-          mainBranchName: business.mainBranchName || usersMap[doc.id]?.mainBranchName || null,
-          igvRate: business.emissionConfig?.taxConfig?.igvRate ?? 18,
-          taxType: business.emissionConfig?.taxConfig?.taxType || 'standard',
-          plan: data.plan || 'unknown',
-          planName: data.planName || null,
-          status,
-          createdAt,
-          periodEnd,
-          // Campos adicionales para UserDetailsModal
-          currentPeriodEnd: data.currentPeriodEnd,
-          currentPeriodStart: data.currentPeriodStart,
-          lastCounterReset: data.lastCounterReset,
-          monthlyPrice: (PLANS[data.plan] || customPlans[data.plan])?.pricePerMonth || 0,
-          limits: data.limits || (PLANS[data.plan] || customPlans[data.plan])?.limits || {},
-          usage: data.usage || { invoicesThisMonth: 0 },
-          paymentHistory: data.paymentHistory || [],
-          blockReason: data.blockReason || null,
-          // Campos originales
-          planLimit: (PLANS[data.plan] || customPlans[data.plan])?.limits?.maxInvoicesPerMonth || 0, // Límite base del plan
-          bonusInvoices: data.bonusInvoices || 0, // Comprobantes extra dados manualmente
-          // Usar el límite real de la BD si existe, sino calcular con plan + bonus
-          limit: (data.limits?.maxInvoicesPerMonth !== undefined && data.limits?.maxInvoicesPerMonth !== null)
-            ? data.limits.maxInvoicesPerMonth
-            : ((PLANS[data.plan] || customPlans[data.plan])?.limits?.maxInvoicesPerMonth || 0) === -1
-              ? -1
-              : ((PLANS[data.plan] || customPlans[data.plan])?.limits?.maxInvoicesPerMonth || 0) + (data.bonusInvoices || 0),
-          accessBlocked: data.accessBlocked || false,
-          lastPayment: data.paymentHistory?.slice(-1)[0]?.date?.toDate?.() || null,
-          subUsersCount: subUsersCountMap[doc.id] || 0,
-          subUsers: subUsersByOwner[doc.id] || [],
-          features: data.features || { productImages: false },
-          // Origen del cliente (Cobrify directo o Reseller)
-          createdByReseller: data.createdByReseller || false,
-          resellerId: data.resellerId || null,
-          resellerName: data.resellerId ? resellersMap[data.resellerId] || data.resellerId : null,
-          // Vendedor (agente de venta) asignado
-          vendedorId: data.vendedorId || null,
-          // Catálogo virtual — para mostrar acceso directo desde el admin
-          catalogEnabled: business.catalogEnabled === true,
-          catalogSlug: business.catalogSlug || null,
-          customDomain: business.customDomain || null,
-          // Archivado desde /admin/expirations (excluido de estadísticas)
-          archived: data.archived === true,
-        })
-      })
-
-      setUsers(usersData)
-      setOrphanSubscriptions(orphans)
-    } catch (error) {
-      console.error('Error loading users:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Eliminar subscription huérfana
-  const handleDeleteOrphanSubscription = async (subscriptionId) => {
-    if (!window.confirm('¿Eliminar esta subscription huérfana? Esta acción no se puede deshacer.')) return
-    setDeletingOrphanId(subscriptionId)
-    try {
-      await deleteDoc(doc(db, 'subscriptions', subscriptionId))
-      setOrphanSubscriptions(prev => prev.filter(o => o.id !== subscriptionId))
-    } catch (error) {
-      console.error('Error eliminando subscription huérfana:', error)
-      alert('Error al eliminar: ' + error.message)
-    } finally {
-      setDeletingOrphanId(null)
-    }
-  }
-
-  // Helper para convertir cualquier formato de fecha a Date
-  const toDate = (val) => {
-    if (!val) return null
-    if (val.toDate) return val.toDate() // Firestore Timestamp
-    if (val._seconds) return new Date(val._seconds * 1000)
-    if (typeof val === 'string') return new Date(val)
-    if (val instanceof Date) return val
-    return null
-  }
-
-  // Cargar stats SUNAT de forma optimizada:
-  // - Aceptados: usar usage.invoicesThisMonth del subscription (ya cargado, 0 queries)
-  // - Rechazados/Pendientes: query con where server-side (muy pocos docs, rápido)
-  const loadSunatStats = async (usersToLoad) => {
-    if (!usersToLoad || usersToLoad.length === 0) return
-
-    setLoadingSunatStats(true)
-
-    try {
-      const batchSize = 20
-      for (let i = 0; i < usersToLoad.length; i += batchSize) {
-        const batch = usersToLoad.slice(i, i + batchSize)
-        const batchStats = {}
-
-        await Promise.all(batch.map(async (userData) => {
-          const userId = userData.userId
-          try {
-            const periodStart = toDate(userData.currentPeriodStart)
-              || new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-
-            // Aceptados = contador del subscription (ya cargado, sin query)
-            const accepted = userData.usage?.invoicesThisMonth || 0
-
-            // Solo consultar rechazados y pendientes (muy pocos docs, rápido)
-            let rejected = 0
-            let pending = 0
-
-            // Helper para filtrar por período
-            const isInPeriod = (docData) => {
-              const issueDate = toDate(docData.issueDate) || toDate(docData.createdAt) || null
-              return issueDate && issueDate >= periodStart
-            }
-
-            // Rechazados en invoices (NC y ND también están en invoices)
-            const rejInvQ = query(collection(db, 'businesses', userId, 'invoices'), where('sunatStatus', 'in', ['rejected', 'failed_permanent']))
-
-            // Pendientes en invoices
-            const pendInvQ = query(collection(db, 'businesses', userId, 'invoices'), where('sunatStatus', 'in', ['pending', 'sending', 'signed', 'SIGNED']))
-
-            const [rejInvSnap, pendInvSnap] = await Promise.all([
-              getDocs(rejInvQ), getDocs(pendInvQ)
-            ])
-
-            rejInvSnap.forEach((doc) => { if (isInPeriod(doc.data())) rejected++ })
-            pendInvSnap.forEach((doc) => { if (isInPeriod(doc.data())) pending++ })
-
-            batchStats[userId] = { accepted, rejected, pending }
-          } catch (err) {
-            console.error(`Error loading stats for user ${userId}:`, err)
-            batchStats[userId] = { accepted: userData.usage?.invoicesThisMonth || 0, rejected: 0, pending: 0 }
-          }
-        }))
-
-        // Actualizar progresivamente después de cada lote
-        setSunatStats(prev => ({ ...prev, ...batchStats }))
+  useEffect(() => {
+    // Los planes personalizados van primero: la fila los necesita para
+    // calcular limites y precios.
+    ;(async () => {
+      let planes = {}
+      try {
+        planes = await getCustomPlans()
+        setCustomPlans(planes)
+      } catch (e) {
+        console.error('Error cargando planes personalizados:', e)
       }
-    } catch (error) {
-      console.error('Error loading SUNAT stats:', error)
-    } finally {
-      setLoadingSunatStats(false)
-    }
-  }
+      await loadUsers(planes)
+    })()
+    loadVendedores()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  // (Las stats de SUNAT ya NO se cargan para todos los usuarios de golpe; se cargan solo
-  // para la página visible — ver el efecto más abajo, junto a la paginación.)
+  // ── Busqueda, filtros, orden y paginacion ───────────────────────────────────
 
-  /**
-   * Índice de búsqueda, uno por cuenta.
-   *
-   * El filtro de antes hacía un `includes()` de la frase completa contra cada
-   * campo por separado: pegar un correo con un espacio al final no encontraba
-   * nada, y la razón social solo aparecía si se escribía en el mismo orden y
-   * con las mismas tildes que en SUNAT. `buildAccountHaystack` arma un solo
-   * texto normalizado por cuenta —y agrega lo que faltaba: teléfono de
-   * contacto, reseller, sucursal principal, slug del catálogo y los correos de
-   * los sub-usuarios— y `matchesPrebuilt` exige que aparezcan todas las
-   * palabras, en el orden que sea.
-   *
-   * Se arma una sola vez por lista, no en cada tecla: son miles de cuentas.
-   */
+  // Un texto normalizado por cuenta, armado una sola vez por lista (son miles).
+  // matchesPrebuilt exige todas las palabras, en cualquier orden y sin tildes.
   const indiceDeBusqueda = useMemo(() => {
     const map = new Map()
     for (const u of users) map.set(u.id, buildAccountHaystack(u))
     return map
   }, [users])
 
-  // Filtrar y ordenar usuarios
   const filteredUsers = useMemo(() => {
     let result = [...users]
 
-    // Filtro de búsqueda: palabras sueltas, en cualquier orden y sin tildes
-    // (ver `indiceDeBusqueda` arriba para el porqué y para la lista de campos).
-    if (searchTerm) {
-      result = result.filter(u => matchesPrebuilt(searchTerm, indiceDeBusqueda.get(u.id) || ''))
-    }
-
-    // Filtro de estado
-    if (statusFilter !== 'all') {
-      result = result.filter(u => u.status === statusFilter)
-    }
-
-    // Filtro de plan
-    if (planFilter !== 'all') {
-      result = result.filter(u => u.plan === planFilter)
-    }
-
-    // Filtro de modo de negocio
+    if (searchTerm) result = result.filter(u => matchesPrebuilt(searchTerm, indiceDeBusqueda.get(u.id) || ''))
+    if (statusFilter !== 'all') result = result.filter(u => u.status === statusFilter)
+    if (planFilter !== 'all') result = result.filter(u => u.plan === planFilter)
     if (modeFilter !== 'all') {
-      if (modeFilter === 'retail') {
-        result = result.filter(u => u.businessMode === 'retail' || !u.businessMode)
-      } else {
-        result = result.filter(u => u.businessMode === modeFilter)
-      }
+      result = modeFilter === 'retail'
+        ? result.filter(u => u.businessMode === 'retail' || !u.businessMode)
+        : result.filter(u => u.businessMode === modeFilter)
     }
-
-    // Filtro de IGV
-    if (igvFilter !== 'all') {
-      if (igvFilter === 'reduced') {
-        result = result.filter(u => u.taxType === 'reduced' || u.igvRate === 10.5)
-      } else if (igvFilter === 'exempt') {
-        result = result.filter(u => u.taxType === 'exempt' || (u.igvRate === 0 && u.taxType !== 'nrus'))
-      } else if (igvFilter === 'nrus') {
-        result = result.filter(u => u.taxType === 'nrus')
-      } else if (igvFilter === 'standard') {
-        result = result.filter(u => u.taxType === 'standard' && u.igvRate === 18)
-      }
+    // Rubro: vale el confirmado y, si no hay, el sugerido.
+    if (rubroFilter !== 'all') {
+      result = rubroFilter === 'none' ? result.filter(u => !u.rubroEfectivo) : result.filter(u => u.rubroEfectivo === rubroFilter)
     }
+    if (igvFilter === 'reduced') result = result.filter(u => u.taxType === 'reduced' || u.igvRate === 10.5)
+    else if (igvFilter === 'exempt') result = result.filter(u => u.taxType === 'exempt' || (u.igvRate === 0 && u.taxType !== 'nrus'))
+    else if (igvFilter === 'nrus') result = result.filter(u => u.taxType === 'nrus')
+    else if (igvFilter === 'standard') result = result.filter(u => u.taxType === 'standard' && u.igvRate === 18)
 
-    // Filtro de vendedor (agente de venta)
-    if (vendedorFilter === 'none') {
-      result = result.filter(u => !u.vendedorId)
-    } else if (vendedorFilter !== 'all') {
-      result = result.filter(u => u.vendedorId === vendedorFilter)
-    }
+    if (vendedorFilter === 'none') result = result.filter(u => !u.vendedorId)
+    else if (vendedorFilter !== 'all') result = result.filter(u => u.vendedorId === vendedorFilter)
 
-    // Filtro de origen (Cobrify vs Reseller vs Reseller específico)
-    if (sourceFilter === 'cobrify') {
-      result = result.filter(u => !u.createdByReseller)
-    } else if (sourceFilter === 'reseller') {
-      result = result.filter(u => u.createdByReseller)
-    } else if (sourceFilter.startsWith('reseller:')) {
-      // Filtrar por reseller específico
+    if (sourceFilter === 'cobrify') result = result.filter(u => !u.createdByReseller)
+    else if (sourceFilter === 'reseller') result = result.filter(u => u.createdByReseller)
+    else if (sourceFilter.startsWith('reseller:')) {
       const resellerId = sourceFilter.replace('reseller:', '')
       result = result.filter(u => u.resellerId === resellerId)
     }
 
-    // Ordenar
-    // Para la columna "Uso" ordenamos por qué tan LLENO está el cupo de
-    // comprobantes (usados / límite), no por la cantidad bruta. Así, al ordenar
-    // de mayor a menor, aparecen primero a quienes se les están acabando los
-    // comprobantes (ej: 95/100 = 95% va antes que 400/500 = 80%), sin importar
-    // que sus planes sean de distinto tamaño. Los planes ilimitados (∞) reciben
-    // un valor muy bajo para que queden al final: nunca se quedan sin cupo.
-    const getSortValue = (u) => {
+    // Vencimiento (lo que era la pagina Vencimientos). Los archivados solo
+    // salen en su propia opcion.
+    if (venceFilter !== 'all') {
+      result = result.filter(u => {
+        if (venceFilter === 'archived') return u.archived
+        if (u.archived) return false
+        const d = diasParaVencer(u)
+        const suspendida = u.status === 'suspended'
+        if (venceFilter === 'overdue') return suspendida || (d !== null && d < 0)
+        if (d === null || suspendida || d < 0) return false
+        if (venceFilter === 'today') return d === 0
+        if (venceFilter === 'week') return d <= 7
+        if (venceFilter === 'month') return d <= 30
+        return true
+      })
+    }
+
+    // "Uso" ordena por que tan LLENO esta el cupo (usados / limite), no por la
+    // cantidad bruta: asi salen primero a quienes se les acaban los
+    // comprobantes. Los ilimitados van al final.
+    const getSortValue = u => {
       if (sortField === 'usage') {
-        const lim = u.limit
-        if (lim === -1 || lim === 0) return -1 // ilimitado (∞) → al final
-        const used = u.usage?.invoicesThisMonth || 0
-        return used / lim
+        if (u.limit === -1 || u.limit === 0) return -1
+        return (u.usage?.invoicesThisMonth || 0) / u.limit
       }
       let val = u[sortField]
       if (val instanceof Date) val = val.getTime()
       return val
     }
-
     result.sort((a, b) => {
       const aVal = getSortValue(a)
       const bVal = getSortValue(b)
-
       if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1
       if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1
       return 0
     })
-
     return result
-  }, [users, indiceDeBusqueda, searchTerm, statusFilter, planFilter, sourceFilter, modeFilter, igvFilter, vendedorFilter, sortField, sortDirection])
+  }, [users, indiceDeBusqueda, searchTerm, statusFilter, planFilter, sourceFilter, modeFilter, rubroFilter, igvFilter, vendedorFilter, venceFilter, sortField, sortDirection])
 
-  // ── Paginación ──────────────────────────────────────────────────────────────
-  // Renderizar SOLO la página actual evita un DOM gigante (cientos de filas) que
-  // lagueaba la página cuando hay muchos negocios.
-  const PAGE_SIZE = 50
-  const [currentPage, setCurrentPage] = useState(1)
+  // Solo se pinta la pagina actual: cientos de filas lagueaban la pantalla.
   const pageCount = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE))
   const displayedUsers = useMemo(
     () => filteredUsers.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
     [filteredUsers, currentPage]
   )
 
-  // Volver a la página 1 cuando cambian filtros/búsqueda/orden (la lista cambia).
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, statusFilter, planFilter, sourceFilter, modeFilter, igvFilter, vendedorFilter, sortField, sortDirection])
+  }, [searchTerm, statusFilter, planFilter, sourceFilter, modeFilter, rubroFilter, igvFilter, vendedorFilter, venceFilter, sortField, sortDirection])
 
-  // Si la página actual queda fuera de rango (ej: tras filtrar a menos resultados), corregir.
   useEffect(() => {
     if (currentPage > pageCount) setCurrentPage(1)
   }, [pageCount, currentPage])
 
-  // Cargar stats SUNAT SOLO de la página visible (y solo de los que falten), en vez de
-  // hacer ~2 queries por cada uno de los cientos de usuarios.
-  useEffect(() => {
-    if (loading || displayedUsers.length === 0) return
-    const pending = displayedUsers.filter(u => !sunatStats[u.userId])
-    if (pending.length > 0) loadSunatStats(pending)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [displayedUsers, loading])
-
-  // Estadísticas rápidas (usa fecha real de periodo para "activos")
-  // Los archivados se excluyen de todos los buckets — son un cluster aparte
-  // que no debe afectar tasas ni distribución.
+  // Cifras del resumen. Los archivados quedan fuera de todos los grupos.
   const stats = useMemo(() => {
     const now = new Date()
-    const isReallyActive = (u) => {
-      const pEnd = u.currentPeriodEnd?.toDate?.() ? u.currentPeriodEnd.toDate() :
-        (u.currentPeriodEnd instanceof Date ? u.currentPeriodEnd : null)
+    const vigente = u => {
+      const pEnd = u.currentPeriodEnd?.toDate?.() ? u.currentPeriodEnd.toDate() : u.currentPeriodEnd instanceof Date ? u.currentPeriodEnd : null
       return pEnd && pEnd > now && u.status !== 'suspended'
     }
-    const nonArchived = users.filter(u => !u.archived)
+    const activos = users.filter(u => !u.archived)
     return {
-      total: nonArchived.length,
-      active: nonArchived.filter(u => isReallyActive(u)).length,
-      trial: nonArchived.filter(u => u.status === 'trial').length,
-      suspended: nonArchived.filter(u => u.status === 'suspended').length,
-      expired: nonArchived.filter(u => !isReallyActive(u) && u.status !== 'suspended' && u.status !== 'trial').length,
-      cobrify: nonArchived.filter(u => !u.createdByReseller).length,
-      reseller: nonArchived.filter(u => u.createdByReseller).length,
+      total: activos.length,
+      active: activos.filter(vigente).length,
+      trial: activos.filter(u => u.status === 'trial').length,
+      suspended: activos.filter(u => u.status === 'suspended').length,
+      expired: activos.filter(u => !vigente(u) && u.status !== 'suspended' && u.status !== 'trial').length,
+      cobrify: activos.filter(u => !u.createdByReseller).length,
+      reseller: activos.filter(u => u.createdByReseller).length,
       archived: users.filter(u => u.archived).length,
     }
   }, [users])
 
-  // Métricas de retención histórica
-  const renewalStats = useMemo(() => {
-    if (!users.length) return null
+  // ── Acciones ────────────────────────────────────────────────────────────────
 
-    const now = new Date()
+  const actualizarCuenta = (id, cambios) => setUsers(prev => prev.map(u => (u.id === id ? { ...u, ...cambios } : u)))
+  const abrirModal = (tipo, cuenta) => {
+    setActionMenuUser(null)
+    setModal({ tipo, cuenta })
+  }
+  const cerrarModal = () => setModal(null)
+  const irAFicha = cuenta => navigate(`/app/admin/users/${cuenta.id}`)
 
-    // Clasificar usuarios que alguna vez pagaron
-    let totalWithPayments = 0  // todos los que alguna vez pagaron
-    let active = 0             // suscripción vigente (currentPeriodEnd > ahora)
-    let churned = 0            // suscripción vencida (currentPeriodEnd <= ahora)
-    let inFirstPeriod = 0      // aún en su primer periodo (solo 1 pago y vigente)
-    let totalRevenue = 0       // ingresos históricos totales
-
-    // Tasa de renovación histórica: cada vencimiento es una oportunidad.
-    // Cuántas se renovaron del total. Refleja lealtad acumulada (mide a un
-    // cliente que pagó 12 meses distinto que a uno que pagó 1 y se fue).
-    let totalOpportunities = 0
-    let totalRenewals = 0
-
-    for (const u of users) {
-      // Excluir archivados: el admin los marcó como "no contar". No deben
-      // arrastrar la tasa de retención hacia abajo ni inflar revenue histórico.
-      if (u.archived) continue
-
-      const payments = (u.paymentHistory || [])
-      if (payments.length === 0) continue
-
-      totalWithPayments++
-
-      // Sumar ingresos históricos
-      for (const p of payments) {
-        totalRevenue += (p.amount || 0)
-      }
-
-      // Determinar si su periodo actual está vigente
-      const pEnd = u.currentPeriodEnd?.toDate?.() ? u.currentPeriodEnd.toDate() :
-        (u.currentPeriodEnd instanceof Date ? u.currentPeriodEnd : null)
-      const isVigente = pEnd && pEnd > now
-
-      if (isVigente) {
-        active++
-        if (payments.length === 1) inFirstPeriod++
-      } else {
-        churned++
-      }
-
-      // Para tasa histórica:
-      //   renewals = pagos posteriores al primero = payments.length - 1
-      //   opportunities = renewals + (1 si ya venció el último → tuvo oportunidad y no la tomó)
-      const renewalsFromUser = Math.max(0, payments.length - 1)
-      const opportunitiesFromUser = renewalsFromUser + (isVigente ? 0 : 1)
-      totalRenewals += renewalsFromUser
-      totalOpportunities += opportunitiesFromUser
+  // El rubro confirmado se pone a mano desde la tabla. La sugerencia queda
+  // intacta: sirve para saber de donde salio la propuesta.
+  async function guardarRubro(user, rubroId) {
+    setEditandoRubro(null)
+    const valor = rubroId || null
+    if (valor === (user.rubro || null)) return
+    try {
+      await updateDoc(doc(db, 'businesses', user.id), { rubro: valor, rubroConfirmadoEn: valor ? new Date() : null })
+      const efectivo = valor || user.rubroSugerido || null
+      actualizarCuenta(user.id, { rubro: valor, rubroEfectivo: efectivo, rubroNombre: efectivo ? nombreRubro(efectivo) : '' })
+      toast.success(valor ? `Rubro: ${nombreRubro(valor)}` : 'Rubro quitado')
+    } catch (e) {
+      toast.error('No se pudo guardar el rubro')
     }
-
-    // Candidatos = todos los que pagaron menos los que están en su primer periodo
-    const candidates = totalWithPayments - inFirstPeriod
-    const renewed = active - inFirstPeriod
-    const rate = candidates > 0 ? Math.round((renewed / candidates) * 100) : null
-
-    // Tasa histórica (lifetime)
-    const lifetimeRate = totalOpportunities > 0
-      ? Math.round((totalRenewals / totalOpportunities) * 100)
-      : null
-
-    return {
-      totalWithPayments, active, churned, inFirstPeriod,
-      candidates, renewed, rate, totalRevenue,
-      totalOpportunities, totalRenewals, lifetimeRate,
-    }
-  }, [users])
+  }
 
   function handleSort(field) {
-    if (sortField === field) {
-      setSortDirection(d => d === 'asc' ? 'desc' : 'asc')
-    } else {
+    if (sortField === field) setSortDirection(d => (d === 'asc' ? 'desc' : 'asc'))
+    else {
       setSortField(field)
       setSortDirection('desc')
     }
   }
 
   async function toggleUserAccess(userId, block) {
+    setActionMenuUser(null)
     try {
-      await updateDoc(doc(db, 'subscriptions', userId), {
-        accessBlocked: block,
-        status: block ? 'suspended' : 'active'
-      })
+      await updateDoc(doc(db, 'subscriptions', userId), { accessBlocked: block, status: block ? 'suspended' : 'active' })
+      toast.success(block ? 'Cuenta suspendida' : 'Cuenta reactivada')
       loadUsers()
-      setActionMenuUser(null)
     } catch (error) {
-      console.error('Error updating user:', error)
+      console.error('Error cambiando el acceso:', error)
+      toast.error('No se pudo cambiar el acceso')
     }
   }
 
-  // Eliminar usuario completamente
-  async function handleDeleteUser() {
-    if (!userToDelete || !currentUser) return
-
-    setDeletingUser(true)
-    try {
-      const idToken = await auth.currentUser.getIdToken()
-      const response = await fetch('https://us-central1-cobrify-395fe.cloudfunctions.net/deleteUser', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}`
-        },
-        body: JSON.stringify({
-          adminUid: currentUser.uid,
-          userIdToDelete: userToDelete.id,
-          deleteData: deleteWithData
-        })
-      })
-
-      const result = await response.json()
-
-      if (result.success) {
-        toast.success(`Usuario eliminado exitosamente`)
-        setShowDeleteModal(false)
-        setUserToDelete(null)
-        setDeleteWithData(false)
-        loadUsers() // Recargar la lista
-      } else {
-        toast.error(result.error || 'Error al eliminar usuario')
-      }
-    } catch (error) {
-      console.error('Error eliminando usuario:', error)
-      toast.error('Error al eliminar usuario')
-    } finally {
-      setDeletingUser(false)
-    }
-  }
-
-  // === VENDEDORES (Agentes de venta) ===
-
-  function openVendedorForm(vendedor = null) {
-    if (vendedor) {
-      setEditingVendedor(vendedor)
-      setVendedorForm({
-        name: vendedor.name || '',
-        phone: vendedor.phone || '',
-        yapeNumber: vendedor.yapeNumber || '',
-        yapeName: vendedor.yapeName || '',
-        bcpAccount: vendedor.bcpAccount || '',
-        bcpCci: vendedor.bcpCci || '',
-        titular: vendedor.titular || '',
-        linkedUserId: vendedor.linkedUserId || ''
-      })
-    } else {
-      setEditingVendedor(null)
-      setVendedorForm({ name: '', phone: '', yapeNumber: '', yapeName: '', bcpAccount: '', bcpCci: '', titular: '', linkedUserId: '' })
-    }
-    setShowVendedorModal(true)
-  }
-
-  async function handleSaveVendedor() {
-    if (!vendedorForm.name.trim()) {
-      toast.error('El nombre es obligatorio')
+  // Cobra el precio PACTADO del cliente (congelado en su suscripcion); el del
+  // catalogo solo si no tiene uno.
+  async function renovarRapido(user) {
+    setActionMenuUser(null)
+    const planConfig = PLANS[user.plan] || customPlans[user.plan]
+    if (!planConfig) {
+      toast.error('Esta cuenta no tiene un plan válido')
       return
     }
-    setSavingVendedor(true)
+    const monto = user.renewalPrice != null ? user.renewalPrice : planConfig.totalPrice
+    if (!window.confirm(`¿Renovar ${user.businessName} con ${planConfig.name} por S/ ${monto}?`)) return
     try {
-      if (editingVendedor) {
-        const result = await updateVendedor(editingVendedor.id, vendedorForm)
-        if (result.success) toast.success('Vendedor actualizado')
-        else toast.error(result.error)
-      } else {
-        const result = await createVendedor(vendedorForm)
-        if (result.success) toast.success('Vendedor creado')
-        else toast.error(result.error)
-      }
-      setShowVendedorModal(false)
-      loadVendedores()
-    } catch (error) {
-      toast.error('Error al guardar vendedor')
-    } finally {
-      setSavingVendedor(false)
-    }
-  }
-
-  async function handleDeleteVendedor(vendedorId) {
-    if (!confirm('¿Eliminar este vendedor?')) return
-    try {
-      const result = await deleteVendedor(vendedorId)
-      if (result.success) {
-        toast.success('Vendedor eliminado')
-        loadVendedores()
-      } else {
-        toast.error(result.error)
-      }
-    } catch (error) {
-      toast.error('Error al eliminar vendedor')
-    }
-  }
-
-  async function handleAssignVendedor() {
-    if (!userToAssignVendedor) return
-    setSavingAssignment(true)
-    try {
-      const subscriptionRef = doc(db, 'subscriptions', userToAssignVendedor.id)
-      await updateDoc(subscriptionRef, {
-        vendedorId: selectedVendedorId || null
-      })
-      toast.success(selectedVendedorId ? 'Vendedor asignado' : 'Vendedor removido')
-      setShowAssignVendedorModal(false)
-      setUserToAssignVendedor(null)
-      setSelectedVendedorId('')
+      await registerPayment(user.id, monto, 'Admin - Renovación rápida', user.plan)
+      toast.success('Renovación registrada')
       loadUsers()
     } catch (error) {
-      console.error('Error asignando vendedor:', error)
-      toast.error('Error al asignar vendedor')
-    } finally {
-      setSavingAssignment(false)
+      console.error('Error al renovar:', error)
+      toast.error('No se pudo renovar')
     }
   }
 
-  // Guardar nombre de contacto
-  async function handleSaveContactName() {
-    if (!userToEditContact) return
-
-    setSavingContact(true)
-    try {
-      // Guardar el nombre de contacto en la colección users
-      const userRef = doc(db, 'users', userToEditContact.id)
-      await setDoc(userRef, {
-        displayName: contactNameInput.trim()
-      }, { merge: true })
-
-      // Guardar el teléfono de contacto del dueño en el negocio (uso interno;
-      // NO es el `phone` que imprime en el ticket).
-      const bizRef = doc(db, 'businesses', userToEditContact.id)
-      await setDoc(bizRef, {
-        contactPhone: contactPhoneInput.trim()
-      }, { merge: true })
-
-      toast.success('Contacto actualizado')
-      setShowContactModal(false)
-      setUserToEditContact(null)
-      setContactNameInput('')
-      setContactPhoneInput('')
-      loadUsers() // Recargar lista
-    } catch (error) {
-      console.error('Error guardando nombre:', error)
-      toast.error('Error al guardar el nombre')
-    } finally {
-      setSavingContact(false)
-    }
-  }
-
-  // Guardar número de usuario editado
-  async function handleSaveUserNumber() {
-    if (!userToEditNumber) return
-
-    const num = parseInt(numberInput)
-    if (isNaN(num) || num < 1) {
-      toast.error('Ingresa un número válido mayor a 0')
+  function abrirWhatsApp(user) {
+    setActionMenuUser(null)
+    const url = enlaceRecordatorioWhatsapp(user)
+    if (!url) {
+      toast.error('Esta cuenta no tiene teléfono registrado')
       return
     }
+    window.open(url, '_blank', 'noopener')
+  }
 
-    // Verificar que no esté duplicado
-    const duplicate = users.find(u => u.userNumber === num && u.id !== userToEditNumber.id)
-    if (duplicate) {
-      toast.error(`El número ${num} ya está asignado a ${duplicate.businessName}`)
-      return
-    }
-
-    setSavingNumber(true)
+  // Archivar = dejar de contar la cuenta en vencimientos y tasas de renovacion.
+  async function archivar(user, valor) {
+    setActionMenuUser(null)
+    if (valor && !window.confirm(`¿Archivar a ${user.businessName}? Queda fuera de los vencimientos y de las tasas de renovación.`)) return
     try {
-      await updateDoc(doc(db, 'subscriptions', userToEditNumber.id), { userNumber: num })
-      toast.success(`Número ${num} asignado a ${userToEditNumber.businessName}`)
-      setShowNumberModal(false)
-      setUserToEditNumber(null)
-      setNumberInput('')
-      loadUsers()
+      await updateDoc(doc(db, 'subscriptions', user.id), valor
+        ? { archived: true, archivedAt: serverTimestamp(), archivedBy: currentUser?.uid || null }
+        : { archived: false, archivedAt: null, archivedBy: null })
+      actualizarCuenta(user.id, { archived: valor })
+      toast.success(valor ? 'Cuenta archivada' : 'Cuenta desarchivada')
     } catch (error) {
-      console.error('Error guardando número:', error)
-      toast.error('Error al guardar el número')
-    } finally {
-      setSavingNumber(false)
+      console.error('Error al archivar:', error)
+      toast.error('No se pudo cambiar el archivado')
     }
   }
 
-  // Asignar números correlativos a usuarios
-  async function assignUserNumbers() {
-    setAssigningNumbers(true)
+  // El cobro vive en registerPayment() del servicio (congela precio pactado,
+  // respeta limites personalizados y levanta bloqueos). Aqui solo se avisa.
+  async function handleRegisterPayment(userId, amount, method, planKey, customEndDate = null, options = {}) {
+    setProcessingPayment(true)
     try {
-      // Ordenar todos los usuarios por fecha de creación (más antiguo primero)
-      const sorted = [...users].sort((a, b) => {
-        const aTime = a.createdAt?.getTime?.() || 0
-        const bTime = b.createdAt?.getTime?.() || 0
-        return aTime - bTime
-      })
-
-      // Encontrar el mayor número ya asignado
-      let maxNumber = 0
-      sorted.forEach(u => {
-        if (u.userNumber && u.userNumber > maxNumber) maxNumber = u.userNumber
-      })
-
-      // Asignar números solo a los que no tienen
-      let nextNumber = maxNumber > 0 ? maxNumber + 1 : 1
-      const updates = []
-
-      // Si ninguno tiene número, asignar a todos en orden
-      if (maxNumber === 0) {
-        sorted.forEach((u, i) => {
-          updates.push({ id: u.id, userNumber: i + 1 })
-        })
-      } else {
-        // Solo asignar a los que no tienen número
-        sorted.forEach(u => {
-          if (!u.userNumber) {
-            updates.push({ id: u.id, userNumber: nextNumber })
-            nextNumber++
-          }
-        })
-      }
-
-      if (updates.length === 0) {
-        toast.success('Todos los usuarios ya tienen número asignado')
-        setAssigningNumbers(false)
-        return
-      }
-
-      // Guardar en Firestore
-      await Promise.all(
-        updates.map(u =>
-          updateDoc(doc(db, 'subscriptions', u.id), { userNumber: u.userNumber })
-        )
-      )
-
-      toast.success(`Números asignados a ${updates.length} usuarios`)
+      const resultado = await registerPayment(userId, parseFloat(amount), method, planKey, customEndDate, options)
+      const vence = resultado?.newPeriodEnd
+      toast.success(vence ? `Pago registrado. Nuevo vencimiento: ${vence.toLocaleDateString('es-PE')}` : 'Pago registrado')
+      cerrarModal()
       loadUsers()
     } catch (error) {
-      console.error('Error asignando números:', error)
-      toast.error('Error al asignar números')
+      console.error('Error al registrar pago:', error)
+      toast.error(error.message || 'No se pudo registrar el pago')
     } finally {
-      setAssigningNumbers(false)
+      setProcessingPayment(false)
+    }
+  }
+
+  async function handleChangePlan(userId, newPlanKey) {
+    const plan = PLANS[newPlanKey] || customPlans[newPlanKey]
+    if (!plan) {
+      toast.error('Plan no válido')
+      return
+    }
+    try {
+      await updateDoc(doc(db, 'subscriptions', userId), { plan: newPlanKey, planName: plan.name, limits: plan.limits, updatedAt: Timestamp.now() })
+      toast.success(`Plan cambiado a ${plan.name}`)
+      cerrarModal()
+      loadUsers()
+    } catch (error) {
+      console.error('Error al cambiar plan:', error)
+      toast.error('No se pudo cambiar el plan')
     }
   }
 
   function exportToCSV() {
-    const headers = ['N°', 'Email', 'Negocio', 'RUC', 'Plan', 'Estado', 'Creado', 'Uso', 'Límite']
+    const headers = ['Código', 'Email', 'Negocio', 'Rubro', 'RUC', 'Plan', 'Estado', 'Creado', 'Uso', 'Límite']
     const rows = filteredUsers.map(u => [
-      u.userNumber || '',
+      u.codigoCliente || '',
       u.email,
       u.businessName,
+      u.rubro ? nombreRubro(u.rubro) : u.rubroSugerido ? `${nombreRubro(u.rubroSugerido)} (sugerido)` : '',
       u.ruc,
       getPlanDisplay(u),
       STATUS_LABELS[u.status],
       u.createdAt?.toLocaleDateString() || 'N/A',
       u.usage?.invoicesThisMonth || 0,
-      u.limit === -1 || u.limit === 0 ? 'Ilimitado' : u.limit
+      u.limit === -1 || u.limit === 0 ? 'Ilimitado' : u.limit,
     ])
-
     const csv = [headers, ...rows].map(r => r.join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
     const a = document.createElement('a')
     a.href = url
     a.download = `usuarios_${new Date().toISOString().split('T')[0]}.csv`
     a.click()
   }
 
-  // Abrir modal de configuración SUNAT
-  async function openSunatConfig(user) {
-    setSunatUserToEdit(user)
-    setShowSunatModal(true)
-    setLoadingSunatConfig(true)
+  function limpiarFiltros() {
+    setSearchTerm('')
+    setStatusFilter('all')
+    setPlanFilter('all')
+    setSourceFilter('all')
+    setVendedorFilter('all')
+    setModeFilter('all')
+    setRubroFilter('all')
+    setIgvFilter('all')
+    setVenceFilter('all')
+  }
 
-    // Cargar configuración actual del negocio
-    try {
-      const businessRef = doc(db, 'businesses', user.id)
-      const businessSnap = await getDoc(businessRef)
-
-      if (businessSnap.exists()) {
-        const businessData = businessSnap.data()
-        console.log('📋 Datos del negocio cargados:', businessData)
-
-        // Credenciales de emisión desde la subcolección PROTEGIDA (fallback al top-level
-        // durante la migración del certificado).
-        const em = await getEmissionSecrets(user.id, businessData)
-
-        // Determinar método de emisión
-        // Prioridad: qpse/sunat raíz > emissionConfig.method > emissionConfig.qpse/sunat
-        let method = 'none'
-        if (em.qpse?.enabled || em.qpse?.usuario) {
-          method = 'qpse'
-        } else if (em.sunat?.enabled || em.sunat?.solUser) {
-          method = 'sunat_direct'
-        } else if (em.emissionConfig?.method) {
-          method = em.emissionConfig.method
-        } else if (em.emissionConfig?.qpse?.enabled || em.emissionConfig?.qpse?.usuario) {
-          method = 'qpse'
-        } else if (em.emissionConfig?.sunat?.enabled || em.emissionConfig?.sunat?.solUser) {
-          method = 'sunat_direct'
-        } else if (businessData.emissionMethod) {
-          method = businessData.emissionMethod
-        }
-
-        // Obtener datos de qpse/sunat (prioridad: raíz > emissionConfig)
-        const qpseData = em.qpse || em.emissionConfig?.qpse || {}
-        const sunatData = em.sunat || em.emissionConfig?.sunat || {}
-        const taxConfig = em.emissionConfig?.taxConfig || businessData.taxConfig || {}
-
-        console.log('📋 Método detectado:', method)
-        console.log('📋 emissionConfig:', businessData.emissionConfig)
-        console.log('📋 QPse data:', qpseData)
-        console.log('📋 SUNAT data:', sunatData)
-
-        // Normalizar environment (produccion -> production para QPse)
-        const normalizeEnv = (env) => {
-          if (env === 'production') return 'production'
-          if (env === 'produccion') return 'production'
-          return env || 'demo'
-        }
-
-        const normalizeSunatEnv = (env) => {
-          if (env === 'production' || env === 'produccion') return 'production'
-          return env || 'beta'
-        }
-
-        setSunatForm({
-          emissionMethod: method,
-          // QPse
-          qpseUsuario: qpseData.usuario || '',
-          qpsePassword: qpseData.password || '',
-          qpseEnvironment: normalizeEnv(qpseData.environment),
-          // SUNAT Directo
-          solUser: sunatData.solUser || '',
-          solPassword: sunatData.solPassword || '',
-          clientId: sunatData.clientId || '',
-          clientSecret: sunatData.clientSecret || '',
-          certificatePassword: sunatData.certificatePassword || '',
-          certificateName: sunatData.certificateName || '',
-          sunatEnvironment: normalizeSunatEnv(sunatData.environment),
-          // Configuración tributaria
-          igvExempt: taxConfig.igvExempt || false,
-          igvRate: taxConfig.igvRate || 18,
-          // taxType guardado manda (un 'nrus' también tiene igvExempt=true y
-          // derivarlo de igvExempt lo confundiría con 'exempt'/Amazonía);
-          // derivar de igvExempt/igvRate solo para configs antiguas sin taxType.
-          // Ley 31556: aceptar 10, 10.5 y 8 como 'reduced' por compatibilidad.
-          taxType: taxConfig.taxType || (taxConfig.igvExempt ? 'exempt' : (taxConfig.igvRate === 10 || taxConfig.igvRate === 10.5 || taxConfig.igvRate === 8 ? 'reduced' : 'standard')),
-          allowInvoicingWithoutSunat: businessData.allowInvoicingWithoutSunat === true
-        })
-      } else {
-        console.warn('⚠️ No se encontró documento de negocio para:', user.id)
-        // Valores por defecto si no existe el negocio
-        setSunatForm({
-          emissionMethod: 'none',
-          qpseUsuario: '',
-          qpsePassword: '',
-          qpseEnvironment: 'demo',
-          solUser: '',
-          solPassword: '',
-          certificatePassword: '',
-          certificateName: '',
-          sunatEnvironment: 'beta',
-          igvExempt: false,
-          igvRate: 18,
-          taxType: 'standard'
-        })
-      }
-    } catch (error) {
-      console.error('Error loading SUNAT config:', error)
-      // Valores por defecto en caso de error
-      setSunatForm({
-        emissionMethod: 'none',
-        qpseUsuario: '',
-        qpsePassword: '',
-        qpseEnvironment: 'demo',
-        solUser: '',
-        solPassword: '',
-        certificatePassword: '',
-        certificateName: '',
-        sunatEnvironment: 'beta',
-        igvExempt: false,
-        igvRate: 18,
-        taxType: 'standard'
-      })
-    } finally {
-      setLoadingSunatConfig(false)
+  // Al filtrar por vencimiento conviene ver primero lo mas urgente.
+  function cambiarVence(valor) {
+    setVenceFilter(valor)
+    if (valor !== 'all' && valor !== 'archived') {
+      setSortField('periodEnd')
+      setSortDirection('asc')
     }
   }
 
-  // Manejar subida de certificado
-  const handleCertificateUpload = (e) => {
-    const file = e.target.files[0]
-    if (file) {
-      if (file.name.endsWith('.pfx') || file.name.endsWith('.p12')) {
-        setCertificateFile(file)
-        setSunatForm(prev => ({
-          ...prev,
-          certificateName: file.name,
-        }))
-      } else {
-        alert('El archivo debe ser un certificado .pfx o .p12')
-      }
-    }
-  }
-
-  // Eliminar certificado
-  const handleRemoveCertificate = () => {
-    setCertificateFile(null)
-    setSunatForm(prev => ({
-      ...prev,
-      certificateName: '',
-      certificatePassword: '',
-    }))
-  }
-
-  // Guardar configuración SUNAT
-  async function saveSunatConfig() {
-    if (!sunatUserToEdit) return
-
-    setSavingSunat(true)
-    try {
-      const businessRef = doc(db, 'businesses', sunatUserToEdit.id)
-
-      // Primero obtener los datos actuales para preservar taxConfig
-      const currentDoc = await getDoc(businessRef)
-      const currentData = currentDoc.exists() ? currentDoc.data() : {}
-      const currentEmissionConfig = currentData.emissionConfig || {}
-      // Config actual desde la subcolección PROTEGIDA (para preservar cert/firmas al re-guardar).
-      const currentSecrets = await getEmissionSecrets(sunatUserToEdit.id, currentData)
-
-      const updateData = {
-        updatedAt: Timestamp.now()
-      }
-
-      // Determinar igvExempt e igvRate basado en taxType
-      // Ley 31556: 8% IGV + 2.5% IPM = 10.5% (vigente desde 01/01/2026)
-      const taxTypeConfig = {
-        standard: { igvExempt: false, igvRate: 18 },
-        reduced: { igvExempt: false, igvRate: 10.5 }, // Ley 31556: 8% IGV + 2.5% IPM
-        exempt: { igvExempt: true, igvRate: 0 },
-        // NRUS lleva igvExempt=true A PROPÓSITO: para el POS, los PDFs y las
-        // notas de crédito se comporta EXACTAMENTE como un exonerado (precios
-        // finales, sin desglose de IGV) — es el camino que ya funciona en
-        // producción. La diferencia vive solo en el XML de la boleta, donde el
-        // generador ve taxType='nrus' y emite tipo de operación 0113 con
-        // líneas GRAVADAS (afectación 10) a tasa 0, que es lo que exige SUNAT
-        // para este régimen (no confundir con exonerado: eso es afectación 20).
-        nrus: { igvExempt: true, igvRate: 0 }
-      }
-      const selectedTaxConfig = taxTypeConfig[sunatForm.taxType] || taxTypeConfig.standard
-
-      // Un NRUS no puede emitir facturas: se le deja solo Boleta y Nota de
-      // Venta en el POS (mismo mecanismo enabledDocumentTypes de Configuración
-      // > POS; el dueño puede reactivarla ahí si el negocio cambia de régimen).
-      // Solo se escribe al MARCAR nrus — al desmarcar no se toca, para no
-      // pisar una configuración que el dueño haya afinado por su cuenta.
-      if (sunatForm.taxType === 'nrus') {
-        updateData.enabledDocumentTypes = ['boleta', 'nota_venta']
-      }
-
-      // Construir emissionConfig
-      const emissionConfig = {
-        method: sunatForm.emissionMethod,
-        taxConfig: {
-          igvExempt: selectedTaxConfig.igvExempt,
-          igvRate: selectedTaxConfig.igvRate,
-          includeIgv: !selectedTaxConfig.igvExempt,
-          taxType: sunatForm.taxType // Guardar también el tipo para referencia
-        }
-      }
-
-      if (sunatForm.emissionMethod === 'qpse') {
-        const qpseData = {
-          enabled: true,
-          usuario: sunatForm.qpseUsuario,
-          password: sunatForm.qpsePassword,
-          environment: sunatForm.qpseEnvironment,
-          firmasDisponibles: currentSecrets.qpse?.firmasDisponibles ?? currentSecrets.emissionConfig?.qpse?.firmasDisponibles ?? 500,
-          firmasUsadas: currentSecrets.qpse?.firmasUsadas ?? currentSecrets.emissionConfig?.qpse?.firmasUsadas ?? 0
-        }
-        emissionConfig.qpse = qpseData
-        emissionConfig.sunat = { enabled: false }
-      } else if (sunatForm.emissionMethod === 'sunat_direct') {
-        // Preparar datos de SUNAT
-        const sunatData = {
-          enabled: true,
-          solUser: sunatForm.solUser,
-          solPassword: sunatForm.solPassword,
-          clientId: sunatForm.clientId,
-          clientSecret: sunatForm.clientSecret,
-          certificatePassword: sunatForm.certificatePassword,
-          environment: sunatForm.sunatEnvironment,
-          homologated: sunatForm.sunatEnvironment === 'production',
-          certificateName: sunatForm.certificateName || currentSecrets.sunat?.certificateName || currentSecrets.emissionConfig?.sunat?.certificateName || '',
-          certificateData: currentSecrets.sunat?.certificateData || currentSecrets.emissionConfig?.sunat?.certificateData || null
-        }
-
-        // Si hay un nuevo archivo de certificado, convertirlo a base64
-        if (certificateFile) {
-          try {
-            const certificateBase64 = await new Promise((resolve, reject) => {
-              const reader = new FileReader()
-              reader.onload = () => {
-                // Extraer solo la parte base64 (sin el prefijo data:...)
-                const base64 = reader.result.split(',')[1]
-                resolve(base64)
-              }
-              reader.onerror = reject
-              reader.readAsDataURL(certificateFile)
-            })
-
-            sunatData.certificateData = certificateBase64
-            console.log('✅ Certificado convertido a base64 (' + certificateBase64.length + ' caracteres)')
-          } catch (certError) {
-            console.error('Error al leer certificado:', certError)
-            throw new Error('Error al procesar el certificado digital')
-          }
-        } else if (!sunatForm.certificateName) {
-          // Si no hay nombre de certificado, eliminar el certificateData
-          sunatData.certificateData = null
-        }
-
-        emissionConfig.sunat = sunatData
-        emissionConfig.qpse = { enabled: false }
-      } else {
-        emissionConfig.qpse = { enabled: false }
-        emissionConfig.sunat = { enabled: false }
-      }
-
-      // Credenciales (sunat/qpse) -> subcolección PROTEGIDA (ya NO al doc público).
-      await saveEmissionSecrets(sunatUserToEdit.id, {
-        sunat: emissionConfig.sunat,
-        qpse: emissionConfig.qpse,
-        emissionConfig: { qpse: emissionConfig.qpse, sunat: emissionConfig.sunat },
-      })
-      // Top-level: solo lo NO secreto (method/taxConfig) + indicador de método para la lista admin.
-      updateData.emissionConfig = { method: emissionConfig.method, taxConfig: emissionConfig.taxConfig }
-      updateData.emissionMethod = sunatForm.emissionMethod
-      updateData.allowInvoicingWithoutSunat = !!sunatForm.allowInvoicingWithoutSunat
-
-      await updateDoc(businessRef, updateData)
-
-      // Si el cliente no tiene un plan que emita por el método elegido, se le
-      // asigna uno mínimo para que pueda facturar.
-      //
-      // OJO con la condición: antes preguntaba si el ID del plan CONTENÍA la
-      // palabra "qpse". Los planes del catálogo actual se llaman mensual,
-      // anual, ilimitado_anual… y ninguno la lleva, aunque todos emiten por
-      // QPse — así que daba verdadero SIEMPRE y le pisaba el plan pagado con
-      // qpse_1_month (S/19.90, 500 comprobantes). Le pasó a 69 cuentas, entre
-      // ellas dos que habían pagado el Ilimitado anual. Ahora se mira el
-      // `emissionMethod` real del plan, no el texto de su ID.
-      const currentPlan = users.find(u => u.id === sunatUserToEdit.id)?.plan
-      const metodoDelPlan = PLANS[currentPlan]?.emissionMethod
-      // Enterprise ('any') sirve para cualquier método: no se toca nunca.
-      const yaEmitePorEseMetodo = metodoDelPlan === sunatForm.emissionMethod || metodoDelPlan === 'any'
-
-      if (!yaEmitePorEseMetodo && (sunatForm.emissionMethod === 'qpse' || sunatForm.emissionMethod === 'sunat_direct')) {
-        const planPorDefecto = sunatForm.emissionMethod === 'qpse' ? 'qpse_1_month' : 'sunat_direct_1_month'
-        await updateDoc(doc(db, 'subscriptions', sunatUserToEdit.id), {
-          plan: planPorDefecto,
-          limits: PLANS[planPorDefecto].limits
-        })
-      }
-
-      setShowSunatModal(false)
-      setSunatUserToEdit(null)
-      setCertificateFile(null) // Limpiar archivo temporal
-      loadUsers()
-      alert('Configuración guardada correctamente')
-    } catch (error) {
-      console.error('Error saving SUNAT config:', error)
-      alert('Error al guardar la configuración')
-    } finally {
-      setSavingSunat(false)
-    }
-  }
-
-  // Abrir modal de features
-  function openFeaturesModal(user) {
-    setFeaturesUserToEdit(user)
-    setFeaturesForm({
-      productImages: user.features?.productImages || false,
-      hidePaymentMethods: user.features?.hidePaymentMethods || false,
-      certificates: user.features?.certificates || false,
-
-      loans: user.features?.loans || false,
-      bulkDelete: user.features?.bulkDelete || false
-    })
-    setShowFeaturesModal(true)
-  }
-
-  // Guardar features
-  async function saveFeatures() {
-    if (!featuresUserToEdit) return
-
-    setSavingFeatures(true)
-    try {
-      await updateUserFeatures(featuresUserToEdit.id, featuresForm)
-      setShowFeaturesModal(false)
-      setFeaturesUserToEdit(null)
-      loadUsers()
-      alert('Features actualizados correctamente')
-    } catch (error) {
-      console.error('Error saving features:', error)
-      alert('Error al guardar features')
-    } finally {
-      setSavingFeatures(false)
-    }
-  }
-
-  // Abrir modal de sucursales
-  async function openBranchesModal(user) {
-    setBranchesUserToEdit(user)
-    setShowBranchesModal(true)
-    setLoadingBranches(true)
-    setBranches([])
-    setEditingBranch(null)
-    setEditingMainBranch(false)
-    setMainBranchName(user.mainBranchName || 'Sucursal Principal')
-    setBranchForm({
-      name: '',
-      address: '',
-      phone: '',
-      email: '',
-      location: '',
-      businessMode: '',
-      isDefault: false,
-      department: '',
-      province: '',
-      district: '',
-      ubigeo: ''
-    })
-
-    try {
-      const result = await getBranches(user.id)
-      if (result.success) {
-        setBranches(result.data)
-      }
-    } catch (error) {
-      console.error('Error loading branches:', error)
-      toast.error('Error al cargar sucursales')
-    } finally {
-      setLoadingBranches(false)
-    }
-  }
-
-  // Guardar nombre de sucursal principal
-  async function handleSaveMainBranchName() {
-    if (!branchesUserToEdit) return
-    if (!mainBranchName.trim()) {
-      toast.error('El nombre de la sucursal es requerido')
-      return
-    }
-
-    setSavingMainBranch(true)
-    try {
-      const trimmedName = mainBranchName.trim()
-
-      // Actualizar en el documento del usuario
-      const userRef = doc(db, 'users', branchesUserToEdit.id)
-      await updateDoc(userRef, {
-        mainBranchName: trimmedName
-      })
-
-      // También actualizar en el documento del negocio (para que lo lea companySettings)
-      const businessRef = doc(db, 'businesses', branchesUserToEdit.id)
-      await updateDoc(businessRef, {
-        mainBranchName: trimmedName
-      })
-
-      // Actualizar el usuario en la lista local
-      setUsers(users.map(u =>
-        u.id === branchesUserToEdit.id
-          ? { ...u, mainBranchName: trimmedName }
-          : u
-      ))
-      setBranchesUserToEdit(prev => ({ ...prev, mainBranchName: trimmedName }))
-      // Mantener selectedUser sincronizado: el modal de sucursales se reabre con
-      // selectedUser, así que sin esto revertiría al nombre viejo hasta recargar.
-      setSelectedUser(prev => (prev && prev.id === branchesUserToEdit.id)
-        ? { ...prev, mainBranchName: trimmedName }
-        : prev)
-
-      toast.success('Nombre de sucursal actualizado')
-      setEditingMainBranch(false)
-    } catch (error) {
-      console.error('Error al guardar nombre:', error)
-      toast.error('Error al guardar el nombre')
-    } finally {
-      setSavingMainBranch(false)
-    }
-  }
-
-  // Crear o actualizar sucursal
-  async function handleSaveBranch() {
-    if (!branchesUserToEdit) return
-    if (!branchForm.name.trim()) {
-      toast.error('El nombre de la sucursal es requerido')
-      return
-    }
-
-    setSavingBranch(true)
-    try {
-      if (editingBranch) {
-        // Actualizar sucursal existente
-        await updateBranch(branchesUserToEdit.id, editingBranch.id, branchForm)
-        toast.success('Sucursal actualizada')
-      } else {
-        // Verificar límite de sucursales antes de crear
-        const maxBranches = branchesUserToEdit.limits?.maxBranches ?? 1
-        const activeBranches = branches.filter(b => b.isActive !== false).length
-
-        if (maxBranches !== -1 && activeBranches >= maxBranches) {
-          toast.error(`Límite alcanzado: ${activeBranches}/${maxBranches} sucursales. Aumenta el límite en la suscripción.`)
-          setSavingBranch(false)
-          return
-        }
-
-        // Crear nueva sucursal
-        const branchResult = await createBranch(branchesUserToEdit.id, {
-          ...branchForm,
-          createdBy: 'admin'
-        })
-
-        // Crear almacén por defecto para la nueva sucursal
-        if (branchResult.success && branchResult.id) {
-          await createWarehouse(branchesUserToEdit.id, {
-            name: branchForm.name,
-            address: branchForm.address || '',
-            location: branchForm.location || '',
-            branchId: branchResult.id,
-            isDefault: true
-          })
-        }
-        toast.success('Sucursal creada con almacén por defecto')
-      }
-
-      // Recargar sucursales
-      const result = await getBranches(branchesUserToEdit.id)
-      if (result.success) {
-        setBranches(result.data)
-      }
-
-      // Limpiar formulario
-      setEditingBranch(null)
-      setBranchForm({
-        name: '',
-        address: '',
-        phone: '',
-        email: '',
-        location: '',
-        businessMode: '',
-        isDefault: false,
-        department: '',
-        province: '',
-        district: '',
-        ubigeo: ''
-      })
-    } catch (error) {
-      console.error('Error saving branch:', error)
-      toast.error('Error al guardar sucursal')
-    } finally {
-      setSavingBranch(false)
-    }
-  }
-
-  // Editar sucursal
-  function handleEditBranch(branch) {
-    setEditingBranch(branch)
-    setBranchForm({
-      name: branch.name || '',
-      address: branch.address || '',
-      phone: branch.phone || '',
-      email: branch.email || '',
-      location: branch.location || '',
-      businessMode: branch.businessMode || '',
-      isDefault: branch.isDefault || false,
-      department: branch.department || '',
-      province: branch.province || '',
-      district: branch.district || '',
-      ubigeo: branch.ubigeo || ''
-    })
-  }
-
-  // Eliminar sucursal
-  async function handleDeleteBranch(branchId) {
-    if (!branchesUserToEdit) return
-    if (!confirm('¿Estás seguro de eliminar esta sucursal?\n\nTambién se eliminarán los almacenes asociados a esta sucursal.')) return
-
-    try {
-      // Primero, eliminar los almacenes asociados a esta sucursal
-      const warehousesResult = await getWarehouses(branchesUserToEdit.id)
-      if (warehousesResult.success) {
-        const branchWarehouses = warehousesResult.data.filter(w => w.branchId === branchId)
-        for (const warehouse of branchWarehouses) {
-          await deleteWarehouse(branchesUserToEdit.id, warehouse.id)
-        }
-      }
-
-      // Luego eliminar la sucursal
-      await deleteBranch(branchesUserToEdit.id, branchId)
-      toast.success('Sucursal y almacenes eliminados')
-
-      // Recargar sucursales
-      const result = await getBranches(branchesUserToEdit.id)
-      if (result.success) {
-        setBranches(result.data)
-      }
-    } catch (error) {
-      console.error('Error deleting branch:', error)
-      toast.error('Error al eliminar sucursal')
-    }
-  }
-
-  // Cancelar edición de sucursal
-  function handleCancelBranchEdit() {
-    setEditingBranch(null)
-    setBranchForm({
-      name: '',
-      address: '',
-      phone: '',
-      email: '',
-      location: '',
-      businessMode: '',
-      isDefault: false,
-      department: '',
-      province: '',
-      district: '',
-      ubigeo: ''
-    })
-  }
-
-  // Helper para obtener provincias según departamento
-  const getProvincias = (deptCode) => {
-    return PROVINCIAS[deptCode] || []
-  }
-
-  // Helper para obtener distritos según departamento y provincia
-  const getDistritos = (deptCode, provCode) => {
-    const key = `${deptCode}${provCode}`
-    return DISTRITOS[key] || []
-  }
-
-  // Calcular ubigeo cuando cambian departamento/provincia/distrito
-  const handleUbigeoChange = (field, value) => {
-    const newForm = { ...branchForm, [field]: value }
-
-    // Resetear campos dependientes
-    if (field === 'department') {
-      newForm.province = ''
-      newForm.district = ''
-      newForm.ubigeo = ''
-    } else if (field === 'province') {
-      newForm.district = ''
-      newForm.ubigeo = ''
-    } else if (field === 'district') {
-      // Calcular ubigeo completo
-      if (newForm.department && newForm.province && value) {
-        newForm.ubigeo = `${newForm.department}${newForm.province}${value}`
-      }
-    }
-
-    setBranchForm(newForm)
-  }
-
-  // Abrir modal para editar límite de sucursales
-  function openEditLimitModal() {
-    setEditingMaxBranches(branchesUserToEdit?.limits?.maxBranches ?? 1)
-    setShowEditLimitModal(true)
-  }
-
-  // Guardar nuevo límite de sucursales
-  async function handleSaveMaxBranches() {
-    if (!branchesUserToEdit) return
-
-    setSavingMaxBranches(true)
-    try {
-      await updateMaxBranches(branchesUserToEdit.id, editingMaxBranches)
-
-      // Actualizar el usuario en el estado local
-      setBranchesUserToEdit(prev => ({
-        ...prev,
-        limits: { ...prev.limits, maxBranches: editingMaxBranches }
-      }))
-
-      // Actualizar lista de usuarios
-      setUsers(prev => prev.map(u =>
-        u.id === branchesUserToEdit.id
-          ? { ...u, limits: { ...u.limits, maxBranches: editingMaxBranches } }
-          : u
-      ))
-
-      toast.success('Límite de sucursales actualizado')
-      setShowEditLimitModal(false)
-    } catch (error) {
-      console.error('Error updating max branches:', error)
-      toast.error('Error al actualizar límite')
-    } finally {
-      setSavingMaxBranches(false)
-    }
-  }
-
-  // Función para guardar límite de comprobantes
-  async function handleSaveInvoiceLimit(userId) {
-    setSavingInvoiceLimit(true)
-    try {
-      const subscriptionRef = doc(db, 'subscriptions', userId)
-      const limitValue = newInvoiceLimit === '' || newInvoiceLimit === -1 ? -1 : parseInt(newInvoiceLimit) || 500
-
-      await updateDoc(subscriptionRef, {
-        'limits.maxInvoicesPerMonth': limitValue,
-        updatedAt: serverTimestamp()
-      })
-
-      toast.success(`Límite actualizado a ${limitValue === -1 ? 'ilimitado' : limitValue} comprobantes/mes`)
-
-      if (selectedUser && selectedUser.id === userId) {
-        setSelectedUser(prev => ({
-          ...prev,
-          limit: limitValue,
-          limits: { ...prev.limits, maxInvoicesPerMonth: limitValue }
-        }))
-      }
-
-      setEditingInvoiceLimit(false)
-      loadUsers()
-    } catch (error) {
-      console.error('Error al actualizar límite:', error)
-      toast.error('Error al actualizar límite')
-    } finally {
-      setSavingInvoiceLimit(false)
-    }
-  }
-
-  // Función para registrar pago
-  // El cobro vive en registerPayment() del servicio, una sola vez. Esta pantalla
-  // tenía su propia copia escribiendo la suscripción a mano y las dos habían
-  // derivado: la copia pisaba los límites personalizados en cada renovación, no
-  // congelaba el precio pactado y no levantaba el bloqueo de acceso ni el del
-  // catálogo al cobrarle a un suspendido. Acá solo queda lo que es de la
-  // pantalla: avisar, cerrar el modal y recargar la lista.
-  async function handleRegisterPayment(userId, amount, method, planKey, customEndDate = null, options = {}) {
-    setProcessingPayment(true)
-    try {
-      const resultado = await registerPayment(userId, parseFloat(amount), method, planKey, customEndDate, options)
-      const vence = resultado?.newPeriodEnd
-      toast.success(
-        vence
-          ? `Pago registrado. Nuevo vencimiento: ${vence.toLocaleDateString('es-PE')}`
-          : 'Pago registrado'
-      )
-      setShowPaymentModal(false)
-      setPaymentUserToEdit(null)
-      loadUsers()
-    } catch (error) {
-      console.error('Error al registrar pago:', error)
-      toast.error(error.message || 'Error al registrar el pago')
-    } finally {
-      setProcessingPayment(false)
-    }
-  }
-
-  // Función para cambiar plan
-  async function handleChangePlan(userId, newPlanKey) {
-    try {
-      const plan = PLANS[newPlanKey] || customPlans[newPlanKey]
-      if (!plan) {
-        toast.error('Plan no válido')
-        return
-      }
-
-      const subscriptionRef = doc(db, 'subscriptions', userId)
-      await updateDoc(subscriptionRef, {
-        plan: newPlanKey,
-        planName: plan.name,
-        limits: plan.limits,
-        updatedAt: Timestamp.now()
-      })
-
-      toast.success(`Plan cambiado a ${plan.name}`)
-      setShowPlanModal(false)
-      setPaymentUserToEdit(null)
-      loadUsers()
-    } catch (error) {
-      console.error('Error al cambiar plan:', error)
-      toast.error('Error al cambiar el plan')
-    }
-  }
-
-  // Función para abrir modal de pago
-  function openPaymentModal(user) {
-    setPaymentUserToEdit(user)
-    setShowPaymentModal(true)
-    setSelectedUser(null)
-  }
-
-  // Función para abrir modal de cambio de plan
-  function openPlanModal(user) {
-    setPaymentUserToEdit(user)
-    setShowPlanModal(true)
-    setSelectedUser(null)
-  }
-
-  // Corregir a mano la fecha de vencimiento (altas duplicadas, cortesías, errores)
-  function openExpiryModal(user) {
-    setPaymentUserToEdit(user)
-    setShowExpiryModal(true)
-    setSelectedUser(null)
-  }
-
-  function formatDate(date) {
-    if (!date) return 'N/A'
-    return date.toLocaleDateString('es-PE', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric'
-    })
-  }
-
-  const SortIcon = ({ field }) => {
-    if (sortField !== field) return null
-    return sortDirection === 'asc' ?
-      <ChevronUp className="w-4 h-4" /> :
-      <ChevronDown className="w-4 h-4" />
-  }
+  // ── Render ──────────────────────────────────────────────────────────────────
+
+  const orden = { campo: sortField, direccion: sortDirection }
+  const hayFiltros = Boolean(searchTerm) || [statusFilter, planFilter, sourceFilter, vendedorFilter, modeFilter, rubroFilter, igvFilter, venceFilter].some(f => f !== 'all')
+  const resumen = loading
+    ? 'Cargando cuentas…'
+    : `${filteredUsers.length} de ${users.length} cuentas · ${stats.active} activas · ${stats.trial} en trial · ${stats.expired} vencidas · ${stats.suspended} suspendidas${stats.archived ? ` · ${stats.archived} archivadas` : ''}`
 
   return (
-    <div className="space-y-6 overflow-x-hidden">
-      {/* Stats Cards */}
-      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-4">
-        <div className="bg-white rounded-xl p-2 sm:p-4 shadow-sm border border-gray-200">
-          <div className="flex flex-col sm:flex-row items-center sm:justify-between gap-1">
-            <Users className="w-6 h-6 sm:w-8 sm:h-8 text-gray-400 flex-shrink-0" />
-            <span className="text-xl sm:text-2xl font-bold text-gray-900">{stats.total}</span>
-          </div>
-          <p className="text-xs sm:text-sm font-medium text-gray-500 mt-1 text-center sm:text-left">Total</p>
-        </div>
-        <div className="bg-white rounded-xl p-2 sm:p-4 shadow-sm border border-gray-200">
-          <div className="flex flex-col sm:flex-row items-center sm:justify-between gap-1">
-            <CheckCircle className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 flex-shrink-0" />
-            <span className="text-xl sm:text-2xl font-bold text-green-600">{stats.active}</span>
-          </div>
-          <p className="text-xs sm:text-sm font-medium text-gray-500 mt-1 text-center sm:text-left">Activos</p>
-        </div>
-        <div className="bg-white rounded-xl p-2 sm:p-4 shadow-sm border border-gray-200">
-          <div className="flex flex-col sm:flex-row items-center sm:justify-between gap-1">
-            <Clock className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 flex-shrink-0" />
-            <span className="text-xl sm:text-2xl font-bold text-blue-600">{stats.trial}</span>
-          </div>
-          <p className="text-xs sm:text-sm font-medium text-gray-500 mt-1 text-center sm:text-left">Trial</p>
-        </div>
-        <div className="bg-white rounded-xl p-2 sm:p-4 shadow-sm border border-gray-200 hidden sm:block">
-          <div className="flex flex-col sm:flex-row items-center sm:justify-between gap-1">
-            <AlertTriangle className="w-6 h-6 sm:w-8 sm:h-8 text-amber-600 flex-shrink-0" />
-            <span className="text-xl sm:text-2xl font-bold text-amber-600">{stats.expired}</span>
-          </div>
-          <p className="text-xs sm:text-sm font-medium text-gray-500 mt-1 text-center sm:text-left">Vencidos</p>
-        </div>
-        <div className="bg-white rounded-xl p-2 sm:p-4 shadow-sm border border-gray-200 hidden sm:block">
-          <div className="flex flex-col sm:flex-row items-center sm:justify-between gap-1">
-            <Ban className="w-6 h-6 sm:w-8 sm:h-8 text-red-600 flex-shrink-0" />
-            <span className="text-xl sm:text-2xl font-bold text-red-600">{stats.suspended}</span>
-          </div>
-          <p className="text-xs sm:text-sm font-medium text-gray-500 mt-1 text-center sm:text-left">Suspendidos</p>
-        </div>
-      </div>
-
-      {/* Tasa de Retención + Tasa Histórica */}
-      {renewalStats && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <button
-            onClick={() => setShowRenewalDetails(!showRenewalDetails)}
-            className="w-full p-3 sm:p-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+    <Pagina
+      resumen={resumen}
+      acciones={
+        <>
+          <Boton tamano="sm" onClick={() => loadUsers()} disabled={loading}>{loading ? 'Cargando…' : 'Recargar'}</Boton>
+          <Boton tamano="sm" onClick={() => abrirModal('vendedores')}>Vendedores</Boton>
+          <Boton
+            tamano="sm"
+            onClick={() => abrirModal('huerfanas')}
+            className={huerfanas.length ? 'text-red-600 border-red-200 hover:bg-red-50' : ''}
+            title="Suscripciones sin usuario ni negocio"
           >
-            <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
-              <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600 flex-shrink-0" />
-              <div className="text-left min-w-0">
-                <p className="text-xs sm:text-sm font-medium text-gray-500">Tasa de Retención</p>
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <span className={`text-xl sm:text-2xl font-bold ${
-                    renewalStats.rate === null ? 'text-gray-400' :
-                    renewalStats.rate > 70 ? 'text-green-600' :
-                    renewalStats.rate >= 40 ? 'text-amber-600' : 'text-red-600'
-                  }`}>
-                    {renewalStats.rate !== null ? `${renewalStats.rate}%` : '—'}
-                  </span>
-                  <span className="text-[10px] text-gray-400 uppercase font-semibold">Estado actual</span>
-                </div>
-              </div>
-              <div className="hidden sm:flex items-center gap-6 ml-auto mr-4 text-sm">
-                <div className="text-center">
-                  <p className="text-gray-500 text-xs">Activos</p>
-                  <p className="font-semibold text-green-600">{renewalStats.active}</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-gray-500 text-xs">No renovaron</p>
-                  <p className="font-semibold text-red-600">{renewalStats.churned}</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-gray-500 text-xs">En 1er periodo</p>
-                  <p className="font-semibold text-blue-600">{renewalStats.inFirstPeriod}</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-gray-500 text-xs">Ingresos totales</p>
-                  <p className="font-semibold text-green-600">S/ {renewalStats.totalRevenue.toFixed(0)}</p>
-                </div>
-              </div>
-            </div>
-            <ChevronRight className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${showRenewalDetails ? 'rotate-90' : ''}`} />
-          </button>
-
-          {/* Resumen móvil */}
-          <div className="sm:hidden px-3 pb-2 flex gap-3 text-xs text-center">
-            <div className="flex-1">
-              <p className="text-gray-500">Activos</p>
-              <p className="font-semibold text-green-600">{renewalStats.active}</p>
-            </div>
-            <div className="flex-1">
-              <p className="text-gray-500">No renovaron</p>
-              <p className="font-semibold text-red-600">{renewalStats.churned}</p>
-            </div>
-            <div className="flex-1">
-              <p className="text-gray-500">1er periodo</p>
-              <p className="font-semibold text-blue-600">{renewalStats.inFirstPeriod}</p>
-            </div>
-          </div>
-
-          {/* Detalle expandible */}
-          {showRenewalDetails && (
-            <div className="border-t border-gray-200 p-3 sm:p-4 space-y-3">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-                <div className="bg-gray-50 rounded-lg p-3 text-center">
-                  <p className="text-gray-500 text-xs mb-1">Total con pagos</p>
-                  <p className="text-lg font-bold text-gray-900">{renewalStats.totalWithPayments}</p>
-                </div>
-                <div className="bg-green-50 rounded-lg p-3 text-center">
-                  <p className="text-gray-500 text-xs mb-1">Renovaron</p>
-                  <p className="text-lg font-bold text-green-600">{renewalStats.renewed}/{renewalStats.candidates}</p>
-                </div>
-                <div className="bg-red-50 rounded-lg p-3 text-center">
-                  <p className="text-gray-500 text-xs mb-1">No renovaron</p>
-                  <p className="text-lg font-bold text-red-600">{renewalStats.churned}</p>
-                </div>
-                <div className="bg-blue-50 rounded-lg p-3 text-center">
-                  <p className="text-gray-500 text-xs mb-1">En 1er periodo</p>
-                  <p className="text-lg font-bold text-blue-600">{renewalStats.inFirstPeriod}</p>
-                </div>
-              </div>
-              <p className="text-xs text-gray-500">
-                La tasa se calcula sobre {renewalStats.candidates} candidatos (excluye {renewalStats.inFirstPeriod} en su primer periodo). Activos con suscripción vigente = renovaron. Vencidos sin nuevo pago = no renovaron.
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Tasa de Renovación Histórica (por oportunidad) */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="w-full p-3 sm:p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
-              <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 text-emerald-600 flex-shrink-0" />
-              <div className="text-left min-w-0">
-                <p className="text-xs sm:text-sm font-medium text-gray-500">Tasa Histórica</p>
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <span className={`text-xl sm:text-2xl font-bold ${
-                    renewalStats.lifetimeRate === null ? 'text-gray-400' :
-                    renewalStats.lifetimeRate > 70 ? 'text-emerald-600' :
-                    renewalStats.lifetimeRate >= 40 ? 'text-amber-600' : 'text-red-600'
-                  }`}>
-                    {renewalStats.lifetimeRate !== null ? `${renewalStats.lifetimeRate}%` : '—'}
-                  </span>
-                  <span className="text-[10px] text-gray-400 uppercase font-semibold">Acumulada</span>
-                </div>
-              </div>
-              <div className="hidden sm:flex items-center gap-6 ml-auto mr-4 text-sm">
-                <div className="text-center">
-                  <p className="text-gray-500 text-xs">Renovaciones</p>
-                  <p className="font-semibold text-emerald-600">{renewalStats.totalRenewals}</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-gray-500 text-xs">Oportunidades</p>
-                  <p className="font-semibold text-gray-700">{renewalStats.totalOpportunities}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="border-t border-gray-200 p-3 text-xs text-gray-500">
-            Cada vencimiento cuenta como una oportunidad. Mide lealtad acumulada — un cliente que renovó 11 veces y se fue al 12 vale más que uno que se fue al primer mes.
-          </div>
-        </div>
-        </div>
-      )}
-
-      {/* Mapa de usuarios por departamento */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-4">
-        <button
-          onClick={() => setShowMap(!showMap)}
-          className="flex items-center justify-between w-full text-left"
-        >
-          <h3 className="text-sm font-semibold text-gray-900">Distribución Geográfica</h3>
-          <span className="text-xs text-primary-600">{showMap ? 'Ocultar' : 'Ver mapa'}</span>
-        </button>
-        {showMap && (
-          <div className="mt-3">
-            <PeruUsersMap users={users} />
-          </div>
-        )}
-      </div>
-
-      {/* Toolbar */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-4">
-        <div className="flex flex-col gap-3">
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Buscar por nombre, email, RUC, teléfono, dirección..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-9 sm:pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-            />
-          </div>
-
-          {/* Filters */}
-          <div className="flex flex-wrap gap-2">
-            <select
-              value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value)}
-              className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="all">Estado</option>
-              <option value="active">Activos</option>
-              <option value="trial">Trial</option>
-              <option value="expired">Vencidos</option>
-              <option value="suspended">Suspendidos</option>
-            </select>
-
-            <select
-              value={planFilter}
-              onChange={e => setPlanFilter(e.target.value)}
-              className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="all">Plan</option>
-              {/* Solo el catálogo vigente: tras la migración (15-jul-2026) ya no hay usuarios en planes legacy */}
-              {Object.entries(PLANS).filter(([key]) => SELLABLE_PLAN_IDS.includes(key) || key === 'enterprise' || key === 'trial').map(([key, plan]) => (
-                <option key={key} value={key}>{plan.name}</option>
+            Huérfanas{huerfanas.length ? ` · ${huerfanas.length}` : ''}
+          </Boton>
+          <Boton tamano="sm" onClick={exportToCSV}>Exportar CSV</Boton>
+        </>
+      }
+    >
+      <Filtros>
+        <Buscador ancho="w-full sm:w-80" placeholder="Nombre, correo, RUC, teléfono, dirección" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+        <FiltroSelect value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+          <option value="all">Estado</option>
+          <option value="active">Activas</option>
+          <option value="trial">Trial</option>
+          <option value="expired">Vencidas</option>
+          <option value="suspended">Suspendidas</option>
+        </FiltroSelect>
+        <FiltroSelect value={venceFilter} onChange={e => cambiarVence(e.target.value)}>
+          <option value="all">Vence</option>
+          <option value="today">Vence hoy</option>
+          <option value="week">Vence en 7 días</option>
+          <option value="month">Vence en 30 días</option>
+          <option value="overdue">Vencidas o suspendidas</option>
+          <option value="archived">Archivadas{stats.archived ? ` (${stats.archived})` : ''}</option>
+        </FiltroSelect>
+        <FiltroSelect value={planFilter} onChange={e => setPlanFilter(e.target.value)}>
+          <option value="all">Plan</option>
+          {/* Solo el catalogo vigente: tras la migracion (15-jul-2026) no quedan cuentas en planes legacy */}
+          {Object.entries(PLANS)
+            .filter(([key]) => SELLABLE_PLAN_IDS.includes(key) || key === 'enterprise' || key === 'trial')
+            .map(([key, plan]) => <option key={key} value={key}>{plan.name}</option>)}
+        </FiltroSelect>
+        <FiltroSelect value={sourceFilter} onChange={e => setSourceFilter(e.target.value)}>
+          <option value="all">Origen</option>
+          <option value="cobrify">Cobrify ({stats.cobrify})</option>
+          <option value="reseller">Todos los resellers ({stats.reseller})</option>
+          {resellers.length > 0 && (
+            <optgroup label="Por reseller">
+              {resellers.map(r => (
+                <option key={r.id} value={`reseller:${r.id}`}>{r.name} ({users.filter(u => u.resellerId === r.id).length})</option>
               ))}
-            </select>
-
-            <select
-              value={sourceFilter}
-              onChange={e => setSourceFilter(e.target.value)}
-              className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="all">Origen ({stats.cobrify}+{stats.reseller})</option>
-              <option value="cobrify">Cobrify ({stats.cobrify})</option>
-              <option value="reseller">Todos Resellers ({stats.reseller})</option>
-              {resellers.length > 0 && (
-                <optgroup label="─── Por Reseller ───">
-                  {resellers.map(r => {
-                    const count = users.filter(u => u.resellerId === r.id).length
-                    return (
-                      <option key={r.id} value={`reseller:${r.id}`}>
-                        {r.name} ({count})
-                      </option>
-                    )
-                  })}
-                </optgroup>
-              )}
-            </select>
-
-            <select
-              value={vendedorFilter}
-              onChange={e => setVendedorFilter(e.target.value)}
-              className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="all">Vendedor</option>
-              <option value="none">Sin vendedor</option>
-              {vendedores.map(v => {
-                const count = users.filter(u => u.vendedorId === v.id).length
-                return (
-                  <option key={v.id} value={v.id}>
-                    {v.name} ({count})
-                  </option>
-                )
-              })}
-            </select>
-
-            <select
-              value={modeFilter}
-              onChange={e => setModeFilter(e.target.value)}
-              className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="all">Modo</option>
-              <option value="retail">Retail ({users.filter(u => u.businessMode === 'retail' || !u.businessMode).length})</option>
-              <option value="restaurant">Restaurante ({users.filter(u => u.businessMode === 'restaurant').length})</option>
-              <option value="pharmacy">Farmacia ({users.filter(u => u.businessMode === 'pharmacy').length})</option>
-              <option value="real_estate">Inmobiliaria ({users.filter(u => u.businessMode === 'real_estate').length})</option>
-              <option value="transport">Transporte ({users.filter(u => u.businessMode === 'transport').length})</option>
-            </select>
-
-            <select
-              value={igvFilter}
-              onChange={e => setIgvFilter(e.target.value)}
-              className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="all">IGV</option>
-              <option value="reduced">10.5% ({users.filter(u => u.taxType === 'reduced' || u.igvRate === 10.5).length})</option>
-              <option value="exempt">Exonerado ({users.filter(u => u.taxType === 'exempt' || (u.igvRate === 0 && u.taxType !== 'nrus')).length})</option>
-              <option value="nrus">NRUS ({users.filter(u => u.taxType === 'nrus').length})</option>
-              <option value="standard">18% ({users.filter(u => u.taxType === 'standard' && u.igvRate === 18).length})</option>
-            </select>
-
-            <button
-              onClick={loadUsers}
-              disabled={loading}
-              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Recargar"
-            >
-              <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 ${loading ? 'animate-spin' : ''}`} />
-            </button>
-
-            <button
-              onClick={() => openVendedorForm()}
-              className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 transition-colors text-xs sm:text-sm"
-              title="Gestionar vendedores"
-            >
-              <UserCheck className="w-4 h-4" />
-              <span className="hidden sm:inline">Vendedores</span>
-            </button>
-
-            <button
-              onClick={assignUserNumbers}
-              disabled={assigningNumbers || loading}
-              className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-xs sm:text-sm disabled:opacity-50"
-              title="Asignar números correlativos"
-            >
-              {assigningNumbers ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlusCircle className="w-4 h-4" />}
-              <span className="hidden sm:inline">Asignar N°</span>
-            </button>
-
-            <button
-              onClick={exportToCSV}
-              className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-xs sm:text-sm"
-            >
-              <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">Exportar</span>
-            </button>
-
-            <button
-              onClick={() => setShowOrphansModal(true)}
-              className={`flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm ${
-                orphanSubscriptions.length > 0
-                  ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-              title="Revisar subscriptions sin usuario ni negocio"
-            >
-              <AlertTriangle className="w-4 h-4" />
-              <span className="hidden sm:inline">Huérfanas</span>
-              <span className="font-semibold">{orphanSubscriptions.length}</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Results count */}
-        <div className="mt-2 sm:mt-3 text-xs sm:text-sm text-gray-500">
-          {filteredUsers.length} de {users.length} usuarios
-        </div>
-      </div>
-
-      {/* Users Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-visible">
-        {/* Vista móvil - Cards */}
-        <div className="sm:hidden divide-y divide-gray-200">
-          {loading ? (
-            <div className="p-8 text-center">
-              <RefreshCw className="w-6 h-6 text-gray-400 animate-spin mx-auto mb-2" />
-              <p className="text-sm text-gray-500">Cargando...</p>
-            </div>
-          ) : filteredUsers.length === 0 ? (
-            <div className="p-8 text-center">
-              <Users className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-              <p className="text-sm text-gray-500">No se encontraron usuarios</p>
-            </div>
-          ) : (
-            displayedUsers.map(user => (
-              <div
-                key={user.id}
-                className="p-3 hover:bg-gray-50"
-              >
-                {/* Header: Negocio + Estado */}
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${user.createdByReseller ? 'bg-cyan-50' : 'bg-primary-50'}`}>
-                      {user.userNumber ? (
-                        <span className="text-[10px] font-bold text-primary-700">{user.userNumber}</span>
-                      ) : (
-                        <Building2 className={`w-4 h-4 ${user.createdByReseller ? 'text-cyan-700' : 'text-primary-700'}`} />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-gray-900 text-sm truncate">{user.businessName}</p>
-                      <p className="text-xs text-gray-500 truncate">{user.email}</p>
-                      {user.createdByReseller && (
-                        <p className="text-[10px] text-cyan-600 truncate">↳ {user.resellerName}</p>
-                      )}
-                      {user.vendedorId && (
-                        <p className="text-[10px] text-amber-600 font-medium truncate">
-                          V: {vendedores.find(v => v.id === user.vendedorId)?.name || 'Vendedor'}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${STATUS_COLORS[user.status]}`}>
-                    {STATUS_LABELS[user.status]}
-                  </span>
-                </div>
-
-                {/* Info Row: Plan + SUNAT + Vencimiento */}
-                <div className="flex items-center justify-between text-xs mb-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-100">
-                      {getPlanDisplay(user)}
-                    </span>
-                    {user.emissionMethod && user.emissionMethod !== 'none' && (
-                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                        user.emissionMethod === 'qpse' ? 'bg-emerald-50 text-emerald-700' :
-                        user.emissionMethod === 'sunat_direct' ? 'bg-sky-50 text-sky-700' :
-                        'bg-gray-50 text-gray-600'
-                      }`}>
-                        {user.emissionMethod === 'qpse' ? 'QPse' :
-                         user.emissionMethod === 'sunat_direct' ? 'SUNAT' : user.emissionMethod}
-                      </span>
-                    )}
-                  </div>
-                  {user.periodEnd && (
-                    <span className={`text-[11px] font-medium ${
-                      user.periodEnd < new Date() ? 'text-red-600' :
-                      user.periodEnd < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) ? 'text-amber-600' :
-                      'text-gray-500'
-                    }`}>
-                      Vence: {user.periodEnd.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })}
-                      {user.periodEnd < new Date() && <span className="ml-1 text-red-500 font-bold">!</span>}
-                    </span>
-                  )}
-                </div>
-
-                {/* Uso de facturación */}
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${
-                        user.limit > 0 && (user.usage?.invoicesThisMonth || 0) / user.limit > 0.9
-                          ? 'bg-red-500'
-                          : user.limit > 0 && (user.usage?.invoicesThisMonth || 0) / user.limit > 0.7
-                            ? 'bg-amber-500'
-                            : 'bg-emerald-500'
-                      }`}
-                      style={{ width: user.limit > 0 ? `${Math.min(((user.usage?.invoicesThisMonth || 0) / user.limit) * 100, 100)}%` : '10%' }}
-                    />
-                  </div>
-                  <span className="text-[11px] text-gray-500 tabular-nums flex-shrink-0">
-                    {user.usage?.invoicesThisMonth || 0}/{user.limit === -1 || user.limit === 0 ? '∞' : user.limit}
-                  </span>
-                </div>
-
-                {/* Contacto + Ubicación */}
-                {(user.contactName || user.phone || user.department) && (
-                  <div className="flex items-center gap-3 text-[11px] text-gray-500 mb-2">
-                    {(user.contactName || user.phone) && (
-                      <span className="truncate">
-                        {user.contactName}{user.contactName && user.phone && ' · '}{user.phone}
-                      </span>
-                    )}
-                    {user.department && (
-                      <span className="text-gray-400 truncate">{user.department}</span>
-                    )}
-                  </div>
-                )}
-
-                {/* Acciones */}
-                <div className="flex items-center justify-end gap-1 pt-2 border-t border-gray-100">
-                  <button
-                    onClick={() => setSelectedUser(user)}
-                    className="flex items-center gap-1 px-2 py-1.5 text-xs text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-                  >
-                    <Eye className="w-3.5 h-3.5" /> Ver
-                  </button>
-                  <button
-                    onClick={() => {
-                      setUserToEditContact(user)
-                      setContactNameInput(user.contactName || '')
-                      setContactPhoneInput(user.contactPhone || '')
-                      setShowContactModal(true)
-                    }}
-                    className="flex items-center gap-1 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" /> Editar
-                  </button>
-                  {user.status !== 'suspended' ? (
-                    <button
-                      onClick={() => toggleUserAccess(user.id, true)}
-                      className="flex items-center gap-1 px-2 py-1.5 text-xs text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-                    >
-                      <Ban className="w-3.5 h-3.5" /> Suspender
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => toggleUserAccess(user.id, false)}
-                      className="flex items-center gap-1 px-2 py-1.5 text-xs text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
-                    >
-                      <CheckCircle className="w-3.5 h-3.5" /> Reactivar
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))
+            </optgroup>
           )}
-        </div>
-
-        {/* Vista desktop - Tabla */}
-        <div className="hidden sm:block overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
-              <tr>
-                <th
-                  className="px-2 py-2.5 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors w-12"
-                  onClick={() => handleSort('userNumber')}
-                >
-                  <div className="flex items-center justify-center gap-1">
-                    N° <SortIcon field="userNumber" />
-                  </div>
-                </th>
-                <th
-                  className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-                  onClick={() => handleSort('businessName')}
-                >
-                  <div className="flex items-center gap-1">
-                    Negocio <SortIcon field="businessName" />
-                  </div>
-                </th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Contacto
-                </th>
-                <th
-                  className="px-2 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-                  onClick={() => handleSort('plan')}
-                >
-                  <div className="flex items-center gap-1">
-                    Plan <SortIcon field="plan" />
-                  </div>
-                </th>
-                <th
-                  className="px-2 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-                  onClick={() => handleSort('status')}
-                >
-                  <div className="flex items-center gap-1">
-                    Estado <SortIcon field="status" />
-                  </div>
-                </th>
-                <th
-                  className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-                  onClick={() => handleSort('usage')}
-                >
-                  <div className="flex items-center gap-1">
-                    Uso <SortIcon field="usage" />
-                  </div>
-                </th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  SUNAT
-                </th>
-                <th
-                  className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-                  onClick={() => handleSort('department')}
-                >
-                  <div className="flex items-center gap-1">
-                    Ubicación <SortIcon field="department" />
-                  </div>
-                </th>
-                <th
-                  className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-                  onClick={() => handleSort('periodEnd')}
-                >
-                  <div className="flex items-center gap-1">
-                    Vence <SortIcon field="periodEnd" />
-                  </div>
-                </th>
-                <th
-                  className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-                  onClick={() => handleSort('createdAt')}
-                >
-                  <div className="flex items-center gap-1">
-                    Registro <SortIcon field="createdAt" />
-                  </div>
-                </th>
-                <th className="px-3 py-2.5 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
-
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 bg-white">
-              {loading ? (
-                <tr>
-                  <td colSpan={11} className="px-4 py-12 text-center">
-                    <RefreshCw className="w-6 h-6 text-gray-400 animate-spin mx-auto mb-2" />
-                    <p className="text-sm text-gray-500">Cargando usuarios...</p>
-                  </td>
-                </tr>
-              ) : filteredUsers.length === 0 ? (
-                <tr>
-                  <td colSpan={11} className="px-4 py-12 text-center">
-                    <Users className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                    <p className="text-sm text-gray-500">No se encontraron usuarios</p>
-                  </td>
-                </tr>
-              ) : (
-                displayedUsers.map((user) => (
-                  <tr
-                    key={user.id}
-                    className="hover:bg-gray-50 cursor-pointer transition-colors"
-                    onClick={() => setSelectedUser(user)}
-                  >
-                    {/* N° */}
-                    <td className="px-2 py-2 text-center">
-                      <button
-                        onClick={e => {
-                          e.stopPropagation()
-                          setUserToEditNumber(user)
-                          setNumberInput(user.userNumber ? String(user.userNumber) : '')
-                          setShowNumberModal(true)
-                        }}
-                        className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-[11px] font-bold transition-colors ${
-                          user.userNumber
-                            ? 'bg-gray-100 text-gray-700 hover:bg-primary-100 hover:text-primary-700'
-                            : 'bg-gray-50 text-gray-300 hover:bg-primary-50 hover:text-primary-400 border border-dashed border-gray-300'
-                        }`}
-                        title="Editar número"
-                      >
-                        {user.userNumber || '+'}
-                      </button>
-                    </td>
-                    {/* Negocio + Email + RUC */}
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${user.createdByReseller ? 'bg-cyan-50' : 'bg-primary-50'}`}>
-                          <Building2 className={`w-3.5 h-3.5 ${user.createdByReseller ? 'text-cyan-700' : 'text-primary-700'}`} />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1">
-                            <p className="font-medium text-gray-900 text-[12px] truncate max-w-[140px]">{user.businessName}</p>
-                            {/* Acceso directo al catálogo virtual (solo si está habilitado y configurado) */}
-                            {user.catalogEnabled && (user.customDomain || user.catalogSlug) && (() => {
-                              const url = user.customDomain
-                                ? `https://${user.customDomain}`
-                                : `${window.location.origin}/catalogo/${user.catalogSlug}`
-                              return (
-                                <a
-                                  href={url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="inline-flex items-center justify-center w-4 h-4 rounded text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 transition-colors flex-shrink-0"
-                                  title={`Abrir catálogo: ${url}`}
-                                >
-                                  <Globe className="w-3 h-3" />
-                                </a>
-                              )
-                            })()}
-                          </div>
-                          <p className="text-[10px] text-gray-400 truncate max-w-[150px]">{user.email}</p>
-                          {user.ruc && <p className="text-[9px] text-gray-400">RUC: {user.ruc}</p>}
-                          {user.createdByReseller && (
-                            <p className="text-[9px] text-cyan-600 font-medium truncate max-w-[150px]">
-                              ↳ {user.resellerName}
-                            </p>
-                          )}
-                          {user.vendedorId && (
-                            <p className="text-[9px] text-amber-600 font-medium truncate max-w-[150px]">
-                              V: {vendedores.find(v => v.id === user.vendedorId)?.name || 'Vendedor'}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    {/* Contacto + Teléfono */}
-                    <td className="px-3 py-2">
-                      <div className="min-w-0">
-                        {user.contactName ? (
-                          <p className="text-[11px] text-gray-700 font-medium truncate max-w-[120px]">{user.contactName}</p>
-                        ) : (
-                          <p className="text-[10px] text-gray-400">—</p>
-                        )}
-                        {user.phone && (
-                          <p className="text-[10px] text-gray-500 truncate max-w-[120px]">{user.phone}</p>
-                        )}
-                      </div>
-                    </td>
-                    {/* Plan */}
-                    <td className="px-2 py-2">
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-100">
-                        {getPlanDisplay(user)}
-                      </span>
-                    </td>
-                    {/* Estado */}
-                    <td className="px-2 py-2">
-                      <div className="flex flex-col gap-1 items-start">
-                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                          user.status === 'active' ? 'bg-green-50 text-green-700 border border-green-100' :
-                          user.status === 'trial' ? 'bg-blue-50 text-blue-700 border border-blue-100' :
-                          user.status === 'suspended' ? 'bg-red-50 text-red-700 border border-red-100' :
-                          'bg-amber-50 text-amber-700 border border-amber-100'
-                        }`}>
-                          {STATUS_LABELS[user.status]}
-                        </span>
-                        {user.archived && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200" title="Excluido de estadísticas">
-                            📦 Archivado
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    {/* Uso */}
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-14 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all ${
-                              user.limit > 0 && (user.usage?.invoicesThisMonth || 0) / user.limit > 0.9
-                                ? 'bg-red-500'
-                                : user.limit > 0 && (user.usage?.invoicesThisMonth || 0) / user.limit > 0.7
-                                  ? 'bg-amber-500'
-                                  : 'bg-emerald-500'
-                            }`}
-                            style={{ width: user.limit > 0 ? `${Math.min(((user.usage?.invoicesThisMonth || 0) / user.limit) * 100, 100)}%` : '10%' }}
-                          />
-                        </div>
-                        <span className="text-[11px] text-gray-500 tabular-nums">
-                          {user.usage?.invoicesThisMonth || 0}/{user.limit === -1 || user.limit === 0 ? '∞' : user.limit}
-                        </span>
-                      </div>
-                    </td>
-                    {/* SUNAT */}
-                    <td className="px-3 py-2">
-                      <div className="flex flex-col gap-1">
-                        {user.emissionMethod && user.emissionMethod !== 'none' ? (
-                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                            user.emissionMethod === 'qpse' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                            user.emissionMethod === 'sunat_direct' ? 'bg-sky-50 text-sky-700 border border-sky-200' :
-                            'bg-gray-50 text-gray-600 border border-gray-200'
-                          }`}>
-                            {user.emissionMethod === 'qpse' ? 'QPse' :
-                             user.emissionMethod === 'sunat_direct' ? 'SUNAT' : user.emissionMethod}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-gray-400">—</span>
-                        )}
-                        {/* Estados de documentos SUNAT */}
-                        {sunatStats[user.userId] ? (
-                          <div className="flex gap-1 text-[9px] flex-wrap">
-                            <span className="text-green-600" title="Aceptados SUNAT">✓{sunatStats[user.userId].accepted}</span>
-                            {sunatStats[user.userId].rejected > 0 && (
-                              <span className="text-red-600 font-bold" title="Rechazados SUNAT">✗{sunatStats[user.userId].rejected}</span>
-                            )}
-                            {sunatStats[user.userId].pending > 0 && (
-                              <span className="text-amber-600" title="Pendientes envío SUNAT">⏳{sunatStats[user.userId].pending}</span>
-                            )}
-                          </div>
-                        ) : loadingSunatStats ? (
-                          <span className="text-[9px] text-gray-400">...</span>
-                        ) : null}
-                      </div>
-                    </td>
-                    {/* Ubicación */}
-                    <td className="px-3 py-2">
-                      {user.department || user.province ? (
-                        <div className="text-[11px]">
-                          <p className="text-gray-700 font-medium truncate max-w-[100px]">{user.department || '—'}</p>
-                          {user.province && user.province !== user.department && (
-                            <p className="text-gray-400 text-[10px] truncate max-w-[100px]">{user.province}</p>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-[10px] text-gray-400">—</span>
-                      )}
-                    </td>
-                    {/* Vence */}
-                    <td className="px-3 py-2">
-                      {user.periodEnd ? (
-                        <div className={`text-[11px] font-medium ${
-                          user.periodEnd < new Date() ? 'text-red-600' :
-                          user.periodEnd < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) ? 'text-amber-600' :
-                          'text-gray-600'
-                        }`}>
-                          {user.periodEnd.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })}
-                          {user.periodEnd < new Date() && (
-                            <span className="ml-1 text-[9px] text-red-500 font-bold">!</span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-[11px] text-gray-400">—</span>
-                      )}
-                    </td>
-                    {/* Registro */}
-                    <td className="px-3 py-2 text-[11px] text-gray-500">{formatDate(user.createdAt)}</td>
-                    {/* Acciones */}
-                    <td className="px-3 py-2 text-center">
-                      <div className="relative inline-flex">
-                        <button
-                          onClick={e => {
-                            e.stopPropagation()
-                            toggleActionMenu(user.id, e.currentTarget)
-                          }}
-                          className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                          <MoreVertical className="w-4 h-4 text-gray-400" />
-                        </button>
-
-                        {actionMenuUser === user.id && (
-                          <div
-                            className="fixed w-44 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50"
-                            style={{ top: actionMenuPosition.top, left: actionMenuPosition.left }}
-                          >
-                            <button
-                              onClick={e => {
-                                e.stopPropagation()
-                                setSelectedUser(user)
-                                setActionMenuUser(null)
-                              }}
-                              className="w-full px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                            >
-                              <Eye className="w-3.5 h-3.5" /> Ver detalles
-                            </button>
-                            <button
-                              onClick={e => {
-                                e.stopPropagation()
-                                setUserToEditContact(user)
-                                setContactNameInput(user.contactName || '')
-                                setContactPhoneInput(user.contactPhone || '')
-                                setShowContactModal(true)
-                                setActionMenuUser(null)
-                              }}
-                              className="w-full px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" /> Editar contacto
-                            </button>
-                            {user.status !== 'suspended' ? (
-                              <button
-                                onClick={e => {
-                                  e.stopPropagation()
-                                  toggleUserAccess(user.id, true)
-                                }}
-                                className="w-full px-3 py-1.5 text-left text-xs text-amber-600 hover:bg-amber-50 flex items-center gap-2"
-                              >
-                                <Ban className="w-3.5 h-3.5" /> Suspender
-                              </button>
-                            ) : (
-                              <button
-                                onClick={e => {
-                                  e.stopPropagation()
-                                  toggleUserAccess(user.id, false)
-                                }}
-                                className="w-full px-3 py-1.5 text-left text-xs text-emerald-600 hover:bg-emerald-50 flex items-center gap-2"
-                              >
-                                <CheckCircle className="w-3.5 h-3.5" /> Reactivar
-                              </button>
-                            )}
-                            <button
-                              onClick={e => {
-                                e.stopPropagation()
-                                setUserToAssignVendedor(user)
-                                setSelectedVendedorId(user.vendedorId || '')
-                                setShowAssignVendedorModal(true)
-                                setActionMenuUser(null)
-                              }}
-                              className="w-full px-3 py-1.5 text-left text-xs text-amber-600 hover:bg-amber-50 flex items-center gap-2"
-                            >
-                              <UserCheck className="w-3.5 h-3.5" /> Asignar vendedor
-                            </button>
-                            <div className="border-t border-gray-100 my-0.5" />
-                            <button
-                              onClick={e => {
-                                e.stopPropagation()
-                                setUserToDelete(user)
-                                setShowDeleteModal(true)
-                                setActionMenuUser(null)
-                              }}
-                              className="w-full px-3 py-1.5 text-left text-xs text-red-600 hover:bg-red-50 flex items-center gap-2"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" /> Eliminar
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Paginación */}
-        {!loading && filteredUsers.length > PAGE_SIZE && (
-          <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-gray-200">
-            <p className="text-xs text-gray-500">
-              Mostrando {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredUsers.length)} de {filteredUsers.length}
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage <= 1}
-                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
-              >
-                Anterior
-              </button>
-              <span className="text-sm text-gray-700">Página {currentPage} de {pageCount}</span>
-              <button
-                onClick={() => setCurrentPage(p => Math.min(pageCount, p + 1))}
-                disabled={currentPage >= pageCount}
-                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
-              >
-                Siguiente
-              </button>
-            </div>
-          </div>
+        </FiltroSelect>
+        <FiltroSelect value={vendedorFilter} onChange={e => setVendedorFilter(e.target.value)}>
+          <option value="all">Vendedor</option>
+          <option value="none">Sin vendedor</option>
+          {vendedores.map(v => (
+            <option key={v.id} value={v.id}>{v.name} ({users.filter(u => u.vendedorId === v.id).length})</option>
+          ))}
+        </FiltroSelect>
+        <FiltroSelect value={modeFilter} onChange={e => setModeFilter(e.target.value)}>
+          <option value="all">Modo</option>
+          <option value="retail">Retail ({users.filter(u => u.businessMode === 'retail' || !u.businessMode).length})</option>
+          <option value="restaurant">Restaurante ({users.filter(u => u.businessMode === 'restaurant').length})</option>
+          <option value="pharmacy">Farmacia ({users.filter(u => u.businessMode === 'pharmacy').length})</option>
+          <option value="real_estate">Inmobiliaria ({users.filter(u => u.businessMode === 'real_estate').length})</option>
+          <option value="transport">Transporte ({users.filter(u => u.businessMode === 'transport').length})</option>
+        </FiltroSelect>
+        <FiltroSelect value={rubroFilter} onChange={e => setRubroFilter(e.target.value)}>
+          <option value="all">Rubro</option>
+          <option value="none">Sin rubro ({users.filter(u => !u.rubroEfectivo).length})</option>
+          {RUBROS.map(r => {
+            const cuantos = users.filter(u => u.rubroEfectivo === r.id).length
+            return cuantos > 0 ? <option key={r.id} value={r.id}>{r.nombre} ({cuantos})</option> : null
+          })}
+        </FiltroSelect>
+        <FiltroSelect value={igvFilter} onChange={e => setIgvFilter(e.target.value)}>
+          <option value="all">IGV</option>
+          <option value="reduced">10.5% ({users.filter(u => u.taxType === 'reduced' || u.igvRate === 10.5).length})</option>
+          <option value="exempt">Exonerado ({users.filter(u => u.taxType === 'exempt' || (u.igvRate === 0 && u.taxType !== 'nrus')).length})</option>
+          <option value="nrus">NRUS ({users.filter(u => u.taxType === 'nrus').length})</option>
+          <option value="standard">18% ({users.filter(u => u.taxType === 'standard' && u.igvRate === 18).length})</option>
+        </FiltroSelect>
+        {hayFiltros && (
+          <button type="button" onClick={limpiarFiltros} className="h-8 px-2 text-[12.5px] text-gray-500 hover:text-gray-900">Limpiar</button>
         )}
-      </div>
+      </Filtros>
 
-      {/* User Detail Modal */}
-      {selectedUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4 overflow-hidden">
-          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-[calc(100vw-1rem)] sm:max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
-            <div className="p-4 sm:p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10">
-              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Detalles del Usuario</h2>
-              <button
-                onClick={() => setSelectedUser(null)}
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
-              {/* Header */}
-              <div className="flex items-start gap-3 sm:gap-4">
-                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-primary-50 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <Building2 className="w-6 h-6 sm:w-8 sm:h-8 text-primary-700" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-base sm:text-lg font-semibold text-gray-900 truncate">{selectedUser.businessName}</h3>
-                  <p className="text-sm text-gray-500 truncate">{selectedUser.email}</p>
-                  <div className="flex flex-wrap gap-1 sm:gap-2 mt-2">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[selectedUser.status]}`}>
-                      {STATUS_LABELS[selectedUser.status]}
-                    </span>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
-                      {getPlanDisplay(selectedUser)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Info Grid */}
-              <div className="grid grid-cols-2 gap-2 sm:gap-4">
-                <div className="bg-gray-50 rounded-lg p-2 sm:p-4">
-                  <div className="flex items-center gap-1 sm:gap-2 text-gray-500 mb-1">
-                    <CreditCard className="w-3 h-3 sm:w-4 sm:h-4" />
-                    <span className="text-xs sm:text-sm">RUC</span>
-                  </div>
-                  <p className="font-medium text-xs sm:text-base truncate">{selectedUser.ruc || 'Sin configurar'}</p>
-                </div>
-
-                <div className="bg-gray-50 rounded-lg p-2 sm:p-4">
-                  <div className="flex items-center gap-1 sm:gap-2 text-gray-500 mb-1">
-                    <Calendar className="w-3 h-3 sm:w-4 sm:h-4" />
-                    <span className="text-xs sm:text-sm">Registro</span>
-                  </div>
-                  <p className="font-medium text-xs sm:text-base">{formatDate(selectedUser.createdAt)}</p>
-                </div>
-
-                <div className="bg-gray-50 rounded-lg p-2 sm:p-4">
-                  <div className="flex items-center gap-1 sm:gap-2 text-gray-500 mb-1">
-                    <Building2 className="w-3 h-3 sm:w-4 sm:h-4" />
-                    <span className="text-xs sm:text-sm">Tipo</span>
-                  </div>
-                  <p className="font-medium text-xs sm:text-base capitalize">{selectedUser.businessMode === 'restaurant' ? 'Restaurante' : 'Retail'}</p>
-                </div>
-
-                <div className="bg-gray-50 rounded-lg p-2 sm:p-4">
-                  <div className="flex items-center gap-1 sm:gap-2 text-gray-500 mb-1">
-                    <Shield className="w-3 h-3 sm:w-4 sm:h-4" />
-                    <span className="text-xs sm:text-sm">Emisión</span>
-                  </div>
-                  <p className="font-medium text-xs sm:text-base">
-                    {selectedUser.emissionMethod === 'qpse' ? 'QPse' :
-                     selectedUser.emissionMethod === 'sunat_direct' ? 'SUNAT' : 'Sin config.'}
-                  </p>
-                </div>
-
-                <div className="bg-gray-50 rounded-lg p-2 sm:p-4">
-                  <div className="flex items-center gap-1 sm:gap-2 text-gray-500 mb-1">
-                    <Clock className="w-3 h-3 sm:w-4 sm:h-4" />
-                    <span className="text-xs sm:text-sm">Vence</span>
-                  </div>
-                  <p className="font-medium text-xs sm:text-base">{formatDate(selectedUser.periodEnd)}</p>
-                </div>
-
-                <div className="bg-gray-50 rounded-lg p-2 sm:p-4">
-                  <div className="flex items-center gap-1 sm:gap-2 text-gray-500 mb-1">
-                    <Users className="w-3 h-3 sm:w-4 sm:h-4" />
-                    <span className="text-xs sm:text-sm">Sub-usuarios</span>
-                  </div>
-                  <p className="font-medium text-xs sm:text-base">{selectedUser.subUsersCount}</p>
-                </div>
-              </div>
-
-              {/* Usage */}
-              {(() => {
-                const currentLimit = selectedUser.limit ?? selectedUser.limits?.maxInvoicesPerMonth ?? -1
-                const currentUsage = selectedUser.usage?.invoicesThisMonth || 0
-                const usagePercentage = currentLimit > 0 ? (currentUsage / currentLimit) * 100 : 0
-
+      <Seccion sinRelleno className="overflow-hidden">
+        <Tabla alto="lg:max-h-[calc(100vh-12rem)]">
+          <thead>
+            <tr>
+              <Th campo="codigoCliente" orden={orden} onOrdenar={handleSort} ancho={84}>Código</Th>
+              <Th campo="businessName" orden={orden} onOrdenar={handleSort}>Negocio</Th>
+              <Th>Contacto</Th>
+              <Th campo="rubroEfectivo" orden={orden} onOrdenar={handleSort}>Rubro</Th>
+              <Th campo="plan" orden={orden} onOrdenar={handleSort}>Plan</Th>
+              <Th campo="status" orden={orden} onOrdenar={handleSort}>Estado</Th>
+              <Th campo="usage" orden={orden} onOrdenar={handleSort} alinear="der">Uso</Th>
+              <Th>Emisión</Th>
+              <Th campo="department" orden={orden} onOrdenar={handleSort}>Ubicación</Th>
+              <Th campo="periodEnd" orden={orden} onOrdenar={handleSort} alinear="der">Vence</Th>
+              <Th campo="createdAt" orden={orden} onOrdenar={handleSort} alinear="der">Alta</Th>
+              <Th ancho={44}><span className="sr-only">Acciones</span></Th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <FilaVacia colSpan={12}>Cargando cuentas…</FilaVacia>
+            ) : filteredUsers.length === 0 ? (
+              <FilaVacia colSpan={12}>Ninguna cuenta coincide con la búsqueda y los filtros</FilaVacia>
+            ) : (
+              displayedUsers.map(user => {
+                const usados = user.usage?.invoicesThisMonth || 0
+                const ilimitado = user.limit === -1 || user.limit === 0
+                const lleno = !ilimitado && user.limit > 0 && usados / user.limit >= 0.9
+                const dias = diasParaVencer(user)
+                const vencida = dias !== null && dias < 0
+                const urlTienda = user.catalogEnabled && (user.customDomain || user.catalogSlug)
+                  ? user.customDomain ? `https://${user.customDomain}` : `${window.location.origin}/catalogo/${user.catalogSlug}`
+                  : null
+                const nombreVendedor = user.vendedorId ? vendedores.find(v => v.id === user.vendedorId)?.name || '—' : null
                 return (
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-gray-500">Uso este mes</span>
-                      <span className="font-medium">
-                        {currentUsage} / {currentLimit === -1 || currentLimit === 0 ? '∞' : currentLimit} documentos
-                      </span>
-                    </div>
-                    <div className="h-3 bg-gray-200 rounded-full overflow-hidden mb-3">
-                      <div
-                        className={`h-full rounded-full ${
-                          currentLimit > 0 && usagePercentage > 90
-                            ? 'bg-red-500'
-                            : currentLimit > 0 && usagePercentage > 70
-                              ? 'bg-amber-500'
-                              : 'bg-green-500'
-                        }`}
-                        style={{ width: currentLimit > 0 ? `${Math.min(usagePercentage, 100)}%` : '5%' }}
-                      />
-                    </div>
-
-                    {/* Editar límite */}
-                    {editingInvoiceLimit ? (
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          value={newInvoiceLimit === -1 ? '' : newInvoiceLimit}
-                          onChange={(e) => setNewInvoiceLimit(e.target.value === '' ? -1 : parseInt(e.target.value) || 0)}
-                          placeholder="∞ ilimitado"
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        />
-                        <button
-                          onClick={() => handleSaveInvoiceLimit(selectedUser.id)}
-                          disabled={savingInvoiceLimit}
-                          className="px-3 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 transition-colors disabled:opacity-50"
-                        >
-                          {savingInvoiceLimit ? '...' : 'Guardar'}
-                        </button>
-                        <button
-                          onClick={() => setEditingInvoiceLimit(false)}
-                          className="px-3 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50"
-                        >
-                          ✕
-                        </button>
+                  <Fila key={user.id} onClick={() => irAFicha(user)} apagada={user.archived}>
+                    <Td apagado className="font-mono text-[12px]">{user.codigoCliente || '—'}</Td>
+                    <Td className="max-w-[280px]">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="truncate font-medium">{user.businessName}</span>
+                        {urlTienda && (
+                          <a href={urlTienda} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+                            className="shrink-0 text-[11px] text-primary-700 hover:underline" title={`Abrir la tienda: ${urlTienda}`}>
+                            tienda ↗
+                          </a>
+                        )}
                       </div>
-                    ) : (
-                      <button
-                        onClick={() => { setNewInvoiceLimit(currentLimit); setEditingInvoiceLimit(true) }}
-                        className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                        Cambiar límite ({currentLimit === -1 ? '∞' : currentLimit}/mes)
-                      </button>
-                    )}
-                  </div>
-                )
-              })()}
-
-              {/* Sub-usuarios */}
-              {selectedUser.subUsers && selectedUser.subUsers.length > 0 && (
-                <div className="bg-primary-50 rounded-lg p-4 border border-primary-100">
-                  <div className="flex items-center gap-2 text-primary-700 mb-3">
-                    <Users className="w-5 h-5" />
-                    <span className="font-medium">Sub-usuarios ({selectedUser.subUsers.length})</span>
-                  </div>
-                  <div className="space-y-2">
-                    {selectedUser.subUsers.map((subUser, idx) => (
-                      <div key={idx} className="flex items-center justify-between bg-white rounded-lg p-3">
-                        <div>
-                          <p className="font-medium text-gray-900">{subUser.displayName || subUser.email}</p>
-                          <p className="text-xs text-gray-500">{subUser.email}</p>
+                      <div className="truncate text-[11.5px] text-gray-500">{user.email}{user.ruc ? ` · ${user.ruc}` : ''}</div>
+                      {(user.createdByReseller || nombreVendedor) && (
+                        <div className="truncate text-[11.5px] text-gray-500">
+                          {user.createdByReseller ? `Reseller: ${user.resellerName}` : ''}
+                          {user.createdByReseller && nombreVendedor ? ' · ' : ''}
+                          {nombreVendedor ? `Vendedor: ${nombreVendedor}` : ''}
                         </div>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          subUser.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                        }`}>
-                          {subUser.isActive ? 'Activo' : 'Inactivo'}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
-                <button
-                  onClick={() => openPaymentModal(selectedUser)}
-                  className="flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 sm:py-3 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 text-xs sm:text-sm"
-                >
-                  <DollarSign className="w-4 h-4 sm:w-5 sm:h-5" />
-                  <span className="hidden sm:inline">Registrar</span> Pago
-                </button>
-
-                <button
-                  onClick={() => openPlanModal(selectedUser)}
-                  className="flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 sm:py-3 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 text-xs sm:text-sm"
-                >
-                  <Edit2 className="w-4 h-4 sm:w-5 sm:h-5" />
-                  <span className="hidden sm:inline">Cambiar</span> Plan
-                </button>
-
-                <button
-                  onClick={() => openExpiryModal(selectedUser)}
-                  className="flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 sm:py-3 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 text-xs sm:text-sm"
-                  title="Corregir la fecha de vencimiento sin registrar un pago"
-                >
-                  <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
-                  <span className="hidden sm:inline">Cambiar</span> Fecha
-                </button>
-
-                <button
-                  onClick={() => {
-                    openSunatConfig(selectedUser)
-                  }}
-                  className="flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 sm:py-3 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 text-xs sm:text-sm"
-                >
-                  <Settings className="w-4 h-4 sm:w-5 sm:h-5" />
-                  SUNAT
-                </button>
-
-                <button
-                  onClick={() => {
-                    openFeaturesModal(selectedUser)
-                  }}
-                  className="flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 sm:py-3 bg-primary-100 text-primary-700 rounded-lg hover:bg-primary-200 text-xs sm:text-sm"
-                >
-                  <Sparkles className="w-4 h-4 sm:w-5 sm:h-5" />
-                  Features
-                  {selectedUser.features?.productImages && (
-                    <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                  )}
-                </button>
-
-                <button
-                  onClick={() => {
-                    openBranchesModal(selectedUser)
-                  }}
-                  className="flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 sm:py-3 bg-cyan-100 text-cyan-700 rounded-lg hover:bg-cyan-200 text-xs sm:text-sm"
-                >
-                  <Store className="w-4 h-4 sm:w-5 sm:h-5" />
-                  Sucursales
-                </button>
-
-                {selectedUser.status !== 'suspended' ? (
-                  <button
-                    onClick={() => {
-                      toggleUserAccess(selectedUser.id, true)
-                      setSelectedUser(null)
-                    }}
-                    className="col-span-2 sm:col-span-1 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 sm:py-3 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-xs sm:text-sm"
-                  >
-                    <Ban className="w-4 h-4 sm:w-5 sm:h-5" />
-                    Suspender
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => {
-                      toggleUserAccess(selectedUser.id, false)
-                      setSelectedUser(null)
-                    }}
-                    className="col-span-2 sm:col-span-1 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 sm:py-3 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 text-xs sm:text-sm"
-                  >
-                    <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5" />
-                    Reactivar
-                  </button>
-                )}
-
-                </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Click outside to close menu */}
-      {actionMenuUser && (
-        <div
-          className="fixed inset-0 z-0"
-          onClick={() => setActionMenuUser(null)}
-        />
-      )}
-
-      {/* Modal de Configuración SUNAT */}
-      {showSunatModal && sunatUserToEdit && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4 overflow-hidden">
-          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-[calc(100vw-1rem)] sm:max-w-lg max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
-            <div className="p-4 sm:p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10">
-              <div className="min-w-0 flex-1">
-                <h2 className="text-base sm:text-xl font-semibold text-gray-900">Configurar Emisión</h2>
-                <p className="text-xs sm:text-sm text-gray-500 truncate">{sunatUserToEdit.businessName}</p>
-              </div>
-              <button
-                onClick={() => {
-                  setShowSunatModal(false)
-                  setSunatUserToEdit(null)
-                  setCertificateFile(null)
-                }}
-                className="p-2 hover:bg-gray-100 rounded-lg flex-shrink-0"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
-              {/* Loading state */}
-              {loadingSunatConfig ? (
-                <div className="flex flex-col items-center justify-center py-12">
-                  <Loader2 className="w-10 h-10 text-primary-600 animate-spin mb-4" />
-                  <p className="text-gray-500">Cargando configuración...</p>
-                </div>
-              ) : (
-              <>
-              {/* Override: permitir comprobantes fiscales sin conexión SUNAT */}
-              <label className="flex items-start gap-3 bg-amber-50 rounded-lg p-4 border border-amber-200 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={!!sunatForm.allowInvoicingWithoutSunat}
-                  onChange={e => setSunatForm({ ...sunatForm, allowInvoicingWithoutSunat: e.target.checked })}
-                  className="mt-0.5 w-4 h-4 text-amber-600 rounded flex-shrink-0"
-                />
-                <div>
-                  <span className="text-sm font-medium text-gray-900">Permitir boletas/facturas sin conexión SUNAT</span>
-                  <p className="text-xs text-gray-600 mt-0.5">
-                    Por defecto, un negocio sin método de emisión configurado solo puede emitir Notas de Venta en el POS.
-                    Activá esto para permitirle igualmente Boletas y Facturas.
-                  </p>
-                </div>
-              </label>
-
-              {/* Configuración Tributaria */}
-              <div className="bg-green-50 rounded-lg p-4 border border-green-200 space-y-4">
-                <div className="flex items-center gap-2 text-green-700">
-                  <CreditCard className="w-5 h-5" />
-                  <span className="font-medium">Configuración Tributaria</span>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Régimen de IGV
-                  </label>
-                  <div className="space-y-2">
-                    {/* IGV Estándar 18% */}
-                    <label className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-all ${
-                      sunatForm.taxType === 'standard'
-                        ? 'border-green-500 bg-green-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}>
-                      <input
-                        type="radio"
-                        name="taxType"
-                        value="standard"
-                        checked={sunatForm.taxType === 'standard'}
-                        onChange={e => setSunatForm({ ...sunatForm, taxType: e.target.value })}
-                        className="mt-1 text-green-600 focus:ring-green-500"
-                      />
-                      <div>
-                        <span className="font-medium text-gray-900">IGV Estándar (18%)</span>
-                        <p className="text-xs text-gray-500">Régimen general para la mayoría de empresas</p>
-                      </div>
-                    </label>
-
-                    {/* IGV Reducido 10% - Ley 31556 */}
-                    <label className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-all ${
-                      sunatForm.taxType === 'reduced'
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}>
-                      <input
-                        type="radio"
-                        name="taxType"
-                        value="reduced"
-                        checked={sunatForm.taxType === 'reduced'}
-                        onChange={e => setSunatForm({ ...sunatForm, taxType: e.target.value })}
-                        className="mt-1 text-blue-600 focus:ring-blue-500"
-                      />
-                      <div>
-                        <span className="font-medium text-gray-900">IGV Reducido (10.5%) - Ley N° 31556</span>
-                        <p className="text-xs text-gray-500">MYPES de restaurantes, hoteles y alojamientos turísticos (ventas ≤ S/ 7.8M anuales). Tasa: 8% IGV + 2.5% IPM = 10.5%. Vigente hasta 31/12/2026.</p>
-                      </div>
-                    </label>
-
-                    {/* Exonerado 0% - Ley 27037 */}
-                    <label className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-all ${
-                      sunatForm.taxType === 'exempt'
-                        ? 'border-amber-500 bg-amber-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}>
-                      <input
-                        type="radio"
-                        name="taxType"
-                        value="exempt"
-                        checked={sunatForm.taxType === 'exempt'}
-                        onChange={e => setSunatForm({ ...sunatForm, taxType: e.target.value })}
-                        className="mt-1 text-amber-600 focus:ring-amber-500"
-                      />
-                      <div>
-                        <span className="font-medium text-gray-900">Exonerado (0%) - Ley N° 27037</span>
-                        <p className="text-xs text-gray-500">Ley de Promoción de la Inversión en la Amazonía. Para empresas ubicadas en Loreto, Ucayali, Madre de Dios, Amazonas y San Martín.</p>
-                      </div>
-                    </label>
-
-                    {/* NRUS - Nuevo Régimen Único Simplificado */}
-                    <label className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-all ${
-                      sunatForm.taxType === 'nrus'
-                        ? 'border-emerald-500 bg-emerald-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}>
-                      <input
-                        type="radio"
-                        name="taxType"
-                        value="nrus"
-                        checked={sunatForm.taxType === 'nrus'}
-                        onChange={e => setSunatForm({ ...sunatForm, taxType: e.target.value })}
-                        className="mt-1 text-emerald-600 focus:ring-emerald-500"
-                      />
-                      <div>
-                        <span className="font-medium text-gray-900">NRUS - Nuevo RUS (boletas con IGV 0%)</span>
-                        <p className="text-xs text-gray-500">
-                          Nuevo Régimen Único Simplificado: paga cuota fija mensual, no declara IGV.
-                          Las boletas salen como <strong>Venta Interna-NRUS (0113)</strong>, gravadas con
-                          IGV en cero — NO como exoneradas. Al guardar se desactiva la Factura en el POS
-                          (un NRUS no emite facturas).
-                        </p>
-                      </div>
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              {/* Selector de método */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Método de Emisión
-                </label>
-                <select
-                  value={sunatForm.emissionMethod}
-                  onChange={e => setSunatForm({ ...sunatForm, emissionMethod: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                >
-                  <option value="none">Sin configurar</option>
-                  <option value="qpse">QPse (500 docs/mes)</option>
-                  <option value="sunat_direct">SUNAT Directo (Ilimitado)</option>
-                </select>
-              </div>
-
-              {/* Configuración QPse */}
-              {sunatForm.emissionMethod === 'qpse' && (
-                <div className="bg-amber-50 rounded-lg p-4 border border-amber-200 space-y-4">
-                  <div className="flex items-center gap-2 text-amber-700">
-                    <FileKey className="w-5 h-5" />
-                    <span className="font-medium">Configuración QPse</span>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Ambiente
-                    </label>
-                    <select
-                      value={sunatForm.qpseEnvironment}
-                      onChange={e => setSunatForm({ ...sunatForm, qpseEnvironment: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    >
-                      <option value="demo">Demo (Pruebas)</option>
-                      <option value="production">Producción</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Usuario QPse
-                    </label>
-                    <input
-                      type="text"
-                      value={sunatForm.qpseUsuario}
-                      onChange={e => setSunatForm({ ...sunatForm, qpseUsuario: e.target.value })}
-                      placeholder="usuario@empresa.com"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Contraseña QPse
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showPasswords.qpse ? 'text' : 'password'}
-                        value={sunatForm.qpsePassword}
-                        onChange={e => setSunatForm({ ...sunatForm, qpsePassword: e.target.value })}
-                        placeholder="••••••••"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 pr-10"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPasswords({ ...showPasswords, qpse: !showPasswords.qpse })}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                      >
-                        <Key className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Estado de homologación QPse - derivado del ambiente */}
-                  <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
-                    <span className="text-sm text-gray-600">Estado:</span>
-                    {sunatForm.qpseEnvironment === 'production' ? (
-                      <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">Homologado</span>
-                    ) : (
-                      <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">En pruebas</span>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Configuración SUNAT Directo */}
-              {sunatForm.emissionMethod === 'sunat_direct' && (
-                <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 space-y-4">
-                  <div className="flex items-center gap-2 text-blue-700">
-                    <Shield className="w-5 h-5" />
-                    <span className="font-medium">Configuración SUNAT Directo</span>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Ambiente
-                    </label>
-                    <select
-                      value={sunatForm.sunatEnvironment}
-                      onChange={e => setSunatForm({ ...sunatForm, sunatEnvironment: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    >
-                      <option value="beta">Beta (Pruebas)</option>
-                      <option value="production">Producción</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Usuario SOL
-                    </label>
-                    <input
-                      type="text"
-                      value={sunatForm.solUser}
-                      onChange={e => setSunatForm({ ...sunatForm, solUser: e.target.value })}
-                      placeholder="MODDATOS"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Clave SOL
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showPasswords.sol ? 'text' : 'password'}
-                        value={sunatForm.solPassword}
-                        onChange={e => setSunatForm({ ...sunatForm, solPassword: e.target.value })}
-                        placeholder="••••••••"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 pr-10"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPasswords({ ...showPasswords, sol: !showPasswords.sol })}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                      >
-                        <Key className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Credenciales API REST para Guías de Remisión */}
-                  <div className="col-span-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-sm font-medium text-blue-900 mb-1">
-                      Credenciales API REST (para Guías de Remisión)
-                    </p>
-                    <p className="text-xs text-blue-700 mb-3">
-                      Requeridas para enviar GRE directamente a SUNAT. Generar en: Menú SOL → Empresa → Credenciales API
-                    </p>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Client ID
-                        </label>
-                        <input
-                          type="text"
-                          value={sunatForm.clientId}
-                          onChange={e => setSunatForm({ ...sunatForm, clientId: e.target.value })}
-                          placeholder="ej: 12345678901-abc123..."
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Client Secret
-                        </label>
-                        <div className="relative">
-                          <input
-                            type={showPasswords.api ? 'text' : 'password'}
-                            value={sunatForm.clientSecret}
-                            onChange={e => setSunatForm({ ...sunatForm, clientSecret: e.target.value })}
-                            placeholder="••••••••"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 pr-10"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowPasswords({ ...showPasswords, api: !showPasswords.api })}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                          >
-                            <Key className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Contraseña del Certificado
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showPasswords.cert ? 'text' : 'password'}
-                        value={sunatForm.certificatePassword}
-                        onChange={e => setSunatForm({ ...sunatForm, certificatePassword: e.target.value })}
-                        placeholder="••••••••"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 pr-10"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPasswords({ ...showPasswords, cert: !showPasswords.cert })}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                      >
-                        <Key className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Certificado Digital */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Certificado Digital (.pfx)
-                    </label>
-                    {sunatForm.certificateName ? (
-                      <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-                        <FileKey className="w-5 h-5 text-green-600" />
-                        <span className="text-sm text-green-700 font-medium flex-1">{sunatForm.certificateName}</span>
+                      )}
+                    </Td>
+                    <Td className="max-w-[170px]">
+                      <div className="truncate">{user.contactName || <span className="text-gray-400">—</span>}</div>
+                      {(user.contactPhone || user.phone) && <div className="truncate text-[11.5px] text-gray-500">{user.contactPhone || user.phone}</div>}
+                    </Td>
+                    {/* Rubro: pastilla llena si esta confirmado, punteada si es la sugerencia. Un clic lo cambia. */}
+                    <Td onClick={e => e.stopPropagation()}>
+                      {editandoRubro === user.id ? (
+                        <select
+                          autoFocus
+                          defaultValue={user.rubro || user.rubroSugerido || ''}
+                          onBlur={() => setEditandoRubro(null)}
+                          onChange={e => guardarRubro(user, e.target.value)}
+                          className="h-7 w-36 rounded-md border border-gray-300 bg-white px-1.5 text-[12px] focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                        >
+                          <option value="">Sin rubro</option>
+                          {RUBROS.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+                        </select>
+                      ) : (
                         <button
                           type="button"
-                          onClick={handleRemoveCertificate}
-                          className="p-1 hover:bg-green-100 rounded text-green-600 hover:text-red-600 transition-colors"
-                          title="Eliminar certificado"
+                          onClick={() => setEditandoRubro(user.id)}
+                          className="max-w-[150px] text-left"
+                          title={user.rubro ? 'Rubro confirmado. Clic para cambiarlo' : user.rubroSugerido ? `Sugerido: ${nombreRubro(user.rubroSugerido)}. Clic para confirmarlo o cambiarlo` : 'Sin rubro. Clic para ponerle uno'}
                         >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                          <AlertTriangle className="w-5 h-5 text-amber-600" />
-                          <span className="text-sm text-amber-700">Sin certificado</span>
-                        </div>
-                      </div>
-                    )}
-                    {/* Botón para subir certificado */}
-                    <label className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg cursor-pointer hover:bg-blue-100 transition-colors">
-                      <Upload className="w-4 h-4" />
-                      <span className="text-sm font-medium">
-                        {sunatForm.certificateName ? 'Cambiar certificado' : 'Subir certificado'}
-                      </span>
-                      <input
-                        type="file"
-                        accept=".pfx,.p12"
-                        onChange={handleCertificateUpload}
-                        className="hidden"
-                      />
-                    </label>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Formatos aceptados: .pfx, .p12
-                    </p>
-                  </div>
-
-                  {/* Estado de homologación - derivado del ambiente */}
-                  <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
-                    <span className="text-sm text-gray-600">Estado:</span>
-                    {sunatForm.sunatEnvironment === 'production' ? (
-                      <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">Homologado</span>
-                    ) : (
-                      <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">En pruebas</span>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Botones */}
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={() => {
-                    setShowSunatModal(false)
-                    setSunatUserToEdit(null)
-                    setCertificateFile(null)
-                  }}
-                  className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={saveSunatConfig}
-                  disabled={savingSunat}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
-                >
-                  {savingSunat ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      Guardando...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-5 h-5" />
-                      Guardar
-                    </>
-                  )}
-                </button>
-              </div>
-              </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Features */}
-      {showFeaturesModal && featuresUserToEdit && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4 overflow-hidden">
-          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-[calc(100vw-1rem)] sm:max-w-md max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
-            <div className="p-4 sm:p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10">
-              <div className="min-w-0 flex-1">
-                <h2 className="text-base sm:text-xl font-semibold text-gray-900">Features Especiales</h2>
-                <p className="text-xs sm:text-sm text-gray-500 truncate">{featuresUserToEdit.businessName}</p>
-              </div>
-              <button
-                onClick={() => {
-                  setShowFeaturesModal(false)
-                  setFeaturesUserToEdit(null)
-                }}
-                className="p-2 hover:bg-gray-100 rounded-lg flex-shrink-0"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
-              <p className="text-sm text-gray-600">
-                Activa features especiales para este usuario. Estos features son adicionales al plan contratado.
-              </p>
-
-              {/* Feature: Imágenes de productos */}
-              <div className="bg-primary-50 rounded-lg p-4 border border-primary-100">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
-                      <Image className="w-5 h-5 text-primary-600" />
-                    </div>
-                    <div>
-                      <h3 className="font-medium text-gray-900">Imágenes de productos</h3>
-                      <p className="text-xs text-gray-500">Permite subir fotos a los productos</p>
-                    </div>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={featuresForm.productImages}
-                      onChange={e => setFeaturesForm({ ...featuresForm, productImages: e.target.checked })}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
-                  </label>
-                </div>
-                {featuresForm.productImages && (
-                  <div className="mt-3 flex items-center gap-2 p-2 bg-primary-100 rounded-lg">
-                    <CheckCircle className="w-4 h-4 text-primary-600" />
-                    <span className="text-sm text-primary-700 font-medium">Feature habilitado</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Feature: Ocultar métodos de pago */}
-              <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
-                      <CreditCard className="w-5 h-5 text-amber-600" />
-                    </div>
-                    <div>
-                      <h3 className="font-medium text-gray-900">Ocultar métodos de pago</h3>
-                      <p className="text-xs text-gray-500">Solo efectivo en POS (oculta selector)</p>
-                    </div>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={featuresForm.hidePaymentMethods}
-                      onChange={e => setFeaturesForm({ ...featuresForm, hidePaymentMethods: e.target.checked })}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-amber-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
-                  </label>
-                </div>
-                {featuresForm.hidePaymentMethods && (
-                  <div className="mt-3 flex items-center gap-2 p-2 bg-amber-100 rounded-lg">
-                    <CheckCircle className="w-4 h-4 text-amber-600" />
-                    <span className="text-sm text-amber-700 font-medium">Todas las ventas serán en Efectivo</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Feature: Préstamos */}
-              <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
-                      <Landmark className="w-5 h-5 text-emerald-600" />
-                    </div>
-                    <div>
-                      <h3 className="font-medium text-gray-900">Préstamos</h3>
-                      <p className="text-xs text-gray-500">Gestión de préstamos bancarios y de terceros</p>
-                    </div>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={featuresForm.loans}
-                      onChange={e => setFeaturesForm({ ...featuresForm, loans: e.target.checked })}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-                  </label>
-                </div>
-                {featuresForm.loans && (
-                  <div className="mt-3 flex items-center gap-2 p-2 bg-emerald-100 rounded-lg">
-                    <CheckCircle className="w-4 h-4 text-emerald-600" />
-                    <span className="text-sm text-emerald-700 font-medium">Acceso al módulo de Préstamos</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Feature: Eliminación Masiva */}
-              <div className="p-3 sm:p-4 bg-red-50 rounded-lg sm:rounded-xl border border-red-200">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="w-9 h-9 sm:w-10 sm:h-10 bg-red-500 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
-                      <Trash2 className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="font-semibold text-gray-900 text-sm sm:text-base">Eliminación Masiva</h3>
-                      <p className="text-xs text-gray-500 truncate">Limpiar datos: productos, ventas, clientes, etc.</p>
-                    </div>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={featuresForm.bulkDelete}
-                      onChange={e => setFeaturesForm({ ...featuresForm, bulkDelete: e.target.checked })}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-red-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
-                  </label>
-                </div>
-                {featuresForm.bulkDelete && (
-                  <div className="mt-3 flex items-center gap-2 p-2 bg-red-100 rounded-lg">
-                    <AlertTriangle className="w-4 h-4 text-red-600" />
-                    <span className="text-sm text-red-700 font-medium">Acceso a limpieza masiva de datos (PELIGROSO)</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Feature: Certificados (Extintores) */}
-              <div className="p-3 sm:p-4 bg-amber-50 rounded-lg sm:rounded-xl border border-amber-200">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="w-9 h-9 sm:w-10 sm:h-10 bg-amber-500 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
-                      <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="font-semibold text-gray-900 text-sm sm:text-base">Certificados</h3>
-                      <p className="text-xs text-gray-500 truncate">Certificados de extintores (operatividad y capacitación)</p>
-                    </div>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={featuresForm.certificates}
-                      onChange={e => setFeaturesForm({ ...featuresForm, certificates: e.target.checked })}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-amber-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
-                  </label>
-                </div>
-                {featuresForm.certificates && (
-                  <div className="mt-3 flex items-center gap-2 p-2 bg-amber-100 rounded-lg">
-                    <CheckCircle className="w-4 h-4 text-amber-600" />
-                    <span className="text-sm text-amber-700 font-medium">Acceso al módulo de Certificados</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Botones */}
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={() => {
-                    setShowFeaturesModal(false)
-                    setFeaturesUserToEdit(null)
-                  }}
-                  className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={saveFeatures}
-                  disabled={savingFeatures}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
-                >
-                  {savingFeatures ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      Guardando...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-5 h-5" />
-                      Guardar
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Registrar Pago */}
-      {showPaymentModal && paymentUserToEdit && (
-        <UserDetailsModal
-          user={paymentUserToEdit}
-          type="payment"
-          onClose={() => {
-            setShowPaymentModal(false)
-            setPaymentUserToEdit(null)
-          }}
-          onRegisterPayment={handleRegisterPayment}
-          loading={processingPayment}
-          toast={toast}
-          customPlans={customPlans}
-        />
-      )}
-
-      {/* Modal de Cambiar Plan */}
-      {showPlanModal && paymentUserToEdit && (
-        <UserDetailsModal
-          user={paymentUserToEdit}
-          type="edit"
-          onClose={() => {
-            setShowPlanModal(false)
-            setPaymentUserToEdit(null)
-          }}
-          onChangePlan={handleChangePlan}
-          loading={processingPayment}
-          toast={toast}
-          customPlans={customPlans}
-        />
-      )}
-
-      {/* Modal de Cambiar Vencimiento */}
-      {showExpiryModal && paymentUserToEdit && (
-        <UserDetailsModal
-          user={paymentUserToEdit}
-          type="expiry"
-          onClose={() => {
-            setShowExpiryModal(false)
-            setPaymentUserToEdit(null)
-          }}
-          onUserUpdated={loadUsers}
-          toast={toast}
-        />
-      )}
-
-      {/* Modal de Sucursales */}
-      {showBranchesModal && branchesUserToEdit && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4 overflow-hidden">
-          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-[calc(100vw-1rem)] sm:max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
-            <div className="p-4 sm:p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10">
-              <div className="min-w-0 flex-1">
-                <h2 className="text-base sm:text-xl font-semibold text-gray-900 flex items-center gap-2 flex-wrap">
-                  <Store className="w-5 h-5 text-cyan-600" />
-                  Gestionar Sucursales
-                  <button
-                    onClick={openEditLimitModal}
-                    className="ml-2 px-2.5 py-0.5 bg-cyan-100 text-cyan-700 text-xs font-medium rounded-full hover:bg-cyan-200 transition-colors flex items-center gap-1"
-                    title="Editar límite de sucursales"
-                  >
-                    {branches.filter(b => b.isActive !== false).length + 1}/
-                    {branchesUserToEdit.limits?.maxBranches === -1 ? '∞' : (branchesUserToEdit.limits?.maxBranches ?? 1)}
-                    <Edit2 className="w-3 h-3" />
-                  </button>
-                </h2>
-                <p className="text-xs sm:text-sm text-gray-500 truncate">{branchesUserToEdit.businessName}</p>
-              </div>
-              <button
-                onClick={() => {
-                  setShowBranchesModal(false)
-                  setBranchesUserToEdit(null)
-                  setBranches([])
-                  setEditingBranch(null)
-                }}
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-4 sm:p-6 space-y-6">
-              {/* Lista de sucursales existentes */}
-              <div>
-                <h3 className="font-medium text-gray-900 mb-3">Sucursales Activas</h3>
-                {loadingBranches ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="w-6 h-6 animate-spin text-primary-600" />
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {/* Sucursal Principal Implícita - siempre existe */}
-                    <div className="p-4 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1 min-w-0">
-                          {editingMainBranch ? (
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="text"
-                                value={mainBranchName}
-                                onChange={(e) => setMainBranchName(e.target.value)}
-                                className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                                placeholder="Nombre de la sucursal"
-                                autoFocus
-                              />
-                              <button
-                                onClick={handleSaveMainBranchName}
-                                disabled={savingMainBranch}
-                                className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
-                              >
-                                {savingMainBranch ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setEditingMainBranch(false)
-                                  setMainBranchName(branchesUserToEdit?.mainBranchName || 'Sucursal Principal')
-                                }}
-                                className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            </div>
+                          {user.rubro ? (
+                            <Pastilla tono="neutro" className="max-w-full truncate">{nombreRubro(user.rubro)}</Pastilla>
+                          ) : user.rubroSugerido ? (
+                            <Pastilla tono="punteado" className="max-w-full truncate">{nombreRubro(user.rubroSugerido)}</Pastilla>
                           ) : (
-                            <div className="flex items-center gap-2">
-                              <h4 className="font-medium text-gray-900">{mainBranchName}</h4>
-                              <span className="px-2 py-0.5 bg-cyan-100 text-cyan-700 text-xs rounded-full">
-                                Principal
-                              </span>
-                            </div>
+                            <span className="text-gray-400">—</span>
                           )}
-                          <p className="text-sm text-gray-500 mt-1">
-                            Usa las series globales del negocio (configuradas en Ajustes)
-                          </p>
-                        </div>
-                        {!editingMainBranch && (
-                          <button
-                            onClick={() => setEditingMainBranch(true)}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
-                            title="Editar nombre"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Sucursales adicionales configuradas */}
-                    {branches.filter(b => b.isActive).length === 0 ? (
-                      <div className="text-center py-4 text-gray-400 text-sm">
-                        No hay sucursales adicionales configuradas
-                      </div>
-                    ) : (
-                  <div className="space-y-3">
-                    {branches.filter(b => b.isActive).map(branch => (
-                      <div
-                        key={branch.id}
-                        className={`p-4 border rounded-lg ${editingBranch?.id === branch.id ? 'border-cyan-500 bg-cyan-50' : 'border-gray-200'}`}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <h4 className="font-medium text-gray-900">{branch.name}</h4>
-                              <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
-                                Sucursal adicional
-                              </span>
-                            </div>
-                            {branch.address && (
-                              <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
-                                <MapPin className="w-3 h-3" /> {branch.address}
-                              </p>
-                            )}
-                            {branch.phone && (
-                              <p className="text-sm text-gray-500 flex items-center gap-1">
-                                <Phone className="w-3 h-3" /> {branch.phone}
-                              </p>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleEditBranch(branch)}
-                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
-                              title="Editar sucursal"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteBranch(branch.id)}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                              title="Eliminar sucursal"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Formulario para crear/editar sucursal */}
-              <div className="border-t pt-6">
-                <h3 className="font-medium text-gray-900 mb-4">
-                  {editingBranch ? 'Editar Sucursal' : 'Nueva Sucursal Adicional'}
-                </h3>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Nombre de la Sucursal *
-                    </label>
-                    <input
-                      type="text"
-                      value={branchForm.name}
-                      onChange={e => setBranchForm({ ...branchForm, name: e.target.value })}
-                      placeholder="Ej: Tienda Centro, Sucursal Norte"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Dirección
-                    </label>
-                    <input
-                      type="text"
-                      value={branchForm.address}
-                      onChange={e => setBranchForm({ ...branchForm, address: e.target.value })}
-                      placeholder="Dirección completa para comprobantes"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Teléfono
-                      </label>
-                      <input
-                        type="text"
-                        value={branchForm.phone}
-                        onChange={e => setBranchForm({ ...branchForm, phone: e.target.value })}
-                        placeholder="01-1234567"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Email
-                      </label>
-                      <input
-                        type="email"
-                        value={branchForm.email}
-                        onChange={e => setBranchForm({ ...branchForm, email: e.target.value })}
-                        placeholder="sucursal@empresa.com"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Ciudad/Ubicación
-                    </label>
-                    <input
-                      type="text"
-                      value={branchForm.location}
-                      onChange={e => setBranchForm({ ...branchForm, location: e.target.value })}
-                      placeholder="Lima, Arequipa, etc."
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    />
-                  </div>
-
-                  {/* Ubigeo - Departamento/Provincia/Distrito */}
-                  <div className="pt-2 border-t border-gray-200">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Ubigeo (para guías de remisión)
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Departamento</label>
-                        <select
-                          value={branchForm.department}
-                          onChange={e => handleUbigeoChange('department', e.target.value)}
-                          className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        >
-                          <option value="">Seleccione</option>
-                          {DEPARTAMENTOS.map(dept => (
-                            <option key={dept.code} value={dept.code}>
-                              {dept.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Provincia</label>
-                        <select
-                          value={branchForm.province}
-                          onChange={e => handleUbigeoChange('province', e.target.value)}
-                          disabled={!branchForm.department}
-                          className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100"
-                        >
-                          <option value="">Seleccione</option>
-                          {getProvincias(branchForm.department).map(prov => (
-                            <option key={prov.code} value={prov.code}>
-                              {prov.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Distrito</label>
-                        <select
-                          value={branchForm.district}
-                          onChange={e => handleUbigeoChange('district', e.target.value)}
-                          disabled={!branchForm.province}
-                          className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100"
-                        >
-                          <option value="">Seleccione</option>
-                          {getDistritos(branchForm.department, branchForm.province).map(dist => (
-                            <option key={dist.code} value={dist.code}>
-                              {dist.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                    {branchForm.ubigeo && (
-                      <p className="text-xs text-cyan-600 mt-1">
-                        Ubigeo: {branchForm.ubigeo}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Modo de negocio (plantilla) de la sucursal. '' = hereda el del negocio.
-                      Permite que un mismo RUC maneje locales con plantillas distintas
-                      (ej. un local restaurante y otro hotel). */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Modo de negocio (plantilla)
-                    </label>
-                    <select
-                      value={branchForm.businessMode || ''}
-                      onChange={e => setBranchForm({ ...branchForm, businessMode: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    >
-                      <option value="">Heredar del negocio (por defecto)</option>
-                      <option value="retail">Comercio / Retail</option>
-                      <option value="restaurant">Restaurante</option>
-                      <option value="pharmacy">Farmacia</option>
-                      <option value="hotel">Hotel</option>
-                      <option value="veterinary">Veterinaria</option>
-                      <option value="lending">Préstamos</option>
-                      <option value="transport">Transporte</option>
-                      <option value="logistics">Logística / Construcción</option>
-                      <option value="real_estate">Inmobiliaria</option>
-                    </select>
-                    <p className="mt-1 text-xs text-gray-500">
-                      Define la plantilla (menú lateral y pantallas) cuando esta sucursal está activa. Déjalo en «Heredar» para usar el modo general del negocio.
-                    </p>
-                  </div>
-
-                  {!editingBranch && branches.length > 0 && (
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        id="isDefault"
-                        checked={branchForm.isDefault}
-                        onChange={e => setBranchForm({ ...branchForm, isDefault: e.target.checked })}
-                        className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                      />
-                      <label htmlFor="isDefault" className="text-sm text-gray-700">
-                        Establecer como sucursal principal
-                      </label>
-                    </div>
-                  )}
-
-                  <div className="flex gap-3 pt-2">
-                    {editingBranch && (
-                      <button
-                        onClick={handleCancelBranchEdit}
-                        className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-                      >
-                        Cancelar
-                      </button>
-                    )}
-                    <button
-                      onClick={handleSaveBranch}
-                      disabled={savingBranch || !branchForm.name.trim()}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
-                    >
-                      {savingBranch ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Guardando...
-                        </>
-                      ) : (
-                        <>
-                          {editingBranch ? <Save className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                          {editingBranch ? 'Actualizar' : 'Crear Sucursal Adicional'}
-                        </>
+                        </button>
                       )}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Info sobre series */}
-              <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-4">
-                <h4 className="font-medium text-cyan-800 mb-1">Series Automáticas</h4>
-                <p className="text-sm text-cyan-700">
-                  Al crear una sucursal, se generan automáticamente las series de documentos (F001, B001, etc.).
-                  Las series se incrementan para cada nueva sucursal (F002, B002...).
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal para editar límite de sucursales */}
-      {showEditLimitModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-sm p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Store className="w-5 h-5 text-cyan-600" />
-              Límite de Sucursales
-            </h3>
-            <p className="text-sm text-gray-600 mb-4">
-              Configura cuántas sucursales puede tener este cliente. Usa -1 para ilimitado.
-            </p>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Máximo de sucursales
-                </label>
-                <input
-                  type="number"
-                  min="-1"
-                  value={editingMaxBranches}
-                  onChange={e => setEditingMaxBranches(parseInt(e.target.value) || 1)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  -1 = Ilimitado, 1 = Una sucursal, 2+ = Múltiples
-                </p>
-              </div>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setShowEditLimitModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleSaveMaxBranches}
-                  disabled={savingMaxBranches}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
-                >
-                  {savingMaxBranches ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Guardando...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4" />
-                      Guardar
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de confirmación de eliminación */}
-      {showDeleteModal && userToDelete && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md">
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                  <Trash2 className="w-6 h-6 text-red-600" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Eliminar Usuario</h2>
-                  <p className="text-sm text-gray-500">Esta acción no se puede deshacer</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-sm text-gray-600">
-                  <span className="font-medium">Negocio:</span> {userToDelete.businessName}
-                </p>
-                <p className="text-sm text-gray-600">
-                  <span className="font-medium">Email:</span> {userToDelete.email}
-                </p>
-                <p className="text-sm text-gray-600">
-                  <span className="font-medium">RUC:</span> {userToDelete.ruc || 'N/A'}
-                </p>
-              </div>
-
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                <p className="text-sm text-amber-800">
-                  <strong>Advertencia:</strong> Se eliminará la cuenta de Firebase Auth y el documento del usuario.
-                </p>
-              </div>
-
-              <label className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={deleteWithData}
-                  onChange={(e) => setDeleteWithData(e.target.checked)}
-                  className="mt-0.5 w-4 h-4 text-red-600 rounded focus:ring-red-500"
-                />
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Eliminar también los datos</p>
-                  <p className="text-xs text-gray-500">
-                    Incluye facturas, productos, clientes, almacenes y demás información del negocio
-                  </p>
-                </div>
-              </label>
-            </div>
-
-            <div className="p-6 border-t border-gray-200 flex gap-3 justify-end">
-              <button
-                onClick={() => {
-                  setShowDeleteModal(false)
-                  setUserToDelete(null)
-                  setDeleteWithData(false)
-                }}
-                disabled={deletingUser}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleDeleteUser}
-                disabled={deletingUser}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
-              >
-                {deletingUser ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Eliminando...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="w-4 h-4" />
-                    Eliminar Usuario
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de editar nombre de contacto */}
-      {/* Modal editar número de usuario */}
-      {showNumberModal && userToEditNumber && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-sm">
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center">
-                  <Edit2 className="w-6 h-6 text-primary-600" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Editar N° de Usuario</h2>
-                  <p className="text-sm text-gray-500 truncate">{userToEditNumber.businessName}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Número
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={numberInput}
-                  onChange={(e) => setNumberInput(e.target.value)}
-                  placeholder="Ej: 1"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-lg font-bold text-center"
-                  autoFocus
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') handleSaveUserNumber()
-                  }}
-                />
-              </div>
-
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-xs text-gray-500">
-                  <span className="font-medium">Email:</span> {userToEditNumber.email}
-                </p>
-                <p className="text-xs text-gray-500">
-                  <span className="font-medium">Actual:</span> {userToEditNumber.userNumber || 'Sin asignar'}
-                </p>
-              </div>
-            </div>
-
-            <div className="p-6 border-t border-gray-200 flex gap-3 justify-end">
-              <button
-                onClick={() => {
-                  setShowNumberModal(false)
-                  setUserToEditNumber(null)
-                  setNumberInput('')
-                }}
-                disabled={savingNumber}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSaveUserNumber}
-                disabled={savingNumber || !numberInput.trim()}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-              >
-                {savingNumber ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    Guardando...
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-4 h-4" />
-                    Guardar
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showContactModal && userToEditContact && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md">
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                  <Edit2 className="w-6 h-6 text-blue-600" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Editar Contacto</h2>
-                  <p className="text-sm text-gray-500">{userToEditContact.businessName}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nombre de Contacto
-                </label>
-                <input
-                  type="text"
-                  value={contactNameInput}
-                  onChange={(e) => setContactNameInput(e.target.value)}
-                  placeholder="Ej: Juan Pérez"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Teléfono de contacto (dueño)
-                </label>
-                <input
-                  type="tel"
-                  value={contactPhoneInput}
-                  onChange={(e) => setContactPhoneInput(e.target.value)}
-                  placeholder="987654321"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                />
-                <p className="mt-1 text-xs text-gray-500">Para contactar al dueño. No se imprime en el ticket.</p>
-              </div>
-
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-xs text-gray-500">
-                  <span className="font-medium">Email:</span> {userToEditContact.email}
-                </p>
-                {userToEditContact.phone && (
-                  <p className="text-xs text-gray-500">
-                    <span className="font-medium">Teléfono del negocio (ticket):</span> {userToEditContact.phone}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <div className="p-6 border-t border-gray-200 flex gap-3 justify-end">
-              <button
-                onClick={() => {
-                  setShowContactModal(false)
-                  setUserToEditContact(null)
-                  setContactNameInput('')
-                  setContactPhoneInput('')
-                }}
-                disabled={savingContact}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSaveContactName}
-                disabled={savingContact}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-              >
-                {savingContact ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    Guardando...
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-4 h-4" />
-                    Guardar
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Crear/Editar Vendedor */}
-      {showVendedorModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">
-                  {editingVendedor ? 'Editar Vendedor' : 'Nuevo Vendedor'}
-                </h2>
-                <p className="text-sm text-gray-500">Agente de venta</p>
-              </div>
-              <button onClick={() => setShowVendedorModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
-                <input
-                  type="text"
-                  value={vendedorForm.name}
-                  onChange={e => setVendedorForm({ ...vendedorForm, name: e.target.value })}
-                  placeholder="Ej: Luis Huaman"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp (con código país)</label>
-                <input
-                  type="text"
-                  value={vendedorForm.phone}
-                  onChange={e => setVendedorForm({ ...vendedorForm, phone: e.target.value })}
-                  placeholder="51987654321"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">N° Yape</label>
-                  <input
-                    type="text"
-                    value={vendedorForm.yapeNumber}
-                    onChange={e => setVendedorForm({ ...vendedorForm, yapeNumber: e.target.value })}
-                    placeholder="987 654 321"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Nombre Yape</label>
-                  <input
-                    type="text"
-                    value={vendedorForm.yapeName}
-                    onChange={e => setVendedorForm({ ...vendedorForm, yapeName: e.target.value })}
-                    placeholder="Luis Huaman"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Cuenta BCP</label>
-                  <input
-                    type="text"
-                    value={vendedorForm.bcpAccount}
-                    onChange={e => setVendedorForm({ ...vendedorForm, bcpAccount: e.target.value })}
-                    placeholder="1234567890123"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">CCI</label>
-                  <input
-                    type="text"
-                    value={vendedorForm.bcpCci}
-                    onChange={e => setVendedorForm({ ...vendedorForm, bcpCci: e.target.value })}
-                    placeholder="00212345678901234567"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Titular de cuenta</label>
-                <input
-                  type="text"
-                  value={vendedorForm.titular}
-                  onChange={e => setVendedorForm({ ...vendedorForm, titular: e.target.value })}
-                  placeholder="Luis Huaman"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Vincular cuenta de usuario</label>
-                <select
-                  value={vendedorForm.linkedUserId}
-                  onChange={e => setVendedorForm({ ...vendedorForm, linkedUserId: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
-                >
-                  <option value="">-- Sin vincular --</option>
-                  {users.map(u => (
-                    <option key={u.id} value={u.id}>
-                      {u.businessName || u.razonSocial || u.email} {u.ruc ? `(${u.ruc})` : ''}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  Al vincular, el vendedor podrá ver sus clientes asignados en "Mi Suscripción"
-                </p>
-              </div>
-
-              {/* Lista de vendedores existentes */}
-              {vendedores.length > 0 && (
-                <div className="border-t pt-4 mt-4">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-2">Vendedores existentes</h3>
-                  <div className="space-y-2 max-h-40 overflow-y-auto">
-                    {vendedores.map(v => (
-                      <div key={v.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{v.name}</p>
-                          <p className="text-xs text-gray-500">{v.phone} | Yape: {v.yapeNumber}{v.linkedUserId ? ` | Vinculado` : ''}</p>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => openVendedorForm(v)}
-                            className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteVendedor(v.id)}
-                            className="p-1 text-red-600 hover:bg-red-50 rounded"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="p-6 border-t border-gray-200 flex gap-3 justify-end">
-              <button
-                onClick={() => setShowVendedorModal(false)}
-                disabled={savingVendedor}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSaveVendedor}
-                disabled={savingVendedor || !vendedorForm.name.trim()}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-              >
-                {savingVendedor ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Guardando...</>
-                ) : (
-                  <><Save className="w-4 h-4" /> {editingVendedor ? 'Actualizar' : 'Crear'}</>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Asignar Vendedor a Usuario */}
-      {showAssignVendedorModal && userToAssignVendedor && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md">
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center">
-                  <UserCheck className="w-6 h-6 text-amber-600" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Asignar Vendedor</h2>
-                  <p className="text-sm text-gray-500">{userToAssignVendedor.businessName}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Vendedor</label>
-                <select
-                  value={selectedVendedorId}
-                  onChange={e => setSelectedVendedorId(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                  <option value="">Sin vendedor (Quantio)</option>
-                  {vendedores.map(v => (
-                    <option key={v.id} value={v.id}>{v.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="bg-amber-50 rounded-lg p-3">
-                <p className="text-xs text-amber-700">
-                  Si se asigna un vendedor, al suspenderse este cliente verá los datos de pago del vendedor y las notificaciones de pago no mostrarán montos.
-                </p>
-              </div>
-            </div>
-
-            <div className="p-6 border-t border-gray-200 flex gap-3 justify-end">
-              <button
-                onClick={() => {
-                  setShowAssignVendedorModal(false)
-                  setUserToAssignVendedor(null)
-                  setSelectedVendedorId('')
-                }}
-                disabled={savingAssignment}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleAssignVendedor}
-                disabled={savingAssignment}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-              >
-                {savingAssignment ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Guardando...</>
-                ) : (
-                  <><Check className="w-4 h-4" /> Guardar</>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Subscriptions Huérfanas */}
-      {showOrphansModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl border border-gray-200 max-w-3xl w-full max-h-[85vh] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="w-6 h-6 text-red-600" />
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900">
-                    Subscriptions Huérfanas ({orphanSubscriptions.length})
-                  </h2>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Subscriptions sin negocio o sin user doc — probablemente sub-usuarios mal creados
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowOrphansModal(false)}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-              {orphanSubscriptions.length === 0 ? (
-                <p className="text-center text-gray-500 py-8">No hay subscriptions huérfanas</p>
-              ) : (
-                <div className="space-y-2">
-                  {orphanSubscriptions.map(orphan => (
-                    <div key={orphan.id} className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium text-gray-900 text-sm truncate">
-                              {orphan.email || orphan.displayName || '(sin email)'}
-                            </span>
-                            {orphan.plan && (
-                              <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
-                                {orphan.plan}
-                              </span>
-                            )}
-                            {orphan.status && (
-                              <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-700 rounded">
-                                {orphan.status}
-                              </span>
-                            )}
-                          </div>
-                          {orphan.displayName && orphan.email && orphan.displayName !== orphan.email && (
-                            <p className="text-xs text-gray-600 mt-0.5">{orphan.displayName}</p>
-                          )}
-                          <p className="text-xs text-gray-400 mt-1 font-mono">UID: {orphan.id}</p>
-                          <p className="text-xs text-gray-500 mt-0.5">{orphan.reason}</p>
-                          {orphan.createdAt && (
-                            <p className="text-xs text-gray-400 mt-0.5">
-                              Creada: {orphan.createdAt.toLocaleDateString('es-PE')}
-                            </p>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => handleDeleteOrphanSubscription(orphan.id)}
-                          disabled={deletingOrphanId === orphan.id}
-                          className="flex items-center gap-1 px-3 py-1.5 text-xs bg-red-100 text-red-700 hover:bg-red-200 rounded disabled:opacity-50"
+                    </Td>
+                    <Td apagado>{getPlanDisplay(user)}</Td>
+                    <Td>
+                      <Estado valor={user.status} etiqueta={STATUS_LABELS[user.status] || user.status} />
+                      {user.archived && <span className="ml-1.5 text-[11.5px] text-gray-400">archivada</span>}
+                    </Td>
+                    <Td numero className={lleno ? 'text-red-600 font-medium' : ''}>{usados}/{ilimitado ? '∞' : user.limit}</Td>
+                    <Td apagado>
+                      {user.emissionMethod && user.emissionMethod !== 'none'
+                        ? user.emissionMethod === 'qpse' ? 'QPse' : user.emissionMethod === 'sunat_direct' ? 'SUNAT directo' : user.emissionMethod
+                        : '—'}
+                    </Td>
+                    <Td apagado className="max-w-[150px]">
+                      <div className="truncate">{user.department || '—'}{user.province && user.province !== user.department ? ` · ${user.province}` : ''}</div>
+                    </Td>
+                    <Td
+                      numero
+                      className={vencida ? 'text-red-600 font-medium' : dias !== null && dias <= 7 ? 'text-gray-900 font-medium' : 'text-gray-500'}
+                      title={dias === null ? undefined : vencida ? `Venció hace ${Math.abs(dias)} días` : dias === 0 ? 'Vence hoy' : `Vence en ${dias} días`}
+                    >
+                      {formatDate(user.periodEnd)}
+                    </Td>
+                    <Td numero apagado>{formatDate(user.createdAt)}</Td>
+                    <Td alinear="centro" onClick={e => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={e => toggleActionMenu(user.id, e.currentTarget)}
+                        className="h-6 w-6 rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-900 text-[16px] leading-none"
+                        title="Acciones"
+                        aria-label="Acciones"
+                      >
+                        ⋯
+                      </button>
+                      {actionMenuUser === user.id && (
+                        <div
+                          className="fixed w-52 bg-white rounded-md border border-gray-200 shadow-md py-1 z-50 text-left"
+                          style={{ top: actionMenuPosition.top, left: actionMenuPosition.left }}
                         >
-                          {deletingOrphanId === orphan.id ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <ItemMenu onClick={() => irAFicha(user)}>Ver ficha</ItemMenu>
+                          <ItemMenu onClick={() => abrirModal('pago', user)}>Registrar pago</ItemMenu>
+                          <ItemMenu onClick={() => renovarRapido(user)}>Renovar con el mismo plan</ItemMenu>
+                          <ItemMenu onClick={() => abrirModal('plan', user)}>Cambiar plan</ItemMenu>
+                          <ItemMenu onClick={() => abrirModal('vencimiento', user)}>Cambiar vencimiento</ItemMenu>
+                          <ItemMenu onClick={() => abrirWhatsApp(user)}>Recordar por WhatsApp</ItemMenu>
+                          <div className="border-t border-gray-100 my-1" />
+                          <ItemMenu onClick={() => abrirModal('contacto', user)}>Contacto del dueño</ItemMenu>
+                          <ItemMenu onClick={() => abrirModal('vendedor', user)}>Vendedor</ItemMenu>
+                          <ItemMenu onClick={() => abrirModal('sunat', user)}>Emisión electrónica</ItemMenu>
+                          <ItemMenu onClick={() => abrirModal('funciones', user)}>Funciones especiales</ItemMenu>
+                          <ItemMenu onClick={() => abrirModal('sucursales', user)}>Sucursales</ItemMenu>
+                          <div className="border-t border-gray-100 my-1" />
+                          {user.status !== 'suspended' ? (
+                            <ItemMenu onClick={() => toggleUserAccess(user.id, true)}>Suspender</ItemMenu>
                           ) : (
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <ItemMenu onClick={() => toggleUserAccess(user.id, false)}>Reactivar</ItemMenu>
                           )}
-                          Eliminar
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                          {(user.status === 'suspended' || vencida || user.archived) && (
+                            <ItemMenu onClick={() => archivar(user, !user.archived)}>{user.archived ? 'Desarchivar' : 'Archivar'}</ItemMenu>
+                          )}
+                          <ItemMenu rojo onClick={() => abrirModal('eliminar', user)}>Eliminar cuenta</ItemMenu>
+                        </div>
+                      )}
+                    </Td>
+                  </Fila>
+                )
+              })
+            )}
+          </tbody>
+        </Tabla>
 
-            <div className="border-t border-gray-200 p-4 flex justify-end">
-              <button
-                onClick={() => setShowOrphansModal(false)}
-                className="px-4 py-2 text-sm border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg"
-              >
-                Cerrar
-              </button>
+        {!loading && filteredUsers.length > PAGE_SIZE && (
+          <div className="flex items-center justify-between gap-3 px-4 py-2 border-t border-gray-200 text-[12.5px] text-gray-500">
+            <span>{(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredUsers.length)} de {filteredUsers.length}</span>
+            <div className="flex items-center gap-2">
+              <Boton tamano="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage <= 1}>Anterior</Boton>
+              <span>Página {currentPage} de {pageCount}</span>
+              <Boton tamano="sm" onClick={() => setCurrentPage(p => Math.min(pageCount, p + 1))} disabled={currentPage >= pageCount}>Siguiente</Boton>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Seccion>
 
-    </div>
+      {actionMenuUser && <div className="fixed inset-0 z-40" onClick={() => setActionMenuUser(null)} />}
+
+      {modal?.tipo === 'pago' && (
+        <UserDetailsModal user={modal.cuenta} type="payment" onClose={cerrarModal} onRegisterPayment={handleRegisterPayment} loading={processingPayment} toast={toast} customPlans={customPlans} />
+      )}
+      {modal?.tipo === 'plan' && (
+        <UserDetailsModal user={modal.cuenta} type="edit" onClose={cerrarModal} onChangePlan={handleChangePlan} loading={processingPayment} toast={toast} customPlans={customPlans} />
+      )}
+      {modal?.tipo === 'vencimiento' && (
+        <UserDetailsModal user={modal.cuenta} type="expiry" onClose={cerrarModal} onUserUpdated={() => loadUsers()} toast={toast} />
+      )}
+      {modal?.tipo === 'sunat' && <SunatModal cuenta={modal.cuenta} onClose={cerrarModal} onGuardado={() => loadUsers()} />}
+      {modal?.tipo === 'funciones' && (
+        <FuncionesModal cuenta={modal.cuenta} onClose={cerrarModal} onGuardado={features => actualizarCuenta(modal.cuenta.id, { features })} />
+      )}
+      {modal?.tipo === 'sucursales' && (
+        <SucursalesModal cuenta={modal.cuenta} onClose={cerrarModal} onCambio={cambios => actualizarCuenta(modal.cuenta.id, cambios)} />
+      )}
+      {modal?.tipo === 'contacto' && (
+        <ContactoModal cuenta={modal.cuenta} onClose={cerrarModal} onGuardado={cambios => actualizarCuenta(modal.cuenta.id, cambios)} />
+      )}
+      {modal?.tipo === 'vendedor' && (
+        <AsignarVendedorModal cuenta={modal.cuenta} vendedores={vendedores} onClose={cerrarModal} onGuardado={cambios => actualizarCuenta(modal.cuenta.id, cambios)} />
+      )}
+      {modal?.tipo === 'eliminar' && (
+        <EliminarCuentaModal cuenta={modal.cuenta} onClose={cerrarModal} onEliminada={id => setUsers(prev => prev.filter(u => u.id !== id))} />
+      )}
+      {modal?.tipo === 'vendedores' && <VendedoresModal vendedores={vendedores} cuentas={users} onClose={cerrarModal} onCambio={loadVendedores} />}
+      {modal?.tipo === 'huerfanas' && (
+        <HuerfanasModal huerfanas={huerfanas} onClose={cerrarModal} onEliminada={id => setHuerfanas(prev => prev.filter(h => h.id !== id))} />
+      )}
+    </Pagina>
   )
 }
