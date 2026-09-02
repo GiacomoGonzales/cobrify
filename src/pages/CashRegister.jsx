@@ -11,7 +11,7 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils'
 import { isMultiCurrencyEnabled, normalizeCurrency } from '@/utils/currency'
 import {
   getCashRegisterSession,
@@ -2701,7 +2701,9 @@ export default function CashRegister() {
                   )}
                   <div className="text-xs text-gray-500 mt-2">
                     <Calendar className="w-3 h-3 inline mr-1" />
-                    Abierto: {getDateFromTimestamp(currentSession.openedAt) ? formatDate(getDateFromTimestamp(currentSession.openedAt)) : 'Hoy'}
+                    {/* Dia Y hora: con la caja abierta de ayer, el dia solo no dice
+                        desde cuando viene corriendo la sesion. */}
+                    Abierto: {getDateFromTimestamp(currentSession.openedAt) ? formatDateTime(getDateFromTimestamp(currentSession.openedAt)) : 'Hoy'}
                   </div>
                 </div>
 
