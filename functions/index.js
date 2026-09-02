@@ -1,6 +1,6 @@
 import { onRequest, onCall, HttpsError } from 'firebase-functions/v2/https'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
-import { onDocumentWritten, onDocumentUpdated } from 'firebase-functions/v2/firestore'
+import { onDocumentWritten, onDocumentUpdated, onDocumentCreated } from 'firebase-functions/v2/firestore'
 import { initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore'
@@ -46,6 +46,7 @@ import {
   chargeFlowCustomer, unregisterFlowCard,
 } from './src/services/flowService.js'
 import { resolveAudience } from './src/services/audienceService.js'
+import { siguienteCodigoCliente, sugerirRubro } from './src/services/clientesService.js'
 
 // Initialize Firebase Admin
 initializeApp()
@@ -14683,3 +14684,113 @@ const crearLogeadorSunat = (coleccion, nombre) => onDocumentUpdated(
 export const logSunatInvoices = crearLogeadorSunat('invoices', 'logSunatInvoices')
 export const logSunatGuias = crearLogeadorSunat('dispatchGuides', 'logSunatGuias')
 export const logSunatGuiasTransp = crearLogeadorSunat('carrierDispatchGuides', 'logSunatGuiasTransp')
+
+
+// =====================================================================
+// CÓDIGO DE CLIENTE (correlativo desde 1000001) y RUBRO
+// =====================================================================
+
+/**
+ * Cada negocio nuevo recibe su código de cliente al nacer, venga de donde
+ * venga: registro normal, reseller o (pronto) Cobrify Chat. Así ninguno de
+ * esos caminos tiene que saber del contador. Si el doc ya trae código (lo
+ * puso la semilla en el servidor), no se toca.
+ */
+export const asignarCodigoCliente = onDocumentCreated(
+  { document: 'businesses/{businessId}', region: 'us-central1' },
+  async (event) => {
+    const snap = event.data
+    if (!snap) return
+    if (snap.data()?.codigoCliente) return
+    await db.runTransaction(async (tx) => {
+      const fresco = await tx.get(snap.ref)
+      if (fresco.data()?.codigoCliente) return
+      const codigo = await siguienteCodigoCliente(db, tx)
+      tx.update(snap.ref, { codigoCliente: codigo, codigoClienteAsignadoEn: new Date() })
+    })
+  }
+)
+
+/**
+ * Numera de una vez las cuentas que ya existen, por orden de alta (la más
+ * antigua es la 1000001). Solo admin. Con `dryRun=1` no escribe nada: devuelve
+ * cuántas se numerarían y una muestra, para revisar antes de ejecutar.
+ * Idempotente: las que ya tienen código se saltan.
+ */
+export const numerarClientes = onRequest(
+  { region: 'us-central1', timeoutSeconds: 300, memory: '512MiB' },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    const adminUid = await verifyAdminFromRequest(req)
+    if (!adminUid) { res.status(403).json({ success: false, error: 'No autorizado - Solo administradores' }); return }
+
+    const dryRun = String(req.query.dryRun ?? req.body?.dryRun ?? '') === '1'
+    try {
+      const snap = await db.collection('businesses').get()
+      const fecha = (d) => {
+        const c = d.createdAt
+        if (!c) return Number.MAX_SAFE_INTEGER
+        if (typeof c.toMillis === 'function') return c.toMillis()
+        const t = new Date(c).getTime()
+        return Number.isFinite(t) ? t : Number.MAX_SAFE_INTEGER
+      }
+      const todos = snap.docs.map((d) => ({ id: d.id, data: d.data() }))
+      const yaNumerados = todos.filter((b) => b.data.codigoCliente)
+      const pendientes = todos
+        .filter((b) => !b.data.codigoCliente)
+        .sort((a, b) => fecha(a.data) - fecha(b.data) || a.id.localeCompare(b.id))
+      const sinFecha = pendientes.filter((b) => !b.data.createdAt).length
+
+      const muestra = pendientes.slice(0, 8).map((b) => ({
+        id: b.id,
+        nombre: b.data.businessName || b.data.razonSocial || b.data.name || b.data.tradeName || '(sin nombre)',
+        ruc: b.data.ruc || '',
+        alta: b.data.createdAt?.toDate ? b.data.createdAt.toDate().toISOString().slice(0, 10) : (b.data.createdAt || null),
+      }))
+
+      if (dryRun) {
+        res.json({ success: true, dryRun: true, total: todos.length, yaNumerados: yaNumerados.length,
+                   porNumerar: pendientes.length, sinFechaDeAlta: sinFecha, muestra })
+        return
+      }
+
+      let asignados = 0
+      let ultimo = null
+      // De a uno y en orden: el contador manda, así el número refleja la antigüedad.
+      for (const b of pendientes) {
+        await db.runTransaction(async (tx) => {
+          const ref = db.collection('businesses').doc(b.id)
+          const fresco = await tx.get(ref)
+          if (fresco.data()?.codigoCliente) return
+          const codigo = await siguienteCodigoCliente(db, tx)
+          tx.update(ref, { codigoCliente: codigo, codigoClienteAsignadoEn: new Date() })
+          asignados += 1
+          ultimo = codigo
+        })
+      }
+      console.log(`[numerarClientes] admin ${adminUid} numeró ${asignados} cuentas (último ${ultimo})`)
+      res.json({ success: true, dryRun: false, total: todos.length, asignados, ultimoCodigo: ultimo, muestra })
+    } catch (e) {
+      console.error('[numerarClientes]', e)
+      res.status(500).json({ success: false, error: e.message })
+    }
+  }
+)
+
+/**
+ * Sugerencia de rubro a partir del texto de actividad de SUNAT. Lo usa el
+ * admin al guardar `actividadSunat` de una cuenta: devuelve el id del rubro
+ * o null (sin clasificar). Solo admin.
+ */
+export const sugerirRubroSunat = onRequest(
+  { region: 'us-central1', timeoutSeconds: 30, memory: '256MiB' },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    const adminUid = await verifyAdminFromRequest(req)
+    if (!adminUid) { res.status(403).json({ success: false, error: 'No autorizado - Solo administradores' }); return }
+    const actividad = req.body?.actividad ?? req.query.actividad ?? ''
+    res.json({ success: true, rubro: sugerirRubro(actividad) })
+  }
+)

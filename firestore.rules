@@ -364,12 +364,25 @@ service cloud.firestore {
     // Cada usuario tiene un solo negocio con su userId como ID
     // IMPORTANTE: Los administradores tienen acceso sin importar su suscripción
     // Sub-usuarios (employees) pueden acceder a los datos del Business Owner
+    // Contadores del sistema (p.ej. el correlativo de código de cliente).
+    // Los escribe solo el servidor; el admin puede mirarlos.
+    match /contadores/{contadorId} {
+      allow read: if isAdmin();
+    }
+
     match /businesses/{userId} {
       // Admins pueden leer/escribir cualquier negocio
       allow read, write: if isAdmin();
       // Owners y sub-usuarios pueden acceder a su propio negocio si tienen acceso activo
       allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
-      allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      // El negocio puede editar lo suyo, pero NO los campos que administra
+      // Cobrify: el código de cliente (lo entrega el servidor y no cambia),
+      // el rubro, la actividad de SUNAT y los datos del dueño. Esos los
+      // escribe el admin o el servidor.
+      allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId)
+        && (request.resource == null
+            || !request.resource.data.diff(resource == null ? {} : resource.data).affectedKeys()
+                 .hasAny(['codigoCliente', 'codigoClienteAsignadoEn', 'rubro', 'actividadSunat', 'dueno']));
 
       // Resellers pueden crear negocios para sus clientes.
       // SEGURIDAD: antes cualquier autenticado podía crear businesses/{cualquierUID}

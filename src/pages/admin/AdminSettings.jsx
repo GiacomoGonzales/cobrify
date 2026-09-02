@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { db, auth } from '@/lib/firebase'
+import { consultarEstablecimientos } from '@/services/documentLookupService'
+import { nombreRubro } from '@/data/rubros'
 import { doc, getDoc, setDoc, updateDoc, collection, getDocs, deleteDoc } from 'firebase/firestore'
 import { PLANS } from '@/services/subscriptionService'
 import { getCustomPlans, createCustomPlan, updateCustomPlan, deleteCustomPlan, getHiddenPlans, hidePlan, unhidePlan } from '@/services/customPlanService'
@@ -25,8 +27,7 @@ import {
   Plus,
   Edit2,
   X,
-  Image as ImageIcon
-} from 'lucide-react'
+  Image as ImageIcon, Hash, Tag } from 'lucide-react'
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '@/lib/firebase'
 
@@ -1253,6 +1254,8 @@ function MaintenanceSection() {
 
           {/* Migración de credenciales SUNAT a subcolección protegida (cierre de exposición pública) */}
           <EmissionSecretsMigrationCard />
+          <CodigoClienteCard />
+          <ActividadSunatCard />
 
           {/* Info */}
           <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
@@ -1280,6 +1283,208 @@ function formatBytes(b) {
 // Dispara la Cloud Function migrateEmissionSecrets (admin-only) que mueve el
 // certificado/claves SUNAT/QPse del doc público a /businesses/{id}/secrets/emission.
 // Orden: Probar (dry-run) → Copiar → (deploy del cliente) → Borrar del doc público.
+/**
+ * Código de cliente: numera de una vez las cuentas que ya existen, por orden
+ * de alta (la más antigua es la 1000001). Las nuevas se numeran solas al
+ * nacer (trigger `asignarCodigoCliente`). Primero "Simular" para ver cuántas
+ * y cuáles; "Numerar" recién cuando el reporte cuadre.
+ */
+function CodigoClienteCard() {
+  const [busy, setBusy] = useState('')
+  const [result, setResult] = useState(null)
+  const URL = 'https://us-central1-cobrify-395fe.cloudfunctions.net/numerarClientes'
+
+  async function run(mode) {
+    if (mode === 'real' && !window.confirm('¿Numerar todas las cuentas que todavía no tienen código? El número se asigna una sola vez y no se cambia después.')) return
+    setBusy(mode)
+    setResult(null)
+    try {
+      const idToken = await auth.currentUser.getIdToken()
+      const res = await fetch(URL + (mode === 'dry' ? '?dryRun=1' : ''), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+        body: JSON.stringify({}),
+      })
+      setResult(await res.json())
+    } catch (e) {
+      setResult({ success: false, error: e.message })
+    } finally {
+      setBusy('')
+    }
+  }
+
+  return (
+    <div className="bg-emerald-50 rounded-xl p-5 border border-emerald-200">
+      <div className="flex items-start gap-3">
+        <Hash className="w-6 h-6 text-emerald-600 flex-shrink-0 mt-1" />
+        <div className="flex-1">
+          <h4 className="font-medium text-gray-900">Códigos de cliente</h4>
+          <p className="text-sm text-gray-600 mt-1">
+            Da a cada cuenta su código de cliente (desde <b>1000001</b>, por orden de alta). Se asigna una sola
+            vez y no cambia. Las cuentas nuevas lo reciben solas al crearse; esto es solo para las que ya existen.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button onClick={() => run('dry')} disabled={!!busy}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-emerald-300 text-emerald-800 rounded-lg hover:bg-emerald-100 disabled:opacity-50">
+              {busy === 'dry' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Info className="w-4 h-4" />} Simular
+            </button>
+            <button onClick={() => run('real')} disabled={!!busy}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50">
+              {busy === 'real' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Hash className="w-4 h-4" />} Numerar ahora
+            </button>
+          </div>
+          {result && (
+            <div className={`mt-3 p-3 rounded-lg text-sm ${result.success ? 'bg-white border border-emerald-200' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+              {result.success ? (
+                <>
+                  <p className="text-gray-800">
+                    {result.dryRun ? 'Simulación: ' : 'Listo: '}
+                    <b>{result.total}</b> cuentas en total ·{' '}
+                    {result.dryRun
+                      ? <><b>{result.yaNumerados}</b> ya tenían código · <b>{result.porNumerar}</b> por numerar{result.sinFechaDeAlta ? <> · <b>{result.sinFechaDeAlta}</b> sin fecha de alta (van al final)</> : null}</>
+                      : <><b>{result.asignados}</b> numeradas · último código <b>{result.ultimoCodigo}</b></>}
+                  </p>
+                  {Array.isArray(result.muestra) && result.muestra.length > 0 && (
+                    <ul className="mt-2 text-xs text-gray-600 space-y-0.5">
+                      {result.muestra.map((m) => (
+                        <li key={m.id}><span className="text-gray-400">{m.alta || 'sin fecha'}</span> · {m.nombre}{m.ruc ? ` · RUC ${m.ruc}` : ''}</li>
+                      ))}
+                      {result.dryRun && result.porNumerar > result.muestra.length && <li className="text-gray-400">… y {result.porNumerar - result.muestra.length} más</li>}
+                    </ul>
+                  )}
+                </>
+              ) : <p>{result.error || 'Error'}</p>}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Actividad de SUNAT y rubro sugerido. Recorre las cuentas con RUC, consulta
+ * el establecimiento principal en SUNAT, guarda la actividad económica tal
+ * cual llega y anota el rubro que sugiere el catálogo. NO fija el rubro:
+ * eso se confirma a mano en la ficha. Va despacio (una consulta cada 400 ms)
+ * para no reventar la cuota de la API; se puede detener y retomar, porque
+ * las que ya tienen actividad se saltan.
+ */
+function ActividadSunatCard() {
+  const [busy, setBusy] = useState(false)
+  const [stopRef] = useState({ stop: false })
+  const [progress, setProgress] = useState(null)
+  const [result, setResult] = useState(null)
+  const [rehacer, setRehacer] = useState(false)
+  const SUGERIR_URL = 'https://us-central1-cobrify-395fe.cloudfunctions.net/sugerirRubroSunat'
+
+  const esperar = (ms) => new Promise((r) => setTimeout(r, ms))
+
+  async function run(mode) {
+    if (mode === 'save' && !window.confirm('¿Consultar SUNAT y guardar la actividad y el rubro sugerido en cada cuenta con RUC? No cambia el rubro confirmado.')) return
+    setBusy(true); stopRef.stop = false; setResult(null)
+    const cuenta = { total: 0, procesadas: 0, conActividad: 0, sinDatosSunat: 0, errores: 0, sugeridos: {}, sinSugerencia: 0, guardadas: 0 }
+    try {
+      const idToken = await auth.currentUser.getIdToken()
+      const snap = await getDocs(collection(db, 'businesses'))
+      const pendientes = snap.docs.filter((d) => {
+        const b = d.data()
+        const ruc = String(b.ruc || '').trim()
+        return /^\d{11}$/.test(ruc) && (rehacer || !b.actividadSunat)
+      })
+      cuenta.total = pendientes.length
+      setProgress({ hecho: 0, total: pendientes.length })
+      for (const d of pendientes) {
+        if (stopRef.stop) break
+        const b = d.data()
+        try {
+          const est = await consultarEstablecimientos(String(b.ruc).trim())
+          const lista = est?.success && Array.isArray(est.data) ? est.data : []
+          const principal = lista.find((x) => /PRINCIPAL/i.test(x.tipo || '')) || lista[0]
+          const actividad = (principal?.actividad || '').trim()
+          if (!actividad) { cuenta.sinDatosSunat += 1 } else {
+            cuenta.conActividad += 1
+            const r = await fetch(SUGERIR_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` }, body: JSON.stringify({ actividad }) })
+            const j = await r.json()
+            const rubro = j?.rubro || null
+            if (rubro) cuenta.sugeridos[rubro] = (cuenta.sugeridos[rubro] || 0) + 1; else cuenta.sinSugerencia += 1
+            if (mode === 'save') {
+              await updateDoc(doc(db, 'businesses', d.id), { actividadSunat: actividad, rubroSugerido: rubro, rubroSugeridoEn: new Date() })
+              cuenta.guardadas += 1
+            }
+          }
+        } catch (e) {
+          cuenta.errores += 1
+        }
+        cuenta.procesadas += 1
+        setProgress({ hecho: cuenta.procesadas, total: pendientes.length })
+        await esperar(400)
+      }
+      setResult({ success: true, mode, detenido: stopRef.stop, ...cuenta })
+    } catch (e) {
+      setResult({ success: false, error: e.message })
+    } finally {
+      setBusy(false); setProgress(null)
+    }
+  }
+
+  return (
+    <div className="bg-sky-50 rounded-xl p-5 border border-sky-200">
+      <div className="flex items-start gap-3">
+        <Tag className="w-6 h-6 text-sky-600 flex-shrink-0 mt-1" />
+        <div className="flex-1">
+          <h4 className="font-medium text-gray-900">Actividad SUNAT y rubro sugerido</h4>
+          <p className="text-sm text-gray-600 mt-1">
+            Consulta en SUNAT la actividad económica de cada cuenta con RUC, la guarda tal cual, y anota el rubro
+            que sugiere el catálogo. <b>No cambia el rubro</b>: la sugerencia se confirma después en la ficha.
+            Salta las que ya tienen actividad, así se puede detener y retomar.
+          </p>
+          <label className="mt-2 flex items-center gap-2 text-sm text-gray-700">
+            <input type="checkbox" checked={rehacer} onChange={(e) => setRehacer(e.target.checked)} disabled={busy} />
+            Volver a consultar también las que ya tienen actividad
+          </label>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button onClick={() => run('dry')} disabled={busy}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-sky-300 text-sky-800 rounded-lg hover:bg-sky-100 disabled:opacity-50">
+              <Info className="w-4 h-4" /> Simular
+            </button>
+            <button onClick={() => run('save')} disabled={busy}
+              className="flex items-center gap-2 px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 disabled:opacity-50">
+              <Tag className="w-4 h-4" /> Consultar y guardar
+            </button>
+            {busy && (
+              <button onClick={() => { stopRef.stop = true }}
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100">
+                <X className="w-4 h-4" /> Detener
+              </button>
+            )}
+          </div>
+          {progress && <p className="mt-2 text-sm text-gray-600"><RefreshCw className="inline w-4 h-4 animate-spin mr-1" />{progress.hecho} de {progress.total}…</p>}
+          {result && (
+            <div className={`mt-3 p-3 rounded-lg text-sm ${result.success ? 'bg-white border border-sky-200' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+              {result.success ? (
+                <>
+                  <p className="text-gray-800">
+                    {result.mode === 'dry' ? 'Simulación' : 'Guardado'}{result.detenido ? ' (detenido a medias)' : ''}: <b>{result.procesadas}</b> de {result.total} cuentas con RUC ·{' '}
+                    <b>{result.conActividad}</b> con actividad en SUNAT · <b>{result.sinDatosSunat}</b> sin datos · <b>{result.errores}</b> errores
+                    {result.mode === 'save' ? <> · <b>{result.guardadas}</b> guardadas</> : null}
+                  </p>
+                  <ul className="mt-2 text-xs text-gray-600 space-y-0.5">
+                    {Object.entries(result.sugeridos).sort((a, b) => b[1] - a[1]).map(([id, n]) => (
+                      <li key={id}><b>{n}</b> · {nombreRubro(id)} <span className="text-gray-400">({id})</span></li>
+                    ))}
+                    {result.sinSugerencia > 0 && <li><b>{result.sinSugerencia}</b> · Sin clasificar (SUNAT dice algo que el catálogo no reconoce)</li>}
+                  </ul>
+                </>
+              ) : <p>{result.error || 'Error'}</p>}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function EmissionSecretsMigrationCard() {
   const [busy, setBusy] = useState('')
   const [result, setResult] = useState(null)

@@ -1,0 +1,391 @@
+{
+  "_doc": "Catálogo de rubros. Cada rubro pertenece a un modo (businessMode) y define qué páginas se suman a las comunes el primer día, qué opciones cambian respecto a la semilla, y qué patrones del texto de actividad económica de SUNAT lo sugieren (se comparan sin tildes, en mayúsculas). Agregar un rubro = agregar una fila aquí, no código.",
+  "rubros": [
+    {
+      "id": "ferreteria",
+      "nombre": "Ferretería y construcción",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "warehouses",
+        "stock-movements",
+        "purchases",
+        "suppliers",
+        "quotations",
+        "dispatch-guides"
+      ],
+      "ajustes": {
+        "dispatchGuidesEnabled": true
+      },
+      "patronesSunat": [
+        "FERRETER",
+        "MATERIALES DE CONSTRUCCI",
+        "PINTURA",
+        "VIDRIO",
+        "SANITARI",
+        "ELECTRIC"
+      ]
+    },
+    {
+      "id": "abarrotes",
+      "nombre": "Abarrotes, bodega y minimarket",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "purchases",
+        "suppliers",
+        "promotions"
+      ],
+      "ajustes": {
+        "showAllProductsInPOS": true
+      },
+      "patronesSunat": [
+        "PREDOMINIO DE ALIMENTOS",
+        "MINIMARKET",
+        "ABARROTES",
+        "BODEGA",
+        "BEBIDAS Y TABACO"
+      ]
+    },
+    {
+      "id": "ropa",
+      "nombre": "Ropa, calzado y accesorios",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "promotions",
+        "online-orders",
+        "quotations"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "PRENDAS DE VESTIR",
+        "CALZADO",
+        "ARTICULOS DE CUERO",
+        "TEXTIL"
+      ]
+    },
+    {
+      "id": "tecnologia",
+      "nombre": "Tecnología, celulares y cómputo",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "warehouses",
+        "quotations",
+        "purchases",
+        "suppliers",
+        "certificates"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "TELECOMUNICACION",
+        "COMPUTADORA",
+        "PERIFERICO",
+        "ELECTRODOMESTICO",
+        "EQUIPO DE AUDIO",
+        "VIDEO"
+      ]
+    },
+    {
+      "id": "belleza",
+      "nombre": "Salón de belleza, barbería y spa",
+      "modo": "retail",
+      "paginas": [
+        "vet-agenda",
+        "promotions",
+        "sellers"
+      ],
+      "ajustes": {
+        "appointmentsEnabled": true,
+        "allowCustomProducts": true
+      },
+      "patronesSunat": [
+        "PELUQUERIA",
+        "TRATAMIENTOS DE BELLEZA",
+        "BARBERIA",
+        "SPA"
+      ]
+    },
+    {
+      "id": "servicios",
+      "nombre": "Consultorio y servicios profesionales",
+      "modo": "retail",
+      "paginas": [
+        "quotations",
+        "vet-agenda"
+      ],
+      "ajustes": {
+        "appointmentsEnabled": true,
+        "allowCustomProducts": true
+      },
+      "patronesSunat": [
+        "ODONTOLOG",
+        "CONSULTORIA",
+        "ACTIVIDADES JURIDICAS",
+        "CONTABILIDAD",
+        "MEDICOS",
+        "ARQUITECTURA",
+        "INGENIERIA",
+        "PUBLICIDAD",
+        "FOTOGRAF"
+      ]
+    },
+    {
+      "id": "taller",
+      "nombre": "Taller mecánico y repuestos",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "purchases",
+        "suppliers",
+        "quotations"
+      ],
+      "ajustes": {
+        "allowCustomProducts": true
+      },
+      "patronesSunat": [
+        "REPARACION DE VEHICULOS",
+        "MANTENIMIENTO DE VEHICULOS",
+        "PARTES, PIEZAS",
+        "REPUESTOS",
+        "MOTOCICLETAS"
+      ]
+    },
+    {
+      "id": "libreria",
+      "nombre": "Librería, útiles e imprenta",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "promotions",
+        "purchases",
+        "quotations"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "LIBROS",
+        "PAPELERIA",
+        "IMPRESION",
+        "UTILES DE OFICINA"
+      ]
+    },
+    {
+      "id": "mayorista",
+      "nombre": "Distribuidora y mayorista",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "warehouses",
+        "stock-movements",
+        "dispatch-guides",
+        "bulk-emission",
+        "purchases",
+        "purchase-orders",
+        "suppliers",
+        "sellers",
+        "quotations"
+      ],
+      "ajustes": {
+        "dispatchGuidesEnabled": true
+      },
+      "patronesSunat": [
+        "VENTA AL POR MAYOR",
+        "DISTRIBUCION"
+      ]
+    },
+    {
+      "id": "otro-comercio",
+      "nombre": "Otro comercio",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "purchases",
+        "quotations"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "VENTA AL POR MENOR"
+      ]
+    },
+    {
+      "id": "restaurante",
+      "nombre": "Restaurante, cevichería y pollería",
+      "modo": "restaurant",
+      "paginas": [
+        "tables",
+        "orders",
+        "kitchen",
+        "waiters",
+        "envios",
+        "ingredients",
+        "recipes",
+        "purchases",
+        "suppliers"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "RESTAURANTES",
+        "SERVICIO MOVIL DE COMIDAS",
+        "POLLERIA",
+        "CEVICHERIA",
+        "CHIFA"
+      ]
+    },
+    {
+      "id": "cafeteria",
+      "nombre": "Cafetería, juguería y comida rápida",
+      "modo": "restaurant",
+      "paginas": [
+        "orders",
+        "kitchen",
+        "envios",
+        "ingredients",
+        "recipes",
+        "purchases"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "CAFETERIA",
+        "JUGUERIA",
+        "COMIDA RAPIDA",
+        "PANADERIA",
+        "PASTELERIA"
+      ]
+    },
+    {
+      "id": "bar",
+      "nombre": "Bar y discoteca",
+      "modo": "restaurant",
+      "paginas": [
+        "tables",
+        "orders",
+        "waiters",
+        "purchases",
+        "suppliers"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "SUMINISTRO DE BEBIDAS",
+        "BAR",
+        "DISCOTECA"
+      ]
+    },
+    {
+      "id": "farmacia",
+      "nombre": "Botica y farmacia",
+      "modo": "pharmacy",
+      "paginas": [
+        "inventory",
+        "warehouses",
+        "batch-control",
+        "expiry-alerts",
+        "laboratories",
+        "purchases",
+        "suppliers"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "FARMACEUTIC",
+        "MEDICINALES",
+        "BOTICA",
+        "FARMACIA"
+      ]
+    },
+    {
+      "id": "veterinaria",
+      "nombre": "Veterinaria y pet shop",
+      "modo": "veterinary",
+      "paginas": [
+        "vet-agenda",
+        "vet-alerts",
+        "online-orders",
+        "purchase-history"
+      ],
+      "ajustes": {
+        "appointmentsEnabled": true
+      },
+      "patronesSunat": [
+        "VETERINARIA",
+        "ANIMALES DE COMPAÑIA",
+        "MASCOTAS"
+      ]
+    },
+    {
+      "id": "prestamos",
+      "nombre": "Casa de préstamos",
+      "modo": "lending",
+      "paginas": [
+        "lending"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "ACTIVIDADES DE CREDITO",
+        "PRESTAMOS",
+        "CASA DE EMPEÑO"
+      ]
+    },
+    {
+      "id": "hotel",
+      "nombre": "Hotel y hospedaje",
+      "modo": "hotel",
+      "paginas": [],
+      "ajustes": {},
+      "patronesSunat": [
+        "ALOJAMIENTO",
+        "HOTEL",
+        "HOSPEDAJE",
+        "HOSTAL"
+      ]
+    },
+    {
+      "id": "transporte",
+      "nombre": "Transporte de carga y pasajeros",
+      "modo": "transport",
+      "paginas": [
+        "carrier-dispatch-guides"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "TRANSPORTE DE CARGA",
+        "TRANSPORTE DE PASAJEROS",
+        "TRANSPORTE TERRESTRE"
+      ]
+    },
+    {
+      "id": "obras",
+      "nombre": "Constructora y obras",
+      "modo": "logistics",
+      "paginas": [
+        "projects",
+        "warehouse-exits",
+        "warehouse-returns",
+        "logistics-reports",
+        "inventory",
+        "warehouses",
+        "purchases",
+        "suppliers"
+      ],
+      "ajustes": {
+        "exitNoteEnabled": true
+      },
+      "patronesSunat": [
+        "CONSTRUCCION DE EDIFICIOS",
+        "INGENIERIA CIVIL",
+        "OBRAS"
+      ]
+    },
+    {
+      "id": "inmobiliaria",
+      "nombre": "Inmobiliaria",
+      "modo": "real_estate",
+      "paginas": [],
+      "ajustes": {},
+      "patronesSunat": [
+        "INMOBILIARIA",
+        "BIENES RAICES",
+        "ALQUILER DE INMUEBLES"
+      ]
+    }
+  ]
+}
