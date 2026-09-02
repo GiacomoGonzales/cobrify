@@ -271,11 +271,17 @@ export const getLoyaltyCards = async (businessId) => {
  *
  * @param {string} refId  ID único de la venta que origina el sello
  *                        (`invoice_<id>` o `order_<id>`).
+ * @param {string} [localId]  Negocio que SELLÓ, cuando no es el mismo que
+ *                        guarda la tarjeta. Dos empresas de un mismo grupo
+ *                        comparten las tarjetas (ver src/utils/businessGroup.js)
+ *                        y sin esto no habría forma de saber quién dio el
+ *                        sello ni quién entregó el premio — que es lo que
+ *                        después les permite liquidar entre ellas.
  * @returns {{success, alreadyStamped?, card?, rewardReady?}}
  */
 export const earnStamp = async (businessId, {
   phone, customerName = '', customerId = null,
-  refId, source = 'pos', amount = 0, config,
+  refId, source = 'pos', amount = 0, config, localId = null,
 }) => {
   const key = phoneKey(phone)
   if (!key) return { success: false, error: 'El cliente no tiene teléfono' }
@@ -349,6 +355,9 @@ export const earnStamp = async (businessId, {
         stamps: sellosGanados,
         source,          // 'pos' | 'online'
         amount: Number(amount) || 0,
+        // Solo cuando la tarjeta vive en OTRO negocio del grupo: si no,
+        // el local es el dueño de la tarjeta y el dato sobra.
+        ...(localId && localId !== businessId ? { localId } : {}),
         date: serverTimestamp(),
       })
       return { alreadyStamped: false, stamps, goal: cfg.goal }
@@ -372,7 +381,7 @@ export const earnStamp = async (businessId, {
  * Canjear el premio: descuenta la meta de sellos (no reinicia a cero — si tenía
  * 12 con meta 10, le quedan 2, que es lo justo) y deja el movimiento.
  */
-export const redeemReward = async (businessId, phone, { userName = '', note = '', config = null } = {}) => {
+export const redeemReward = async (businessId, phone, { userName = '', note = '', config = null, localId = null } = {}) => {
   const key = phoneKey(phone)
   if (!key) return { success: false, error: 'Sin teléfono válido' }
   // La vigencia se valida también acá y no solo en la pantalla: el canje es
@@ -427,6 +436,8 @@ export const redeemReward = async (businessId, phone, { userName = '', note = ''
         stamps: -goal,
         note,
         redeemedBy: userName,
+        // Qué local entregó el premio (ver earnStamp).
+        ...(localId && localId !== businessId ? { localId } : {}),
         date: serverTimestamp(),
       })
       return { stamps }

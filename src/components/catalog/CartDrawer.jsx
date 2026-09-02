@@ -20,6 +20,7 @@ import {
   isBusinessOpen,
 } from '@/components/catalog/catalogHelpers'
 import { validateCoupon, normalizeCouponCode } from '@/services/couponService'
+import { idDeFidelizacion } from '@/utils/businessGroup'
 import {
   X,
   Plus,
@@ -248,7 +249,9 @@ export default function CartDrawer({
     setValidatingCoupon(true)
     setCouponError('')
     try {
-      const res = await validateCoupon(business.id, codigo, { database: db })
+      // Los cupones pueden ser del grupo: el mismo código vale en los dos
+      // locales (ver src/utils/businessGroup.js).
+      const res = await validateCoupon(idDeFidelizacion(business, business.id), codigo, { database: db })
       if (!res.success) { setCouponError(res.error); return }
       setAppliedCoupon(res.coupon)
       setCouponInput('')

@@ -27,6 +27,10 @@ export default function OrderCustomerModal({
   isOpen,
   onClose,
   businessId,
+  // Dónde vive la TARJETA de sellos. Puede ser otro negocio del mismo
+  // grupo (ver src/utils/businessGroup.js); los clientes, en cambio,
+  // siguen siendo los de este negocio.
+  loyaltyBusinessId = null,
   order,
   loyaltyConfig = null,
   onAssign,
@@ -80,7 +84,7 @@ export default function OrderCustomerModal({
       }
       const ficha = hallados.length ? { id: hallados[0].id, ...hallados[0].data() } : null
 
-      const tarjeta = await getLoyaltyCard(businessId, key, loyaltyConfig)
+      const tarjeta = await getLoyaltyCard(loyaltyBusinessId || businessId, key, loyaltyConfig)
       const card = tarjeta.success ? tarjeta.data : null
 
       if (!ficha && !card) {

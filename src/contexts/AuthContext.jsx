@@ -402,6 +402,33 @@ export const AuthProvider = ({ children }) => {
 
               setBusinessMode(mode)
               setBusinessSettings(withFeatureDefaults(businessData))
+
+              /**
+               * GRUPO DE FIDELIZACIÓN: el programa de sellos sale del negocio que
+               * lo guarda, no del propio.
+               *
+               * Dos empresas de un mismo grupo comparten las tarjetas (ver
+               * src/utils/businessGroup.js). El programa —meta, premio, vigencia,
+               * tema de la tarjeta digital— tiene que ser UNO: si cada local
+               * tuviera el suyo, la misma tarjeta significaría cosas distintas
+               * según dónde la presenten, y el local que no lo configuró no
+               * sellaría nada.
+               *
+               * Se resuelve acá, al cargar, para que todo lo de abajo —el POS,
+               * Promociones, los pedidos online— siga leyendo
+               * businessSettings.loyaltyConfig sin enterarse.
+               */
+              const grupoFidelidad = String(businessData.loyaltyGroupId || '').trim()
+              if (grupoFidelidad && grupoFidelidad !== businessDoc.id) {
+                getDoc(doc(db, 'businesses', grupoFidelidad))
+                  .then((grupoDoc) => {
+                    if (!grupoDoc.exists()) return
+                    const cfgDelGrupo = grupoDoc.data()?.loyaltyConfig
+                    if (!cfgDelGrupo) return
+                    setBusinessSettings((prev) => (prev ? { ...prev, loyaltyConfig: cfgDelGrupo } : prev))
+                  })
+                  .catch((e) => console.warn('No se pudo leer el programa de sellos del grupo:', e?.message))
+              }
               // Espejar la Impresora de Caja (compartida por negocio en Firestore)
               // a localStorage: el servicio de impresión la lee de ahí al imprimir
               // desde Ventas/POS. Sin esto, un dispositivo que nunca abrió

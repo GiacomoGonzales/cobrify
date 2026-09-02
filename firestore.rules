@@ -337,6 +337,29 @@ service cloud.firestore {
       return isOwner(userId) || isSubUserOf(userId);
     }
 
+    // El negocio del que pide: el suyo si es dueño, el de su jefe si es
+    // sub-usuario.
+    function negocioDelQuePide() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+             && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.ownerId != null
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.ownerId
+        : request.auth.uid;
+    }
+
+    // GRUPO DE FIDELIZACIÓN: dos empresas distintas que comparten las
+    // tarjetas de sellos y los cupones (ver src/utils/businessGroup.js).
+    //
+    // Es una puerta ESTRECHA a propósito: solo abre las dos subcolecciones
+    // de fidelización, y solo si el negocio del que pide declara
+    // explícitamente que su grupo es este. Los productos, los clientes, el
+    // stock y los comprobantes siguen siendo intocables entre negocios.
+    function mismoGrupoDeFidelizacion(userId) {
+      let propio = negocioDelQuePide();
+      return exists(/databases/$(database)/documents/businesses/$(propio))
+             && get(/databases/$(database)/documents/businesses/$(propio)).data.loyaltyGroupId == userId
+             && hasAccess(propio);
+    }
+
     // Businesses (Negocios)
     // Cada usuario tiene un solo negocio con su userId como ID
     // IMPORTANTE: Los administradores tienen acceso sin importar su suscripción
@@ -772,12 +795,15 @@ service cloud.firestore {
       match /loyaltyCards/{cardId} {
         allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        // La otra empresa del mismo grupo sella y canjea sobre esta tarjeta.
+        allow read, write: if isAuthenticated() && mismoGrupoDeFidelizacion(userId);
 
         // Movimientos: el ID es la referencia de la venta que lo originó, y
         // eso es lo que impide sellar dos veces la misma venta.
         match /movements/{movementId} {
           allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
           allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+          allow read, write: if isAuthenticated() && mismoGrupoDeFidelizacion(userId);
         }
       }
 
@@ -790,6 +816,8 @@ service cloud.firestore {
         allow get: if true;
         allow list: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        // La otra empresa del mismo grupo administra y consume los mismos cupones.
+        allow list, write: if isAuthenticated() && mismoGrupoDeFidelizacion(userId);
       }
 
       // Subcollection: Descuentos programados (Promociones).

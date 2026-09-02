@@ -270,6 +270,43 @@ async function userCanAccessBusiness(userId, businessId) {
 }
 
 /**
+ * GRUPO DE FIDELIZACIÓN: dos empresas que comparten tarjetas y cupones.
+ *
+ * Espejo de `idDeFidelizacion` en src/utils/businessGroup.js, donde está
+ * explicado el caso. Se repite acá porque el front y las functions son dos
+ * despliegues distintos y no comparten módulos; si cambia uno, cambia el
+ * otro.
+ */
+function grupoDeFidelizacion(negocio, propioId) {
+  return String(negocio?.loyaltyGroupId || '').trim() || propioId
+}
+
+/**
+ * ¿Este usuario puede tocar las TARJETAS de ese negocio?
+ *
+ * Además de los suyos, los del grupo: el dueño de un local necesita poder
+ * emitir el pase de una tarjeta que vive en la otra empresa del grupo.
+ * Es una puerta ESTRECHA a propósito —solo fidelización, y solo si el
+ * negocio del que pregunta apunta a ese grupo— y no reemplaza a
+ * `userCanAccessBusiness` para nada más.
+ */
+async function userCanAccessLoyaltyOf(userId, businessId) {
+  if (await userCanAccessBusiness(userId, businessId)) return true
+  try {
+    // El negocio del que pregunta: el suyo si es dueño, o el de su jefe.
+    let propio = userId
+    const userDoc = await db.collection('users').doc(userId).get()
+    if (userDoc.exists && userDoc.data().ownerId && userDoc.data().isActive === true) {
+      propio = userDoc.data().ownerId
+    }
+    const snap = await db.collection('businesses').doc(String(propio)).get()
+    return snap.exists && grupoDeFidelizacion(snap.data(), propio) === String(businessId)
+  } catch (e) {
+    return false
+  }
+}
+
+/**
  * SEGURIDAD (cert SUNAT): los secretos de emisión (sunat, qpse, y las credenciales
  * anidadas emissionConfig.{qpse,sunat}) se están moviendo del doc top-level
  * /businesses/{id} —que es de lectura pública cuando el catálogo/libro está activo—
@@ -12510,7 +12547,7 @@ export const getWalletPassLink = onRequest(
       if (!businessId || !phone) {
         res.status(400).json({ error: 'businessId y phone son requeridos' }); return
       }
-      if (!(await userCanAccessBusiness(decoded.uid, businessId))) {
+      if (!(await userCanAccessLoyaltyOf(decoded.uid, businessId))) {
         res.status(403).json({ error: 'No autorizado para este negocio' }); return
       }
 
@@ -12610,7 +12647,15 @@ export const registerLoyaltyCustomer = onRequest(
         const snap = await resolverNegocio(idOSlug)
         if (!snap) { res.status(404).json({ error: 'Negocio no encontrado' }); return }
         const b = snap.data()
-        const cfg = b.loyaltyConfig || {}
+        // El PROGRAMA sale del grupo (meta, premio, vigencia): dos locales
+        // del mismo grupo tienen que ofrecer la misma tarjeta. La MARCA de
+        // la página, en cambio, es la del local que puso ese QR — el cliente
+        // escanea ahí y ahí tiene que reconocerse.
+        const grupoId = grupoDeFidelizacion(b, snap.id)
+        const bGrupo = grupoId === snap.id
+          ? b
+          : ((await db.collection('businesses').doc(grupoId).get()).data() || b)
+        const cfg = bGrupo.loyaltyConfig || {}
         res.status(200).json({
           ok: true,
           businessId: snap.id,
@@ -12645,7 +12690,13 @@ export const registerLoyaltyCustomer = onRequest(
       if (!businessId) { res.status(400).json({ error: 'Falta el negocio' }); return }
       const bizSnap = await db.collection('businesses').doc(String(businessId)).get()
       if (!bizSnap.exists) { res.status(404).json({ error: 'Negocio no encontrado' }); return }
-      const cfg = bizSnap.data().loyaltyConfig || {}
+      // Grupo: la tarjeta y el programa viven en un solo lado; el CLIENTE
+      // se queda en el local donde se registró, que es su base.
+      const grupoId = grupoDeFidelizacion(bizSnap.data(), String(businessId))
+      const grupoSnap = grupoId === String(businessId)
+        ? bizSnap
+        : await db.collection('businesses').doc(grupoId).get()
+      const cfg = (grupoSnap.exists ? grupoSnap.data() : bizSnap.data()).loyaltyConfig || {}
       if (cfg.enabled !== true) {
         res.status(409).json({ error: 'Este negocio no tiene activo su programa de sellos' }); return
       }
@@ -12737,7 +12788,7 @@ export const registerLoyaltyCustomer = onRequest(
       }
 
       // ── Tarjeta: idempotente, el doc es el teléfono ──
-      const cardRef = db.collection('businesses').doc(String(businessId))
+      const cardRef = db.collection('businesses').doc(grupoId)
         .collection('loyaltyCards').doc(celular)
       const cardSnap = await cardRef.get()
       const bienvenida = Math.max(0, Math.min(5, Number(cfg.welcomeStamps) || 0))
@@ -12770,7 +12821,7 @@ export const registerLoyaltyCustomer = onRequest(
         }
       }
 
-      const link = await tarjetaYLinkCorto(String(businessId), celular)
+      const link = await tarjetaYLinkCorto(grupoId, celular)
       res.status(200).json({
         ok: true,
         alreadyRegistered: yaEstaba,

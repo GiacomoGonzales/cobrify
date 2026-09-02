@@ -16,6 +16,7 @@ import {
   Ticket,
   Power,
   Clock,
+  Users,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -30,6 +31,7 @@ import { uploadProductImage, createImagePreview, revokeImagePreview } from '@/se
 import ProductModifiersSection from '@/components/ProductModifiersSection'
 import { getLoyaltyCards, getWalletPassLink, redeemReward, WALLET_EN_APROBACION } from '@/services/loyaltyService'
 import { getCoupons, createCoupon, setCouponActive, deleteCoupon, normalizeCouponCode } from '@/services/couponService'
+import { idDeFidelizacion, comparteGrupo } from '@/utils/businessGroup'
 import { getGiftCertificates, createGiftCertificate, cancelGiftCertificate } from '@/services/giftCertificateService'
 import { getOpenCashSessions } from '@/services/firestoreService'
 import {
@@ -127,6 +129,11 @@ export default function Promotions() {
   const [saving, setSaving] = useState(false)
 
   const businessId = getBusinessId()
+  // Las tarjetas y los cupones pueden vivir en otro negocio del mismo
+  // grupo (ver src/utils/businessGroup.js). Los productos, los
+  // certificados y las promos por horario NO: esos son de cada empresa.
+  const idFidelidad = idDeFidelizacion(businessSettings, businessId)
+  const enGrupo = comparteGrupo(businessSettings, businessId)
 
   useEffect(() => {
     if (!businessId) return
@@ -149,7 +156,7 @@ export default function Promotions() {
       return
     }
     // Las tarjetas y el catálogo cargan por separado: si una falla, la otra vive.
-    getLoyaltyCards(businessId)
+    getLoyaltyCards(idFidelidad)
       .then((res) => setTarjetas(res?.success ? res.data : []))
       .catch(() => {})
       .finally(() => setCargandoTarjetas(false))
@@ -160,7 +167,7 @@ export default function Promotions() {
     getProductCategories(businessId)
       .then((res) => setCategoriasDelNegocio(res?.success ? (res.data || []) : []))
       .catch(() => {})
-    getCoupons(businessId)
+    getCoupons(idFidelidad)
       .then((res) => setCupones(res?.success ? res.data : []))
       .catch(() => {})
       .finally(() => setCargandoCupones(false))
@@ -321,7 +328,7 @@ export default function Promotions() {
     if (isDemoMode) { toast.error('No disponible en modo demo'); return }
     setSavingCupon(true)
     try {
-      const res = await createCoupon(businessId, {
+      const res = await createCoupon(idFidelidad, {
         code: cuponForm.code,
         type: cuponForm.type,
         value: cuponForm.value,
@@ -347,7 +354,7 @@ export default function Promotions() {
     if (isDemoMode) { toast.error('No disponible en modo demo'); return }
     setAccionandoCupon(cupon.id)
     try {
-      const res = await setCouponActive(businessId, cupon.id, !cupon.active)
+      const res = await setCouponActive(idFidelidad, cupon.id, !cupon.active)
       if (!res.success) { toast.error('No se pudo cambiar el cupón'); return }
       setCupones((prev) => prev.map((c) => c.id === cupon.id ? { ...c, active: !cupon.active } : c))
     } finally {
@@ -381,7 +388,7 @@ export default function Promotions() {
     if (isDemoMode) { toast.error('No disponible en modo demo'); return }
     setAccionandoCupon(cupon.id)
     try {
-      const res = await deleteCoupon(businessId, cupon.id)
+      const res = await deleteCoupon(idFidelidad, cupon.id)
       if (!res.success) { toast.error('No se pudo eliminar'); return }
       setCupones((prev) => prev.filter((c) => c.id !== cupon.id))
       toast.success(`Cupón ${cupon.id} eliminado`)
@@ -413,7 +420,7 @@ export default function Promotions() {
     try {
       const { getAuth } = await import('firebase/auth')
       const idToken = await getAuth().currentUser?.getIdToken()
-      const res = await getWalletPassLink(businessId, tarjeta.phone || tarjeta.id, idToken)
+      const res = await getWalletPassLink(idFidelidad, tarjeta.phone || tarjeta.id, idToken)
       if (!res.success) { toast.error(res.error || 'No se pudo generar la tarjeta'); return }
       const texto = `Hola! Esta es tu tarjeta de sellos de ${nombreNegocio || 'nuestro negocio'}. ` +
         `Ya tienes ${res.stamps} de ${res.goal}. Agregala a tu celular: ${res.shortUrl || res.url}`
@@ -429,7 +436,7 @@ export default function Promotions() {
     if (isDemoMode) { toast.error('No disponible en modo demo'); return }
     setAccionandoId(`canje_${tarjeta.id}`)
     try {
-      const res = await redeemReward(businessId, tarjeta.phone || tarjeta.id, { config: businessSettings?.loyaltyConfig })
+      const res = await redeemReward(idFidelidad, tarjeta.phone || tarjeta.id, { config: businessSettings?.loyaltyConfig, localId: businessId })
       if (!res.success) { toast.error(res.error || 'No se pudo canjear'); return }
       toast.success(`Premio canjeado. Le quedan ${res.stamps} sellos`)
       setTarjetas((prev) => prev.map((t) => t.id === tarjeta.id
@@ -562,6 +569,23 @@ export default function Promotions() {
           Fideliza a tus clientes y arma ofertas — todo desde un solo lugar
         </p>
       </div>
+
+      {/* Aviso de grupo. Sin esto, un negocio ve tarjetas y cupones que no
+          creó y no hay forma de que entienda por qué —ni de diagnosticarlo
+          cuando llame a preguntar. */}
+      {enGrupo && (
+        <div className="flex items-start gap-3 p-4 rounded-lg border border-blue-200 bg-blue-50">
+          <Users className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+          <div className="text-sm text-blue-900">
+            <p className="font-medium">Fidelización compartida con otro local</p>
+            <p className="mt-0.5 text-blue-800">
+              Las tarjetas de sellos y los cupones son los mismos en los dos locales: un sello
+              sumado acá cuenta allá, y el premio se canjea en cualquiera de los dos. Los
+              productos, los clientes y los comprobantes siguen siendo de este negocio.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Pestañas. En móvil son un CARRUSEL: la fila se desliza dentro de sí
           misma (overflow-x-auto) en vez de empujar el ancho de la página —

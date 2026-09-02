@@ -51,10 +51,11 @@ import { useLocationAccess } from '@/utils/locationAccess'
 import { collection, onSnapshot, query, orderBy, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { stationsForOrder } from '@/utils/kitchenComandaFormat'
+import { idDeFidelizacion } from '@/utils/businessGroup'
 import GuideLink from '@/components/guide/GuideLink'
 
 export default function Tables() {
-  const { user, getBusinessId, isDemoMode, demoData, userPermissions, filterBranchesByAccess, allowedBranches, hasMainBranchAccess } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData, businessSettings, userPermissions, filterBranchesByAccess, allowedBranches, hasMainBranchAccess } = useAppContext()
   // Filtro de seguridad por sede (respeta las sucursales habilitadas del usuario secundario)
   const canAccessTable = useLocationAccess()
   const toast = useToast()
@@ -2287,6 +2288,7 @@ export default function Tables() {
         isOpen={isCustomerModalOpen}
         onClose={() => setIsCustomerModalOpen(false)}
         businessId={getBusinessId()}
+        loyaltyBusinessId={idDeFidelizacion(businessSettings, getBusinessId())}
         order={selectedOrder}
         loyaltyConfig={companySettings?.loyaltyConfig || null}
         onAssign={handleAssignCustomer}

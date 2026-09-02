@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { collection, query, where, onSnapshot } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAppContext } from '@/hooks/useAppContext'
+import { idDeFidelizacion } from '@/utils/businessGroup'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useToast } from '@/contexts/ToastContext'
 import { updateOrderStatus } from '@/services/orderService'
@@ -460,7 +461,8 @@ export default function OnlineOrders() {
             && order.customerPhone) {
           try {
             const { earnStamp } = await import('@/services/loyaltyService')
-            const res = await earnStamp(getBusinessId(), {
+            const res = await earnStamp(idDeFidelizacion(companySettings, getBusinessId()), {
+              localId: getBusinessId(),
               phone: order.customerPhone,
               customerName: order.customerName || '',
               customerId: order.catalogCustomerId || null,

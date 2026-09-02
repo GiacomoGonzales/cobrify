@@ -73,6 +73,7 @@ import { applyBranchPricing } from '@/utils/branchPricing'
 import { filterProductsForBranch, filterCategoriesForBranch, isProductInBranch } from '@/utils/branchCatalog'
 import { filtrarVendibles, esSoloUsoInterno } from '@/utils/productSale'
 import { lineaDeEnvio, yaHayEnvioEnElCarrito } from '@/utils/deliveryFee'
+import { idDeFidelizacion } from '@/utils/businessGroup'
 import { getAvailableDocumentTypes, resolveDocumentType } from '@/utils/documentTypes'
 import { calculateInvoiceAmounts, calculateMixedInvoiceAmounts, calculateRecargoConsumo, ID_TYPES, DETRACTION_TYPES, DETRACTION_MIN_AMOUNT, calcularDetraccion } from '@/utils/peruUtils'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
@@ -1116,7 +1117,7 @@ export default function POS() {
     ;(async () => {
       try {
         const { getLoyaltyCard } = await import('@/services/loyaltyService')
-        const res = await getLoyaltyCard(getBusinessId(), tel, companySettings?.loyaltyConfig)
+        const res = await getLoyaltyCard(idDeFidelizacion(companySettings, getBusinessId()), tel, companySettings?.loyaltyConfig)
         if (alive && res.success) setLoyaltyCard(res.data)
       } catch { /* la tarjeta es informativa: nunca frena el POS */ }
     })()
@@ -5729,7 +5730,7 @@ export default function POS() {
     setValidatingCoupon(true)
     try {
       const { validateCoupon } = await import('@/services/couponService')
-      const res = await validateCoupon(getBusinessId(), codigo)
+      const res = await validateCoupon(idDeFidelizacion(companySettings, getBusinessId()), codigo)
       if (!res.success) { toast.error(res.error); return }
       const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
       if (res.coupon.type === 'percent') {
@@ -7951,10 +7952,11 @@ ${textoDeErrores(revision.errores)}`, 9000)
                 const premioEnCarrito = !esProducto || cart.some(i => i.isLoyaltyReward)
                 if (mismoCliente && premioEnCarrito) {
                   const { redeemReward } = await import('@/services/loyaltyService')
-                  const r = await redeemReward(businessId, bgCustomerData.phone, {
+                  const r = await redeemReward(idDeFidelizacion(companySettings, businessId), bgCustomerData.phone, {
                     userName: user?.displayName || user?.email || '',
                     note: loyaltyRedemption.label || companySettings.loyaltyConfig.reward || '',
                     config: companySettings.loyaltyConfig,
+                    localId: businessId,
                   })
                   if (r.success) {
                     setLoyaltyCard(prev => (prev ? { ...prev, stamps: r.stamps } : prev))
@@ -7979,7 +7981,11 @@ ${textoDeErrores(revision.errores)}`, 9000)
             if (companySettings?.loyaltyConfig?.enabled && bgCustomerData?.phone) {
               try {
                 const { earnStamp } = await import('@/services/loyaltyService')
-                const res = await earnStamp(businessId, {
+                // El grupo decide DONDE vive la tarjeta; `localId` deja
+                // anotado en el movimiento cual de los dos locales sello,
+                // que es lo que despues les permite liquidar entre ellos.
+                const res = await earnStamp(idDeFidelizacion(companySettings, businessId), {
+                  localId: businessId,
                   phone: bgCustomerData.phone,
                   customerName: bgCustomerData.name || bgCustomerData.businessName || '',
                   customerId: bgCustomerData.customerId || null,
@@ -8871,7 +8877,7 @@ ${textoDeErrores(revision.errores)}`, 9000)
       const { getWalletPassLink } = await import('@/services/loyaltyService')
       const { getAuth } = await import('firebase/auth')
       const idToken = await getAuth().currentUser?.getIdToken()
-      const res = await getWalletPassLink(getBusinessId(), tel, idToken)
+      const res = await getWalletPassLink(idDeFidelizacion(companySettings, getBusinessId()), tel, idToken)
       if (!res.success) { toast.error(res.error || 'No se pudo generar la tarjeta'); return }
 
       const negocio = companySettings?.tradeName || companySettings?.name || 'nuestro negocio'
@@ -11803,10 +11809,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                               setIsRedeeming(true)
                               try {
                                 const { redeemReward } = await import('@/services/loyaltyService')
-                                const res = await redeemReward(getBusinessId(), customerData.phone, {
+                                const res = await redeemReward(idDeFidelizacion(companySettings, getBusinessId()), customerData.phone, {
                                   userName: user?.displayName || user?.email || '',
                                   note: companySettings.loyaltyConfig.reward || '',
                                   config: companySettings.loyaltyConfig,
+                                  localId: getBusinessId(),
                                 })
                                 if (res.success) {
                                   toast.success(`Premio canjeado. Le quedan ${res.stamps} sellos.`)
@@ -13510,7 +13517,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             const { getAuth } = await import('firebase/auth')
             const { getWalletPassLink } = await import('@/services/loyaltyService')
             const idToken = await getAuth().currentUser?.getIdToken()
-            const res = await getWalletPassLink(getBusinessId(), telCliente, idToken)
+            const res = await getWalletPassLink(idDeFidelizacion(companySettings, getBusinessId()), telCliente, idToken)
             if (!res.success) { toast.error(res.error || 'No se pudo generar la tarjeta'); return }
             const nombreNegocio = companySettings?.name || companySettings?.tradeName || companySettings?.businessName || 'nuestro negocio'
             // El mismo mensaje que usa el gestor de Promociones: un solo link

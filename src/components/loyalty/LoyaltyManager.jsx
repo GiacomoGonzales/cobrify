@@ -7,6 +7,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import QRCode from 'qrcode'
 import { db } from '@/lib/firebase'
 import { useAppContext } from '@/hooks/useAppContext'
+import { idDeFidelizacion } from '@/utils/businessGroup'
 import { useToast } from '@/contexts/ToastContext'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
@@ -130,6 +131,9 @@ export default function LoyaltyManager({ isOpen, onClose }) {
   // TODOS los hooks antes de cualquier return condicional (React #310: un
   // hook bajo `if (!isOpen) return null` compila bien y revienta en runtime).
   const { getBusinessId, isDemoMode, businessSettings } = useAppContext()
+  // Grupo de fidelizacion: las tarjetas pueden vivir en el otro negocio
+  // (ver src/utils/businessGroup.js).
+  const idFidelidad = idDeFidelizacion(businessSettings, getBusinessId())
   const toast = useToast()
 
   const [cargando, setCargando] = useState(true)
@@ -159,7 +163,7 @@ export default function LoyaltyManager({ isOpen, onClose }) {
         const businessId = getBusinessId()
         const [snap, res] = await Promise.all([
           getDoc(doc(db, 'businesses', businessId)),
-          getLoyaltyCards(businessId),
+          getLoyaltyCards(idFidelidad),
         ])
         if (cancelado) return
         const data = snap.exists() ? snap.data() : {}
@@ -360,7 +364,7 @@ export default function LoyaltyManager({ isOpen, onClose }) {
     setAccionandoId(`wa_${tarjeta.id}`)
     try {
       const idToken = await getAuth().currentUser?.getIdToken()
-      const res = await getWalletPassLink(getBusinessId(), tarjeta.phone, idToken)
+      const res = await getWalletPassLink(idFidelidad, tarjeta.phone, idToken)
       if (!res.success) { toast.error(res.error || 'No se pudo generar la tarjeta'); return }
       // El link corto (cbrfy.link, el mismo acortador de los PDFs); el largo
       // es un JWT de ~800 caracteres.
@@ -378,7 +382,7 @@ export default function LoyaltyManager({ isOpen, onClose }) {
     if (isDemoMode) { toast.error('No disponible en modo demo'); return }
     setAccionandoId(`canje_${tarjeta.id}`)
     try {
-      const res = await redeemReward(getBusinessId(), tarjeta.phone, { config })
+      const res = await redeemReward(idFidelidad, tarjeta.phone, { config, localId: getBusinessId() })
       if (!res.success) { toast.error(res.error || 'No se pudo canjear'); return }
       toast.success(`Premio canjeado. Le quedan ${res.stamps} sellos`)
       setTarjetas(prev => prev.map(t => t.id === tarjeta.id
