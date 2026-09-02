@@ -194,6 +194,20 @@ function HistorialOrdenes({ ordenes, cargando, fechas, setFechas, abierta, setAb
   )
 }
 
+/**
+ * Alto y letra de los botones de accion de la tarjeta de orden.
+ *
+ * Con `size="sm"` quedaban en 32 px de alto: bastante por debajo de los 44
+ * que se recomiendan para tocar con el dedo. Esta pantalla se usa de pie y
+ * apurado, muchas veces en una tablet montada en la barra, y ahi 32 px con
+ * letra de 14 es facil de errar.
+ *
+ * Se suben a 44 y la letra crece un punto desde tablet, que es donde sobra
+ * ancho. En el celular se queda en 14: con 16, los dos botones y el menu
+ * "+" no entran en una tarjeta de 343 px sin partirse en dos renglones.
+ */
+const BOTON_ACCION = 'flex-1 min-h-[44px] text-sm sm:text-base'
+
 export default function Orders() {
   const { user, getBusinessId, isDemoMode, demoData, filterBranchesByAccess, filterWarehousesByAccess, allowedBranches, hasMainBranchAccess, userPermissions, businessMode, businessSettings } = useAppContext()
   const isOwner = !userPermissions?.ownerId
@@ -2098,7 +2112,7 @@ export default function Orders() {
                         onClick={() => handleStatusChange(order.id, 'pending', order)}
                         disabled={isUpdating || (requirePaymentBeforeKitchen && !order.paid)}
                         size="sm"
-                        className="flex-1"
+                        className={BOTON_ACCION}
                       >
                         {isUpdating ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -2115,7 +2129,7 @@ export default function Orders() {
                         onClick={() => handleStatusChange(order.id, 'preparing', order)}
                         disabled={isUpdating}
                         size="sm"
-                        className="flex-1"
+                        className={BOTON_ACCION}
                       >
                         {isUpdating ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -2132,7 +2146,7 @@ export default function Orders() {
                         onClick={() => handleCloseOrder(order)}
                         variant="success"
                         size="sm"
-                        className="flex-1"
+                        className={BOTON_ACCION}
                       >
                         <Receipt className="w-4 h-4 mr-1" />
                         Cerrar Cuenta
@@ -2144,7 +2158,7 @@ export default function Orders() {
                         disabled={isUpdating}
                         size="sm"
                         variant="outline"
-                        className="flex-1 border-purple-500 text-purple-600 hover:bg-purple-50"
+                        className={`${BOTON_ACCION} border-purple-500 text-purple-600 hover:bg-purple-50`}
                       >
                         {isUpdating ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -2161,7 +2175,7 @@ export default function Orders() {
                         onClick={() => handleMarkAsDelivered(order)}
                         variant="success"
                         size="sm"
-                        className="flex-1"
+                        className={BOTON_ACCION}
                       >
                         <CheckCircle className="w-4 h-4 mr-1" />
                         Marcar Entregada
@@ -2178,7 +2192,7 @@ export default function Orders() {
                         onClick={() => handleGoToPayment(order)}
                         variant="outline"
                         size="sm"
-                        className="flex-1 border-green-500 text-green-600 hover:bg-green-50"
+                        className={`${BOTON_ACCION} border-green-500 text-green-600 hover:bg-green-50`}
                       >
                         <DollarSign className="w-4 h-4 mr-1" />
                         {order.paid ? 'Facturar' : 'Cobrar'}
@@ -2191,7 +2205,7 @@ export default function Orders() {
                         onClick={() => setOpenMenuOrderId(openMenuOrderId === order.id ? null : order.id)}
                         variant="outline"
                         size="sm"
-                        className="px-3"
+                        className="px-3 min-h-[44px]"
                         title="Más acciones"
                       >
                         <Plus className="w-4 h-4" />
