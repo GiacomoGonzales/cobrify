@@ -154,6 +154,9 @@ export const createReservation = async (businessId, reservationData) => {
       // puedan cobrar la persona extra por noche.
       guests: Number(reservationData.guests) || Number(reservationData.baseGuests) || 1,
       baseGuests: Number(reservationData.baseGuests) || 1,
+      // El formulario las pide y las mandaba; esta lista no las nombraba, así
+      // que al reabrir la reserva volvían en cero.
+      pets: Math.max(0, Number(reservationData.pets) || 0),
       extraGuestRate: Number(reservationData.extraGuestRate) || 0,
       extraGuestTotal: Number(reservationData.extraGuestTotal) || 0,
       totalAmount,
@@ -163,6 +166,8 @@ export const createReservation = async (businessId, reservationData) => {
       extras: reservationData.extras || [],
       paymentStatus: reservationData.paymentStatus || 'pending', // pending, partial, paid
       amountPaid: reservationData.amountPaid || 0,
+      // Quién la creó. El que llama lo manda a propósito y se caía acá.
+      ...(reservationData.userId && { userId: reservationData.userId }),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     }

@@ -4817,6 +4817,12 @@ export default function Settings() {
                       allowManualTaxAffectation: allowManualTaxAffectation,
                       enableCustomerDisplay: enableCustomerDisplay,
                       hiddenMenuItems: hiddenMenuItems,
+                      // Los tres se EDITAN en esta pestaña. Estaban solo en el
+                      // payload del botón de Ventas, así que "Guardar
+                      // Preferencias" decía que sí y no guardaba nada de esto.
+                      obrasEnabled: obrasEnabled,
+                      hiddenOrderSources: hiddenOrderSources,
+                      customOrderSources: customOrderSources,
                       metaAdsEnabled: metaAdsEnabled,
                       metaAdsPhonePrefix: metaAdsPhonePrefix,
                       metaAdsOrderIdPrefix: metaAdsOrderIdPrefix,

@@ -2155,6 +2155,22 @@ export default function POS() {
             presentationName: item.presentationName,
             presentationFactor: item.presentationFactor || 1,
           }),
+          // Lo que la cotización guardó y el comprobante sabe escribir, pero se
+          // caía en este paso del medio: la venta hecha a mano salía completa y
+          // la convertida salía pelada. En farmacia son el registro sanitario y
+          // el número de lote, que es lo que después hay que poder rastrear.
+          ...(item.imageUrl && { imageUrl: item.imageUrl }),
+          ...(item.batchNumber && { batchNumber: item.batchNumber }),
+          ...(item.batchExpiryDate && { batchExpiryDate: item.batchExpiryDate }),
+          ...(item.laboratoryName && { laboratoryName: item.laboratoryName }),
+          ...(item.marca && { marca: item.marca }),
+          ...(item.genericName && { genericName: item.genericName }),
+          ...(item.concentration && { concentration: item.concentration }),
+          ...(item.presentation && { presentation: item.presentation }),
+          ...(item.activeIngredient && { activeIngredient: item.activeIngredient }),
+          ...(item.therapeuticAction && { therapeuticAction: item.therapeuticAction }),
+          ...(item.saleCondition && { saleCondition: item.saleCondition }),
+          ...(item.sanitaryRegistry && { sanitaryRegistry: item.sanitaryRegistry }),
         }))
         setCart(cartItems)
         warnHiddenItemsInCart(cartItems)
@@ -2373,6 +2389,29 @@ export default function POS() {
           presentationFactor: item.presentationFactor || 1,
           batchNumber: item.batchNumber || '',
           batchExpiryDate: item.batchExpiryDate || '',
+          // SKU y código de barras van SEPARADOS, igual que en la conversión de
+          // cotizaciones. Copiando solo `code`, la venta convertida quedaba con
+          // el código de BARRAS y la misma venta hecha a mano con el SKU: el
+          // mismo producto con dos códigos distintos según el camino, en el PDF
+          // y en el XML de SUNAT.
+          sku: item.sku || '',
+          ...(item.imageUrl && { imageUrl: item.imageUrl }),
+          // Qué variante se vendió. Acá no toca stock —la nota ya lo descontó—
+          // pero sin esto el comprobante final no dice cuál era.
+          ...(item.isVariant && {
+            isVariant: true,
+            variantSku: item.variantSku || '',
+            variantAttributes: item.variantAttributes || {},
+          }),
+          ...(item.laboratoryName && { laboratoryName: item.laboratoryName }),
+          ...(item.marca && { marca: item.marca }),
+          ...(item.genericName && { genericName: item.genericName }),
+          ...(item.concentration && { concentration: item.concentration }),
+          ...(item.presentation && { presentation: item.presentation }),
+          ...(item.activeIngredient && { activeIngredient: item.activeIngredient }),
+          ...(item.therapeuticAction && { therapeuticAction: item.therapeuticAction }),
+          ...(item.saleCondition && { saleCondition: item.saleCondition }),
+          ...(item.sanitaryRegistry && { sanitaryRegistry: item.sanitaryRegistry }),
         }))
         setCart(cartItems)
         warnHiddenItemsInCart(cartItems)
