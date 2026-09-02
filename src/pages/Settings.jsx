@@ -2495,7 +2495,15 @@ export default function Settings() {
         }
       }
 
-      console.log('🖨️ Llamando a testPrinter con ancho:', printerConfig.paperWidth || 58)
+      // El ancho de la PRUEBA tiene que ser el mismo con el que va a salir un
+      // ticket de verdad, o la prueba no prueba nada. El POS lo lee FRESCO de la
+      // configuración guardada y cae a 80 (POS.jsx ~8974); acá se usaba el
+      // estado de React con `|| 58`, así que con el estado sin cargar la prueba
+      // salía a 58 mientras las ventas salían a 80 — y el usuario diagnosticaba
+      // un problema de impresora que no existía.
+      const guardada = await getPrinterConfig(getBusinessId())
+      const anchoDePrueba = guardada?.config?.paperWidth || printerConfig.paperWidth || 80
+      console.log('🖨️ Llamando a testPrinter con ancho:', anchoDePrueba)
 
       // Agregar timeout de 30 segundos
       const timeoutPromise = new Promise((_, reject) =>
@@ -2503,7 +2511,7 @@ export default function Settings() {
       )
 
       const result = await Promise.race([
-        testPrinter(printerConfig.paperWidth || 58),
+        testPrinter(anchoDePrueba),
         timeoutPromise
       ])
 
