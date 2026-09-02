@@ -26,11 +26,9 @@ struct ConversationView: View {
     @State private var mostrarFicha = false
     @State private var respondiendoA: Mensaje?
     @State private var lejosDelFondo = false
-    /// Ya está anclada al final: hasta entonces la conversación no se pinta,
-    /// para que nunca se vea el desplazamiento inicial.
-    @State private var yaAnclada = false
-    /// El usuario ya tomó el control de la lista: dejamos de reanclar.
-    @State private var usuarioMovioLaLista = false
+    /// La primera tanda de mensajes todavía no llega. Solo sirve para no
+    /// mover el scroll al abrir; nunca para esconder la conversación.
+    @State private var primeraCarga = true
     /// Archivo de una respuesta rápida que espera en el compositor: sale
     /// recién al tocar enviar, con lo que haya en el cuadro como pie.
     @State private var mediaPendiente: MediaBiblioteca?
@@ -41,7 +39,14 @@ struct ConversationView: View {
         ScrollViewReader { proxy in
           ZStack(alignment: .bottomTrailing) {
             ScrollView {
-                LazyVStack(spacing: 3) {
+                // VStack y no LazyVStack: con la perezosa, SwiftUI no conoce
+                // el alto de las burbujas que aún no midió —y aquí son muy
+                // altas—, así que el salto al final caía siempre aproximado y
+                // reintentarlo perseguía un blanco móvil. Con la pila normal
+                // todos los altos se saben de entrada (las fotos ya reservan
+                // su tamaño con las medidas del servidor) y el final se acierta
+                // a la primera. Por eso la ventana de mensajes es corta.
+                VStack(spacing: 3) {
                     ForEach(elementos) { elemento in
                         switch elemento {
                         case .separador(let id, let titulo):
@@ -73,46 +78,39 @@ struct ConversationView: View {
                 // queda pegada al cuadro de escribir.
                 .padding(.bottom, 8)
             }
-            .defaultScrollAnchor(.bottom)
-            .opacity(yaAnclada ? 1 : 0)
+            // OJO: aquí NO va `defaultScrollAnchor(.bottom)`. Reajusta el
+            // desplazamiento cada vez que cambia el alto del contenido, eso
+            // cambia qué filas hay que medir, lo que vuelve a cambiar el alto…
+            // y el hilo principal se queda girando en `placeSubviews`. Se veía
+            // como la pantalla congelada al entrar a un chat. El final se fija
+            // a mano, saltando a la marca `anclaFinal`.
             // Al subir por la conversación aparece la flecha para volver al
             // final, como WhatsApp.
             .alAlejarseDelFondo { lejos in
-                // Si se aleja del fondo estando ya colocada, fue él: no se
-                // le vuelve a mover la lista bajo los dedos.
-                if lejos && yaAnclada { usuarioMovioLaLista = true }
                 withAnimation(.easeOut(duration: 0.18)) { lejosDelFondo = lejos }
             }
             // Arrastrar hacia abajo va cerrando el teclado, como WhatsApp.
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: store.mensajes.count + store.pendientes.count) {
-                let primeraVez = !yaAnclada
-                // Un mensaje que llega estando ya dentro sí se desliza.
-                if !primeraVez { bajarAlFinal(proxy) }
-                // La pila perezosa a veces no pinta hasta que algo mueve el
-                // layout (se notaba al entrar desde una notificación): dos
-                // pasadas más, ya asentado.
-                if primeraVez {
-                    // Se coloca de golpe, sin animar, y se reafirma mientras
-                    // las fotos terminan de cargar y empujan el contenido.
+                if primeraCarga {
+                    primeraCarga = false
+                    // Al final SIN animar: es instantáneo, así que no se ve
+                    // el barrido que molestaba. Antes esto se hacía tras
+                    // esconder la lista con opacity, y si este aviso no
+                    // llegaba —al volver a entrar a un chat ya visto— la
+                    // conversación se quedaba en blanco para siempre.
                     bajarAlFinal(proxy, animado: false)
-                    for retraso in [0.05, 0.2, 0.5, 1.0] {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + retraso) {
-                            guard !usuarioMovioLaLista else { return }
-                            bajarAlFinal(proxy, animado: false)
-                            yaAnclada = true
-                        }
-                    }
-                } else {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    // Una sola reafirmación por si algún alto cambia al
+                    // terminar de cargar. Sin animar: no se ve, solo coloca.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                         bajarAlFinal(proxy, animado: false)
                     }
+                    return
                 }
-            }
-            // Conversación sin mensajes: no hay nada que anclar, pero igual
-            // tiene que verse.
-            .onChange(of: store.cargando) {
-                if !store.cargando && store.mensajes.isEmpty { yaAnclada = true }
+                // Un mensaje nuevo que llega mientras lee más arriba no le
+                // mueve la lista bajo los dedos.
+                guard !lejosDelFondo else { return }
+                bajarAlFinal(proxy)
             }
             // Al abrir el teclado, la conversación sube sola y lo último
             // queda a la vista — sin tener que hacer scroll a mano.
@@ -349,6 +347,10 @@ struct ConversationView: View {
 
     private func bajarAlFinal(_ proxy: ScrollViewProxy, animado: Bool = true) {
         guard !store.mensajes.isEmpty || !store.pendientes.isEmpty else { return }
+        // Si la llevamos nosotros al final, ya estamos al final: la flecha se
+        // apaga aquí. Esperar al aviso de geometría dejaba el botón encendido
+        // cuando el contenido terminaba de asentarse sin más movimiento.
+        if lejosDelFondo { withAnimation(.easeOut(duration: 0.18)) { lejosDelFondo = false } }
         if animado {
             withAnimation { proxy.scrollTo(Self.anclaFinal, anchor: .bottom) }
         } else {

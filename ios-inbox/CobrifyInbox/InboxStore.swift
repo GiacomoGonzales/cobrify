@@ -70,7 +70,13 @@ final class MensajesStore: ObservableObject {
             .collection("whatsappConversations").document(conversationId)
             .collection("messages")
             .order(by: "timestamp")
-            .limit(to: 500)
+            // `toLast` y no `to`: ordenando por fecha ascendente, `limit(to:)`
+            // se queda con los mensajes MÁS VIEJOS. En un chat largo eso abría
+            // la conversación en historia antigua, sin lo reciente.
+            // Ventana corta a propósito: la lista se arma de golpe (no es
+            // perezosa) para que el salto al final sea exacto, y eso solo sale
+            // barato con pocos mensajes. Son los últimos, que es lo que se lee.
+            .limit(toLast: 120)
             .addSnapshotListener { [weak self] snap, _ in
                 guard let self else { return }
                 self.cargando = false
