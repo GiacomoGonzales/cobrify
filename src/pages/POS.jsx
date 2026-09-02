@@ -7432,7 +7432,9 @@ ${textoDeErrores(revision.errores)}`, 9000)
         // así el PDF/ticket y el reporte de Pagos Pendientes los leen igual.
         ...(notaVentaCreditTermsOn && notaVentaBalance > 0 && {
           paymentType: 'credito',
-          paymentDueDate: paymentDueDate || null,
+          // Con cuotas no se guarda: el XML la ignora y el PDF la imprimiría
+          // al lado del detalle de cuotas como si fuera otro plazo.
+          paymentDueDate: paymentInstallments.length > 0 ? null : (paymentDueDate || null),
           paymentInstallments: paymentInstallments.map(inst => ({
             number: inst.number,
             amount: parseFloat(inst.amount) || 0,
@@ -7445,7 +7447,7 @@ ${textoDeErrores(revision.errores)}`, 9000)
         // aplican a boletas).
         ...(documentType === 'boleta' && {
           paymentType: paymentType,
-          paymentDueDate: paymentType === 'credito' ? paymentDueDate : null,
+          paymentDueDate: paymentType === 'credito' && paymentInstallments.length === 0 ? paymentDueDate : null,
           paymentInstallments: paymentType === 'credito' ? paymentInstallments.map(inst => ({
             number: inst.number,
             amount: parseFloat(inst.amount) || 0,
@@ -7455,7 +7457,7 @@ ${textoDeErrores(revision.errores)}`, 9000)
         // Forma de pago (solo para facturas) - Contado/Crédito con cuotas
         ...(documentType === 'factura' && {
           paymentType: paymentType, // 'contado' o 'credito'
-          paymentDueDate: paymentType === 'credito' ? paymentDueDate : null,
+          paymentDueDate: paymentType === 'credito' && paymentInstallments.length === 0 ? paymentDueDate : null,
           paymentInstallments: paymentType === 'credito' ? paymentInstallments.map(inst => ({
             number: inst.number,
             amount: parseFloat(inst.amount) || 0,
@@ -9468,22 +9470,25 @@ ${companySettings?.businessName || 'Tu Empresa'}`
       {/* Campos adicionales para Crédito */}
       {paymentType === 'credito' && (
         <div className="mt-2 space-y-2">
-          <div>
-            <label className="text-xs text-gray-500 mb-0.5 block">Fecha de Vencimiento</label>
-            <input
-              type="date"
-              value={paymentDueDate}
-              onChange={e => {
-                setPaymentDueDate(e.target.value)
-                // Si hay una sola cuota, actualizar su fecha también
-                if (paymentInstallments.length === 1) {
-                  setPaymentInstallments([{ ...paymentInstallments[0], dueDate: e.target.value }])
-                }
-              }}
-              min={dayAfterLocalDate(emissionDate)}
-              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
-            />
-          </div>
+          {/* Con cuotas, esta fecha no manda: el XML declara una PaymentTerms
+              por cuota y solo cae a la fecha suelta si no hay ninguna. Dejarla
+              a la vista con un valor puesto hacía creer que sí. */}
+          {paymentInstallments.length > 0 ? (
+            <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5">
+              El vencimiento lo marcan las cuotas de abajo.
+            </p>
+          ) : (
+            <div>
+              <label className="text-xs text-gray-500 mb-0.5 block">Fecha de Vencimiento</label>
+              <input
+                type="date"
+                value={paymentDueDate}
+                onChange={e => setPaymentDueDate(e.target.value)}
+                min={dayAfterLocalDate(emissionDate)}
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+              />
+            </div>
+          )}
 
           {/* Cuotas */}
           <div>
@@ -12858,22 +12863,23 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             el total: lo que ya pagó al inicio no se debe. */}
                         {notaVentaCreditTermsOn && notaVentaBalance > 0 && (
                           <div className="pt-2 mt-1 border-t border-gray-200 space-y-2">
-                            <div>
-                              <label className="text-xs text-gray-600 mb-0.5 block">Fecha de vencimiento del saldo</label>
-                              <input
-                                type="date"
-                                value={paymentDueDate}
-                                onChange={e => {
-                                  setPaymentDueDate(e.target.value)
-                                  if (paymentInstallments.length === 1) {
-                                    setPaymentInstallments([{ ...paymentInstallments[0], dueDate: e.target.value }])
-                                  }
-                                }}
-                                min={emissionDate}
-                                disabled={lastInvoiceData !== null}
-                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
-                              />
-                            </div>
+                            {paymentInstallments.length > 0 ? (
+                              <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5">
+                                El vencimiento lo marcan las cuotas de abajo.
+                              </p>
+                            ) : (
+                              <div>
+                                <label className="text-xs text-gray-600 mb-0.5 block">Fecha de vencimiento del saldo</label>
+                                <input
+                                  type="date"
+                                  value={paymentDueDate}
+                                  onChange={e => setPaymentDueDate(e.target.value)}
+                                  min={emissionDate}
+                                  disabled={lastInvoiceData !== null}
+                                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                />
+                              </div>
+                            )}
 
                             <div>
                               <div className="flex items-center justify-between mb-1">
@@ -12981,9 +12987,16 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           <p className="text-xs text-amber-700 mt-2">
                             <strong>Monto pendiente:</strong> {formatCurrency(amounts.total, currency)}
                           </p>
-                          {paymentDueDate && (
+                          {/* Con cuotas manda cada cuota, no esta fecha: mostrarla
+                              aca seria un tercer plazo a la vista que no existe. */}
+                          {paymentDueDate && paymentInstallments.length === 0 && (
                             <p className="text-xs text-amber-700 mt-1">
                               <strong>Vencimiento:</strong> {new Date(paymentDueDate + 'T00:00:00').toLocaleDateString('es-PE')}
+                            </p>
+                          )}
+                          {paymentInstallments.length > 0 && (
+                            <p className="text-xs text-amber-700 mt-1">
+                              <strong>Cuotas:</strong> {paymentInstallments.length}
                             </p>
                           )}
                         </div>

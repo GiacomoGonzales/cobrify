@@ -1098,13 +1098,24 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   let paymentForm = 'CONTADO'
   if (invoice.paymentType === 'credito') {
-    // Calcular días de crédito basado en fecha de emisión y vencimiento
+    // Calcular días de crédito basado en fecha de emisión y vencimiento.
+    //
+    // Con CUOTAS manda la última: es hasta cuándo tiene plazo el cliente. La
+    // fecha suelta ya no se guarda cuando hay cuotas (el XML tampoco la usa),
+    // así que sin esto un plan a 45 días se imprimiría como "CRÉDITO 30 DÍAS".
     let creditDays = 30 // Por defecto
-    if (invoice.paymentDueDate) {
+    const cuotasPdf = Array.isArray(invoice.paymentInstallments) ? invoice.paymentInstallments : []
+    const ultimaCuota = cuotasPdf
+      .map(c => c?.dueDate)
+      .filter(Boolean)
+      .sort()
+      .pop()
+    const vencimientoParaDias = invoice.paymentDueDate || ultimaCuota
+    if (vencimientoParaDias) {
       const emissionDateObj = pdfDateSource
         ? (pdfDateSource.toDate ? pdfDateSource.toDate() : new Date(pdfDateSource))
         : new Date()
-      const dueDateObj = new Date(invoice.paymentDueDate + 'T00:00:00')
+      const dueDateObj = new Date(vencimientoParaDias + 'T00:00:00')
       const diffTime = dueDateObj - emissionDateObj
       creditDays = Math.round(diffTime / (1000 * 60 * 60 * 24))
       if (creditDays < 0) creditDays = 30

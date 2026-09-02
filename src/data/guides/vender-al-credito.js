@@ -8,7 +8,7 @@
  */
 export default {
   id: 'vender-al-credito',
-  actualizado: '22/08/2026',
+  actualizado: '02/09/2026',
   intro:
     'Vender hoy y cobrar después es normal en el negocio peruano — lo peligroso es perderle el rastro a quién te debe. Este recorrido cubre el circuito completo: emitir al crédito, registrar los cobros y vigilar la deuda.',
 
@@ -22,13 +22,17 @@ export default {
           items: [
             'Arma la venta en el **Punto de Venta** como siempre.',
             'En la condición de pago cambia **Contado** por **Crédito**.',
-            'Pon la **fecha de vencimiento** y, si acordaron pagos parciales, las **cuotas** con sus fechas.',
+            'Pon la **fecha de vencimiento**. Si en cambio acordaron pagarlo en partes, agrega las **cuotas** con sus fechas y la fecha suelta desaparece: manda cada cuota.',
             'Emite. El comprobante nace con su saldo pendiente completo.',
           ],
         },
         {
           type: 'ojo',
           text: 'Ponle SIEMPRE una fecha de vencimiento real, la que acordaste de palabra. Es la fecha que después separa "deuda normal" de "deuda vencida" — sin ella, todo parece estar bien para siempre.',
+        },
+        {
+          type: 'consejo',
+          text: 'Es **una cosa o la otra**: o una fecha para todo el saldo, o cuotas con sus propias fechas. Al agregar la primera cuota, el campo de fecha de vencimiento se va — el comprobante ya no lo necesita, porque cada cuota lleva la suya. Si quitas todas las cuotas, vuelve.',
         },
         {
           type: 'ojo',
