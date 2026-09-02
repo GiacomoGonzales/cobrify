@@ -9,6 +9,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { montoDeEnvio } from '@/utils/deliveryFee'
 
 export default function EditOrderItemsModal({ isOpen, onClose, table, order, onSuccess, onAfterAddItems = null }) {
   const { getBusinessId, business, user } = useAppContext()
@@ -183,7 +184,7 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
   }
 
   const calculateTotals = () => {
-    if (!order || !order.items) return { subtotal: 0, igv: 0, recargo: 0, total: 0 }
+    if (!order || !order.items) return { subtotal: 0, igv: 0, recargo: 0, total: 0, envio: 0 }
 
     const itemsTotal = order.items.reduce((sum, item) => sum + item.total, 0)
 
@@ -192,8 +193,13 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
       recargo = itemsTotal * (recargoConfig.rate / 100)
     }
 
+    // El envío no es un plato ni entra al recargo al consumo, pero sí al total:
+    // es lo que el pedido va a cobrar. Sin esto el modal mostraba un total
+    // menor que el de la tarjeta del pedido.
+    const envio = montoDeEnvio(order.deliveryFee)
+
     const igvRate = taxConfig.igvRate || 18
-    const baseConRecargo = itemsTotal + recargo
+    const baseConRecargo = itemsTotal + recargo + envio
 
     let subtotal, igv, total
     if (taxConfig.igvExempt) {
@@ -206,7 +212,7 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
       total = baseConRecargo
     }
 
-    return { subtotal, igv, recargo, total, itemsTotal }
+    return { subtotal, igv, recargo, total, itemsTotal, envio }
   }
 
   if (!table || !order) return null
@@ -377,6 +383,12 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Recargo al consumo ({recargoConfig.rate}%):</span>
                 <span className="font-medium">S/ {totals.recargo.toFixed(2)}</span>
+              </div>
+            )}
+            {totals.envio > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Envío:</span>
+                <span className="font-medium">S/ {totals.envio.toFixed(2)}</span>
               </div>
             )}
             {!taxConfig.igvExempt && (

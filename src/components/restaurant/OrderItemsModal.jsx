@@ -17,6 +17,7 @@ import { esVendible } from '@/utils/productSale'
 import { cn, matchesPrebuilt } from '@/lib/utils'
 import { buildProductHaystack } from '@/utils/productSearch'
 import { agregarItemsOrdenDemo } from '@/data/demo/operaciones'
+import { montoDeEnvio } from '@/utils/deliveryFee'
 
 export default function OrderItemsModal({
   isOpen,
@@ -700,6 +701,10 @@ export default function OrderItemsModal({
   if (!isNewOrder && (!table || !order)) return null
 
   const cartTotal = cart.reduce((sum, item) => sum + (item.total || 0), 0)
+  // El envío del pedido nuevo, para que el total de acá sea el mismo que va a
+  // quedar en la orden. Solo al CREAR: agregando items a una orden existente,
+  // este total es el de lo que se está agregando.
+  const envioDelPedido = isNewOrder ? montoDeEnvio(newOrderData?.deliveryFee) : 0
 
   // Bloque reutilizable: item del carrito en modo lista compacto.
   // Fila 1: nombre + total + quitar. Fila 2: cantidad + nota (una sola linea).
@@ -1007,9 +1012,21 @@ export default function OrderItemsModal({
             className="border-t border-gray-200 p-4 flex-shrink-0 space-y-3"
             style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
           >
+            {envioDelPedido > 0 && (
+              <>
+                <div className="flex justify-between text-sm text-gray-600">
+                  <span>Productos:</span>
+                  <span>S/ {cartTotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm text-gray-600">
+                  <span>Envío:</span>
+                  <span>S/ {envioDelPedido.toFixed(2)}</span>
+                </div>
+              </>
+            )}
             <div className="flex justify-between text-lg font-bold">
               <span>Total:</span>
-              <span className="text-primary-600">S/ {cartTotal.toFixed(2)}</span>
+              <span className="text-primary-600">S/ {(cartTotal + envioDelPedido).toFixed(2)}</span>
             </div>
             <div className="text-xs text-gray-500 text-center">
               Los montos detallados aparecerán en la precuenta

@@ -233,6 +233,17 @@ export const createOrder = async (businessId, orderData) => {
       ...(orderData.customerName && { customerName: orderData.customerName }),
       ...(orderData.customerPhone && { customerPhone: orderData.customerPhone }),
       ...(orderData.customerAddress && { customerAddress: orderData.customerAddress }),
+
+      // Costo del envío. Va SIEMPRE, aunque sea 0: la tarjeta del pedido lo
+      // muestra y se corrige desde ahí, y el POS lo lee al cobrar.
+      //
+      // OJO: este objeto es una lista EXPLÍCITA de campos, no un spread de
+      // `orderData`. Un campo que no esté nombrado acá se descarta en silencio
+      // —así se perdió el envío la primera vez: el total salía correcto porque
+      // se calcula antes, pero el pedido quedaba diciendo "Sin costo" y al
+      // cobrar no llegaba nada al POS.
+      deliveryFee: montoDeEnvio(orderData.deliveryFee),
+
       // Documento para el comprobante (se arrastra al POS al cobrar)
       ...(orderData.documentType && { customerDocumentType: orderData.documentType }),
       ...(orderData.documentNumber && { customerDocumentNumber: orderData.documentNumber }),
