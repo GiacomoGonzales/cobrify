@@ -666,7 +666,19 @@ const getCutFeedLines = () => {
  * @param {Object} config - { enabled, ip, port, name, paperWidth }
  */
 export const saveDocumentPrinterConfig = (config) => {
-  localStorage.setItem('factuya_documentPrinterConfig', JSON.stringify(config));
+  // MERGE, igual que savePrinterConfig: lo que el objeto no traiga se
+  // conserva. Conectar la impresora reconstruye la config desde cero y sin
+  // esto perdía lo que no volviera a mandar.
+  //
+  // Deshabilitar sigue funcionando: manda enabled:false, ip:'' y name:''
+  // explícitos, y lo explícito pisa a lo guardado.
+  let guardado = {};
+  try {
+    guardado = JSON.parse(localStorage.getItem('factuya_documentPrinterConfig') || '{}') || {};
+  } catch {
+    guardado = {};
+  }
+  localStorage.setItem('factuya_documentPrinterConfig', JSON.stringify({ ...guardado, ...config }));
 };
 
 // Impresora de Caja COMPARTIDA por negocio (Firestore). Si está configurada, tiene

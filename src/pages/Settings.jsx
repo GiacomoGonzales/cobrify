@@ -2674,7 +2674,9 @@ export default function Settings() {
         ip: docPrinterIp.trim(),
         port,
         name: docPrinterName.trim() || 'Impresora de Documentos',
-        paperWidth: documentPrinterConfig.paperWidth || 58
+        // Mismo criterio que la impresora principal: el ancho solo se manda si
+        // se sabe. Con `|| 58`, conectar con el estado sin cargar lo forzaba.
+        ...(documentPrinterConfig.paperWidth ? { paperWidth: documentPrinterConfig.paperWidth } : {}),
       }
       setDocumentPrinterConfig(newConfig)
       saveDocumentPrinterConfig(newConfig)
