@@ -186,7 +186,7 @@ export default {
         },
         {
           type: 'texto',
-          text: 'Si quieres esa misma lista en el **ticket impreso** del cierre, actívala en Configuración. Viene apagada porque con muchos productos el ticket se alarga bastante; el PDF los trae siempre.',
+          text: 'Si quieres esa misma lista en el **ticket impreso** del cierre, actívala en Configuración. Sale por cualquier impresora —la del navegador y las térmicas por Bluetooth o WiFi— y también al reimprimir un cierre desde el Historial. Viene apagada porque con muchos productos el ticket se alarga bastante; el PDF los trae siempre.',
         },
         {
           type: 'enlace',

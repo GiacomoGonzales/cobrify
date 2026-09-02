@@ -11,6 +11,57 @@
  * que decir lo mismo.
  */
 
+/** Cantidad sin ceros de relleno: 2 -> "2", 1.5 -> "1.5". */
+const cantidadCorta = (n) => {
+  const v = Number(n) || 0
+  return Number.isInteger(v) ? String(v) : String(Math.round(v * 1000) / 1000)
+}
+
+const monto = (n) => (Math.round((Number(n) || 0) * 100) / 100).toFixed(2)
+
+/**
+ * Una línea de "etiqueta ....... valor" que entra en el ancho del papel.
+ *
+ * Si el nombre no entra, se RECORTA: partirlo en dos líneas duplica el alto de
+ * un ticket que ya es largo, y en una lista de productos lo que se busca es
+ * reconocer el artículo, no leer su nombre completo.
+ */
+const lineaAncho = (etiqueta, valor, ancho) => {
+  const val = String(valor)
+  const tope = ancho - val.length - 1
+  const etq = etiqueta.length > tope ? etiqueta.slice(0, Math.max(1, tope)) : etiqueta
+  const relleno = Math.max(1, ancho - etq.length - val.length)
+  return etq + ' '.repeat(relleno) + val
+}
+
+/**
+ * El bloque de productos vendidos, listo para mandar a una térmica.
+ *
+ * Devuelve las líneas de texto ya alineadas al ancho del papel; el que imprime
+ * solo las recorre. Lista vacía = no hay nada que imprimir y no se dibuja ni el
+ * título.
+ *
+ * @param {object} resumen  lo que devuelve `resumirProductosVendidos`
+ * @param {number} ancho    caracteres por línea (32 en 58mm, 48 en 80mm)
+ * @returns {string[]}
+ */
+export const lineasDeProductosParaTicket = (resumen, ancho = 32) => {
+  const lineas = resumen?.lineas || []
+  if (lineas.length === 0) return []
+
+  const out = ['PRODUCTOS VENDIDOS', '-'.repeat(ancho)]
+  for (const p of lineas) {
+    out.push(lineaAncho(`${cantidadCorta(p.cantidad)} ${p.nombre}`, monto(p.importe), ancho))
+  }
+  out.push('-'.repeat(ancho))
+  out.push(lineaAncho(
+    `${cantidadCorta(resumen.totalUnidades)} unidades`,
+    monto(resumen.totalImporte),
+    ancho,
+  ))
+  return out
+}
+
 /** ¿Este comprobante cuenta como venta del turno? */
 const cuenta = (inv) => {
   const st = inv?.status

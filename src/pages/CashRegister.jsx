@@ -34,6 +34,7 @@ import { generateCashReportExcel, generateCashReportPDF } from '@/services/cashR
 import CashClosureTicket from '@/components/CashClosureTicket'
 import { aplicarTamanoDeHoja } from '@/utils/printPageSize'
 import { getSessionMoneyTotals } from '@/utils/cashTotals'
+import { resumirProductosVendidos } from '@/utils/cashClosureProducts'
 import { Capacitor } from '@capacitor/core'
 import { getPaymentBucketLabel, getCustomMethodByLabel, isCashLikePayment } from '@/utils/paymentMethods'
 import GuideLink from '@/components/guide/GuideLink'
@@ -1372,6 +1373,12 @@ export default function CashRegister() {
       // Obtener nombre de sucursal si aplica
       const branchName = selectedBranch ? branches.find(b => b.id === selectedBranch)?.name : null
 
+      // Relación de productos: la misma que ya sale en el PDF y en el ticket
+      // HTML. Solo si el negocio la tiene activada (Config > Preferencias).
+      const productosDelTurno = businessSettings?.showProductsInCashClosure === true
+        ? resumirProductosVendidos(todayInvoices)
+        : null
+
       // Imprimir
       const result = await printCashClosureTicket(
         closedSessionData,
@@ -1380,7 +1387,8 @@ export default function CashRegister() {
         printerConfig.paperWidth || 58,
         branchName,
         closedSessionData?.deferredPayments || totals.deferredPayments || [],
-        hideExpectedForCashier
+        hideExpectedForCashier,
+        productosDelTurno
       )
 
       if (result.success) {
@@ -1430,6 +1438,9 @@ export default function CashRegister() {
 
       // Imprimir (incluye deferredPayments — guardados o reconstruidos)
       const { deferred } = getHistoryDerived(selectedHistorySession, historyInvoices)
+      const productosDeLaSesion = businessSettings?.showProductsInCashClosure === true
+        ? resumirProductosVendidos(historyInvoices)
+        : null
       const result = await printCashClosureTicket(
         selectedHistorySession,
         historyMovements,
@@ -1437,7 +1448,8 @@ export default function CashRegister() {
         printerConfig.paperWidth || 58,
         branchName,
         deferred,
-        hideExpectedForCashier
+        hideExpectedForCashier,
+        productosDeLaSesion
       )
 
       if (result.success) {
@@ -5047,7 +5059,7 @@ export default function CashRegister() {
             hideExpected={hideExpectedForCashier}
             sessionData={printSessionData}
             movements={printMovements}
-            invoices={printSessionData === closedSessionData ? todayInvoices : []}
+            invoices={printSessionData === closedSessionData ? todayInvoices : historyInvoices}
             deferredPayments={printSessionData?.deferredPayments || (printSessionData === closedSessionData ? (totals.deferredPayments || []) : [])}
             companySettings={companySettings}
             paperWidth={printerConfig?.paperWidth || 80}

@@ -15,6 +15,7 @@ import { formatQuantity } from '@/lib/utils'
 import { nibbleDeTamano } from '@/utils/escposCharSize';
 import { vinculoDe } from '@/utils/documentLinks';
 import { getUnitShortLabel } from '@/utils/units'
+import { lineasDeProductosParaTicket } from '@/utils/cashClosureProducts'
 
 /**
  * Servicio para manejar impresoras térmicas WiFi/Bluetooth
@@ -3397,7 +3398,7 @@ export const printSplitPreBillThermal = async (order, table, business, taxConfig
  * esas dos rutas — el try/catch lo convertia en un "Error al imprimir" que
  * parecia problema de impresora (detectado con ESLint el 17-ago-2026).
  */
-export const printCashClosureTicket = async (sessionData, movements = [], business, paperWidth = 58, branchName = null, deferredPayments = [], hideExpected = false) => {
+export const printCashClosureTicket = async (sessionData, movements = [], business, paperWidth = 58, branchName = null, deferredPayments = [], hideExpected = false, productosVendidos = null) => {
   const isNative = Capacitor.isNativePlatform();
 
   if (!isNative || !isPrinterConnected) {
@@ -3407,13 +3408,13 @@ export const printCashClosureTicket = async (sessionData, movements = [], busine
   // Si es conexión WiFi o interna, usar la función específica con ESC/POS builder
   if (connectionType === 'wifi' || connectionType === 'internal') {
     console.log(`📶 Usando impresión ${connectionType} para cierre de caja...`);
-    return await printWifiCashClosure(sessionData, movements, business, paperWidth, branchName, deferredPayments, hideExpected);
+    return await printWifiCashClosure(sessionData, movements, business, paperWidth, branchName, deferredPayments, hideExpected, productosVendidos);
   }
 
   // Si usa el servicio BLE alternativo (iOS), usar printBLECashClosure
   if (useAlternativeBLE) {
     console.log('🔵 iOS: Usando impresión BLE alternativa para cierre de caja...');
-    return await printBLECashClosure(sessionData, movements, business, paperWidth, branchName, deferredPayments, hideExpected);
+    return await printBLECashClosure(sessionData, movements, business, paperWidth, branchName, deferredPayments, hideExpected, productosVendidos);
   }
 
   // Bluetooth Android - comportamiento original
@@ -3704,6 +3705,15 @@ export const printCashClosureTicket = async (sessionData, movements = [], busine
       }
     }
 
+    // ========== PRODUCTOS VENDIDOS ==========
+    // Mismo bloque que el ticket HTML y el PDF: sale del helper compartido.
+    const lineasProd = lineasDeProductosParaTicket(productosVendidos, lineWidth);
+    if (lineasProd.length > 0) {
+      printer = printer.align('left').bold(true).text(lineasProd[0] + '\n').bold(false);
+      for (const l of lineasProd.slice(1)) printer = printer.text(l + '\n');
+      printer = printer.text('\n');
+    }
+
     // ========== FOOTER ==========
     printer = printer
       .align('center')
@@ -3735,7 +3745,7 @@ export const printCashClosureTicket = async (sessionData, movements = [], busine
 /**
  * Imprimir cierre de caja vía WiFi
  */
-const printWifiCashClosure = async (sessionData, movements, business, paperWidth, branchName, deferredPayments = [], hideExpected = false) => {
+const printWifiCashClosure = async (sessionData, movements, business, paperWidth, branchName, deferredPayments = [], hideExpected = false, productosVendidos = null) => {
   try {
     const format = getFormat(paperWidth);
     const lineWidth = format.charsPerLine;
@@ -3937,6 +3947,14 @@ const printWifiCashClosure = async (sessionData, movements, business, paperWidth
       }
     }
 
+    // Productos vendidos (mismo bloque que el ticket HTML y el PDF)
+    const lineasProdWifi = lineasDeProductosParaTicket(productosVendidos, lineWidth);
+    if (lineasProdWifi.length > 0) {
+      builder.alignLeft().bold(true).text(lineasProdWifi[0]).newLine().bold(false);
+      for (const l of lineasProdWifi.slice(1)) builder.text(l).newLine();
+      builder.newLine();
+    }
+
     // Footer
     builder.alignCenter()
       .text('Documento interno')
@@ -3965,7 +3983,7 @@ const printWifiCashClosure = async (sessionData, movements, business, paperWidth
 /**
  * Imprimir cierre de caja vía BLE (iOS)
  */
-const printBLECashClosure = async (sessionData, movements, business, paperWidth, branchName, deferredPayments = [], hideExpected = false) => {
+const printBLECashClosure = async (sessionData, movements, business, paperWidth, branchName, deferredPayments = [], hideExpected = false, productosVendidos = null) => {
   try {
     const format = getFormat(paperWidth);
     const lineWidth = format.charsPerLine;
@@ -4131,6 +4149,12 @@ const printBLECashClosure = async (sessionData, movements, business, paperWidth,
         ticketText += 'Efectivo + billeteras\n';
         ticketText += format.separator + '\n';
       }
+    }
+
+    // Productos vendidos (mismo bloque que el ticket HTML y el PDF)
+    const lineasProdBle = lineasDeProductosParaTicket(productosVendidos, lineWidth);
+    if (lineasProdBle.length > 0) {
+      ticketText += lineasProdBle.join('\n') + '\n\n';
     }
 
     // Footer
