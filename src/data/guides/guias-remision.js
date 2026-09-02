@@ -6,7 +6,7 @@
  */
 export default {
   id: 'guias-remision',
-  actualizado: '12/08/2026',
+  actualizado: '02/09/2026',
   intro:
     'La guía de remisión es el documento que ampara el traslado de mercadería: dice qué se mueve, desde dónde, hacia dónde y en qué vehículo. Va a SUNAT igual que una factura, y es la que te piden si te fiscalizan en el camino.',
 
@@ -44,6 +44,41 @@ export default {
         {
           type: 'consejo',
           text: 'Si haces despachos parecidos seguido, **Clonar guía** te copia una anterior y solo cambias lo que corresponde.',
+        },
+      ],
+    },
+
+    {
+      id: 'conductores-vehiculos',
+      title: 'Guardar tus conductores y vehículos',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Si siempre despachas con los mismos dos o tres conductores, no hace falta escribir sus datos en cada guía. En **Equipo → Conductores y vehículos** los cargas una vez y después los eliges de una lista.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Entra a Equipo → Conductores y vehículos.',
+            'En **Conductores**, agrega el documento, los nombres y la licencia. En **Vehículos**, la placa y —si corresponde— la autorización MTC y la TUCE.',
+            'Al crear una guía, arriba de esos campos aparece un desplegable: eliges y se llenan solos.',
+          ],
+        },
+        {
+          type: 'consejo',
+          text: 'Marca **"Es el de siempre"** al que más uses. Sale primero en la lista, con una estrella.',
+        },
+        {
+          type: 'texto',
+          text: 'Puedes anotar cuándo vence la **licencia** y la **TUCE**. No son datos que viajen a SUNAT: son para ti. Cuando falta poco o ya vencieron, aparece el aviso en la lista y también al elegirlos en la guía.',
+        },
+        {
+          type: 'ojo',
+          text: 'Guardarlos no te obliga a usarlos: para un flete de una sola vez con un tercero, los campos siguen ahí y los escribes como siempre. El desplegable solo los rellena.',
+        },
+        {
+          type: 'consejo',
+          text: 'Son dos listas separadas a propósito. Un conductor puede llevar distintas unidades y una unidad la manejan distintos conductores, así que los eliges por separado en cada guía.',
         },
       ],
     },

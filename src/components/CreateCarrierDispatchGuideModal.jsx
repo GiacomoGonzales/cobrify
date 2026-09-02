@@ -3,6 +3,7 @@ import { UNIDADES_PESO, convertirPeso } from '@/utils/weightUnits'
 import { X, Truck, MapPin, User, Package, Calendar, FileText, Building2, Car, Plus, Trash2, Search, Loader2, Save, Info, Store } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import { validatePlate, normalizePlate, PLATE_MAX_LENGTH, PLATE_EXAMPLE } from '@/utils/vehiclePlate'
+import SelectorDeFlota, { useFlota, elDeSiempre } from '@/components/fleet/SelectorDeFlota'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
@@ -197,6 +198,10 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
     mtcEntity: '',
     tuce: '' // Tarjeta Única de Circulación Electrónica
   }])
+
+  // Conductores y vehículos guardados (Equipo > Conductores y vehículos).
+  // Sirven para no re-teclear los mismos datos en cada guía.
+  const { drivers: flotaConductores, vehicles: flotaVehiculos } = useFlota(getBusinessId?.(), isOpen)
 
   // Conductores (soporte para múltiples)
   const [drivers, setDrivers] = useState([{
@@ -1700,6 +1705,22 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
                   </Button>
                 )}
               </div>
+
+              {/* Elegir uno guardado en vez de escribir los cuatro campos */}
+              <SelectorDeFlota
+                tipo="vehicle"
+                lista={flotaVehiculos}
+                onElegir={(v) => {
+                  const next = [...vehicles]
+                  next[index] = {
+                    plate: v.plate || '',
+                    mtcAuthorization: v.mtcAuthorization || '',
+                    mtcEntity: v.mtcEntity || '',
+                    tuce: v.tuce || '',
+                  }
+                  setVehicles(next)
+                }}
+              />
               <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 <Input
                   label="Placa *"
@@ -1779,6 +1800,23 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
                   </Button>
                 )}
               </div>
+
+              {/* Elegir uno guardado en vez de escribir los cinco campos */}
+              <SelectorDeFlota
+                tipo="driver"
+                lista={flotaConductores}
+                onElegir={(d) => {
+                  const next = [...drivers]
+                  next[index] = {
+                    documentType: d.documentType || '1',
+                    documentNumber: d.documentNumber || '',
+                    name: d.name || '',
+                    lastName: d.lastName || '',
+                    license: d.license || '',
+                  }
+                  setDrivers(next)
+                }}
+              />
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Select
                   label="Tipo de documento *"

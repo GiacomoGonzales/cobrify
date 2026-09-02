@@ -15,6 +15,7 @@ import { matchesSearchQuery } from '@/lib/utils'
 import { UNIDADES_PESO, convertirPeso } from '@/utils/weightUnits'
 import { consultarRUC, consultarDNI, consultarEstablecimientos } from '@/services/documentLookupService'
 import { validatePlate, normalizePlate, PLATE_MAX_LENGTH, PLATE_EXAMPLE } from '@/utils/vehiclePlate'
+import SelectorDeFlota, { useFlota } from '@/components/fleet/SelectorDeFlota'
 
 const TRANSFER_REASONS = [
   { value: '01', label: 'Venta' },
@@ -190,6 +191,10 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = 
   const [driverName, setDriverName] = useState('')
   const [driverLastName, setDriverLastName] = useState('')
   const [driverLicense, setDriverLicense] = useState('')
+
+  // Conductores y vehículos guardados (Equipo > Conductores y vehículos):
+  // para no re-teclear los mismos datos en cada guía.
+  const { drivers: flotaConductores, vehicles: flotaVehiculos } = useFlota(getBusinessId?.(), isOpen)
 
   // Conductores secundarios (relevo)
   const [additionalDrivers, setAdditionalDrivers] = useState([])
@@ -2538,6 +2543,18 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = 
                 </h3>
               </div>
 
+              {/* Elegir uno guardado en vez de escribir los campos */}
+              <SelectorDeFlota
+                tipo="vehicle"
+                lista={flotaVehiculos}
+                onElegir={(v) => {
+                  setVehiclePlate(v.plate || '')
+                  setVehicleAuthNumber(v.mtcAuthorization || '')
+                  setVehicleAuthEntity(v.mtcEntity || '')
+                  setVehicleTuce(v.tuce || '')
+                }}
+              />
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
                   ref={plateInputRef}
@@ -2672,6 +2689,19 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = 
                   {isM1LVehicle && <span className="text-sm font-normal text-green-600 ml-2">(Opcional)</span>}
                 </h3>
               </div>
+
+              {/* Elegir uno guardado en vez de escribir los campos */}
+              <SelectorDeFlota
+                tipo="driver"
+                lista={flotaConductores}
+                onElegir={(d) => {
+                  setDriverDocType(d.documentType || '1')
+                  setDriverDocNumber(d.documentNumber || '')
+                  setDriverName(d.name || '')
+                  setDriverLastName(d.lastName || '')
+                  setDriverLicense(d.license || '')
+                }}
+              />
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Select

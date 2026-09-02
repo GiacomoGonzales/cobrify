@@ -90,6 +90,9 @@ import DemoLogisticsLayout from './layouts/DemoLogisticsLayout'
 const Tables = lazy(() => import('./pages/Tables'))
 const Waiters = lazy(() => import('./pages/Waiters'))
 const Sellers = lazy(() => import('./pages/Sellers'))
+// Conductores y vehiculos guardados, para las guias de remision (y, mas
+// adelante, el modulo de transporte de pasajeros).
+const Fleet = lazy(() => import('./pages/Fleet'))
 const Attendance = lazy(() => import('./pages/Attendance'))
 const MySchedule = lazy(() => import('./pages/MySchedule'))
 const Orders = lazy(() => import('./pages/Orders'))
@@ -169,6 +172,7 @@ const RUTAS_DEMO = (
               <Route path="clientes" element={<Customers />} />
               <Route path="promociones" element={<Promotions />} />
               <Route path="vendedores" element={<Sellers />} />
+              <Route path="flota" element={<Fleet />} />
               <Route path="productos" element={<Products />} />
               <Route path="inventario" element={<Inventory />} />
               <Route path="almacenes" element={<Warehouses />} />
@@ -368,6 +372,7 @@ function App() {
               <Route path="promociones" element={<Promotions />} />
               <Route path="control-pagos-alumnos" element={<StudentPaymentControl />} />
               <Route path="vendedores" element={<Sellers />} />
+              <Route path="flota" element={<Fleet />} />
               <Route path="productos" element={<Products />} />
               <Route path="inventario" element={<Inventory />} />
               <Route path="almacenes" element={<Warehouses />} />
@@ -419,6 +424,7 @@ function App() {
               <Route path="ordenes-compra" element={<PurchaseOrders />} />
               <Route path="proveedores" element={<Suppliers />} />
               <Route path="vendedores" element={<Sellers />} />
+              <Route path="flota" element={<Fleet />} />
               <Route path="caja" element={<CashRegister />} />
               <Route path="reportes" element={<Reports />} />
               <Route path="gastos" element={<Expenses />} />
@@ -493,6 +499,7 @@ function App() {
               <Route path="ordenes-compra" element={<PurchaseOrders />} />
               <Route path="ingredientes/historial" element={<PurchaseHistory />} />
               <Route path="vendedores" element={<Sellers />} />
+              <Route path="flota" element={<Fleet />} />
               <Route path="mi-horario" element={<MySchedule />} />
               <Route path="asistencia" element={<Attendance />} />
               <Route path="flujo-caja" element={<CashFlow />} />
@@ -528,6 +535,7 @@ function App() {
               <Route path="cotizaciones" element={<Quotations />} />
               <Route path="cotizaciones/nueva" element={<CreateQuotation />} />
               <Route path="vendedores" element={<Sellers />} />
+              <Route path="flota" element={<Fleet />} />
               <Route path="mi-horario" element={<MySchedule />} />
               <Route path="asistencia" element={<Attendance />} />
               <Route path="configuracion" element={<Settings />} />
@@ -558,6 +566,7 @@ function App() {
               <Route path="promociones" element={<Promotions />} />
               <Route path="control-pagos-alumnos" element={<StudentPaymentControl />} />
               <Route path="vendedores" element={<Sellers />} />
+              <Route path="flota" element={<Fleet />} />
               <Route path="asistencia" element={<Attendance />} />
               <Route path="mi-horario" element={<MySchedule />} />
               <Route path="productos" element={<Products />} />

@@ -23,6 +23,11 @@ import { httpsCallable } from 'firebase/functions'
 
 // ============ PÁGINAS COMUNES (todos los modos) ============
 export const COMMON_PAGES = [
+  // Equipo. La página de conductores y vehículos va acá y no en las de cada
+  // modo porque las guías de remisión las emite gente de todos los modos:
+  // 205 negocios retail, 17 farmacias, 8 restaurantes. Quién la VE lo decide
+  // el menú lateral, que la muestra solo con las guías encendidas.
+  { id: 'fleet', name: 'Conductores y vehículos', path: '/flota', category: 'ventas' },
   // Principales
   { id: 'dashboard', name: 'Dashboard', path: '/dashboard', category: 'principal' },
   { id: 'pos', name: 'Punto de Venta (POS)', path: '/pos', category: 'principal' },

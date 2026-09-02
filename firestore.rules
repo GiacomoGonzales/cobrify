@@ -620,6 +620,19 @@ service cloud.firestore {
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
+      // Subcollections: conductores y vehiculos guardados, para elegirlos al
+      // emitir una guia de remision en vez de re-teclear sus datos.
+      // Ver src/services/fleetService.js.
+      match /drivers/{driverId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
+      match /vehicles/{vehicleId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
       // Subcollection: Liquidaciones de comision. Cierran un periodo y dejan
       // constancia de lo pagado a cada vendedor. Solo el negocio con sesion.
       match /commissionPayouts/{payoutId} {

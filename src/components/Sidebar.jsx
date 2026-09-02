@@ -414,6 +414,16 @@ function Sidebar() {
           pageId: 'sellers',
           menuId: 'sellers',
         },
+        // Conductores y vehiculos: solo tiene sentido con las guias de
+        // remision encendidas, que es donde se eligen. El modulo de
+        // transporte de pasajeros los va a usar tambien, y ahi se ampliara.
+        ...(businessSettings?.dispatchGuidesEnabled ? [{
+          path: '/flota',
+          icon: Truck,
+          label: 'Conductores y vehículos',
+          pageId: 'fleet',
+          menuId: 'fleet',
+        }] : []),
         // Control de Asistencia:
         // - Sub-usuarios solo ven el link en la app nativa (marcan con QR/GPS).
         // - Owner/Admin lo ven siempre (gestionan configuración y marcaciones).
@@ -759,6 +769,16 @@ function Sidebar() {
           pageId: 'sellers',
           menuId: 'sellers',
         },
+        // Conductores y vehiculos: solo tiene sentido con las guias de
+        // remision encendidas, que es donde se eligen. El modulo de
+        // transporte de pasajeros los va a usar tambien, y ahi se ampliara.
+        ...(businessSettings?.dispatchGuidesEnabled ? [{
+          path: '/flota',
+          icon: Truck,
+          label: 'Conductores y vehículos',
+          pageId: 'fleet',
+          menuId: 'fleet',
+        }] : []),
         ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
           ? [{
               path: '/asistencia',
@@ -1056,6 +1076,16 @@ function Sidebar() {
           pageId: 'sellers',
           menuId: 'sellers',
         },
+        // Conductores y vehiculos: solo tiene sentido con las guias de
+        // remision encendidas, que es donde se eligen. El modulo de
+        // transporte de pasajeros los va a usar tambien, y ahi se ampliara.
+        ...(businessSettings?.dispatchGuidesEnabled ? [{
+          path: '/flota',
+          icon: Truck,
+          label: 'Conductores y vehículos',
+          pageId: 'fleet',
+          menuId: 'fleet',
+        }] : []),
         ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
           ? [{
               path: '/asistencia',
