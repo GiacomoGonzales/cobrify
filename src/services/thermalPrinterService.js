@@ -570,25 +570,46 @@ export const isPrinterReady = () => {
  */
 export const savePrinterConfig = async (userId, printerConfig) => {
   try {
+    // MERGE con lo ya guardado, no reemplazo.
+    //
+    // Conectar la impresora arma el objeto desde cero —solo enabled, address,
+    // name, type y paperWidth— y abajo cada campo se normaliza con
+    // `campo || false`: todo lo que el objeto no traiga se guardaba apagado.
+    // Con una ticketera de red que se reconecta seguido, el usuario perdía
+    // "Mostrar unidad de medida" y otras siete opciones TODOS LOS DÍAS
+    // (reporte de JC&AN, 02-sep-2026).
+    //
+    // Va acá y no en los dos handlers que conectan: así queda protegido
+    // cualquier camino que guarde con un objeto parcial, incluidos los que se
+    // escriban después. Apagar una opción sigue funcionando, porque un `false`
+    // explícito en el objeto que llega pisa al guardado.
+    let guardado = {}
+    try {
+      guardado = JSON.parse(localStorage.getItem('factuya_printerConfig') || '{}') || {}
+    } catch {
+      guardado = {}
+    }
+    const cfg = { ...guardado, ...printerConfig }
+
     const configData = {
-      address: printerConfig.address,
-      name: printerConfig.name,
-      type: printerConfig.type || 'bluetooth', // bluetooth, wifi o internal
-      paperWidth: printerConfig.paperWidth || 80, // Guardar ancho de papel (80mm por defecto)
-      enabled: printerConfig.enabled !== false,
-      webPrintLegible: printerConfig.webPrintLegible || false, // Modo legible para impresión web (legacy; derivado de ticketFontSize)
-      ticketFontSize: printerConfig.ticketFontSize || (printerConfig.webPrintLegible ? 'medium' : 'small'), // Tamaño de letra del ticket web: 'small' | 'medium' | 'large'
+      address: cfg.address,
+      name: cfg.name,
+      type: cfg.type || 'bluetooth', // bluetooth, wifi o internal
+      paperWidth: cfg.paperWidth || 80, // Guardar ancho de papel (80mm por defecto)
+      enabled: cfg.enabled !== false,
+      webPrintLegible: cfg.webPrintLegible || false, // Modo legible para impresión web (legacy; derivado de ticketFontSize)
+      ticketFontSize: cfg.ticketFontSize || (cfg.webPrintLegible ? 'medium' : 'small'), // Tamaño de letra del ticket web: 'small' | 'medium' | 'large'
       // Tamaño de letra propio de la COMANDA ('' = sigue al del ticket). En
       // cocina se lee de lejos, así que suele querer letra más grande que el
       // comprobante del cliente.
-      kitchenFontSize: printerConfig.kitchenFontSize || '',
-      compactPrint: printerConfig.compactPrint || false, // Modo compacto para ahorro de papel
-      printMargins: printerConfig.printMargins ?? 8, // Márgenes laterales en mm para impresión web
-      simplePrint: printerConfig.simplePrint || false, // Impresión simple sin fondos negros
-      cutFeedLines: printerConfig.cutFeedLines ?? 5, // Líneas de avance antes del corte
-      ultraCompactKitchen: printerConfig.ultraCompactKitchen || false, // Comandas ultracompactas
-      a4SheetPrint: printerConfig.a4SheetPrint || false, // Imprimir en hoja A4 (impresoras de tinta/laser, no termicas)
-      showItemUnit: printerConfig.showItemUnit || false, // Mostrar unidad/presentacion antes de cada producto en el ticket
+      kitchenFontSize: cfg.kitchenFontSize || '',
+      compactPrint: cfg.compactPrint || false, // Modo compacto para ahorro de papel
+      printMargins: cfg.printMargins ?? 8, // Márgenes laterales en mm para impresión web
+      simplePrint: cfg.simplePrint || false, // Impresión simple sin fondos negros
+      cutFeedLines: cfg.cutFeedLines ?? 5, // Líneas de avance antes del corte
+      ultraCompactKitchen: cfg.ultraCompactKitchen || false, // Comandas ultracompactas
+      a4SheetPrint: cfg.a4SheetPrint || false, // Imprimir en hoja A4 (impresoras de tinta/laser, no termicas)
+      showItemUnit: cfg.showItemUnit || false, // Mostrar unidad/presentacion antes de cada producto en el ticket
       updatedAt: new Date().toISOString()
     };
 
