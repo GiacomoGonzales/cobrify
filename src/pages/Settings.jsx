@@ -2439,13 +2439,16 @@ export default function Settings() {
     try {
       const result = await connectPrinter(printerAddress)
       if (result.success) {
-        // Guardar configuración (mantener paperWidth actual o usar 58mm por defecto)
         const newConfig = {
           enabled: true,
           address: printerAddress,
           name: printerName,
           type: 'bluetooth',
-          paperWidth: printerConfig.paperWidth || 58
+          // El ancho SOLO se manda si se sabe. Con `|| 58` acá, conectar la
+          // impresora con el estado todavía sin cargar forzaba 58mm y lo dejaba
+          // guardado — el ancho "se cambiaba solo" (reporte de JC&AN,
+          // 02-sep-2026). Sin el campo, savePrinterConfig conserva el guardado.
+          ...(printerConfig.paperWidth ? { paperWidth: printerConfig.paperWidth } : {}),
         }
         setPrinterConfig(newConfig)
 
@@ -2584,7 +2587,11 @@ export default function Settings() {
           address: address,
           name: wifiName.trim() || 'Impresora WiFi',
           type: 'wifi',
-          paperWidth: printerConfig.paperWidth || 58
+          // El ancho SOLO se manda si se sabe. Con `|| 58` acá, conectar la
+          // impresora con el estado todavía sin cargar forzaba 58mm y lo dejaba
+          // guardado — el ancho "se cambiaba solo" (reporte de JC&AN,
+          // 02-sep-2026). Sin el campo, savePrinterConfig conserva el guardado.
+          ...(printerConfig.paperWidth ? { paperWidth: printerConfig.paperWidth } : {}),
         }
         setPrinterConfig(newConfig)
 
@@ -2815,7 +2822,11 @@ export default function Settings() {
           address: 'internal',
           name: 'Impresora Interna iMin',
           type: 'internal',
-          paperWidth: printerConfig.paperWidth || 58
+          // El ancho SOLO se manda si se sabe. Con `|| 58` acá, conectar la
+          // impresora con el estado todavía sin cargar forzaba 58mm y lo dejaba
+          // guardado — el ancho "se cambiaba solo" (reporte de JC&AN,
+          // 02-sep-2026). Sin el campo, savePrinterConfig conserva el guardado.
+          ...(printerConfig.paperWidth ? { paperWidth: printerConfig.paperWidth } : {}),
         }
         setPrinterConfig(newConfig)
         await savePrinterConfig(getBusinessId(), newConfig)
