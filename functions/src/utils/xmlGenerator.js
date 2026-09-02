@@ -300,6 +300,79 @@ function mapUnitToSunatCode(unit) {
  * - UBL 2.1: http://docs.oasis-open.org/ubl/UBL-2.1.html
  * - Especificaciones SUNAT: https://cpe.sunat.gob.pe/node/88
  */
+/**
+ * ¿Esta línea se entrega GRATIS?
+ *
+ * SUNAT rechaza con error 3105 si se declara afectación 10 (gravado oneroso)
+ * con valor de venta 0: para SUNAT una línea "con cobro" que vale cero es una
+ * contradicción. Lo que corresponde es declararla como operación gratuita.
+ *
+ * Vivió duplicado, idéntico, dentro de la factura y de la nota de crédito.
+ */
+const isBonificacionItem = (item) => {
+    // Marcada explícitamente al cobrar.
+    if (item.isBonificacion === true) return true
+
+    // Precio 0 CON valor de referencia: es un regalo aunque nadie lo haya
+    // marcado. Una gratuita necesita declarar cuánto vale lo regalado, así que
+    // sin esa referencia no se puede emitir como tal — esa línea queda con su
+    // afectación original y lo que la salva es el subtotal de cabecera (más
+    // abajo). Pasó de verdad: el vendedor puso el producto a 0 y le agregó
+    // "(BONIFICACIÓN)" al nombre en vez de usar el botón, y el comprobante se
+    // rechazó con el error 3105.
+    const precio = Number(item.unitPrice)
+    const cantidad = Number(item.quantity)
+    const referencia = Number(item.referencePrice ?? item.originalUnitPrice ?? item.listPrice ?? 0)
+    if (precio === 0 && cantidad > 0 && Number.isFinite(referencia) && referencia > 0) return true
+
+    // Precio normal con descuento del 100%: la forma en que el POS registra
+    // una bonificación.
+    const itemDiscount = item.itemDiscount || item.descuento || 0
+    if (itemDiscount <= 0) return false
+    const lineTotalWithIGV = cantidad * precio
+    return Math.abs(lineTotalWithIGV - itemDiscount) < 0.005
+  }
+
+/**
+ * El unitario CON IGV que hay que DECLARAR en la línea.
+ *
+ * En una gratuita el cliente paga 0, pero SUNAT quiere ver cuánto vale lo que
+ * se regaló: ese valor referencial es el que alimenta el `LineExtensionAmount`
+ * de la línea y el total de operaciones gratuitas del documento.
+ */
+const unitarioDeclarable = (item, esRegalo) => {
+  const precio = Number(item?.unitPrice) || 0
+  const referencia = Number(item?.referencePrice ?? item?.originalUnitPrice ?? item?.listPrice ?? 0)
+  return (esRegalo && precio === 0 && referencia > 0) ? referencia : precio
+}
+
+/**
+ * La afectación (Catálogo 07) que le toca a una línea REGALADA, según lo que
+ * sería esa misma línea si se cobrara.
+ *
+ * Todas las gratuitas usan el tributo 9996 (GRA), pero el código cambia por
+ * familia y las reglas de SUNAT las tratan al revés entre sí:
+ *   - 15 Gravado – Bonificaciones      → el IGV de la línea NO puede ser 0 (3111)
+ *   - 21 Exonerado - Transf. gratuita  → el IGV SÍ tiene que ser 0 (3110)
+ *   - 31 Inafecto – Retiro por Bonific.→ ídem, IGV en 0 (3110)
+ *
+ * Antes se forzaba 15 a TODA línea regalada. En un negocio con IGV 18% eso
+ * pasa, pero los 53 negocios acogidos a la Ley de Amazonía tienen IGV 0%: la
+ * línea salía con afectación 15 e IGV cero, que es exactamente lo que la
+ * regla 3111 rechaza. Ninguno de ellos podía regalar nada.
+ */
+const afectacionDeLoRegalado = (afectacionSiSeCobrara) => {
+  if (afectacionSiSeCobrara === '20') return '21'
+  if (afectacionSiSeCobrara === '30') return '31'
+  return '15'
+}
+
+/** ¿Esta afectación gratuita declara IGV? Solo la familia gravada (11 a 17). */
+const gratuitaConIGV = (afectacion) => {
+  const n = Number(afectacion)
+  return n >= 11 && n <= 17
+}
+
 export function generateInvoiceXML(invoiceData, businessData) {
   // Mapeo de tipos de documento según catálogo 01 de SUNAT
   const documentTypeMap = {
@@ -466,6 +539,26 @@ export function generateInvoiceXML(invoiceData, businessData) {
     root.ele('cbc:Note', {
       'languageLocaleID': '2001'
     }).txt('BIENES TRANSFERIDOS EN LA AMAZONÍA REGIÓN SELVA PARA SER CONSUMIDOS EN LA MISMA')
+  }
+
+  // Leyenda de TRANSFERENCIA GRATUITA (Catálogo 52, código 1002).
+  //
+  // Ninguna regla la EXIGE —revisadas todas las menciones de '1002' en las
+  // reglas de validación al 26-ago-2026—, pero es la etiqueta que corresponde
+  // y es lo que el receptor ve impreso cuando le entregan algo sin cobro.
+  //
+  // La 2416 sí pide que, SI va la leyenda, el total de operaciones gratuitas
+  // sea mayor a cero. Por eso se emite solo cuando hay algo regalado con valor
+  // declarado: un ítem marcado como regalo al que nadie le puso precio de
+  // referencia no suma nada al total y haría rebotar el comprobante.
+  const hayGratuitasConValor = (invoiceData.items || []).some((it) => (
+    isBonificacionItem(it)
+    && unitarioDeclarable(it, true) * (Number(it?.quantity) || 0) > 0
+  ))
+  if (hayGratuitasConValor) {
+    root.ele('cbc:Note', {
+      'languageLocaleID': '1002'
+    }).txt('TRANSFERENCIA GRATUITA DE UN BIEN Y/O SERVICIO PRESTADO GRATUITAMENTE')
   }
 
   // Leyenda informativa de RETENCIÓN del IGV (cliente agente de retención). Texto libre
@@ -780,35 +873,6 @@ export function generateInvoiceXML(invoiceData, businessData) {
     paymentTerms.ele('cbc:PaymentMeansID').txt('Contado')
   }
 
-  // === BONIFICACIÓN (Catálogo 07 código 15) ===
-  // Si el descuento por ítem iguala el valor total del ítem (≥ 100%), el ítem se
-  // entrega como bonificación gravada. SUNAT rechaza con error 3105 si se declara
-  // afectación 10 (gravado oneroso) con LineExtensionAmount=0 y TaxAmount=0.
-  // La bonificación se declara con afectación 15, PriceTypeCode 02 y tributo 9996 (GRA).
-  const isBonificacionItem = (item) => {
-    // Marcada explícitamente al cobrar.
-    if (item.isBonificacion === true) return true
-
-    // Precio 0 CON valor de referencia: es un regalo aunque nadie lo haya
-    // marcado. Una gratuita necesita declarar cuánto vale lo regalado, así que
-    // sin esa referencia no se puede emitir como tal — esa línea queda con su
-    // afectación original y lo que la salva es el subtotal de cabecera (más
-    // abajo). Pasó de verdad: el vendedor puso el producto a 0 y le agregó
-    // "(BONIFICACIÓN)" al nombre en vez de usar el botón, y el comprobante se
-    // rechazó con el error 3105.
-    const precio = Number(item.unitPrice)
-    const cantidad = Number(item.quantity)
-    const referencia = Number(item.referencePrice ?? item.originalUnitPrice ?? item.listPrice ?? 0)
-    if (precio === 0 && cantidad > 0 && Number.isFinite(referencia) && referencia > 0) return true
-
-    // Precio normal con descuento del 100%: la forma en que el POS registra
-    // una bonificación.
-    const itemDiscount = item.itemDiscount || item.descuento || 0
-    if (itemDiscount <= 0) return false
-    const lineTotalWithIGV = cantidad * precio
-    return Math.abs(lineTotalWithIGV - itemDiscount) < 0.005
-  }
-
   // === DESCUENTO GLOBAL ===
   // IMPORTANTE: Usar solo globalDiscount (descuento global, sin incluir descuentos por ítem).
   // Los descuentos por ítem se manejan como AllowanceCharge en cada línea.
@@ -862,31 +926,28 @@ export function generateInvoiceXML(invoiceData, businessData) {
   invoiceData.items.forEach((item) => {
     const isBonifLine = isBonificacionItem(item)
 
-    // REGLA: Si negocio tiene Ley de la Selva (igvExempt=true) → FORZAR exonerado
-    //        Si el ítem es bonificación (descuento del 100%) → FORZAR afectación 15 (gravado bonificación)
-    let taxAffectation
-    if (isBonifLine) {
-      taxAffectation = '15'  // Gravado - Bonificaciones (Catálogo 07)
-    } else if (igvExempt) {
-      // NRUS: la línea es GRAVADA (10/1000) con tasa 0 — no exonerada. Marcar
-      // 20 diría que los productos están exonerados por ley, que es falso; lo
-      // que pasa es que el RÉGIMEN del emisor no desglosa IGV. Con igvRate 0
-      // la aritmética de abajo ya produce base completa e IGV 0.
-      taxAffectation = isNrusBoleta ? '10' : '20'
-    } else {
-      taxAffectation = item.taxAffectation || '10'
-    }
+    // Qué SERÍA esta línea si se cobrara. De ahí sale su afectación: si se
+    // regala, la gratuita que le corresponde a esa misma familia.
+    //
+    // NRUS: la línea es GRAVADA (10/1000) con tasa 0 — no exonerada. Marcar 20
+    // diría que los productos están exonerados por ley, que es falso; lo que
+    // pasa es que el RÉGIMEN del emisor no desglosa IGV. Con igvRate 0 la
+    // aritmética de abajo ya produce base completa e IGV 0.
+    const afectacionOnerosa = igvExempt
+      ? (isNrusBoleta ? '10' : '20')
+      : (item.taxAffectation || '10')
+    const taxAffectation = isBonifLine ? afectacionDeLoRegalado(afectacionOnerosa) : afectacionOnerosa
+
     const isGravadoOneroso = taxAffectation === '10'  // Operación gravada onerosa (con cobro)
     const isExonerado = taxAffectation === '20'
     const isInafecto = taxAffectation === '30'
-    // isGravadoOrBonif: ambos casos calculan con IGV (gravado oneroso y bonificación)
-    const isGravadoOrBonif = isGravadoOneroso || isBonifLine
+    // Quién calcula con IGV: el gravado oneroso y SOLO la gratuita gravada (15).
+    // La gratuita exonerada (21) y la inafecta (31) tienen que declarar IGV 0
+    // —regla 3110—, así que no entran acá.
+    const isGravadoOrBonif = isGravadoOneroso || (isBonifLine && gratuitaConIGV(taxAffectation))
     // Para una gratuita marcada con precio 0, el valor de referencia es lo que
     // vale el producto: es el número que SUNAT quiere ver declarado.
-    const referenciaItem = Number(item.referencePrice ?? item.originalUnitPrice ?? item.listPrice ?? 0)
-    const originalPriceWithIGV = (isBonifLine && Number(item.unitPrice) === 0 && referenciaItem > 0)
-      ? referenciaItem
-      : item.unitPrice
+    const originalPriceWithIGV = unitarioDeclarable(item, isBonifLine)
 
     // IGV rate: SIEMPRE usar la tasa global del negocio para items con IGV (gravado u bonificación)
     // SUNAT regla 3462: "La tasa del IGV debe ser la misma en todas las líneas"
@@ -1690,33 +1751,6 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
       .txt(creditDiscount.toFixed(2))
   }
 
-  // === BONIFICACIÓN (Catálogo 07 código 15) ===
-  // Si un item viene con itemDiscount que iguala su valor total, se trata como bonificación.
-  // Mismo helper que generateInvoiceXML para consistencia.
-  const isBonificacionItem = (item) => {
-    // Marcada explícitamente al cobrar.
-    if (item.isBonificacion === true) return true
-
-    // Precio 0 CON valor de referencia: es un regalo aunque nadie lo haya
-    // marcado. Una gratuita necesita declarar cuánto vale lo regalado, así que
-    // sin esa referencia no se puede emitir como tal — esa línea queda con su
-    // afectación original y lo que la salva es el subtotal de cabecera (más
-    // abajo). Pasó de verdad: el vendedor puso el producto a 0 y le agregó
-    // "(BONIFICACIÓN)" al nombre en vez de usar el botón, y el comprobante se
-    // rechazó con el error 3105.
-    const precio = Number(item.unitPrice)
-    const cantidad = Number(item.quantity)
-    const referencia = Number(item.referencePrice ?? item.originalUnitPrice ?? item.listPrice ?? 0)
-    if (precio === 0 && cantidad > 0 && Number.isFinite(referencia) && referencia > 0) return true
-
-    // Precio normal con descuento del 100%: la forma en que el POS registra
-    // una bonificación.
-    const itemDiscount = item.itemDiscount || item.descuento || 0
-    if (itemDiscount <= 0) return false
-    const lineTotalWithIGV = cantidad * precio
-    return Math.abs(lineTotalWithIGV - itemDiscount) < 0.005
-  }
-
   // === CALCULAR TOTALES POR TIPO DE AFECTACIÓN ===
   // Necesario para generar múltiples TaxSubtotals
   let cnSumGravadas = 0
@@ -1734,18 +1768,16 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
   creditNoteData.items.forEach((item) => {
     const isBonifLine = isBonificacionItem(item)
 
-    let taxAffectation
-    if (isBonifLine) {
-      taxAffectation = '15'  // Gravado - Bonificaciones
-    } else if (igvExempt) {
-      taxAffectation = '20'
-    } else {
-      taxAffectation = item.taxAffectation || '10'
-    }
+    // Mismo criterio que la factura: la gratuita hereda la familia de lo que
+    // sería la línea si se cobrara. La NC no tiene la excepción del tipo de
+    // operación 0113, así que acá forzar 15 con IGV 0 rompía igual.
+    const afectacionOnerosa = igvExempt ? '20' : (item.taxAffectation || '10')
+    const taxAffectation = isBonifLine ? afectacionDeLoRegalado(afectacionOnerosa) : afectacionOnerosa
+
     const isGravado = taxAffectation === '10'
     const isExonerado = taxAffectation === '20'
     const isInafecto = taxAffectation === '30'
-    const isGravadoOrBonif = isGravado || isBonifLine
+    const isGravadoOrBonif = isGravado || (isBonifLine && gratuitaConIGV(taxAffectation))
 
     const itemIgvRate = isGravadoOrBonif ? igvRate : 0
     const itemIgvMultiplier = itemIgvRate / 100
