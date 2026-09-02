@@ -3,7 +3,6 @@ import {
   signInWithEmailAndPassword,
   setPersistence,
   browserSessionPersistence,
-  browserLocalPersistence,
   indexedDBLocalPersistence,
   createUserWithEmailAndPassword,
   signOut,
@@ -50,13 +49,30 @@ export const loginWithEmail = async (email, password) => {
     // (reporte del 25-ago-2026). Este setPersistence estaba degradando la
     // persistencia que firebase.js ya había elegido bien.
     //
+    // EN WEB NO SE TOCA, y esa es la corrección del 02-sep-2026. Acá se fijaba
+    // `browserLocalPersistence` (localStorage) mientras que lib/firebase.js
+    // arranca con `getAuth(app)`, o sea la cadena por defecto, que usa
+    // IndexedDB primero. Con una sola pestaña da igual —la instancia que hizo
+    // login es la misma que lee—, pero con DOS no: la del login quedaba
+    // anclada a localStorage y la nueva arrancaba con la cadena por defecto.
+    // Firebase terminaba moviendo la sesión entre almacenes, así que la
+    // pestaña vieja veía desaparecer al usuario y se cerraba, y en la nueva
+    // las lecturas de Firestore salían sin token — "Missing or insufficient
+    // permissions" en absolutamente todo.
+    //
+    // Se deja la de por defecto (no una explícita) porque esa cadena TAMBIÉN
+    // lee localStorage: las sesiones ya abiertas ahí siguen valiendo. Fijar
+    // una sola habría echado a todos una vez.
+    //
     // La cuenta demo es la excepción a propósito: es compartida y tiene que
     // morir al cerrar, en app y en web por igual.
     try {
-      const persistenciaNormal = Capacitor.isNativePlatform()
-        ? indexedDBLocalPersistence
-        : browserLocalPersistence
-      await setPersistence(auth, esCuentaDemo(email) ? browserSessionPersistence : persistenciaNormal)
+      if (esCuentaDemo(email)) {
+        await setPersistence(auth, browserSessionPersistence)
+      } else if (Capacitor.isNativePlatform()) {
+        await setPersistence(auth, indexedDBLocalPersistence)
+      }
+      // Web con cuenta normal: la de por defecto, la misma del arranque.
     } catch (e) {
       // Si el navegador no soporta cambiarla, se sigue con la de por defecto:
       // mejor entrar que bloquear el acceso por esto.

@@ -3725,7 +3725,11 @@ Gracias por tu preferencia.`
                         // nueva saca al usuario del sistema o no se ve.
                         const ruta = appPath(`pos?duplicateInvoiceId=${invoice.id}`)
                         if (convieneOtraPestana(Capacitor.isNativePlatform(), window.innerWidth)) {
-                          window.open(ruta, '_blank', 'noopener,noreferrer')
+                          // Sin windowFeatures: con el tercer argumento algunos
+                          // navegadores abren una VENTANA emergente en vez de una
+                          // pestana. Y `noopener` es para enlaces externos que no
+                          // deben tocar la pagina de origen; esto es la misma app.
+                          window.open(ruta, '_blank')
                         } else {
                           appNavigate(`pos?duplicateInvoiceId=${invoice.id}`)
                         }
