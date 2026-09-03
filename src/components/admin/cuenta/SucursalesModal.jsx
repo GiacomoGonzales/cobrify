@@ -6,12 +6,22 @@ import { createWarehouse, getWarehouses, deleteWarehouse } from '@/services/ware
 import { updateMaxBranches } from '@/services/subscriptionService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 import { useToast } from '@/contexts/ToastContext'
-import { Modal, Boton, Campo, Entrada, Selector, Casilla, Tabla, Th, Td, Fila, FilaVacia } from '@/components/admin/ui'
+import { Modal, Boton, Campo, Entrada, Selector, Casilla } from '@/components/admin/ui'
 
-// Sucursales de una cuenta: la principal (implicita, solo se renombra), las
-// adicionales (crear/editar/borrar, cada una con su almacen) y el maximo
-// permitido por la suscripcion. onCambio recibe lo que cambio en la cuenta
-// (mainBranchName o limits) para que la lista o la ficha se actualicen.
+// Sucursales de una cuenta: una tarjeta por sucursal con sus datos, un boton
+// para agregar y el maximo permitido por la suscripcion. onCambio recibe lo que
+// cambio en la cuenta (mainBranchName, datos del negocio o limits) para que la
+// ficha se actualice sin recargar.
+//
+// LA PRINCIPAL TAMBIEN SE EDITA DESDE AQUI. No es un documento de `branches`:
+// es el negocio mismo, asi que sus datos viven en `businesses/{id}` y antes
+// solo se tocaban entrando a la Configuracion de esa cuenta.
+//
+// OJO CON LA UBICACION, que se guarda distinto en cada sitio:
+//   - sucursal adicional -> department/province/district son CODIGOS de ubigeo
+//   - negocio (principal) -> son NOMBRES, mas `ubigeo` con el codigo completo
+// Es asi desde antes; el formulario trabaja siempre con codigos y traduce al
+// guardar y al cargar la principal.
 
 const FORM_VACIO = {
   name: '',
@@ -47,13 +57,25 @@ export default function SucursalesModal({ cuenta, onClose, onCambio }) {
   const [form, setForm] = useState(FORM_VACIO)
   const [editando, setEditando] = useState(null)
   const [guardando, setGuardando] = useState(false)
-  const [nombrePrincipal, setNombrePrincipal] = useState(cuenta.mainBranchName || 'Sucursal Principal')
+  // Que se esta editando, si algo: una sucursal adicional (`editando`), el
+  // negocio (`editandoPrincipal`) o una nueva (`creando`). Se edita de a una.
   const [editandoPrincipal, setEditandoPrincipal] = useState(false)
-  const [guardandoPrincipal, setGuardandoPrincipal] = useState(false)
+  const [creando, setCreando] = useState(false)
+  const [principal, setPrincipal] = useState({
+    name: cuenta.mainBranchName || 'Sucursal Principal',
+    address: cuenta.address || '',
+    phone: cuenta.phone || '',
+    department: cuenta.department || '',
+    province: cuenta.province || '',
+    district: cuenta.district || '',
+  })
   const [maximo, setMaximo] = useState(cuenta.limits?.maxBranches ?? 1)
   const [editandoMaximo, setEditandoMaximo] = useState(false)
   const [guardandoMaximo, setGuardandoMaximo] = useState(false)
   const set = (campo, valor) => setForm(f => ({ ...f, [campo]: valor }))
+
+  // Con algo abierto no se ofrece abrir otra cosa: se edita de a una.
+  const formAbierto = creando || Boolean(editando) || editandoPrincipal
 
   async function recargar() {
     const result = await getBranches(cuenta.id)
@@ -83,26 +105,80 @@ export default function SucursalesModal({ cuenta, onClose, onCambio }) {
     setForm(nuevo)
   }
 
+  /**
+   * Guardar la sucursal principal, que es el negocio.
+   *
+   * La ubicacion se convierte de codigos a NOMBRES, que es como la guarda la
+   * Configuracion de la cuenta; escribir codigos ahi dejaria "15" donde el
+   * comprobante espera "LIMA".
+   */
   async function guardarPrincipal() {
-    const nombre = nombrePrincipal.trim()
+    const nombre = form.name.trim()
     if (!nombre) {
       toast.error('El nombre de la sucursal es obligatorio')
       return
     }
-    setGuardandoPrincipal(true)
+    setGuardando(true)
     try {
-      // En users lo lee el negocio; en businesses, companySettings.
+      const dept = DEPARTAMENTOS.find(d => d.code === form.department)
+      const prov = (PROVINCIAS[form.department] || []).find(x => x.code === form.province)
+      const dist = (DISTRITOS[`${form.department}${form.province}`] || []).find(x => x.code === form.district)
+      const datos = {
+        mainBranchName: nombre,
+        address: form.address || '',
+        phone: form.phone || '',
+        department: dept?.name || '',
+        province: prov?.name || '',
+        district: dist?.name || '',
+        ubigeo: form.ubigeo || '',
+      }
+      // El nombre lo lee el negocio desde users; el resto vive en businesses.
       await updateDoc(doc(db, 'users', cuenta.id), { mainBranchName: nombre })
-      await updateDoc(doc(db, 'businesses', cuenta.id), { mainBranchName: nombre })
-      onCambio?.({ mainBranchName: nombre })
-      toast.success('Nombre de la sucursal principal guardado')
-      setEditandoPrincipal(false)
+      await updateDoc(doc(db, 'businesses', cuenta.id), datos)
+      setPrincipal({
+        name: nombre,
+        address: datos.address,
+        phone: datos.phone,
+        department: datos.department,
+        province: datos.province,
+        district: datos.district,
+      })
+      onCambio?.({ mainBranchName: nombre, address: datos.address, phone: datos.phone, department: datos.department, province: datos.province, district: datos.district })
+      toast.success('Sucursal principal guardada')
+      cerrarFormulario()
     } catch (error) {
-      console.error('Error guardando el nombre:', error)
-      toast.error('No se pudo guardar el nombre')
+      console.error('Error guardando la principal:', error)
+      toast.error('No se pudo guardar la sucursal principal')
     } finally {
-      setGuardandoPrincipal(false)
+      setGuardando(false)
     }
+  }
+
+  /** Abrir el formulario con los datos del negocio, traduciendo nombres a codigos. */
+  function editarPrincipal() {
+    const dept = DEPARTAMENTOS.find(d => d.name === principal.department)
+    const prov = dept ? (PROVINCIAS[dept.code] || []).find(x => x.name === principal.province) : null
+    const dist = dept && prov ? (DISTRITOS[`${dept.code}${prov.code}`] || []).find(x => x.name === principal.district) : null
+    setEditando(null)
+    setEditandoPrincipal(true)
+    setCreando(false)
+    setForm({
+      ...FORM_VACIO,
+      name: principal.name,
+      address: principal.address,
+      phone: principal.phone,
+      department: dept?.code || '',
+      province: prov?.code || '',
+      district: dist?.code || '',
+      ubigeo: dept && prov && dist ? `${dept.code}${prov.code}${dist.code}` : '',
+    })
+  }
+
+  function cerrarFormulario() {
+    setEditando(null)
+    setEditandoPrincipal(false)
+    setCreando(false)
+    setForm(FORM_VACIO)
   }
 
   async function guardarMaximo() {
@@ -150,8 +226,7 @@ export default function SucursalesModal({ cuenta, onClose, onCambio }) {
         toast.success('Sucursal creada con su almacén')
       }
       await recargar()
-      setEditando(null)
-      setForm(FORM_VACIO)
+      cerrarFormulario()
     } catch (error) {
       console.error('Error guardando la sucursal:', error)
       toast.error('No se pudo guardar la sucursal')
@@ -162,6 +237,8 @@ export default function SucursalesModal({ cuenta, onClose, onCambio }) {
 
   function editar(sucursal) {
     setEditando(sucursal)
+    setEditandoPrincipal(false)
+    setCreando(false)
     setForm({
       name: sucursal.name || '',
       address: sucursal.address || '',
@@ -224,108 +301,212 @@ export default function SucursalesModal({ cuenta, onClose, onCambio }) {
           )}
         </div>
 
-        {/* Lista */}
-        <div className="border border-gray-200 rounded-md overflow-hidden">
-          <Tabla>
-            <thead>
-              <tr>
-                <Th>Sucursal</Th>
-                <Th>Dirección</Th>
-                <Th>Teléfono</Th>
-                <Th>Modo</Th>
-                <Th ancho={120}></Th>
-              </tr>
-            </thead>
-            <tbody>
-              <Fila>
-                <Td>
-                  {editandoPrincipal ? (
-                    <div className="flex items-center gap-2">
-                      <Entrada value={nombrePrincipal} onChange={e => setNombrePrincipal(e.target.value)} autoFocus className="w-48" />
-                      <Boton tamano="sm" variante="primario" onClick={guardarPrincipal} disabled={guardandoPrincipal}>{guardandoPrincipal ? '…' : 'Guardar'}</Boton>
-                      <Boton tamano="sm" onClick={() => { setEditandoPrincipal(false); setNombrePrincipal(cuenta.mainBranchName || 'Sucursal Principal') }}>Cancelar</Boton>
-                    </div>
-                  ) : (
-                    <span className="font-medium">{nombrePrincipal} <span className="text-gray-400 font-normal">· principal</span></span>
-                  )}
-                </Td>
-                <Td apagado className="whitespace-normal">Usa las series globales del negocio</Td>
-                <Td apagado>—</Td>
-                <Td apagado>Del negocio</Td>
-                <Td alinear="der">{!editandoPrincipal && <Boton tamano="sm" onClick={() => setEditandoPrincipal(true)}>Renombrar</Boton>}</Td>
-              </Fila>
-              {cargando ? (
-                <FilaVacia colSpan={5}>Cargando sucursales…</FilaVacia>
-              ) : (
-                activas.map(s => (
-                  <Fila key={s.id} seleccionada={editando?.id === s.id}>
-                    <Td className="font-medium">{s.name}</Td>
-                    <Td apagado className="whitespace-normal">{s.address || '—'}</Td>
-                    <Td apagado>{s.phone || '—'}</Td>
-                    <Td apagado>{MODOS.find(([v]) => v === (s.businessMode || ''))?.[1] || s.businessMode}</Td>
-                    <Td alinear="der">
-                      <div className="flex justify-end gap-1">
-                        <Boton tamano="sm" onClick={() => editar(s)}>Editar</Boton>
-                        <Boton tamano="sm" variante="peligro" onClick={() => eliminar(s.id)}>Eliminar</Boton>
-                      </div>
-                    </Td>
-                  </Fila>
-                ))
-              )}
-            </tbody>
-          </Tabla>
-        </div>
-
-        {/* Formulario */}
-        <div className="space-y-3 border-t border-gray-200 pt-4">
-          <p className="text-[12.5px] font-medium text-gray-900">{editando ? `Editar ${editando.name}` : 'Nueva sucursal adicional'}</p>
-          <Campo etiqueta="Nombre">
-            <Entrada value={form.name} onChange={e => set('name', e.target.value)} placeholder="Tienda Centro, Sucursal Norte…" />
-          </Campo>
-          <Campo etiqueta="Dirección" ayuda="Sale en los comprobantes.">
-            <Entrada value={form.address} onChange={e => set('address', e.target.value)} />
-          </Campo>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Campo etiqueta="Teléfono"><Entrada value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="01-1234567" /></Campo>
-            <Campo etiqueta="Correo"><Entrada type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="sucursal@empresa.com" /></Campo>
-            <Campo etiqueta="Ciudad"><Entrada value={form.location} onChange={e => set('location', e.target.value)} placeholder="Lima, Arequipa…" /></Campo>
-          </div>
-          <div>
-            <p className="mb-1 text-[12px] font-medium text-gray-700">Ubigeo (para guías de remisión){form.ubigeo ? <span className="ml-2 font-normal text-gray-500">{form.ubigeo}</span> : null}</p>
-            <div className="grid grid-cols-3 gap-2">
-              <Selector value={form.department} onChange={e => cambiarUbigeo('department', e.target.value)}>
-                <option value="">Departamento</option>
-                {DEPARTAMENTOS.map(d => <option key={d.code} value={d.code}>{d.name}</option>)}
-              </Selector>
-              <Selector value={form.province} onChange={e => cambiarUbigeo('province', e.target.value)} disabled={!form.department}>
-                <option value="">Provincia</option>
-                {provincias.map(p => <option key={p.code} value={p.code}>{p.name}</option>)}
-              </Selector>
-              <Selector value={form.district} onChange={e => cambiarUbigeo('district', e.target.value)} disabled={!form.province}>
-                <option value="">Distrito</option>
-                {distritos.map(d => <option key={d.code} value={d.code}>{d.name}</option>)}
-              </Selector>
-            </div>
-          </div>
-          <Campo etiqueta="Modo de negocio (plantilla)" ayuda="Menú y pantallas cuando esta sucursal está activa. En «Heredar» usa el modo general del negocio.">
-            <Selector value={form.businessMode || ''} onChange={e => set('businessMode', e.target.value)}>
-              {MODOS.map(([v, n]) => <option key={v} value={v}>{n}</option>)}
-            </Selector>
-          </Campo>
-          {!editando && sucursales.length > 0 && (
-            <Casilla etiqueta="Marcar como sucursal por defecto" checked={form.isDefault} onChange={e => set('isDefault', e.target.checked)} />
+        {/* Una tarjeta por sucursal. Al editar, la MISMA tarjeta se abre en
+            campos: nada de un formulario aparte al final del modal. */}
+        <div className="space-y-2">
+          {editandoPrincipal ? (
+            <TarjetaEditor
+              titulo={`${principal.name} · principal`}
+              nota="Son los datos del negocio: los mismos que salen en sus comprobantes y que el dueño ve en su Configuración."
+              esPrincipal
+              form={form}
+              set={set}
+              cambiarUbigeo={cambiarUbigeo}
+              provincias={provincias}
+              distritos={distritos}
+              guardando={guardando}
+              onGuardar={guardarPrincipal}
+              onCancelar={cerrarFormulario}
+            />
+          ) : (
+            <TarjetaSucursal
+              nombre={principal.name}
+              esPrincipal
+              direccion={principal.address}
+              telefono={principal.phone}
+              ubicacion={[principal.district, principal.province, principal.department].filter(Boolean).join(' · ')}
+              modo="Del negocio"
+              nota="Usa las series globales del negocio"
+              onEditar={editarPrincipal}
+            />
           )}
-          <div className="flex justify-end gap-2">
-            {editando && <Boton onClick={() => { setEditando(null); setForm(FORM_VACIO) }}>Cancelar</Boton>}
-            <Boton variante="primario" onClick={guardarSucursal} disabled={guardando || !form.name.trim()}>
-              {guardando ? 'Guardando…' : editando ? 'Guardar cambios' : 'Crear sucursal'}
+
+          {cargando ? (
+            <p className="text-[12.5px] text-gray-500 py-3">Cargando sucursales…</p>
+          ) : (
+            activas.map(su => (
+              editando?.id === su.id ? (
+                <TarjetaEditor
+                  key={su.id}
+                  titulo={`Editar ${su.name}`}
+                  form={form}
+                  set={set}
+                  cambiarUbigeo={cambiarUbigeo}
+                  provincias={provincias}
+                  distritos={distritos}
+                  guardando={guardando}
+                  onGuardar={guardarSucursal}
+                  onCancelar={cerrarFormulario}
+                />
+              ) : (
+                <TarjetaSucursal
+                  key={su.id}
+                  nombre={su.name}
+                  direccion={su.address}
+                  telefono={su.phone}
+                  correo={su.email}
+                  ubicacion={su.location}
+                  modo={MODOS.find(([v]) => v === (su.businessMode || ''))?.[1] || su.businessMode}
+                  onEditar={() => editar(su)}
+                  onEliminar={() => eliminar(su.id)}
+                />
+              )
+            ))
+          )}
+
+          {/* La nueva sucursal es otra tarjeta mas, al final de la lista. */}
+          {creando && (
+            <TarjetaEditor
+              titulo="Nueva sucursal"
+              nota="Al crearla se generan sus series de documentos (F001, B001…), correlativas a las anteriores."
+              form={form}
+              set={set}
+              cambiarUbigeo={cambiarUbigeo}
+              provincias={provincias}
+              distritos={distritos}
+              guardando={guardando}
+              onGuardar={guardarSucursal}
+              onCancelar={cerrarFormulario}
+              extra={sucursales.length > 0 && (
+                <Casilla etiqueta="Marcar como sucursal por defecto" checked={form.isDefault} onChange={e => set('isDefault', e.target.checked)} />
+              )}
+            />
+          )}
+
+          {!cargando && !formAbierto && (
+            <Boton
+              variante="primario"
+              onClick={() => { setEditando(null); setEditandoPrincipal(false); setForm(FORM_VACIO); setCreando(true) }}
+            >
+              Agregar sucursal
             </Boton>
-          </div>
-          <p className="text-[11.5px] text-gray-500">
-            Al crear una sucursal se generan sus series de documentos (F001, B001…), correlativas a las anteriores.
-          </p>
+          )}
         </div>
       </div>
     </Modal>
+  )
+}
+
+/**
+ * Una sucursal como bloque, no como fila de tabla.
+ *
+ * En la tabla, la direccion larga y el aviso de las series partian el texto en
+ * cinco lineas y empujaban los botones fuera del modal. Aca cada dato tiene su
+ * etiqueta y el ancho no pelea con nada.
+ */
+function TarjetaSucursal({ nombre, esPrincipal = false, direccion, telefono, correo, ubicacion, modo, nota, editando = false, onEditar, onEliminar }) {
+  const datos = [
+    ['Dirección', direccion],
+    ['Teléfono', telefono],
+    ['Correo', correo],
+    ['Ubicación', ubicacion],
+    ['Modo', modo],
+  ].filter(([, v]) => v)
+
+  return (
+    <div className={`rounded-md border p-3 ${editando ? 'border-primary-500 bg-primary-50' : 'border-gray-200 bg-white'}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[13px] font-medium text-gray-900 truncate">
+            {nombre}
+            {esPrincipal && <span className="ml-1.5 text-[11.5px] font-normal text-gray-400">· principal</span>}
+          </p>
+          {nota && <p className="text-[11.5px] text-gray-500">{nota}</p>}
+        </div>
+        <div className="flex shrink-0 gap-1">
+          <Boton tamano="sm" onClick={onEditar}>Editar</Boton>
+          {onEliminar && <Boton tamano="sm" variante="peligro" onClick={onEliminar}>Eliminar</Boton>}
+        </div>
+      </div>
+      {datos.length > 0 && (
+        <dl className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
+          {datos.map(([etiqueta, valor]) => (
+            <div key={etiqueta} className="flex gap-2 text-[12px] min-w-0">
+              <dt className="w-20 shrink-0 text-gray-500">{etiqueta}</dt>
+              <dd className="min-w-0 flex-1 text-gray-900 break-words">{valor}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </div>
+  )
+}
+
+/**
+ * La misma tarjeta, pero abierta en campos.
+ *
+ * Editar ocurre DONDE esta la sucursal, no en un formulario al final del modal:
+ * asi se ve cual se esta tocando y el boton de guardar queda al lado de lo que
+ * se cambio, no debajo del borde de la ventana.
+ */
+function TarjetaEditor({ titulo, nota, esPrincipal = false, form, set, cambiarUbigeo, provincias, distritos, guardando, onGuardar, onCancelar, extra }) {
+  return (
+    <div className="rounded-md border border-primary-500 bg-primary-50 p-3 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[13px] font-medium text-gray-900 truncate">{titulo}</p>
+          {nota && <p className="text-[11.5px] text-gray-500">{nota}</p>}
+        </div>
+        <div className="flex shrink-0 gap-1">
+          <Boton tamano="sm" onClick={onCancelar}>Cancelar</Boton>
+          <Boton tamano="sm" variante="primario" onClick={onGuardar} disabled={guardando || !form.name.trim()}>
+            {guardando ? 'Guardando…' : 'Guardar'}
+          </Boton>
+        </div>
+      </div>
+
+      <Campo etiqueta="Nombre">
+        <Entrada autoFocus value={form.name} onChange={e => set('name', e.target.value)} placeholder="Tienda Centro, Sucursal Norte…" />
+      </Campo>
+      <Campo etiqueta="Dirección" ayuda="Sale en los comprobantes.">
+        <Entrada value={form.address} onChange={e => set('address', e.target.value)} />
+      </Campo>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <Campo etiqueta="Teléfono"><Entrada value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="01-1234567" /></Campo>
+        {!esPrincipal && (
+          <Campo etiqueta="Correo"><Entrada type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="sucursal@empresa.com" /></Campo>
+        )}
+        {!esPrincipal && (
+          <Campo etiqueta="Ciudad"><Entrada value={form.location} onChange={e => set('location', e.target.value)} placeholder="Lima, Arequipa…" /></Campo>
+        )}
+      </div>
+      <div>
+        <p className="mb-1 text-[12px] font-medium text-gray-700">
+          Ubigeo (para guías de remisión){form.ubigeo ? <span className="ml-2 font-normal text-gray-500">{form.ubigeo}</span> : null}
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <Selector value={form.department} onChange={e => cambiarUbigeo('department', e.target.value)}>
+            <option value="">Departamento</option>
+            {DEPARTAMENTOS.map(d => <option key={d.code} value={d.code}>{d.name}</option>)}
+          </Selector>
+          <Selector value={form.province} onChange={e => cambiarUbigeo('province', e.target.value)} disabled={!form.department}>
+            <option value="">Provincia</option>
+            {provincias.map(pr => <option key={pr.code} value={pr.code}>{pr.name}</option>)}
+          </Selector>
+          <Selector value={form.district} onChange={e => cambiarUbigeo('district', e.target.value)} disabled={!form.province}>
+            <option value="">Distrito</option>
+            {distritos.map(d => <option key={d.code} value={d.code}>{d.name}</option>)}
+          </Selector>
+        </div>
+      </div>
+      {!esPrincipal && (
+        <Campo etiqueta="Modo de negocio (plantilla)" ayuda="Menú y pantallas cuando esta sucursal está activa. En «Heredar» usa el modo general del negocio.">
+          <Selector value={form.businessMode || ''} onChange={e => set('businessMode', e.target.value)}>
+            {MODOS.map(([v, n]) => <option key={v} value={v}>{n}</option>)}
+          </Selector>
+        </Campo>
+      )}
+      {extra}
+    </div>
   )
 }

@@ -278,8 +278,13 @@ export default function SunatModal({ cuenta, onClose, onGuardado }) {
           <Campo etiqueta="Método de emisión">
             <Selector value={form.emissionMethod} onChange={e => set('emissionMethod', e.target.value)}>
               <option value="none">Sin configurar</option>
-              <option value="qpse">QPse (500 documentos al mes)</option>
-              <option value="sunat_direct">SUNAT directo (ilimitado)</option>
+              {/* El metodo dice QUIEN firma, no cuantos comprobantes entran:
+                  el tope del mes es `limits.maxInvoicesPerMonth`, que viene del
+                  PLAN (100 el basico, 1000 el mensual…) y se cambia desde la
+                  ficha. Decir "QPse (500 al mes)" mezclaba las dos cosas y
+                  ademas era falso para casi todos los planes. */}
+              <option value="qpse">QPse (firma nuestro proveedor)</option>
+              <option value="sunat_direct">SUNAT directo (con su propio certificado)</option>
             </Selector>
           </Campo>
 

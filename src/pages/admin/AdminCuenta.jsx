@@ -27,12 +27,19 @@ import {
 // pagina, con las acciones a mano. Reemplaza al modal de "Detalles del
 // usuario" y a los modales sueltos de la lista.
 
-const ESTADOS = { active: 'Activa', trial: 'En trial', suspended: 'Suspendida', expired: 'Vencida' }
+const ESTADOS = { active: 'Activa', suspended: 'Suspendida', expired: 'Vencida' }
 const MODOS = {
   retail: 'Retail', restaurant: 'Restaurante', pharmacy: 'Farmacia', real_estate: 'Inmobiliaria',
   transport: 'Transporte', hotel: 'Hotel', veterinary: 'Veterinaria', logistics: 'Logística', lending: 'Préstamos',
 }
-const REGIMENES = { standard: 'IGV 18 %', reduced: 'IGV reducido 10,5 % (Ley 31556)', exempt: 'Exonerado (Ley 27037)', nrus: 'NRUS' }
+// Se nombra el regimen y despues la tasa: lo que distingue a una cuenta es
+// estar en Amazonia o ser NRUS, no el numero suelto.
+const REGIMENES = {
+  standard: 'General · IGV 18 %',
+  reduced: 'Restaurantes · IGV 10,5 % (Ley 31556)',
+  exempt: 'Amazonía · exonerado (Ley 27037)',
+  nrus: 'NRUS · Nuevo RUS',
+}
 const METODOS = { qpse: 'QPse', sunat_direct: 'SUNAT directo', none: 'Sin configurar' }
 const TIPOS_DOC = { factura: 'Facturas', boleta: 'Boletas', nota_venta: 'Notas de venta', nota_credito: 'Notas de crédito', nota_debito: 'Notas de débito' }
 
@@ -453,6 +460,32 @@ export default function AdminCuenta() {
       </div>
 
       <Seccion titulo={`Sucursales (${sucursalesActivas.length + 1})`} sinRelleno acciones={<Boton tamano="sm" onClick={() => setModal('sucursales')}>Gestionar</Boton>}>
+        {/* En el celular, tarjetas: una tabla de cinco columnas obliga a
+            desplazar de lado para leer una sola fila. */}
+        <div className="sm:hidden divide-y divide-gray-100">
+          <FichaEnTarjeta
+            titulo={`${c.mainBranchName || 'Sucursal Principal'} · principal`}
+            datos={[
+              ['Dirección', c.address],
+              ['Teléfono', c.phone],
+              ['Modo', MODOS[c.businessMode] || c.businessMode],
+              ['Creada', fecha(c.createdAt)],
+            ]}
+          />
+          {sucursalesActivas.map(s => (
+            <FichaEnTarjeta
+              key={s.id}
+              titulo={s.name}
+              datos={[
+                ['Dirección', s.address],
+                ['Teléfono', s.phone],
+                ['Modo', s.businessMode ? MODOS[s.businessMode] || s.businessMode : 'Hereda'],
+                ['Creada', fecha(s.createdAt)],
+              ]}
+            />
+          ))}
+        </div>
+        <div className="hidden sm:block">
         <Tabla>
           <thead>
             <tr>
@@ -482,10 +515,26 @@ export default function AdminCuenta() {
             ))}
           </tbody>
         </Tabla>
+        </div>
       </Seccion>
 
       {c.subUsers.length > 0 && (
         <Seccion titulo={`Sub-usuarios (${c.subUsers.length})`} sinRelleno>
+          <div className="sm:hidden divide-y divide-gray-100">
+            {c.subUsers.map(u => (
+              <FichaEnTarjeta
+                key={u.id}
+                titulo={u.displayName || u.email}
+                estado={<Estado valor={u.isActive ? 'active' : 'inactive'} etiqueta={u.isActive ? 'Activo' : 'Inactivo'} />}
+                datos={[
+                  ['Correo', u.email],
+                  ['Páginas', u.allowedPages.length],
+                  ['Creado', fecha(u.createdAt)],
+                ]}
+              />
+            ))}
+          </div>
+          <div className="hidden sm:block">
           <Tabla>
             <thead>
               <tr>
@@ -508,10 +557,30 @@ export default function AdminCuenta() {
               ))}
             </tbody>
           </Tabla>
+          </div>
         </Seccion>
       )}
 
       <Seccion titulo={`Pagos (${c.paymentHistory.length})`} sinRelleno>
+        <div className="sm:hidden divide-y divide-gray-100">
+          {c.paymentHistory.length === 0 && (
+            <p className="px-4 py-6 text-center text-[12.5px] text-gray-500">Todavía no hay pagos registrados</p>
+          )}
+          {[...c.paymentHistory].reverse().map((p, i) => (
+            <FichaEnTarjeta
+              key={i}
+              titulo={moneda(p.amount)}
+              estado={<Estado valor={p.status || 'completed'} etiqueta={p.status === 'pending' ? 'Pendiente' : p.status === 'failed' ? 'Fallido' : 'Completado'} />}
+              datos={[
+                ['Fecha', fechaHora(p.date)],
+                ['Plan', p.planName || (p.plan && (PLANS[p.plan]?.name || customPlans[p.plan]?.name)) || p.plan],
+                ['Duración', p.months ? `${p.months} ${p.months === 1 ? 'mes' : 'meses'}` : null],
+                ['Método', p.method],
+              ]}
+            />
+          ))}
+        </div>
+        <div className="hidden sm:block">
         <Tabla>
           <thead>
             <tr>
@@ -537,9 +606,21 @@ export default function AdminCuenta() {
             ))}
           </tbody>
         </Tabla>
+        </div>
       </Seccion>
 
       <Seccion titulo="Historial" descripcion="Todo lo fechado que se sabe de la cuenta, de lo más reciente a lo más antiguo." sinRelleno>
+        <div className="sm:hidden divide-y divide-gray-100">
+          {historial.length === 0 && <p className="px-4 py-6 text-center text-[12.5px] text-gray-500">Sin eventos</p>}
+          {historial.map((e, i) => (
+            <div key={i} className="px-4 py-2.5">
+              <p className="text-[12.5px] font-medium text-gray-900">{e.evento}</p>
+              <p className="text-[11.5px] text-gray-500">{fechaHora(e.fecha)}</p>
+              {e.detalle && <p className="mt-0.5 text-[12px] text-gray-600 break-words">{e.detalle}</p>}
+            </div>
+          ))}
+        </div>
+        <div className="hidden sm:block">
         <Tabla>
           <tbody>
             {historial.length === 0 && <FilaVacia colSpan={3}>Sin eventos</FilaVacia>}
@@ -552,6 +633,7 @@ export default function AdminCuenta() {
             ))}
           </tbody>
         </Tabla>
+        </div>
       </Seccion>
 
       <Seccion titulo="Notas internas" descripcion="Solo las ve el equipo de Cobrify.">
@@ -585,5 +667,34 @@ export default function AdminCuenta() {
       {modal === 'vendedor' && <AsignarVendedorModal cuenta={c} vendedores={vendedores} onClose={cerrarModal} onGuardado={cambios => parchar(cambios)} />}
       {modal === 'eliminar' && <EliminarCuentaModal cuenta={c} onClose={cerrarModal} onEliminada={() => navigate('/app/admin/users')} />}
     </Pagina>
+  )
+}
+
+/**
+ * Una fila de tabla convertida en tarjeta, para el celular.
+ *
+ * Las secciones de la ficha tienen de cinco a seis columnas; en un telefono eso
+ * es desplazarse de lado para leer un solo renglon. Aca cada dato lleva su
+ * etiqueta y lo que no tiene valor no ocupa linea.
+ */
+function FichaEnTarjeta({ titulo, estado, datos }) {
+  const llenos = datos.filter(([, v]) => v !== null && v !== undefined && v !== '')
+  return (
+    <div className="px-4 py-2.5">
+      <div className="flex items-start justify-between gap-2">
+        <p className="min-w-0 flex-1 text-[12.5px] font-medium text-gray-900 break-words">{titulo}</p>
+        {estado && <span className="shrink-0 text-[11.5px]">{estado}</span>}
+      </div>
+      {llenos.length > 0 && (
+        <dl className="mt-1 space-y-0.5">
+          {llenos.map(([etiqueta, valor]) => (
+            <div key={etiqueta} className="flex gap-2 text-[11.5px]">
+              <dt className="w-20 shrink-0 text-gray-500">{etiqueta}</dt>
+              <dd className="min-w-0 flex-1 text-gray-700 break-words">{valor}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </div>
   )
 }
