@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
-import { BarChart3, Search, Loader2, ArrowUpFromLine, ArrowDownToLine, HardHat, Package, CheckCircle, AlertTriangle, XCircle, ChevronDown, ChevronUp, Download, Calendar } from 'lucide-react'
+import { BarChart3, Search, Loader2, ArrowUpFromLine, ArrowDownToLine, HardHat, Package, CheckCircle, AlertTriangle, XCircle, ChevronDown, ChevronUp, Download, Calendar, ShoppingCart } from 'lucide-react'
 import Card, { CardContent } from '@/components/ui/Card'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { getWarehouseExits } from '@/services/warehouseExitService'
 import { getWarehouseReturns } from '@/services/warehouseReturnService'
 import { getProjects } from '@/services/projectService'
+import { getPurchases } from '@/services/firestoreService'
+import { formatCurrency } from '@/lib/utils'
 
 export default function LogisticsReports() {
   const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
@@ -14,6 +16,7 @@ export default function LogisticsReports() {
   const [exits, setExits] = useState([])
   const [returns, setReturns] = useState([])
   const [projects, setProjects] = useState([])
+  const [purchases, setPurchases] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
   const [filterProject, setFilterProject] = useState('all')
@@ -33,18 +36,25 @@ export default function LogisticsReports() {
         setExits(demoData?.warehouseExits || [])
         setReturns(demoData?.warehouseReturns || [])
         setProjects(demoData?.projects || [])
+        setPurchases(demoData?.purchases || [])
         setIsLoading(false)
         return
       }
       const businessId = getBusinessId()
-      const [exitsResult, returnsResult, projectsResult] = await Promise.all([
+      const [exitsResult, returnsResult, projectsResult, purchasesResult] = await Promise.all([
         getWarehouseExits(businessId),
         getWarehouseReturns(businessId),
         getProjects(businessId),
+        getPurchases(businessId),
       ])
       if (exitsResult.success) setExits(exitsResult.data || [])
       if (returnsResult.success) setReturns(returnsResult.data || [])
       if (projectsResult.success) setProjects(projectsResult.data || [])
+      // Solo las compras ASIGNADAS a una obra. Las generales —oficina, flota—
+      // no son de nadie y sumarlas inflaria el costo de alguna obra.
+      if (purchasesResult.success) {
+        setPurchases((purchasesResult.data || []).filter(c => c.projectId))
+      }
     } catch (error) {
       console.error('Error:', error)
     } finally {
@@ -78,6 +88,7 @@ export default function LogisticsReports() {
 
   const filteredExits = filterByDate(filterProject === 'all' ? exits : exits.filter(e => e.projectId === filterProject))
   const filteredReturns = filterByDate(filterProject === 'all' ? returns : returns.filter(r => r.projectId === filterProject))
+  const filteredPurchases = filterByDate(filterProject === 'all' ? purchases : purchases.filter(c => c.projectId === filterProject))
 
   // ===== STATS GENERALES =====
   const generalStats = useMemo(() => {
@@ -88,8 +99,15 @@ export default function LogisticsReports() {
     const totalLost = filteredReturns.reduce((s, r) => s + (r.lostItems || 0), 0)
     const pendingInField = totalExitItems - totalReturnItems
 
-    return { totalExitItems, totalReturnItems, totalGood, totalDamaged, totalLost, pendingInField }
-  }, [filteredExits, filteredReturns])
+    // Lo COMPRADO para obras: unidades y plata. Es la primera punta del
+    // circuito —comprado, enviado, devuelto— y sin ella no hay saldo.
+    const totalBoughtItems = filteredPurchases.reduce(
+      (s, c) => s + (c.items || []).reduce((n, it) => n + (Number(it.quantity) || 0), 0), 0)
+    const totalBoughtAmount = filteredPurchases.reduce((s, c) => s + (Number(c.total) || 0), 0)
+
+    return { totalExitItems, totalReturnItems, totalGood, totalDamaged, totalLost, pendingInField,
+             totalBoughtItems, totalBoughtAmount }
+  }, [filteredExits, filteredReturns, filteredPurchases])
 
   // ===== DATOS POR PROYECTO =====
   const projectStats = useMemo(() => {
@@ -106,8 +124,32 @@ export default function LogisticsReports() {
         damagedItems: 0,
         lostItems: 0,
         pendingInField: 0,
+        purchases: 0,
+        boughtItems: 0,
+        boughtAmount: 0,
         productDetails: {},
       }
+    })
+
+    // Lo COMPRADO para cada obra. Va primero porque es el punto de partida:
+    // todo lo demas —enviar, devolver— pasa despues.
+    filteredPurchases.forEach(compra => {
+      if (!stats[compra.projectId]) return
+      const s2 = stats[compra.projectId]
+      s2.purchases++
+      s2.boughtAmount += Number(compra.total) || 0
+      compra.items?.forEach(item => {
+        const cantidad = Number(item.quantity) || 0
+        s2.boughtItems += cantidad
+        const key = item.productId || item.productName
+        if (!s2.productDetails[key]) {
+          s2.productDetails[key] = {
+            name: item.productName, code: item.productCode,
+            bought: 0, sent: 0, returnedGood: 0, returnedDamaged: 0, lost: 0,
+          }
+        }
+        s2.productDetails[key].bought += cantidad
+      })
     })
 
     filteredExits.forEach(exit => {
@@ -119,7 +161,7 @@ export default function LogisticsReports() {
         if (!stats[exit.projectId].productDetails[key]) {
           stats[exit.projectId].productDetails[key] = {
             name: item.productName, code: item.productCode,
-            sent: 0, returnedGood: 0, returnedDamaged: 0, lost: 0,
+            bought: 0, sent: 0, returnedGood: 0, returnedDamaged: 0, lost: 0,
           }
         }
         stats[exit.projectId].productDetails[key].sent += item.quantity
@@ -138,7 +180,7 @@ export default function LogisticsReports() {
         if (!stats[ret.projectId].productDetails[key]) {
           stats[ret.projectId].productDetails[key] = {
             name: item.productName, code: item.productCode,
-            sent: 0, returnedGood: 0, returnedDamaged: 0, lost: 0,
+            bought: 0, sent: 0, returnedGood: 0, returnedDamaged: 0, lost: 0,
           }
         }
         if (item.condition === 'good') stats[ret.projectId].productDetails[key].returnedGood += item.quantity
@@ -155,14 +197,24 @@ export default function LogisticsReports() {
       })
     })
 
-    return Object.values(stats).filter(s => s.exits > 0 || s.returns > 0)
-  }, [projects, filteredExits, filteredReturns])
+    // Sin enviar: lo que se compro para la obra y todavia esta en el almacen.
+    Object.values(stats).forEach(s2 => {
+      Object.values(s2.productDetails).forEach(pd => {
+        pd.notSent = (pd.bought || 0) - pd.sent
+      })
+    })
+
+    // Una obra con compras pero sin movimientos todavia tambien cuenta: es
+    // justo la que hay que mirar para saber que queda por despachar.
+    return Object.values(stats).filter(s => s.exits > 0 || s.returns > 0 || s.purchases > 0)
+  }, [projects, filteredExits, filteredReturns, filteredPurchases])
 
   // ===== HISTORIAL COMBINADO =====
   const timeline = useMemo(() => {
     const all = [
       ...filteredExits.map(e => ({ ...e, _type: 'exit' })),
       ...filteredReturns.map(r => ({ ...r, _type: 'return' })),
+      ...filteredPurchases.map(c => ({ ...c, _type: 'purchase' })),
     ]
     all.sort((a, b) => {
       const dA = toDate(a.createdAt)?.getTime() || 0
@@ -170,7 +222,7 @@ export default function LogisticsReports() {
       return dB - dA
     })
     return all
-  }, [filteredExits, filteredReturns])
+  }, [filteredExits, filteredReturns, filteredPurchases])
 
   const tabs = [
     { id: 'overview', label: 'Resumen General' },
@@ -367,6 +419,11 @@ export default function LogisticsReports() {
                               {ps.project.code && <span className="text-xs text-indigo-600 font-mono">({ps.project.code})</span>}
                             </div>
                             <div className="flex flex-wrap gap-3 mt-1 text-xs">
+                              {ps.boughtItems > 0 && (
+                                <span className="text-emerald-700">
+                                  {ps.boughtItems} comprados · {formatCurrency(ps.boughtAmount)}
+                                </span>
+                              )}
                               <span className="text-indigo-600">{ps.exitItems} enviados</span>
                               <span className="text-blue-600">{ps.returnItems} retornados</span>
                               <span className="font-bold text-amber-600">{ps.pendingInField} en obra</span>
@@ -386,11 +443,15 @@ export default function LogisticsReports() {
                               <thead>
                                 <tr className="text-xs text-gray-500 border-b">
                                   <th className="text-left py-2">Producto</th>
+                                  <th className="text-center py-2">Comprados</th>
                                   <th className="text-center py-2">Enviados</th>
                                   <th className="text-center py-2">Ret. OK</th>
                                   <th className="text-center py-2">Dañados</th>
                                   <th className="text-center py-2">Perdidos</th>
                                   <th className="text-center py-2 font-bold">En obra</th>
+                                  {/* Lo comprado para la obra que todavia no salio del almacen:
+                                      es el "sobrante" que pidio ECOQORIS. */}
+                                  <th className="text-center py-2">Sin enviar</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -400,11 +461,13 @@ export default function LogisticsReports() {
                                       <span className="font-medium text-gray-900">{pd.name}</span>
                                       {pd.code && <span className="text-xs text-gray-500 font-mono ml-1">{pd.code}</span>}
                                     </td>
+                                    <td className="py-2 text-center text-emerald-700">{pd.bought || 0}</td>
                                     <td className="py-2 text-center text-indigo-600">{pd.sent}</td>
                                     <td className="py-2 text-center text-green-600">{pd.returnedGood}</td>
                                     <td className="py-2 text-center text-yellow-600">{pd.returnedDamaged}</td>
                                     <td className="py-2 text-center text-red-600">{pd.lost}</td>
                                     <td className="py-2 text-center font-bold text-amber-600">{pd.pending}</td>
+                                    <td className="py-2 text-center text-gray-600">{pd.notSent}</td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -429,28 +492,48 @@ export default function LogisticsReports() {
               ) : (
                 timeline.map(mov => {
                   const isExit = mov._type === 'exit'
+                  const isCompra = mov._type === 'purchase'
+                  // Una compra es el PRIMER movimiento de la obra: entra material.
+                  // Sus campos son otros (no tiene number ni userName; el "quién" es
+                  // el proveedor y las unidades salen de los items).
+                  const unidades = isCompra
+                    ? (mov.items || []).reduce((n2, it) => n2 + (Number(it.quantity) || 0), 0)
+                    : (mov.totalItems || 0)
                   return (
                     <div key={mov.id} className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50">
-                      <div className={`p-2 rounded-full flex-shrink-0 ${isExit ? 'bg-indigo-100' : 'bg-blue-100'}`}>
-                        {isExit
-                          ? <ArrowUpFromLine className="w-4 h-4 text-indigo-600" />
-                          : <ArrowDownToLine className="w-4 h-4 text-blue-600" />
+                      <div className={`p-2 rounded-full flex-shrink-0 ${isCompra ? 'bg-emerald-100' : isExit ? 'bg-indigo-100' : 'bg-blue-100'}`}>
+                        {isCompra
+                          ? <ShoppingCart className="w-4 h-4 text-emerald-700" />
+                          : isExit
+                            ? <ArrowUpFromLine className="w-4 h-4 text-indigo-600" />
+                            : <ArrowDownToLine className="w-4 h-4 text-blue-600" />
                         }
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           {mov.number && <span className="text-xs font-mono text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">{mov.number}</span>}
-                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${isExit ? 'bg-indigo-100 text-indigo-700' : 'bg-blue-100 text-blue-700'}`}>
-                            {isExit ? 'Salida' : 'Retorno'}
+                          {isCompra && mov.invoiceNumber && (
+                            <span className="text-xs font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">{mov.invoiceNumber}</span>
+                          )}
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${isCompra ? 'bg-emerald-100 text-emerald-700' : isExit ? 'bg-indigo-100 text-indigo-700' : 'bg-blue-100 text-blue-700'}`}>
+                            {isCompra ? 'Compra' : isExit ? 'Salida' : 'Retorno'}
                           </span>
                           <span className="font-medium text-gray-900 text-sm truncate">{mov.projectName}</span>
                         </div>
                         <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-xs text-gray-500">
-                          <span>{mov.totalItems || 0} und · {mov.items?.length || 0} productos</span>
-                          <span>{mov.warehouseName}</span>
-                          <span>{mov.userName}</span>
-                          {!isExit && mov.damagedItems > 0 && <span className="text-yellow-600">{mov.damagedItems} dañados</span>}
-                          {!isExit && mov.lostItems > 0 && <span className="text-red-600">{mov.lostItems} perdidos</span>}
+                          <span>{unidades} und · {mov.items?.length || 0} productos</span>
+                          {isCompra
+                            ? <>
+                                <span>{mov.supplier?.businessName || 'Sin proveedor'}</span>
+                                <span className="text-emerald-700">{formatCurrency(mov.total || 0)}</span>
+                              </>
+                            : <>
+                                <span>{mov.warehouseName}</span>
+                                <span>{mov.userName}</span>
+                              </>
+                          }
+                          {!isExit && !isCompra && mov.damagedItems > 0 && <span className="text-yellow-600">{mov.damagedItems} dañados</span>}
+                          {!isExit && !isCompra && mov.lostItems > 0 && <span className="text-red-600">{mov.lostItems} perdidos</span>}
                         </div>
                       </div>
                       <span className="text-xs text-gray-400 flex-shrink-0">{formatDate(mov.createdAt)}</span>
