@@ -353,3 +353,138 @@
     }
   }
 }
+
+/* ============================================================
+   MODO OSCURO DEL ADMIN
+   ============================================================
+   Solo dentro de `.admin.oscuro`: la app de negocios y el chat no se tocan.
+
+   POR QUE ASI Y NO CON `dark:` EN CADA CLASE. El admin usa unas sesenta clases
+   de color en treinta archivos; poner la variante oscura en cada una son mas de
+   mil ediciones a mano, y basta olvidar una para dejar texto blanco sobre fondo
+   blanco. Aca se retine la paleta en un solo lugar. Es viable porque el rediseno
+   dejo el admin con TRES colores —gris, azul y rojo— y esa lista es finita.
+
+   Si agregas una clase de color nueva en el admin, agregala tambien aca.
+   La regla de oro: `text-white` NO se toca, porque vive sobre botones de color.
+   ============================================================ */
+
+.admin.oscuro {
+  /* Grises: fondo de pagina, superficies y texto. */
+  --ad-fondo: #0E1117;
+  --ad-superficie: #161B22;
+  --ad-superficie-2: #1C232C;
+  --ad-superficie-3: #253039;
+  --ad-borde: #262D36;
+  --ad-borde-fuerte: #303945;
+  --ad-borde-suave: #1E242C;
+  --ad-texto: #E6EDF3;
+  --ad-texto-2: #C3CCD6;
+  --ad-texto-3: #A8B3BF;
+  --ad-texto-4: #8B96A3;
+  --ad-texto-5: #6E7883;
+
+  /* El azul y el rojo suben de luminosidad: los tonos claros del modo dia
+     desaparecen sobre un fondo oscuro. */
+  --ad-azul: #6AA1FF;
+  --ad-azul-suave: #14243D;
+  --ad-rojo: #FF8A7A;
+  --ad-rojo-suave: #3A1C18;
+  --ad-verde: #5DD39E;
+  --ad-ambar: #E0AC55;
+
+  color-scheme: dark;
+  background-color: var(--ad-fondo);
+  color: var(--ad-texto);
+}
+
+/* ---------- Fondos ---------- */
+.admin.oscuro .bg-white { background-color: var(--ad-superficie); }
+.admin.oscuro .bg-gray-50 { background-color: var(--ad-fondo); }
+.admin.oscuro .bg-gray-100 { background-color: var(--ad-superficie-2); }
+.admin.oscuro .bg-gray-200 { background-color: var(--ad-superficie-3); }
+/* gray-900 es el fondo de la pestaña activa, y lleva texto blanco encima: en
+   oscuro no puede ser casi negro o desaparece contra la pagina. */
+.admin.oscuro .bg-gray-900 { background-color: var(--ad-borde-fuerte); }
+.admin.oscuro .bg-white\/60 { background-color: rgb(22 27 34 / 0.6); }
+
+/* ---------- Texto ---------- */
+.admin.oscuro .text-gray-900 { color: var(--ad-texto); }
+.admin.oscuro .text-gray-800 { color: var(--ad-texto-2); }
+.admin.oscuro .text-gray-700 { color: var(--ad-texto-2); }
+.admin.oscuro .text-gray-600 { color: var(--ad-texto-3); }
+.admin.oscuro .text-gray-500 { color: var(--ad-texto-4); }
+.admin.oscuro .text-gray-400 { color: var(--ad-texto-5); }
+.admin.oscuro .text-gray-300 { color: var(--ad-texto-5); }
+
+/* ---------- Bordes ---------- */
+.admin.oscuro .border-gray-100 { border-color: var(--ad-borde-suave); }
+.admin.oscuro .border-gray-200 { border-color: var(--ad-borde); }
+.admin.oscuro .border-gray-300 { border-color: var(--ad-borde-fuerte); }
+.admin.oscuro .border-gray-900 { border-color: var(--ad-texto-4); }
+.admin.oscuro .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color: var(--ad-borde-suave); }
+.admin.oscuro .divide-gray-200 > :not([hidden]) ~ :not([hidden]) { border-color: var(--ad-borde); }
+
+/* ---------- Azul de marca ---------- */
+.admin.oscuro .bg-primary-50 { background-color: var(--ad-azul-suave); }
+.admin.oscuro .bg-primary-100 { background-color: #1B3155; }
+.admin.oscuro .text-primary-600,
+.admin.oscuro .text-primary-700,
+.admin.oscuro .text-primary-800,
+.admin.oscuro .text-primary-900 { color: var(--ad-azul); }
+.admin.oscuro .border-primary-300,
+.admin.oscuro .border-primary-400 { border-color: #2F5A9E; }
+
+/* ---------- Rojo: lo malo ---------- */
+.admin.oscuro .bg-red-50 { background-color: var(--ad-rojo-suave); }
+.admin.oscuro .bg-red-100 { background-color: #4A231E; }
+.admin.oscuro .text-red-500,
+.admin.oscuro .text-red-600,
+.admin.oscuro .text-red-700,
+.admin.oscuro .text-red-800,
+.admin.oscuro .text-red-900 { color: var(--ad-rojo); }
+.admin.oscuro .border-red-200 { border-color: #5A2A24; }
+
+/* ---------- Los pocos sueltos que quedaron ---------- */
+.admin.oscuro .bg-green-100 { background-color: #12332A; }
+.admin.oscuro .text-green-600,
+.admin.oscuro .text-green-700,
+.admin.oscuro .text-green-800,
+.admin.oscuro .text-green-900 { color: var(--ad-verde); }
+.admin.oscuro .bg-blue-100 { background-color: #14243D; }
+.admin.oscuro .bg-blue-200 { background-color: #1B3155; }
+.admin.oscuro .text-blue-600,
+.admin.oscuro .text-blue-700,
+.admin.oscuro .text-blue-800,
+.admin.oscuro .text-blue-900 { color: var(--ad-azul); }
+.admin.oscuro .bg-amber-50 { background-color: #33270F; }
+.admin.oscuro .text-amber-600,
+.admin.oscuro .text-amber-800 { color: var(--ad-ambar); }
+.admin.oscuro .border-amber-200 { border-color: #4A3A1A; }
+
+/* ---------- Formularios ---------- */
+.admin.oscuro input,
+.admin.oscuro select,
+.admin.oscuro textarea {
+  background-color: var(--ad-superficie-2);
+  border-color: var(--ad-borde-fuerte);
+  color: var(--ad-texto);
+}
+.admin.oscuro input::placeholder,
+.admin.oscuro textarea::placeholder { color: var(--ad-texto-5); }
+.admin.oscuro option { background-color: var(--ad-superficie-2); color: var(--ad-texto); }
+
+/* ---------- Graficos ----------
+   Recharts pinta la grilla y los ejes con los colores de chartTheme, que son
+   los del modo dia. Se retinen por CSS; el tooltip lleva estilo en linea, asi
+   que ahi hace falta !important. */
+.admin.oscuro .recharts-cartesian-grid line { stroke: var(--ad-borde); }
+.admin.oscuro .recharts-cartesian-axis-line,
+.admin.oscuro .recharts-cartesian-axis-tick-line { stroke: var(--ad-borde); }
+.admin.oscuro .recharts-text { fill: var(--ad-texto-4); }
+.admin.oscuro .recharts-default-tooltip {
+  background-color: var(--ad-superficie-2) !important;
+  border-color: var(--ad-borde-fuerte) !important;
+  color: var(--ad-texto);
+}
+.admin.oscuro .recharts-tooltip-item { color: var(--ad-texto-2) !important; }
