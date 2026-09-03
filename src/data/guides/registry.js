@@ -93,8 +93,9 @@ export const GUIDES = [
     title: 'Préstamos (Cartera)',
     category: 'Finanzas',
     description: 'Registrar préstamos, cobrar cuotas con desglose mora/interés/capital y entregar constancias.',
-    keywords: 'prestamos cartera prestar capital interes cuota fija solo interes mora modalidad diario semanal quincenal mensual constancia pago amortizar',
-    modos: ['lending'],
+    keywords: 'prestamos cartera prestar capital interes cuota fija solo interes mora modalidad diario semanal quincenal mensual constancia pago amortizar fiado',
+    // Tambien en restaurante, donde la cartera es un modulo opt-in.
+    modos: ['lending', 'restaurant'],
     load: () => import('./prestamos-cartera.js'),
   },
   {

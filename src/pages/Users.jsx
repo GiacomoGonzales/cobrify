@@ -125,7 +125,10 @@ export default function Users() {
   const isRestaurantMode = businessMode === 'restaurant'
 
   // Obtener páginas disponibles según el modo del negocio
-  const availablePages = getAvailablePagesByMode(businessMode, { obrasEnabled: businessSettings?.obrasEnabled === true })
+  const availablePages = getAvailablePagesByMode(businessMode, {
+    obrasEnabled: businessSettings?.obrasEnabled === true,
+    lendingEnabled: businessSettings?.lendingEnabled === true,
+  })
 
   // Agrupar páginas por categoría para mejor visualización
   const pagesByCategory = useMemo(() => {

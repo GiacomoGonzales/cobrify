@@ -277,10 +277,15 @@ export const LENDING_PAGES = [
  *   encendido: sus paginas (las mismas del modo Logistica) entran al catalogo
  *   de permisos. Sin esto, el dueno veia las paginas en su menu pero no podia
  *   dar acceso a ellas a un sub-usuario.
+ * @param {boolean} [opciones.lendingEnabled] Modulo de Prestamos encendido:
+ *   la cartera entra al catalogo de permisos, por la misma razon que obras.
  */
 export const getAvailablePagesByMode = (businessMode, opciones = {}) => {
+  // La cartera de prestamos es un MODULO opt-in, no un modo: se suma al
+  // catalogo del modo que la tenga encendida.
+  const prestamos = opciones.lendingEnabled ? LENDING_PAGES : []
   if (businessMode === 'restaurant') {
-    return [...COMMON_PAGES, ...RESTAURANT_PAGES]
+    return [...COMMON_PAGES, ...RESTAURANT_PAGES, ...prestamos]
   } else if (businessMode === 'pharmacy') {
     return [...COMMON_PAGES, ...PHARMACY_PAGES]
   } else if (businessMode === 'real_estate') {

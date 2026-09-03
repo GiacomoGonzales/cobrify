@@ -835,6 +835,18 @@ function Sidebar() {
           menuId: 'accounting',
         },
         {
+          // La MISMA cartera del modo Préstamos, ofrecida como módulo
+          // (opt-in lendingEnabled). Un restaurante que fía con intereses
+          // no tiene por qué migrar de modo para usarla: hacerlo le apaga
+          // Mesas, Órdenes y Cocina.
+          path: '/prestamos-cartera',
+          icon: HandCoins,
+          label: 'Préstamos',
+          pageId: 'lending',
+          requiresLending: true,
+          hideInDemo: true,
+        },
+        {
           path: '/meta-ads',
           icon: Facebook,
           label: 'Meta Ads',
@@ -2131,6 +2143,11 @@ function Sidebar() {
       // Modulo apagado por defecto: la mayoria de los negocios en modo General
       // no manda material a obras y no tiene por que ver estas paginas.
       if (businessSettings?.obrasEnabled !== true && !saltarFiltros) return false
+    }
+    if (item.requiresLending) {
+      // Apagado por defecto: la mayoría de los negocios no presta plata.
+      // Se enciende en Configuración > Preferencias.
+      if (businessSettings?.lendingEnabled !== true && !saltarFiltros) return false
     }
     if (item.requiresAppointments) {
       const appointmentsEnabled = businessSettings?.appointmentsEnabled === true

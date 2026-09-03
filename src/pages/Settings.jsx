@@ -514,6 +514,9 @@ export default function Settings() {
   // Obras y proyectos en modo General: reusa las paginas del modo Logistica
   // sin obligar al negocio a migrar de modo. Apagado por defecto.
   const [obrasEnabled, setObrasEnabled] = useState(false)
+  // Prestamos en modo Restaurante: misma idea, con la cartera del modo
+  // Prestamos. Apagado por defecto.
+  const [lendingEnabled, setLendingEnabled] = useState(false)
   // Aca vive lo que NOMBRA los niveles de precio. El CALCULO (base, formula y
   // porcentajes) se configura en Productos > Ajuste de precios, junto al ajuste
   // masivo: las dos cosas responden a de donde sale el numero de un precio.
@@ -1422,6 +1425,7 @@ export default function Settings() {
         setBranchPricingEnabled(businessData.branchPricingEnabled || false)
         setBranchCatalogEnabled(businessData.branchCatalogEnabled || false)
         setObrasEnabled(businessData.obrasEnabled === true)
+        setLendingEnabled(businessData.lendingEnabled === true)
         // Presentaciones y niveles de precio: `?? true` para reflejar el mismo
         // default que aplica AuthContext (encendidas si nunca se configuraron).
         // Con `|| false` el interruptor salía apagado mientras la función estaba
@@ -4059,6 +4063,26 @@ export default function Settings() {
                 )}
               </div>
 
+              {/* Préstamos a clientes. Es la cartera del modo Préstamos
+                  ofrecida como módulo: cambiar de modo le apagaría al
+                  restaurante Mesas, Órdenes y Cocina. */}
+              {businessMode === 'restaurant' && (
+                <>
+                  <div className="border-t border-gray-200"></div>
+                  <div>
+                    <SettingToggle
+                      id="opcion-lendingEnabled"
+                      checked={lendingEnabled}
+                      onChange={(e) => setLendingEnabled(e.target.checked)}
+                      title="Préstamos a clientes"
+                      description={lendingEnabled
+                        ? '✓ Habilitado: en Reportes & Finanzas aparece "Préstamos", para prestar dinero a tus clientes y cobrar en cuotas con intereses y mora. No cambia tu modo de negocio: Mesas, Órdenes y Cocina siguen igual.'
+                        : '✗ Deshabilitado: no se muestra la página de Préstamos. Actívalo si le prestas dinero a tus clientes y quieres llevar las cuotas, los intereses y la mora.'}
+                    />
+                  </div>
+                </>
+              )}
+
               {/* Obras y proyectos. Son las páginas del modo Logística
                   ofrecidas como módulo: migrar de modo haría perder GRE
                   Transportista, Cotizaciones y Emisión Masiva. */}
@@ -4842,6 +4866,7 @@ export default function Settings() {
                       // payload del botón de Ventas, así que "Guardar
                       // Preferencias" decía que sí y no guardaba nada de esto.
                       obrasEnabled: obrasEnabled,
+                      lendingEnabled: lendingEnabled,
                       hiddenOrderSources: hiddenOrderSources,
                       customOrderSources: customOrderSources,
                       metaAdsEnabled: metaAdsEnabled,
@@ -6455,6 +6480,7 @@ export default function Settings() {
                       branchPricingEnabled: branchPricingEnabled,
                       branchCatalogEnabled: branchCatalogEnabled,
                       obrasEnabled: obrasEnabled,
+                      lendingEnabled: lendingEnabled,
                       multiplePricesEnabled: multiplePricesEnabled,
                       priceLabels: priceLabels,
                       // OJO: pricePercentages, priceCalculationBase y marginFormula
