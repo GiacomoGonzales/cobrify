@@ -757,10 +757,22 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
       if (result.success) {
         setSupplierName(result.data.razonSocial || '')
         // El domicilio del proveedor es el punto de partida, igual que al crear.
-        aplicarUbigeoConsultado(result.data, setOriginDepartment, setOriginProvince, setOriginDistrict)
+        // El punto de PARTIDA en una compra, sin pisar lo que ya estuviera.
+        const ubigeoPartida = originDepartment
+          ? `${originDepartment}${originProvince || ''}${originDistrict || ''}`
+          : ''
+        if (sePuedeRellenar(ubigeoPartida, autoRellenado.current.partidaUbigeo)) {
+          const puesto = aplicarUbigeoConsultado(result.data, setOriginDepartment, setOriginProvince, setOriginDistrict)
+          if (puesto) autoRellenado.current.partidaUbigeo = String(result.data.ubigeo || '')
+        }
         if (result.data.direccion) {
+          // El domicilio fiscal se guarda siempre en los datos del proveedor; al
+          // punto de partida solo se propone.
           setSupplierAddress(result.data.direccion)
-          setOriginAddress(result.data.direccion)
+          if (sePuedeRellenar(originAddress, autoRellenado.current.partida)) {
+            setOriginAddress(result.data.direccion)
+            autoRellenado.current.partida = result.data.direccion
+          }
         }
         toast.success(`Datos encontrados: ${result.data.razonSocial}`)
       } else {
@@ -876,6 +888,127 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
     setDist(ubi.distrito)
     return true
   }
+
+  // Es una COMPRA si el motivo es 02. En una compra los roles se invierten: la
+  // mercadería sale del PROVEEDOR (punto de partida) y llega a MI local (punto
+  // de llegada), al revés que en una venta.
+  const isPurchase = transferReason === '02'
+
+  /**
+   * Lo último que el sistema rellenó solo en cada punto.
+   *
+   * Al EDITAR esto pesa más que al crear: los puntos vienen de una guía ya
+   * guardada y no se pisan nunca. Solo se completa lo que está vacío, o lo que
+   * autocompletamos nosotros durante esta misma edición —para que al cambiar
+   * de destinatario la dirección no se quede apuntando al anterior—.
+   */
+  const autoRellenado = useRef({ destino: '', destinoUbigeo: '', partida: '', partidaUbigeo: '' })
+
+  const sePuedeRellenar = (actual, marca) => !actual || actual === marca
+
+  // El punto que le toca al EMISOR según el motivo: partida en una venta,
+  // llegada en una compra. Cadena sucursal → negocio → domicilio fiscal del RUC.
+  //
+  // Se ejecuta al abrir y al cambiar el motivo, pero SOLO llena lo que esté
+  // vacío: una guía guardada manda sobre cualquier sugerencia.
+  useEffect(() => {
+    if (!isOpen) return
+
+    const completarPuntoDelEmisor = async () => {
+      const businessId = getBusinessId()
+      if (!businessId) return
+
+      const direccionActual = isPurchase ? destinationAddress : originAddress
+      const deptActual = isPurchase ? destinationDepartment : originDepartment
+      if (direccionActual && deptActual) return
+
+      const setAddr = isPurchase ? setDestinationAddress : setOriginAddress
+      const setDept = isPurchase ? setDestinationDepartment : setOriginDepartment
+      const setProv = isPurchase ? setDestinationProvince : setOriginProvince
+      const setDist = isPurchase ? setDestinationDistrict : setOriginDistrict
+
+      const ponerUbigeo = (ubigeo) => {
+        const { valid, departamento, provincia, distrito } = resolveUbigeoParts(ubigeo)
+        if (!valid) return false
+        setDept(departamento)
+        setProv(provincia)
+        setDist(distrito)
+        return true
+      }
+
+      // 1. Sucursal seleccionada
+      const sucursal = selectedBranchId ? branches.find(b => b.id === selectedBranchId) : null
+      if (sucursal) {
+        if (!direccionActual && sucursal.address) setAddr(sucursal.address)
+        if (!deptActual && ponerUbigeo(sucursal.ubigeo)) return
+        if (!direccionActual && sucursal.address && deptActual) return
+      }
+
+      // 2. Negocio principal
+      let datosNegocio = null
+      try {
+        const resultado = await getCompanySettings(businessId)
+        if (resultado.success && resultado.data) {
+          datosNegocio = resultado.data
+          if (!direccionActual && datosNegocio.address) setAddr(datosNegocio.address)
+          if (!deptActual && ponerUbigeo(datosNegocio.ubigeo)) return
+        }
+      } catch (error) {
+        console.error('Error al cargar la dirección del negocio:', error)
+      }
+
+      // 3. Domicilio fiscal del RUC — el piso. Sin esto el punto podía quedar
+      //    vacío y SUNAT rechaza la guía.
+      const rucEmisor = String(datosNegocio?.ruc || '').replace(/\D/g, '')
+      const faltaDireccion = !direccionActual && !datosNegocio?.address
+      const faltaUbigeo = !deptActual && !datosNegocio?.ubigeo
+      if (rucEmisor.length !== 11 || (!faltaDireccion && !faltaUbigeo)) return
+      try {
+        const consulta = await consultarRUC(rucEmisor)
+        if (consulta.success && consulta.data) {
+          if (faltaDireccion && consulta.data.direccion) setAddr(consulta.data.direccion)
+          if (faltaUbigeo) {
+            const ubi = codigosDeUbigeo(consulta.data)
+            if (ubi.departamento) {
+              setDept(ubi.departamento)
+              setProv(ubi.provincia)
+              setDist(ubi.distrito)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('No se pudo completar con el domicilio fiscal:', error)
+      }
+    }
+
+    completarPuntoDelEmisor()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, isPurchase, selectedBranchId, branches])
+
+  // El destinatario propone el punto de LLEGADA, solo en ventas: en una compra
+  // ese punto es mío y lo llena el efecto de arriba.
+  useEffect(() => {
+    if (!isOpen || isPurchase) return
+
+    const ubigeoDestinatario = recipientDepartment
+      ? `${recipientDepartment}${recipientProvince || ''}${recipientDistrict || ''}`
+      : ''
+    const ubigeoLlegada = destinationDepartment
+      ? `${destinationDepartment}${destinationProvince || ''}${destinationDistrict || ''}`
+      : ''
+
+    if (ubigeoDestinatario && sePuedeRellenar(ubigeoLlegada, autoRellenado.current.destinoUbigeo)) {
+      setDestinationDepartment(recipientDepartment)
+      setDestinationProvince(recipientProvince || '')
+      setDestinationDistrict(recipientDistrict || '')
+      autoRellenado.current.destinoUbigeo = ubigeoDestinatario
+    }
+    if (recipientAddress && sePuedeRellenar(destinationAddress, autoRellenado.current.destino)) {
+      setDestinationAddress(recipientAddress)
+      autoRellenado.current.destino = recipientAddress
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, isPurchase, recipientDepartment, recipientProvince, recipientDistrict, recipientAddress])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
