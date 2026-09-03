@@ -17,6 +17,7 @@ import {
   canPayOnline,
 } from '@/services/subscriptionService';
 import { getVendedorByLinkedUser, getVendedorClients } from '@/services/vendedorService';
+import { puedeVerHistorialDePagos } from '@/utils/subscriptionOwnership';
 import { useSubscriptionPaymentInfo } from '@/hooks/useSubscriptionPaymentInfo';
 import {
   CreditCard,
@@ -259,6 +260,17 @@ export default function MySubscription() {
   const daysRemaining = periodEnd ? differenceInDays(new Date(periodEnd), new Date()) : 0;
   const isActive = subscription.status === 'active' && !subscription.accessBlocked;
   const isExpiringSoon = daysRemaining <= 7 && daysRemaining > 0;
+
+  // El historial de pagos SOLO para clientes directos de Cobrify: en una
+  // cuenta de reseller o de vendedor, esos montos son lo que Cobrify le
+  // cobró al INTERMEDIARIO, y mostrárselos al cliente le revela el precio
+  // de compra de su proveedor (reporte de un vendedor, 02-sep-2026).
+  //
+  // `vendedorInfo` llega asíncrono, pero solo puede ABRIR la sección, nunca
+  // cerrarla: mientras carga se ve oculta, que es el lado seguro.
+  const verHistorialDePagos = puedeVerHistorialDePagos(subscription, {
+    esElVendedorDeLaCuenta: !!(vendedorInfo?.id && vendedorInfo.id === subscription.vendedorId),
+  });
 
   // Datos para renovación / cambio de plan (solo clientes directos de Cobrify)
   const isDirectClient = !isResellerAccount && !vendedorInfo && !subscription.resellerId && !subscription.vendedorId;
@@ -821,7 +833,7 @@ export default function MySubscription() {
       </div>
 
       {/* Historial de pagos */}
-      {subscription.paymentHistory && subscription.paymentHistory.length > 0 && (
+      {verHistorialDePagos && subscription.paymentHistory && subscription.paymentHistory.length > 0 && (
         <div className="bg-white p-6 rounded-2xl border border-gray-200">
           <div className="flex items-center gap-3 mb-4">
             <DollarSign className="w-6 h-6 text-green-600" />

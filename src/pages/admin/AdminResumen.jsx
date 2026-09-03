@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { collection, getDocs } from 'firebase/firestore'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { db } from '@/lib/firebase'
+import { origenDeCuenta } from '@/utils/subscriptionOwnership'
 import {
   getAdminStats,
   getAnalyticsData,
@@ -136,7 +137,10 @@ async function cargarDetalleGlobal() {
     const negocio = negocios[d.id] || {}
     const fin = data.currentPeriodEnd?.toDate?.() || null
     const archivado = data.archived === true
-    const origen = data.resellerId ? 'reseller' : data.vendedorId ? 'vendedor' : 'directo'
+    // Mismo criterio que usa "Mi Suscripción" para decidir de quién es la
+    // cuenta. Mirando solo `resellerId` quedaban como DIRECTAS las que traen
+    // `createdByReseller` sin él.
+    const origen = origenDeCuenta(data)
 
     let estado = 'activos'
     if (data.status === 'suspended' || data.accessBlocked) estado = 'suspendidos'
