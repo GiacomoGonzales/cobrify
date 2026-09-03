@@ -1814,7 +1814,11 @@ export default function Orders() {
             const isUrgent = order.priority === 'urgent'
 
             return (
-              <Card key={order.id} className={`border-2 ${isUrgent ? 'border-red-500 bg-red-50' : statusConfig.bgColor}`}>
+              // `h-full flex flex-col` + `mt-auto` en la fila de botones: las
+              // tarjetas de una misma fila del grid crecen hasta la mas alta, y
+              // sin esto los botones quedaban a distinta altura en cada una,
+              // con un hueco blanco debajo de las mas cortas.
+              <Card key={order.id} className={`border-2 h-full flex flex-col ${isUrgent ? 'border-red-500 bg-red-50' : statusConfig.bgColor}`}>
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -1893,7 +1897,7 @@ export default function Orders() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent className="space-y-3 flex-1 flex flex-col">
                   {/* Info de Mesa/Tipo y Mozo/Fuente */}
                   <div className="flex items-center justify-between text-sm pb-3 border-b border-gray-200">
                     {order.tableNumber ? (
@@ -2115,7 +2119,7 @@ export default function Orders() {
                       menos. Y no se pierde: Entregada sobre una orden sin facturar
                       abre el cierre, que ofrece emitir el comprobante o cerrar sin
                       él con su motivo. */}
-                  <div className="mt-3 flex gap-2 items-stretch">
+                  <div className="mt-auto pt-3 flex gap-2 items-stretch">
                     {/* Botón primario según estado */}
                     {order.status === 'pending' && (
                       <Button
