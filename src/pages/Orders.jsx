@@ -2109,7 +2109,12 @@ export default function Orders() {
                     </div>
                   )}
 
-                  {/* Botones de acción: primario + Cobrar + menú "+" */}
+                  {/* Botones de acción: avanzar estado + Marcar Entregada + menú "+".
+                      Entregada va como BOTON y Cobrar al menú porque cerrar la orden
+                      es lo que se hace en cada pedido; facturar desde acá, mucho
+                      menos. Y no se pierde: Entregada sobre una orden sin facturar
+                      abre el cierre, que ofrece emitir el comprobante o cerrar sin
+                      él con su motivo. */}
                   <div className="mt-3 flex gap-2 items-stretch">
                     {/* Botón primario según estado */}
                     {order.status === 'pending' && (
@@ -2175,7 +2180,12 @@ export default function Orders() {
                         )}
                       </Button>
                     )}
-                    {order.status === 'dispatched' && (
+                    {/* Antes solo aparecia en "Despachada", asi que una orden que
+                        quedo en Pendiente no tenia forma de cerrarse sin caminarla
+                        por los cuatro estados. Los negocios que cobran y no usan el
+                        flujo de cocina terminaban con cientos de ordenes abiertas
+                        (caso real: 175 pendientes, varias de seis horas). */}
+                    {order.status !== 'delivered' && (
                       <Button
                         onClick={() => handleMarkAsDelivered(order)}
                         variant="success"
@@ -2187,22 +2197,6 @@ export default function Orders() {
                       </Button>
                     )}
 
-                    {/* Cobrar/Facturar: el comprobante se emite SIEMPRE en el POS, aunque la
-                        orden ya esté pagada. El flag "pagado" es solo informativo para la
-                        comanda del motorizado (saber si cobrar al entregar), NO equivale a
-                        "facturado". Por eso una orden con pago anticipado sigue mostrando esta
-                        acción hasta que se emite su comprobante. */}
-                    {order.status !== 'delivered' && !order.invoiced && (
-                      <Button
-                        onClick={() => handleGoToPayment(order)}
-                        variant="outline"
-                        size="sm"
-                        className={`${BOTON_ACCION} border-green-500 text-green-600 hover:bg-green-50`}
-                      >
-                        <DollarSign className="w-4 h-4 mr-1" />
-                        {order.paid ? 'Facturar' : 'Cobrar'}
-                      </Button>
-                    )}
 
                     {/* Menú "+" con acciones secundarias */}
                     <div className="relative">
@@ -2223,6 +2217,29 @@ export default function Orders() {
                             onClick={() => setOpenMenuOrderId(null)}
                           />
                           <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg py-1 overflow-hidden min-w-[200px]">
+                            {/* Cobrar / Facturar. Vive acá y no como botón porque se usa
+                                mucho menos que cerrar la orden — y porque "Marcar
+                                Entregada" sobre una orden sin facturar ya ofrece emitir
+                                el comprobante. Queda para el caso de cobrar ANTES de
+                                cerrar.
+
+                                El comprobante se emite SIEMPRE en el POS, aunque la orden
+                                ya esté pagada: "pagado" es informativo para la comanda del
+                                motorizado (saber si cobrar al entregar) y NO equivale a
+                                "facturado". Por eso una orden con pago anticipado sigue
+                                mostrando esta acción hasta que se emite su comprobante. */}
+                            {order.status !== 'delivered' && !order.invoiced && (
+                              <button
+                                onClick={() => {
+                                  setOpenMenuOrderId(null)
+                                  handleGoToPayment(order)
+                                }}
+                                className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
+                              >
+                                <DollarSign className="w-4 h-4 text-gray-400" />
+                                <span className="font-medium text-gray-900">{order.paid ? 'Facturar' : 'Cobrar'}</span>
+                              </button>
+                            )}
                             <button
                               onClick={() => {
                                 setOpenMenuOrderId(null)
@@ -2243,28 +2260,6 @@ export default function Orders() {
                               <Split className="w-4 h-4 text-gray-600" />
                               <span className="font-medium text-gray-900">Dividir Cuenta</span>
                             </button>
-                            {/* Marcar Entregada, desde CUALQUIER estado.
-                                Como botón principal solo aparece en "Despachada", asi que
-                                una orden que quedó en Pendiente no tenia forma de cerrarse
-                                sin caminarla por los cuatro estados. Los negocios que
-                                cobran y no usan el flujo de cocina terminaban con cientos
-                                de ordenes abiertas (caso real: 175 pendientes, varias de
-                                seis horas y ya facturadas).
-                                Pasa por el mismo handler: si esta facturada la cierra
-                                directo, y si no, abre el cierre con su motivo. */}
-                            {order.status !== 'delivered' && order.status !== 'dispatched' && (
-                              <button
-                                onClick={() => {
-                                  setOpenMenuOrderId(null)
-                                  handleMarkAsDelivered(order)
-                                }}
-                                className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3 border-t border-gray-100"
-                              >
-                                <CheckCircle className="w-4 h-4 text-gray-400" />
-                                <span className="font-medium text-gray-900">Marcar Entregada</span>
-                              </button>
-                            )}
-
                             {/* Cerrar Cuenta secundario: en ready sin mesa (delivery/takeout), por si se necesita cerrar sin despachar */}
                             {order.status === 'ready' && !order.tableNumber && (
                               <button
