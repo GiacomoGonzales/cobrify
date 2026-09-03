@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { isPharmaLikeMode } from '@/utils/businessModes'
 import { getProjects } from '@/services/projectService'
+import { leerBorrador, guardarBorrador, borrarBorrador } from '@/utils/borradorLocal'
 import { filterProductsForBranch } from '@/utils/branchCatalog'
 import { conPrecioDeSucursal, applyBranchPricing } from '@/utils/branchPricing'
 import { Plus, Trash2, Save, ArrowLeft, Loader2, Search, X, PackagePlus, Package, Beaker, Store, RefreshCw, DollarSign, Gift, Tag, Upload, Wrench, HardHat } from 'lucide-react'
@@ -282,6 +283,103 @@ export default function CreatePurchase() {
   useEffect(() => {
     loadData()
   }, [user, purchaseId])
+
+  // ===== BORRADOR =====
+  //
+  // Salir de la pantalla por error —un clic en el menú, el botón atrás del
+  // teléfono— borraba una compra de treinta líneas y había que empezar de cero.
+  // Se guarda en este navegador y vuelve al entrar. Ver utils/borradorLocal.js.
+  //
+  // NO se guarda al EDITAR una compra existente: ahí el formulario ya viene
+  // cargado desde la compra y un borrador viejo la pisaría con datos de otra.
+  const claveDelBorrador = `compra_borrador_${getBusinessId()}`
+  const borradorCargadoRef = useRef(false)
+  // El almacén se restaura aparte, cuando la lista ya cargó.
+  const almacenDelBorradorRef = useRef(null)
+
+  useEffect(() => {
+    if (isEditMode || borradorCargadoRef.current) return
+    borradorCargadoRef.current = true
+
+    const b = leerBorrador(claveDelBorrador)
+    if (!b) return
+
+    if (b.selectedSupplier) setSelectedSupplier(b.selectedSupplier)
+    if (b.invoiceNumber) setInvoiceNumber(b.invoiceNumber)
+    if (b.invoiceDocType) setInvoiceDocType(b.invoiceDocType)
+    if (b.invoiceDate) setInvoiceDate(b.invoiceDate)
+    if (b.notes) setNotes(b.notes)
+    if (b.paymentType) setPaymentType(b.paymentType)
+    if (b.currency) setCurrency(b.currency)
+    if (b.exchangeRate) setExchangeRate(Number(b.exchangeRate))
+    if (b.exchangeRateSource) setExchangeRateSource(b.exchangeRateSource)
+    if (typeof b.affectsStock === 'boolean') setAffectsStock(b.affectsStock)
+    if (typeof b.isAsset === 'boolean') setIsAsset(b.isAsset)
+    if (b.selectedProjectId) setSelectedProjectId(b.selectedProjectId)
+    // Por ID y contra lo que existe HOY: si el almacén se borró mientras tanto,
+    // queda vacío en vez de guardar una compra que apunta a algo que no está.
+    if (b.selectedWarehouseId) almacenDelBorradorRef.current = b.selectedWarehouseId
+
+    if (Array.isArray(b.purchaseItems) && b.purchaseItems.length > 0) {
+      setPurchaseItems(b.purchaseItems)
+      const conProducto = b.purchaseItems.filter(it => it.productName).length
+      if (conProducto > 0) {
+        toast.info(`Borrador recuperado (${conProducto} ${conProducto === 1 ? 'producto' : 'productos'})`)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditMode])
+
+  useEffect(() => {
+    if (isEditMode || warehouses.length === 0) return
+    const id = almacenDelBorradorRef.current
+    if (!id) return
+    almacenDelBorradorRef.current = null
+    const almacen = warehouses.find(w => w.id === id)
+    if (almacen) setSelectedWarehouse(almacen)
+  }, [isEditMode, warehouses])
+
+  useEffect(() => {
+    if (isEditMode || !borradorCargadoRef.current) return
+
+    // Nada que guardar mientras el formulario esté vacío. Sin esto, entrar y
+    // salir sin tocar nada dejaría un borrador en blanco que después aparece
+    // anunciado como "recuperado".
+    const hayAlgo = !!selectedSupplier
+      || !!invoiceNumber.trim()
+      || !!notes.trim()
+      || purchaseItems.some(it => it.productName || Number(it.quantity) > 0)
+
+    if (!hayAlgo) {
+      borrarBorrador(claveDelBorrador)
+      return
+    }
+
+    // Con retraso: guardar en cada tecla escribiría cientos de veces mientras
+    // se llena una compra larga.
+    const t = setTimeout(() => {
+      guardarBorrador(claveDelBorrador, {
+        selectedSupplier,
+        invoiceNumber,
+        invoiceDocType,
+        invoiceDate,
+        notes,
+        paymentType,
+        currency,
+        exchangeRate,
+        exchangeRateSource,
+        affectsStock,
+        isAsset,
+        selectedProjectId,
+        selectedWarehouseId: selectedWarehouse?.id || null,
+        purchaseItems,
+      })
+    }, 800)
+    return () => clearTimeout(t)
+  }, [isEditMode, claveDelBorrador, selectedSupplier, invoiceNumber, invoiceDocType,
+      invoiceDate, notes, paymentType, currency, exchangeRate, exchangeRateSource,
+      affectsStock, isAsset, selectedProjectId, selectedWarehouse, purchaseItems])
+
 
   // Trae el TC de hoy (o de la fecha de factura si está en pasado). Se llama
   // automáticamente al cambiar a USD si el TC actual no fue editado a mano.
@@ -2867,6 +2965,9 @@ export default function CreatePurchase() {
       // OJO: en éxito NO reactivamos el botón (savingRef/isSaving siguen en true)
       // para que durante el 1.5s previo a navegar el usuario no pueda volver a
       // pulsar "Guardar" y duplicar la compra. La navegación desmonta la página.
+      // La compra ya está guardada: el borrador dejó de tener sentido y si
+      // quedara, la próxima compra abriría con los datos de esta.
+      borrarBorrador(claveDelBorrador)
       toast.success(isEditMode ? 'Compra actualizada exitosamente' : 'Compra registrada exitosamente. Stock y costos actualizados')
       setTimeout(() => {
         appNavigate('compras')
