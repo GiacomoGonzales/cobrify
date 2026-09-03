@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { isPharmaLikeMode } from '@/utils/businessModes'
+import { getProjects } from '@/services/projectService'
 import { filterProductsForBranch } from '@/utils/branchCatalog'
 import { conPrecioDeSucursal, applyBranchPricing } from '@/utils/branchPricing'
-import { Plus, Trash2, Save, ArrowLeft, Loader2, Search, X, PackagePlus, Package, Beaker, Store, RefreshCw, DollarSign, Gift, Tag, Upload, Wrench } from 'lucide-react'
+import { Plus, Trash2, Save, ArrowLeft, Loader2, Search, X, PackagePlus, Package, Beaker, Store, RefreshCw, DollarSign, Gift, Tag, Upload, Wrench, HardHat } from 'lucide-react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useAuth } from '@/contexts/AuthContext'
@@ -209,6 +210,10 @@ export default function CreatePurchase() {
   const conPreciosDeLaSede = (prod) =>
     precioPorSucursal ? applyBranchPricing(prod, sucursalDeLaCompra) : prod
   const [branches, setBranches] = useState([])
+  // Obras/proyectos. Solo en modo Logistica: es donde el modulo existe y donde
+  // la compra por obra tiene sentido.
+  const [projects, setProjects] = useState([])
+  const [selectedProjectId, setSelectedProjectId] = useState('')
 
   // Va acá y no junto a `sucursalDeLaCompra` porque necesita `branches`, que se
   // declara en esta línea: más arriba sería un ReferenceError en cada render.
@@ -439,6 +444,17 @@ export default function CreatePurchase() {
 
       if (suppliersResult.success) {
         setSuppliers(suppliersResult.data || [])
+      }
+
+      // Las obras se piden aparte y solo en Logistica: en los otros modos el
+      // selector ni se muestra, asi que traerlas seria una consulta al cohete.
+      if (businessMode === 'logistics') {
+        try {
+          const obras = await getProjects(businessId)
+          if (obras.success) setProjects(obras.data || [])
+        } catch (error) {
+          console.error('Error al cargar las obras:', error)
+        }
       }
 
       if (productsResult.success) {
@@ -1905,6 +1921,18 @@ export default function CreatePurchase() {
         // no hay ingreso físico, y así ningún reporte la atribuye a un almacén)
         warehouseId: affectsStock ? (selectedWarehouse?.id || null) : null,
         warehouseName: affectsStock ? (selectedWarehouse?.name || null) : null,
+        // Obra a la que se compró. Mismos campos que Salidas y Retornos de
+        // almacén, para que los tres se crucen sin traducir nada: comprado
+        // menos consumido menos devuelto = lo que queda en esa obra.
+        //
+        // El NOMBRE va congelado junto al id: si la obra se renombra o se
+        // borra, la compra vieja tiene que seguir diciendo a dónde fue.
+        ...(() => {
+          const obra = projects.find(p => p.id === selectedProjectId)
+          return obra
+            ? { projectId: obra.id, projectName: obra.name || '', projectCode: obra.code || '' }
+            : { projectId: null, projectName: '', projectCode: '' }
+        })(),
         items: purchaseItems
           .filter(item => !item.isVariant || (item.quantity && Number(item.quantity) > 0))
           .map(item => ({
@@ -3113,6 +3141,34 @@ export default function CreatePurchase() {
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
                   El stock ingresará a este almacén
+                </p>
+              </div>
+            )}
+
+            {/* Obra / Proyecto. Solo en modo Logística, que es donde vive el
+                módulo. Opcional: hay compras de oficina o de flota que no son
+                de ninguna obra, y obligarlas a elegir una ensuciaría el saldo
+                de esa obra con gastos que no le corresponden. */}
+            {businessMode === 'logistics' && projects.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <HardHat className="w-4 h-4 inline mr-1" />
+                  Obra / Proyecto
+                </label>
+                <select
+                  value={selectedProjectId}
+                  onChange={e => setSelectedProjectId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="">Sin obra (compra general)</option>
+                  {projects.map(obra => (
+                    <option key={obra.id} value={obra.id}>
+                      {obra.code ? `${obra.code} — ${obra.name}` : obra.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Lo comprado para esta obra se separa del resto en el reporte por obra.
                 </p>
               </div>
             )}

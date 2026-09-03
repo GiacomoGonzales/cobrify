@@ -1293,6 +1293,9 @@ export default function Purchases() {
         purchase.invoiceNumber,
         purchase.supplier?.businessName,
         purchase.supplier?.documentNumber,
+        // Obra: buscar "Colegio San Martin" trae sus compras
+        purchase.projectName,
+        purchase.projectCode,
       ))
     }
     return map
@@ -1680,6 +1683,15 @@ export default function Purchases() {
                     )}
                     {purchase.isAsset === true && (
                       <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 flex-shrink-0">Activo</span>
+                    )}
+                    {/* La obra a la que se compró. Se muestra el NOMBRE guardado
+                        en la compra, no el de la obra actual: si la renombraron o
+                        la borraron, la compra vieja tiene que seguir diciendo a
+                        dónde fue. */}
+                    {purchase.projectName && (
+                      <span className="px-1.5 py-0.5 rounded chip-neutro flex-shrink-0 line-clamp-1" title={purchase.projectName}>
+                        {purchase.projectCode || purchase.projectName}
+                      </span>
                     )}
                     <span className="text-gray-300">•</span>
                     <span>
