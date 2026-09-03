@@ -6468,6 +6468,12 @@ export default function POS() {
     }))
     const revision = revisarAntesDeEmitir({
       documentType,
+      // El nombre que se va a guardar, con el mismo respaldo que usa el
+      // comprobante: si no hay nada, la boleta sale a "Cliente General".
+      customer: {
+        name: customerData.name || customerData.businessName || 'Cliente General',
+        businessName: customerData.businessName || customerData.name || '',
+      },
       // POR CONSUMO: se revisa lo que de VERDAD va a SUNAT. Un plato de
       // cortesía a precio 0 queda dentro de la línea única, así que no puede
       // bloquear la venta por algo que el comprobante nunca va a declarar.

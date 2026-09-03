@@ -34,6 +34,7 @@ import { getActiveBranches } from '@/services/branchService'
 import { filterProductsForBranch } from '@/utils/branchCatalog'
 import { filtrarVendibles } from '@/utils/productSale'
 import { applyBranchPricing } from '@/utils/branchPricing'
+import { revisarAntesDeEmitir, textoDeErrores } from '@/utils/sunatPreflight'
 
 // Unidades de medida SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
 const UNITS = [
@@ -369,6 +370,24 @@ export default function CreateInvoice() {
 
     if (!validateForm()) {
       setTimeout(() => setMessage(null), 3000)
+      return
+    }
+
+    // La misma revision previa que hace el POS: un rechazo de SUNAT consume el
+    // correlativo y obliga a rehacer la venta. Ver src/utils/sunatPreflight.js.
+    const revision = revisarAntesDeEmitir({
+      documentType,
+      items: invoiceItems.map(it => ({
+        name: it.name,
+        quantity: parseFloat(it.quantity),
+        unitPrice: parseFloat(it.unitPrice),
+      })),
+      customer: selectedCustomer || { name: 'Cliente General' },
+    })
+    if (revision.errores.length > 0) {
+      setMessage({ type: 'error', text: `SUNAT rechazaría este comprobante:
+
+${textoDeErrores(revision.errores)}` })
       return
     }
 

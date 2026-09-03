@@ -23,16 +23,65 @@ const numero = (v) => {
 }
 
 /**
+ * ¿Este texto sirve como nombre para SUNAT?
+ *
+ * SUNAT valida `cbc:RegistrationName` y rechaza con el código 2022 lo que "no
+ * cumple con el estándar". Un punto, un guion o un espacio no son un nombre:
+ * la boleta BQ01-00000150 salió con el nombre en "." y volvió rechazada, con
+ * el correlativo ya gastado.
+ *
+ * La regla es a propósito la mínima que separa un nombre de un relleno: al
+ * menos DOS letras o números. No se exige más porque nombres cortos y raros
+ * existen, y bloquear una venta de verdad es peor que dejar pasar un caso
+ * dudoso.
+ */
+const pareceNombre = (texto) => {
+  const limpio = String(texto || '').trim()
+  if (!limpio) return false
+  // \p{L} y \p{N} para no dejar afuera tildes ni la Ñ.
+  const alfanumericos = limpio.match(/[\p{L}\p{N}]/gu) || []
+  return alfanumericos.length >= 2
+}
+
+/**
  * Revisa los ítems de un comprobante por emitir.
  *
  * @param {object} p
  * @param {string} p.documentType
  * @param {Array}  p.items  líneas del comprobante, tal como se van a guardar
+ * @param {object} [p.customer]  el cliente, tal como se va a guardar
  * @returns {{ errores: Array<{linea:number, producto:string, problema:string, solucion:string}> }}
  */
-export function revisarAntesDeEmitir({ documentType, items = [] } = {}) {
+export function revisarAntesDeEmitir({ documentType, items = [], customer = null } = {}) {
   const errores = []
   if (!vaASunat(documentType)) return { errores }
+
+  /**
+   * El NOMBRE del cliente. Va primero porque no depende de ninguna línea:
+   * con un nombre inválido el comprobante entero rebota.
+   *
+   * En factura manda la razón social; en boleta, cualquiera de los dos —el
+   * POS guarda el nombre en `name` y la razón social en `businessName`—.
+   */
+  if (customer) {
+    const esFactura = String(documentType).toLowerCase() === 'factura'
+    const nombre = esFactura
+      ? (customer.businessName || customer.name || '')
+      : (customer.name || customer.businessName || '')
+    if (!pareceNombre(nombre)) {
+      const mostrado = String(nombre || '').trim()
+      errores.push({
+        linea: 0,
+        producto: esFactura ? 'Razón social del cliente' : 'Nombre del cliente',
+        problema: mostrado
+          ? `dice "${mostrado}", y SUNAT no lo acepta como nombre`
+          : 'está vacío',
+        solucion: esFactura
+          ? 'Busca el RUC para traer la razón social, o escríbela completa.'
+          : 'Escribe el nombre del cliente, o déjalo como "Cliente General".',
+      })
+    }
+  }
 
   items.forEach((item, i) => {
     if (!item) return
@@ -69,5 +118,9 @@ export function revisarAntesDeEmitir({ documentType, items = [] } = {}) {
 export function textoDeErrores(errores = []) {
   if (errores.length === 0) return ''
   const lineas = errores.map(e => `• ${e.producto}: ${e.problema}`)
-  return `${lineas.join('\n')}\n\n${errores[0].solucion}`
+  // Las soluciones SIN repetir: diez líneas con el mismo precio 0 comparten
+  // arreglo, pero un nombre inválido y un precio 0 se arreglan distinto, y antes
+  // solo se mostraba el del primero.
+  const soluciones = [...new Set(errores.map(e => e.solucion).filter(Boolean))]
+  return `${lineas.join('\n')}\n\n${soluciones.join('\n')}`
 }
