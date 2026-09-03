@@ -2243,6 +2243,28 @@ export default function Orders() {
                               <Split className="w-4 h-4 text-gray-600" />
                               <span className="font-medium text-gray-900">Dividir Cuenta</span>
                             </button>
+                            {/* Marcar Entregada, desde CUALQUIER estado.
+                                Como botón principal solo aparece en "Despachada", asi que
+                                una orden que quedó en Pendiente no tenia forma de cerrarse
+                                sin caminarla por los cuatro estados. Los negocios que
+                                cobran y no usan el flujo de cocina terminaban con cientos
+                                de ordenes abiertas (caso real: 175 pendientes, varias de
+                                seis horas y ya facturadas).
+                                Pasa por el mismo handler: si esta facturada la cierra
+                                directo, y si no, abre el cierre con su motivo. */}
+                            {order.status !== 'delivered' && order.status !== 'dispatched' && (
+                              <button
+                                onClick={() => {
+                                  setOpenMenuOrderId(null)
+                                  handleMarkAsDelivered(order)
+                                }}
+                                className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3 border-t border-gray-100"
+                              >
+                                <CheckCircle className="w-4 h-4 text-gray-400" />
+                                <span className="font-medium text-gray-900">Marcar Entregada</span>
+                              </button>
+                            )}
+
                             {/* Cerrar Cuenta secundario: en ready sin mesa (delivery/takeout), por si se necesita cerrar sin despachar */}
                             {order.status === 'ready' && !order.tableNumber && (
                               <button
