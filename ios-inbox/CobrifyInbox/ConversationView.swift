@@ -34,6 +34,12 @@ struct ConversationView: View {
     @State private var mediaPendiente: MediaBiblioteca?
     @FocusState private var cuadroEnfocado: Bool
     @State private var mostrarVincular = false
+    @State private var mostrarBuscar = false
+    @State private var mostrarArchivosDelChat = false
+    /// Mensaje al que hay que saltar cuando se cierra una hoja. Se guarda en vez
+    /// de saltar desde dentro: mientras la hoja se va, el scroll de abajo no
+    /// esta listo para recibir la orden.
+    @State private var saltarA: String?
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -112,6 +118,10 @@ struct ConversationView: View {
                 guard !lejosDelFondo else { return }
                 bajarAlFinal(proxy)
             }
+            // Volver de "Buscar en el chat" o de "Fotos y archivos" salta al
+            // mensaje elegido. Va aquí y no junto a las hojas porque el proxy
+            // del scroll solo existe dentro de este bloque.
+            .onChange(of: saltarA) { saltarAlElegido(proxy) }
             // Al abrir el teclado, la conversación sube sola y lo último
             // queda a la vista — sin tener que hacer scroll a mano.
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
@@ -211,6 +221,17 @@ struct ConversationView: View {
                         Label(conv.nota == nil ? "Agregar nota interna" : "Ver nota interna", systemImage: "note.text")
                     }
                     Divider()
+                    Button {
+                        mostrarBuscar = true
+                    } label: {
+                        Label("Buscar en el chat", systemImage: "magnifyingglass")
+                    }
+                    Button {
+                        mostrarArchivosDelChat = true
+                    } label: {
+                        Label("Fotos y archivos", systemImage: "photo.on.rectangle")
+                    }
+                    Divider()
                     if conv.linkedBusinessId != nil {
                         Button {
                             mostrarFicha = true
@@ -233,6 +254,15 @@ struct ConversationView: View {
                     Image(systemName: "ellipsis.circle")
                 }
             }
+        }
+        .sheet(isPresented: $mostrarBuscar) {
+            BuscarEnChatSheet(mensajes: store.mensajes,
+                              nombreContacto: conv.titulo,
+                              alElegir: { saltarA = $0 })
+        }
+        .sheet(isPresented: $mostrarArchivosDelChat) {
+            ArchivosDelChatSheet(mensajes: store.mensajes,
+                                 alElegir: { saltarA = $0 })
         }
         .sheet(isPresented: $mostrarNota) {
             NavigationStack {
@@ -341,6 +371,18 @@ struct ConversationView: View {
             },
             previaLocal: store.previasLocales[m.id]
         )
+    }
+
+    /// Salta al mensaje que se eligió en una hoja.
+    ///
+    /// Con un respiro: si se salta mientras la hoja se está yendo, el destino
+    /// queda tapado por la animación y parece que no pasó nada.
+    private func saltarAlElegido(_ proxy: ScrollViewProxy) {
+        guard let id = saltarA else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            withAnimation { proxy.scrollTo(id, anchor: .center) }
+            saltarA = nil
+        }
     }
 
     private static let anclaFinal = "fin-de-la-conversacion"
@@ -812,6 +854,10 @@ private struct BurbujaMensaje: View {
             }
             .padding(.horizontal, esStickerSuelto ? 0 : 12)
             .padding(.vertical, esStickerSuelto ? 0 : 8)
+            // Los enlaces toman el color del tinte. Dentro de la burbuja propia
+            // —que ya es del color de la marca— el azul de siempre se pierde,
+            // asi que ahi van en blanco y subrayados.
+            .tint(mensaje.esSaliente ? Color.white : Color.accentColor)
             .background(esStickerSuelto ? AnyShapeStyle(.clear) : AnyShapeStyle(fondo),
                         in: RoundedRectangle(cornerRadius: 16))
             .contextMenu { menuContextual }
@@ -907,7 +953,7 @@ private struct BurbujaMensaje: View {
                     miniatura
                         .onTapGesture { verAdjunto = true }
                     if !mensaje.texto.isEmpty {
-                        Text(mensaje.texto)
+                        Text(TextoWhatsapp.atribuido(mensaje.texto))
                             .frame(maxWidth: 230, alignment: .leading)
                     }
                 }
@@ -956,7 +1002,12 @@ private struct BurbujaMensaje: View {
                         .foregroundStyle(.secondary)
                 }
             default:
-                Text(mensaje.texto.isEmpty ? "[\(mensaje.tipo)]" : mensaje.texto)
+                // El formato de WhatsApp (*negrita*, _cursiva_, ~tachado~,
+                // ```mono```) y los enlaces tocables. Sin esto el cliente veia
+                // los asteriscos pelados.
+                Text(mensaje.texto.isEmpty
+                     ? AttributedString("[\(mensaje.tipo)]")
+                     : TextoWhatsapp.atribuido(mensaje.texto))
                     .multilineTextAlignment(.leading)
             }
         }
