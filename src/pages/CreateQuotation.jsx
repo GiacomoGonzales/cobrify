@@ -387,8 +387,20 @@ export default function CreateQuotation() {
           if (typeof draft.hideIgv === 'boolean') setHideIgv(draft.hideIgv)
           if (draft.recipientName) setRecipientName(draft.recipientName)
           if (draft.recipientPosition) setRecipientPosition(draft.recipientPosition)
-          if (draft.quotationItems?.some(i => i.name || i.productId)) {
-            toast.info('Borrador recuperado')
+          // El aviso salía SOLO si había productos. Quien volvía con el cliente,
+          // las notas o los términos ya cargados no veía nada y daba por hecho
+          // que el borrador no funcionaba. Se avisa por cualquier dato que el
+          // usuario haya escrito de verdad.
+          const conProducto = (draft.quotationItems || []).filter(i => i.name || i.productId).length
+          const recupero = conProducto > 0
+            || !!draft.selectedCustomer
+            || !!draft.manualCustomer?.name
+            || !!draft.manualCustomer?.documentNumber
+            || !!draft.notes
+          if (recupero) {
+            toast.info(conProducto > 0
+              ? `Borrador recuperado (${conProducto} ${conProducto === 1 ? 'producto' : 'productos'})`
+              : 'Borrador recuperado')
           }
         } else {
           localStorage.removeItem(getDraftKey())
@@ -423,12 +435,17 @@ export default function CreateQuotation() {
     if (!draftLoadedRef.current) return
     if (quotationId) return
 
+    // Los términos por defecto los pone el sistema, no el usuario: contarlos
+    // como "hay datos" hacía que una cotización recién abierta y abandonada
+    // dejara un borrador vacío. Solo cuentan si los cambió.
+    const terminosPropios = terms.trim() !== (businessSettings?.invoiceFooterTerms || '').trim()
+
     const hasData = (quotationItems.some(i => i.name || i.productId))
       || !!selectedCustomer
       || !!manualCustomer.documentNumber
       || !!manualCustomer.name
       || !!notes
-      || !!terms
+      || (!!terms && terminosPropios)
 
     if (!hasData) {
       localStorage.removeItem(getDraftKey())
@@ -459,7 +476,7 @@ export default function CreateQuotation() {
       }
     }, 500)
     return () => clearTimeout(timeoutId)
-  }, [quotationItems, selectedCustomer, customerMode, manualCustomer, validityDays, issueDate, notes, terms, discount, discountType, hideIgv, recipientName, recipientPosition, quotationId])
+  }, [quotationItems, selectedCustomer, customerMode, manualCustomer, validityDays, issueDate, notes, terms, discount, discountType, hideIgv, recipientName, recipientPosition, quotationId, businessSettings?.invoiceFooterTerms])
 
   // Alerta del navegador al cerrar pestaña si hay datos sin guardar
   useEffect(() => {
