@@ -2237,7 +2237,12 @@ export default function Orders() {
                                 className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
                               >
                                 <DollarSign className="w-4 h-4 text-gray-400" />
-                                <span className="font-medium text-gray-900">{order.paid ? 'Facturar' : 'Cobrar'}</span>
+                                {/* "Por adelantado" porque lo normal es cerrar con
+                                    "Marcar Entregada", que ya pregunta por el comprobante.
+                                    Esto es cobrar ANTES de cerrar. Si la orden ya está
+                                    pagada dice "Facturar" a secas: ahí no se cobra nada,
+                                    solo se emite el comprobante. */}
+                                <span className="font-medium text-gray-900">{order.paid ? 'Facturar' : 'Cobrar por adelantado'}</span>
                               </button>
                             )}
                             <button
