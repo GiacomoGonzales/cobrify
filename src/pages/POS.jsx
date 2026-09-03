@@ -101,6 +101,7 @@ import {
   getCustomers,
   createInvoice,
   createInvoiceWithNumber,
+  createProduct,
   getCompanySettings,
   updateProduct,
   updateProductStockTransaction,
@@ -144,6 +145,7 @@ import { diasDeRecordatorio } from '@/utils/vetReminders'
 import { repreciarPorCantidad } from '@/utils/autoPriceByQty'
 import { revisarAntesDeEmitir, textoDeErrores } from '@/utils/sunatPreflight'
 import { lineasPorConsumo, TEXTO_POR_CONSUMO } from '@/utils/comprobantePorConsumo'
+import { sePuedeGuardar, productoDesdePersonalizado } from '@/utils/productoRapido'
 import AutoGrowTextarea from '@/components/ui/AutoGrowTextarea'
 
 const PAYMENT_METHODS = {
@@ -526,6 +528,10 @@ export default function POS() {
   // Recargo por pago con tarjeta (Configuración > Ventas). Cuando aplica, SUBE el
   // precio de los productos (no se muestra como línea); el comprobante sale como
   // una venta normal a ese precio, así el IGV queda correcto sin tocar SUNAT.
+  // Guardar en el catalogo lo que se vende como producto personalizado.
+  // Apagado por defecto: crear productos solos llena el catalogo de cosas que
+  // el negocio no queria ahi. En demo no se guarda nada.
+  const guardarPersonalizados = !isDemoMode && businessSettings?.autoSaveCustomProducts === true
   const [cardCommissionConfig, setCardCommissionConfig] = useState({ enabled: false, rate: 5 })
   // Marca para autocompletar el monto del único pago tras cambiar de método (el
   // total puede subir por el recargo de tarjeta, que se sabe recién al elegir Tarjeta).
@@ -1057,6 +1063,10 @@ export default function POS() {
   const [customProduct, setCustomProduct] = useState({
     name: '',
     price: '',
+    // Costo. Sirve aunque el producto no se guarde: congelado en la venta,
+    // es lo que hace que el reporte de ganancia no cuente el servicio como
+    // 100% de margen.
+    cost: '',
     quantity: 1,
     unit: 'NIU',
     taxAffectation: '10', // '10'=Gravado 18%, '20'=Exonerado, '30'=Inafecto
@@ -4854,6 +4864,9 @@ export default function POS() {
       ...(effectiveTaxConfig.taxType === 'standard' && customProduct.taxAffectation === '10' && !customProduct.isBonificacion && { igvRate: customIgvRate }),
       stock: null, // Productos personalizados no tienen control de stock
       isCustom: true,
+      // El costo que escribió el vendedor, congelado en la venta como en
+      // cualquier producto del catálogo (ver computeItemCostAtSale).
+      ...(Number(customProduct.cost) > 0 && { costAtSale: Number(customProduct.cost) }),
       ...(customProduct.isBonificacion && { isBonificacion: true, ...(bonifRef > 0 && { bonificacionRefPrice: bonifRef }) }),
       // Multi-divisa: PEN exacto del precio para los totales en base (sesión USD)
       ...(customBasePrice != null && customBasePrice > 0 && { basePrice: customBasePrice }),
@@ -4864,6 +4877,27 @@ export default function POS() {
     setCart([...cart, customProductItem])
     toast.success('Producto personalizado agregado al carrito')
 
+    // Guardarlo en el catálogo para la PRÓXIMA vez, si el negocio lo pidió.
+    //
+    // La venta en curso no cambia: el ítem sigue siendo personalizado, sin
+    // movimiento de stock. Meterlo dentro de esta venta cambiaría el descuento
+    // de stock de una operación que ya estaba bien.
+    //
+    // Va sin `await` y sin avisar si falla: agregar al carrito no puede
+    // quedarse esperando a Firestore ni romperse porque el catálogo no
+    // respondió. Ver src/utils/productoRapido.js.
+    if (guardarPersonalizados && sePuedeGuardar(customProduct, productsRaw)) {
+      const nuevo = productoDesdePersonalizado(customProduct, { igvRate: effectiveTaxConfig.igvRate })
+      createProduct(getBusinessId(), nuevo)
+        .then(res => {
+          if (res?.success) {
+            setProductsRaw(prev => [...prev, { id: res.id, ...nuevo }])
+            toast.info(`"${nuevo.name}" quedó guardado en tu catálogo`)
+          }
+        })
+        .catch(err => console.error('No se pudo guardar el producto personalizado:', err))
+    }
+
     // Resetear y cerrar modal. La AFECTACIÓN (gravado/exonerado/inafecto) y
     // addIgv se MANTIENEN para el siguiente item: un negocio que vende
     // exonerado agrega muchos items personalizados seguidos y re-seleccionar
@@ -4873,6 +4907,7 @@ export default function POS() {
       ...prev,
       name: '',
       price: '',
+      cost: '',
       quantity: 1,
       unit: 'NIU',
       isBonificacion: false,
@@ -13472,6 +13507,28 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               />
             </div>
           </div>
+
+          {/* Costo. Opcional, pero sin él la venta figura con 100% de margen:
+              el reporte de ganancia usa el costo congelado en cada línea. */}
+          {!customProduct.isBonificacion && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Costo unitario <span className="text-xs font-normal text-gray-500">(opcional)</span>
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={customProduct.cost || ''}
+                onChange={(e) => setCustomProduct({ ...customProduct, cost: e.target.value })}
+                placeholder="0.00"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Lo que te costó a ti. Sin esto, Reportes cuenta esta venta como ganancia completa.
+              </p>
+            </div>
+          )}
 
           {/* Checkbox para indicar si el precio incluye IGV */}
           {!effectiveTaxConfig.igvExempt && customProduct.taxAffectation === '10' && (

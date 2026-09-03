@@ -442,6 +442,8 @@ export default function Settings() {
   const [shopifreeLogFilter, setShopifreeLogFilter] = useState('all') // all|orders|products|errors
 
   // Estados para configuración de inventario
+  // Guardar en el catalogo lo que se vende como producto personalizado.
+  const [autoSaveCustomProducts, setAutoSaveCustomProducts] = useState(false)
   const [allowNegativeStock, setAllowNegativeStock] = useState(false)
   // Ver (solo ver) el stock de las demás sucursales desde el POS.
   const [showOtherBranchesStock, setShowOtherBranchesStock] = useState(false)
@@ -1379,6 +1381,7 @@ export default function Settings() {
 
         // Cargar configuración de inventario
         setAllowNegativeStock(businessData.allowNegativeStock || false)
+        setAutoSaveCustomProducts(businessData.autoSaveCustomProducts === true)
         setShowOtherBranchesStock(businessData.showOtherBranchesStock === true)
         setConfirmSaleWithoutStock(businessData.confirmSaleWithoutStock || false)
         setAllowCustomProducts(businessData.allowCustomProducts || false)
@@ -5525,6 +5528,18 @@ export default function Settings() {
                   Configura el comportamiento del control de stock
                 </p>
                 <div className="space-y-4">
+                  {/* Producto personalizado -> catalogo. Va en este bloque porque
+                      lo que crea es un producto, aunque se dispare desde el POS. */}
+                  <SettingToggle
+                    id="opcion-autoSaveCustomProducts"
+                    checked={autoSaveCustomProducts}
+                    onChange={(e) => setAutoSaveCustomProducts(e.target.checked)}
+                    title="Guardar los productos personalizados en el catálogo"
+                    description={autoSaveCustomProducts
+                      ? '✓ Habilitado: cuando en el Punto de Venta agregas un producto escrito a mano, queda guardado en tu catálogo para la próxima vez, con su precio y su costo. Nace sin control de stock (suele ser un servicio) y no se guarda dos veces el mismo nombre. La venta en curso no cambia.'
+                      : '✗ Deshabilitado: los productos escritos a mano valen solo para esa venta y hay que volver a escribirlos la próxima vez.'}
+                  />
+
                   <SettingToggle
                     id="opcion-allowNegativeStock"
                     checked={allowNegativeStock}
@@ -6530,6 +6545,7 @@ export default function Settings() {
                       posCustomFields: posCustomFields,
                       serviceStationConfig: serviceStationConfig,
                       allowNegativeStock: allowNegativeStock,
+                      autoSaveCustomProducts: autoSaveCustomProducts,
                       showOtherBranchesStock: showOtherBranchesStock,
                       confirmSaleWithoutStock: confirmSaleWithoutStock,
                       stockDischargeEnabled: stockDischargeEnabled,
