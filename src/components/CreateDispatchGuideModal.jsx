@@ -858,15 +858,46 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = 
       }
 
       // 3. Negocio principal
+      let businessData = null
       try {
         const companyResult = await getCompanySettings(businessId)
         if (companyResult.success && companyResult.data) {
-          const businessData = companyResult.data
+          businessData = companyResult.data
           setAddr(businessData.address || '')
           applyUbigeo(businessData.ubigeo)
         }
       } catch (error) {
         console.error('Error al cargar dirección del negocio:', error)
+      }
+
+      // 4. Domicilio fiscal del RUC — el último escalón.
+      //
+      // Si Configuración no tiene dirección o ubigeo, el punto se quedaba VACÍO
+      // y SUNAT rechaza la guía. El domicilio fiscal siempre existe, así que
+      // sirve de piso.
+      //
+      // El almacén y la sucursal MANDAN sobre esto: acá solo se llega cuando
+      // ninguno de los dos trajo el dato, y solo se completa lo que falta.
+      const rucEmisor = String(businessData?.ruc || '').replace(/\D/g, '')
+      const faltaDireccion = !businessData?.address
+      const faltaUbigeo = !businessData?.ubigeo
+      if (rucEmisor.length === 11 && (faltaDireccion || faltaUbigeo)) {
+        try {
+          const consulta = await consultarRUC(rucEmisor)
+          if (consulta.success && consulta.data) {
+            if (faltaDireccion && consulta.data.direccion) setAddr(consulta.data.direccion)
+            if (faltaUbigeo) {
+              const ubi = codigosDeUbigeo(consulta.data)
+              if (ubi.departamento) {
+                setDept(ubi.departamento)
+                setProv(ubi.provincia)
+                setDist(ubi.distrito)
+              }
+            }
+          }
+        } catch (error) {
+          console.error('No se pudo completar con el domicilio fiscal:', error)
+        }
       }
     }
 
@@ -893,6 +924,23 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = 
     if (isOpen) loadMyEstablishments()
   }, [isOpen, getBusinessId])
 
+
+  /**
+   * Lo último que el sistema rellenó solo en cada punto.
+   *
+   * Sirve para distinguir "el usuario no tocó esto" de "el usuario escribió
+   * esto". Rellenar es una ayuda; pisar lo que alguien escribió a mano es una
+   * molestia, y en una guía es peor: el punto de llegada NO siempre es el
+   * domicilio fiscal del cliente —puede ser una obra, otro local, un almacén
+   * suyo—. Pero si lo que hay es lo que pusimos nosotros y el destinatario
+   * cambia, tiene que seguirlo: una guía que sale hacia la dirección del
+   * cliente ANTERIOR es un error mayor que uno de comodidad.
+   */
+  const autoRellenado = useRef({ destino: '', destinoUbigeo: '', partida: '', partidaUbigeo: '' })
+
+  /** Rellena solo si está vacío o si lo que hay lo habíamos puesto nosotros. */
+  const sePuedeRellenar = (actual, marca) => !actual || actual === marca
+
   // Sincronizar ubigeo y dirección del destinatario con el punto correspondiente
   // En ventas: destinatario (cliente) → punto de LLEGADA
   // En compras: destinatario (proveedor) → punto de PARTIDA
@@ -903,23 +951,25 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = 
     // Solo sincronizamos para ventas
     if (isPurchase) return
 
-    // Sincronizar departamento
-    if (recipientDepartment) {
+    const ubigeoDestinatario = recipientDepartment
+      ? `${recipientDepartment}${recipientProvince || ''}${recipientDistrict || ''}`
+      : ''
+    const ubigeoLlegada = destinationDepartment
+      ? `${destinationDepartment}${destinationProvince || ''}${destinationDistrict || ''}`
+      : ''
+
+    if (ubigeoDestinatario && sePuedeRellenar(ubigeoLlegada, autoRellenado.current.destinoUbigeo)) {
       setDestinationDepartment(recipientDepartment)
+      setDestinationProvince(recipientProvince || '')
+      setDestinationDistrict(recipientDistrict || '')
+      autoRellenado.current.destinoUbigeo = ubigeoDestinatario
     }
-    // Sincronizar provincia
-    if (recipientProvince) {
-      setDestinationProvince(recipientProvince)
-    }
-    // Sincronizar distrito
-    if (recipientDistrict) {
-      setDestinationDistrict(recipientDistrict)
-    }
-    // Sincronizar dirección
-    if (recipientAddress) {
+    if (recipientAddress && sePuedeRellenar(destinationAddress, autoRellenado.current.destino)) {
       setDestinationAddress(recipientAddress)
+      autoRellenado.current.destino = recipientAddress
     }
-  }, [recipientDepartment, recipientProvince, recipientDistrict, recipientAddress, isPurchase])
+  }, [recipientDepartment, recipientProvince, recipientDistrict, recipientAddress, isPurchase,
+      destinationDepartment, destinationProvince, destinationDistrict, destinationAddress])
 
   // Obtener ubigeo completo
   const getUbigeo = (dept, prov, dist) => {
@@ -1375,14 +1425,24 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = 
       const result = await consultarRUC(ruc)
       if (result.success) {
         setSupplierName(result.data.razonSocial || '')
-        // En una guia por COMPRA el domicilio del proveedor es el punto de
-        // partida: su ubigeo sale de la misma consulta que la direccion.
-        aplicarUbigeoConsultado(result.data, setOriginDepartment, setOriginProvince, setOriginDistrict)
+        // En una guía por COMPRA el domicilio del proveedor es el punto de
+        // PARTIDA: su ubigeo sale de la misma consulta que la dirección. Mismo
+        // criterio que el punto de llegada: no se pisa lo escrito a mano.
+        const ubigeoPartida = originDepartment
+          ? `${originDepartment}${originProvince || ''}${originDistrict || ''}`
+          : ''
+        if (sePuedeRellenar(ubigeoPartida, autoRellenado.current.partidaUbigeo)) {
+          const puesto = aplicarUbigeoConsultado(result.data, setOriginDepartment, setOriginProvince, setOriginDistrict)
+          if (puesto) autoRellenado.current.partidaUbigeo = String(result.data.ubigeo || '')
+        }
         if (result.data.direccion) {
-          // Domicilio fiscal: se guarda en los datos del proveedor y además se
-          // propone como punto de partida (el usuario puede cambiarlo por un anexo).
+          // El domicilio fiscal se guarda siempre en los datos del proveedor; al
+          // punto de partida solo se propone (el usuario puede elegir un anexo).
           setSupplierAddress(result.data.direccion)
-          setOriginAddress(result.data.direccion)
+          if (sePuedeRellenar(originAddress, autoRellenado.current.partida)) {
+            setOriginAddress(result.data.direccion)
+            autoRellenado.current.partida = result.data.direccion
+          }
         }
         toast.success(`Datos encontrados: ${result.data.razonSocial}`)
       } else {
