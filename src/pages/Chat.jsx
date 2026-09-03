@@ -79,7 +79,7 @@ import {
  * app de mensajes; en pantalla grande, los dos a la vez.
  */
 export default function Chat() {
-  const { user, isAdmin, isLoading } = useAuth()
+  const { user, isAdmin, isLoading, rolesResolved } = useAuth()
   const toast = useToast()
 
   const [conversaciones, setConversaciones] = useState([])
@@ -453,7 +453,12 @@ export default function Chat() {
     }
   }
 
-  if (isLoading) {
+  // Esperar a que los ROLES esten resueltos, no solo a que isLoading se apague.
+  // Al iniciar sesion, onAuthChange pone rolesResolved en false SIN volver a
+  // encender isLoading: en ese hueco isAdmin todavia es false y esta pantalla
+  // rebotaba al dashboard justo despues de entrar — que es exactamente lo que
+  // no debe pasar cuando entras por chat.cobrifyperu.com.
+  if (isLoading || !rolesResolved) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
