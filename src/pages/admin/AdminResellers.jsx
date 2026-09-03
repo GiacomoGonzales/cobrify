@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useMemo, useState, useEffect } from 'react'
 import { db, auth } from '@/lib/firebase'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -18,36 +18,21 @@ import { normalizeCustomDomain } from '@/services/brandingService'
 import { matchesPrebuilt } from '@/lib/utils'
 import { buildAccountHaystack } from '@/utils/adminSearch'
 import {
-  Users,
-  Plus,
   Search,
   RefreshCw,
-  Eye,
-  Edit2,
-  Trash2,
   X,
-  Building2,
-  Mail,
-  Phone,
-  Wallet,
-  Percent,
-  CheckCircle,
-  XCircle,
   Save,
   Loader2,
-  UserPlus,
   DollarSign,
-  TrendingUp,
   AlertTriangle,
   UserCheck,
-  Award,
-  Crown,
   Globe,
-  Link2,
-  ExternalLink,
-  Smartphone,
 } from 'lucide-react'
-import { Pagina, Filtros, Buscador, Boton } from '@/components/admin/ui'
+import {
+  Pagina, Seccion, Filtros, Buscador, FiltroSelect, Boton,
+  Tabla, Th, Td, Fila, FilaVacia, Estado, Pastilla,
+  useMenuDeFila, BotonDeFila, CajaMenu, ItemMenu, SeparadorMenu,
+} from '@/components/admin/ui'
 
 // URL de las Cloud Functions (Cloud Run)
 const FUNCTIONS_BASE_URL = 'https://us-central1-cobrify-395fe.cloudfunctions.net'
@@ -60,6 +45,9 @@ export default function AdminResellers() {
   const [loading, setLoading] = useState(true)
   const [resellers, setResellers] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
+  const [estadoFiltro, setEstadoFiltro] = useState('all')
+  const [modeloFiltro, setModeloFiltro] = useState('all')
+  const [orden, setOrden] = useState({ campo: 'empresa', direccion: 'asc' })
   const [showModal, setShowModal] = useState(false)
   // APK de marca blanca: se sube por reseller y le aparece en su panel.
   const [apkReseller, setApkReseller] = useState(null)
@@ -432,7 +420,40 @@ export default function AdminResellers() {
   }
 
   // Mismo criterio que la lista de Usuarios (@/utils/adminSearch).
-  const filteredResellers = resellers.filter(r => matchesPrebuilt(searchTerm, buildAccountHaystack(r)))
+  // Mismo trato que Usuarios: filtros arriba, orden por columna y menu de fila.
+  const menu = useMenuDeFila()
+
+  const filteredResellers = useMemo(() => {
+    let lista = resellers.filter(r => matchesPrebuilt(searchTerm, buildAccountHaystack(r)))
+    if (estadoFiltro !== 'all') {
+      const activo = estadoFiltro === 'activos'
+      lista = lista.filter(r => (r.isActive !== false) === activo)
+    }
+    if (modeloFiltro !== 'all') lista = lista.filter(r => (r.pricingModel === 'v2' ? 'v2' : 'legacy') === modeloFiltro)
+
+    const valor = r => {
+      switch (orden.campo) {
+        case 'saldo': return r.balance || 0
+        case 'clientes': return r.activeClientsCount || 0
+        case 'descuento': return r.effectiveDiscount || 0
+        default: return (r.companyName || '').toLowerCase()
+      }
+    }
+    return [...lista].sort((a, b) => {
+      const av = valor(a)
+      const bv = valor(b)
+      if (av < bv) return orden.direccion === 'asc' ? -1 : 1
+      if (av > bv) return orden.direccion === 'asc' ? 1 : -1
+      return 0
+    })
+  }, [resellers, searchTerm, estadoFiltro, modeloFiltro, orden])
+
+  const ordenarPor = campo => setOrden(o => ({
+    campo,
+    direccion: o.campo === campo && o.direccion === 'asc' ? 'desc' : 'asc',
+  }))
+
+  const hayFiltros = Boolean(searchTerm) || estadoFiltro !== 'all' || modeloFiltro !== 'all'
 
   const stats = {
     total: resellers.length,
@@ -452,238 +473,150 @@ export default function AdminResellers() {
     )
   }
 
+  // Las acciones de cada reseller. Es una funcion y no un componente para que
+  // se cierre sobre el reseller de la fila sin pasarle diez props.
+  const accionesDe = r => (
+    <CajaMenu posicion={menu.posicion} refMenu={menu.refMenu}>
+      <ItemMenu onClick={() => { menu.cerrar(); openEditModal(r) }}>Ver y editar</ItemMenu>
+      <ItemMenu onClick={() => { menu.cerrar(); openDepositModal(r) }}>Agregar saldo</ItemMenu>
+      <SeparadorMenu />
+      <ItemMenu onClick={() => { menu.cerrar(); openApkModal(r) }}>
+        {r.androidApp?.url ? 'App Android (publicada)' : 'Subir app Android'}
+      </ItemMenu>
+      {r.customDomain && (
+        <ItemMenu onClick={() => { menu.cerrar(); window.open(`https://${r.customDomain}`, '_blank', 'noopener') }}>
+          Abrir su dominio ↗
+        </ItemMenu>
+      )}
+      <SeparadorMenu />
+      <ItemMenu rojo={r.isActive !== false} onClick={() => { menu.cerrar(); toggleResellerStatus(r) }}>
+        {r.isActive !== false ? 'Desactivar' : 'Reactivar'}
+      </ItemMenu>
+    </CajaMenu>
+  )
+
   return (
-    <div className="space-y-4">
-      <Pagina
-        resumen={`${stats.total} resellers · ${stats.active} activos · S/ ${stats.totalBalance.toFixed(2)} de saldo · ${stats.totalClients} clientes`}
-        acciones={
-          <>
-            <Boton tamano="sm" onClick={loadResellers}>Recargar</Boton>
-            <Boton tamano="sm" variante="primario" onClick={openCreateModal}>Nuevo reseller</Boton>
-          </>
-        }
-      />
+    <Pagina
+      resumen={`${stats.total} resellers · ${stats.active} activos · S/ ${stats.totalBalance.toFixed(2)} de saldo · ${stats.totalClients} clientes`}
+      acciones={
+        <>
+          <Boton tamano="sm" onClick={loadResellers}>Recargar</Boton>
+          <Boton tamano="sm" variante="primario" onClick={openCreateModal}>Nuevo reseller</Boton>
+        </>
+      }
+    >
       <Filtros>
         <Buscador ancho="w-full sm:w-80" placeholder="Nombre, correo, RUC, dominio" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+        <FiltroSelect value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)}>
+          <option value="all">Estado</option>
+          <option value="activos">Activos</option>
+          <option value="inactivos">Inactivos</option>
+        </FiltroSelect>
+        <FiltroSelect value={modeloFiltro} onChange={e => setModeloFiltro(e.target.value)}>
+          <option value="all">Modelo</option>
+          <option value="v2">v2</option>
+          <option value="legacy">Legacy</option>
+        </FiltroSelect>
+        {hayFiltros && (
+          <button
+            type="button"
+            onClick={() => { setSearchTerm(''); setEstadoFiltro('all'); setModeloFiltro('all') }}
+            className="h-8 px-2 text-[12.5px] text-gray-500 hover:text-gray-900"
+          >
+            Limpiar
+          </button>
+        )}
       </Filtros>
 
-      {/* Table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        {filteredResellers.length === 0 ? (
-          <div className="p-12 text-center">
-            <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500">No hay resellers</p>
-          </div>
-        ) : (
-          <>
-            {/* Mobile Card View */}
-            <div className="sm:hidden divide-y divide-gray-100">
-              {filteredResellers.map(reseller => (
-                <div key={reseller.id} className="p-3 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-primary-50 rounded-full flex items-center justify-center flex-shrink-0">
-                        <Building2 className="w-4 h-4 text-primary-700" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-medium text-gray-900 text-sm truncate">{reseller.companyName}</p>
-                        <p className="text-xs text-gray-500 truncate">{reseller.email}</p>
-                        {reseller.customDomain && (
-                          <div className="flex items-center gap-1 mt-0.5">
-                            <Globe className="w-2.5 h-2.5 text-primary-400" />
-                            <span className="text-xs text-primary-600 truncate">
-                              {reseller.customDomain}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                      reseller.isActive !== false
-                        ? 'bg-gray-100 text-gray-700'
-                        : 'bg-red-100 text-red-700'
-                    }`}>
-                      {reseller.isActive !== false ? 'Activo' : 'Inactivo'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs mb-2">
-                    <div className="flex items-center gap-3">
-                      <span className="text-lg">{reseller.currentTier?.icon}</span>
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full font-medium">
-                        <Percent className="w-3 h-3" />
-                        {reseller.effectiveDiscount}%
-                        {reseller.hasOverride && <Crown className="w-3 h-3 text-primary-500" />}
-                      </span>
-                      {reseller.pricingModel === 'v2'
-                        ? <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full font-medium">v2</span>
-                        : <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full font-medium">Legacy</span>}
-                      <span className="text-gray-500">{reseller.activeClientsCount || 0} activos</span>
-                    </div>
-                    <span className="font-semibold text-gray-900">S/ {(reseller.balance || 0).toFixed(2)}</span>
-                  </div>
-                  <div className="flex items-center justify-end gap-1 pt-2 border-t border-gray-100">
-                    <button
-                      onClick={() => openDepositModal(reseller)}
-                      className="p-2 text-gray-700 hover:bg-gray-50 rounded-lg text-xs flex items-center gap-1 transition-colors"
-                    >
-                      <Plus className="w-4 h-4" /> Saldo
-                    </button>
-                    <button
-                      onClick={() => openEditModal(reseller)}
-                      className="p-2 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => toggleResellerStatus(reseller)}
-                      className={`p-2 rounded-lg transition-colors ${
-                        reseller.isActive !== false
-                          ? 'text-red-500 hover:bg-red-50'
-                          : 'text-gray-500 hover:bg-gray-50'
-                      }`}
-                    >
-                      {reseller.isActive !== false ? (
-                        <XCircle className="w-4 h-4" />
-                      ) : (
-                        <CheckCircle className="w-4 h-4" />
-                      )}
-                    </button>
-                  </div>
+      <Seccion sinRelleno className="overflow-hidden">
+        {/* En el celular, tarjetas; la tabla desde tablet. Igual que Usuarios. */}
+        <div className="sm:hidden divide-y divide-gray-100">
+          {filteredResellers.length === 0 ? (
+            <p className="p-6 text-center text-[12.5px] text-gray-500">
+              {hayFiltros ? 'Ningún reseller coincide con el filtro.' : 'Todavía no hay resellers.'}
+            </p>
+          ) : filteredResellers.map(r => (
+            <div key={r.id} className="p-3">
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-gray-900 text-[13px] truncate">{r.companyName}</p>
+                  <p className="text-[11.5px] text-gray-500 truncate">{r.email}</p>
+                  {r.ruc && <p className="text-[11.5px] text-gray-500">RUC {r.ruc}</p>}
                 </div>
-              ))}
+                <div className="relative shrink-0">
+                  <BotonDeFila onClick={el => menu.alternar(r.id, el)} />
+                  {menu.abiertoEn === r.id && accionesDe(r)}
+                </div>
+              </div>
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px] text-gray-500">
+                <Estado valor={r.isActive !== false ? 'active' : 'suspended'} etiqueta={r.isActive !== false ? 'Activo' : 'Inactivo'} />
+                <span>{r.currentTier?.name || '—'} · {r.effectiveDiscount}% desc.</span>
+                <span className="font-medium text-gray-900">S/ {(r.balance || 0).toFixed(2)}</span>
+                <span>{r.activeClientsCount || 0} de {r.clientsCount || 0} clientes</span>
+                {r.customDomain && <span className="truncate">{r.customDomain}</span>}
+              </div>
             </div>
+          ))}
+        </div>
 
-            {/* Desktop Table View */}
-            <div className="hidden sm:block overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empresa</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contacto</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nivel</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Saldo</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Clientes</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {filteredResellers.map(reseller => (
-                    <tr key={reseller.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-primary-50 rounded-full flex items-center justify-center">
-                            <Building2 className="w-5 h-5 text-primary-700" />
-                          </div>
-                          <div>
-                            <p className="font-medium text-gray-900">{reseller.companyName}</p>
-                            <p className="text-sm text-gray-500">{reseller.ruc}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="text-sm text-gray-900">{reseller.contactName || '-'}</p>
-                        <p className="text-sm text-gray-500">{reseller.email}</p>
-                        {reseller.customDomain && (
-                          <div className="flex items-center gap-1 mt-1">
-                            <Globe className="w-3 h-3 text-primary-400" />
-                            <span className="text-xs text-primary-600">
-                              {reseller.customDomain}
-                            </span>
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xl">{reseller.currentTier?.icon}</span>
-                          <div>
-                            <div className="flex items-center gap-1">
-                              <span className="font-medium text-gray-900">{reseller.currentTier?.name}</span>
-                              {reseller.hasOverride && (
-                                <Crown className="w-3 h-3 text-primary-500" title="Descuento manual" />
-                              )}
-                            </div>
-                            <span className="text-sm text-gray-700 font-medium">{reseller.effectiveDiscount}% desc.</span>
-                            <div className="mt-0.5">
-                              {reseller.pricingModel === 'v2'
-                                ? <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded text-[11px] font-medium">v2</span>
-                                : <span className="px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded text-[11px] font-medium">Legacy</span>}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-gray-900">S/ {(reseller.balance || 0).toFixed(2)}</span>
-                          <button
-                            onClick={() => openDepositModal(reseller)}
-                            className="p-1 text-gray-700 hover:bg-gray-50 rounded transition-colors"
-                            title="Agregar saldo"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div>
-                          <span className="font-medium text-gray-900">{reseller.activeClientsCount || 0}</span>
-                          <span className="text-gray-400 text-sm"> / {reseller.clientsCount || 0}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                          reseller.isActive !== false
-                            ? 'bg-gray-100 text-gray-700'
-                            : 'bg-red-100 text-red-700'
-                        }`}>
-                          {reseller.isActive !== false ? 'Activo' : 'Inactivo'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => openApkModal(reseller)}
-                            className={`p-2 rounded-lg transition-colors ${
-                              reseller.androidApp?.url
-                                ? 'text-gray-700 hover:bg-gray-50'
-                                : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
-                            }`}
-                            title={reseller.androidApp?.url
-                              ? `App publicada${reseller.androidApp.version ? ` (v${reseller.androidApp.version})` : ''}`
-                              : 'Subir app Android'}
-                          >
-                            <Smartphone className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => openEditModal(reseller)}
-                            className="p-2 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => toggleResellerStatus(reseller)}
-                            className={`p-2 rounded-lg transition-colors ${
-                              reseller.isActive !== false
-                                ? 'text-red-500 hover:bg-red-50'
-                                : 'text-gray-500 hover:bg-gray-50'
-                            }`}
-                          >
-                            {reseller.isActive !== false ? (
-                              <XCircle className="w-4 h-4" />
-                            ) : (
-                              <CheckCircle className="w-4 h-4" />
-                            )}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-      </div>
+        <div className="hidden sm:block">
+          <Tabla>
+            <thead>
+              <tr>
+                <Th campo="empresa" orden={orden} onOrdenar={ordenarPor}>Empresa</Th>
+                <Th>Contacto</Th>
+                <Th campo="descuento" orden={orden} onOrdenar={ordenarPor}>Nivel</Th>
+                <Th campo="saldo" orden={orden} onOrdenar={ordenarPor} alinear="der">Saldo</Th>
+                <Th campo="clientes" orden={orden} onOrdenar={ordenarPor} alinear="der">Clientes</Th>
+                <Th>Estado</Th>
+                <Th ancho="44px" />
+              </tr>
+            </thead>
+            <tbody>
+              {filteredResellers.length === 0 ? (
+                <FilaVacia colSpan={7}>
+                  {hayFiltros ? 'Ningún reseller coincide con el filtro.' : 'Todavía no hay resellers.'}
+                </FilaVacia>
+              ) : filteredResellers.map(r => (
+                <Fila key={r.id}>
+                  <Td>
+                    <p className="font-medium text-gray-900">{r.companyName}</p>
+                    <p className="text-gray-500">{r.ruc || '—'}</p>
+                  </Td>
+                  <Td>
+                    <p className="text-gray-900">{r.contactName || '—'}</p>
+                    <p className="text-gray-500">{r.email}</p>
+                    {r.customDomain && <p className="text-primary-600">{r.customDomain}</p>}
+                  </Td>
+                  <Td>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-gray-900">{r.currentTier?.name || '—'}</span>
+                      {r.hasOverride && <Pastilla tono="punteado">manual</Pastilla>}
+                    </div>
+                    <p className="text-gray-500">
+                      {r.effectiveDiscount}% desc. · {r.pricingModel === 'v2' ? 'v2' : 'Legacy'}
+                    </p>
+                  </Td>
+                  <Td numero>S/ {(r.balance || 0).toFixed(2)}</Td>
+                  <Td numero>
+                    {r.activeClientsCount || 0}
+                    <span className="text-gray-400"> / {r.clientsCount || 0}</span>
+                  </Td>
+                  <Td>
+                    <Estado valor={r.isActive !== false ? 'active' : 'suspended'} etiqueta={r.isActive !== false ? 'Activo' : 'Inactivo'} />
+                  </Td>
+                  <Td alinear="centro">
+                    <div className="relative">
+                      <BotonDeFila onClick={el => menu.alternar(r.id, el)} />
+                      {menu.abiertoEn === r.id && accionesDe(r)}
+                    </div>
+                  </Td>
+                </Fila>
+              ))}
+            </tbody>
+          </Tabla>
+        </div>
+      </Seccion>
 
       {/* Create/Edit Modal */}
       {showModal && (
@@ -1164,6 +1097,7 @@ export default function AdminResellers() {
           </div>
         </div>
       )}
-    </div>
+      {menu.abiertoEn && <div className="fixed inset-0 z-40" onClick={menu.cerrar} />}
+    </Pagina>
   )
 }

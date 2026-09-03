@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { doc, updateDoc, serverTimestamp, Timestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -19,7 +19,10 @@ import ContactoModal from '@/components/admin/cuenta/ContactoModal'
 import AsignarVendedorModal from '@/components/admin/cuenta/AsignarVendedorModal'
 import EliminarCuentaModal from '@/components/admin/cuenta/EliminarCuentaModal'
 import VendedoresModal from '@/components/admin/cuenta/VendedoresModal'
-import { Pagina, Seccion, Tabla, Th, Td, Fila, FilaVacia, Filtros, FiltroSelect, Buscador, Estado, Pastilla, Boton } from '@/components/admin/ui'
+import {
+  Pagina, Seccion, Tabla, Th, Td, Fila, FilaVacia, Filtros, FiltroSelect, Buscador, Estado, Pastilla, Boton,
+  useMenuDeFila, CajaMenu, ItemMenu, SeparadorMenu,
+} from '@/components/admin/ui'
 
 // Lista de cuentas: buscador, filtros y tabla. Clic en una fila abre la ficha
 // (/app/admin/users/:id); el menu de la derecha tiene los atajos.
@@ -36,18 +39,6 @@ const getPlanDisplay = user => {
 }
 
 const formatDate = date => (date ? date.toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' }) : '—')
-
-function ItemMenu({ rojo = false, onClick, children }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`w-full px-3 py-1.5 text-left text-[12.5px] hover:bg-gray-50 ${rojo ? 'text-red-600' : 'text-gray-700'}`}
-    >
-      {children}
-    </button>
-  )
-}
 
 export default function AdminUsers() {
   const toast = useToast()
@@ -92,66 +83,9 @@ export default function AdminUsers() {
 
   // Menu de acciones de una fila. Es `position: fixed` (para salir del
   // overflow de la tabla), asi que al hacer scroll se recalcula contra su boton.
-  const [actionMenuUser, setActionMenuUser] = useState(null)
-  const [actionMenuPosition, setActionMenuPosition] = useState({ top: 0, left: 0 })
-  const actionMenuTriggerRef = useRef(null)
-
-  // Se coloca DEBAJO del boton y despues se encaja en la pantalla midiendo el
-  // menu de verdad (ver el efecto de abajo). Antes el alto estaba escrito a
-  // mano —470 px— y no coincidia con el menu real: en una laptop el menu se
-  // abria medio afuera de la pantalla y quedaba cortado.
-  const computeActionMenuPosition = triggerEl => {
-    if (!triggerEl) return null
-    const rect = triggerEl.getBoundingClientRect()
-    if (rect.bottom < 0 || rect.top > window.innerHeight) return null
-    return { top: rect.bottom + 4, left: Math.max(8, Math.min(rect.right - 208, window.innerWidth - 216)) }
-  }
-
-  const menuRef = useRef(null)
-
-  // Encajar el menu en la pantalla una vez que existe y se puede medir. Si no
-  // entra debajo del boton, sube; nunca se sale por arriba.
-  useLayoutEffect(() => {
-    if (!actionMenuUser || !menuRef.current) return
-    const alto = menuRef.current.offsetHeight
-    setActionMenuPosition(pos => {
-      const top = Math.max(8, Math.min(pos.top, window.innerHeight - alto - 8))
-      return top === pos.top ? pos : { ...pos, top }
-    })
-  }, [actionMenuUser])
-
-  const toggleActionMenu = (userId, triggerEl) => {
-    if (actionMenuUser === userId) {
-      setActionMenuUser(null)
-      actionMenuTriggerRef.current = null
-      return
-    }
-    const pos = computeActionMenuPosition(triggerEl)
-    if (!pos) return
-    actionMenuTriggerRef.current = triggerEl
-    setActionMenuPosition(pos)
-    setActionMenuUser(userId)
-  }
-
-  useEffect(() => {
-    if (!actionMenuUser) return
-    const reposition = () => {
-      const pos = computeActionMenuPosition(actionMenuTriggerRef.current)
-      if (!pos) {
-        setActionMenuUser(null)
-        actionMenuTriggerRef.current = null
-        return
-      }
-      setActionMenuPosition(pos)
-    }
-    // capture: true para captar tambien el scroll de contenedores internos
-    window.addEventListener('scroll', reposition, true)
-    window.addEventListener('resize', reposition)
-    return () => {
-      window.removeEventListener('scroll', reposition, true)
-      window.removeEventListener('resize', reposition)
-    }
-  }, [actionMenuUser])
+  // El menu de fila (posicion, medicion y cierre) vive en el kit: lo comparten
+  // esta pantalla y Resellers.
+  const menu = useMenuDeFila()
 
   // ── Carga ──────────────────────────────────────────────────────────────────
 
@@ -312,7 +246,7 @@ export default function AdminUsers() {
 
   const actualizarCuenta = (id, cambios) => setUsers(prev => prev.map(u => (u.id === id ? { ...u, ...cambios } : u)))
   const abrirModal = (tipo, cuenta) => {
-    setActionMenuUser(null)
+    menu.cerrar()
     setModal({ tipo, cuenta })
   }
   const cerrarModal = () => setModal(null)
@@ -343,7 +277,7 @@ export default function AdminUsers() {
   }
 
   async function toggleUserAccess(userId, block) {
-    setActionMenuUser(null)
+    menu.cerrar()
     try {
       await updateDoc(doc(db, 'subscriptions', userId), { accessBlocked: block, status: block ? 'suspended' : 'active' })
       toast.success(block ? 'Cuenta suspendida' : 'Cuenta reactivada')
@@ -357,7 +291,7 @@ export default function AdminUsers() {
   // Cobra el precio PACTADO del cliente (congelado en su suscripcion); el del
   // catalogo solo si no tiene uno.
   async function renovarRapido(user) {
-    setActionMenuUser(null)
+    menu.cerrar()
     const planConfig = PLANS[user.plan] || customPlans[user.plan]
     if (!planConfig) {
       toast.error('Esta cuenta no tiene un plan válido')
@@ -376,7 +310,7 @@ export default function AdminUsers() {
   }
 
   function abrirWhatsApp(user) {
-    setActionMenuUser(null)
+    menu.cerrar()
     const url = enlaceRecordatorioWhatsapp(user)
     if (!url) {
       toast.error('Esta cuenta no tiene teléfono registrado')
@@ -387,7 +321,7 @@ export default function AdminUsers() {
 
   // Archivar = dejar de contar la cuenta en vencimientos y tasas de renovacion.
   async function archivar(user, valor) {
-    setActionMenuUser(null)
+    menu.cerrar()
     if (valor && !window.confirm(`¿Archivar a ${user.businessName}? Queda fuera de los vencimientos y de las tasas de renovación.`)) return
     try {
       await updateDoc(doc(db, 'subscriptions', user.id), valor
@@ -492,24 +426,20 @@ export default function AdminUsers() {
   // abrio), asi que sirve igual desde la tabla y desde las tarjetas del celular.
   // Es una funcion y no un componente para que no se remonte en cada render.
   const menuAcciones = (user, vencida) => (
-            <div
-              ref={menuRef}
-              className="fixed w-52 max-h-[calc(100vh-16px)] overflow-y-auto overscroll-contain bg-white rounded-md border border-gray-200 shadow-md py-1 z-50 text-left"
-              style={{ top: actionMenuPosition.top, left: actionMenuPosition.left }}
-            >
+            <CajaMenu posicion={menu.posicion} refMenu={menu.refMenu}>
               <ItemMenu onClick={() => irAFicha(user)}>Ver ficha</ItemMenu>
               <ItemMenu onClick={() => abrirModal('pago', user)}>Registrar pago</ItemMenu>
               <ItemMenu onClick={() => renovarRapido(user)}>Renovar con el mismo plan</ItemMenu>
               <ItemMenu onClick={() => abrirModal('plan', user)}>Cambiar plan</ItemMenu>
               <ItemMenu onClick={() => abrirModal('vencimiento', user)}>Cambiar vencimiento</ItemMenu>
               <ItemMenu onClick={() => abrirWhatsApp(user)}>Recordar por WhatsApp</ItemMenu>
-              <div className="border-t border-gray-100 my-1" />
+              <SeparadorMenu />
               <ItemMenu onClick={() => abrirModal('contacto', user)}>Contacto del dueño</ItemMenu>
               <ItemMenu onClick={() => abrirModal('vendedor', user)}>Vendedor</ItemMenu>
               <ItemMenu onClick={() => abrirModal('sunat', user)}>Emisión electrónica</ItemMenu>
               <ItemMenu onClick={() => abrirModal('funciones', user)}>Funciones especiales</ItemMenu>
               <ItemMenu onClick={() => abrirModal('sucursales', user)}>Sucursales</ItemMenu>
-              <div className="border-t border-gray-100 my-1" />
+              <SeparadorMenu />
               {user.status !== 'suspended' ? (
                 <ItemMenu onClick={() => toggleUserAccess(user.id, true)}>Suspender</ItemMenu>
               ) : (
@@ -519,7 +449,7 @@ export default function AdminUsers() {
                 <ItemMenu onClick={() => archivar(user, !user.archived)}>{user.archived ? 'Desarchivar' : 'Archivar'}</ItemMenu>
               )}
               <ItemMenu rojo onClick={() => abrirModal('eliminar', user)}>Eliminar cuenta</ItemMenu>
-            </div>
+            </CajaMenu>
   )
 
   return (
@@ -637,13 +567,13 @@ export default function AdminUsers() {
                     <div className="relative shrink-0" onClick={e => e.stopPropagation()}>
                       <button
                         type="button"
-                        onClick={e => toggleActionMenu(user.id, e.currentTarget)}
+                        onClick={e => menu.alternar(user.id, e.currentTarget)}
                         className="h-7 w-7 rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-900 text-[16px] leading-none"
                         aria-label="Acciones"
                       >
                         ⋯
                       </button>
-                      {actionMenuUser === user.id && menuAcciones(user, vencida)}
+                      {menu.abiertoEn === user.id && menuAcciones(user, vencida)}
                     </div>
                   </div>
                   <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px] text-gray-500">
@@ -774,14 +704,14 @@ export default function AdminUsers() {
                     <Td alinear="centro" onClick={e => e.stopPropagation()}>
                       <button
                         type="button"
-                        onClick={e => toggleActionMenu(user.id, e.currentTarget)}
+                        onClick={e => menu.alternar(user.id, e.currentTarget)}
                         className="h-6 w-6 rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-900 text-[16px] leading-none"
                         title="Acciones"
                         aria-label="Acciones"
                       >
                         ⋯
                       </button>
-                      {actionMenuUser === user.id && menuAcciones(user, vencida)}
+                      {menu.abiertoEn === user.id && menuAcciones(user, vencida)}
                     </Td>
                   </Fila>
                 )
@@ -803,7 +733,7 @@ export default function AdminUsers() {
         )}
       </Seccion>
 
-      {actionMenuUser && <div className="fixed inset-0 z-40" onClick={() => setActionMenuUser(null)} />}
+      {menu.abiertoEn && <div className="fixed inset-0 z-40" onClick={menu.cerrar} />}
 
       {modal?.tipo === 'pago' && (
         <UserDetailsModal user={modal.cuenta} type="payment" onClose={cerrarModal} onRegisterPayment={handleRegisterPayment} loading={processingPayment} toast={toast} customPlans={customPlans} />
