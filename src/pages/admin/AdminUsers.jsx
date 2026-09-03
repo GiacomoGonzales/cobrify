@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { doc, updateDoc, serverTimestamp, Timestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -19,13 +19,12 @@ import ContactoModal from '@/components/admin/cuenta/ContactoModal'
 import AsignarVendedorModal from '@/components/admin/cuenta/AsignarVendedorModal'
 import EliminarCuentaModal from '@/components/admin/cuenta/EliminarCuentaModal'
 import VendedoresModal from '@/components/admin/cuenta/VendedoresModal'
-import HuerfanasModal from '@/components/admin/cuenta/HuerfanasModal'
 import { Pagina, Seccion, Tabla, Th, Td, Fila, FilaVacia, Filtros, FiltroSelect, Buscador, Estado, Pastilla, Boton } from '@/components/admin/ui'
 
 // Lista de cuentas: buscador, filtros y tabla. Clic en una fila abre la ficha
 // (/app/admin/users/:id); el menu de la derecha tiene los atajos.
 
-const STATUS_LABELS = { active: 'Activo', trial: 'Trial', suspended: 'Suspendido', expired: 'Vencido' }
+const STATUS_LABELS = { active: 'Activo', suspended: 'Suspendido', expired: 'Vencido' }
 const PAGE_SIZE = 10
 
 // Nombre del plan con su precio
@@ -61,7 +60,6 @@ export default function AdminUsers() {
   const [resellers, setResellers] = useState([])
   const [vendedores, setVendedores] = useState([])
   const [customPlans, setCustomPlans] = useState({})
-  const [huerfanas, setHuerfanas] = useState([])
 
   // El buscador de la cabecera del admin manda aqui con ?q=; si cambia estando
   // ya en la pagina (otra busqueda), tambien se aplica.
@@ -98,14 +96,29 @@ export default function AdminUsers() {
   const [actionMenuPosition, setActionMenuPosition] = useState({ top: 0, left: 0 })
   const actionMenuTriggerRef = useRef(null)
 
+  // Se coloca DEBAJO del boton y despues se encaja en la pantalla midiendo el
+  // menu de verdad (ver el efecto de abajo). Antes el alto estaba escrito a
+  // mano —470 px— y no coincidia con el menu real: en una laptop el menu se
+  // abria medio afuera de la pantalla y quedaba cortado.
   const computeActionMenuPosition = triggerEl => {
     if (!triggerEl) return null
     const rect = triggerEl.getBoundingClientRect()
     if (rect.bottom < 0 || rect.top > window.innerHeight) return null
-    const menuHeight = 470
-    const openUp = window.innerHeight - rect.bottom < menuHeight && rect.top > menuHeight
-    return { top: openUp ? rect.top - menuHeight : rect.bottom + 4, left: rect.right - 208 }
+    return { top: rect.bottom + 4, left: Math.max(8, Math.min(rect.right - 208, window.innerWidth - 216)) }
   }
+
+  const menuRef = useRef(null)
+
+  // Encajar el menu en la pantalla una vez que existe y se puede medir. Si no
+  // entra debajo del boton, sube; nunca se sale por arriba.
+  useLayoutEffect(() => {
+    if (!actionMenuUser || !menuRef.current) return
+    const alto = menuRef.current.offsetHeight
+    setActionMenuPosition(pos => {
+      const top = Math.max(8, Math.min(pos.top, window.innerHeight - alto - 8))
+      return top === pos.top ? pos : { ...pos, top }
+    })
+  }, [actionMenuUser])
 
   const toggleActionMenu = (userId, triggerEl) => {
     if (actionMenuUser === userId) {
@@ -145,9 +158,8 @@ export default function AdminUsers() {
   async function loadUsers(planes = customPlans) {
     setLoading(true)
     try {
-      const { cuentas, huerfanas: sinDueno, resellers: lista } = await cargarCuentas({ customPlans: planes })
+      const { cuentas, resellers: lista } = await cargarCuentas({ customPlans: planes })
       setUsers(cuentas)
-      setHuerfanas(sinDueno)
       setResellers(lista)
     } catch (error) {
       console.error('Error cargando cuentas:', error)
@@ -288,9 +300,8 @@ export default function AdminUsers() {
     return {
       total: activos.length,
       active: activos.filter(vigente).length,
-      trial: activos.filter(u => u.status === 'trial').length,
       suspended: activos.filter(u => u.status === 'suspended').length,
-      expired: activos.filter(u => !vigente(u) && u.status !== 'suspended' && u.status !== 'trial').length,
+      expired: activos.filter(u => !vigente(u) && u.status !== 'suspended').length,
       cobrify: activos.filter(u => !u.createdByReseller).length,
       reseller: activos.filter(u => u.createdByReseller).length,
       archived: users.filter(u => u.archived).length,
@@ -475,14 +486,15 @@ export default function AdminUsers() {
   const hayFiltros = Boolean(searchTerm) || cuantosFiltros > 0
   const resumen = loading
     ? 'Cargando cuentas…'
-    : `${filteredUsers.length} de ${users.length} cuentas · ${stats.active} activas · ${stats.trial} en trial · ${stats.expired} vencidas · ${stats.suspended} suspendidas${stats.archived ? ` · ${stats.archived} archivadas` : ''}`
+    : `${filteredUsers.length} de ${users.length} cuentas · ${stats.active} activas · ${stats.expired} vencidas · ${stats.suspended} suspendidas${stats.archived ? ` · ${stats.archived} archivadas` : ''}`
 
   // Menu ⋯ de una cuenta. Es `position: fixed` (se ancla al boton que lo
   // abrio), asi que sirve igual desde la tabla y desde las tarjetas del celular.
   // Es una funcion y no un componente para que no se remonte en cada render.
   const menuAcciones = (user, vencida) => (
             <div
-              className="fixed w-52 bg-white rounded-md border border-gray-200 shadow-md py-1 z-50 text-left"
+              ref={menuRef}
+              className="fixed w-52 max-h-[calc(100vh-16px)] overflow-y-auto overscroll-contain bg-white rounded-md border border-gray-200 shadow-md py-1 z-50 text-left"
               style={{ top: actionMenuPosition.top, left: actionMenuPosition.left }}
             >
               <ItemMenu onClick={() => irAFicha(user)}>Ver ficha</ItemMenu>
@@ -517,14 +529,6 @@ export default function AdminUsers() {
         <>
           <Boton tamano="sm" onClick={() => loadUsers()} disabled={loading}>{loading ? 'Cargando…' : 'Recargar'}</Boton>
           <Boton tamano="sm" onClick={() => abrirModal('vendedores')}>Vendedores</Boton>
-          <Boton
-            tamano="sm"
-            onClick={() => abrirModal('huerfanas')}
-            className={huerfanas.length ? 'text-red-600 border-red-200 hover:bg-red-50' : ''}
-            title="Suscripciones sin usuario ni negocio"
-          >
-            Huérfanas{huerfanas.length ? ` · ${huerfanas.length}` : ''}
-          </Boton>
           <Boton tamano="sm" onClick={exportToCSV}>Exportar CSV</Boton>
         </>
       }
@@ -542,7 +546,6 @@ export default function AdminUsers() {
         <FiltroSelect value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
           <option value="all">Estado</option>
           <option value="active">Activas</option>
-          <option value="trial">Trial</option>
           <option value="expired">Vencidas</option>
           <option value="suspended">Suspendidas</option>
         </FiltroSelect>
@@ -558,7 +561,7 @@ export default function AdminUsers() {
           <option value="all">Plan</option>
           {/* Solo el catalogo vigente: tras la migracion (15-jul-2026) no quedan cuentas en planes legacy */}
           {Object.entries(PLANS)
-            .filter(([key]) => SELLABLE_PLAN_IDS.includes(key) || key === 'enterprise' || key === 'trial')
+            .filter(([key]) => SELLABLE_PLAN_IDS.includes(key) || key === 'enterprise')
             .map(([key, plan]) => <option key={key} value={key}>{plan.name}</option>)}
         </FiltroSelect>
         <FiltroSelect value={sourceFilter} onChange={e => setSourceFilter(e.target.value)}>
@@ -828,9 +831,6 @@ export default function AdminUsers() {
         <EliminarCuentaModal cuenta={modal.cuenta} onClose={cerrarModal} onEliminada={id => setUsers(prev => prev.filter(u => u.id !== id))} />
       )}
       {modal?.tipo === 'vendedores' && <VendedoresModal vendedores={vendedores} cuentas={users} onClose={cerrarModal} onCambio={loadVendedores} />}
-      {modal?.tipo === 'huerfanas' && (
-        <HuerfanasModal huerfanas={huerfanas} onClose={cerrarModal} onEliminada={id => setHuerfanas(prev => prev.filter(h => h.id !== id))} />
-      )}
     </Pagina>
   )
 }
