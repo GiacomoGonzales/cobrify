@@ -1,0 +1,19 @@
+{
+  "name": "Cobrify Chat",
+  "short_name": "Cobrify Chat",
+  "description": "Bandeja de WhatsApp de Cobrify.",
+  "start_url": "/chat",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#25BB6A",
+  "theme_color": "#25BB6A",
+  "orientation": "any",
+  "lang": "es-PE",
+  "dir": "ltr",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "/chat/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/chat/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/chat/icon-1024.png", "sizes": "1024x1024", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -32,6 +32,7 @@ import { getActiveBranches } from '@/services/branchService'
 import { initializePushNotifications, cleanupPushNotifications } from '@/services/notificationService'
 import { setBusinessInfo, clearBusinessInfo } from '@/plugins/businessStorage'
 import { getFirstAllowedRoute } from '@/utils/pageRoutes'
+import { esDominioDelChat } from '@/utils/dominioChat'
 import SubscriptionBlockedModal from '@/components/SubscriptionBlockedModal'
 
 const AuthContext = createContext(null)
@@ -666,6 +667,14 @@ export const AuthProvider = ({ children }) => {
             console.error('Error al inicializar notificaciones push:', error)
             // No bloquear el login si fallan las notificaciones
           }
+        }
+
+        // Por el subdominio del chat se entra a la bandeja y punto: quien abre
+        // chat.cobrifyperu.com no viene a facturar. Si la cuenta no es admin, la
+        // propia pagina del chat la manda al panel.
+        if (esDominioDelChat()) {
+          navigate('/chat')
+          return { success: true }
         }
 
         // El onAuthChange se encargará de actualizar el estado

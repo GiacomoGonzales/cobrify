@@ -12,6 +12,7 @@ import {
   applyBrandingColors,
   removeBrandingColors
 } from '@/services/brandingService'
+import { esDominioDelChat, MARCA_CHAT } from '@/utils/dominioChat'
 
 const BrandingContext = createContext({
   branding: DEFAULT_BRANDING,
@@ -185,6 +186,23 @@ export function BrandingProvider({ children }) {
     // No pisar título/favicon en rutas públicas de catálogo/menú (lo maneja CatalogoPublico)
     const path = window.location.pathname
     if (path.startsWith('/catalogo/') || path.startsWith('/menu/')) return
+
+    // El subdominio del chat tiene marca propia y no la resuelve este contexto:
+    // sin esta salida, al terminar de cargar la marca por defecto se volvia a
+    // poner el titulo y el favicon de Cobrify encima de los de Cobrify Chat.
+    if (esDominioDelChat()) {
+      document.title = MARCA_CHAT.nombre
+      const ponerIcono = (selector, href) => {
+        const el = document.querySelector(selector)
+        if (el) el.setAttribute('href', href)
+      }
+      ponerIcono('link[rel="icon"]', MARCA_CHAT.favicon)
+      ponerIcono('link[rel="shortcut icon"]', MARCA_CHAT.favicon)
+      ponerIcono('link[rel="apple-touch-icon"]', MARCA_CHAT.iconoApple)
+      const theme = document.querySelector('meta[name="theme-color"]')
+      if (theme) theme.setAttribute('content', MARCA_CHAT.color)
+      return
+    }
 
     // Actualizar título de la pestaña
     if (branding.companyName && branding.companyName !== DEFAULT_BRANDING.companyName) {

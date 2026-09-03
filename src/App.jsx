@@ -6,6 +6,7 @@ import { ToastProvider } from './contexts/ToastContext'
 import AppLifecycleManager from './components/AppLifecycleManager'
 import MainLayout from './layouts/MainLayout'
 import LandingRouter from './components/LandingRouter'
+import { esDominioDelChat } from '@/utils/dominioChat'
 import { Capacitor } from '@capacitor/core'
 import { StatusBar, Style } from '@capacitor/status-bar'
 // ============================================================
@@ -287,8 +288,19 @@ function App() {
           <ToastProvider>
             <Suspense fallback={<PantallaCargando />}>
             <Routes>
-            {/* Landing Page - En móvil redirige a dashboard, en web usa LandingRouter */}
-            <Route path="/" element={isNative ? <Navigate to="/app/dashboard" replace /> : <LandingRouter />} />
+            {/* Landing Page - En móvil redirige a dashboard, en web usa LandingRouter.
+                En chat.cobrifyperu.com la raiz ES el chat: quien entra por esa
+                puerta viene a la bandeja, no a la pagina de marketing. */}
+            <Route
+              path="/"
+              element={
+                esDominioDelChat()
+                  ? <Navigate to="/chat" replace />
+                  : isNative
+                    ? <Navigate to="/app/dashboard" replace />
+                    : <LandingRouter />
+              }
+            />
 
             {/* Rutas públicas de autenticación */}
             <Route path="/login" element={<Login />} />

@@ -5,6 +5,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import SplashMarca from '@/components/SplashMarca'
 import { esDominioReseller } from '@/utils/resellerDomain'
+import { esDominioDelChat, MARCA_CHAT } from '@/utils/dominioChat'
 import { useAuth } from '@/contexts/AuthContext'
 import { loginSchema } from '@/utils/schemas'
 import { getResellerBranding, getResellerByHostname } from '@/services/brandingService'
@@ -30,10 +31,11 @@ export default function Login() {
   const isBusinessUser = isAdmin || isBusinessOwner || isReseller || !!userPermissions
   const isShopperAccount = isAuthenticated && rolesResolved && !isBusinessUser
 
-  // Redirigir al dashboard si el usuario ya está autenticado (solo usuarios del sistema)
+  // Redirigir al entrar (solo usuarios del sistema). Por el subdominio del chat
+  // se cae en la bandeja: quien entra por esa puerta no viene a facturar.
   useEffect(() => {
     if (isAuthenticated && !isAuthLoading && rolesResolved && isBusinessUser) {
-      navigate('/app/dashboard', { replace: true })
+      navigate(esDominioDelChat() ? '/chat' : '/app/dashboard', { replace: true })
     }
   }, [isAuthenticated, isAuthLoading, rolesResolved, isBusinessUser, navigate])
 
@@ -49,6 +51,18 @@ export default function Login() {
       setIsLoadingBranding(true)
 
       try {
+        // Prioridad 0: el subdominio del chat tiene marca propia y no hay nada
+        // que consultar — es una constante, no un reseller de la base.
+        if (esDominioDelChat()) {
+          setCustomBranding({
+            companyName: MARCA_CHAT.nombre,
+            logoUrl: MARCA_CHAT.icono,
+            primaryColor: MARCA_CHAT.color,
+            lema: 'Bandeja de WhatsApp',
+          })
+          return
+        }
+
         // Prioridad 1: Parámetro ?ref= en la URL
         if (refId) {
           console.log('🔍 Loading branding by ref param:', refId)
@@ -160,7 +174,7 @@ export default function Login() {
               </div>
             )}
             <h1 className="text-3xl font-bold text-white mb-1">{customBranding.companyName}</h1>
-            <p className="text-sm text-white/80">Sistema de facturación para Perú</p>
+            <p className="text-sm text-white/80">{customBranding.lema || 'Sistema de facturación para Perú'}</p>
           </div>
 
           <Card className="shadow-2xl">
@@ -201,7 +215,7 @@ export default function Login() {
           </Card>
 
           <p className="text-center text-white text-xs mt-4 opacity-75">
-            © 2025 {customBranding.companyName}. Sistema de facturación y cobranza.
+            © {new Date().getFullYear()} {customBranding.companyName}. {customBranding.lema ? `${customBranding.lema}.` : 'Sistema de facturación y cobranza.'}
           </p>
         </div>
       </div>

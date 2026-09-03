@@ -37,6 +37,41 @@ function isResellerDomain(hostname) {
   return !IGNORED_DOMAINS.some(ignored => h.includes(ignored))
 }
 
+// El subdominio del chat (chat.cobrifyperu.com) es la MISMA app servida por
+// otra puerta. Su marca no sale de la base de datos: es una constante, asi que
+// la vista previa se arma aca mismo en vez de pagar una funcion. Criterio
+// espejado en src/utils/dominioChat.js y en el <head> de index.html.
+const HOSTS_DEL_CHAT = ['chat.cobrifyperu.com', 'chat.cobrify.com', 'chat.localhost']
+
+function esDominioDelChat(hostname) {
+  if (!hostname) return false
+  return HOSTS_DEL_CHAT.includes(hostname.toLowerCase().split(':')[0])
+}
+
+const META_CHAT = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>Cobrify Chat</title>
+<meta name="description" content="Bandeja de WhatsApp de Cobrify." />
+<meta name="robots" content="noindex, nofollow" />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Cobrify Chat" />
+<meta property="og:title" content="Cobrify Chat" />
+<meta property="og:description" content="Bandeja de WhatsApp de Cobrify." />
+<meta property="og:url" content="https://chat.cobrifyperu.com/" />
+<meta property="og:image" content="https://chat.cobrifyperu.com/chat/icon-1024.png" />
+<meta property="og:image:type" content="image/png" />
+<meta property="og:image:width" content="1024" />
+<meta property="og:image:height" content="1024" />
+<meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="Cobrify Chat" />
+<meta name="twitter:description" content="Bandeja de WhatsApp de Cobrify." />
+<meta name="twitter:image" content="https://chat.cobrifyperu.com/chat/icon-1024.png" />
+</head>
+<body>Cobrify Chat</body>
+</html>`
+
 export default function middleware(request) {
   const url = new URL(request.url)
   const hostname = request.headers.get('host') || ''
@@ -68,6 +103,18 @@ export default function middleware(request) {
   // Solo interceptar para bots sociales
   if (!isSocialBot(userAgent)) {
     return // Continuar normalmente
+  }
+
+  // Caso 0: subdominio del chat. Es privado, asi que el HTML no dice mas que su
+  // nombre y su icono; el navegador de una persona nunca llega aca.
+  if (esDominioDelChat(hostname)) {
+    return new Response(META_CHAT, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'public, max-age=300',
+      },
+    })
   }
 
   // Caso 1: Catálogo público (/catalogo/:slug)

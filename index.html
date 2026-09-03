@@ -98,6 +98,54 @@
       "inLanguage": "es-PE"
     }
     </script>
+    <!-- MARCA DEL SUBDOMINIO DEL CHAT (chat.cobrifyperu.com).
+         Va en el <head>, no en el <body>: tiene que correr ANTES de que el
+         navegador lea el manifiesto o pinte el favicon, o se ve un parpadeo con
+         el logo de Cobrify. El criterio ("chat.") esta espejado en
+         src/utils/dominioChat.js — si cambias uno, cambia el otro. -->
+    <script>
+      (function () {
+        try {
+          var hosts = ['chat.cobrifyperu.com', 'chat.cobrify.com', 'chat.localhost'];
+          if (hosts.indexOf(window.location.hostname.toLowerCase()) === -1) return;
+          document.title = 'Cobrify Chat';
+          var poner = function (selector, href) {
+            var el = document.querySelector(selector);
+            if (el) el.setAttribute('href', href);
+          };
+          poner('link[rel="icon"]', '/chat/icon-64.png');
+          poner('link[rel="shortcut icon"]', '/chat/icon-64.png');
+          poner('link[rel="apple-touch-icon"]', '/chat/icon-180.png');
+          poner('link[rel="manifest"]', '/chat/manifest.json');
+          var meta = function (selector, contenido) {
+            var el = document.querySelector(selector);
+            if (el) el.setAttribute('content', contenido);
+          };
+          meta('meta[name="theme-color"]', '#25BB6A');
+          meta('meta[name="apple-mobile-web-app-title"]', 'Cobrify Chat');
+          meta('meta[name="title"]', 'Cobrify Chat');
+          meta('meta[name="description"]', 'Bandeja de WhatsApp de Cobrify.');
+          meta('meta[name="robots"]', 'noindex, nofollow');
+          meta('meta[property="og:title"]', 'Cobrify Chat');
+          meta('meta[property="og:description"]', 'Bandeja de WhatsApp de Cobrify.');
+          meta('meta[property="og:site_name"]', 'Cobrify Chat');
+          meta('meta[property="og:url"]', 'https://chat.cobrifyperu.com/');
+          meta('meta[name="twitter:title"]', 'Cobrify Chat');
+          meta('meta[name="twitter:description"]', 'Bandeja de WhatsApp de Cobrify.');
+          var icono = 'https://chat.cobrifyperu.com/chat/icon-1024.png';
+          meta('meta[property="og:image"]', icono);
+          meta('meta[property="og:image:url"]', icono);
+          meta('meta[property="og:image:secure_url"]', icono);
+          meta('meta[property="og:image:type"]', 'image/png');
+          meta('meta[property="og:image:width"]', '1024');
+          meta('meta[property="og:image:height"]', '1024');
+          meta('meta[property="og:image:alt"]', 'Cobrify Chat');
+          meta('meta[name="twitter:image"]', icono);
+          meta('meta[name="twitter:image:alt"]', 'Cobrify Chat');
+          meta('meta[name="twitter:card"]', 'summary');
+        } catch (e) { /* sin marca propia: la app carga igual */ }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
