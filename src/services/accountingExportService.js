@@ -70,6 +70,51 @@ const hasXml = (inv) => {
 /**
  * Construye el workbook con estilos. Retorna el workbook listo para escribir.
  */
+/**
+ * ¿Este documento DESHACE una venta?
+ *
+ * Acepta las dos escrituras que conviven en la base (`nota_credito` y
+ * `nota-credito`), igual que el mapa de nombres de más abajo.
+ */
+const esNotaDeCredito = (docType) =>
+  String(docType || '').replace('-', '_') === 'nota_credito'
+
+/**
+ * Los montos de un documento COMO LOS CUENTA LA CONTABILIDAD.
+ *
+ * Una nota de crédito no es una venta más: deshace una. Se guarda en positivo
+ * —es un comprobante con su propio total— pero en un reporte contable tiene
+ * que RESTAR. Sumándola, el total del período dice que se vendió más de lo que
+ * se vendió, y encima crece cada vez que se corrige una venta (observación de
+ * JMC, 03-sep-2026). La nota de DÉBITO sí suma: aumenta la deuda.
+ *
+ * Un solo lugar para las tres hojas que suman plata. El desglose por afectación
+ * estaba copiado tres veces, que es justo donde el signo se habría arreglado en
+ * una y no en las otras.
+ */
+const montosContables = (inv) => {
+  const signo = esNotaDeCredito(inv.documentType) ? -1 : 1
+  let gravada = 0, exonerada = 0, inafecta = 0
+  if (Array.isArray(inv.items)) {
+    inv.items.forEach(item => {
+      const monto = (item.quantity || 1) * (item.price || item.unitPrice || 0)
+      if (item.taxAffectation === '20') exonerada += monto
+      else if (item.taxAffectation === '30') inafecta += monto
+      else gravada += monto
+    })
+  }
+  return {
+    signo,
+    gravada: signo * gravada,
+    exonerada: signo * exonerada,
+    inafecta: signo * inafecta,
+    subtotal: signo * (inv.subtotal || 0),
+    descuento: signo * (inv.discount || 0),
+    igv: signo * (inv.igv || inv.tax || 0),
+    total: signo * (inv.total || 0),
+  }
+}
+
 function buildAccountingWorkbook(filtered, businessData = null, periodLabel = null) {
   // Multi-divisa: detectar si hay facturas USD. Si las hay, agregamos
   // columna "Moneda" y totales separados por moneda.
@@ -114,16 +159,8 @@ function buildAccountingWorkbook(filtered, businessData = null, periodLabel = nu
     docTypes.push(docType)
     invoiceCurrencies.push(invCcy)
 
-    // Desglose tributario (a partir de items)
-    let opGravada = 0, opExonerada = 0, opInafecta = 0
-    if (inv.items && Array.isArray(inv.items)) {
-      inv.items.forEach(item => {
-        const itemTotal = (item.quantity || 1) * (item.price || item.unitPrice || 0)
-        if (item.taxAffectation === '20') opExonerada += itemTotal
-        else if (item.taxAffectation === '30') opInafecta += itemTotal
-        else opGravada += itemTotal
-      })
-    }
+    // Desglose tributario, ya con el signo que le toca al documento
+    const montos = montosContables(inv)
 
     const typeNames = {
       factura: 'Factura', boleta: 'Boleta',
@@ -142,13 +179,13 @@ function buildAccountingWorkbook(filtered, businessData = null, periodLabel = nu
       inv.customer?.businessName || inv.customer?.name || '-',
       inv.customer?.documentNumber || '-',
       formatDateAccounting(getInvoiceDate(inv)),
-      Number(opGravada.toFixed(2)),
-      Number(opExonerada.toFixed(2)),
-      Number(opInafecta.toFixed(2)),
-      Number((inv.subtotal || 0).toFixed(2)),
-      Number((inv.discount || 0).toFixed(2)),
-      Number((inv.igv || inv.tax || 0).toFixed(2)),
-      Number((inv.total || 0).toFixed(2)),
+      Number(montos.gravada.toFixed(2)),
+      Number(montos.exonerada.toFixed(2)),
+      Number(montos.inafecta.toFixed(2)),
+      Number(montos.subtotal.toFixed(2)),
+      Number(montos.descuento.toFixed(2)),
+      Number(montos.igv.toFixed(2)),
+      Number(montos.total.toFixed(2)),
       ...(hasUsdInvoices ? [invCcy] : []),
       sunatLabel,
       hasXml(inv) ? 'Sí' : 'No',
@@ -161,20 +198,14 @@ function buildAccountingWorkbook(filtered, businessData = null, periodLabel = nu
   const totalsByCurrency = filtered.reduce((acc, inv) => {
     const ccy = normalizeCurrency(inv.currency)
     if (!acc[ccy]) acc[ccy] = { gravada: 0, exonerada: 0, inafecta: 0, subtotal: 0, descuento: 0, igv: 0, total: 0 }
-    let g = 0, e = 0, ia = 0
-    inv.items?.forEach(item => {
-      const t = (item.quantity || 1) * (item.price || item.unitPrice || 0)
-      if (item.taxAffectation === '20') e += t
-      else if (item.taxAffectation === '30') ia += t
-      else g += t
-    })
-    acc[ccy].gravada += g
-    acc[ccy].exonerada += e
-    acc[ccy].inafecta += ia
-    acc[ccy].subtotal += (inv.subtotal || 0)
-    acc[ccy].descuento += (inv.discount || 0)
-    acc[ccy].igv += (inv.igv || inv.tax || 0)
-    acc[ccy].total += (inv.total || 0)
+    const m = montosContables(inv)
+    acc[ccy].gravada += m.gravada
+    acc[ccy].exonerada += m.exonerada
+    acc[ccy].inafecta += m.inafecta
+    acc[ccy].subtotal += m.subtotal
+    acc[ccy].descuento += m.descuento
+    acc[ccy].igv += m.igv
+    acc[ccy].total += m.total
     return acc
   }, {})
 
@@ -284,21 +315,15 @@ function appendIgvMonthlySheet(wb, invoices, businessData, periodLabel) {
       })
     }
     const e = agg.get(key)
-    let g = 0, exo = 0, ina = 0
-    inv.items?.forEach(item => {
-      const t = (item.quantity || 1) * (item.price || item.unitPrice || 0)
-      if (item.taxAffectation === '20') exo += t
-      else if (item.taxAffectation === '30') ina += t
-      else g += t
-    })
+    const m = montosContables(inv)
     e.count += 1
-    e.gravada += g
-    e.exonerada += exo
-    e.inafecta += ina
-    e.subtotal += (inv.subtotal || 0)
-    e.descuento += (inv.discount || 0)
-    e.igv += (inv.igv || inv.tax || 0)
-    e.total += (inv.total || 0)
+    e.gravada += m.gravada
+    e.exonerada += m.exonerada
+    e.inafecta += m.inafecta
+    e.subtotal += m.subtotal
+    e.descuento += m.descuento
+    e.igv += m.igv
+    e.total += m.total
   }
   if (agg.size === 0) return
 
@@ -469,8 +494,12 @@ function appendItemsAfectacionSheet(wb, invoices, businessData, periodLabel) {
     if (!Array.isArray(inv.items)) continue
     const invDate = formatDateAccounting(getInvoiceDate(inv))
     const customerName = inv.customer?.name || inv.customer?.businessName || 'Cliente General'
+    // La devolución se cuenta como lo que es: unidades que VUELVEN. Con la
+    // cantidad en negativo, cantidad x precio da el subtotal negativo solo y
+    // la fila sigue cuadrando en la planilla.
+    const signoDoc = esNotaDeCredito(inv.documentType) ? -1 : 1
     for (const item of inv.items) {
-      const qty = item.quantity || 1
+      const qty = signoDoc * (item.quantity || 1)
       const price = item.unitPrice || item.price || 0
       const sub = qty * price
       const afect = item.taxAffectation === '20' ? 'EXONERADO' : item.taxAffectation === '30' ? 'INAFECTO' : 'GRAVADO'
