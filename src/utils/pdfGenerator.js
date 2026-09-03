@@ -16,6 +16,7 @@ import { getWalletLogoDataUrl } from '@/utils/walletLogos'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 import { vinculoDe } from '@/utils/documentLinks'
+import { lineasDelComprobante } from '@/utils/comprobantePorConsumo'
 
 /**
  * Convierte un número a texto en español (para montos en facturas peruanas)
@@ -1536,8 +1537,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const minProductRowHeight = (spacious ? 22 : 15) * S
   const lineHeight = (spacious ? 10 : 9) * S // Altura por línea de texto
 
-  // Solo mostrar las filas que tienen productos (sin filas vacías)
-  const rawItems = invoice.items || []
+  // Solo mostrar las filas que tienen productos (sin filas vacías).
+  // Si el comprobante se emitió POR CONSUMO, acá viene la línea única.
+  const rawItems = lineasDelComprobante(invoice)
 
   // Agrupar unidades con número de serie del mismo producto (mismo precio/descuento/lote)
   // en una sola fila, concatenando las series. Items sin serialNumber no se modifican.

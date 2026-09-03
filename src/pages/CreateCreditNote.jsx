@@ -13,6 +13,7 @@ import Alert from '@/components/ui/Alert'
 import { getInvoicesPage, createInvoice, updateInvoice, getDocumentSeries, updateDocumentSeries, updateProductStockTransaction, sendCreditNoteToSunat, getCompanySettings, createNoteWithNumber } from '@/services/firestoreService'
 import { formatCurrency } from '@/lib/utils'
 import { normalizeCurrency, convertToBase } from '@/utils/currency'
+import { lineasDelComprobante } from '@/utils/comprobantePorConsumo'
 import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
 import AutoGrowTextarea from '@/components/ui/AutoGrowTextarea'
 
@@ -330,7 +331,10 @@ export default function CreateCreditNote() {
             // referencie el valor de la factura original — no la cantidad
             // actual ya editada. Sin esto, al bajar de 5 a 4, el usuario no
             // podía volver a subir a 5 porque el cap caía al valor actual.
-            items: invoice.items.map((item, idx) => {
+            // Las MISMAS líneas que se le mandaron a SUNAT en la factura. Si
+            // salió POR CONSUMO, la nota también: una NC con los platos contra
+            // una boleta de una línea no cuadra en el portal de SUNAT.
+            items: lineasDelComprobante(invoice).map((item, idx) => {
               const qty = Number(item.quantity) || 0
               const lineGross = unitGrossOf(item) * qty
               const lineAfterItemDisc = Math.max(0, lineGross - (Number(item.itemDiscount) || 0))

@@ -287,6 +287,25 @@ const UNIT_CODE_MAP = {
  * @param {string} unit - Unidad de medida (puede ser texto o código)
  * @returns {string} - Código SUNAT válido (default: NIU)
  */
+/**
+ * Las lineas que le tocan al comprobante.
+ *
+ * Un restaurante puede emitir POR CONSUMO: el documento lleva una sola linea
+ * en vez del detalle de platos. En ese caso el POS congela esa linea en
+ * `itemsComprobante` al cobrar, y `items` queda con el detalle real para el
+ * stock, los insumos y los reportes.
+ *
+ * Se congela y no se calcula aca porque lo IMPRESO y lo DECLARADO tienen que
+ * ser lo mismo para siempre, y el criterio vive del lado del front
+ * (src/utils/comprobantePorConsumo.js) donde se arma la venta. Esta funcion
+ * solo elige cual de las dos listas usar.
+ */
+function lineasDelComprobante(documento) {
+  const congeladas = documento && documento.itemsComprobante
+  if (Array.isArray(congeladas) && congeladas.length > 0) return congeladas
+  return (documento && documento.items) || []
+}
+
 function mapUnitToSunatCode(unit) {
   if (!unit) return 'NIU'
   const normalized = unit.toString().toUpperCase().trim()
@@ -551,7 +570,7 @@ export function generateInvoiceXML(invoiceData, businessData) {
   // sea mayor a cero. Por eso se emite solo cuando hay algo regalado con valor
   // declarado: un ítem marcado como regalo al que nadie le puso precio de
   // referencia no suma nada al total y haría rebotar el comprobante.
-  const hayGratuitasConValor = (invoiceData.items || []).some((it) => (
+  const hayGratuitasConValor = lineasDelComprobante(invoiceData).some((it) => (
     isBonificacionItem(it)
     && unitarioDeclarable(it, true) * (Number(it?.quantity) || 0) > 0
   ))
@@ -879,7 +898,7 @@ export function generateInvoiceXML(invoiceData, businessData) {
   // Si no existe globalDiscount (facturas antiguas), usar discount como fallback.
   // Pero si hay items con itemDiscount, restar esos del discount total para no contar doble.
   // Las bonificaciones tampoco cuentan como descuento global (no es un descuento, es un regalo).
-  const itemDiscountsSum = (invoiceData.items || []).reduce((sum, item) => {
+  const itemDiscountsSum = lineasDelComprobante(invoiceData).reduce((sum, item) => {
     if (isBonificacionItem(item)) return sum
     return sum + (item.itemDiscount || item.descuento || 0)
   }, 0)
@@ -923,7 +942,7 @@ export function generateInvoiceXML(invoiceData, businessData) {
   let sumBonificadas = 0   // Valor referencial SIN IGV de bonificaciones (afectación = '15')
   let sumIGVBonificadas = 0 // IGV referencial de bonificaciones (no se cobra al cliente)
 
-  invoiceData.items.forEach((item) => {
+  lineasDelComprobante(invoiceData).forEach((item) => {
     const isBonifLine = isBonificacionItem(item)
 
     // Qué SERÍA esta línea si se cobrara. De ahí sale su afectación: si se
@@ -1152,7 +1171,7 @@ export function generateInvoiceXML(invoiceData, businessData) {
 
   // DEBUG: Log de valores calculados
   console.log('🧮 XML Generator - Cálculos SUNAT:')
-  console.log(`   Items count: ${invoiceData.items.length}`)
+  console.log(`   Items count: ${lineasDelComprobante(invoiceData).length}`)
   console.log(`   discountWithIGV (global, con IGV): ${discountWithIGV}`)
   console.log(`   globalDiscountBase (sin IGV, código 02): ${globalDiscountBase}`)
   console.log(`   globalDiscountIGV: ${globalDiscountIGV}`)
@@ -1359,7 +1378,7 @@ export function generateInvoiceXML(invoiceData, businessData) {
     .txt(payableAmount.toFixed(2))
 
   // === ITEMS ===
-  invoiceData.items.forEach((item, index) => {
+  lineasDelComprobante(invoiceData).forEach((item, index) => {
     const invoiceLine = root.ele('cac:InvoiceLine')
 
     // Recuperar la afectación calculada en el bloque anterior (toma en cuenta bonificación)
@@ -1765,7 +1784,7 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
   const cnLineTaxableRef = []   // Valor referencial sin IGV por línea
   const cnLineIGVRef = []       // IGV referencial por línea
 
-  creditNoteData.items.forEach((item) => {
+  lineasDelComprobante(creditNoteData).forEach((item) => {
     const isBonifLine = isBonificacionItem(item)
 
     // Mismo criterio que la factura: la gratuita hereda la familia de lo que
@@ -1937,7 +1956,7 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
     .txt(cnTotal.toFixed(2))
 
   // === ITEMS (CreditNoteLine en lugar de InvoiceLine) ===
-  creditNoteData.items.forEach((item, index) => {
+  lineasDelComprobante(creditNoteData).forEach((item, index) => {
     const creditNoteLine = root.ele('cac:CreditNoteLine')
 
     // Recuperar la afectación calculada en el bloque anterior (toma en cuenta bonificación)
@@ -2305,7 +2324,7 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
   const dnLineIgvRates = []
   const dnLineTaxAffectations = []
 
-  debitNoteData.items.forEach((item) => {
+  lineasDelComprobante(debitNoteData).forEach((item) => {
     let taxAffectation
     if (igvExempt) {
       taxAffectation = '20'
@@ -2424,7 +2443,7 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
     .txt(debitNoteData.total.toFixed(2))
 
   // === ITEMS (DebitNoteLine en lugar de InvoiceLine) ===
-  debitNoteData.items.forEach((item, index) => {
+  lineasDelComprobante(debitNoteData).forEach((item, index) => {
     const debitNoteLine = root.ele('cac:DebitNoteLine')
 
     // Código de afectación al IGV (10=Gravado, 20=Exonerado, 30=Inafecto)

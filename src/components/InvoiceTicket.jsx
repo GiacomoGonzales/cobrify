@@ -10,6 +10,7 @@ import { formatQuantity } from '@/lib/utils'
 import { getTicketFooterParts } from '@/utils/ticketFooter'
 import { vinculoDe } from '@/utils/documentLinks'
 import { getUnitShortLabel } from '@/utils/units'
+import { lineasDelComprobante } from '@/utils/comprobantePorConsumo'
 
 /**
  * Componente de Ticket Imprimible según formato SUNAT
@@ -942,7 +943,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
       <div className="ticket-section">
         <div className="section-title">DETALLE</div>
         <div className="items-table">
-          {invoice.items?.map((item, index) => {
+          {lineasDelComprobante(invoice).map((item, index) => {
             // Formatear cantidad: con decimales si tiene, sino entero
             const qtyFormatted = formatQuantity(item.quantity);
             const unitSuffix = item.unit && item.allowDecimalQuantity ? ` ${getUnitShortLabel(item.unit)}` : '';

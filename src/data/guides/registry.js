@@ -88,6 +88,16 @@ export const GUIDES = [
     load: () => import('./cuanto-gano.js'),
   },
   {
+    id: 'por-consumo',
+    route: null, // la opción vive en Configuración y la casilla en el POS
+    title: 'Emitir POR CONSUMO',
+    category: 'Ventas',
+    description: 'Que la boleta salga con una sola línea en vez del detalle de platos, sin cambiar nada por dentro.',
+    keywords: 'por consumo una sola linea detalle platos boleta factura restaurante mesa cuenta consumo de alimentos y bebidas resumir juntar agrupar ticket largo',
+    modos: ['restaurant'],
+    load: () => import('./por-consumo.js'),
+  },
+  {
     id: 'prestamos-cartera',
     route: '/app/prestamos-cartera',
     title: 'Préstamos (Cartera)',

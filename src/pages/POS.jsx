@@ -143,6 +143,7 @@ import GuideLink from '@/components/guide/GuideLink'
 import { diasDeRecordatorio } from '@/utils/vetReminders'
 import { repreciarPorCantidad } from '@/utils/autoPriceByQty'
 import { revisarAntesDeEmitir, textoDeErrores } from '@/utils/sunatPreflight'
+import { lineasPorConsumo, TEXTO_POR_CONSUMO } from '@/utils/comprobantePorConsumo'
 import AutoGrowTextarea from '@/components/ui/AutoGrowTextarea'
 
 const PAYMENT_METHODS = {
@@ -515,6 +516,12 @@ export default function POS() {
     return effectiveTaxConfig.taxType === 'reduced' ? effectiveTaxConfig.igvRate : item?.igvRate
   }, [allowManualTaxAffectation, saleTaxMode, effectiveTaxConfig])
   const [recargoConsumoConfig, setRecargoConsumoConfig] = useState({ enabled: false, rate: 10 }) // Recargo al Consumo (restaurantes)
+  // POR CONSUMO (restaurantes): el comprobante sale con una sola línea en vez
+  // del detalle de platos. Adentro no cambia nada — ver comprobantePorConsumo.js.
+  const [porConsumoConfig, setPorConsumoConfig] = useState({ enabled: false, texto: TEXTO_POR_CONSUMO })
+  // Por VENTA: el negocio fija el default en Configuración y el cajero puede
+  // desmarcarlo en una venta puntual (un cliente que pide el detalle).
+  const [porConsumoVenta, setPorConsumoVenta] = useState(false)
   // Recargo por pago con tarjeta (Configuración > Ventas). Cuando aplica, SUBE el
   // precio de los productos (no se muestra como línea); el comprobante sale como
   // una venta normal a ese precio, así el IGV queda correcto sin tocar SUNAT.
@@ -3091,6 +3098,12 @@ export default function POS() {
             rate: businessData.restaurantConfig.recargoConsumoRate ?? 10
           }
           setRecargoConsumoConfig(rcConfig)
+          const pcTexto = (businessData.restaurantConfig.porConsumoTexto || '').trim() || TEXTO_POR_CONSUMO
+          const pcEnabled = businessData.restaurantConfig.porConsumoEnabled === true
+          setPorConsumoConfig({ enabled: pcEnabled, texto: pcTexto })
+          // El default de la casilla: si el negocio lo tiene activado, lo quiere
+          // siempre. Dejarlo solo como casilla manual se olvida todos los días.
+          setPorConsumoVenta(pcEnabled)
         }
 
         // Cargar configuración de Recargo por pago con tarjeta (Configuración > Ventas)
@@ -5924,27 +5937,51 @@ export default function POS() {
   }, [cart, cardSurchargeFactor])
 
   // Calcular montos sin descuento (optimizado con useMemo)
+  // ¿Esta venta sale POR CONSUMO? Solo en restaurante, con el módulo activado
+  // en Configuración y la casilla marcada al cobrar.
+  const porConsumoActivo = businessMode === 'restaurant' && porConsumoConfig.enabled && porConsumoVenta
+
   const amounts = React.useMemo(() => {
     // Calcular total de descuentos por ítem
     const totalItemDiscounts = effectiveCart.reduce((sum, item) => sum + (item.itemDiscount || 0), 0)
 
     // Usar calculateMixedInvoiceAmounts para manejar productos con diferentes taxAffectation
     // Aplicamos el precio efectivo considerando el descuento por ítem
+    const lineasDelCarrito = effectiveCart.map(item => {
+      const lineTotal = item.price * item.quantity
+      const itemDiscount = item.itemDiscount || 0
+      // Calcular precio efectivo por unidad después del descuento del ítem
+      const effectivePrice = itemDiscount > 0
+        ? (lineTotal - itemDiscount) / item.quantity
+        : item.price
+      return {
+        price: effectivePrice,
+        quantity: item.quantity,
+        taxAffectation: resolveItemTaxAffectation(item),
+        igvRate: resolveItemIgvRate(item),
+      }
+    })
+
+    // POR CONSUMO: los totales se calculan sobre la línea COLAPSADA, no sobre
+    // los platos. El total a pagar es idéntico —el colapso lo conserva exacto—,
+    // pero la base y el IGV de un documento de una sola línea son los de esa
+    // línea. Sin esto el ticket imprimiría un IGV y el visualizador de SUNAT
+    // mostraría otro con uno o dos céntimos de diferencia: el sistema redondea
+    // por línea justamente para que XML y ticket cuadren (ver peruUtils).
+    const lineasParaTotales = porConsumoActivo
+      ? lineasPorConsumo(lineasDelCarrito, {
+          igvRate: effectiveTaxConfig.igvRate,
+          texto: porConsumoConfig.texto,
+        }).map(l => ({
+          price: l.unitPrice,
+          quantity: l.quantity,
+          taxAffectation: l.taxAffectation,
+          igvRate: l.igvRate,
+        }))
+      : lineasDelCarrito
+
     const baseAmounts = calculateMixedInvoiceAmounts(
-      effectiveCart.map(item => {
-        const lineTotal = item.price * item.quantity
-        const itemDiscount = item.itemDiscount || 0
-        // Calcular precio efectivo por unidad después del descuento del ítem
-        const effectivePrice = itemDiscount > 0
-          ? (lineTotal - itemDiscount) / item.quantity
-          : item.price
-        return {
-          price: effectivePrice,
-          quantity: item.quantity,
-          taxAffectation: resolveItemTaxAffectation(item),
-          igvRate: resolveItemIgvRate(item),
-        }
-      }),
+      lineasParaTotales,
       effectiveTaxConfig.igvRate
     )
 
@@ -6060,7 +6097,7 @@ export default function POS() {
       exonerado: baseAmounts.exonerado,
       inafecto: baseAmounts.inafecto,
     }
-  }, [effectiveCart, effectiveTaxConfig, resolveItemTaxAffectation, resolveItemIgvRate, discountAmount, recargoConsumoConfig, businessMode, currency, exchangeRate])
+  }, [effectiveCart, effectiveTaxConfig, resolveItemTaxAffectation, resolveItemIgvRate, discountAmount, recargoConsumoConfig, businessMode, currency, exchangeRate, porConsumoActivo, porConsumoConfig.texto])
 
   // Actualizar pantalla de cliente cuando cambia el carrito
   useEffect(() => {
@@ -6407,16 +6444,27 @@ export default function POS() {
      * cliente ya en la calle. Dos segundos antes valen más que la corrección
      * después. Ver src/utils/sunatPreflight.js.
      */
+    const lineasARevisar = cart.map(item => ({
+      name: item.name,
+      quantity: item.quantity,
+      unitPrice: item.price,
+      taxAffectation: resolveItemTaxAffectation(item),
+      igvRate: resolveItemIgvRate(item),
+      isBonificacion: item.isBonificacion,
+      itemDiscount: item.itemDiscount,
+      ...referenciaDeRegalo(item),
+    }))
     const revision = revisarAntesDeEmitir({
       documentType,
-      items: cart.map(item => ({
-        name: item.name,
-        quantity: item.quantity,
-        unitPrice: item.price,
-        isBonificacion: item.isBonificacion,
-        itemDiscount: item.itemDiscount,
-        ...referenciaDeRegalo(item),
-      })),
+      // POR CONSUMO: se revisa lo que de VERDAD va a SUNAT. Un plato de
+      // cortesía a precio 0 queda dentro de la línea única, así que no puede
+      // bloquear la venta por algo que el comprobante nunca va a declarar.
+      items: porConsumoActivo
+        ? lineasPorConsumo(lineasARevisar, {
+            igvRate: effectiveTaxConfig.igvRate,
+            texto: porConsumoConfig.texto,
+          })
+        : lineasARevisar,
     })
     if (revision.errores.length > 0) {
       toast.error(`SUNAT rechazaría este comprobante:
@@ -6943,6 +6991,10 @@ ${textoDeErrores(revision.errores)}`, 9000)
                 goodsServiceCode: customerData.goodsServiceCode || '',
               },
           items: items,
+          // Igual que la venta real: el demo tiene que enseñar el mismo ticket.
+          ...(porConsumoActivo
+            ? { itemsComprobante: lineasPorConsumo(items, { igvRate: effectiveTaxConfig.igvRate, texto: porConsumoConfig.texto }) }
+            : {}),
           subtotal: amounts.subtotalAfterDiscount, // Subtotal después del descuento (base imponible)
           subtotalBeforeDiscount: amounts.subtotal, // Subtotal original (antes del descuento)
           discount: amounts.discount || 0,
@@ -7247,6 +7299,12 @@ ${textoDeErrores(revision.errores)}`, 9000)
               goodsServiceCode: customerData.goodsServiceCode || '',
             },
         items: items,
+        // POR CONSUMO: la representación FISCAL del documento, congelada.
+        // `items` sigue siendo el detalle real (stock, insumos, reportes,
+        // comisiones); esto es lo único que se imprime y se declara.
+        ...(porConsumoActivo
+          ? { itemsComprobante: lineasPorConsumo(items, { igvRate: effectiveTaxConfig.igvRate, texto: porConsumoConfig.texto }) }
+          : {}),
         subtotal: amounts.subtotalAfterDiscount, // Subtotal después del descuento (base imponible)
         subtotalBeforeDiscount: amounts.subtotal, // Subtotal original (antes del descuento)
         discount: amounts.discount || 0,
@@ -10564,6 +10622,31 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     </p>
                   )}
                 </div>
+              )}
+
+              {/* 4a-bis. POR CONSUMO.
+                  Restaurante con el módulo activado en Configuración. Es por
+                  VENTA: arranca en lo que eligió el negocio y el cajero puede
+                  desmarcarlo si el cliente pide el detalle. */}
+              {businessMode === 'restaurant' && porConsumoConfig.enabled && (
+                <label className="flex items-start gap-2.5 p-2.5 border border-gray-300 rounded-lg cursor-pointer hover:border-primary-300 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={porConsumoVenta}
+                    onChange={(e) => setPorConsumoVenta(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-xs font-medium text-gray-900">
+                      Emitir como &quot;{porConsumoConfig.texto}&quot;
+                    </span>
+                    <span className="block text-xs text-gray-500">
+                      {porConsumoVenta
+                        ? 'El comprobante sale con una sola línea. El detalle de platos queda guardado en el sistema.'
+                        : 'El comprobante sale con el detalle de cada plato.'}
+                    </span>
+                  </span>
+                </label>
               )}
 
               {/* 4b. Moneda (solo retail con flag multi-divisa activa) ===== */}

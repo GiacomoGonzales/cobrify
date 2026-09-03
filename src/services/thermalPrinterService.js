@@ -16,6 +16,7 @@ import { nibbleDeTamano } from '@/utils/escposCharSize';
 import { vinculoDe } from '@/utils/documentLinks';
 import { getUnitShortLabel } from '@/utils/units'
 import { lineasDeProductosParaTicket } from '@/utils/cashClosureProducts'
+import { lineasDelComprobante } from '@/utils/comprobantePorConsumo'
 
 /**
  * Servicio para manejar impresoras térmicas WiFi/Bluetooth
@@ -838,7 +839,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
     let itemsText = '';
 
     // NO mostrar header de columnas para ningún formato (ni 58mm ni 80mm)
-    for (const item of invoice.items || []) {
+    for (const item of lineasDelComprobante(invoice)) {
       // Nombre y unidad/presentacion para la columna opcional "{cantidad} {UNIDAD/CAJA}".
       // La presentacion (CAJA X24, PACK, ...) REEMPLAZA la unidad y NO se repite al final
       // del nombre. Prioridad: presentationName; si no lo trae pero el nombre termina en un
@@ -2030,7 +2031,7 @@ const printBLETicket = async (invoice, business, paperWidth = 58) => {
       customerPhone: invoice.customer?.phone || invoice.customerPhone || '',
 
       // Items (con todos los campos necesarios)
-      items: (invoice.items || []).map(item => {
+      items: lineasDelComprobante(invoice).map(item => {
         // Anexar modificadores con precio a observations para que el plugin BLE
         // los muestre (no tiene lógica propia de modifiers).
         // Sin el "(+...)": el monto del adicional se suma aparte, igual que
@@ -2744,7 +2745,7 @@ const buildTicketEscPos = async (invoice, business, paperWidth = 58) => {
       .bold(false);
 
     // Items
-    for (const item of invoice.items || []) {
+    for (const item of lineasDelComprobante(invoice)) {
       // Usar 'name' como nombre principal, o 'description' si 'name' no existe (compatibilidad con datos antiguos)
       const itemName = item.name || item.description || '';
       // Observaciones adicionales (IMEI, placa, serie, etc.)

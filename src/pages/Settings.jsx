@@ -741,6 +741,10 @@ export default function Settings() {
     // Recargo al Consumo (Decreto Ley N° 25988)
     recargoConsumoEnabled: false, // Habilitar recargo al consumo
     recargoConsumoRate: 10, // Porcentaje del recargo (1-13%)
+    // POR CONSUMO: el comprobante sale con una sola línea en vez del detalle
+    // de platos. Adentro no cambia nada (ver comprobantePorConsumo.js).
+    porConsumoEnabled: false,
+    porConsumoTexto: 'POR CONSUMO',
   })
 
   // Categorías de productos (para asignar a estaciones)
@@ -4991,6 +4995,34 @@ export default function Settings() {
                             <span className="text-sm text-gray-600">%</span>
                           </div>
                           <span className="text-xs text-gray-500">(máximo 13% por ley)</span>
+                        </div>
+                      )}
+
+                      {/* POR CONSUMO: el comprobante con una sola línea */}
+                      <SettingToggle
+                        id="opcion-porConsumo"
+                        checked={restaurantConfig.porConsumoEnabled === true}
+                        onChange={(e) => setRestaurantConfig({...restaurantConfig, porConsumoEnabled: e.target.checked})}
+                        title="Emitir POR CONSUMO"
+                        description={restaurantConfig.porConsumoEnabled
+                          ? `✓ Habilitado: la boleta o factura sale con una sola línea que dice "${(restaurantConfig.porConsumoTexto || '').trim() || 'POR CONSUMO'}", en vez del detalle de platos. Adentro del sistema no cambia nada: el stock, los insumos y los reportes siguen viendo cada plato, y al cobrar puedes desmarcarlo si un cliente pide el detalle.`
+                          : '✗ Deshabilitado: el comprobante sale con el detalle de cada plato.'}
+                      />
+
+                      {restaurantConfig.porConsumoEnabled && (
+                        <div className="mt-3 ml-7">
+                          <label className="block text-sm text-gray-700 mb-1">Qué dice la línea:</label>
+                          <input
+                            type="text"
+                            maxLength={80}
+                            value={restaurantConfig.porConsumoTexto ?? 'POR CONSUMO'}
+                            onChange={(e) => setRestaurantConfig({...restaurantConfig, porConsumoTexto: e.target.value.toUpperCase()})}
+                            placeholder="POR CONSUMO"
+                            className="w-full max-w-xs px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Algunos negocios usan &quot;CONSUMO DE ALIMENTOS Y BEBIDAS&quot;. Si lo dejas vacío se emite como POR CONSUMO.
+                          </p>
                         </div>
                       )}
 
