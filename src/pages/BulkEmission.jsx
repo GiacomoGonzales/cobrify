@@ -229,6 +229,8 @@ export default function BulkEmission() {
           allowNegativeStock: businessSettings?.allowNegativeStock === true,
           autoEnvio: businessSettings?.autoSendToSunat === true,
           userId: user?.uid || '',
+          userName: user?.displayName || user?.email || '',
+          userEmail: user?.email || '',
           onProgress: (p) => setProgreso(p),
           debeCancelar: () => cancelarRef.current,
         })

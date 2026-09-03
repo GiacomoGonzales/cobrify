@@ -114,7 +114,7 @@ const metodoPagoDe = (op) => (
     : (METODO_PAGO[String(op.metodoPago || '').toUpperCase()] || 'Efectivo')
 )
 
-function comprobanteDesdeOperacion(op, { igvRate, bulkKey, loteKey, warehouseId, branchId, autoEnvio, tipoCambio = null }) {
+function comprobanteDesdeOperacion(op, { igvRate, bulkKey, loteKey, warehouseId, branchId, autoEnvio, tipoCambio = null, emisor = null }) {
   const t = op.totales
   // Descuentos por item, SIN las bonificaciones: en una bonificacion el
   // "descuento" es el precio entero del regalo, no una rebaja que el cliente
@@ -218,6 +218,18 @@ function comprobanteDesdeOperacion(op, { igvRate, bulkKey, loteKey, warehouseId,
           payments: [{ method: metodoPagoDe(op), amount: t.total }],
         }),
     ...(op.observaciones ? { notes: op.observaciones } : {}),
+    // QUIEN lo emitio. El POS lo guarda desde siempre y la ficha del
+    // comprobante lo muestra como "Registrado por"; el lote no lo guardaba, asi
+    // que una emision masiva quedaba sin autor (consulta de JMC, 03-sep-2026).
+    // Mismos campos que el POS, para que la ficha no tenga que preguntar de
+    // donde salio el documento.
+    ...(emisor?.uid
+      ? {
+          createdBy: emisor.uid,
+          createdByName: emisor.name || emisor.email || 'Usuario',
+          createdByEmail: emisor.email || '',
+        }
+      : {}),
     // Vendedor: lo usan las comisiones y el filtro por vendedor de los reportes.
     ...(op.vendedor
       ? { sellerId: op.vendedor.id, sellerName: op.vendedor.name, sellerCode: op.vendedor.code || null }
@@ -271,6 +283,8 @@ function comprobanteDesdeOperacion(op, { igvRate, bulkKey, loteKey, warehouseId,
  * @param {boolean}  [opts.allowNegativeStock]
  * @param {boolean}  [opts.autoEnvio] - si el negocio tiene el envío automático a SUNAT activo
  * @param {string}   [opts.userId]
+ * @param {string}   [opts.userName]   quien emite: queda en el comprobante
+ * @param {string}   [opts.userEmail]
  * @param {Function} [opts.onProgress] - ({ indice, total, nOperacion, etapa, numero }) por paso
  * @param {Function} [opts.debeCancelar] - () => boolean; se consulta entre comprobantes
  * @returns {Promise<{resultados: Array, resumen: object}>}
@@ -310,6 +324,8 @@ export async function emitirLoteComprobantes(businessId, operaciones, {
   allowNegativeStock = false,
   autoEnvio = false,
   userId = '',
+  userName = '',
+  userEmail = '',
   onProgress = null,
   debeCancelar = null,
 } = {}) {
@@ -360,7 +376,7 @@ export async function emitirLoteComprobantes(businessId, operaciones, {
       // ── Crear el comprobante (numeración atómica por serie) ──
       avisar('creando')
       const tipoCambio = op.moneda === 'USD' ? await tipoCambioDe(op.fechaEmision, tcPorFecha) : 1
-      const datos = comprobanteDesdeOperacion(op, { igvRate, bulkKey, loteKey, warehouseId, branchId, autoEnvio, tipoCambio })
+      const datos = comprobanteDesdeOperacion(op, { igvRate, bulkKey, loteKey, warehouseId, branchId, autoEnvio, tipoCambio, emisor: { uid: userId, name: userName, email: userEmail } })
       const creacion = await createInvoiceWithNumber(businessId, datos, op.tipo, warehouseId || null, branchId)
       if (!creacion.success) {
         resultados.push({ nOperacion: op.nOperacion, numero: null, estado: 'error_creacion', mensaje: creacion.error || 'No se pudo crear el comprobante.' })
