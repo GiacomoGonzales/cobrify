@@ -14,6 +14,9 @@ import {
   Paperclip,
   Pencil,
   Plus,
+  Camera,
+  Mic,
+  Reply,
   RotateCcw,
   Search,
   Send,
@@ -27,6 +30,9 @@ import {
   Tag,
   Trash2,
   AlertTriangle,
+  AlertCircle,
+  SmilePlus,
+  Trash,
   X,
 } from 'lucide-react'
 import FichaCliente from '@/components/chat/FichaCliente'
@@ -36,6 +42,7 @@ import SelectorPlantilla from '@/components/chat/SelectorPlantilla'
 import VisorMedia from '@/components/chat/VisorMedia'
 import PanelMultimedia from '@/components/chat/PanelMultimedia'
 import ConfiguracionChat from '@/components/chat/ConfiguracionChat'
+import { useGrabadora, relojDeGrabacion } from '@/components/chat/grabadoraDeVoz'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import {
@@ -52,6 +59,11 @@ import {
   formatearRestante,
   formatearNumero,
   formatearHora,
+  formatearDia,
+  claveDeDia,
+  reaccionar,
+  avisarLeido,
+  EMOJIS_REACCION,
   ESTADOS,
   estadoDe,
   cambiarEstado,
@@ -139,6 +151,26 @@ export default function Chat() {
   const [resaltado, setResaltado] = useState(null)
   // Cual sugerencia esta seleccionada con las flechas.
   const [sugerenciaSel, setSugerenciaSel] = useState(0)
+  // Citar y reaccionar. `menuMensaje` es el mensaje con las acciones a la
+  // vista: en el escritorio salen al pasar el mouse, y en el celular no hay
+  // mouse, asi que tocar la burbuja las muestra.
+  const [respondiendoA, setRespondiendoA] = useState(null)
+  const [menuMensaje, setMenuMensaje] = useState(null)
+  const [paletaAbierta, setPaletaAbierta] = useState(null)
+  // Reacciones puestas por mi que todavia no volvieron del servidor. Sin esto
+  // el emoji tarda medio segundo en aparecer y el toque se siente muerto.
+  const [reaccionesOptimistas, setReaccionesOptimistas] = useState({})
+  // Ultimo mensaje del cliente por el que ya se aviso "leido" a WhatsApp, para
+  // no repetir la llamada en cada render.
+  const avisadoLeido = useRef(null)
+  // Grabar notas de voz. `puedeGrabar` es false en los navegadores que solo
+  // saben grabar formatos que WhatsApp rechaza: ahi no se ofrece el microfono.
+  const grabadora = useGrabadora()
+  const selectorCamara = useRef(null)
+  // El boton de camara solo tiene sentido donde hay una: en el escritorio abre
+  // el mismo dialogo de archivos y confunde.
+  const hayCamara = typeof window !== 'undefined'
+    && window.matchMedia?.('(pointer: coarse)').matches
 
   useEffect(() => {
     if (!user || !isAdmin) return undefined
@@ -191,6 +223,11 @@ export default function Chat() {
     setBuscadorAbierto(false)
     setBuscarEnChat('')
     setResaltado(null)
+    setRespondiendoA(null)
+    setMenuMensaje(null)
+    setPaletaAbierta(null)
+    setReaccionesOptimistas({})
+    avisadoLeido.current = null
     pegadoAlFondo.current = true
     reciénAbierta.current = true
     if (!activaId) { setMensajes([]); return undefined }
@@ -242,6 +279,21 @@ export default function Chat() {
     return () => obs.disconnect()
   }, [activaId, mensajes.length])
 
+  // Avisarle a WhatsApp que leimos: es lo que le pinta al cliente las dos
+  // palomitas azules. Se dispara con la conversacion abierta, por el ULTIMO
+  // mensaje entrante — Meta marca ese y todos los anteriores de una vez.
+  useEffect(() => {
+    if (!activaId || !mensajes.length) return
+    const ultimoEntrante = [...mensajes].reverse()
+      .find((m) => m.direccion !== 'saliente' && m.waMessageId)
+    if (!ultimoEntrante) return
+    if (avisadoLeido.current === ultimoEntrante.waMessageId) return
+    avisadoLeido.current = ultimoEntrante.waMessageId
+    getAuth().currentUser?.getIdToken()
+      .then((idToken) => avisarLeido(activaId, ultimoEntrante.waMessageId, idToken))
+      .catch(() => {})
+  }, [activaId, mensajes])
+
   useEffect(() => {
     const t = setInterval(() => setAhora(Date.now()), 60000)
     return () => clearInterval(t)
@@ -291,6 +343,47 @@ export default function Chat() {
     const enVuelo = pendientes.filter((p) => !p.waMessageId || !idsConfirmados.has(p.waMessageId))
     return [...mensajes, ...enVuelo]
   }, [mensajes, pendientes])
+
+  // El hilo cortado por dias. El separador se arma una sola vez aca en vez de
+  // preguntarse en cada burbuja si cambio el dia respecto de la anterior.
+  const elementos = useMemo(() => {
+    const salida = []
+    let diaPrevio = null
+    for (const m of hilo) {
+      const dia = claveDeDia(m.timestamp)
+      if (dia && dia !== diaPrevio) {
+        salida.push({ separador: true, id: `dia-${dia}`, rotulo: formatearDia(m.timestamp) })
+        diaPrevio = dia
+      }
+      salida.push({ separador: false, id: m.id, mensaje: m })
+    }
+    return salida
+  }, [hilo])
+
+  // Buscar el mensaje citado por otro. Los mensajes viejos que ya no estan en
+  // la ventana cargada no se encuentran: ahi la cita se muestra sin texto.
+  const mensajePorWaId = useMemo(() => {
+    const mapa = new Map()
+    for (const m of hilo) if (m.waMessageId || m.id) mapa.set(m.waMessageId || m.id, m)
+    return mapa
+  }, [hilo])
+
+  // Retirar lo pintado a mano cuando el servidor ya devolvio lo mismo: si no,
+  // una reaccion quitada desde el telefono no se veria desaparecer aca.
+  useEffect(() => {
+    setReaccionesOptimistas((r) => {
+      if (!Object.keys(r).length) return r
+      let cambio = false
+      const copia = { ...r }
+      for (const m of mensajes) {
+        if (copia[m.id] !== undefined && (m.reacciones?.mia || '') === copia[m.id]) {
+          delete copia[m.id]
+          cambio = true
+        }
+      }
+      return cambio ? copia : r
+    })
+  }, [mensajes])
 
   // Todas las imagenes del hilo, para que el visor navegue entre ellas.
   const imagenesDelHilo = useMemo(
@@ -379,6 +472,65 @@ export default function Chat() {
     }
   }
 
+  // El id con el que Meta conoce un mensaje. Los provisionales (los que
+  // todavia no volvieron del servidor) no tienen, y por eso no se pueden citar
+  // ni reaccionar hasta que llegan.
+  const idDeWhatsapp = (m) => m?.waMessageId || (m?.id?.startsWith('pendiente-') ? null : m?.id)
+
+  /** Lo que se lee en el bloque de cita: el texto, o qué tipo de archivo era. */
+  const resumenDeCita = (m) => {
+    if (m.texto) return m.texto
+    switch (m.tipo) {
+      case 'image': return '📷 Foto'
+      case 'video': return '🎬 Video'
+      case 'audio': return '🎤 Nota de voz'
+      case 'document': return '📄 Documento'
+      case 'sticker': return 'Sticker'
+      default: return 'Mensaje'
+    }
+  }
+
+  const citarMensaje = (m) => {
+    if (!idDeWhatsapp(m)) { toast.error('Esperá a que el mensaje termine de salir'); return }
+    setRespondiendoA(m)
+    setMenuMensaje(null)
+    cuadroTexto.current?.focus()
+  }
+
+  /**
+   * Poner o sacar una reaccion. Meta no tiene una llamada para borrar: se manda
+   * el emoji vacio, y tocar el mismo emoji que ya estaba es justamente eso.
+   */
+  const alternarReaccion = async (m, emoji) => {
+    const waId = idDeWhatsapp(m)
+    if (!waId) return
+    setPaletaAbierta(null)
+    setMenuMensaje(null)
+    const puesta = reaccionDeM(m)
+    const nueva = puesta === emoji ? '' : emoji
+    setReaccionesOptimistas((r) => ({ ...r, [m.id]: nueva }))
+    try {
+      const idToken = await getAuth().currentUser?.getIdToken()
+      await reaccionar(activaId, waId, nueva, idToken)
+    } catch (error) {
+      // Se retira lo pintado: dejar el emoji puesto cuando no llego seria
+      // mentirle al usuario sobre lo que ve el cliente.
+      setReaccionesOptimistas((r) => {
+        const copia = { ...r }
+        delete copia[m.id]
+        return copia
+      })
+      toast.error(error.message || 'No se pudo reaccionar')
+    }
+  }
+
+  /** Mi reaccion: la que se ve, con lo optimista por delante. */
+  const reaccionDeM = (m) => {
+    const optimista = reaccionesOptimistas[m.id]
+    if (optimista !== undefined) return optimista
+    return m.reacciones?.mia || ''
+  }
+
   const handleEnviar = async (e) => {
     e.preventDefault()
     const limpio = texto.trim()
@@ -387,8 +539,10 @@ export default function Chat() {
     setEnviando(true)
     const previo = texto
     const conArchivo = adjuntoGuardado
+    const citado = respondiendoA
     setTexto('')
     setAdjuntoGuardado(null)
+    setRespondiendoA(null)
 
     // Se pinta al instante con estado 'enviando'. Cuando el mensaje real
     // aparezca por la suscripción, este provisional se descarta (se reconocen
@@ -400,6 +554,7 @@ export default function Chat() {
       tipo: conArchivo?.tipo || 'text',
       texto: limpio,
       ...(conArchivo ? { media: conArchivo } : {}),
+      ...(citado ? { respondeA: idDeWhatsapp(citado) } : {}),
       estado: 'enviando',
       timestamp: { toDate: () => new Date() },
     }])
@@ -407,8 +562,8 @@ export default function Chat() {
     try {
       const idToken = await getAuth().currentUser?.getIdToken()
       const { waMessageId } = conArchivo
-        ? await enviarArchivoGuardado(activaId, conArchivo, limpio, idToken)
-        : await enviarMensaje(activaId, limpio, idToken)
+        ? await enviarArchivoGuardado(activaId, conArchivo, limpio, idToken, citado ? idDeWhatsapp(citado) : null)
+        : await enviarMensaje(activaId, limpio, idToken, citado ? idDeWhatsapp(citado) : null)
       setPendientes((p) => p.map((m) => (m.id === tempId ? { ...m, waMessageId } : m)))
     } catch (error) {
       // Devolver el texto al cuadro: perder lo que uno escribió por un error de
@@ -416,6 +571,7 @@ export default function Chat() {
       setPendientes((p) => p.filter((m) => m.id !== tempId))
       setTexto(previo)
       setAdjuntoGuardado(conArchivo)
+      setRespondiendoA(citado)
       toast.error(error.message || 'No se pudo enviar el mensaje')
     } finally {
       setEnviando(false)
@@ -425,6 +581,30 @@ export default function Chat() {
       if (window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
         cuadroTexto.current?.focus()
       }
+    }
+  }
+
+  const handleGrabar = async () => {
+    const r = await grabadora.empezar()
+    if (!r.ok) toast.error(r.motivo)
+  }
+
+  /** Termina la grabación y la manda. Una nota de voz sale sola, sin pie. */
+  const handleEnviarNota = async () => {
+    const archivo = await grabadora.terminar()
+    if (!archivo) return
+    const problema = validarArchivo(archivo)
+    if (problema) { toast.error(problema); return }
+    setEnviando(true)
+    const citado = respondiendoA ? idDeWhatsapp(respondiendoA) : null
+    setRespondiendoA(null)
+    try {
+      const idToken = await getAuth().currentUser?.getIdToken()
+      await enviarArchivo(activaId, archivo, '', idToken, citado)
+    } catch (error) {
+      toast.error(error.message || 'No se pudo enviar la nota de voz')
+    } finally {
+      setEnviando(false)
     }
   }
 
@@ -443,9 +623,11 @@ export default function Chat() {
     setEnviando(true)
     try {
       const idToken = await getAuth().currentUser?.getIdToken()
-      await enviarArchivo(activaId, adjunto, pieAdjunto.trim(), idToken)
+      const citado = respondiendoA ? idDeWhatsapp(respondiendoA) : null
+      await enviarArchivo(activaId, adjunto, pieAdjunto.trim(), idToken, citado)
       setAdjunto(null)
       setPieAdjunto('')
+      setRespondiendoA(null)
     } catch (error) {
       toast.error(error.message || 'No se pudo enviar el archivo')
     } finally {
@@ -992,23 +1174,107 @@ export default function Chat() {
               }}
               className="flex-1 overflow-y-auto px-4 py-4 space-y-2"
             >
-              {hilo.map((m) => {
+              {elementos.map((el) => {
+                if (el.separador) {
+                  return (
+                    <div key={el.id} className="flex justify-center py-1.5">
+                      <span className="px-2.5 py-0.5 rounded-full bg-white border border-gray-200 text-[11px] font-medium text-gray-500">
+                        {el.rotulo}
+                      </span>
+                    </div>
+                  )
+                }
+                const m = el.mensaje
                 const mio = m.direccion === 'saliente'
+                const citado = m.respondeA ? mensajePorWaId.get(m.respondeA) : null
+                const miReaccion = reaccionDeM(m)
+                const suReaccion = m.reacciones?.cliente || ''
+                const conReaccion = Boolean(miReaccion || suReaccion)
+                const fallo = m.estado === 'failed'
+                const puedeActuar = Boolean(idDeWhatsapp(m))
+                const abierto = menuMensaje === m.id
+                const acciones = puedeActuar && (
+                  <div className={`${abierto ? 'flex' : 'hidden group-hover:flex'} items-center gap-0.5 shrink-0`}>
+                    {paletaAbierta === m.id ? (
+                      <div className="flex items-center gap-0.5 rounded-full bg-white border border-gray-200 shadow-sm px-1 py-0.5">
+                        {EMOJIS_REACCION.map((e) => (
+                          <button
+                            key={e}
+                            type="button"
+                            onClick={() => alternarReaccion(m, e)}
+                            className={`w-7 h-7 rounded-full text-base leading-none hover:bg-gray-100 ${
+                              miReaccion === e ? 'bg-green-50' : ''
+                            }`}
+                            title={miReaccion === e ? 'Quitar reacción' : `Reaccionar ${e}`}
+                          >
+                            {e}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => citarMensaje(m)}
+                          title="Responder a este mensaje"
+                          className="w-7 h-7 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                        >
+                          <Reply className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setMenuMensaje(m.id); setPaletaAbierta(m.id) }}
+                          title="Reaccionar"
+                          className="w-7 h-7 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                        >
+                          <SmilePlus className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )
                 return (
                   <div
                     key={m.id}
                     id={`msg-${m.id}`}
-                    className={`flex ${mio ? 'justify-end' : 'justify-start'} ${
-                      resaltado === m.id ? 'animate-pulse' : ''
-                    }`}
+                    className={`group flex items-center gap-1 ${mio ? 'justify-end' : 'justify-start'} ${
+                      conReaccion ? 'mb-3' : ''
+                    } ${resaltado === m.id ? 'animate-pulse' : ''}`}
                   >
+                    {mio && acciones}
+                    <div className={`relative ${m.linkPreview || m.tipo === 'document' ? 'w-72 max-w-[85%]' : 'max-w-[75%]'}`}>
                     <div
-                      className={`${m.linkPreview || m.tipo === 'document' ? 'w-72 max-w-[85%]' : 'max-w-[75%]'} rounded-2xl px-3.5 py-2 ${
+                      onClick={(e) => {
+                        // En el celular no hay mouse: tocar la burbuja saca las
+                        // acciones. Se respeta lo que ya es tocable adentro.
+                        if (e.target.closest('a, button, img, video, audio')) return
+                        setPaletaAbierta(null)
+                        setMenuMensaje(abierto ? null : m.id)
+                      }}
+                      className={`rounded-2xl px-3.5 py-2 ${
                         mio
                           ? 'bg-green-600 text-white rounded-br-sm'
                           : 'bg-white border border-gray-200 text-gray-900 rounded-bl-sm'
                       }`}
                     >
+                      {m.respondeA && (
+                        <button
+                          type="button"
+                          onClick={() => citado && irAlMensaje(citado.id)}
+                          className={`block w-full text-left mb-1.5 rounded-md px-2 py-1 border-l-[3px] ${
+                            mio ? 'bg-black/10 border-green-200' : 'bg-gray-100 border-gray-400'
+                          }`}
+                        >
+                          <span className={`block text-[11px] font-semibold ${mio ? 'text-green-100' : 'text-gray-600'}`}>
+                            {citado
+                              ? (citado.direccion === 'saliente' ? 'Vos' : (activa?.nombre || 'Cliente'))
+                              : 'Mensaje citado'}
+                          </span>
+                          <span className={`block text-[12px] truncate ${mio ? 'text-green-50' : 'text-gray-500'}`}>
+                            {citado ? resumenDeCita(citado) : 'No está en esta parte de la conversación'}
+                          </span>
+                        </button>
+                      )}
                       {m.tipo === 'template' && (
                         <span className={`inline-block text-[10px] font-semibold uppercase tracking-wide mb-1 ${mio ? 'text-green-200' : 'text-gray-400'}`}>
                           Plantilla
@@ -1073,18 +1339,33 @@ export default function Chat() {
                           mio ? 'text-green-100' : 'text-gray-400'
                         }`}
                       >
+                        {fallo && (
+                          <span className="text-[10px] font-semibold text-red-100">No se envió</span>
+                        )}
                         <span className="text-[10px]">{formatearHora(m.timestamp)}</span>
                         {mio && (
-                          m.estado === 'enviando'
-                            ? <Clock className="w-3.5 h-3.5 opacity-70" />
-                            : m.estado === 'read'
-                              ? <CheckCheck className="w-3.5 h-3.5 text-blue-200" />
-                              : m.estado === 'delivered'
-                                ? <CheckCheck className="w-3.5 h-3.5" />
-                                : <Check className="w-3.5 h-3.5" />
+                          fallo
+                            ? <AlertCircle className="w-3.5 h-3.5 text-red-100" />
+                            : m.estado === 'enviando'
+                              ? <Clock className="w-3.5 h-3.5 opacity-70" />
+                              : m.estado === 'read'
+                                ? <CheckCheck className="w-3.5 h-3.5 text-blue-200" />
+                                : m.estado === 'delivered'
+                                  ? <CheckCheck className="w-3.5 h-3.5" />
+                                  : <Check className="w-3.5 h-3.5" />
                         )}
                       </div>
                     </div>
+                    {conReaccion && (
+                      <span
+                        className={`absolute -bottom-2.5 ${mio ? 'left-2' : 'right-2'} px-1.5 py-0.5 rounded-full bg-white border border-gray-200 shadow-sm text-[12px] leading-none`}
+                        title={miReaccion && suReaccion ? 'Tu reacción y la del cliente' : miReaccion ? 'Tu reacción' : 'Reacción del cliente'}
+                      >
+                        {suReaccion}{miReaccion}
+                      </span>
+                    )}
+                    </div>
+                    {!mio && acciones}
                   </div>
                 )
               })}
@@ -1103,15 +1384,62 @@ export default function Chat() {
                   onChange={handleElegirArchivo}
                   className="hidden"
                 />
-                <button
-                  type="button"
-                  onClick={() => selectorArchivo.current?.click()}
-                  disabled={enviando}
-                  className="p-2.5 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-40"
-                  title="Adjuntar imagen o PDF"
-                >
-                  <Paperclip className="w-5 h-5" />
-                </button>
+                {/* `capture` es lo que hace que el celular abra la camara en vez
+                    del carrete. Es un input aparte porque el de arriba acepta
+                    PDF y audio, y con capture el navegador los ignora. */}
+                <input
+                  ref={selectorCamara}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleElegirArchivo}
+                  className="hidden"
+                />
+                {!grabadora.grabando && (
+                  <button
+                    type="button"
+                    onClick={() => selectorArchivo.current?.click()}
+                    disabled={enviando}
+                    className="p-2.5 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-40"
+                    title="Adjuntar imagen o PDF"
+                  >
+                    <Paperclip className="w-5 h-5" />
+                  </button>
+                )}
+                {hayCamara && !grabadora.grabando && (
+                  <button
+                    type="button"
+                    onClick={() => selectorCamara.current?.click()}
+                    disabled={enviando}
+                    className="p-2.5 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-40"
+                    title="Tomar una foto"
+                  >
+                    <Camera className="w-5 h-5" />
+                  </button>
+                )}
+                {respondiendoA && (
+                  <div
+                    className={`absolute bottom-full left-4 right-4 ${
+                      adjuntoGuardado ? 'mb-[3.9rem]' : 'mb-1'
+                    } bg-white border border-gray-200 rounded-xl shadow-sm p-2 flex items-center gap-2.5 z-10`}
+                  >
+                    <div className="w-1 self-stretch rounded-full bg-green-600 flex-none" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-semibold text-gray-500">
+                        Respondiendo a {respondiendoA.direccion === 'saliente' ? 'tu mensaje' : (activa?.nombre || 'el cliente')}
+                      </p>
+                      <p className="text-[13px] text-gray-700 truncate">{resumenDeCita(respondiendoA)}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setRespondiendoA(null)}
+                      className="p-1 text-gray-400 hover:text-gray-600 flex-none"
+                      title="Ya no responder a ese mensaje"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
                 {adjuntoGuardado && (
                   <div className="absolute bottom-full left-4 right-4 mb-1 bg-white border border-green-200 rounded-xl shadow-sm p-2 flex items-center gap-2.5 z-10">
                     {adjuntoGuardado.tipo === 'image' ? (
@@ -1170,6 +1498,23 @@ export default function Chat() {
                     ))}
                   </div>
                 )}
+                {grabadora.grabando ? (
+                  <div className="flex-1 flex items-center gap-3 px-4 py-2.5 bg-gray-100 rounded-2xl">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse flex-none" />
+                    <span className="text-sm font-medium text-gray-700 tabular-nums">
+                      {relojDeGrabacion(grabadora.segundos)}
+                    </span>
+                    <span className="text-xs text-gray-400 hidden sm:inline">Grabando una nota de voz</span>
+                    <button
+                      type="button"
+                      onClick={grabadora.cancelar}
+                      className="ml-auto p-1.5 text-gray-400 hover:text-red-600 rounded-full hover:bg-white"
+                      title="Descartar la nota"
+                    >
+                      <Trash className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
                 <textarea
                   ref={cuadroTexto}
                   rows={1}
@@ -1214,14 +1559,31 @@ export default function Chat() {
                   disabled={enviando}
                   className="flex-1 px-4 py-2.5 bg-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-60 resize-none leading-5 max-h-[132px]"
                 />
-                <button
-                  type="submit"
-                  disabled={!texto.trim() || enviando}
-                  className="p-2.5 bg-green-600 text-white rounded-full hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  aria-label="Enviar"
-                >
-                  <Send className="w-5 h-5" />
-                </button>
+                )}
+                {/* Con algo escrito, el botón envía. Sin nada, ofrece el
+                    micrófono — igual que WhatsApp. */}
+                {texto.trim() || grabadora.grabando || !grabadora.puedeGrabar ? (
+                  <button
+                    type={grabadora.grabando ? 'button' : 'submit'}
+                    onClick={grabadora.grabando ? handleEnviarNota : undefined}
+                    disabled={enviando || (!grabadora.grabando && !texto.trim())}
+                    className="p-2.5 bg-green-600 text-white rounded-full hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    aria-label={grabadora.grabando ? 'Enviar la nota de voz' : 'Enviar'}
+                  >
+                    <Send className="w-5 h-5" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleGrabar}
+                    disabled={enviando}
+                    className="p-2.5 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-40"
+                    title="Grabar una nota de voz"
+                    aria-label="Grabar una nota de voz"
+                  >
+                    <Mic className="w-5 h-5" />
+                  </button>
+                )}
               </form>
             ) : (
               <div className="px-4 py-3 bg-amber-50 border-t border-amber-200">

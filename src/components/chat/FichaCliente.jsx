@@ -3,9 +3,12 @@ import {
   Building2,
   CalendarClock,
   CreditCard,
+  FilePlus2,
   Link2,
   Link2Off,
+  Lock,
   Search,
+  ShieldCheck,
   X,
 } from 'lucide-react'
 import { useToast } from '@/contexts/ToastContext'
@@ -14,8 +17,12 @@ import {
   buscarNegocios,
   vincularConversacion,
   desvincularConversacion,
+  agregarComprobantes,
 } from '@/services/whatsappChatService'
-import { registerPayment, PLANS } from '@/services/subscriptionService'
+import { registerPayment, suspendUser, reactivateUser, PLANS } from '@/services/subscriptionService'
+
+/** Los mismos métodos de cobro que ofrece el panel. */
+const METODOS = ['Yape', 'Plin', 'Transferencia', 'Efectivo', 'Tarjeta']
 
 /**
  * Ficha del cliente al costado de la conversación (Fase 2 del CRM).
@@ -32,12 +39,19 @@ export default function FichaCliente({ conversacion, onCerrar }) {
   const [buscando, setBuscando] = useState('')
   const [resultados, setResultados] = useState([])
   const [renovarAbierto, setRenovarAbierto] = useState(false)
+  const [reactivarAbierto, setReactivarAbierto] = useState(false)
+  const [comprobantesAbierto, setComprobantesAbierto] = useState(false)
+  const [verTodosLosPagos, setVerTodosLosPagos] = useState(false)
+  const [trabajando, setTrabajando] = useState(false)
 
   const businessId = conversacion?.linkedBusinessId || null
 
   useEffect(() => {
     setFicha(null)
     setRenovarAbierto(false)
+    setReactivarAbierto(false)
+    setComprobantesAbierto(false)
+    setVerTodosLosPagos(false)
     if (!businessId) return
     setCargando(true)
     obtenerFichaCliente(businessId)
@@ -56,6 +70,22 @@ export default function FichaCliente({ conversacion, onCerrar }) {
     }, 350)
     return () => clearTimeout(t)
   }, [buscando])
+
+  const releerFicha = () => obtenerFichaCliente(businessId).then(setFicha).catch(() => {})
+
+  const handleSuspender = async () => {
+    if (!window.confirm('¿Suspender el acceso de este negocio por falta de pago?')) return
+    setTrabajando(true)
+    try {
+      await suspendUser(businessId, 'Falta de pago')
+      await releerFicha()
+      toast.success('Acceso suspendido')
+    } catch {
+      toast.error('No se pudo suspender')
+    } finally {
+      setTrabajando(false)
+    }
+  }
 
   const vencimiento = () => {
     if (!ficha?.vence) return null
@@ -156,7 +186,17 @@ export default function FichaCliente({ conversacion, onCerrar }) {
                 </div>
               )}
               {ficha.accessBlocked && (
-                <p className="text-xs font-semibold text-red-600">Cuenta suspendida</p>
+                <div className="pt-1 border-t border-gray-200">
+                  <p className="text-xs font-semibold text-red-600">Cuenta suspendida</p>
+                  {ficha.motivoBloqueo && (
+                    <p className="text-[11px] text-gray-500 mt-0.5">Motivo: {ficha.motivoBloqueo}</p>
+                  )}
+                  {ficha.bloqueadoEl && (
+                    <p className="text-[11px] text-gray-400">
+                      Desde el {ficha.bloqueadoEl.toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </p>
+                  )}
+                </div>
               )}
             </div>
 
@@ -167,22 +207,73 @@ export default function FichaCliente({ conversacion, onCerrar }) {
               </div>
             )}
 
+            {/* Comprobantes del mes: es lo primero que pregunta un cliente
+                que llama porque "no puede facturar". */}
+            <div className="bg-gray-50 rounded-xl p-3">
+              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">
+                Comprobantes de este mes
+              </p>
+              {ficha.topeComprobantes === null || ficha.topeComprobantes < 0 ? (
+                <p className="text-sm text-gray-700">
+                  Ilimitados <span className="text-gray-400">({ficha.emitidosEsteMes} emitidos)</span>
+                </p>
+              ) : (
+                <>
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-sm text-gray-800">
+                      <span className="font-semibold">{ficha.emitidosEsteMes}</span> de {ficha.topeComprobantes}
+                    </span>
+                    <span className={`text-xs font-medium ${
+                      ficha.topeComprobantes - ficha.emitidosEsteMes < 50 ? 'text-amber-700' : 'text-gray-400'
+                    }`}>
+                      quedan {Math.max(0, ficha.topeComprobantes - ficha.emitidosEsteMes)}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${
+                        ficha.emitidosEsteMes >= ficha.topeComprobantes ? 'bg-red-500' : 'bg-green-600'
+                      }`}
+                      style={{ width: `${Math.min(100, (ficha.emitidosEsteMes / Math.max(1, ficha.topeComprobantes)) * 100)}%` }}
+                    />
+                  </div>
+                  <button
+                    onClick={() => setComprobantesAbierto(true)}
+                    className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:border-gray-300"
+                  >
+                    <FilePlus2 className="w-3.5 h-3.5" />
+                    Agregar 500 comprobantes
+                  </button>
+                </>
+              )}
+            </div>
+
             {ficha.pagos.length > 0 && (
               <div>
                 <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">
-                  Últimos pagos
+                  {verTodosLosPagos ? `Pagos (${ficha.pagos.length})` : 'Últimos pagos'}
                 </p>
                 <div className="space-y-1.5">
-                  {ficha.pagos.map((pg, i) => (
-                    <div key={i} className="flex items-center justify-between text-sm">
-                      <span className="text-gray-500 text-xs">
-                        {pg.date?.toDate?.()?.toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: '2-digit' }) || '-'}
+                  {(verTodosLosPagos ? ficha.pagos : ficha.pagos.slice(0, 3)).map((pg, i) => (
+                    <div key={i} className="flex items-center justify-between text-sm gap-2">
+                      <span className="text-gray-500 text-xs flex-none">
+                        {fechaDePago(pg.date)}
                       </span>
-                      <span className="text-gray-700">{pg.planName || pg.plan}</span>
-                      <span className="font-semibold text-gray-900">S/ {Number(pg.amount || 0).toFixed(2)}</span>
+                      <span className="text-gray-700 truncate">{pg.planName || pg.plan}</span>
+                      <span className="font-semibold text-gray-900 flex-none">S/ {Number(pg.amount || 0).toFixed(2)}</span>
                     </div>
                   ))}
                 </div>
+                {ficha.pagos.length > 3 && (
+                  <button
+                    onClick={() => setVerTodosLosPagos((v) => !v)}
+                    className="mt-2 text-xs font-medium text-green-700 hover:text-green-800"
+                  >
+                    {verTodosLosPagos
+                      ? 'Ver solo los últimos'
+                      : `Ver los ${ficha.pagos.length} pagos · S/ ${totalPagado(ficha.pagos).toFixed(2)} en total`}
+                  </button>
+                )}
               </div>
             )}
 
@@ -193,6 +284,28 @@ export default function FichaCliente({ conversacion, onCerrar }) {
               <CreditCard className="w-4 h-4" />
               Registrar renovación
             </button>
+
+            {/* Cortar y devolver el acceso. Son las dos acciones que antes
+                obligaban a salir del chat y abrir el panel. */}
+            {ficha.accessBlocked ? (
+              <button
+                onClick={() => setReactivarAbierto(true)}
+                disabled={trabajando}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-600 text-white text-sm font-semibold rounded-xl hover:bg-amber-700 transition-colors disabled:opacity-50"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                Reactivar acceso
+              </button>
+            ) : (
+              <button
+                onClick={handleSuspender}
+                disabled={trabajando}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold text-red-600 border border-red-200 rounded-xl hover:bg-red-50 transition-colors disabled:opacity-50"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                Suspender acceso
+              </button>
+            )}
 
             <button
               onClick={async () => {
@@ -226,8 +339,24 @@ export default function FichaCliente({ conversacion, onCerrar }) {
           onRenovado={() => {
             setRenovarAbierto(false)
             // Releer la ficha para que el vencimiento nuevo se vea al instante.
-            obtenerFichaCliente(businessId).then(setFicha).catch(() => {})
+            releerFicha()
           }}
+        />
+      )}
+
+      {reactivarAbierto && ficha && (
+        <ModalReactivar
+          ficha={ficha}
+          onCerrar={() => setReactivarAbierto(false)}
+          onListo={() => { setReactivarAbierto(false); releerFicha() }}
+        />
+      )}
+
+      {comprobantesAbierto && ficha && (
+        <ModalComprobantes
+          ficha={ficha}
+          onCerrar={() => setComprobantesAbierto(false)}
+          onListo={() => { setComprobantesAbierto(false); releerFicha() }}
         />
       )}
     </aside>
@@ -325,6 +454,164 @@ function ModalRenovar({ ficha, onCerrar, onRenovado }) {
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+/** La fecha de un pago llega como texto ISO o como marca de Firestore. */
+function fechaDePago(fecha) {
+  const d = fecha?.toDate?.() || (typeof fecha === 'string' ? new Date(fecha) : null)
+  if (!d || Number.isNaN(d.getTime())) return '-'
+  return d.toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: '2-digit' })
+}
+
+const totalPagado = (pagos) => pagos.reduce((t, p) => t + (Number(p.amount) || 0), 0)
+
+/**
+ * Devolver el acceso sin cobrar: son días de gracia, no una renovación. Por eso
+ * no toca el historial de pagos ni el precio pactado — si el cliente después
+ * paga, se registra la renovación aparte.
+ */
+function ModalReactivar({ ficha, onCerrar, onListo }) {
+  const toast = useToast()
+  const [dias, setDias] = useState(7)
+  const [guardando, setGuardando] = useState(false)
+
+  const base = ficha.vence && ficha.vence > new Date() ? ficha.vence : new Date()
+  const nuevoVence = new Date(base)
+  nuevoVence.setDate(nuevoVence.getDate() + dias)
+
+  const guardar = async () => {
+    setGuardando(true)
+    try {
+      await reactivateUser(ficha.businessId, dias)
+      toast.success(`Acceso devuelto por ${dias} días`)
+      onListo()
+    } catch {
+      toast.error('No se pudo reactivar')
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onCerrar}>
+      <div className="bg-white rounded-2xl w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
+        <h3 className="font-semibold text-gray-900">Reactivar acceso</h3>
+        <p className="text-xs text-gray-500 mt-1">
+          Le devuelve el acceso a {ficha.nombre || 'este negocio'} sin cobrarle. Son días de gracia.
+        </p>
+
+        <div className="grid grid-cols-4 gap-2 mt-4">
+          {[7, 15, 30, 60].map((d) => (
+            <button
+              key={d}
+              onClick={() => setDias(d)}
+              className={`py-2 rounded-lg text-sm font-semibold border transition-colors ${
+                dias === d
+                  ? 'bg-green-600 text-white border-green-600'
+                  : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              {d} d
+            </button>
+          ))}
+        </div>
+
+        <p className="text-xs text-gray-500 mt-3">
+          Nuevo vencimiento:{' '}
+          <span className="font-semibold text-gray-800">
+            {nuevoVence.toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' })}
+          </span>
+        </p>
+
+        <div className="flex gap-2 mt-5">
+          <button onClick={onCerrar} className="flex-1 py-2.5 text-sm font-medium text-gray-600 rounded-xl border border-gray-200 hover:bg-gray-50">
+            Cancelar
+          </button>
+          <button
+            onClick={guardar}
+            disabled={guardando}
+            className="flex-1 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-xl hover:bg-green-700 disabled:opacity-50"
+          >
+            {guardando ? 'Reactivando...' : 'Reactivar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Vender 500 comprobantes sueltos. No cambia el plan ni el vencimiento: solo
+ * sube el tope del mes y deja el cobro anotado en el historial.
+ */
+function ModalComprobantes({ ficha, onCerrar, onListo }) {
+  const toast = useToast()
+  const [monto, setMonto] = useState('10')
+  const [metodo, setMetodo] = useState('Yape')
+  const [guardando, setGuardando] = useState(false)
+
+  const guardar = async (e) => {
+    e.preventDefault()
+    setGuardando(true)
+    try {
+      const nuevoTope = await agregarComprobantes(ficha.businessId, Number(monto), metodo)
+      toast.success(`Ahora puede emitir ${nuevoTope} al mes`)
+      onListo()
+    } catch (error) {
+      toast.error(error.message || 'No se pudo agregar')
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onCerrar}>
+      <form onSubmit={guardar} className="bg-white rounded-2xl w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
+        <h3 className="font-semibold text-gray-900">Agregar 500 comprobantes</h3>
+        <p className="text-xs text-gray-500 mt-1">
+          El tope del mes pasa de {ficha.topeComprobantes} a {ficha.topeComprobantes + 500}.
+          El plan y el vencimiento no cambian.
+        </p>
+
+        <label className="block mt-4">
+          <span className="text-xs font-medium text-gray-600">Monto cobrado</span>
+          <div className="mt-1 flex items-center gap-2">
+            <span className="text-sm text-gray-400">S/</span>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={monto}
+              onChange={(e) => setMonto(e.target.value)}
+              className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+            />
+          </div>
+        </label>
+
+        <label className="block mt-3">
+          <span className="text-xs font-medium text-gray-600">Método</span>
+          <select
+            value={metodo}
+            onChange={(e) => setMetodo(e.target.value)}
+            className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+          >
+            {METODOS.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </label>
+
+        <div className="flex gap-2 mt-5">
+          <button type="button" onClick={onCerrar} className="flex-1 py-2.5 text-sm font-medium text-gray-600 rounded-xl border border-gray-200 hover:bg-gray-50">
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={guardando}
+            className="flex-1 py-2.5 text-sm font-semibold text-white bg-green-600 rounded-xl hover:bg-green-700 disabled:opacity-50"
+          >
+            {guardando ? 'Guardando...' : 'Agregar'}
+          </button>
+        </div>
+      </form>
     </div>
   )
 }

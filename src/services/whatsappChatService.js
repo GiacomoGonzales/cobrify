@@ -9,6 +9,7 @@ import {
   orderBy,
   query,
   limit,
+  limitToLast,
   serverTimestamp,
   setDoc,
   startAt,
@@ -51,15 +52,25 @@ export const suscribirConversaciones = (onChange, onError) => {
   )
 }
 
+/** Cuantos mensajes se traen de una conversacion al abrirla. */
+export const VENTANA_MENSAJES = 150
+
 /**
  * Escucha los mensajes de una conversación, del más viejo al más nuevo (que es
  * el orden en que se leen).
+ *
+ * `limitToLast` y no `limit`: con el orden ascendente, `limit` se queda con los
+ * mensajes MAS VIEJOS. Mientras un chat era corto no se notaba, pero pasados
+ * los 500 mensajes la pantalla dejaba de mostrar los nuevos y se quedaba
+ * clavada en historia vieja. Se pide el ULTIMO tramo, que es lo que uno abre a
+ * leer, y ademas corto: 500 burbujas de golpe eran lo que hacia lenta la
+ * primera apertura.
  */
 export const suscribirMensajes = (conversationId, onChange, onError) => {
   const q = query(
     collection(db, 'whatsappConversations', conversationId, 'messages'),
     orderBy('timestamp', 'asc'),
-    limit(500),
+    limitToLast(VENTANA_MENSAJES),
   )
   return onSnapshot(
     q,
@@ -76,14 +87,17 @@ export const suscribirMensajes = (conversationId, onChange, onError) => {
  * el id que devuelve WhatsApp, y la pantalla lo ve llegar por la suscripción.
  * Así no hay dos versiones del mismo mensaje.
  */
-export const enviarMensaje = async (conversationId, texto, idToken) => {
+export const enviarMensaje = async (conversationId, texto, idToken, respondeA = null) => {
   const res = await fetch(SEND_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${idToken}`,
     },
-    body: JSON.stringify({ conversationId, texto }),
+    // `respondeA` es el id de WhatsApp del mensaje citado. El servidor se lo
+    // pasa a Meta como contexto y ademas lo guarda, que es lo que permite
+    // pintar el bloque de cita al recargar.
+    body: JSON.stringify({ conversationId, texto, ...(respondeA ? { respondeA } : {}) }),
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
@@ -138,7 +152,7 @@ const SEND_MEDIA_URL = import.meta.env.VITE_WHATSAPP_SEND_MEDIA_URL
  * guarda en nuestro almacenamiento y se lo manda a Meta por URL — la misma
  * ruta que siguen los archivos recibidos, así el historial vive en un lugar.
  */
-export const enviarArchivo = async (conversationId, file, caption, idToken) => {
+export const enviarArchivo = async (conversationId, file, caption, idToken, respondeA = null) => {
   const problema = validarArchivo(file)
   if (problema) throw new Error(problema)
   const base64 = await aBase64(file)
@@ -154,6 +168,7 @@ export const enviarArchivo = async (conversationId, file, caption, idToken) => {
       mimeType: file.type,
       filename: file.name,
       caption: caption || '',
+      ...(respondeA ? { respondeA } : {}),
     }),
   })
   const data = await res.json().catch(() => ({}))
@@ -170,7 +185,7 @@ export const enviarArchivo = async (conversationId, file, caption, idToken) => {
  * solo su dirección, no el archivo. Por eso mandar un video de 15 MB con un
  * atajo es instantáneo.
  */
-export const enviarArchivoGuardado = async (conversationId, media, caption, idToken) => {
+export const enviarArchivoGuardado = async (conversationId, media, caption, idToken, respondeA = null) => {
   const res = await fetch(SEND_MEDIA_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
@@ -180,6 +195,7 @@ export const enviarArchivoGuardado = async (conversationId, media, caption, idTo
       mimeType: media.mimeType,
       filename: media.filename || null,
       caption: caption || '',
+      ...(respondeA ? { respondeA } : {}),
     }),
   })
   const data = await res.json().catch(() => ({}))
@@ -294,6 +310,7 @@ export const obtenerFichaCliente = async (businessId) => {
   const diasParaVencer = vence
     ? Math.ceil((vence.getTime() - Date.now()) / 86400000)
     : null
+  const tope = sub.limits?.maxInvoicesPerMonth
   return {
     businessId,
     nombre: biz.businessName || sub.businessName || null,
@@ -305,9 +322,51 @@ export const obtenerFichaCliente = async (businessId) => {
     diasParaVencer,
     renewalPrice: sub.renewalPrice ?? null,
     accessBlocked: sub.accessBlocked === true,
-    // Los ultimos pagos, del mas reciente al mas viejo.
-    pagos: [...(sub.paymentHistory || [])].reverse().slice(0, 3),
+    motivoBloqueo: sub.blockReason || null,
+    bloqueadoEl: sub.blockedAt?.toDate?.() || null,
+    // Comprobantes del mes: -1 (o sin tope) es ilimitado.
+    emitidosEsteMes: sub.usage?.invoicesThisMonth ?? 0,
+    topeComprobantes: tope === undefined || tope === null ? null : tope,
+    // TODOS los pagos, del mas reciente al mas viejo. La pantalla decide
+    // cuantos muestra: antes se cortaban en tres aca y no habia forma de ver
+    // el resto sin salir al panel.
+    pagos: [...(sub.paymentHistory || [])].reverse(),
   }
+}
+
+/**
+ * Suma 500 comprobantes al tope del mes. Es el complemento que se vende cuando
+ * un cliente se queda corto sin querer cambiar de plan.
+ *
+ * Queda anotado como un pago mas, con `addonType`, para que el historial
+ * muestre por que entro plata sin que haya cambiado el vencimiento.
+ */
+export const agregarComprobantes = async (businessId, monto, metodo, cuantos = 500) => {
+  const ref = doc(db, 'subscriptions', businessId)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) throw new Error('La suscripción no existe')
+  const tope = snap.data().limits?.maxInvoicesPerMonth
+  if (tope === undefined || tope === null || tope < 0) {
+    throw new Error('Este plan ya tiene comprobantes ilimitados')
+  }
+  await updateDoc(ref, {
+    'limits.maxInvoicesPerMonth': tope + cuantos,
+    lastPaymentDate: serverTimestamp(),
+    paymentHistory: arrayUnion({
+      date: new Date().toISOString(),
+      amount: Number(monto) || 0,
+      method: metodo,
+      plan: 'addon_500_comprobantes',
+      planName: `+${cuantos} Comprobantes`,
+      months: 0,
+      addonType: 'invoices',
+      addonAmount: cuantos,
+      status: 'completed',
+      registeredBy: 'admin',
+    }),
+    updatedAt: serverTimestamp(),
+  })
+  return tope + cuantos
 }
 
 /**
@@ -380,6 +439,36 @@ const postConToken = async (url, cuerpo, idToken) => {
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error || 'La operación falló')
   return data
+}
+
+// =================== REACCIONAR Y AVISAR QUE SE LEYO ===================
+// Las dos funciones existen en el servidor desde que se hizo la app de iPhone.
+// La web no las usaba: reaccionaba el cliente y aca no se veia nada, y el
+// cliente nunca veia sus palomitas azules aunque uno hubiera leido el mensaje.
+
+/** Los cuatro de siempre, los que entran en una fila sin apretarse. */
+export const EMOJIS_REACCION = ['❤️', '👍', '😂', '🙏']
+
+/**
+ * Reacciona a un mensaje. Un emoji vacio QUITA la reaccion, que es como lo
+ * entiende Meta: no hay una llamada aparte para borrarla.
+ */
+export const reaccionar = (conversationId, waMessageId, emoji, idToken) =>
+  postConToken(FN('sendWhatsappReactionFn'), { conversationId, waMessageId, emoji }, idToken)
+
+/**
+ * Le avisa a WhatsApp que leiste el mensaje: es lo que le pinta al cliente las
+ * dos palomitas azules.
+ *
+ * Falla en silencio a proposito. Que el aviso no salga es molesto; que reviente
+ * la pantalla por eso seria peor, y no hay nada que el usuario pueda hacer.
+ */
+export const avisarLeido = async (conversationId, waMessageId, idToken) => {
+  try {
+    await postConToken(FN('markWhatsappRead'), { conversationId, waMessageId }, idToken)
+  } catch (e) {
+    console.warn('No se pudo avisar que se leyo:', e.message)
+  }
 }
 
 export const suscribirPlantillas = (onChange) =>
@@ -551,4 +640,30 @@ export const formatearHora = (timestamp) => {
     ? d.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
     : d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit' })
       + ' ' + d.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
+}
+
+/** "Hoy", "Ayer" o "jueves 28 de agosto" — el rotulo que separa los dias. */
+export const formatearDia = (timestamp) => {
+  const d = timestamp?.toDate?.()
+  if (!d) return ''
+  const hoy = new Date()
+  const ayer = new Date(hoy)
+  ayer.setDate(ayer.getDate() - 1)
+  if (d.toDateString() === hoy.toDateString()) return 'Hoy'
+  if (d.toDateString() === ayer.toDateString()) return 'Ayer'
+  const texto = d.toLocaleDateString('es-PE', {
+    weekday: 'long', day: 'numeric', month: 'long',
+    ...(d.getFullYear() !== hoy.getFullYear() ? { year: 'numeric' } : {}),
+  })
+  // El locale mete una coma tras el dia de la semana ("Jueves, 27 de agosto");
+  // en un separador de chat sobra.
+  const limpio = texto.replace(',', '')
+  return limpio.charAt(0).toUpperCase() + limpio.slice(1)
+}
+
+/** Clave de dia, para saber donde cortar sin comparar textos. */
+export const claveDeDia = (timestamp) => {
+  const d = timestamp?.toDate?.()
+  if (!d) return ''
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
 }
