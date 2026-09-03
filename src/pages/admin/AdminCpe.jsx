@@ -5,10 +5,13 @@ import { formatCurrency, matchesPrebuilt, buildSearchHaystack } from '@/lib/util
 import { urlXmlDe, urlCdrDe, cdrEnLineaDe, tieneCdr, tieneXmlGuardado, estadoSunatDe, fechaDelComprobante } from '@/utils/sunatDocs'
 import { downloadFromUrl, downloadBlob } from '@/utils/nativeDownload'
 import {
-  FileCheck2, Search, RefreshCw, Download, Code, Eye, X, Loader2,
+  Download, Code, X, Loader2,
   CheckCircle, XCircle, Clock, Ban, ChevronLeft, ChevronRight
 } from 'lucide-react'
-import { Pagina, Filtros, FiltroSelect, Buscador, Boton, Entrada, Seccion, Tabla, Th, Td, Fila, FilaVacia, Estado, Aviso } from '@/components/admin/ui'
+import {
+  Pagina, Filtros, FiltroSelect, Buscador, Boton, Entrada, Seccion, Tabla, Th, Td, Fila, FilaVacia, Estado, Aviso,
+  useMenuDeFila, BotonDeFila, CajaMenu, ItemMenu,
+} from '@/components/admin/ui'
 
 /**
  * Panel de CPE de los negocios con SUNAT DIRECTO — la vista de soporte.
@@ -194,6 +197,8 @@ export default function AdminCpe() {
   const [paginaBajas, setPaginaBajas] = useState(0)
 
   const [detalle, setDetalle] = useState(null)
+  // Mismo menu de fila que Usuarios y Resellers.
+  const menu = useMenuDeFila()
   const [detalleTab, setDetalleTab] = useState('info') // 'info' | 'seguimiento'
   const [descargando, setDescargando] = useState(null)
   // Metodo de emision de las empresas que se listan. Con SUNAT directo son
@@ -799,78 +804,65 @@ export default function AdminCpe() {
               )}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">
-                    <th className="px-4 py-3">Emisión</th>
-                    <th className="px-4 py-3">Empresa</th>
-                    <th className="px-4 py-3">Tipo</th>
-                    <th className="px-4 py-3">Número</th>
-                    <th className="px-4 py-3">Cliente / Destinatario</th>
-                    <th className="px-4 py-3 text-right">Total</th>
-                    <th className="px-4 py-3">Estado</th>
-                    <th className="px-4 py-3 text-right">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {paginaFilas.map(inv => {
-                    const emp = nombreEmpresa.get(inv.bizId)
-                    return (
-                      <tr key={`${inv.bizId}-${inv.coleccion}-${inv.id}`} className="hover:bg-gray-50">
-                        <td className="px-4 py-2.5 whitespace-nowrap text-gray-700">
-                          {fechaDelComprobante(inv)?.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' }) || '-'}
-                          <span className="block text-[11px] text-gray-400">creado {formatFechaHora(inv.createdAt)}</span>
-                        </td>
-                        <td className="px-4 py-2.5 max-w-[220px]">
-                          <p className="truncate font-medium text-gray-900 text-[13px]">{emp?.nombre || inv.bizId}</p>
-                          <p className="text-[11px] text-gray-400">{emp?.ruc}</p>
-                        </td>
-                        <td className="px-4 py-2.5"><BadgeTipo inv={inv} /></td>
-                        <td className="px-4 py-2.5 whitespace-nowrap font-medium text-gray-900">{inv.number || '-'}</td>
-                        <td className="px-4 py-2.5 max-w-[200px]">
-                          <p className="truncate text-gray-700">{inv.customer?.businessName || inv.customer?.name || '-'}</p>
-                          <p className="text-[11px] text-gray-400">{inv.customer?.documentNumber || ''}</p>
-                        </td>
-                        <td className="px-4 py-2.5 text-right whitespace-nowrap font-semibold text-gray-900">
-                          {inv.coleccion === 'invoices' ? formatCurrency(inv.total || 0, inv.currency) : '-'}
-                        </td>
-                        <td className="px-4 py-2.5"><BadgeEstado estado={estadoSunatDe(inv)} /></td>
-                        <td className="px-4 py-2.5">
-                          <div className="flex items-center justify-end gap-1">
-                            {tieneXmlGuardado(inv) && (
-                              <button
-                                onClick={() => descargarXml(inv)}
-                                title="Descargar XML firmado"
-                                className="p-1.5 text-gray-700 hover:bg-gray-50 rounded"
-                              >
-                                {descargando === `${inv.id}-xml` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Code className="w-4 h-4" />}
-                              </button>
-                            )}
-                            {tieneCdr(inv) && (
-                              <button
-                                onClick={() => descargarCdr(inv)}
-                                title="Descargar CDR"
-                                className="p-1.5 text-gray-700 hover:bg-gray-50 rounded"
-                              >
-                                {descargando === `${inv.id}-cdr` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                              </button>
-                            )}
-                            <button
-                              onClick={() => { setDetalle(inv); setDetalleTab('info') }}
-                              title="Ver detalle"
-                              className="p-1.5 text-gray-500 hover:bg-gray-100 rounded"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <Tabla>
+              <thead>
+                <tr>
+                  <Th>Emisión</Th>
+                  <Th>Empresa</Th>
+                  <Th>Tipo</Th>
+                  <Th>Número</Th>
+                  <Th>Cliente / Destinatario</Th>
+                  <Th alinear="der">Total</Th>
+                  <Th>Estado</Th>
+                  <Th ancho={44}><span className="sr-only">Acciones</span></Th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginaFilas.map(inv => {
+                  const emp = nombreEmpresa.get(inv.bizId)
+                  const clave = `${inv.bizId}-${inv.coleccion}-${inv.id}`
+                  return (
+                    /* La fila entera abre el detalle, como en Usuarios. */
+                    <Fila key={clave} onClick={() => { setDetalle(inv); setDetalleTab('info') }}>
+                      <Td apagado>
+                        {fechaDelComprobante(inv)?.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' }) || '-'}
+                        <span className="block text-[11px] text-gray-400">creado {formatFechaHora(inv.createdAt)}</span>
+                      </Td>
+                      <Td className="max-w-[220px]">
+                        <p className="truncate font-medium">{emp?.nombre || inv.bizId}</p>
+                        <p className="text-[11px] text-gray-400">{emp?.ruc}</p>
+                      </Td>
+                      <Td><BadgeTipo inv={inv} /></Td>
+                      <Td className="font-medium">{inv.number || '-'}</Td>
+                      <Td className="max-w-[200px]">
+                        <p className="truncate">{inv.customer?.businessName || inv.customer?.name || '-'}</p>
+                        <p className="text-[11px] text-gray-400">{inv.customer?.documentNumber || ''}</p>
+                      </Td>
+                      <Td numero className="font-semibold">
+                        {inv.coleccion === 'invoices' ? formatCurrency(inv.total || 0, inv.currency) : '-'}
+                      </Td>
+                      <Td><BadgeEstado estado={estadoSunatDe(inv)} /></Td>
+                      <Td alinear="centro" onClick={e => e.stopPropagation()}>
+                        <div className="relative">
+                          <BotonDeFila onClick={el => menu.alternar(clave, el)} />
+                          {menu.abiertoEn === clave && (
+                            <CajaMenu posicion={menu.posicion} refMenu={menu.refMenu}>
+                              <ItemMenu onClick={() => { menu.cerrar(); setDetalle(inv); setDetalleTab('info') }}>Ver detalle</ItemMenu>
+                              {tieneXmlGuardado(inv) && (
+                                <ItemMenu onClick={() => { menu.cerrar(); descargarXml(inv) }}>Descargar XML firmado</ItemMenu>
+                              )}
+                              {tieneCdr(inv) && (
+                                <ItemMenu onClick={() => { menu.cerrar(); descargarCdr(inv) }}>Descargar CDR</ItemMenu>
+                              )}
+                            </CajaMenu>
+                          )}
+                        </div>
+                      </Td>
+                    </Fila>
+                  )
+                })}
+              </tbody>
+            </Tabla>
           )}
 
           {!cargando && (
@@ -900,79 +892,81 @@ export default function AdminCpe() {
               {bajas.length === 0 ? 'Sin resúmenes ni comunicaciones de baja en este mes' : 'Nada coincide con la búsqueda'}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">
-                    <th className="px-4 py-3">Fecha</th>
-                    <th className="px-4 py-3">Empresa</th>
-                    <th className="px-4 py-3">Identificador</th>
-                    <th className="px-4 py-3">Documento dado de baja</th>
-                    <th className="px-4 py-3">Motivo</th>
-                    <th className="px-4 py-3">Ticket</th>
-                    <th className="px-4 py-3">Estado</th>
-                    <th className="px-4 py-3 text-right">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {paginaBajasFilas.map(b => {
-                    const emp = nombreEmpresa.get(b.bizId)
-                    const numDoc = b.invoiceSeries ? `${b.invoiceSeries}-${b.invoiceNumber}` : (b.invoiceNumber || '-')
-                    return (
-                      <tr key={`${b.bizId}-${b.id}`} className="hover:bg-gray-50">
-                        <td className="px-4 py-2.5 whitespace-nowrap text-gray-700">{formatFechaHora(b.createdAt)}</td>
-                        <td className="px-4 py-2.5 max-w-[220px]">
-                          <p className="truncate font-medium text-gray-900 text-[13px]">{emp?.nombre || b.bizId}</p>
-                          <p className="text-[11px] text-gray-400">{emp?.ruc}</p>
-                        </td>
-                        <td className="px-4 py-2.5 whitespace-nowrap font-medium text-gray-900">
-                          {b.voidedDocId || b.summaryDocId || b.id}
-                          <span className="block text-[11px] font-normal text-gray-400">
-                            {b.origen === 'RC'
-                              ? (b.action === 'void' ? 'Anulación (resumen diario)' : 'Resumen diario')
-                              : 'Comunicación de baja'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2.5 whitespace-nowrap">
-                          <span className="text-gray-900">{numDoc}</span>
-                          {TIPOS[b.documentType] && <span className="block text-[11px] text-gray-400">{TIPOS[b.documentType].label}</span>}
-                        </td>
-                        <td className="px-4 py-2.5 max-w-[200px]"><p className="truncate text-gray-700">{b.reason || '-'}</p></td>
-                        <td className="px-4 py-2.5 whitespace-nowrap text-xs text-gray-500">{b.ticket || '-'}</td>
-                        <td className="px-4 py-2.5">
-                          <BadgeEstado estado={estadoDeBaja(b)} />
-                          {b.responseDescription && estadoDeBaja(b) !== 'accepted' && (
-                            <p className="text-[11px] text-red-600 mt-0.5 max-w-[180px] truncate" title={b.responseDescription}>{b.responseDescription}</p>
-                          )}
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <div className="flex items-center justify-end gap-1">
-                            {(b.voidXmlStorageUrl || b.xmlSent) && (
-                              <button
-                                onClick={() => bajar(`${b.id}-xml`, b.voidXmlStorageUrl, `${b.voidedDocId || b.summaryDocId || b.id}.xml`, b.xmlSent)}
-                                title="Descargar XML de la baja"
-                                className="p-1.5 text-gray-700 hover:bg-gray-50 rounded"
-                              >
-                                {descargando === `${b.id}-xml` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Code className="w-4 h-4" />}
-                              </button>
-                            )}
-                            {(b.voidCdrStorageUrl || b.cdrData) && (
-                              <button
-                                onClick={() => bajar(`${b.id}-cdr`, b.voidCdrStorageUrl, `CDR-${b.voidedDocId || b.summaryDocId || b.id}.xml`, b.cdrData)}
-                                title="Descargar CDR de la baja"
-                                className="p-1.5 text-gray-700 hover:bg-gray-50 rounded"
-                              >
-                                {descargando === `${b.id}-cdr` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                              </button>
+            <Tabla>
+              <thead>
+                <tr>
+                  <Th>Fecha</Th>
+                  <Th>Empresa</Th>
+                  <Th>Identificador</Th>
+                  <Th>Documento dado de baja</Th>
+                  <Th>Motivo</Th>
+                  <Th>Ticket</Th>
+                  <Th>Estado</Th>
+                  <Th ancho={44}><span className="sr-only">Acciones</span></Th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginaBajasFilas.map(b => {
+                  const emp = nombreEmpresa.get(b.bizId)
+                  const numDoc = b.invoiceSeries ? `${b.invoiceSeries}-${b.invoiceNumber}` : (b.invoiceNumber || '-')
+                  const clave = `baja-${b.bizId}-${b.id}`
+                  const hayXml = b.voidXmlStorageUrl || b.xmlSent
+                  const hayCdr = b.voidCdrStorageUrl || b.cdrData
+                  return (
+                    <Fila key={clave}>
+                      <Td apagado>{formatFechaHora(b.createdAt)}</Td>
+                      <Td className="max-w-[220px]">
+                        <p className="truncate font-medium">{emp?.nombre || b.bizId}</p>
+                        <p className="text-[11px] text-gray-400">{emp?.ruc}</p>
+                      </Td>
+                      <Td className="font-medium">
+                        {b.voidedDocId || b.summaryDocId || b.id}
+                        <span className="block text-[11px] font-normal text-gray-400">
+                          {b.origen === 'RC'
+                            ? (b.action === 'void' ? 'Anulación (resumen diario)' : 'Resumen diario')
+                            : 'Comunicación de baja'}
+                        </span>
+                      </Td>
+                      <Td>
+                        <span>{numDoc}</span>
+                        {TIPOS[b.documentType] && <span className="block text-[11px] text-gray-400">{TIPOS[b.documentType].label}</span>}
+                      </Td>
+                      <Td className="max-w-[200px]"><p className="truncate text-gray-700">{b.reason || '-'}</p></Td>
+                      <Td apagado className="text-[11.5px]">{b.ticket || '-'}</Td>
+                      <Td>
+                        <BadgeEstado estado={estadoDeBaja(b)} />
+                        {b.responseDescription && estadoDeBaja(b) !== 'accepted' && (
+                          <p className="text-[11px] text-red-600 mt-0.5 max-w-[180px] truncate" title={b.responseDescription}>{b.responseDescription}</p>
+                        )}
+                      </Td>
+                      <Td alinear="centro">
+                        {(hayXml || hayCdr) ? (
+                          <div className="relative">
+                            <BotonDeFila onClick={el => menu.alternar(clave, el)} />
+                            {menu.abiertoEn === clave && (
+                              <CajaMenu posicion={menu.posicion} refMenu={menu.refMenu}>
+                                {hayXml && (
+                                  <ItemMenu onClick={() => { menu.cerrar(); bajar(`${b.id}-xml`, b.voidXmlStorageUrl, `${b.voidedDocId || b.summaryDocId || b.id}.xml`, b.xmlSent) }}>
+                                    Descargar XML de la baja
+                                  </ItemMenu>
+                                )}
+                                {hayCdr && (
+                                  <ItemMenu onClick={() => { menu.cerrar(); bajar(`${b.id}-cdr`, b.voidCdrStorageUrl, `CDR-${b.voidedDocId || b.summaryDocId || b.id}.xml`, b.cdrData) }}>
+                                    Descargar CDR de la baja
+                                  </ItemMenu>
+                                )}
+                              </CajaMenu>
                             )}
                           </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </Td>
+                    </Fila>
+                  )
+                })}
+              </tbody>
+            </Tabla>
           )}
 
           {!cargandoBajas && bajas !== null && (

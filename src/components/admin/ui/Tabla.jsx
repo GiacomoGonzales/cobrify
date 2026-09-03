@@ -2,8 +2,13 @@ import { cn } from '@/lib/utils'
 
 const ALINEAR = { izq: 'text-left', der: 'text-right', centro: 'text-center' }
 
-// Tabla densa del admin: 12.5px, cabecera fija, una linea por celda. Las
-// flechas de orden son texto (↑ ↓), no iconos.
+// Tabla densa del admin: 12.5px, una linea por celda. Las flechas de orden son
+// texto (↑ ↓), no iconos.
+//
+// Sin alto propio a proposito: si la tabla se limita, aparece un segundo scroll
+// dentro de la pagina y los botones de paginacion quedan escondidos debajo. El
+// unico scroll es el de la pagina. `alto` sigue existiendo para casos donde se
+// quiera de verdad, pero ninguna pantalla lo usa.
 export function Tabla({ children, className, fija = false, alto }) {
   return (
     <div className={cn('overflow-auto custom-scrollbar', alto)}>
@@ -25,6 +30,13 @@ export function Th({ children, className, alinear = 'izq', ancho, campo, orden, 
       style={ancho ? { width: ancho } : undefined}
       onClick={ordenable ? () => onOrdenar(campo) : undefined}
       className={cn(
+        // Se pega arriba del todo, donde la barra del panel la tapa: la
+        // cabecera se va de la vista al bajar, como en cualquier documento.
+        //
+        // NO usar top-12 para dejarla asomando debajo de la barra: sin scroll
+        // propio la tabla se pega respecto de la PAGINA, y entonces la fila de
+        // titulos se queda flotando en medio de las cuentas, encima de una fila
+        // y con un hueco donde estaba. Se probo y se ve peor que no tenerla.
         'sticky top-0 z-[1] bg-gray-50 border-b border-gray-200 px-3 py-2 text-[11.5px] font-medium text-gray-500 whitespace-nowrap',
         ALINEAR[alinear],
         ordenable && 'cursor-pointer select-none hover:text-gray-900',

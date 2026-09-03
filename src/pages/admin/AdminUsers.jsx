@@ -21,7 +21,7 @@ import EliminarCuentaModal from '@/components/admin/cuenta/EliminarCuentaModal'
 import VendedoresModal from '@/components/admin/cuenta/VendedoresModal'
 import {
   Pagina, Seccion, Tabla, Th, Td, Fila, FilaVacia, Filtros, FiltroSelect, Buscador, Estado, Pastilla, Boton,
-  useMenuDeFila, CajaMenu, ItemMenu, SeparadorMenu,
+  useMenuDeFila, BotonDeFila, CajaMenu, ItemMenu, SeparadorMenu,
 } from '@/components/admin/ui'
 
 // Lista de cuentas: buscador, filtros y tabla. Clic en una fila abre la ficha
@@ -36,6 +36,26 @@ const getPlanDisplay = user => {
   const name = user.planName || plan?.name || user.plan
   const price = plan?.totalPrice
   return price && price > 0 ? `${name} · S/ ${price.toFixed(2)}` : name
+}
+
+/**
+ * El plan partido en tres lineas cortas: "Basico" / "1 mes" / "S/ 19.90".
+ *
+ * En una sola linea ("Plan Basico - 1 Mes · S/ 19.90") la columna se comia el
+ * ancho de dos y obligaba a desplazar la tabla de lado. El nombre pierde el
+ * "Plan " de adelante y el " - 1 Mes" de atras, que se repiten en cada fila y
+ * no distinguen nada; el periodo sale de `months`, que es el dato de verdad.
+ */
+const planEnLineas = (user, customPlans) => {
+  const plan = PLANS[user.plan] || customPlans?.[user.plan]
+  const bruto = String(user.planName || plan?.name || user.plan || '—')
+  const nombre = bruto.split(' - ')[0].replace(/^Plan\s+/i, '') || bruto
+  const meses = plan?.months
+  return {
+    nombre,
+    periodo: meses ? (meses === 1 ? '1 mes' : `${meses} meses`) : null,
+    precio: plan?.totalPrice > 0 ? `S/ ${plan.totalPrice.toFixed(2)}` : null,
+  }
 }
 
 const formatDate = date => (date ? date.toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' }) : '—')
@@ -65,6 +85,9 @@ export default function AdminUsers() {
   const [sourceFilter, setSourceFilter] = useState('all') // 'all' | 'cobrify' | 'reseller' | 'reseller:<id>'
   const [modeFilter, setModeFilter] = useState('all')
   const [rubroFilter, setRubroFilter] = useState('all')
+  // Filtra el REGIMEN del negocio, no la tasa suelta: el regimen manda sobre la
+  // afectacion de cada producto (un RUS no cobra IGV aunque el producto diga
+  // gravado). Se llamaba "IGV" y eso hacia pensar en un dato por producto.
   const [igvFilter, setIgvFilter] = useState('all') // 'all' | 'reduced' | 'exempt' | 'nrus' | 'standard'
   const [vendedorFilter, setVendedorFilter] = useState('all') // 'all' | 'none' | vendedorId
   // Vencimientos: antes era una pagina aparte; ahora es este filtro
@@ -530,11 +553,11 @@ export default function AdminUsers() {
           })}
         </FiltroSelect>
         <FiltroSelect value={igvFilter} onChange={e => setIgvFilter(e.target.value)}>
-          <option value="all">IGV</option>
-          <option value="reduced">10.5% ({users.filter(u => u.taxType === 'reduced' || u.igvRate === 10.5).length})</option>
-          <option value="exempt">Exonerado ({users.filter(u => u.taxType === 'exempt' || (u.igvRate === 0 && u.taxType !== 'nrus')).length})</option>
+          <option value="all">Régimen</option>
+          <option value="standard">General · 18% ({users.filter(u => u.taxType === 'standard' && u.igvRate === 18).length})</option>
+          <option value="reduced">Restaurantes · 10.5% ({users.filter(u => u.taxType === 'reduced' || u.igvRate === 10.5).length})</option>
+          <option value="exempt">Amazonía · exonerado ({users.filter(u => u.taxType === 'exempt' || (u.igvRate === 0 && u.taxType !== 'nrus')).length})</option>
           <option value="nrus">NRUS ({users.filter(u => u.taxType === 'nrus').length})</option>
-          <option value="standard">18% ({users.filter(u => u.taxType === 'standard' && u.igvRate === 18).length})</option>
         </FiltroSelect>
         </div>
         {hayFiltros && (
@@ -565,14 +588,7 @@ export default function AdminUsers() {
                       </div>
                     </div>
                     <div className="relative shrink-0" onClick={e => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        onClick={e => menu.alternar(user.id, e.currentTarget)}
-                        className="h-7 w-7 rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-900 text-[16px] leading-none"
-                        aria-label="Acciones"
-                      >
-                        ⋯
-                      </button>
+                      <BotonDeFila onClick={el => menu.alternar(user.id, el)} />
                       {menu.abiertoEn === user.id && menuAcciones(user, vencida)}
                     </div>
                   </div>
@@ -590,28 +606,25 @@ export default function AdminUsers() {
         </div>
 
         <div className="hidden sm:block">
-        <Tabla alto="lg:max-h-[calc(100vh-12rem)]">
+        <Tabla>
           <thead>
             <tr>
               <Th campo="codigoCliente" orden={orden} onOrdenar={handleSort} ancho={84}>Código</Th>
               <Th campo="businessName" orden={orden} onOrdenar={handleSort}>Negocio</Th>
               <Th>Contacto</Th>
-              <Th campo="rubroEfectivo" orden={orden} onOrdenar={handleSort}>Rubro</Th>
               <Th campo="plan" orden={orden} onOrdenar={handleSort}>Plan</Th>
               <Th campo="status" orden={orden} onOrdenar={handleSort}>Estado</Th>
-              <Th campo="usage" orden={orden} onOrdenar={handleSort} alinear="der">Uso</Th>
-              <Th>Emisión</Th>
+              <Th campo="usage" orden={orden} onOrdenar={handleSort} alinear="der">Uso · emisión</Th>
               <Th campo="department" orden={orden} onOrdenar={handleSort}>Ubicación</Th>
-              <Th campo="periodEnd" orden={orden} onOrdenar={handleSort} alinear="der">Vence</Th>
-              <Th campo="createdAt" orden={orden} onOrdenar={handleSort} alinear="der">Alta</Th>
+              <Th campo="periodEnd" orden={orden} onOrdenar={handleSort} alinear="der">Vence · alta</Th>
               <Th ancho={44}><span className="sr-only">Acciones</span></Th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <FilaVacia colSpan={12}>Cargando cuentas…</FilaVacia>
+              <FilaVacia colSpan={9}>Cargando cuentas…</FilaVacia>
             ) : filteredUsers.length === 0 ? (
-              <FilaVacia colSpan={12}>Ninguna cuenta coincide con la búsqueda y los filtros</FilaVacia>
+              <FilaVacia colSpan={9}>Ninguna cuenta coincide con la búsqueda y los filtros</FilaVacia>
             ) : (
               displayedUsers.map(user => {
                 const usados = user.usage?.invoicesThisMonth || 0
@@ -622,11 +635,12 @@ export default function AdminUsers() {
                 const urlTienda = user.catalogEnabled && (user.customDomain || user.catalogSlug)
                   ? user.customDomain ? `https://${user.customDomain}` : `${window.location.origin}/catalogo/${user.catalogSlug}`
                   : null
+                const plan3 = planEnLineas(user, customPlans)
                 const nombreVendedor = user.vendedorId ? vendedores.find(v => v.id === user.vendedorId)?.name || '—' : null
                 return (
                   <Fila key={user.id} onClick={() => irAFicha(user)} apagada={user.archived}>
                     <Td apagado className="font-mono text-[12px]">{user.codigoCliente || '—'}</Td>
-                    <Td className="max-w-[280px]">
+                    <Td className="max-w-[250px]">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="truncate font-medium">{user.businessName}</span>
                         {urlTienda && (
@@ -637,60 +651,67 @@ export default function AdminUsers() {
                         )}
                       </div>
                       <div className="truncate text-[11.5px] text-gray-500">{user.email}{user.ruc ? ` · ${user.ruc}` : ''}</div>
-                      {(user.createdByReseller || nombreVendedor) && (
-                        <div className="truncate text-[11.5px] text-gray-500">
-                          {user.createdByReseller ? `Reseller: ${user.resellerName}` : ''}
-                          {user.createdByReseller && nombreVendedor ? ' · ' : ''}
-                          {nombreVendedor ? `Vendedor: ${nombreVendedor}` : ''}
-                        </div>
-                      )}
+                      {/* Rubro debajo del RUC, y en la misma linea de quien
+                          vendio la cuenta: son tres datos cortos que no
+                          merecian columnas propias. Un clic cambia el rubro. */}
+                      <div className="flex items-center gap-1.5 min-w-0 text-[11.5px] text-gray-500" onClick={e => e.stopPropagation()}>
+                        {editandoRubro === user.id ? (
+                          <select
+                            autoFocus
+                            defaultValue={user.rubro || user.rubroSugerido || ''}
+                            onBlur={() => setEditandoRubro(null)}
+                            onChange={e => guardarRubro(user, e.target.value)}
+                            className="h-6 w-36 rounded-md border border-gray-300 bg-white px-1.5 text-[12px] focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                          >
+                            <option value="">Sin rubro</option>
+                            {RUBROS.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+                          </select>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setEditandoRubro(user.id)}
+                            className="max-w-[150px] shrink-0 text-left"
+                            title={user.rubro ? 'Rubro confirmado. Clic para cambiarlo' : user.rubroSugerido ? `Sugerido: ${nombreRubro(user.rubroSugerido)}. Clic para confirmarlo o cambiarlo` : 'Sin rubro. Clic para ponerle uno'}
+                          >
+                            {user.rubro ? (
+                              <Pastilla tono="neutro" className="max-w-full truncate">{nombreRubro(user.rubro)}</Pastilla>
+                            ) : user.rubroSugerido ? (
+                              <Pastilla tono="punteado" className="max-w-full truncate">{nombreRubro(user.rubroSugerido)}</Pastilla>
+                            ) : (
+                              <span className="text-gray-400">sin rubro</span>
+                            )}
+                          </button>
+                        )}
+                        {(user.createdByReseller || nombreVendedor) && (
+                          <span className="truncate">
+                            {user.createdByReseller ? `· ${user.resellerName}` : ''}
+                            {nombreVendedor ? ` · ${nombreVendedor}` : ''}
+                          </span>
+                        )}
+                      </div>
                     </Td>
-                    <Td className="max-w-[170px]">
+                    <Td className="max-w-[150px]">
                       <div className="truncate">{user.contactName || <span className="text-gray-400">—</span>}</div>
                       {(user.contactPhone || user.phone) && <div className="truncate text-[11.5px] text-gray-500">{user.contactPhone || user.phone}</div>}
                     </Td>
-                    {/* Rubro: pastilla llena si esta confirmado, punteada si es la sugerencia. Un clic lo cambia. */}
-                    <Td onClick={e => e.stopPropagation()}>
-                      {editandoRubro === user.id ? (
-                        <select
-                          autoFocus
-                          defaultValue={user.rubro || user.rubroSugerido || ''}
-                          onBlur={() => setEditandoRubro(null)}
-                          onChange={e => guardarRubro(user, e.target.value)}
-                          className="h-7 w-36 rounded-md border border-gray-300 bg-white px-1.5 text-[12px] focus:outline-none focus:ring-2 focus:ring-primary-500/40"
-                        >
-                          <option value="">Sin rubro</option>
-                          {RUBROS.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
-                        </select>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setEditandoRubro(user.id)}
-                          className="max-w-[150px] text-left"
-                          title={user.rubro ? 'Rubro confirmado. Clic para cambiarlo' : user.rubroSugerido ? `Sugerido: ${nombreRubro(user.rubroSugerido)}. Clic para confirmarlo o cambiarlo` : 'Sin rubro. Clic para ponerle uno'}
-                        >
-                          {user.rubro ? (
-                            <Pastilla tono="neutro" className="max-w-full truncate">{nombreRubro(user.rubro)}</Pastilla>
-                          ) : user.rubroSugerido ? (
-                            <Pastilla tono="punteado" className="max-w-full truncate">{nombreRubro(user.rubroSugerido)}</Pastilla>
-                          ) : (
-                            <span className="text-gray-400">—</span>
-                          )}
-                        </button>
-                      )}
+                    <Td>
+                      <div className="text-gray-900">{plan3.nombre}</div>
+                      {plan3.periodo && <div className="text-[11.5px] text-gray-500">{plan3.periodo}</div>}
+                      {plan3.precio && <div className="text-[11.5px] text-gray-500 tabular-nums">{plan3.precio}</div>}
                     </Td>
-                    <Td apagado>{getPlanDisplay(user)}</Td>
                     <Td>
                       <Estado valor={user.status} etiqueta={STATUS_LABELS[user.status] || user.status} />
                       {user.archived && <span className="ml-1.5 text-[11.5px] text-gray-400">archivada</span>}
                     </Td>
-                    <Td numero className={lleno ? 'text-red-600 font-medium' : ''}>{usados}/{ilimitado ? '∞' : user.limit}</Td>
-                    <Td apagado>
-                      {user.emissionMethod && user.emissionMethod !== 'none'
-                        ? user.emissionMethod === 'qpse' ? 'QPse' : user.emissionMethod === 'sunat_direct' ? 'SUNAT directo' : user.emissionMethod
-                        : '—'}
+                    <Td numero>
+                      <div className={lleno ? 'text-red-600 font-medium' : ''}>{usados}/{ilimitado ? '∞' : user.limit}</div>
+                      <div className="text-[11.5px] font-normal text-gray-400">
+                        {user.emissionMethod && user.emissionMethod !== 'none'
+                          ? user.emissionMethod === 'qpse' ? 'QPse' : user.emissionMethod === 'sunat_direct' ? 'Directo' : user.emissionMethod
+                          : 'sin emisión'}
+                      </div>
                     </Td>
-                    <Td apagado className="max-w-[150px]">
+                    <Td apagado className="max-w-[110px]">
                       <div className="truncate">{user.department || '—'}{user.province && user.province !== user.department ? ` · ${user.province}` : ''}</div>
                     </Td>
                     <Td
@@ -698,19 +719,11 @@ export default function AdminUsers() {
                       className={vencida ? 'text-red-600 font-medium' : dias !== null && dias <= 7 ? 'text-gray-900 font-medium' : 'text-gray-500'}
                       title={dias === null ? undefined : vencida ? `Venció hace ${Math.abs(dias)} días` : dias === 0 ? 'Vence hoy' : `Vence en ${dias} días`}
                     >
-                      {formatDate(user.periodEnd)}
+                      <div>{formatDate(user.periodEnd)}</div>
+                      <div className="text-[11.5px] font-normal text-gray-400">alta {formatDate(user.createdAt)}</div>
                     </Td>
-                    <Td numero apagado>{formatDate(user.createdAt)}</Td>
                     <Td alinear="centro" onClick={e => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        onClick={e => menu.alternar(user.id, e.currentTarget)}
-                        className="h-6 w-6 rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-900 text-[16px] leading-none"
-                        title="Acciones"
-                        aria-label="Acciones"
-                      >
-                        ⋯
-                      </button>
+                      <BotonDeFila onClick={el => menu.alternar(user.id, el)} />
                       {menu.abiertoEn === user.id && menuAcciones(user, vencida)}
                     </Td>
                   </Fila>

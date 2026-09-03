@@ -477,7 +477,6 @@ export default function AdminResellers() {
   // se cierre sobre el reseller de la fila sin pasarle diez props.
   const accionesDe = r => (
     <CajaMenu posicion={menu.posicion} refMenu={menu.refMenu}>
-      <ItemMenu onClick={() => { menu.cerrar(); openEditModal(r) }}>Ver y editar</ItemMenu>
       <ItemMenu onClick={() => { menu.cerrar(); openDepositModal(r) }}>Agregar saldo</ItemMenu>
       <SeparadorMenu />
       <ItemMenu onClick={() => { menu.cerrar(); openApkModal(r) }}>
@@ -538,7 +537,7 @@ export default function AdminResellers() {
           ) : filteredResellers.map(r => (
             <div key={r.id} className="p-3">
               <div className="flex items-start gap-2">
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 cursor-pointer" onClick={() => openEditModal(r)}>
                   <p className="font-medium text-gray-900 text-[13px] truncate">{r.companyName}</p>
                   <p className="text-[11.5px] text-gray-500 truncate">{r.email}</p>
                   {r.ruc && <p className="text-[11.5px] text-gray-500">RUC {r.ruc}</p>}
@@ -578,7 +577,7 @@ export default function AdminResellers() {
                   {hayFiltros ? 'Ningún reseller coincide con el filtro.' : 'Todavía no hay resellers.'}
                 </FilaVacia>
               ) : filteredResellers.map(r => (
-                <Fila key={r.id}>
+                <Fila key={r.id} onClick={() => openEditModal(r)}>
                   <Td>
                     <p className="font-medium text-gray-900">{r.companyName}</p>
                     <p className="text-gray-500">{r.ruc || '—'}</p>
