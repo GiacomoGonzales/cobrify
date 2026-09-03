@@ -18,7 +18,6 @@ import {
   Users,
   CheckCircle,
   XCircle,
-  Clock,
   DollarSign,
   Search,
   Filter,
@@ -348,15 +347,6 @@ export default function UserManagement() {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs sm:text-sm font-medium text-gray-500">En Prueba</p>
-              <p className="text-xl sm:text-2xl font-bold text-amber-600">{stats.trial}</p>
-            </div>
-            <Clock className="w-6 h-6 sm:w-8 sm:h-8 text-amber-600 flex-shrink-0" />
-          </div>
-        </div>
       </div>
 
       {/* Filtros y búsqueda */}

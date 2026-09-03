@@ -21,7 +21,7 @@ const porcentaje = (parte, total) => (total > 0 ? `${Math.round((parte / total) 
 const fecha = d => (d ? new Date(d).toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: '2-digit' }) : '—')
 
 const MODOS = { retail: 'Retail', restaurant: 'Restaurante', pharmacy: 'Farmacia', real_estate: 'Inmobiliaria', transport: 'Transporte', hotel: 'Hotel', veterinary: 'Veterinaria', logistics: 'Logística', lending: 'Préstamos' }
-const PLANES_ETIQUETA = { trial: 'Trial', free: 'Gratis', basic: 'Básico', pro: 'Pro', premium: 'Premium', enterprise: 'Enterprise', starter: 'Starter' }
+const PLANES_ETIQUETA = { free: 'Gratis', basic: 'Básico', pro: 'Pro', premium: 'Premium', enterprise: 'Enterprise', starter: 'Starter' }
 const TIPOS_DOC = { factura: 'Facturas', boleta: 'Boletas', nota_venta: 'Notas de venta', nota_credito: 'Notas de crédito', nota_debito: 'Notas de débito' }
 const CANALES = { organico: 'Búsqueda orgánica', publicidad: 'Publicidad paga', social: 'Redes sociales', mensajeria: 'Mensajería', referido: 'Sitios referidos', directo: 'Directo' }
 const FUENTES = { google: 'Google', bing: 'Bing', duckduckgo: 'DuckDuckGo', facebook: 'Facebook', instagram: 'Instagram', tiktok: 'TikTok', youtube: 'YouTube', whatsapp: 'WhatsApp', twitter: 'X / Twitter', linkedin: 'LinkedIn', directo: 'Directo' }
@@ -58,6 +58,9 @@ export default function AdminResumen() {
   const [completo, setCompleto] = useState(null)
   const [cargandoCompleto, setCargandoCompleto] = useState(false)
   const [recalculando, setRecalculando] = useState(false)
+  // Lo de todos los dias (cobranza y cifras del mes) sale solo; el resto de
+  // tablas y graficos se despliega a pedido.
+  const [verMas, setVerMas] = useState(false)
   const [error, setError] = useState(null)
 
   async function cargarRapido() {
@@ -75,6 +78,11 @@ export default function AdminResumen() {
 
   useEffect(() => {
     cargarRapido()
+    // Las ventas del dia y del mes se miran a diario, asi que llegan solas.
+    // Cuesta una lectura por cuenta: los pagos son un arreglo DENTRO de cada
+    // suscripcion y no hay agregacion del servidor que los sume.
+    cargarCompleto()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function cargarCompleto() {
@@ -153,9 +161,7 @@ export default function AdminResumen() {
       {/* ── Cobranza: lo que entro de verdad ─────────────────────────────── */}
       <Seccion
         titulo="Cobranza"
-        descripcion={completo
-          ? 'Sobre los pagos registrados en todas las cuentas.'
-          : 'Los pagos viven dentro de cada cuenta, así que no se pueden contar en el servidor: llegan con “Cargar todo”.'}
+        descripcion="Cobrado de verdad: clientes directos y recargas de resellers."
       >
         {completo?.cobranza ? (
           <>
@@ -178,12 +184,7 @@ export default function AdminResumen() {
             </div>
           </>
         ) : (
-          <div className="flex flex-wrap items-center gap-3">
-            <p className="text-[12.5px] text-gray-500">Todavía no se cargó.</p>
-            <Boton tamano="sm" variante="primario" onClick={cargarCompleto} disabled={cargandoCompleto}>
-              {cargandoCompleto ? 'Cargando…' : 'Cargar'}
-            </Boton>
-          </div>
+          <p className="text-[12.5px] text-gray-500">{cargandoCompleto ? 'Sumando los pagos…' : 'Sin datos'}</p>
         )}
       </Seccion>
 
@@ -229,26 +230,8 @@ export default function AdminResumen() {
       )}
 
       {/* ── Lo demas, cuando lo pides ─────────────────────────────────────── */}
-      {!completo ? (
-        <Seccion titulo="Todo lo demás">
-          <p className="text-[12.5px] text-gray-600">
-            Gráficos de crecimiento y ventas, alertas, cuentas por estado, tipo y método de emisión, planes por origen, departamentos,
-            uso, adquisición, retención en vivo, el reporte de inversores completo y la actividad reciente. Lee todas las cuentas
-            una sola vez (unas {entero(rapido ? rapido.total * 3 : 2000)} lecturas), por eso no se carga solo.
-          </p>
-          <div className="mt-3">
-            <Boton variante="primario" onClick={cargarCompleto} disabled={cargandoCompleto}>{cargandoCompleto ? 'Cargando…' : 'Cargar todo'}</Boton>
-          </div>
-        </Seccion>
-      ) : (
+      {completo && (
         <>
-          <nav className="flex flex-wrap gap-x-4 gap-y-1 text-[12.5px]">
-            {SECCIONES.map(([id, nombre]) => (
-              <a key={id} href={`#${id}`} className="text-gray-500 hover:text-gray-900">{nombre}</a>
-            ))}
-            <span className="text-gray-400">· leídas {entero(completo.lecturas)} · {haceCuanto(completo.calculadoEn)}</span>
-          </nav>
-
           <Seccion titulo="Cifras del mes (exactas)" descripcion="Con las cuentas ya leídas: excluye sub-usuarios y suma los pagos.">
             <Cifras>
               <Cifra etiqueta="MRR" valor={moneda(stats.mrr)} nota="ingresos recurrentes" />
@@ -256,7 +239,6 @@ export default function AdminResumen() {
               <Cifra etiqueta="Ingresos totales" valor={moneda(stats.totalRevenue)} nota="desde el inicio" />
               <Cifra etiqueta="Cuentas activas" valor={entero(stats.activeUsers)} nota={`de ${entero(stats.totalUsers)}`} />
               <Cifra etiqueta="Nuevas este mes" valor={entero(stats.newThisMonth)} nota={`${stats.growthRate >= 0 ? '+' : ''}${stats.growthRate ?? 0} % vs. ${entero(stats.newLastMonth)} el mes anterior`} />
-              <Cifra etiqueta="Conversión trial → pago" valor={`${stats.conversionRate ?? 0} %`} />
               <Cifra etiqueta="Documentos este mes" valor={entero(analytics?.totalDocuments)} />
             </Cifras>
           </Seccion>
@@ -269,6 +251,29 @@ export default function AdminResumen() {
               <Grafico datos={stats.revenueChartData} clave="monto" nombre="Ventas" dinero />
             </Seccion>
           </div>
+        </>
+      )}
+
+      {/* Lo de todos los dias termina aca. El resto —alertas, planes,
+          departamentos, uso, adquisicion, retencion, inversores y actividad—
+          es para revisar de vez en cuando, no para abrir la pagina. */}
+      {completo && !verMas && (
+        <div>
+          <Boton onClick={() => setVerMas(true)}>Ver más estadísticas</Boton>
+        </div>
+      )}
+
+      {completo && verMas && (
+        <>
+          <nav className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px]">
+            {SECCIONES.map(([id, nombre]) => (
+              <a key={id} href={`#${id}`} className="text-gray-500 hover:text-gray-900">{nombre}</a>
+            ))}
+            <span className="text-gray-400">· leídas {entero(completo.lecturas)} · {haceCuanto(completo.calculadoEn)}</span>
+            <button type="button" onClick={() => setVerMas(false)} className="text-gray-500 hover:text-gray-900 underline underline-offset-2">
+              Ocultar
+            </button>
+          </nav>
 
           <Seccion id="alertas" titulo={`Alertas (${alertas.length})`} className="scroll-mt-16" sinRelleno>
             <Tabla>
@@ -292,7 +297,6 @@ export default function AdminResumen() {
               <Tabla>
                 <tbody>
                   <FilaConteo etiqueta="Activas" valor={detalle.totales.activos} total={detalle.totales.total} />
-                  <FilaConteo etiqueta="En trial" valor={detalle.totales.trial} total={detalle.totales.total} />
                   <FilaConteo etiqueta="Vencidas" valor={detalle.totales.vencidos} total={detalle.totales.total} rojo />
                   <FilaConteo etiqueta="Suspendidas" valor={detalle.totales.suspendidos} total={detalle.totales.total} rojo />
                   <FilaConteo etiqueta="Archivadas" valor={detalle.totales.archivados} nota="fuera de las tasas" />
@@ -354,7 +358,7 @@ export default function AdminResumen() {
               </tbody>
             </Tabla>
             <p className="px-4 py-2 text-[11.5px] text-gray-500">
-              vendible = catálogo actual · sistema = trial y enterprise · legacy = plan viejo por migrar · desconocido = id sin reconocer
+              vendible = catálogo actual · sistema = planes internos · legacy = plan viejo por migrar · desconocido = id sin reconocer
             </p>
           </Seccion>
 
@@ -365,7 +369,6 @@ export default function AdminResumen() {
                   <Th>Departamento</Th>
                   <Th alinear="der">Cuentas</Th>
                   <Th alinear="der">Activas</Th>
-                  <Th alinear="der">Trial</Th>
                   <Th alinear="der">Vencidas</Th>
                   <Th alinear="der">Suspendidas</Th>
                   <Th alinear="der">% del total</Th>
@@ -377,7 +380,6 @@ export default function AdminResumen() {
                     <Td className={d.departamento === 'Sin departamento' ? 'text-gray-400' : ''}>{d.departamento}</Td>
                     <Td numero className="font-medium">{entero(d.total)}</Td>
                     <Td numero>{entero(d.activos)}</Td>
-                    <Td numero apagado>{entero(d.trial)}</Td>
                     <Td numero className={d.vencidos ? 'text-red-600' : 'text-gray-400'}>{entero(d.vencidos)}</Td>
                     <Td numero className={d.suspendidos ? 'text-red-600' : 'text-gray-400'}>{entero(d.suspendidos)}</Td>
                     <Td numero apagado>{porcentaje(d.total, detalle.totales.total)}</Td>
@@ -607,7 +609,6 @@ function Inversores({ r }) {
           <tbody>
             <FilaConteo etiqueta="Total" valor={r.businesses?.total} />
             <FilaConteo etiqueta="Activos" valor={r.businesses?.active} total={total} />
-            <FilaConteo etiqueta="Trial" valor={r.businesses?.trial} total={total} />
             <FilaConteo etiqueta="Suspendidos" valor={r.businesses?.suspended} total={total} rojo />
             <FilaConteo etiqueta="Archivados" valor={r.businesses?.archived || 0} nota="fuera de las tasas" />
             <FilaConteo etiqueta="Nuevos, últimos 30 días" valor={r.businesses?.newLast30} />

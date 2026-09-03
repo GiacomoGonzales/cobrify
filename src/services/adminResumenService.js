@@ -79,7 +79,7 @@ function calcularStats(subsSnap, customPlans) {
   const endOfMonth = finDeMes()
   const haceUnaSemana = sumarDias(now, -7)
 
-  let totalUsers = 0, activeUsers = 0, suspendedUsers = 0, trialUsers = 0
+  let totalUsers = 0, activeUsers = 0, suspendedUsers = 0
   let newThisMonth = 0, newLastMonth = 0, mrr = 0, collectableThisMonth = 0, collectableCount = 0
   let totalRevenue = 0, expiringThisWeek = 0
   const usersByPlan = {}
@@ -94,7 +94,6 @@ function calcularStats(subsSnap, customPlans) {
     if (data.ownerId) return
     totalUsers++
     if (data.status === 'suspended' || data.accessBlocked) suspendedUsers++
-    else if (data.plan === 'trial' || data.plan === 'free') trialUsers++
     else activeUsers++
 
     const plan = data.plan || 'unknown'
@@ -142,7 +141,6 @@ function calcularStats(subsSnap, customPlans) {
   recentPayments.sort((a, b) => b.date - a.date)
 
   const growthRate = newLastMonth > 0 ? Number(((newThisMonth - newLastMonth) / newLastMonth * 100).toFixed(1)) : newThisMonth > 0 ? 100 : 0
-  const conversionRate = trialUsers > 0 ? Number(((activeUsers / (activeUsers + trialUsers)) * 100).toFixed(1)) : 0
 
   // Ultimos 12 meses, para los dos graficos
   const growthChartData = []
@@ -162,8 +160,8 @@ function calcularStats(subsSnap, customPlans) {
     .map(([plan, value]) => ({ name: allPlans[plan]?.name || plan, value, plan }))
 
   return {
-    totalUsers, activeUsers, suspendedUsers, trialUsers, newThisMonth, newLastMonth, growthRate,
-    mrr, collectableThisMonth, collectableCount, totalRevenue, expiringThisWeek, conversionRate,
+    totalUsers, activeUsers, suspendedUsers, newThisMonth, newLastMonth, growthRate,
+    mrr, collectableThisMonth, collectableCount, totalRevenue, expiringThisWeek,
     usersByPlan, planDistribution,
     recentPayments: recentPayments.slice(0, 10),
     recentUsers: recentUsers.slice(0, 10),
@@ -184,11 +182,11 @@ function calcularAlertas(subsSnap) {
       if (dias > 0 && dias <= 3) alertas.push({ type: 'warning', title: 'Suscripción por vencer', message: `${nombre} vence en ${dias} día(s)`, userId: d.id, date: periodEnd })
       if (dias < 0 && dias > -7) alertas.push({ type: 'error', title: 'Suscripción vencida', message: `${nombre} venció hace ${Math.abs(dias)} día(s)`, userId: d.id, date: periodEnd })
     }
-    if (data.plan === 'trial' || data.plan === 'free') {
+    if (data.plan === 'free') {
       const createdAt = data.createdAt?.toDate?.() || data.startDate?.toDate?.()
       if (createdAt) {
         const dias = Math.floor((now - createdAt) / 86400000)
-        if (dias >= 1) alertas.push({ type: 'info', title: 'Cuenta en trial', message: `${nombre} lleva ${dias} día(s) en trial`, userId: d.id, date: createdAt })
+        if (dias >= 1) alertas.push({ type: 'info', title: 'Cuenta gratuita', message: `${nombre} lleva ${dias} día(s) sin plan pago`, userId: d.id, date: createdAt })
       }
     }
   })
@@ -300,7 +298,7 @@ export const compararCobranza = (ahora, antes, cuando) => {
  * siempre da rojo no informa nada. El mes pasado completo se guarda aparte, que
  * es con lo que uno se mide de verdad.
  */
-function calcularCobranza(subsSnap) {
+function calcularCobranza(subsSnap, recargasSnap) {
   const ahora = new Date()
   const inicioDeHoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate())
   const inicioDeAyer = new Date(inicioDeHoy); inicioDeAyer.setDate(inicioDeAyer.getDate() - 1)
@@ -320,13 +318,25 @@ function calcularCobranza(subsSnap) {
   }
   const porClave = new Map(meses.map(m => [m.clave, m]))
 
+  // Dos fuentes de la misma plata: el cliente directo paga dentro de su
+  // suscripcion; el reseller paga recargando saldo, que vive aparte. Lo que el
+  // reseller GASTA de ese saldo no se cuenta: seria contar dos veces.
+  const cobros = []
   subsSnap.forEach(doc => {
     const data = doc.data()
     if (data.ownerId) return // los sub-usuarios no pagan aparte
     for (const pago of data.paymentHistory || []) {
-      const d = pago.date?.toDate?.() || (pago.date ? new Date(pago.date) : null)
+      cobros.push({ fecha: pago.date?.toDate?.() || (pago.date ? new Date(pago.date) : null), monto: Number(pago.amount) || 0 })
+    }
+  })
+  recargasSnap?.forEach(doc => {
+    const t = doc.data()
+    cobros.push({ fecha: t.createdAt?.toDate?.() || (t.createdAt ? new Date(t.createdAt) : null), monto: Math.abs(Number(t.amount) || 0) })
+  })
+
+  {
+    for (const { fecha: d, monto } of cobros) {
       if (!d || Number.isNaN(d.getTime())) continue
-      const monto = Number(pago.amount) || 0
 
       if (d >= inicioDeHoy) { hoy += monto; cuentaHoy++ }
       else if (d >= inicioDeAyer) ayer += monto
@@ -340,7 +350,7 @@ function calcularCobranza(subsSnap) {
       const fila = porClave.get(`${d.getFullYear()}-${d.getMonth()}`)
       if (fila) fila.total += monto
     }
-  })
+  }
 
   return {
     hoy, ayer, mes, mesPasado, pasadoCompleto, cuentaHoy, cuentaMes,
@@ -355,7 +365,7 @@ function calcularDetalle(subsSnap, negocios, usuarios) {
   const ahora = new Date()
   const porPlan = {}
   const porDepartamento = {}
-  const totales = { total: 0, activos: 0, trial: 0, vencidos: 0, suspendidos: 0, archivados: 0, directo: 0, reseller: 0, vendedor: 0, legacy: 0 }
+  const totales = { total: 0, activos: 0, vencidos: 0, suspendidos: 0, archivados: 0, directo: 0, reseller: 0, vendedor: 0, legacy: 0 }
   let conPagos = 0, vigentes = 0, sinRenovar = 0, enPrimerPeriodo = 0, ingresos = 0, oportunidades = 0, renovaciones = 0
 
   subsSnap.forEach(d => {
@@ -371,7 +381,6 @@ function calcularDetalle(subsSnap, negocios, usuarios) {
 
     let estado = 'activos'
     if (data.status === 'suspended' || data.accessBlocked) estado = 'suspendidos'
-    else if (data.plan === 'trial' || data.plan === 'free') estado = 'trial'
     else if (fin && fin < ahora) estado = 'vencidos'
 
     const planId = data.plan || 'desconocido'
@@ -390,7 +399,7 @@ function calcularDetalle(subsSnap, negocios, usuarios) {
     if (classifyPlan(planId) === 'legacy') totales.legacy++
 
     const dep = titulo(negocio.department) || 'Sin departamento'
-    if (!porDepartamento[dep]) porDepartamento[dep] = { departamento: dep, total: 0, activos: 0, trial: 0, vencidos: 0, suspendidos: 0 }
+    if (!porDepartamento[dep]) porDepartamento[dep] = { departamento: dep, total: 0, activos: 0, vencidos: 0, suspendidos: 0 }
     porDepartamento[dep].total++
     porDepartamento[dep][estado]++
 
@@ -427,11 +436,14 @@ function calcularDetalle(subsSnap, negocios, usuarios) {
 }
 
 export async function resumenCompleto() {
-  const [subsSnap, bizSnap, usersSnap, landingSnap, customPlans] = await Promise.all([
+  const [subsSnap, bizSnap, usersSnap, landingSnap, recargasSnap, customPlans] = await Promise.all([
     getDocs(collection(db, 'subscriptions')),
     getDocs(collection(db, 'businesses')),
     getDocs(collection(db, 'users')),
     getDocs(query(collection(db, 'landingStats'), orderBy('date', 'desc'), limit(30))).catch(() => ({ forEach: () => {} })),
+    // Las recargas de saldo de los resellers son plata cobrada, y no aparecen
+    // en el historial de ninguna suscripcion.
+    getDocs(query(collection(db, 'resellerTransactions'), where('type', '==', 'deposit'))).catch(() => ({ forEach: () => {} })),
     getCustomPlans().catch(() => ({})),
   ])
   const negocios = {}
@@ -445,8 +457,8 @@ export async function resumenCompleto() {
     analytics: calcularAnalytics(subsSnap, negocios),
     adquisicion: calcularAdquisicion(landingSnap, bizSnap, 30),
     detalle: calcularDetalle(subsSnap, negocios, usuarios),
-    cobranza: calcularCobranza(subsSnap),
-    lecturas: subsSnap.size + bizSnap.size + usersSnap.size + 30,
+    cobranza: calcularCobranza(subsSnap, recargasSnap),
+    lecturas: subsSnap.size + bizSnap.size + usersSnap.size + (recargasSnap.size || 0) + 30,
     calculadoEn: new Date(),
   }
 }

@@ -45,7 +45,6 @@ export default function AdminSettings() {
     system: {
       maintenanceMode: false,
       allowNewRegistrations: true,
-      defaultTrialDays: 7,
       pauseSunatRestaurants: false,
       pauseSunatExceptions: []
     }
@@ -1053,27 +1052,6 @@ function SystemSection({ settings, onChange }) {
               </div>
             )}
           </div>
-        </div>
-      </div>
-
-      <div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Configuración de Trial</h3>
-
-        <div className="bg-gray-50 rounded-lg p-4">
-          <label className="block">
-            <span className="text-sm font-medium text-gray-700">Días de trial por defecto</span>
-            <input
-              type="number"
-              min="1"
-              max="30"
-              value={settings.defaultTrialDays}
-              onChange={e => onChange('defaultTrialDays', parseInt(e.target.value) || 7)}
-              className="mt-2 block w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-            />
-            <p className="mt-1 text-sm text-gray-500">
-              Período de prueba gratuita para nuevos usuarios
-            </p>
-          </label>
         </div>
       </div>
 
