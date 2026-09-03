@@ -519,8 +519,9 @@ export default function POS() {
   // POR CONSUMO (restaurantes): el comprobante sale con una sola línea en vez
   // del detalle de platos. Adentro no cambia nada — ver comprobantePorConsumo.js.
   const [porConsumoConfig, setPorConsumoConfig] = useState({ enabled: false, texto: TEXTO_POR_CONSUMO })
-  // Por VENTA: el negocio fija el default en Configuración y el cajero puede
-  // desmarcarlo en una venta puntual (un cliente que pide el detalle).
+  // Por VENTA y APAGADO por defecto: lo normal es que el comprobante salga
+  // con el detalle. El interruptor de Configuración solo hace aparecer la
+  // casilla; marcarla es la decisión del cajero cuando el cliente lo pide.
   const [porConsumoVenta, setPorConsumoVenta] = useState(false)
   // Recargo por pago con tarjeta (Configuración > Ventas). Cuando aplica, SUBE el
   // precio de los productos (no se muestra como línea); el comprobante sale como
@@ -2662,6 +2663,10 @@ export default function POS() {
 
       // Cargar datos en el formulario
       setDocumentType(invoice.documentType)
+      // Si el comprobante se emitió POR CONSUMO, la casilla vuelve marcada: al
+      // reeditarlo tiene que seguir saliendo igual, no destaparle el detalle de
+      // platos a un cliente que pidió una sola línea.
+      setPorConsumoVenta(Array.isArray(invoice.itemsComprobante) && invoice.itemsComprobante.length > 0)
 
       // Cargar cliente — mismo criterio que el resto del POS
       // (utils/posCustomerData). Esta lista estaba escrita a mano DOS veces,
@@ -2828,6 +2833,10 @@ export default function POS() {
 
       // Cargar tipo de documento
       setDocumentType(invoice.documentType)
+      // Si el comprobante se emitió POR CONSUMO, la casilla vuelve marcada: al
+      // reeditarlo tiene que seguir saliendo igual, no destaparle el detalle de
+      // platos a un cliente que pidió una sola línea.
+      setPorConsumoVenta(Array.isArray(invoice.itemsComprobante) && invoice.itemsComprobante.length > 0)
 
       // Cargar cliente — mismo criterio que el resto del POS
       // (utils/posCustomerData). Esta lista estaba escrita a mano DOS veces,
@@ -3101,9 +3110,9 @@ export default function POS() {
           const pcTexto = (businessData.restaurantConfig.porConsumoTexto || '').trim() || TEXTO_POR_CONSUMO
           const pcEnabled = businessData.restaurantConfig.porConsumoEnabled === true
           setPorConsumoConfig({ enabled: pcEnabled, texto: pcTexto })
-          // El default de la casilla: si el negocio lo tiene activado, lo quiere
-          // siempre. Dejarlo solo como casilla manual se olvida todos los días.
-          setPorConsumoVenta(pcEnabled)
+          // La casilla NO se premarca: emitir POR CONSUMO es la excepción, no
+          // lo habitual. Que venga marcada haría que se emitieran sin detalle
+          // ventas donde nadie lo pidió.
         }
 
         // Cargar configuración de Recargo por pago con tarjeta (Configuración > Ventas)
@@ -5369,6 +5378,9 @@ export default function POS() {
     // Los días de recordatorio que se pisaron a mano valen para ESA venta. Sin
     // esto, el "15 días" que pidió un cliente se le aplicaba al siguiente.
     setDiasRecordatorio({})
+    // Vale para ESA venta: el cliente que pidió POR CONSUMO no decide por el
+    // siguiente. Sin esto la casilla quedaba marcada toda la jornada.
+    setPorConsumoVenta(false)
     // El cupón vale para UNA venta: la siguiente arranca sin él.
     setAppliedCoupon(null)
     setCouponInput('')

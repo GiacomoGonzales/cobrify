@@ -9,7 +9,7 @@ export default {
   id: 'por-consumo',
   actualizado: '03/09/2026',
   intro:
-    'La boleta o la factura sale con **una sola línea que dice POR CONSUMO**, en vez de listar los doce platos de la mesa. Adentro del sistema no cambia nada: el stock, los insumos y los reportes siguen viendo cada plato. Se activa en **Configuración → Restaurante**.',
+    'La boleta o la factura sale con **una sola línea que dice POR CONSUMO**, en vez de listar los doce platos de la mesa. Se marca **venta por venta**, cuando el cliente lo pide. Adentro del sistema no cambia nada: el stock, los insumos y los reportes siguen viendo cada plato. Se habilita en **Configuración → Restaurante**.',
 
   sections: [
     {
@@ -41,7 +41,7 @@ export default {
         },
         {
           type: 'texto',
-          text: 'Desde ahí, cada vez que cobres te va a aparecer la casilla **Emitir como "POR CONSUMO"** ya marcada, debajo del tipo de comprobante. Si un cliente te pide el detalle en su factura, la desmarcas en esa venta y sale con todos los platos.',
+          text: 'Desde ahí, al cobrar te va a aparecer la casilla **Emitir como "POR CONSUMO"** debajo del tipo de comprobante. Viene **desmarcada**: lo normal es que el comprobante salga con el detalle. Cuando un cliente te pida que diga solo POR CONSUMO, la marcas en esa venta y listo.',
         },
       ],
     },

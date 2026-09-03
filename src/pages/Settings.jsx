@@ -5005,7 +5005,7 @@ export default function Settings() {
                         onChange={(e) => setRestaurantConfig({...restaurantConfig, porConsumoEnabled: e.target.checked})}
                         title="Emitir POR CONSUMO"
                         description={restaurantConfig.porConsumoEnabled
-                          ? `✓ Habilitado: la boleta o factura sale con una sola línea que dice "${(restaurantConfig.porConsumoTexto || '').trim() || 'POR CONSUMO'}", en vez del detalle de platos. Adentro del sistema no cambia nada: el stock, los insumos y los reportes siguen viendo cada plato, y al cobrar puedes desmarcarlo si un cliente pide el detalle.`
+                          ? `✓ Habilitado: al cobrar aparece una casilla para emitir el comprobante con una sola línea que dice "${(restaurantConfig.porConsumoTexto || '').trim() || 'POR CONSUMO'}", en vez del detalle de platos. Viene DESMARCADA: se marca solo en las ventas donde el cliente lo pide. Adentro del sistema no cambia nada — el stock, los insumos y los reportes siguen viendo cada plato.`
                           : '✗ Deshabilitado: el comprobante sale con el detalle de cada plato.'}
                       />
 
