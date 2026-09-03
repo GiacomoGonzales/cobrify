@@ -10,6 +10,7 @@ import { RUBROS, nombreRubro } from '@/data/rubros'
 import { useToast } from '@/contexts/ToastContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { matchesPrebuilt } from '@/lib/utils'
+import { origenDeCuenta, ORIGEN_DIRECTO, ORIGEN_RESELLER, ORIGEN_VENDEDOR } from '@/utils/subscriptionOwnership'
 import { buildAccountHaystack } from '@/utils/adminSearch'
 import UserDetailsModal from '@/components/admin/UserDetailsModal'
 import SunatModal from '@/components/admin/cuenta/SunatModal'
@@ -82,14 +83,19 @@ export default function AdminUsers() {
 
   const [statusFilter, setStatusFilter] = useState('all')
   const [planFilter, setPlanFilter] = useState('all')
-  const [sourceFilter, setSourceFilter] = useState('all') // 'all' | 'cobrify' | 'reseller' | 'reseller:<id>'
+  // POR DONDE LLEGO la cuenta. Un solo filtro con tres origenes y su desglose:
+  // 'all' | 'directo' | 'vendedor' | 'vendedor:<id>' | 'reseller' | 'reseller:<id>'
+  //
+  // Usa `origenDeCuenta`, el mismo criterio que "Mi Suscripcion" y el Resumen.
+  // Antes preguntaba solo por `createdByReseller`, asi que las cuentas vendidas
+  // por un vendedor caian dentro de "Cobrify" y no habia forma de separarlas.
+  const [sourceFilter, setSourceFilter] = useState('all')
   const [modeFilter, setModeFilter] = useState('all')
   const [rubroFilter, setRubroFilter] = useState('all')
   // Filtra el REGIMEN del negocio, no la tasa suelta: el regimen manda sobre la
   // afectacion de cada producto (un RUS no cobra IGV aunque el producto diga
   // gravado). Se llamaba "IGV" y eso hacia pensar en un dato por producto.
   const [igvFilter, setIgvFilter] = useState('all') // 'all' | 'reduced' | 'exempt' | 'nrus' | 'standard'
-  const [vendedorFilter, setVendedorFilter] = useState('all') // 'all' | 'none' | vendedorId
   // Vencimientos: antes era una pagina aparte; ahora es este filtro
   // (la ruta vieja /expirations llega con ?vence=week).
   const [venceFilter, setVenceFilter] = useState(() => searchParams.get('vence') || 'all')
@@ -182,11 +188,15 @@ export default function AdminUsers() {
     else if (igvFilter === 'nrus') result = result.filter(u => u.taxType === 'nrus')
     else if (igvFilter === 'standard') result = result.filter(u => u.taxType === 'standard' && u.igvRate === 18)
 
-    if (vendedorFilter === 'none') result = result.filter(u => !u.vendedorId)
-    else if (vendedorFilter !== 'all') result = result.filter(u => u.vendedorId === vendedorFilter)
 
-    if (sourceFilter === 'cobrify') result = result.filter(u => !u.createdByReseller)
-    else if (sourceFilter === 'reseller') result = result.filter(u => u.createdByReseller)
+
+    if (sourceFilter === 'directo') result = result.filter(u => origenDeCuenta(u) === ORIGEN_DIRECTO)
+    else if (sourceFilter === 'vendedor') result = result.filter(u => origenDeCuenta(u) === ORIGEN_VENDEDOR)
+    else if (sourceFilter.startsWith('vendedor:')) {
+      const vendedorId = sourceFilter.replace('vendedor:', '')
+      result = result.filter(u => u.vendedorId === vendedorId)
+    }
+    else if (sourceFilter === 'reseller') result = result.filter(u => origenDeCuenta(u) === ORIGEN_RESELLER)
     else if (sourceFilter.startsWith('reseller:')) {
       const resellerId = sourceFilter.replace('reseller:', '')
       result = result.filter(u => u.resellerId === resellerId)
@@ -229,7 +239,7 @@ export default function AdminUsers() {
       return 0
     })
     return result
-  }, [users, indiceDeBusqueda, searchTerm, statusFilter, planFilter, sourceFilter, modeFilter, rubroFilter, igvFilter, vendedorFilter, venceFilter, sortField, sortDirection])
+  }, [users, indiceDeBusqueda, searchTerm, statusFilter, planFilter, sourceFilter, modeFilter, rubroFilter, igvFilter, venceFilter, sortField, sortDirection])
 
   // Solo se pinta la pagina actual: cientos de filas lagueaban la pantalla.
   const pageCount = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE))
@@ -240,7 +250,7 @@ export default function AdminUsers() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, statusFilter, planFilter, sourceFilter, modeFilter, rubroFilter, igvFilter, vendedorFilter, venceFilter, sortField, sortDirection])
+  }, [searchTerm, statusFilter, planFilter, sourceFilter, modeFilter, rubroFilter, igvFilter, venceFilter, sortField, sortDirection])
 
   useEffect(() => {
     if (currentPage > pageCount) setCurrentPage(1)
@@ -259,8 +269,9 @@ export default function AdminUsers() {
       active: activos.filter(vigente).length,
       suspended: activos.filter(u => u.status === 'suspended').length,
       expired: activos.filter(u => !vigente(u) && u.status !== 'suspended').length,
-      cobrify: activos.filter(u => !u.createdByReseller).length,
-      reseller: activos.filter(u => u.createdByReseller).length,
+      directo: activos.filter(u => origenDeCuenta(u) === ORIGEN_DIRECTO).length,
+      vendedor: activos.filter(u => origenDeCuenta(u) === ORIGEN_VENDEDOR).length,
+      reseller: activos.filter(u => origenDeCuenta(u) === ORIGEN_RESELLER).length,
       archived: users.filter(u => u.archived).length,
     }
   }, [users])
@@ -415,12 +426,22 @@ export default function AdminUsers() {
     a.click()
   }
 
+  // Un solo valor para el select de Situacion, que por dentro sigue moviendo dos
+  // filtros distintos (el estado de la cuenta y el horizonte de vencimiento).
+  const situacion = statusFilter !== 'all' ? `estado:${statusFilter}` : venceFilter !== 'all' ? `vence:${venceFilter}` : 'all'
+
+  const cambiarSituacion = valor => {
+    if (valor === 'all') { setStatusFilter('all'); cambiarVence('all'); return }
+    const [tipo, v] = valor.split(':')
+    if (tipo === 'estado') { cambiarVence('all'); setStatusFilter(v) }
+    else { setStatusFilter('all'); cambiarVence(v) }
+  }
+
   function limpiarFiltros() {
     setSearchTerm('')
     setStatusFilter('all')
     setPlanFilter('all')
     setSourceFilter('all')
-    setVendedorFilter('all')
     setModeFilter('all')
     setRubroFilter('all')
     setIgvFilter('all')
@@ -439,7 +460,7 @@ export default function AdminUsers() {
   // ── Render ──────────────────────────────────────────────────────────────────
 
   const orden = { campo: sortField, direccion: sortDirection }
-  const cuantosFiltros = [statusFilter, planFilter, sourceFilter, vendedorFilter, modeFilter, rubroFilter, igvFilter, venceFilter].filter(f => f !== 'all').length
+  const cuantosFiltros = [statusFilter, planFilter, sourceFilter, modeFilter, rubroFilter, igvFilter, venceFilter].filter(f => f !== 'all').length
   const hayFiltros = Boolean(searchTerm) || cuantosFiltros > 0
   const resumen = loading
     ? 'Cargando cuentas…'
@@ -486,29 +507,41 @@ export default function AdminUsers() {
         </>
       }
     >
+      {/* El buscador va en su propia fila: es lo que mas se usa y competia por
+          el ancho con seis selects. Debajo, los filtros. */}
       <Filtros>
-        <Buscador ancho="w-full sm:w-80" placeholder="Nombre, correo, RUC, teléfono, dirección" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+        <Buscador ancho="flex-1 min-w-[220px]" placeholder="Nombre, correo, RUC, teléfono, dirección" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
         <button
           type="button"
           onClick={() => setMostrarFiltros(v => !v)}
-          className="sm:hidden h-8 px-2.5 rounded-md border border-gray-300 bg-white text-[12.5px] text-gray-700"
+          className="sm:hidden h-8 px-2.5 rounded-md border border-gray-300 bg-white text-[12.5px] text-gray-700 shrink-0"
         >
           {mostrarFiltros ? 'Ocultar filtros' : `Filtros${cuantosFiltros ? ` (${cuantosFiltros})` : ''}`}
         </button>
+      </Filtros>
+
+      <Filtros>
         <div className={`${mostrarFiltros ? 'flex' : 'hidden'} sm:contents w-full flex-wrap items-center gap-2`}>
-        <FiltroSelect value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-          <option value="all">Estado</option>
-          <option value="active">Activas</option>
-          <option value="expired">Vencidas</option>
-          <option value="suspended">Suspendidas</option>
-        </FiltroSelect>
-        <FiltroSelect value={venceFilter} onChange={e => cambiarVence(e.target.value)}>
-          <option value="all">Vence</option>
-          <option value="today">Vence hoy</option>
-          <option value="week">Vence en 7 días</option>
-          <option value="month">Vence en 30 días</option>
-          <option value="overdue">Vencidas o suspendidas</option>
-          <option value="archived">Archivadas{stats.archived ? ` (${stats.archived})` : ''}</option>
+        {/* Estado y Vence eran dos preguntas sobre lo mismo, y ademas se
+            repetian: "Vencidas o suspendidas" y "Archivadas" son estados, no
+            fechas. Van juntos, con el estado arriba y el horizonte abajo. */}
+        <FiltroSelect
+          value={situacion}
+          onChange={e => cambiarSituacion(e.target.value)}
+          activo={statusFilter !== 'all' || venceFilter !== 'all'}
+        >
+          <option value="all">Situación</option>
+          <optgroup label="Estado">
+            <option value="estado:active">Activas ({stats.active})</option>
+            <option value="estado:expired">Vencidas ({stats.expired})</option>
+            <option value="estado:suspended">Suspendidas ({stats.suspended})</option>
+            <option value="vence:archived">Archivadas{stats.archived ? ` (${stats.archived})` : ''}</option>
+          </optgroup>
+          <optgroup label="Por vencer">
+            <option value="vence:today">Vence hoy</option>
+            <option value="vence:week">Vence en 7 días</option>
+            <option value="vence:month">Vence en 30 días</option>
+          </optgroup>
         </FiltroSelect>
         <FiltroSelect value={planFilter} onChange={e => setPlanFilter(e.target.value)}>
           <option value="all">Plan</option>
@@ -519,8 +552,16 @@ export default function AdminUsers() {
         </FiltroSelect>
         <FiltroSelect value={sourceFilter} onChange={e => setSourceFilter(e.target.value)}>
           <option value="all">Origen</option>
-          <option value="cobrify">Cobrify ({stats.cobrify})</option>
-          <option value="reseller">Todos los resellers ({stats.reseller})</option>
+          <option value="directo">Directo de Cobrify ({stats.directo})</option>
+          <option value="vendedor">Por vendedor ({stats.vendedor})</option>
+          <option value="reseller">Por reseller ({stats.reseller})</option>
+          {vendedores.length > 0 && (
+            <optgroup label="Vendedor">
+              {vendedores.map(v => (
+                <option key={v.id} value={`vendedor:${v.id}`}>{v.name} ({users.filter(u => u.vendedorId === v.id).length})</option>
+              ))}
+            </optgroup>
+          )}
           {resellers.length > 0 && (
             <optgroup label="Por reseller">
               {resellers.map(r => (
@@ -529,16 +570,9 @@ export default function AdminUsers() {
             </optgroup>
           )}
         </FiltroSelect>
-        <FiltroSelect value={vendedorFilter} onChange={e => setVendedorFilter(e.target.value)}>
-          <option value="all">Vendedor</option>
-          <option value="none">Sin vendedor</option>
-          {vendedores.map(v => (
-            <option key={v.id} value={v.id}>{v.name} ({users.filter(u => u.vendedorId === v.id).length})</option>
-          ))}
-        </FiltroSelect>
         <FiltroSelect value={modeFilter} onChange={e => setModeFilter(e.target.value)}>
           <option value="all">Modo</option>
-          <option value="retail">Retail ({users.filter(u => u.businessMode === 'retail' || !u.businessMode).length})</option>
+          <option value="retail">General ({users.filter(u => u.businessMode === 'retail' || !u.businessMode).length})</option>
           <option value="restaurant">Restaurante ({users.filter(u => u.businessMode === 'restaurant').length})</option>
           <option value="pharmacy">Farmacia ({users.filter(u => u.businessMode === 'pharmacy').length})</option>
           <option value="real_estate">Inmobiliaria ({users.filter(u => u.businessMode === 'real_estate').length})</option>
