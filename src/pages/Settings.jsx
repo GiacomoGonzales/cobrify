@@ -39,6 +39,7 @@ import {
   compressForCoverMobile,
 } from '@/services/productImageService'
 import { consultarRUC, consultarEstablecimientos } from '@/services/documentLookupService'
+import { codigosDeUbigeo, ubigeoDeCodigos } from '@/utils/ubigeoDesdeConsulta'
 import {
   scanPrinters,
   connectPrinter,
@@ -1942,6 +1943,25 @@ export default function Settings() {
         setValue('businessName', result.data.razonSocial || '')
         setValue('tradeName', result.data.nombreComercial || '')
         setValue('address', result.data.direccion || '')
+
+        // La UBICACIÓN también. Antes había que ponerla a mano SIEMPRE, y es el
+        // dato que SUNAT lee en el comprobante y en la guía de remisión.
+        // Solo se pisa lo que la consulta pudo resolver: si trae el departamento
+        // pero no el distrito, no se inventa uno.
+        const ubi = codigosDeUbigeo(result.data)
+        if (ubi.departamento) {
+          setLocationDeptCode(ubi.departamento)
+          setValue('department', DEPARTAMENTOS.find(d => d.code === ubi.departamento)?.name || '')
+          setLocationProvCode(ubi.provincia)
+          setValue('province', ubi.provincia
+            ? (getProvincias(ubi.departamento).find(p => p.code === ubi.provincia)?.name || '')
+            : '')
+          setLocationDistCode(ubi.distrito)
+          setValue('district', ubi.distrito
+            ? (getDistritos(ubi.departamento, ubi.provincia).find(d => d.code === ubi.distrito)?.name || '')
+            : '')
+          setValue('ubigeo', ubigeoDeCodigos(ubi))
+        }
 
         toast.success(`Datos encontrados: ${result.data.razonSocial}`)
 

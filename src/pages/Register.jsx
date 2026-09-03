@@ -9,6 +9,7 @@ import { registerBusinessAsAdmin } from '@/services/authService'
 import { PLANS, SELLABLE_PLAN_IDS } from '@/services/subscriptionService'
 import { consultarRUC } from '@/services/documentLookupService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
+import { codigosDeUbigeo } from '@/utils/ubigeoDesdeConsulta'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Button from '@/components/ui/Button'
@@ -126,43 +127,6 @@ export default function Register() {
   const rucValue = watch('ruc')
 
   // Buscar código de departamento por nombre
-  const findDepartmentCode = (name) => {
-    if (!name) return ''
-    const normalized = name.toUpperCase().trim()
-    const dept = DEPARTAMENTOS.find(d =>
-      d.name.toUpperCase() === normalized ||
-      d.name.toUpperCase().includes(normalized) ||
-      normalized.includes(d.name.toUpperCase())
-    )
-    return dept?.code || ''
-  }
-
-  // Buscar código de provincia por nombre
-  const findProvinceCode = (deptCode, name) => {
-    if (!deptCode || !name) return ''
-    const normalized = name.toUpperCase().trim()
-    const provincias = PROVINCIAS[deptCode] || []
-    const prov = provincias.find(p =>
-      p.name.toUpperCase() === normalized ||
-      p.name.toUpperCase().includes(normalized) ||
-      normalized.includes(p.name.toUpperCase())
-    )
-    return prov?.code || ''
-  }
-
-  // Buscar código de distrito por nombre
-  const findDistrictCode = (deptCode, provCode, name) => {
-    if (!deptCode || !provCode || !name) return ''
-    const normalized = name.toUpperCase().trim()
-    const key = `${deptCode}${provCode}`
-    const distritos = DISTRITOS[key] || []
-    const dist = distritos.find(d =>
-      d.name.toUpperCase() === normalized ||
-      d.name.toUpperCase().includes(normalized) ||
-      normalized.includes(d.name.toUpperCase())
-    )
-    return dist?.code || ''
-  }
 
   // Buscar datos del RUC automáticamente
   const handleLookupRuc = async () => {
@@ -182,19 +146,13 @@ export default function Register() {
         setValue('tradeName', result.data.nombreComercial || '')
         setValue('address', result.data.direccion || '')
 
-        // Convertir nombres de ubicación a códigos de ubigeo
-        const deptCode = findDepartmentCode(result.data.departamento)
-        if (deptCode) {
-          setDepartmentCode(deptCode)
-          const provCode = findProvinceCode(deptCode, result.data.provincia)
-          if (provCode) {
-            setProvinceCode(provCode)
-            const distCode = findDistrictCode(deptCode, provCode, result.data.distrito)
-            if (distCode) {
-              setDistrictCode(distCode)
-            }
-          }
-        }
+        // Ubicación: manda el CÓDIGO que devuelve la consulta, no el nombre.
+        // Ver src/utils/ubigeoDesdeConsulta.js — buscar por nombre se quedaba
+        // mudo con las tildes (JUNIN) y con los nombres ambiguos (SAN JUAN).
+        const ubi = codigosDeUbigeo(result.data)
+        setDepartmentCode(ubi.departamento)
+        setProvinceCode(ubi.provincia)
+        setDistrictCode(ubi.distrito)
       } else {
         setError(result.error || 'No se encontraron datos para este RUC')
       }
