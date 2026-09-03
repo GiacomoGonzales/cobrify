@@ -71,7 +71,7 @@ export async function resumenRapido() {
 
 // ── Completo ────────────────────────────────────────────────────────────────
 
-function calcularStats(subsSnap, customPlans) {
+function calcularStats(subsSnap, customPlans, recargasSnap) {
   const now = new Date()
   const startOfMonth = inicioDeMes()
   const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
@@ -139,6 +139,23 @@ function calcularStats(subsSnap, customPlans) {
 
   recentUsers.sort((a, b) => b.createdAt - a.createdAt)
   recentPayments.sort((a, b) => b.date - a.date)
+
+  // Las recargas de resellers son ingreso igual que un pago de cliente directo,
+  // y NO estan en `paymentHistory`. Sin esto, la cobranza de arriba y el grafico
+  // de ventas por mes decian numeros distintos de la misma plata: la diferencia
+  // era justo lo cobrado a los resellers.
+  //
+  // MRR y "por cobrar" no se tocan: eso describe suscripciones, y una recarga no
+  // es un ingreso recurrente.
+  recargasSnap?.forEach(d => {
+    const t = d.data()
+    const fecha = t.createdAt?.toDate?.() || (t.createdAt ? new Date(t.createdAt) : null)
+    if (!fecha || Number.isNaN(fecha.getTime())) return
+    const monto = Math.abs(Number(t.amount) || 0)
+    totalRevenue += monto
+    const k = claveMes(fecha)
+    monthlyRevenue[k] = (monthlyRevenue[k] || 0) + monto
+  })
 
   const growthRate = newLastMonth > 0 ? Number(((newThisMonth - newLastMonth) / newLastMonth * 100).toFixed(1)) : newThisMonth > 0 ? 100 : 0
 
@@ -318,6 +335,14 @@ function calcularCobranza(subsSnap, recargasSnap) {
   }
   const porClave = new Map(meses.map(m => [m.clave, m]))
 
+  // Dia a dia del mes en curso, solo hasta HOY: dibujar los dias que faltan
+  // como cero haria caer la linea a cero y pareceria que se dejo de cobrar.
+  const dias = []
+  for (let d = 1; d <= ahora.getDate(); d++) {
+    dias.push({ dia: d, etiqueta: String(d), total: 0 })
+  }
+  const porDia = new Map(dias.map(x => [x.dia, x]))
+
   // Dos fuentes de la misma plata: el cliente directo paga dentro de su
   // suscripcion; el reseller paga recargando saldo, que vive aparte. Lo que el
   // reseller GASTA de ese saldo no se cuenta: seria contar dos veces.
@@ -349,6 +374,11 @@ function calcularCobranza(subsSnap, recargasSnap) {
 
       const fila = porClave.get(`${d.getFullYear()}-${d.getMonth()}`)
       if (fila) fila.total += monto
+
+      if (d >= inicioDelMes) {
+        const filaDia = porDia.get(d.getDate())
+        if (filaDia) filaDia.total += monto
+      }
     }
   }
 
@@ -356,6 +386,7 @@ function calcularCobranza(subsSnap, recargasSnap) {
     hoy, ayer, mes, mesPasado, pasadoCompleto, cuentaHoy, cuentaMes,
     ticket: cuentaMes ? mes / cuentaMes : 0,
     meses,
+    dias,
   }
 }
 
@@ -452,7 +483,7 @@ export async function resumenCompleto() {
   usersSnap.forEach(d => { usuarios[d.id] = d.data() })
 
   return {
-    stats: calcularStats(subsSnap, customPlans),
+    stats: calcularStats(subsSnap, customPlans, recargasSnap),
     alertas: calcularAlertas(subsSnap),
     analytics: calcularAnalytics(subsSnap, negocios),
     adquisicion: calcularAdquisicion(landingSnap, bizSnap, 30),

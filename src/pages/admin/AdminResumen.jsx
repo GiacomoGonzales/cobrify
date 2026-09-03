@@ -20,7 +20,7 @@ const decimal = (v, d = 1) => (Number(v) || 0).toLocaleString('es-PE', { minimum
 const porcentaje = (parte, total) => (total > 0 ? `${Math.round((parte / total) * 100)} %` : '—')
 const fecha = d => (d ? new Date(d).toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: '2-digit' }) : '—')
 
-const MODOS = { retail: 'Retail', restaurant: 'Restaurante', pharmacy: 'Farmacia', real_estate: 'Inmobiliaria', transport: 'Transporte', hotel: 'Hotel', veterinary: 'Veterinaria', logistics: 'Logística', lending: 'Préstamos' }
+const MODOS = { retail: 'General', restaurant: 'Restaurante', pharmacy: 'Farmacia', real_estate: 'Inmobiliaria', transport: 'Transporte', hotel: 'Hotel', veterinary: 'Veterinaria', logistics: 'Logística', lending: 'Préstamos' }
 const PLANES_ETIQUETA = { free: 'Gratis', basic: 'Básico', pro: 'Pro', premium: 'Premium', enterprise: 'Enterprise', starter: 'Starter' }
 const TIPOS_DOC = { factura: 'Facturas', boleta: 'Boletas', nota_venta: 'Notas de venta', nota_credito: 'Notas de crédito', nota_debito: 'Notas de débito' }
 const CANALES = { organico: 'Búsqueda orgánica', publicidad: 'Publicidad paga', social: 'Redes sociales', mensajeria: 'Mensajería', referido: 'Sitios referidos', directo: 'Directo' }
@@ -179,8 +179,17 @@ export default function AdminResumen() {
               <Cifra etiqueta="Ticket promedio del mes" valor={moneda(completo.cobranza.ticket)} />
               <Cifra etiqueta="Mes pasado completo" valor={moneda(completo.cobranza.pasadoCompleto)} nota="los 30 días, para tener con qué medir" />
             </Cifras>
-            <div className="mt-4">
-              <Grafico datos={completo.cobranza.meses} clave="total" nombre="Cobrado" dinero />
+            <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div>
+                <p className="mb-1 text-[12px] font-medium text-gray-700">
+                  Día a día de {new Date().toLocaleDateString('es-PE', { month: 'long' })}
+                </p>
+                <Grafico datos={completo.cobranza.dias} clave="total" nombre="Cobrado" eje="etiqueta" dinero />
+              </div>
+              <div>
+                <p className="mb-1 text-[12px] font-medium text-gray-700">Últimos 12 meses</p>
+                <Grafico datos={completo.cobranza.meses} clave="total" nombre="Cobrado" dinero />
+              </div>
             </div>
           </>
         ) : (
@@ -243,14 +252,12 @@ export default function AdminResumen() {
             </Cifras>
           </Seccion>
 
-          <div id="crecimiento" className="grid grid-cols-1 lg:grid-cols-2 gap-4 scroll-mt-16">
-            <Seccion titulo="Cuentas nuevas por mes">
-              <Grafico datos={stats.growthChartData} clave="nuevos" nombre="Cuentas nuevas" />
-            </Seccion>
-            <Seccion titulo="Ventas por mes">
-              <Grafico datos={stats.revenueChartData} clave="monto" nombre="Ventas" dinero />
-            </Seccion>
-          </div>
+          {/* Las ventas por mes ya se ven arriba, en el grafico de Cobranza:
+              son la MISMA serie desde que las recargas de resellers cuentan en
+              las dos. Dos graficos iguales en una pantalla solo confunden. */}
+          <Seccion id="crecimiento" titulo="Cuentas nuevas por mes" className="scroll-mt-16">
+            <Grafico datos={stats.growthChartData} clave="nuevos" nombre="Cuentas nuevas" />
+          </Seccion>
         </>
       )}
 
@@ -493,7 +500,7 @@ function FilaConteo({ etiqueta, valor, total, nota, rojo = false }) {
 }
 
 // Grafico de area en un solo color, relleno plano (sin degradado).
-function Grafico({ datos, clave, nombre, dinero = false }) {
+function Grafico({ datos, clave, nombre, dinero = false, eje = 'month' }) {
   const filas = datos || []
   if (!filas.length) return <p className="text-[12.5px] text-gray-500 py-8 text-center">Sin datos</p>
   return (
@@ -501,7 +508,7 @@ function Grafico({ datos, clave, nombre, dinero = false }) {
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={filas} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} vertical={false} />
-          <XAxis dataKey="month" tick={{ fontSize: 11, fill: CHART.axis }} stroke={CHART.grid} axisLine={false} tickLine={false} />
+          <XAxis dataKey={eje} tick={{ fontSize: 11, fill: CHART.axis }} stroke={CHART.grid} axisLine={false} tickLine={false} />
           <YAxis tick={{ fontSize: 11, fill: CHART.axis }} stroke={CHART.grid} axisLine={false} tickLine={false} tickFormatter={v => (v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : v)} />
           <Tooltip contentStyle={{ ...CHART_TOOLTIP, fontSize: 12 }} formatter={v => [dinero ? moneda(v) : entero(v), nombre]} />
           <Area type="monotone" dataKey={clave} name={nombre} stroke={CHART.primary} strokeWidth={2} fill={CHART.primary} fillOpacity={0.08} />
