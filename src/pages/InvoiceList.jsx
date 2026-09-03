@@ -69,6 +69,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { doc, updateDoc } from 'firebase/firestore'
 import { storage, db } from '@/lib/firebase'
 import { prepareInvoiceXML, downloadCompressedXML, isSunatConfigured, voidDocument, canVoidDocument, checkVoidStatus } from '@/services/sunatService'
+import { descargarTicketPdf } from '@/utils/ticketPdf'
 import { generateInvoicesExcel } from '@/services/invoiceExportService'
 import InvoiceTicket from '@/components/InvoiceTicket'
 import { aplicarTamanoDeHoja } from '@/utils/printPageSize'
@@ -216,6 +217,7 @@ export default function InvoiceList() {
   // Estado separado para impresión de ticket desde la fila: evita abrir el modal
   // de detalle y no rompe el render del contenedor bulk de impresión masiva.
   const [rowPrintInvoice, setRowPrintInvoice] = useState(null)
+  const [downloadingTicket, setDownloadingTicket] = useState(null) // comprobante cuyo ticket se pasa a PDF
   const [deletingInvoice, setDeletingInvoice] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [sendingToSunat, setSendingToSunat] = useState(null) // ID de factura siendo enviada a SUNAT
@@ -420,6 +422,33 @@ export default function InvoiceList() {
   }, [user])
 
   // Función para imprimir ticket
+  /**
+   * El ticket como ARCHIVO PDF. El "Descargar PDF" de siempre baja el A4; esto
+   * baja lo mismo que sale de la ticketera, para poder mandarlo por WhatsApp.
+   * Fotografía el MISMO componente que se imprime (src/utils/ticketPdf.js).
+   */
+  const handleDownloadTicketPdf = async (invoice) => {
+    if (downloadingTicket) return
+    setDownloadingTicket(invoice.id)
+    // El ticket solo existe en el DOM mientras hay un comprobante seleccionado.
+    setRowPrintInvoice(invoice)
+    try {
+      await new Promise(r => setTimeout(r, 150))
+      await descargarTicketPdf(ticketRef.current, {
+        anchoMm: a4SheetPrint ? 210 : ticketPaperWidth,
+        nombreArchivo: invoice.number || 'comprobante',
+        titulo: invoice.number || 'Comprobante',
+      })
+      toast.success('Ticket descargado')
+    } catch (error) {
+      console.error('Error al generar el ticket en PDF:', error)
+      toast.error('No se pudo generar el ticket')
+    } finally {
+      setRowPrintInvoice(null)
+      setDownloadingTicket(null)
+    }
+  }
+
   const handlePrintTicket = async (invoiceArg) => {
     // Permite llamarlo desde el modal (sin args, usa viewingInvoice) o
     // desde la fila de Ventas pasando la factura directamente.
@@ -4021,6 +4050,23 @@ Gracias por tu preferencia.`
                   >
                     <Download className="w-4 h-4 text-green-600" />
                     <span>Descargar PDF</span>
+                  </button>
+
+                  {/* Descargar el ticket como PDF (para mandarlo por WhatsApp) */}
+                  <button
+                    onClick={() => {
+                      setOpenMenuId(null)
+                      handleDownloadTicketPdf(invoice)
+                    }}
+                    disabled={downloadingTicket === invoice.id}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3 disabled:opacity-50"
+                  >
+                    {downloadingTicket === invoice.id ? (
+                      <Loader2 className="w-4 h-4 text-orange-600 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4 text-orange-600" />
+                    )}
+                    <span>{downloadingTicket === invoice.id ? 'Generando...' : 'Descargar ticket'}</span>
                   </button>
 
                   {/* Descargar XML - Prioriza el XML real firmado de Storage, fallback al generador frontend */}
