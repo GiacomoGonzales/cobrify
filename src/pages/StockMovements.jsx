@@ -297,7 +297,7 @@ export default function StockMovements() {
   const movementSearchIndex = useMemo(() => {
     const map = new Map()
     for (const movement of movements) {
-      map.set(movement.id, buildSearchHaystack(movement.productName, movement.productCode, movement.notes))
+      map.set(movement.id, buildSearchHaystack(movement.productName, movement.productCode, movement.notes, movement.supplierName))
     }
     return map
   }, [movements])
@@ -364,6 +364,18 @@ export default function StockMovements() {
 
     return matchesSearch && matchesBranch && matchesWarehouse && matchesType && matchesDate
   })
+
+  // De donde vino la mercaderia, si el movimiento lo trae. Lo escribe la
+  // importacion masiva de productos con las columnas `proveedor` y
+  // `fecha_compra`: sirve para saber a quien se le compro el stock inicial
+  // sin ensuciar la ficha del producto, que quedaria congelada con el primer
+  // proveedor.
+  const origenDelMovimiento = (m) => {
+    const partes = []
+    if (m?.supplierName) partes.push(m.supplierName)
+    if (m?.purchaseDate) partes.push(`comprado el ${formatDate(m.purchaseDate)}`)
+    return partes.join(' — ')
+  }
 
   const getMovementTypeInfo = (type) => {
     const types = {
@@ -546,6 +558,8 @@ export default function StockMovements() {
       'Stock después': m.stockAfter ?? '-',
       'Almacén': m.warehouseName || '',
       'Origen/Destino': m.type === 'transfer_in' ? m.fromWarehouseName || '' : m.type === 'transfer_out' ? m.toWarehouseName || '' : '',
+      'Proveedor': m.supplierName || '',
+      'Fecha de compra': m.purchaseDate ? formatDate(m.purchaseDate) : '',
       'Notas': m.notes || m.reason || '',
     }))
 
@@ -562,6 +576,8 @@ export default function StockMovements() {
       { wch: 12 }, // Stock después
       { wch: 20 }, // Almacén
       { wch: 20 }, // Origen/Destino
+      { wch: 24 }, // Proveedor
+      { wch: 14 }, // Fecha de compra
       { wch: 30 }, // Notas
     ]
 
@@ -1046,6 +1062,9 @@ export default function StockMovements() {
                     </div>
 
                     {/* Fila 4: Motivo (si existe) */}
+                    {origenDelMovimiento(movement) && (
+                      <p className="text-xs text-gray-500 mt-0.5 truncate">{origenDelMovimiento(movement)}</p>
+                    )}
                     {(movement.notes || movement.reason) && (
                       <p className="text-xs text-gray-400 mt-0.5 truncate">{movement.notes || movement.reason}</p>
                     )}
@@ -1143,6 +1162,9 @@ export default function StockMovements() {
                           </span>
                         </td>
                         <td className="px-2 py-2">
+                          {origenDelMovimiento(movement) && (
+                            <p className="text-xs text-gray-700">{origenDelMovimiento(movement)}</p>
+                          )}
                           <p className="text-xs text-gray-600 line-clamp-2" title={movement.notes || movement.reason}>
                             {movement.notes || movement.reason || '-'}
                           </p>

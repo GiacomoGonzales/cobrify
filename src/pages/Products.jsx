@@ -2664,6 +2664,9 @@ export default function Products() {
               updates.marca = product.marca
             }
             // Código de barras (campo `code`) — también se actualiza en reimports
+            // El modelo se actualiza si el Excel lo trae; una plantilla vieja
+            // sin la columna no lo borra.
+            if (product.modelo) updates.modelo = product.modelo
             if (product.code) updates.code = product.code
             // Visibilidad en catálogo público (parser usa `catalogVisible`)
             if (product.catalogVisible !== undefined) updates.catalogVisible = product.catalogVisible
@@ -2973,6 +2976,23 @@ export default function Products() {
             // No persistir el array crudo del Excel en Firestore
             delete product.serialNumbers
 
+            // Proveedor y fecha de compra del stock inicial: NO son del producto.
+            // Se sacan de aca y se guardan en el MOVIMIENTO de entrada, que es
+            // donde significan lo correcto y donde cada compra posterior lleva el
+            // suyo. En el producto quedarian congelados con el primer proveedor.
+            const proveedorInicial = product._proveedorInicial || null
+            delete product._proveedorInicial
+
+            // De donde vino esta mercaderia, para los dos tipos de movimiento de
+            // abajo. La FECHA es la que declara el negocio (`lastPurchaseDate`,
+            // la misma que ya usa Mercaderia Estancada), NO la del movimiento:
+            // `createdAt` sigue siendo cuando el stock entro al sistema, y de eso
+            // depende "Inventario a fecha pasada".
+            const origenDeLaCompra = {
+              ...(proveedorInicial ? { supplierName: proveedorInicial } : {}),
+              ...(product.lastPurchaseDate ? { purchaseDate: product.lastPurchaseDate } : {}),
+            }
+
             // Disponibilidad por sucursal elegida en el modal de importacion.
             // SOLO al crear: los productos existentes que el archivo actualiza
             // conservan su configuracion (pisarla en masa seria destructivo).
@@ -3002,6 +3022,7 @@ export default function Products() {
                       referenceType: 'initial_stock',
                       referenceId: result.id,
                       userId: user?.uid,
+                      ...origenDeLaCompra,
                       notes: `Stock inicial variante ${v.sku} por importación masiva`
                     })
                   }
@@ -3015,6 +3036,7 @@ export default function Products() {
                     referenceType: 'initial_stock',
                     referenceId: result.id,
                     userId: user?.uid,
+                    ...origenDeLaCompra,
                     ...(product.batchNumber && { batchNumber: product.batchNumber }),
                     ...(product.expirationDate && { expirationDate: product.expirationDate }),
                     notes: `Ingreso de stock inicial por importación masiva${product.batchNumber ? ` - Lote: ${product.batchNumber}` : ''}`

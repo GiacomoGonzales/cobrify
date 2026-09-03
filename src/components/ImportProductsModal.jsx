@@ -592,6 +592,17 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
         presentation: String(row.presentacion || row.Presentacion || row.PRESENTACION || row.presentation || '').trim() || null,
         laboratoryName: String(row.laboratorio || row.Laboratorio || row.LABORATORIO || row.laboratory || '').trim() || null,
         marca: String(row.marca || row.Marca || row.MARCA || row.brand || '').trim() || null,
+        // Modelo del producto. Lo usan carteras, calzado, celulares, repuestos.
+        modelo: String(row.modelo || row.Modelo || row.MODELO || row.model || '').trim() || null,
+        // PROVEEDOR del stock inicial. No es del producto: si se guardara ahi
+        // quedaria congelado con el primero y mentiria en cuanto le compren a
+        // otro. Viaja aparte y termina en el MOVIMIENTO de entrada, donde cada
+        // ingreso lleva el suyo (ver Products.jsx). El guion bajo marca que se
+        // saca del objeto antes de guardar el producto.
+        //
+        // La FECHA de compra no hace falta aca: ya se lee mas arriba como
+        // `lastPurchaseDate` (la usa el reporte de Mercaderia Estancada).
+        _proveedorInicial: String(row.proveedor || row.Proveedor || row.PROVEEDOR || row.supplier || '').trim() || null,
         // Si la marca del Excel matchea (case-insensitive) con una marca administrada
         // existente, enlazamos por brandId. Si no, queda null y el usuario puede
         // migrar después con el wizard del modal "Gestionar Marcas".
@@ -935,6 +946,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           presentacion: 'Tableta',
           laboratorio: 'GSK',
           marca: 'Panadol',
+          modelo: '',
+          proveedor: '',
           principio_activo: 'Paracetamol',
           accion_terapeutica: 'Analgésico',
           condicion_venta: 'otc',
@@ -985,6 +998,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           presentacion: 'Cápsula',
           laboratorio: 'Medifarma',
           marca: 'Amoxicilina Medifarma',
+          modelo: '',
+          proveedor: '',
           principio_activo: 'Amoxicilina trihidrato',
           accion_terapeutica: 'Antibiótico',
           condicion_venta: 'prescription',
@@ -1030,6 +1045,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           presentacion: 'Tableta',
           laboratorio: 'AC Farma',
           marca: 'Rivotril',
+          modelo: '',
+          proveedor: '',
           principio_activo: 'Clonazepam',
           accion_terapeutica: 'Ansiolítico',
           condicion_venta: 'retained',
@@ -1081,6 +1098,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           presentacion: 'Tableta',
           laboratorio: 'Pfizer',
           marca: 'Advil',
+          modelo: '',
+          proveedor: '',
           principio_activo: 'Ibuprofeno',
           accion_terapeutica: 'Antiinflamatorio',
           condicion_venta: 'otc',
@@ -1126,6 +1145,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           presentacion: '',
           laboratorio: '',
           marca: '',
+          modelo: '',
+          proveedor: '',
           principio_activo: '',
           accion_terapeutica: '',
           condicion_venta: '',
@@ -1179,6 +1200,11 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           nombre: 'Polerón Classic con Capucha',
           descripcion: 'Polerón unisex de algodón felpado, talla única',
           marca: 'StreetWear',
+          // Modelo del producto: carteras, calzado, celulares, repuestos.
+          modelo: 'SW-CAP-2024',
+          // Proveedor y fecha de compra del STOCK INICIAL. Opcionales: sirven
+          // para dejar registrado de donde salio la mercaderia que ya tienes.
+          proveedor: 'Textiles del Norte SAC',
           categoria: 'Ropa',
           subcategoria: 'Poleras',
           unidad: 'UNIDAD',
@@ -1198,7 +1224,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           permitir_decimales: 'NO',
           control_vencimiento: 'NO',
           fecha_vencimiento: '',
-          fecha_compra: '',
+          fecha_compra: '2026-04-02',
           control_series: 'NO',
           mostrar_en_catalogo: 'SI',
           precio_comparacion: '',
@@ -1253,6 +1279,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           nombre: 'Consultoría 1 hora',
           descripcion: 'Sesión de asesoría individual (no requiere inventario)',
           marca: '',
+          modelo: '',
+          proveedor: '',
           categoria: 'Servicios',
           subcategoria: '',
           unidad: 'HORA',
@@ -1292,6 +1320,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           nombre: 'Aceite de Oliva Extra Virgen (a granel)',
           descripcion: 'Venta por litros desde bidón industrial',
           marca: 'Italia',
+          modelo: '',
+          proveedor: '',
           categoria: 'Comestibles',
           subcategoria: 'Aceites',
           unidad: 'LITRO',
@@ -1332,6 +1362,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           nombre: 'Yogurt Natural Bidón 1L',
           descripcion: 'Yogurt griego sin azúcar, conservar refrigerado',
           marca: 'Lácteos del Valle',
+          modelo: '',
+          proveedor: '',
           categoria: 'Lácteos',
           subcategoria: '',
           unidad: 'UNIDAD',
@@ -1374,6 +1406,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           nombre: 'Laptop Pro 15"',
           descripcion: 'Laptop profesional, 16GB RAM, SSD 512GB',
           marca: 'TechBrand',
+          modelo: '',
+          proveedor: '',
           categoria: 'Electrónica',
           subcategoria: 'Laptops',
           unidad: 'UNIDAD',
@@ -1418,6 +1452,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           nombre: 'Gaseosa Cola 500ml',
           descripcion: 'Botella plástica, sabor cola',
           marca: 'RefrescoSA',
+          modelo: '',
+          proveedor: '',
           categoria: 'Bebidas',
           subcategoria: 'Gaseosas',
           unidad: 'UNIDAD',
@@ -1469,6 +1505,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           nombre: 'Polo Básico Algodón',
           descripcion: 'Polo unisex de algodón pima — 3 tallas',
           marca: 'Local',
+          modelo: '',
+          proveedor: '',
           categoria: 'Ropa',
           subcategoria: 'Polos',
           unidad: 'UNIDAD',
@@ -1535,6 +1573,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
           nombre: 'Polo Deportivo Dry-Fit',
           descripcion: idx === 0 ? 'Polo deportivo dry-fit, S a L en negro o blanco' : '',
           marca: idx === 0 ? 'SportPro' : '',
+          modelo: '',
+          proveedor: '',
           categoria: idx === 0 ? 'Ropa' : '',
           subcategoria: idx === 0 ? 'Polos Deportivos' : '',
           unidad: 'UNIDAD',

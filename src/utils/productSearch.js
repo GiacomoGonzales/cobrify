@@ -81,6 +81,9 @@ export function buildProductHaystack(product, opts = {}) {
     categoryName,
     product.marca,
     product.brandName,
+    // Modelo: en carteras, calzado o repuestos se busca por el modelo
+    // ("WR64") tanto como por el nombre.
+    product.modelo,
     // Farmacia / veterinaria
     product.genericName,
     product.activeIngredient,

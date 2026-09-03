@@ -157,6 +157,7 @@ const ProductFormModal = ({
       initialStock: '',
       expirationDate: '',
       marca: '',
+      modelo: '',
       brandId: '',
     },
   })
@@ -262,6 +263,7 @@ const ProductFormModal = ({
         initialStock: initialData.initialStock?.toString() || '',
         expirationDate: initialData.expirationDate || '',
         marca: initialData.marca || '',
+        modelo: initialData.modelo || '',
         brandId: initialData.brandId || '',
       })
       setNoStock(initialData.noStock || false)
@@ -677,6 +679,19 @@ const ProductFormModal = ({
                     {...register('marca')}
                   />
                 )}
+              </div>
+            )}
+
+            {/* Modelo. Va con la marca porque se leen juntos: "Zhan / WR64".
+                Lo pidio una empresa de carteras y sirve igual en calzado,
+                celulares, repuestos y muebles; en farmacia no aplica. */}
+            {businessMode !== 'pharmacy' && (
+              <div>
+                <Input
+                  label="Modelo (Opcional)"
+                  placeholder="Ej: WR64, Air Max 90, XR-200"
+                  {...register('modelo')}
+                />
               </div>
             )}
 
