@@ -16,7 +16,6 @@ import ConsumoInternoModal from '@/components/inventory/ConsumoInternoModal'
 import { createBarTab, occupyTable } from '@/services/tableService'
 import { useLocationAccess } from '@/utils/locationAccess'
 import { useAppContext } from '@/hooks/useAppContext'
-import { useMasonry } from '@/hooks/useMasonry'
 import { useToast } from '@/contexts/ToastContext'
 import { collection, query, where, onSnapshot, orderBy as firestoreOrderBy, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -346,9 +345,6 @@ export default function Orders() {
 
   // Menú de acciones (ID de la orden con menú abierto)
   const [openMenuOrderId, setOpenMenuOrderId] = useState(null)
-
-  // Las tarjetas no se estiran hasta la mas alta de la fila. Ver useMasonry.js
-  const { contenedorRef: gridDeOrdenes } = useMasonry()
 
   // Dividir cuenta
   const [isSplitBillModalOpen, setIsSplitBillModalOpen] = useState(false)
@@ -1790,12 +1786,11 @@ export default function Orders() {
       )}
 
       {/* Lista de Órdenes */}
-      {/* `items-start` para que cada tarjeta mida lo que mide su contenido, y
-          useMasonry para que ademas suba hasta donde termina la de arriba en
-          su columna en vez de esperar a que termine la fila entera. Sin las
-          dos cosas, una orden de dos productos quedaba con medio cuerpo en
-          blanco solo porque la de al lado traia ocho. */}
-      <div ref={gridDeOrdenes} className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
+      {/* `items-start`: cada tarjeta mide lo que mide su contenido.
+          Por defecto el grid las estira todas a la altura de la mas alta de
+          la fila, asi que una orden de dos productos quedaba con medio
+          cuerpo en blanco solo porque la de al lado traia cuatro. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
         {orders.length === 0 ? (
           <div className="col-span-full">
             <Card>
