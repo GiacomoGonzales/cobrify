@@ -3713,8 +3713,8 @@ Gracias por tu preferencia.`
                       }}
                       className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                     >
-                      <Edit className="w-4 h-4 text-blue-600" />
-                      <span className="text-blue-600 font-medium">Editar documento</span>
+                      <Edit className="w-4 h-4 text-gray-400" />
+                      <span className="font-medium">Editar documento</span>
                     </button>
                   )}
 
@@ -3741,8 +3741,8 @@ Gracias por tu preferencia.`
                       }}
                       className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                     >
-                      <Copy className="w-4 h-4 text-purple-600" />
-                      <span className="text-purple-600 font-medium">Duplicar comprobante</span>
+                      <Copy className="w-4 h-4 text-gray-400" />
+                      <span className="font-medium">Duplicar comprobante</span>
                     </button>
                   )}
 
@@ -3780,11 +3780,11 @@ Gracias por tu preferencia.`
                       className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {sendingToSunat === invoice.id ? (
-                        <Loader2 className="w-4 h-4 text-orange-600 animate-spin" />
+                        <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
                       ) : (
-                        <Send className="w-4 h-4 text-orange-600" />
+                        <Send className="w-4 h-4 text-gray-400" />
                       )}
-                      <span className="text-orange-600 font-medium">
+                      <span className="font-medium">
                         Reintentar envío a SUNAT
                       </span>
                     </button>
@@ -3842,8 +3842,8 @@ Gracias por tu preferencia.`
                       }}
                       className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                     >
-                      <Edit className="w-4 h-4 text-amber-600" />
-                      <span className="text-amber-700 font-medium">Editar y reemitir (mismo número)</span>
+                      <Edit className="w-4 h-4 text-gray-400" />
+                      <span className="font-medium">Editar y reemitir (mismo número)</span>
                     </button>
                   )}
 
@@ -3873,11 +3873,11 @@ Gracias por tu preferencia.`
                       className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {sendingToSunat === invoice.id ? (
-                        <Loader2 className="w-4 h-4 text-orange-600 animate-spin" />
+                        <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
                       ) : (
-                        <Send className="w-4 h-4 text-orange-600" />
+                        <Send className="w-4 h-4 text-gray-400" />
                       )}
-                      <span className="text-orange-600 font-medium">
+                      <span className="font-medium">
                         Reintentar envío NC a SUNAT
                       </span>
                     </button>
@@ -4142,9 +4142,9 @@ Gracias por tu preferencia.`
                           setVoidReason('')
                           setRefundOnVoid(true)
                         }}
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-3 text-red-600"
                       >
-                        <Ban className="w-4 h-4 text-gray-400" />
+                        <Ban className="w-4 h-4" />
                         <span>{invoice.documentType === 'nota_venta' ? 'Anular Nota de Venta' : 'Anular (rechazada por SUNAT)'}</span>
                       </button>
                     </>
@@ -4167,9 +4167,9 @@ Gracias por tu preferencia.`
                           setVoidingSunatInvoice(invoice)
                           setVoidSunatReason('')
                         }}
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-3 text-red-600"
                       >
-                        <Ban className="w-4 h-4 text-gray-400" />
+                        <Ban className="w-4 h-4" />
                         <span>Anular en SUNAT</span>
                       </button>
                     </>
