@@ -463,6 +463,19 @@ export default function InvoiceList() {
     // Fallback: impresión estándar (web o si falla la térmica).
     // Releer la configuración FRESCA de localStorage antes de imprimir, para no usar
     // valores cacheados en memoria que pueden estar desincronizados (mismo fix que el POS).
+    //
+    // Los tres valores que definen la HOJA se guardan aparte, en variables locales.
+    // `setState` NO cambia las variables de esta función —siguen siendo las del
+    // render en que se creó—, así que abajo la hoja se declaraba con el ancho
+    // VIEJO mientras el ticket ya se dibujaba con el NUEVO. Al no coincidir, el
+    // navegador encoge el ticket para que entre: es el "se desconfigura al
+    // reimprimir" de JC&AN. Salía mal solo la PRIMERA vez después de cambiar la
+    // configuración y bien a la segunda, que es lo que lo hacía difícil de creer.
+    //
+    // El POS no tenía el problema porque ni siquiera declara el tamaño de hoja.
+    let anchoDeHoja = ticketPaperWidth
+    let esHojaA4 = a4SheetPrint
+    let ajustarLaHoja = ajustarHoja
     try {
       const fresh = await getPrinterConfig(getBusinessId())
       if (fresh.success && fresh.config) {
@@ -475,6 +488,9 @@ export default function InvoiceList() {
         setA4SheetPrint(fresh.config.a4SheetPrint || false)
         setTicketPaperWidth(fresh.config.paperWidth || 80)
         setAjustarHoja(fresh.config.ajustarHojaAlTicket !== false)
+        anchoDeHoja = fresh.config.paperWidth || 80
+        esHojaA4 = fresh.config.a4SheetPrint || false
+        ajustarLaHoja = fresh.config.ajustarHojaAlTicket !== false
         // Dar un tick para que el ticket se re-renderice con los valores frescos
         await new Promise(resolve => setTimeout(resolve, 60))
       }
@@ -488,9 +504,9 @@ export default function InvoiceList() {
     // La hoja se ajusta al ticket: sin esto el navegador cae en A4 y el
     // comprobante sale chiquito arriba con media hoja en blanco. En modo
     // "hoja A4" el propio componente pide A4 y no hay que medir nada.
-    const prepararHoja = () => a4SheetPrint
+    const prepararHoja = () => esHojaA4
       ? () => {}
-      : aplicarTamanoDeHoja(ticketRef.current, ticketPaperWidth, ajustarHoja)
+      : aplicarTamanoDeHoja(ticketRef.current, anchoDeHoja, ajustarLaHoja)
 
     if (invoiceArg && viewingInvoice?.id !== invoice.id) {
       setRowPrintInvoice(invoice)
