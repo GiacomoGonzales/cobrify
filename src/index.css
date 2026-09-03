@@ -34,12 +34,21 @@
   }
 
   /* Base styles - sin restricciones de overflow para permitir scroll en Login */
+  /* Tamaño de la interfaz, elegido por el usuario en Configuración.
+     1 = normal. Escala TODA la app porque Tailwind mide en `rem`: texto,
+     paddings, altos de fila y hasta los iconos. Ver utils/escalaInterfaz.js. */
+  :root {
+    --escala-ui: 1;
+  }
+
   html {
     height: 100%;
     /* Usar viewport dinámico para iOS Safari */
     height: 100dvh;
-    /* Zoom global - reduce todo al 90% (como alejar zoom 10%) */
-    font-size: 90%;
+    /* Zoom global - reduce todo al 90% (como alejar zoom 10%).
+       La escala del usuario MULTIPLICA este valor en vez de reemplazarlo, así
+       la tablet sigue saliendo más compacta que el teléfono. */
+    font-size: calc(90% * var(--escala-ui));
     /* Smooth scroll para anchor links */
     scroll-behavior: smooth;
   }
@@ -51,7 +60,15 @@
      Esto NO afecta a teléfonos (anchos < 768px) ni desktops (pointer: fine). */
   @media (min-width: 768px) and (pointer: coarse) {
     html {
-      font-size: 85%;
+      font-size: calc(85% * var(--escala-ui));
+    }
+  }
+
+  /* Al IMPRIMIR no se escala: el ticket se mide en milímetros contra el papel,
+     no contra la vista de quien lo emite. */
+  @media print {
+    :root {
+      --escala-ui: 1;
     }
   }
 
@@ -74,7 +91,10 @@
   input,
   select,
   textarea {
-    font-size: 16px;
+    /* 16px es el mínimo que evita que iOS haga zoom al enfocar un campo. Con
+       `max` ese piso se respeta y además el campo CRECE con el tamaño elegido:
+       de nada sirve agrandar la app si lo que uno escribe sigue chiquito. */
+    font-size: max(16px, 1rem);
   }
 
   /* Fix date input overflow on iOS */

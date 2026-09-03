@@ -40,6 +40,7 @@ import {
 } from '@/services/productImageService'
 import { consultarRUC, consultarEstablecimientos } from '@/services/documentLookupService'
 import { codigosDeUbigeo, ubigeoDeCodigos } from '@/utils/ubigeoDesdeConsulta'
+import { ESCALAS, leerEscala, aplicarEscala } from '@/utils/escalaInterfaz'
 import {
   scanPrinters,
   connectPrinter,
@@ -514,6 +515,10 @@ export default function Settings() {
   const [branchCatalogEnabled, setBranchCatalogEnabled] = useState(false)
   // Obras y proyectos en modo General: reusa las paginas del modo Logistica
   // sin obligar al negocio a migrar de modo. Apagado por defecto.
+  // Tamaño de la interfaz. Va por DISPOSITIVO (localStorage), no por negocio:
+  // es la vista de una persona, no una preferencia de la empresa. Por eso no
+  // entra en ningún payload de guardado — se aplica y se guarda al elegirlo.
+  const [escalaUi, setEscalaUi] = useState(leerEscala)
   const [obrasEnabled, setObrasEnabled] = useState(false)
   // Prestamos en modo Restaurante: misma idea, con la cartera del modo
   // Prestamos. Apagado por defecto.
@@ -3903,6 +3908,36 @@ export default function Settings() {
           </CardHeader>
           <CardContent>
             <div className="space-y-6">
+              {/* Tamaño de la interfaz. Va PRIMERO a propósito: quien la necesita
+                  es justamente quien más le cuesta encontrarla. Se aplica al
+                  instante y no necesita "Guardar" — es de este dispositivo. */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Tamaño de la interfaz</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Agranda el texto y todo lo demás si te cuesta leer la pantalla. Solo afecta a
+                  este dispositivo y se aplica al momento.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {ESCALAS.map(escala => (
+                    <button
+                      key={escala.id}
+                      type="button"
+                      onClick={() => setEscalaUi(aplicarEscala(escala.id))}
+                      className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                        escalaUi === escala.id
+                          ? 'border-primary-500 bg-primary-50 text-primary-700'
+                          : 'border-gray-300 text-gray-700 hover:border-gray-400'
+                      }`}
+                      style={{ fontSize: `${escala.factor}rem` }}
+                    >
+                      {escala.nombre}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="border-t border-gray-200"></div>
+
               {/* Business Mode Section */}
               <div>
                 <h3 className="text-base font-semibold text-gray-900 mb-1">Tipo de Negocio</h3>
