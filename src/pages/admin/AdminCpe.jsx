@@ -729,33 +729,39 @@ export default function AdminCpe() {
           </Boton>
         }
       />
+      {/* Tres filas, cada una con su trabajo: primero a que seccion estas
+          mirando, despues buscar, y al final los filtros. Antes iban las tres
+          cosas mezcladas en la misma linea y las pestañas no se leian como
+          pestañas. */}
+      <div className="flex w-full sm:inline-flex sm:w-auto rounded-md border border-gray-300 bg-white p-0.5">
+        {[
+          ['cpe', 'Comprobantes y guías', 'Comprobantes'],
+          ['bajas', 'Resúmenes diarios', 'Resúmenes'],
+          ['alertas', 'Alertas 1033', 'Alertas'],
+        ].map(([k, largo, corto]) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => setSeccion(k)}
+            className={`h-7 flex-1 sm:flex-none min-w-0 px-2 sm:px-3 rounded text-[12px] sm:text-[12.5px] whitespace-nowrap ${seccion === k ? 'bg-gray-900 text-white' : 'text-gray-600 hover:text-gray-900'}`}
+          >
+            <span className="sm:hidden">{corto}</span>
+            <span className="hidden sm:inline">{largo}</span>
+          </button>
+        ))}
+      </div>
+
       <Filtros>
-        {/* En el celular ocupan la fila entera y se reparten el ancho, con el
-            nombre corto: los tres nombres largos no entran en 375 px y el texto
-            se salia del recuadro. */}
-        <div className="flex w-full sm:inline-flex sm:w-auto rounded-md border border-gray-300 bg-white p-0.5">
-          {[
-            ['cpe', 'Comprobantes y guías', 'Comprobantes'],
-            ['bajas', 'Resúmenes diarios', 'Resúmenes'],
-            ['alertas', 'Alertas 1033', 'Alertas'],
-          ].map(([k, largo, corto]) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => setSeccion(k)}
-              className={`h-7 flex-1 sm:flex-none min-w-0 px-2 sm:px-3 rounded text-[12px] sm:text-[12.5px] whitespace-nowrap ${seccion === k ? 'bg-gray-900 text-white' : 'text-gray-600 hover:text-gray-900'}`}
-            >
-              <span className="sm:hidden">{corto}</span>
-              <span className="hidden sm:inline">{largo}</span>
-            </button>
-          ))}
-        </div>
         <Buscador
-          ancho="w-full sm:w-80"
+          ancho="flex-1 min-w-[220px]"
           placeholder={seccion === 'cpe' ? 'Número, cliente, empresa o RUC' : seccion === 'alertas' ? 'Empresa, RUC o número' : 'Identificador, documento, ticket, empresa'}
           value={busqueda}
           onChange={e => setBusqueda(e.target.value)}
         />
+      </Filtros>
+
+      <Filtros>
+        <Entrada type="month" value={mes} onChange={e => e.target.value && setMes(e.target.value)} className="w-40" />
         {seccion !== 'alertas' && (
           <>
             <FiltroSelect value={metodo} onChange={e => setMetodo(e.target.value)} valorTodos="sunat_direct">
@@ -768,7 +774,6 @@ export default function AdminCpe() {
             </FiltroSelect>
           </>
         )}
-        <Entrada type="month" value={mes} onChange={e => e.target.value && setMes(e.target.value)} className="w-40" />
         {seccion === 'cpe' && (
           <>
             <FiltroSelect value={tipoFiltro} onChange={e => setTipoFiltro(e.target.value)}>
