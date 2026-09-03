@@ -171,6 +171,14 @@ export const consultarRUC = async (ruc) => {
     // apiperu.dev devuelve los datos directamente o en result.data
     const data = result.data || result
 
+    // Sin direccion es un RUC de persona natural: el dato vive en el endpoint
+    // del domicilio fiscal. Ver consultarDomicilioFiscal.
+    let domicilio = data
+    if (!data.direccion_completa && !data.direccion) {
+      const extra = await consultarDomicilioFiscal(ruc)
+      if (extra) domicilio = extra
+    }
+
     // Formatear respuesta
     return {
       success: true,
@@ -180,11 +188,11 @@ export const consultarRUC = async (ruc) => {
         nombreComercial: data.nombre_comercial || '',
         estado: data.estado || '',
         condicion: data.condicion || '',
-        direccion: data.direccion_completa || data.direccion || '',
-        departamento: data.departamento || '',
-        provincia: data.provincia || '',
-        distrito: data.distrito || '',
-        ubigeo: data.ubigeo || ''
+        direccion: domicilio.direccion_completa || domicilio.direccion || '',
+        departamento: domicilio.departamento || '',
+        provincia: domicilio.provincia || '',
+        distrito: domicilio.distrito || '',
+        ubigeo: ubigeoDe(domicilio)
       }
     }
   } catch (error) {
@@ -193,6 +201,66 @@ export const consultarRUC = async (ruc) => {
       success: false,
       error: error.message || 'Error al consultar RUC. Verifique su conexión a internet.'
     }
+  }
+}
+
+/**
+ * El UBIGEO como CODIGO de 6 digitos.
+ *
+ * apiperu manda dos cosas con nombres parecidos: `ubigeo_sunat` es el codigo
+ * ("150141") y `ubigeo` es un ARRAY de tres niveles (["15","1501","150141"]).
+ * Devolver el array dejaba a las guias de remision sin ubigeo en silencio: el
+ * consumidor pregunta por `.length === 6` y un array de tres da 3.
+ */
+const ubigeoDe = (data) => {
+  if (!data) return ''
+  const codigo = data.ubigeo_sunat || ''
+  if (codigo) return String(codigo)
+  const partes = data.ubigeo
+  if (Array.isArray(partes)) {
+    const ultimo = partes.filter(Boolean).pop()
+    return ultimo ? String(ultimo) : ''
+  }
+  return partes ? String(partes) : ''
+}
+
+/**
+ * El DOMICILIO FISCAL de un RUC, en su endpoint propio.
+ *
+ * Hace falta porque /api/ruc devuelve la direccion VACIA cuando el RUC es de
+ * PERSONA NATURAL (empieza con 10): nombre, estado y condicion llegan bien, y
+ * direccion, departamento, provincia, distrito y ubigeo llegan todos en
+ * blanco. Con un RUC 20 el mismo endpoint los devuelve completos (verificado
+ * contra tres RUC 10 y un RUC 20, 03-sep-2026; reporte de JMC).
+ *
+ * Consume un credito APARTE, asi que consultarRUC solo lo llama cuando de
+ * verdad falto la direccion — y no "cuando el RUC empieza con 10": si manana
+ * apiperu completa el endpoint principal, esta segunda consulta deja de
+ * hacerse sola.
+ *
+ * Nunca tira: es un complemento. Si falla, el RUC igual se devuelve con lo que
+ * si vino.
+ */
+const consultarDomicilioFiscal = async (ruc) => {
+  try {
+    const isNative = Capacitor.isNativePlatform()
+    const url = isNative ? `${API_BASE_URL}/api/ruc-domicilio-fiscal` : '/api/ruc-domicilio'
+    const response = await httpRequest(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${APIPERU_TOKEN}`,
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ruc })
+    })
+    if (!response.ok) return null
+    const result = await response.json()
+    if (!result || result.success === false) return null
+    return result.data || null
+  } catch (error) {
+    console.warn('No se pudo consultar el domicilio fiscal:', error?.message || error)
+    return null
   }
 }
 
@@ -291,7 +359,8 @@ export const consultarEstablecimientos = async (ruc) => {
       departamento: e.departamento || '',
       provincia: e.provincia || '',
       distrito: e.distrito || '',
-      ubigeo: e.ubigeo || e.ubigeo_sunat || ''
+      // Mismo criterio que el domicilio fiscal: el CODIGO, no el array de niveles
+      ubigeo: ubigeoDe(e)
     }))
 
     return { success: true, data }
