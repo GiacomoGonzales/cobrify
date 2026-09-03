@@ -59,7 +59,7 @@ const SUB_STATUS_OPTIONS = [
 ]
 
 const BUSINESS_MODE_OPTIONS = [
-  { value: 'retail', label: 'Retail' },
+  { value: 'retail', label: 'General' },
   { value: 'restaurant', label: 'Restaurante' },
   { value: 'pharmacy', label: 'Farmacia' },
   { value: 'hotel', label: 'Hotel' },

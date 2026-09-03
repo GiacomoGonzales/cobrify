@@ -39,7 +39,7 @@ const FORM_VACIO = {
 
 const MODOS = [
   ['', 'Heredar del negocio'],
-  ['retail', 'Comercio / retail'],
+  ['retail', 'General (todo tipo de negocio)'],
   ['restaurant', 'Restaurante'],
   ['pharmacy', 'Farmacia'],
   ['hotel', 'Hotel'],

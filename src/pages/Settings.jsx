@@ -3952,7 +3952,7 @@ export default function Settings() {
                   onChange={(e) => setBusinessMode(e.target.value)}
                   className="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
                 >
-                  <option value="retail">Retail (Tienda/Comercio) — POS, productos, inventario, almacenes, compras</option>
+                  <option value="retail">General (todo tipo de negocio) — POS, productos, inventario, almacenes, compras</option>
                   <option value="restaurant">Restaurante — Mesas, mozos, órdenes, cocina, menú, caja</option>
                   <option value="pharmacy">Farmacia — Medicamentos, laboratorios, lotes, alertas de vencimiento</option>
                   <option value="veterinary">Veterinaria — Pacientes, servicios, medicamentos, control de lotes</option>

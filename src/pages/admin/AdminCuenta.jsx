@@ -29,7 +29,7 @@ import {
 
 const ESTADOS = { active: 'Activa', suspended: 'Suspendida', expired: 'Vencida' }
 const MODOS = {
-  retail: 'Retail', restaurant: 'Restaurante', pharmacy: 'Farmacia', real_estate: 'Inmobiliaria',
+  retail: 'General', restaurant: 'Restaurante', pharmacy: 'Farmacia', real_estate: 'Inmobiliaria',
   transport: 'Transporte', hotel: 'Hotel', veterinary: 'Veterinaria', logistics: 'Logística', lending: 'Préstamos',
 }
 // Se nombra el regimen y despues la tasa: lo que distingue a una cuenta es
