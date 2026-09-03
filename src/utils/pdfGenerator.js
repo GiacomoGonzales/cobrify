@@ -1099,29 +1099,32 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   let paymentForm = 'CONTADO'
   if (invoice.paymentType === 'credito') {
-    // Calcular días de crédito basado en fecha de emisión y vencimiento.
+    // "N DÍAS" describe un vencimiento ÚNICO. Un pago en cuotas no tiene un
+    // plazo: tiene un cronograma, y ese cronograma ya va detallado abajo, en
+    // el recuadro de Forma de Pago con el monto y la fecha de cada cuota.
     //
-    // Con CUOTAS manda la última: es hasta cuándo tiene plazo el cliente. La
-    // fecha suelta ya no se guarda cuando hay cuotas (el XML tampoco la usa),
-    // así que sin esto un plan a 45 días se imprimiría como "CRÉDITO 30 DÍAS".
-    let creditDays = 30 // Por defecto
+    // Resumirlo en un número era peor que no ponerlo: "CRÉDITO 22 DÍAS" sobre
+    // dos cuotas —una a 4 días y otra a 22— le dice al cliente que tiene 22
+    // días para todo, que es justo lo contrario de lo pactado (pedido de JMC,
+    // 03-sep-2026, factura de MIRMAS PERU).
     const cuotasPdf = Array.isArray(invoice.paymentInstallments) ? invoice.paymentInstallments : []
-    const ultimaCuota = cuotasPdf
-      .map(c => c?.dueDate)
-      .filter(Boolean)
-      .sort()
-      .pop()
-    const vencimientoParaDias = invoice.paymentDueDate || ultimaCuota
-    if (vencimientoParaDias) {
-      const emissionDateObj = pdfDateSource
-        ? (pdfDateSource.toDate ? pdfDateSource.toDate() : new Date(pdfDateSource))
-        : new Date()
-      const dueDateObj = new Date(vencimientoParaDias + 'T00:00:00')
-      const diffTime = dueDateObj - emissionDateObj
-      creditDays = Math.round(diffTime / (1000 * 60 * 60 * 24))
-      if (creditDays < 0) creditDays = 30
+    const tieneCuotas = cuotasPdf.some(c => c?.dueDate)
+
+    if (tieneCuotas) {
+      paymentForm = 'CRÉDITO'
+    } else {
+      let creditDays = 30 // Por defecto
+      if (invoice.paymentDueDate) {
+        const emissionDateObj = pdfDateSource
+          ? (pdfDateSource.toDate ? pdfDateSource.toDate() : new Date(pdfDateSource))
+          : new Date()
+        const dueDateObj = new Date(invoice.paymentDueDate + 'T00:00:00')
+        const diffTime = dueDateObj - emissionDateObj
+        creditDays = Math.round(diffTime / (1000 * 60 * 60 * 24))
+        if (creditDays < 0) creditDays = 30
+      }
+      paymentForm = `CRÉDITO ${creditDays} DÍAS`
     }
-    paymentForm = `CRÉDITO ${creditDays} DÍAS`
   } else if (invoice.paymentType === 'contado') {
     paymentForm = 'CONTADO'
   } else {
