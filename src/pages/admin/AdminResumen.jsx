@@ -1,30 +1,18 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { collection, getDocs } from 'firebase/firestore'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { db } from '@/lib/firebase'
-import { origenDeCuenta } from '@/utils/subscriptionOwnership'
-import {
-  getAdminStats,
-  getAnalyticsData,
-  getSystemAlerts,
-  getAcquisitionData,
-  getInvestorReport,
-  recalculateInvestorReport,
-} from '@/services/adminStatsService'
-import { PLANS, classifyPlan } from '@/services/subscriptionService'
+import { getInvestorReport, recalculateInvestorReport } from '@/services/adminStatsService'
+import { resumenRapido, resumenCompleto } from '@/services/adminResumenService'
+import { PLANS } from '@/services/subscriptionService'
 import { CHART, CHART_TOOLTIP } from '@/components/charts/chartTheme'
 import { Pagina, Seccion, Tabla, Th, Td, Fila, FilaVacia, Boton, Cifras, Cifra, Aviso } from '@/components/admin/ui'
 
-// Toda la informacion global en una sola pagina larga. Reune lo que antes
-// estaba repartido en Dashboard, Analytics, Distribucion de planes y Reporte
-// de inversores. Primero tablas; graficos solo para lo que cambia en el
-// tiempo (cuentas nuevas y ventas por mes).
-//
-// Dos velocidades de carga: lo rapido (stats, alertas, analytics, adquisicion
-// y el reporte cacheado) entra solo; el detalle que recorre todas las
-// suscripciones y negocios (por plan, por departamento, retencion en vivo)
-// se pide con un boton, igual que el recalculo del reporte de inversores.
+// Toda la informacion global en una sola pagina, en dos velocidades:
+// - al abrir, las cifras contadas en el servidor (agregaciones, ~16 lecturas)
+//   y la ultima foto del reporte de inversores (1 lectura);
+// - con "Cargar todo", el resto: lee suscripciones, negocios y usuarios UNA
+//   vez y de ahi salen graficos, alertas, planes, departamentos, uso,
+//   adquisicion, retencion y actividad.
 
 const moneda = v => `S/ ${(Number(v) || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const entero = v => (Number(v) || 0).toLocaleString('es-PE')
@@ -32,61 +20,15 @@ const decimal = (v, d = 1) => (Number(v) || 0).toLocaleString('es-PE', { minimum
 const porcentaje = (parte, total) => (total > 0 ? `${Math.round((parte / total) * 100)} %` : '—')
 const fecha = d => (d ? new Date(d).toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: '2-digit' }) : '—')
 
-const MODOS = {
-  retail: 'Retail',
-  restaurant: 'Restaurante',
-  pharmacy: 'Farmacia',
-  real_estate: 'Inmobiliaria',
-  transport: 'Transporte',
-  hotel: 'Hotel',
-  veterinary: 'Veterinaria',
-  logistics: 'Logística',
-}
-
-const PLANES_ETIQUETA = {
-  trial: 'Trial',
-  free: 'Gratis',
-  basic: 'Básico',
-  pro: 'Pro',
-  premium: 'Premium',
-  enterprise: 'Enterprise',
-  starter: 'Starter',
-}
-
-const TIPOS_DOC = {
-  factura: 'Facturas',
-  boleta: 'Boletas',
-  nota_venta: 'Notas de venta',
-  nota_credito: 'Notas de crédito',
-  nota_debito: 'Notas de débito',
-}
-
-const CANALES = {
-  organico: 'Búsqueda orgánica',
-  publicidad: 'Publicidad paga',
-  social: 'Redes sociales',
-  mensajeria: 'Mensajería',
-  referido: 'Sitios referidos',
-  directo: 'Directo',
-}
-
-const FUENTES = {
-  google: 'Google',
-  bing: 'Bing',
-  duckduckgo: 'DuckDuckGo',
-  facebook: 'Facebook',
-  instagram: 'Instagram',
-  tiktok: 'TikTok',
-  youtube: 'YouTube',
-  whatsapp: 'WhatsApp',
-  twitter: 'X / Twitter',
-  linkedin: 'LinkedIn',
-  directo: 'Directo',
-}
+const MODOS = { retail: 'Retail', restaurant: 'Restaurante', pharmacy: 'Farmacia', real_estate: 'Inmobiliaria', transport: 'Transporte', hotel: 'Hotel', veterinary: 'Veterinaria', logistics: 'Logística', lending: 'Préstamos' }
+const PLANES_ETIQUETA = { trial: 'Trial', free: 'Gratis', basic: 'Básico', pro: 'Pro', premium: 'Premium', enterprise: 'Enterprise', starter: 'Starter' }
+const TIPOS_DOC = { factura: 'Facturas', boleta: 'Boletas', nota_venta: 'Notas de venta', nota_credito: 'Notas de crédito', nota_debito: 'Notas de débito' }
+const CANALES = { organico: 'Búsqueda orgánica', publicidad: 'Publicidad paga', social: 'Redes sociales', mensajeria: 'Mensajería', referido: 'Sitios referidos', directo: 'Directo' }
+const FUENTES = { google: 'Google', bing: 'Bing', duckduckgo: 'DuckDuckGo', facebook: 'Facebook', instagram: 'Instagram', tiktok: 'TikTok', youtube: 'YouTube', whatsapp: 'WhatsApp', twitter: 'X / Twitter', linkedin: 'LinkedIn', directo: 'Directo' }
 
 const SECCIONES = [
-  ['cifras', 'Cifras'],
   ['crecimiento', 'Crecimiento'],
+  ['alertas', 'Alertas'],
   ['cuentas', 'Cuentas'],
   ['planes', 'Planes'],
   ['uso', 'Uso'],
@@ -107,157 +49,42 @@ function haceCuanto(date) {
   return `hace ${dias} día${dias !== 1 ? 's' : ''}`
 }
 
-const titulo = s => String(s || '').trim().toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase())
-
-// Recorre suscripciones, negocios y usuarios una sola vez y saca de ahi las
-// tres tablas pesadas. Excluye sub-usuarios (tienen ownerId) como Usuarios.
-async function cargarDetalleGlobal() {
-  const [subsSnap, bizSnap, usersSnap] = await Promise.all([
-    getDocs(collection(db, 'subscriptions')),
-    getDocs(collection(db, 'businesses')),
-    getDocs(collection(db, 'users')),
-  ])
-  const negocios = {}
-  bizSnap.forEach(d => { negocios[d.id] = d.data() })
-  const usuarios = {}
-  usersSnap.forEach(d => { usuarios[d.id] = d.data() })
-
-  const ahora = new Date()
-  const porPlan = {}
-  const porDepartamento = {}
-  const totales = { total: 0, activos: 0, trial: 0, vencidos: 0, suspendidos: 0, archivados: 0, directo: 0, reseller: 0, vendedor: 0, legacy: 0 }
-
-  // Retencion (mismo calculo que tenia Usuarios): cada vencimiento es una
-  // oportunidad de renovar; los archivados no cuentan.
-  let conPagos = 0, vigentes = 0, sinRenovar = 0, enPrimerPeriodo = 0, ingresos = 0, oportunidades = 0, renovaciones = 0
-
-  subsSnap.forEach(d => {
-    const data = d.data()
-    if (data.ownerId || usuarios[d.id]?.ownerId) return
-    const negocio = negocios[d.id] || {}
-    const fin = data.currentPeriodEnd?.toDate?.() || null
-    const archivado = data.archived === true
-    // Mismo criterio que usa "Mi Suscripción" para decidir de quién es la
-    // cuenta. Mirando solo `resellerId` quedaban como DIRECTAS las que traen
-    // `createdByReseller` sin él.
-    const origen = origenDeCuenta(data)
-
-    let estado = 'activos'
-    if (data.status === 'suspended' || data.accessBlocked) estado = 'suspendidos'
-    else if (data.plan === 'trial' || data.plan === 'free') estado = 'trial'
-    else if (fin && fin < ahora) estado = 'vencidos'
-
-    const planId = data.plan || 'desconocido'
-    if (!porPlan[planId]) porPlan[planId] = { planId, total: 0, activos: 0, directo: 0, reseller: 0, vendedor: 0 }
-    porPlan[planId].total++
-    porPlan[planId][origen]++
-    if (estado === 'activos') porPlan[planId].activos++
-
-    if (archivado) {
-      totales.archivados++
-    } else {
-      totales.total++
-      totales[estado]++
-      totales[origen]++
-      if (classifyPlan(planId) === 'legacy') totales.legacy++
-
-      const dep = titulo(negocio.department) || 'Sin departamento'
-      if (!porDepartamento[dep]) porDepartamento[dep] = { departamento: dep, total: 0, activos: 0, trial: 0, vencidos: 0, suspendidos: 0 }
-      porDepartamento[dep].total++
-      porDepartamento[dep][estado]++
-
-      const pagos = data.paymentHistory || []
-      if (pagos.length) {
-        conPagos++
-        for (const p of pagos) ingresos += p.amount || 0
-        const vigente = fin && fin > ahora
-        if (vigente) {
-          vigentes++
-          if (pagos.length === 1) enPrimerPeriodo++
-        } else {
-          sinRenovar++
-        }
-        const renovo = Math.max(0, pagos.length - 1)
-        renovaciones += renovo
-        oportunidades += renovo + (vigente ? 0 : 1)
-      }
-    }
-  })
-
-  const candidatos = conPagos - enPrimerPeriodo
-  const renovados = vigentes - enPrimerPeriodo
-  const retencion = {
-    conPagos, vigentes, sinRenovar, enPrimerPeriodo, ingresos, candidatos, renovados, oportunidades, renovaciones,
-    tasa: candidatos > 0 ? Math.round((renovados / candidatos) * 100) : null,
-    tasaHistorica: oportunidades > 0 ? Math.round((renovaciones / oportunidades) * 100) : null,
-  }
-
-  const planes = Object.values(porPlan)
-    .map(r => ({
-      ...r,
-      nombre: PLANS[r.planId]?.name || (r.planId === 'desconocido' ? '(sin plan)' : r.planId),
-      precio: PLANS[r.planId]?.totalPrice,
-      clase: classifyPlan(r.planId),
-    }))
-    .sort((a, b) => b.total - a.total)
-
-  const departamentos = Object.values(porDepartamento).sort((a, b) => b.total - a.total)
-
-  return { planes, departamentos, retencion, totales, calculadoEn: new Date() }
-}
-
 export default function AdminResumen() {
-  const [stats, setStats] = useState(null)
-  const [analytics, setAnalytics] = useState(null)
-  const [alertas, setAlertas] = useState([])
-  const [adquisicion, setAdquisicion] = useState(null)
+  const [rapido, setRapido] = useState(null)
+  const [cargandoRapido, setCargandoRapido] = useState(true)
   const [reporte, setReporte] = useState(null)
-  const [cargando, setCargando] = useState(true)
-  const [actualizando, setActualizando] = useState(false)
-  const [detalle, setDetalle] = useState(null)
-  const [cargandoDetalle, setCargandoDetalle] = useState(false)
+  const [completo, setCompleto] = useState(null)
+  const [cargandoCompleto, setCargandoCompleto] = useState(false)
   const [recalculando, setRecalculando] = useState(false)
   const [error, setError] = useState(null)
-  const [actualizadoEn, setActualizadoEn] = useState(null)
 
-  async function cargar(deNuevo = false) {
-    deNuevo ? setActualizando(true) : setCargando(true)
+  async function cargarRapido() {
+    setCargandoRapido(true)
     setError(null)
-    const [s, a, al, ad, r] = await Promise.allSettled([
-      getAdminStats(),
-      getAnalyticsData(),
-      getSystemAlerts(),
-      getAcquisitionData(30),
-      getInvestorReport(),
-    ])
-    if (s.status === 'fulfilled') setStats(s.value)
-    if (a.status === 'fulfilled') setAnalytics(a.value)
-    if (al.status === 'fulfilled') setAlertas(al.value || [])
-    if (ad.status === 'fulfilled') setAdquisicion(ad.value)
-    if (r.status === 'fulfilled') setReporte(r.value)
-    const fallo = [s, a, al, ad, r].find(x => x.status === 'rejected')
-    if (fallo) {
-      console.error('Error cargando el resumen:', fallo.reason)
-      setError('Una parte del resumen no se pudo cargar. Prueba con Actualizar.')
+    const [r, inv] = await Promise.allSettled([resumenRapido(), getInvestorReport()])
+    if (r.status === 'fulfilled') setRapido(r.value)
+    else {
+      console.error('Error contando cuentas:', r.reason)
+      setError('No se pudieron contar las cuentas. Prueba con Recontar.')
     }
-    setActualizadoEn(new Date())
-    setCargando(false)
-    setActualizando(false)
+    if (inv.status === 'fulfilled') setReporte(inv.value)
+    setCargandoRapido(false)
   }
 
   useEffect(() => {
-    cargar()
+    cargarRapido()
   }, [])
 
-  async function cargarDetalle() {
-    setCargandoDetalle(true)
+  async function cargarCompleto() {
+    setCargandoCompleto(true)
+    setError(null)
     try {
-      setDetalle(await cargarDetalleGlobal())
+      setCompleto(await resumenCompleto())
     } catch (e) {
-      console.error('Error cargando el detalle global:', e)
-      setError('No se pudo cargar el detalle por plan y departamento.')
+      console.error('Error cargando el resumen completo:', e)
+      setError('No se pudo cargar el detalle.')
     } finally {
-      setCargandoDetalle(false)
+      setCargandoCompleto(false)
     }
   }
 
@@ -278,95 +105,145 @@ export default function AdminResumen() {
 
   const hayReporte = reporte && !reporte.needsCalculation
   const reporteEn = hayReporte && reporte.calculatedAt ? new Date(reporte.calculatedAt) : null
+  const stats = completo?.stats
+  const analytics = completo?.analytics
+  const alertas = completo?.alertas || []
+  const adquisicion = completo?.adquisicion
+  const detalle = completo?.detalle
 
-  const totalCuentas = detalle?.totales.total ?? stats?.totalUsers ?? 0
-
-  const resumen = cargando
-    ? 'Cargando…'
-    : `${entero(stats?.totalUsers)} cuentas · ${entero(stats?.activeUsers)} activas · ${entero(stats?.trialUsers)} en trial · ${entero(stats?.suspendedUsers)} suspendidas${actualizadoEn ? ` · actualizado ${haceCuanto(actualizadoEn)}` : ''}`
+  const resumen = cargandoRapido
+    ? 'Contando cuentas…'
+    : rapido
+      ? `${entero(rapido.total)} cuentas · ${entero(rapido.activas)} activas · ${entero(rapido.trial)} en trial · ${entero(rapido.suspendidas)} suspendidas · contado ${haceCuanto(rapido.calculadoEn)}`
+      : ''
 
   return (
     <Pagina
       resumen={resumen}
       acciones={
-        <Boton tamano="sm" onClick={() => cargar(true)} disabled={cargando || actualizando}>
-          {actualizando ? 'Actualizando…' : 'Actualizar'}
-        </Boton>
+        <>
+          <Boton tamano="sm" onClick={cargarRapido} disabled={cargandoRapido}>{cargandoRapido ? 'Contando…' : 'Recontar'}</Boton>
+          <Boton tamano="sm" variante={completo ? 'secundario' : 'primario'} onClick={cargarCompleto} disabled={cargandoCompleto}>
+            {cargandoCompleto ? 'Cargando…' : completo ? 'Recargar todo' : 'Cargar todo'}
+          </Boton>
+        </>
       }
     >
-      <nav className="flex flex-wrap gap-x-4 gap-y-1 text-[12.5px]">
-        {SECCIONES.map(([id, nombre]) => (
-          <a key={id} href={`#${id}`} className="text-gray-500 hover:text-gray-900">{nombre}</a>
-        ))}
-      </nav>
-
       {error && <Aviso tono="rojo">{error}</Aviso>}
 
-      {cargando ? (
-        <Seccion><p className="text-gray-500 py-6 text-center">Cargando el resumen…</p></Seccion>
+      {/* ── Lo barato: cifras contadas en el servidor ─────────────────────── */}
+      <Seccion titulo="Cifras" descripcion="Contadas en el servidor al abrir la página, sin leer las cuentas una por una.">
+        {rapido ? (
+          <Cifras>
+            <Cifra etiqueta="Cuentas" valor={entero(rapido.total)} nota={`${entero(rapido.activas)} activas`} />
+            <Cifra etiqueta="En trial" valor={entero(rapido.trial)} />
+            <Cifra etiqueta="Suspendidas" valor={entero(rapido.suspendidas)} />
+            <Cifra etiqueta="Nuevas este mes" valor={entero(rapido.nuevasMes)} />
+            <Cifra etiqueta="Vencen en 7 días" valor={entero(rapido.vencen7)} alerta={rapido.vencen7 > 0} />
+            <Cifra etiqueta="Vencidas, últimos 7 días" valor={entero(rapido.vencidas7)} alerta={rapido.vencidas7 > 0} />
+            <Cifra etiqueta="Renuevan este mes" valor={entero(rapido.renuevanMes)} nota="activas que vencen este mes" />
+            <Cifra etiqueta="MRR" valor={moneda(rapido.mrr)} nota="activas × precio mensual del plan" />
+          </Cifras>
+        ) : (
+          <p className="text-[12.5px] text-gray-500">{cargandoRapido ? 'Contando…' : 'Sin datos'}</p>
+        )}
+      </Seccion>
+
+      <Seccion
+        id="inversores"
+        titulo="Última foto para inversores"
+        descripcion={reporteEn
+          ? `Calculada ${reporteEn.toLocaleString('es-PE')} (${haceCuanto(reporteEn)})${reporte?.calculationTimeSeconds != null ? ` en ${reporte.calculationTimeSeconds} s` : ''}. Queda guardada hasta el próximo recálculo.`
+          : 'Recorre toda la plataforma en el servidor y guarda el resultado; solo se recalcula cuando lo pides.'}
+        className="scroll-mt-16"
+        acciones={
+          <Boton tamano="sm" onClick={recalcular} disabled={recalculando}>
+            {recalculando ? 'Calculando…' : hayReporte ? 'Recalcular' : 'Generar reporte'}
+          </Boton>
+        }
+      >
+        {hayReporte ? (
+          <Cifras>
+            <Cifra etiqueta="Facturado por los negocios" valor={moneda(reporte.invoicing?.totalAmount)} nota={`${entero(reporte.invoicing?.totalDocuments)} comprobantes`} />
+            <Cifra etiqueta="MRR" valor={moneda(reporte.subscriptions?.mrr)} />
+            <Cifra etiqueta="ARR proyectado" valor={moneda(reporte.subscriptions?.arr)} />
+            <Cifra etiqueta="Negocios activos" valor={entero(reporte.businesses?.active)} nota={`de ${entero(reporte.businesses?.total)}`} />
+            {reporte.retention && <Cifra etiqueta="Retención" valor={reporte.retention.currentRate != null ? `${reporte.retention.currentRate} %` : '—'} nota={`${entero(reporte.retention.renewed)} / ${entero(reporte.retention.candidates)}`} />}
+            {reporte.retention && <Cifra etiqueta="Renovación histórica" valor={reporte.retention.lifetimeRate != null ? `${reporte.retention.lifetimeRate} %` : '—'} nota={`${entero(reporte.retention.totalRenewals)} / ${entero(reporte.retention.totalOpportunities)}`} />}
+          </Cifras>
+        ) : (
+          <p className="text-[12.5px] text-gray-500">{recalculando ? 'Calculando… puede tardar varios minutos.' : 'Todavía no se generó el reporte.'}</p>
+        )}
+      </Seccion>
+
+      {/* ── Lo demas, cuando lo pides ─────────────────────────────────────── */}
+      {!completo ? (
+        <Seccion titulo="Todo lo demás">
+          <p className="text-[12.5px] text-gray-600">
+            Gráficos de crecimiento y ventas, alertas, cuentas por estado, tipo y método de emisión, planes por origen, departamentos,
+            uso, adquisición, retención en vivo, el reporte de inversores completo y la actividad reciente. Lee todas las cuentas
+            una sola vez (unas {entero(rapido ? rapido.total * 3 : 2000)} lecturas), por eso no se carga solo.
+          </p>
+          <div className="mt-3">
+            <Boton variante="primario" onClick={cargarCompleto} disabled={cargandoCompleto}>{cargandoCompleto ? 'Cargando…' : 'Cargar todo'}</Boton>
+          </div>
+        </Seccion>
       ) : (
         <>
-          {/* ── Cifras ─────────────────────────────────────────────────── */}
-          <Seccion id="cifras" titulo="Cifras del mes" className="scroll-mt-16">
+          <nav className="flex flex-wrap gap-x-4 gap-y-1 text-[12.5px]">
+            {SECCIONES.map(([id, nombre]) => (
+              <a key={id} href={`#${id}`} className="text-gray-500 hover:text-gray-900">{nombre}</a>
+            ))}
+            <span className="text-gray-400">· leídas {entero(completo.lecturas)} · {haceCuanto(completo.calculadoEn)}</span>
+          </nav>
+
+          <Seccion titulo="Cifras del mes (exactas)" descripcion="Con las cuentas ya leídas: excluye sub-usuarios y suma los pagos.">
             <Cifras>
-              <Cifra etiqueta="MRR" valor={moneda(stats?.mrr)} nota="ingresos recurrentes" />
-              <Cifra etiqueta="Por cobrar este mes" valor={moneda(stats?.collectableThisMonth)} nota={`${entero(stats?.collectableCount)} renovaciones`} />
-              <Cifra etiqueta="Ingresos totales" valor={moneda(stats?.totalRevenue)} nota="desde el inicio" />
-              <Cifra etiqueta="Cuentas activas" valor={entero(stats?.activeUsers)} nota={`de ${entero(stats?.totalUsers)}`} />
-              <Cifra
-                etiqueta="Nuevas este mes"
-                valor={entero(stats?.newThisMonth)}
-                nota={`${stats?.growthRate >= 0 ? '+' : ''}${stats?.growthRate ?? 0} % vs. ${entero(stats?.newLastMonth)} el mes anterior`}
-              />
-              <Cifra etiqueta="Vencen en 7 días" valor={entero(stats?.expiringThisWeek)} alerta={stats?.expiringThisWeek > 0} />
-              <Cifra etiqueta="Conversión trial → pago" valor={`${stats?.conversionRate ?? 0} %`} />
+              <Cifra etiqueta="MRR" valor={moneda(stats.mrr)} nota="ingresos recurrentes" />
+              <Cifra etiqueta="Por cobrar este mes" valor={moneda(stats.collectableThisMonth)} nota={`${entero(stats.collectableCount)} renovaciones`} />
+              <Cifra etiqueta="Ingresos totales" valor={moneda(stats.totalRevenue)} nota="desde el inicio" />
+              <Cifra etiqueta="Cuentas activas" valor={entero(stats.activeUsers)} nota={`de ${entero(stats.totalUsers)}`} />
+              <Cifra etiqueta="Nuevas este mes" valor={entero(stats.newThisMonth)} nota={`${stats.growthRate >= 0 ? '+' : ''}${stats.growthRate ?? 0} % vs. ${entero(stats.newLastMonth)} el mes anterior`} />
+              <Cifra etiqueta="Conversión trial → pago" valor={`${stats.conversionRate ?? 0} %`} />
               <Cifra etiqueta="Documentos este mes" valor={entero(analytics?.totalDocuments)} />
             </Cifras>
           </Seccion>
 
-          {/* ── Crecimiento ────────────────────────────────────────────── */}
           <div id="crecimiento" className="grid grid-cols-1 lg:grid-cols-2 gap-4 scroll-mt-16">
             <Seccion titulo="Cuentas nuevas por mes">
-              <Grafico datos={stats?.growthChartData} clave="nuevos" nombre="Cuentas nuevas" />
+              <Grafico datos={stats.growthChartData} clave="nuevos" nombre="Cuentas nuevas" />
             </Seccion>
             <Seccion titulo="Ventas por mes">
-              <Grafico datos={stats?.revenueChartData} clave="monto" nombre="Ventas" dinero />
+              <Grafico datos={stats.revenueChartData} clave="monto" nombre="Ventas" dinero />
             </Seccion>
           </div>
 
-          {/* ── Alertas ────────────────────────────────────────────────── */}
-          {alertas.length > 0 && (
-            <Seccion titulo={`Alertas del sistema (${alertas.length})`} sinRelleno>
-              <Tabla>
-                <tbody>
-                  {alertas.slice(0, 12).map((a, i) => (
-                    <Fila key={i}>
-                      <Td className={a.type === 'error' ? 'text-red-600 font-medium' : ''}>{a.title}</Td>
-                      <Td apagado className="whitespace-normal">{a.message}</Td>
-                      <Td alinear="der">
-                        {a.userId && (
-                          <Link to={`/app/admin/users?q=${encodeURIComponent(a.userId)}`} className="text-primary-700 hover:underline">
-                            Ver cuenta
-                          </Link>
-                        )}
-                      </Td>
-                    </Fila>
-                  ))}
-                </tbody>
-              </Tabla>
-            </Seccion>
-          )}
+          <Seccion id="alertas" titulo={`Alertas (${alertas.length})`} className="scroll-mt-16" sinRelleno>
+            <Tabla>
+              <tbody>
+                {alertas.length === 0 && <FilaVacia colSpan={3}>Sin alertas</FilaVacia>}
+                {alertas.slice(0, 20).map((a, i) => (
+                  <Fila key={i}>
+                    <Td className={a.type === 'error' ? 'text-red-600 font-medium' : ''}>{a.title}</Td>
+                    <Td apagado className="whitespace-normal">{a.message}</Td>
+                    <Td alinear="der">
+                      {a.userId && <Link to={`/app/admin/users/${a.userId}`} className="text-primary-700 hover:underline">Ver cuenta</Link>}
+                    </Td>
+                  </Fila>
+                ))}
+              </tbody>
+            </Tabla>
+          </Seccion>
 
-          {/* ── Cuentas ────────────────────────────────────────────────── */}
           <div id="cuentas" className="grid grid-cols-1 lg:grid-cols-3 gap-4 scroll-mt-16">
             <Seccion titulo="Por estado" sinRelleno>
               <Tabla>
                 <tbody>
-                  <FilaConteo etiqueta="Activas" valor={stats?.activeUsers} total={stats?.totalUsers} />
-                  <FilaConteo etiqueta="En trial" valor={stats?.trialUsers} total={stats?.totalUsers} />
-                  <FilaConteo etiqueta="Suspendidas" valor={stats?.suspendedUsers} total={stats?.totalUsers} rojo />
-                  {detalle && <FilaConteo etiqueta="Vencidas" valor={detalle.totales.vencidos} total={detalle.totales.total} rojo />}
-                  {detalle && <FilaConteo etiqueta="Archivadas" valor={detalle.totales.archivados} nota="fuera de las tasas" />}
+                  <FilaConteo etiqueta="Activas" valor={detalle.totales.activos} total={detalle.totales.total} />
+                  <FilaConteo etiqueta="En trial" valor={detalle.totales.trial} total={detalle.totales.total} />
+                  <FilaConteo etiqueta="Vencidas" valor={detalle.totales.vencidos} total={detalle.totales.total} rojo />
+                  <FilaConteo etiqueta="Suspendidas" valor={detalle.totales.suspendidos} total={detalle.totales.total} rojo />
+                  <FilaConteo etiqueta="Archivadas" valor={detalle.totales.archivados} nota="fuera de las tasas" />
                 </tbody>
               </Tabla>
             </Seccion>
@@ -374,7 +251,7 @@ export default function AdminResumen() {
               <Tabla>
                 <tbody>
                   {(analytics?.businessModes || []).map(m => (
-                    <FilaConteo key={m.name} etiqueta={MODOS[m.name] || m.name} valor={m.value} total={stats?.totalUsers} />
+                    <FilaConteo key={m.name} etiqueta={m.name} valor={m.value} total={stats.totalUsers} />
                   ))}
                   {!(analytics?.businessModes || []).length && <FilaVacia colSpan={3}>Sin datos</FilaVacia>}
                 </tbody>
@@ -384,7 +261,7 @@ export default function AdminResumen() {
               <Tabla>
                 <tbody>
                   {(analytics?.emissionMethods || []).map(m => (
-                    <FilaConteo key={m.name} etiqueta={m.name} valor={m.value} total={stats?.totalUsers} />
+                    <FilaConteo key={m.name} etiqueta={m.name} valor={m.value} total={stats.totalUsers} />
                   ))}
                   {!(analytics?.emissionMethods || []).length && <FilaVacia colSpan={3}>Sin datos</FilaVacia>}
                 </tbody>
@@ -392,97 +269,72 @@ export default function AdminResumen() {
             </Seccion>
           </div>
 
-          {/* ── Planes y departamentos (detalle pesado, bajo demanda) ──── */}
-          <Seccion
-            id="planes"
-            titulo="Por plan"
-            descripcion="Cuántas cuentas hay en cada plan, por origen. Lee todas las suscripciones y negocios."
-            className="scroll-mt-16"
-            sinRelleno
-            acciones={
-              <Boton tamano="sm" onClick={cargarDetalle} disabled={cargandoDetalle}>
-                {cargandoDetalle ? 'Cargando…' : detalle ? 'Recargar' : 'Cargar detalle'}
-              </Boton>
-            }
-          >
-            {detalle ? (
-              <>
-                <div className="px-4 py-2 text-[12.5px] text-gray-500 border-b border-gray-100">
-                  {entero(detalle.totales.total)} cuentas · {entero(detalle.totales.directo)} directas · {entero(detalle.totales.reseller)} de reseller · {entero(detalle.totales.vendedor)} de vendedor · {entero(detalle.totales.legacy)} en planes legacy
-                </div>
-                <Tabla>
-                  <thead>
-                    <tr>
-                      <Th>Plan</Th>
-                      <Th>Clase</Th>
-                      <Th alinear="der">Precio</Th>
-                      <Th alinear="der">Cuentas</Th>
-                      <Th alinear="der">Activas</Th>
-                      <Th alinear="der">Directas</Th>
-                      <Th alinear="der">Reseller</Th>
-                      <Th alinear="der">Vendedor</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detalle.planes.map(p => (
-                      <Fila key={p.planId}>
-                        <Td>
-                          {p.nombre} <span className="text-gray-400 font-mono text-[11px]">{p.planId}</span>
-                        </Td>
-                        <Td apagado className={p.clase === 'desconocido' ? 'text-red-600' : ''}>{p.clase}</Td>
-                        <Td numero apagado>{p.precio != null ? moneda(p.precio) : '—'}</Td>
-                        <Td numero className="font-medium">{entero(p.total)}</Td>
-                        <Td numero>{entero(p.activos)}</Td>
-                        <Td numero apagado>{entero(p.directo)}</Td>
-                        <Td numero apagado>{entero(p.reseller)}</Td>
-                        <Td numero apagado>{entero(p.vendedor)}</Td>
-                      </Fila>
-                    ))}
-                  </tbody>
-                </Tabla>
-                <p className="px-4 py-2 text-[11.5px] text-gray-500">
-                  vendible = catálogo actual · sistema = trial y enterprise · legacy = plan viejo por migrar · desconocido = id sin reconocer
-                </p>
-              </>
-            ) : (
-              <SinDetalle cargando={cargandoDetalle} />
-            )}
+          <Seccion id="planes" titulo="Por plan" descripcion="Cuántas cuentas hay en cada plan, por origen." className="scroll-mt-16" sinRelleno>
+            <div className="px-4 py-2 text-[12.5px] text-gray-500 border-b border-gray-100">
+              {entero(detalle.totales.total)} cuentas · {entero(detalle.totales.directo)} directas · {entero(detalle.totales.reseller)} de reseller · {entero(detalle.totales.vendedor)} de vendedor · {entero(detalle.totales.legacy)} en planes legacy
+            </div>
+            <Tabla>
+              <thead>
+                <tr>
+                  <Th>Plan</Th>
+                  <Th>Clase</Th>
+                  <Th alinear="der">Precio</Th>
+                  <Th alinear="der">Cuentas</Th>
+                  <Th alinear="der">Activas</Th>
+                  <Th alinear="der">Directas</Th>
+                  <Th alinear="der">Reseller</Th>
+                  <Th alinear="der">Vendedor</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {detalle.planes.map(p => (
+                  <Fila key={p.planId}>
+                    <Td>{p.nombre} <span className="text-gray-400 font-mono text-[11px]">{p.planId}</span></Td>
+                    <Td apagado className={p.clase === 'desconocido' ? 'text-red-600' : ''}>{p.clase}</Td>
+                    <Td numero apagado>{p.precio != null ? moneda(p.precio) : '—'}</Td>
+                    <Td numero className="font-medium">{entero(p.total)}</Td>
+                    <Td numero>{entero(p.activos)}</Td>
+                    <Td numero apagado>{entero(p.directo)}</Td>
+                    <Td numero apagado>{entero(p.reseller)}</Td>
+                    <Td numero apagado>{entero(p.vendedor)}</Td>
+                  </Fila>
+                ))}
+              </tbody>
+            </Tabla>
+            <p className="px-4 py-2 text-[11.5px] text-gray-500">
+              vendible = catálogo actual · sistema = trial y enterprise · legacy = plan viejo por migrar · desconocido = id sin reconocer
+            </p>
           </Seccion>
 
           <Seccion titulo="Por departamento" sinRelleno>
-            {detalle ? (
-              <Tabla>
-                <thead>
-                  <tr>
-                    <Th>Departamento</Th>
-                    <Th alinear="der">Cuentas</Th>
-                    <Th alinear="der">Activas</Th>
-                    <Th alinear="der">Trial</Th>
-                    <Th alinear="der">Vencidas</Th>
-                    <Th alinear="der">Suspendidas</Th>
-                    <Th alinear="der">% del total</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {detalle.departamentos.map(d => (
-                    <Fila key={d.departamento}>
-                      <Td className={d.departamento === 'Sin departamento' ? 'text-gray-400' : ''}>{d.departamento}</Td>
-                      <Td numero className="font-medium">{entero(d.total)}</Td>
-                      <Td numero>{entero(d.activos)}</Td>
-                      <Td numero apagado>{entero(d.trial)}</Td>
-                      <Td numero className={d.vencidos ? 'text-red-600' : 'text-gray-400'}>{entero(d.vencidos)}</Td>
-                      <Td numero className={d.suspendidos ? 'text-red-600' : 'text-gray-400'}>{entero(d.suspendidos)}</Td>
-                      <Td numero apagado>{porcentaje(d.total, detalle.totales.total)}</Td>
-                    </Fila>
-                  ))}
-                </tbody>
-              </Tabla>
-            ) : (
-              <SinDetalle cargando={cargandoDetalle} />
-            )}
+            <Tabla>
+              <thead>
+                <tr>
+                  <Th>Departamento</Th>
+                  <Th alinear="der">Cuentas</Th>
+                  <Th alinear="der">Activas</Th>
+                  <Th alinear="der">Trial</Th>
+                  <Th alinear="der">Vencidas</Th>
+                  <Th alinear="der">Suspendidas</Th>
+                  <Th alinear="der">% del total</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {detalle.departamentos.map(d => (
+                  <Fila key={d.departamento}>
+                    <Td className={d.departamento === 'Sin departamento' ? 'text-gray-400' : ''}>{d.departamento}</Td>
+                    <Td numero className="font-medium">{entero(d.total)}</Td>
+                    <Td numero>{entero(d.activos)}</Td>
+                    <Td numero apagado>{entero(d.trial)}</Td>
+                    <Td numero className={d.vencidos ? 'text-red-600' : 'text-gray-400'}>{entero(d.vencidos)}</Td>
+                    <Td numero className={d.suspendidos ? 'text-red-600' : 'text-gray-400'}>{entero(d.suspendidos)}</Td>
+                    <Td numero apagado>{porcentaje(d.total, detalle.totales.total)}</Td>
+                  </Fila>
+                ))}
+              </tbody>
+            </Tabla>
           </Seccion>
 
-          {/* ── Uso ────────────────────────────────────────────────────── */}
           <Seccion id="uso" titulo="Cuentas con más documentos este mes" className="scroll-mt-16" sinRelleno>
             <Tabla>
               <thead>
@@ -507,96 +359,64 @@ export default function AdminResumen() {
             </Tabla>
           </Seccion>
 
-          {/* ── Adquisición ────────────────────────────────────────────── */}
           <Seccion id="adquisicion" titulo="Adquisición (últimos 30 días)" className="scroll-mt-16">
             <Adquisicion datos={adquisicion} />
           </Seccion>
 
-          {/* ── Retención ──────────────────────────────────────────────── */}
-          <Seccion
-            id="retencion"
-            titulo="Retención"
-            descripcion="Calculada en vivo sobre los pagos de cada cuenta. Los archivados no cuentan."
-            className="scroll-mt-16"
-            acciones={!detalle && (
-              <Boton tamano="sm" onClick={cargarDetalle} disabled={cargandoDetalle}>
-                {cargandoDetalle ? 'Cargando…' : 'Calcular'}
-              </Boton>
-            )}
-          >
-            {detalle ? (
-              <>
-                <Cifras>
-                  <Cifra etiqueta="Tasa de retención" valor={detalle.retencion.tasa !== null ? `${detalle.retencion.tasa} %` : '—'} nota="vigentes / los que ya pasaron su primer vencimiento" />
-                  <Cifra etiqueta="Tasa histórica" valor={detalle.retencion.tasaHistorica !== null ? `${detalle.retencion.tasaHistorica} %` : '—'} nota="renovaciones / oportunidades" />
-                  <Cifra etiqueta="Con pagos" valor={entero(detalle.retencion.conPagos)} />
-                  <Cifra etiqueta="Vigentes" valor={entero(detalle.retencion.vigentes)} nota={`${entero(detalle.retencion.enPrimerPeriodo)} en su primer periodo`} />
-                  <Cifra etiqueta="Vencieron sin renovar" valor={entero(detalle.retencion.sinRenovar)} alerta={detalle.retencion.sinRenovar > 0} />
-                  <Cifra etiqueta="Ingresos históricos" valor={moneda(detalle.retencion.ingresos)} />
-                </Cifras>
-                <p className="mt-3 text-[11.5px] text-gray-500">
-                  Retención: {entero(detalle.retencion.renovados)} de {entero(detalle.retencion.candidatos)} candidatos siguen vigentes.
-                  Histórica: {entero(detalle.retencion.renovaciones)} renovaciones en {entero(detalle.retencion.oportunidades)} oportunidades; cada vencimiento cuenta como una.
-                </p>
-              </>
-            ) : (
-              <p className="text-[12.5px] text-gray-500">{cargandoDetalle ? 'Calculando…' : 'Pulsa Calcular para recorrer los pagos de todas las cuentas.'}</p>
-            )}
+          <Seccion id="retencion" titulo="Retención" descripcion="Calculada en vivo sobre los pagos de cada cuenta. Los archivados no cuentan." className="scroll-mt-16">
+            <Cifras>
+              <Cifra etiqueta="Tasa de retención" valor={detalle.retencion.tasa !== null ? `${detalle.retencion.tasa} %` : '—'} nota="vigentes / los que ya pasaron su primer vencimiento" />
+              <Cifra etiqueta="Tasa histórica" valor={detalle.retencion.tasaHistorica !== null ? `${detalle.retencion.tasaHistorica} %` : '—'} nota="renovaciones / oportunidades" />
+              <Cifra etiqueta="Con pagos" valor={entero(detalle.retencion.conPagos)} />
+              <Cifra etiqueta="Vigentes" valor={entero(detalle.retencion.vigentes)} nota={`${entero(detalle.retencion.enPrimerPeriodo)} en su primer periodo`} />
+              <Cifra etiqueta="Vencieron sin renovar" valor={entero(detalle.retencion.sinRenovar)} alerta={detalle.retencion.sinRenovar > 0} />
+              <Cifra etiqueta="Ingresos históricos" valor={moneda(detalle.retencion.ingresos)} />
+            </Cifras>
+            <p className="mt-3 text-[11.5px] text-gray-500">
+              Retención: {entero(detalle.retencion.renovados)} de {entero(detalle.retencion.candidatos)} candidatos siguen vigentes.
+              Histórica: {entero(detalle.retencion.renovaciones)} renovaciones en {entero(detalle.retencion.oportunidades)} oportunidades; cada vencimiento cuenta como una.
+            </p>
           </Seccion>
 
-          {/* ── Reporte de inversores ──────────────────────────────────── */}
-          <Seccion
-            id="inversores"
-            titulo="Reporte para inversores"
-            descripcion={reporteEn
-              ? `Calculado ${reporteEn.toLocaleString('es-PE')} (${haceCuanto(reporteEn)})${reporte?.calculationTimeSeconds != null ? ` en ${reporte.calculationTimeSeconds} s` : ''}. Queda guardado hasta el próximo recálculo.`
-              : 'Recorre toda la plataforma y guarda el resultado; solo se recalcula cuando lo pides.'}
-            className="scroll-mt-16"
-            acciones={
-              <Boton tamano="sm" onClick={recalcular} disabled={recalculando}>
-                {recalculando ? 'Calculando…' : hayReporte ? 'Recalcular' : 'Generar reporte'}
-              </Boton>
-            }
-          >
-            {hayReporte ? <Inversores r={reporte} /> : (
-              <p className="text-[12.5px] text-gray-500">{recalculando ? 'Calculando… puede tardar varios minutos.' : 'Todavía no se generó el reporte.'}</p>
-            )}
-          </Seccion>
+          {hayReporte && (
+            <Seccion titulo="Reporte para inversores, completo" descripcion={reporteEn ? `Foto del ${reporteEn.toLocaleString('es-PE')}.` : undefined}>
+              <Inversores r={reporte} />
+            </Seccion>
+          )}
 
-          {/* ── Actividad reciente ─────────────────────────────────────── */}
           <div id="actividad" className="grid grid-cols-1 lg:grid-cols-2 gap-4 scroll-mt-16">
             <Seccion titulo="Cuentas recientes" sinRelleno acciones={<Link to="/app/admin/users" className="text-[12.5px] text-primary-700 hover:underline">Ver todas</Link>}>
               <Tabla>
                 <tbody>
-                  {(stats?.recentUsers || []).map((u, i) => (
+                  {(stats.recentUsers || []).map((u, i) => (
                     <Fila key={i}>
-                      <Td>
-                        <Link to={`/app/admin/users?q=${encodeURIComponent(u.email || '')}`} className="hover:underline">{u.businessName || 'Sin nombre'}</Link>
-                        <div className="text-[11.5px] text-gray-500">{u.email}</div>
+                      <Td className="max-w-[240px]">
+                        <Link to={`/app/admin/users/${u.id}`} className="block truncate hover:underline">{u.businessName || 'Sin nombre'}</Link>
+                        <div className="truncate text-[11.5px] text-gray-500">{u.email}</div>
                       </Td>
                       <Td apagado>{u.planName || PLANS[u.plan]?.name || u.plan}</Td>
                       <Td numero apagado>{fecha(u.createdAt)}</Td>
                     </Fila>
                   ))}
-                  {!(stats?.recentUsers || []).length && <FilaVacia colSpan={3}>Sin cuentas recientes</FilaVacia>}
+                  {!(stats.recentUsers || []).length && <FilaVacia colSpan={3}>Sin cuentas nuevas en la última semana</FilaVacia>}
                 </tbody>
               </Tabla>
             </Seccion>
             <Seccion titulo="Pagos recientes" sinRelleno acciones={<Link to="/app/admin/payments" className="text-[12.5px] text-primary-700 hover:underline">Ver historial</Link>}>
               <Tabla>
                 <tbody>
-                  {(stats?.recentPayments || []).map((p, i) => (
+                  {(stats.recentPayments || []).map((p, i) => (
                     <Fila key={i}>
-                      <Td>
-                        {p.businessName || 'Sin nombre'}
-                        <div className="text-[11.5px] text-gray-500">{p.email}</div>
+                      <Td className="max-w-[240px]">
+                        <Link to={`/app/admin/users/${p.userId}`} className="block truncate hover:underline">{p.businessName || 'Sin nombre'}</Link>
+                        <div className="truncate text-[11.5px] text-gray-500">{p.email}</div>
                       </Td>
                       <Td apagado>{p.planName || PLANS[p.plan]?.name || p.plan}{p.method ? ` · ${p.method}` : ''}</Td>
                       <Td numero className="font-medium">{moneda(p.amount)}</Td>
                       <Td numero apagado>{fecha(p.date)}</Td>
                     </Fila>
                   ))}
-                  {!(stats?.recentPayments || []).length && <FilaVacia colSpan={4}>Sin pagos recientes</FilaVacia>}
+                  {!(stats.recentPayments || []).length && <FilaVacia colSpan={4}>Sin pagos este mes</FilaVacia>}
                 </tbody>
               </Tabla>
             </Seccion>
@@ -607,21 +427,13 @@ export default function AdminResumen() {
   )
 }
 
-function SinDetalle({ cargando }) {
-  return (
-    <p className="px-4 py-6 text-[12.5px] text-gray-500 text-center">
-      {cargando ? 'Leyendo suscripciones y negocios…' : 'Pulsa Cargar detalle para leer todas las cuentas.'}
-    </p>
-  )
-}
-
 function FilaConteo({ etiqueta, valor, total, nota, rojo = false }) {
   const n = Number(valor) || 0
   return (
     <Fila>
       <Td apagado>{etiqueta}{nota && <span className="ml-1.5 text-[11px] text-gray-400">{nota}</span>}</Td>
       <Td numero className={rojo && n > 0 ? 'text-red-600 font-medium' : 'font-medium'}>{entero(n)}</Td>
-      <Td numero apagado ancho={64}>{total ? porcentaje(n, total) : ''}</Td>
+      <Td numero apagado>{total ? porcentaje(n, total) : ''}</Td>
     </Fila>
   )
 }
@@ -631,18 +443,12 @@ function Grafico({ datos, clave, nombre, dinero = false }) {
   const filas = datos || []
   if (!filas.length) return <p className="text-[12.5px] text-gray-500 py-8 text-center">Sin datos</p>
   return (
-    <div className="h-56">
+    <div className="h-52 sm:h-56">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={filas} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} vertical={false} />
           <XAxis dataKey="month" tick={{ fontSize: 11, fill: CHART.axis }} stroke={CHART.grid} axisLine={false} tickLine={false} />
-          <YAxis
-            tick={{ fontSize: 11, fill: CHART.axis }}
-            stroke={CHART.grid}
-            axisLine={false}
-            tickLine={false}
-            tickFormatter={v => (v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : v)}
-          />
+          <YAxis tick={{ fontSize: 11, fill: CHART.axis }} stroke={CHART.grid} axisLine={false} tickLine={false} tickFormatter={v => (v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : v)} />
           <Tooltip contentStyle={{ ...CHART_TOOLTIP, fontSize: 12 }} formatter={v => [dinero ? moneda(v) : entero(v), nombre]} />
           <Area type="monotone" dataKey={clave} name={nombre} stroke={CHART.primary} strokeWidth={2} fill={CHART.primary} fillOpacity={0.08} />
         </AreaChart>
@@ -656,12 +462,8 @@ function Adquisicion({ datos }) {
   if (!datos.hasData) {
     return (
       <div className="space-y-3 max-w-2xl">
-        <Aviso titulo="Todavía no hay visitas medidas">
-          La medición de origen se activó hace poco; las visitas y registros anteriores no tienen origen.
-        </Aviso>
-        <p className="text-[12.5px] text-gray-500">
-          Los anuncios de Google y Meta se detectan solos. Para el resto, agrega parámetros al enlace que compartas:
-        </p>
+        <Aviso titulo="Todavía no hay visitas medidas">La medición de origen se activó hace poco; las visitas y registros anteriores no tienen origen.</Aviso>
+        <p className="text-[12.5px] text-gray-500">Los anuncios de Google y Meta se detectan solos. Para el resto, agrega parámetros al enlace que compartas:</p>
         <code className="block text-[12px] bg-gray-50 border border-gray-200 rounded-md px-3 py-2 text-gray-700 break-all">
           cobrifyperu.com/?utm_source=instagram&amp;utm_medium=publicidad&amp;utm_campaign=agosto
         </code>
@@ -692,15 +494,10 @@ function Adquisicion({ datos }) {
         </div>
       )}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="border border-gray-200 rounded-md overflow-hidden">
+        <div className="min-w-0 border border-gray-200 rounded-md overflow-hidden">
           <Tabla>
             <thead>
-              <tr>
-                <Th>Fuente</Th>
-                <Th alinear="der">Visitas</Th>
-                <Th alinear="der">%</Th>
-                <Th alinear="der">Registros</Th>
-              </tr>
+              <tr><Th>Fuente</Th><Th alinear="der">Visitas</Th><Th alinear="der">%</Th><Th alinear="der">Registros</Th></tr>
             </thead>
             <tbody>
               {(datos.visitsBySource || []).map(s => (
@@ -714,14 +511,10 @@ function Adquisicion({ datos }) {
             </tbody>
           </Tabla>
         </div>
-        <div className="border border-gray-200 rounded-md overflow-hidden">
+        <div className="min-w-0 border border-gray-200 rounded-md overflow-hidden">
           <Tabla>
             <thead>
-              <tr>
-                <Th>Tipo de canal</Th>
-                <Th alinear="der">Visitas</Th>
-                <Th alinear="der">%</Th>
-              </tr>
+              <tr><Th>Tipo de canal</Th><Th alinear="der">Visitas</Th><Th alinear="der">%</Th></tr>
             </thead>
             <tbody>
               {(datos.visitsByMedium || []).map(m => (
@@ -755,17 +548,8 @@ function Inversores({ r }) {
     ['Más de una sucursal', r.businessFlags?.withMultipleBranches],
     ['Fotos de productos', r.businessFlags?.withProductImages],
   ]
-  const ret = r.retention
   return (
     <div className="space-y-5">
-      <Cifras>
-        <Cifra etiqueta="Total facturado por los negocios" valor={moneda(r.invoicing?.totalAmount)} nota={`${entero(r.invoicing?.totalDocuments)} comprobantes`} />
-        <Cifra etiqueta="MRR" valor={moneda(r.subscriptions?.mrr)} />
-        <Cifra etiqueta="ARR proyectado" valor={moneda(r.subscriptions?.arr)} nota={`${entero(r.businesses?.active)} negocios activos`} />
-        {ret && <Cifra etiqueta="Retención" valor={ret.currentRate !== null && ret.currentRate !== undefined ? `${ret.currentRate} %` : '—'} nota={`${entero(ret.renewed)} / ${entero(ret.candidates)}`} />}
-        {ret && <Cifra etiqueta="Renovación histórica" valor={ret.lifetimeRate !== null && ret.lifetimeRate !== undefined ? `${ret.lifetimeRate} %` : '—'} nota={`${entero(ret.totalRenewals)} / ${entero(ret.totalOpportunities)}`} />}
-      </Cifras>
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Bloque titulo="Negocios">
           <tbody>
@@ -798,9 +582,7 @@ function Inversores({ r }) {
         </Bloque>
         <Bloque titulo="Funciones que usan">
           <tbody>
-            {funciones.map(([nombre, n]) => (
-              <FilaConteo key={nombre} etiqueta={nombre} valor={n || 0} total={total} />
-            ))}
+            {funciones.map(([nombre, n]) => <FilaConteo key={nombre} etiqueta={nombre} valor={n || 0} total={total} />)}
           </tbody>
         </Bloque>
         <Bloque titulo="Volumen">
@@ -823,19 +605,13 @@ function Inversores({ r }) {
       </div>
 
       {r.topBusinessesByRevenue?.length > 0 && (
-        <div className="border border-gray-200 rounded-md overflow-hidden">
+        <div className="min-w-0 border border-gray-200 rounded-md overflow-hidden">
           <div className="px-3 py-2 text-[12.5px] font-medium text-gray-900 border-b border-gray-200 bg-gray-50">
             Las {r.topBusinessesByRevenue.length} empresas que más facturan
           </div>
           <Tabla>
             <thead>
-              <tr>
-                <Th ancho={40} alinear="der">#</Th>
-                <Th>Empresa</Th>
-                <Th>Tipo</Th>
-                <Th alinear="der">Comprobantes</Th>
-                <Th alinear="der">Facturado</Th>
-              </tr>
+              <tr><Th ancho={40} alinear="der">#</Th><Th>Empresa</Th><Th>Tipo</Th><Th alinear="der">Comprobantes</Th><Th alinear="der">Facturado</Th></tr>
             </thead>
             <tbody>
               {r.topBusinessesByRevenue.map((b, i) => (
@@ -852,16 +628,14 @@ function Inversores({ r }) {
         </div>
       )}
 
-      <p className="text-[11.5px] text-gray-500">
-        Calculado en {r.calculationTimeSeconds} s sobre {entero(r.businessesProcessed)} negocios.
-      </p>
+      <p className="text-[11.5px] text-gray-500">Calculado en {r.calculationTimeSeconds} s sobre {entero(r.businessesProcessed)} negocios.</p>
     </div>
   )
 }
 
 function Bloque({ titulo: nombre, children }) {
   return (
-    <div className="border border-gray-200 rounded-md overflow-hidden">
+    <div className="min-w-0 border border-gray-200 rounded-md overflow-hidden">
       <div className="px-3 py-2 text-[12.5px] font-medium text-gray-900 border-b border-gray-200 bg-gray-50">{nombre}</div>
       <Tabla>{children}</Tabla>
     </div>

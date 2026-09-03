@@ -26,7 +26,7 @@ import { Pagina, Seccion, Tabla, Th, Td, Fila, FilaVacia, Filtros, FiltroSelect,
 // (/app/admin/users/:id); el menu de la derecha tiene los atajos.
 
 const STATUS_LABELS = { active: 'Activo', trial: 'Trial', suspended: 'Suspendido', expired: 'Vencido' }
-const PAGE_SIZE = 50
+const PAGE_SIZE = 10
 
 // Nombre del plan con su precio
 const getPlanDisplay = user => {
@@ -85,6 +85,8 @@ export default function AdminUsers() {
   const [sortField, setSortField] = useState('createdAt')
   const [sortDirection, setSortDirection] = useState('desc')
   const [currentPage, setCurrentPage] = useState(1)
+  // En el celular los nueve filtros van plegados detras de un boton
+  const [mostrarFiltros, setMostrarFiltros] = useState(false)
 
   // Un solo modal abierto a la vez: { tipo, cuenta }
   const [modal, setModal] = useState(null)
@@ -469,10 +471,44 @@ export default function AdminUsers() {
   // ── Render ──────────────────────────────────────────────────────────────────
 
   const orden = { campo: sortField, direccion: sortDirection }
-  const hayFiltros = Boolean(searchTerm) || [statusFilter, planFilter, sourceFilter, vendedorFilter, modeFilter, rubroFilter, igvFilter, venceFilter].some(f => f !== 'all')
+  const cuantosFiltros = [statusFilter, planFilter, sourceFilter, vendedorFilter, modeFilter, rubroFilter, igvFilter, venceFilter].filter(f => f !== 'all').length
+  const hayFiltros = Boolean(searchTerm) || cuantosFiltros > 0
   const resumen = loading
     ? 'Cargando cuentas…'
     : `${filteredUsers.length} de ${users.length} cuentas · ${stats.active} activas · ${stats.trial} en trial · ${stats.expired} vencidas · ${stats.suspended} suspendidas${stats.archived ? ` · ${stats.archived} archivadas` : ''}`
+
+  // Menu ⋯ de una cuenta. Es `position: fixed` (se ancla al boton que lo
+  // abrio), asi que sirve igual desde la tabla y desde las tarjetas del celular.
+  // Es una funcion y no un componente para que no se remonte en cada render.
+  const menuAcciones = (user, vencida) => (
+            <div
+              className="fixed w-52 bg-white rounded-md border border-gray-200 shadow-md py-1 z-50 text-left"
+              style={{ top: actionMenuPosition.top, left: actionMenuPosition.left }}
+            >
+              <ItemMenu onClick={() => irAFicha(user)}>Ver ficha</ItemMenu>
+              <ItemMenu onClick={() => abrirModal('pago', user)}>Registrar pago</ItemMenu>
+              <ItemMenu onClick={() => renovarRapido(user)}>Renovar con el mismo plan</ItemMenu>
+              <ItemMenu onClick={() => abrirModal('plan', user)}>Cambiar plan</ItemMenu>
+              <ItemMenu onClick={() => abrirModal('vencimiento', user)}>Cambiar vencimiento</ItemMenu>
+              <ItemMenu onClick={() => abrirWhatsApp(user)}>Recordar por WhatsApp</ItemMenu>
+              <div className="border-t border-gray-100 my-1" />
+              <ItemMenu onClick={() => abrirModal('contacto', user)}>Contacto del dueño</ItemMenu>
+              <ItemMenu onClick={() => abrirModal('vendedor', user)}>Vendedor</ItemMenu>
+              <ItemMenu onClick={() => abrirModal('sunat', user)}>Emisión electrónica</ItemMenu>
+              <ItemMenu onClick={() => abrirModal('funciones', user)}>Funciones especiales</ItemMenu>
+              <ItemMenu onClick={() => abrirModal('sucursales', user)}>Sucursales</ItemMenu>
+              <div className="border-t border-gray-100 my-1" />
+              {user.status !== 'suspended' ? (
+                <ItemMenu onClick={() => toggleUserAccess(user.id, true)}>Suspender</ItemMenu>
+              ) : (
+                <ItemMenu onClick={() => toggleUserAccess(user.id, false)}>Reactivar</ItemMenu>
+              )}
+              {(user.status === 'suspended' || vencida || user.archived) && (
+                <ItemMenu onClick={() => archivar(user, !user.archived)}>{user.archived ? 'Desarchivar' : 'Archivar'}</ItemMenu>
+              )}
+              <ItemMenu rojo onClick={() => abrirModal('eliminar', user)}>Eliminar cuenta</ItemMenu>
+            </div>
+  )
 
   return (
     <Pagina
@@ -495,6 +531,14 @@ export default function AdminUsers() {
     >
       <Filtros>
         <Buscador ancho="w-full sm:w-80" placeholder="Nombre, correo, RUC, teléfono, dirección" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+        <button
+          type="button"
+          onClick={() => setMostrarFiltros(v => !v)}
+          className="sm:hidden h-8 px-2.5 rounded-md border border-gray-300 bg-white text-[12.5px] text-gray-700"
+        >
+          {mostrarFiltros ? 'Ocultar filtros' : `Filtros${cuantosFiltros ? ` (${cuantosFiltros})` : ''}`}
+        </button>
+        <div className={`${mostrarFiltros ? 'flex' : 'hidden'} sm:contents w-full flex-wrap items-center gap-2`}>
         <FiltroSelect value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
           <option value="all">Estado</option>
           <option value="active">Activas</option>
@@ -559,12 +603,60 @@ export default function AdminUsers() {
           <option value="nrus">NRUS ({users.filter(u => u.taxType === 'nrus').length})</option>
           <option value="standard">18% ({users.filter(u => u.taxType === 'standard' && u.igvRate === 18).length})</option>
         </FiltroSelect>
+        </div>
         {hayFiltros && (
           <button type="button" onClick={limpiarFiltros} className="h-8 px-2 text-[12.5px] text-gray-500 hover:text-gray-900">Limpiar</button>
         )}
       </Filtros>
 
       <Seccion sinRelleno className="overflow-hidden">
+        {/* Celular: una tarjeta por cuenta (la tabla no cabe) */}
+        <div className="sm:hidden divide-y divide-gray-100">
+          {loading ? (
+            <p className="px-3 py-8 text-center text-[12.5px] text-gray-500">Cargando cuentas…</p>
+          ) : filteredUsers.length === 0 ? (
+            <p className="px-3 py-8 text-center text-[12.5px] text-gray-500">Ninguna cuenta coincide con la búsqueda y los filtros</p>
+          ) : (
+            displayedUsers.map(user => {
+              const dias = diasParaVencer(user)
+              const vencida = dias !== null && dias < 0
+              const usados = user.usage?.invoicesThisMonth || 0
+              const ilimitado = user.limit === -1 || user.limit === 0
+              return (
+                <div key={user.id} className={`px-3 py-2.5 ${user.archived ? 'text-gray-400' : ''}`} onClick={() => irAFicha(user)}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate font-medium text-gray-900">{user.businessName}</div>
+                      <div className="truncate text-[11.5px] text-gray-500">
+                        {user.email}{user.ruc ? ` · ${user.ruc}` : ''}{user.codigoCliente ? ` · ${user.codigoCliente}` : ''}
+                      </div>
+                    </div>
+                    <div className="relative shrink-0" onClick={e => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={e => toggleActionMenu(user.id, e.currentTarget)}
+                        className="h-7 w-7 rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-900 text-[16px] leading-none"
+                        aria-label="Acciones"
+                      >
+                        ⋯
+                      </button>
+                      {actionMenuUser === user.id && menuAcciones(user, vencida)}
+                    </div>
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px] text-gray-500">
+                    <Estado valor={user.status} etiqueta={STATUS_LABELS[user.status] || user.status} />
+                    <span>{getPlanDisplay(user)}</span>
+                    {user.periodEnd && <span className={vencida ? 'text-red-600 font-medium' : ''}>Vence {formatDate(user.periodEnd)}</span>}
+                    <span>{usados}/{ilimitado ? '∞' : user.limit}</span>
+                    {user.rubroEfectivo && <span>{nombreRubro(user.rubroEfectivo)}{user.rubro ? '' : ' (sugerido)'}</span>}
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </div>
+
+        <div className="hidden sm:block">
         <Tabla alto="lg:max-h-[calc(100vh-12rem)]">
           <thead>
             <tr>
@@ -686,35 +778,7 @@ export default function AdminUsers() {
                       >
                         ⋯
                       </button>
-                      {actionMenuUser === user.id && (
-                        <div
-                          className="fixed w-52 bg-white rounded-md border border-gray-200 shadow-md py-1 z-50 text-left"
-                          style={{ top: actionMenuPosition.top, left: actionMenuPosition.left }}
-                        >
-                          <ItemMenu onClick={() => irAFicha(user)}>Ver ficha</ItemMenu>
-                          <ItemMenu onClick={() => abrirModal('pago', user)}>Registrar pago</ItemMenu>
-                          <ItemMenu onClick={() => renovarRapido(user)}>Renovar con el mismo plan</ItemMenu>
-                          <ItemMenu onClick={() => abrirModal('plan', user)}>Cambiar plan</ItemMenu>
-                          <ItemMenu onClick={() => abrirModal('vencimiento', user)}>Cambiar vencimiento</ItemMenu>
-                          <ItemMenu onClick={() => abrirWhatsApp(user)}>Recordar por WhatsApp</ItemMenu>
-                          <div className="border-t border-gray-100 my-1" />
-                          <ItemMenu onClick={() => abrirModal('contacto', user)}>Contacto del dueño</ItemMenu>
-                          <ItemMenu onClick={() => abrirModal('vendedor', user)}>Vendedor</ItemMenu>
-                          <ItemMenu onClick={() => abrirModal('sunat', user)}>Emisión electrónica</ItemMenu>
-                          <ItemMenu onClick={() => abrirModal('funciones', user)}>Funciones especiales</ItemMenu>
-                          <ItemMenu onClick={() => abrirModal('sucursales', user)}>Sucursales</ItemMenu>
-                          <div className="border-t border-gray-100 my-1" />
-                          {user.status !== 'suspended' ? (
-                            <ItemMenu onClick={() => toggleUserAccess(user.id, true)}>Suspender</ItemMenu>
-                          ) : (
-                            <ItemMenu onClick={() => toggleUserAccess(user.id, false)}>Reactivar</ItemMenu>
-                          )}
-                          {(user.status === 'suspended' || vencida || user.archived) && (
-                            <ItemMenu onClick={() => archivar(user, !user.archived)}>{user.archived ? 'Desarchivar' : 'Archivar'}</ItemMenu>
-                          )}
-                          <ItemMenu rojo onClick={() => abrirModal('eliminar', user)}>Eliminar cuenta</ItemMenu>
-                        </div>
-                      )}
+                      {actionMenuUser === user.id && menuAcciones(user, vencida)}
                     </Td>
                   </Fila>
                 )
@@ -722,6 +786,7 @@ export default function AdminUsers() {
             )}
           </tbody>
         </Tabla>
+        </div>
 
         {!loading && filteredUsers.length > PAGE_SIZE && (
           <div className="flex items-center justify-between gap-3 px-4 py-2 border-t border-gray-200 text-[12.5px] text-gray-500">

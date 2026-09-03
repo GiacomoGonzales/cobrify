@@ -2,6 +2,8 @@ import { forwardRef } from 'react'
 import { Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
+// Fila de filtros. En el celular cada select ocupa media fila; en escritorio,
+// lo que necesite.
 export function Filtros({ children, className }) {
   return <div className={cn('flex flex-wrap items-center gap-2', className)}>{children}</div>
 }
@@ -18,7 +20,7 @@ export const FiltroSelect = forwardRef(function FiltroSelect(
       ref={ref}
       value={value}
       className={cn(
-        'h-8 rounded-md border bg-white pl-2.5 pr-7 text-[12.5px] focus:outline-none focus:ring-2 focus:ring-primary-500/40 focus:border-primary-500',
+        'h-8 max-w-full flex-1 basis-[calc(50%-0.25rem)] sm:flex-none sm:basis-auto rounded-md border bg-white pl-2.5 pr-7 text-[12.5px] focus:outline-none focus:ring-2 focus:ring-primary-500/40 focus:border-primary-500',
         puesto ? 'border-gray-500 text-gray-900' : 'border-gray-300 text-gray-600',
         className
       )}
@@ -29,7 +31,7 @@ export const FiltroSelect = forwardRef(function FiltroSelect(
   )
 })
 
-export const Buscador = forwardRef(function Buscador({ className, ancho = 'w-72', ...props }, ref) {
+export const Buscador = forwardRef(function Buscador({ className, ancho = 'w-full sm:w-72', ...props }, ref) {
   return (
     <div className={cn('relative', ancho, className)}>
       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />

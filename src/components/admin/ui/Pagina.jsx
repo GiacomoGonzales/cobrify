@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 // flex con gap (no space-y) para que los modales fijos hijos no hereden margen.
 export default function Pagina({ resumen, acciones, className, children }) {
   return (
-    <div className={cn('flex flex-col gap-4', className)}>
+    <div className={cn('flex flex-col gap-4 min-w-0', className)}>
       {(resumen || acciones) && (
         <div className="flex flex-wrap items-center justify-between gap-3 min-h-8">
           <div className="text-[12.5px] text-gray-500 tabular-nums">{resumen}</div>

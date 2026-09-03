@@ -7,32 +7,16 @@ import { Search, Menu, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TituloAdminContext } from '@/components/admin/ui/tituloAdmin'
 
-// Menu del panel: cuatro bloques, solo texto. El orden es el del dia a dia:
-// primero las cuentas, despues el dinero, los numeros globales y lo operativo.
-const GRUPOS = [
-  {
-    titulo: 'Cuentas',
-    items: [
-      { path: '/app/admin/users', label: 'Usuarios' },
-      { path: '/app/admin/resellers', label: 'Resellers' },
-    ],
-  },
-  {
-    titulo: 'Dinero',
-    items: [{ path: '/app/admin/payments', label: 'Pagos' }],
-  },
-  {
-    titulo: 'Global',
-    items: [{ path: '/app/admin/resumen', label: 'Resumen' }],
-  },
-  {
-    titulo: 'Operación',
-    items: [
-      { path: '/app/admin/cpe', label: 'Comprobantes CPE' },
-      { path: '/app/admin/notifications', label: 'Notificaciones' },
-      { path: '/app/admin/settings', label: 'Configuración' },
-    ],
-  },
+// Menu del panel: una lista, solo texto, sin titulos de bloque. El Resumen
+// va primero; la bandeja de WhatsApp (que vive fuera del panel) al final.
+const ITEMS = [
+  { path: '/app/admin/resumen', label: 'Resumen' },
+  { path: '/app/admin/users', label: 'Usuarios' },
+  { path: '/app/admin/resellers', label: 'Resellers' },
+  { path: '/app/admin/payments', label: 'Pagos' },
+  { path: '/app/admin/cpe', label: 'Comprobantes' },
+  { path: '/app/admin/notifications', label: 'Notificaciones' },
+  { path: '/app/admin/settings', label: 'Configuración' },
 ]
 
 // Rutas que ya no estan en el menu pero siguen existiendo (o redirigen):
@@ -44,8 +28,6 @@ const TITULOS_SUELTOS = {
   '/app/admin/plan-distribution': 'Resumen',
   '/app/admin/expirations': 'Usuarios',
 }
-
-const ITEMS = GRUPOS.flatMap(g => g.items)
 
 function Item({ item, onClick }) {
   return (
@@ -64,27 +46,35 @@ function Item({ item, onClick }) {
   )
 }
 
+// La bandeja de WhatsApp vive fuera del panel, a pantalla completa: en el
+// navegador se abre en otra pestana para no perder el admin; dentro de la app
+// nativa no hay pestanas (y la base es relativa), asi que ahi se navega igual.
+function EnlaceWhatsapp({ onClick }) {
+  const clases = 'mt-3 block px-2.5 py-1.5 rounded-md text-[13px] text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+  const contenido = <>WhatsApp <span className="text-gray-400">↗</span></>
+
+  if (Capacitor.isNativePlatform()) {
+    return (
+      <NavLink to="/chat" onClick={onClick} className={clases}>
+        {contenido}
+      </NavLink>
+    )
+  }
+
+  return (
+    <a href="/chat" target="_blank" rel="noopener noreferrer" onClick={onClick} className={clases}>
+      {contenido}
+    </a>
+  )
+}
+
 function Menu_({ onNavegar }) {
   return (
-    <nav className="px-3 py-3">
-      {/* La bandeja de WhatsApp vive fuera del panel, a pantalla completa. */}
-      <NavLink
-        to="/chat"
-        onClick={onNavegar}
-        className="block px-2.5 py-1.5 rounded-md text-[13px] text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-      >
-        WhatsApp <span className="text-gray-400">↗</span>
-      </NavLink>
-      {GRUPOS.map(grupo => (
-        <div key={grupo.titulo} className="mt-4">
-          <p className="px-2.5 mb-1 text-[11px] font-medium uppercase tracking-wider text-gray-400">{grupo.titulo}</p>
-          <div className="space-y-px">
-            {grupo.items.map(item => (
-              <Item key={item.path} item={item} onClick={onNavegar} />
-            ))}
-          </div>
-        </div>
+    <nav className="px-3 py-3 space-y-px">
+      {ITEMS.map(item => (
+        <Item key={item.path} item={item} onClick={onNavegar} />
       ))}
+      <EnlaceWhatsapp onClick={onNavegar} />
     </nav>
   )
 }
@@ -194,6 +184,17 @@ export default function AdminLayout() {
                   <X className="w-4 h-4" />
                 </button>
               </div>
+              <form onSubmit={buscar} className="relative px-3 pt-3">
+                <Search className="absolute left-[22px] top-[21px] w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                <input
+                  type="search"
+                  value={busqueda}
+                  onChange={e => setBusqueda(e.target.value)}
+                  placeholder="Buscar cuenta, RUC, teléfono"
+                  className="h-8 w-full rounded-md border border-gray-300 bg-white pl-8 pr-2.5 text-[12.5px] text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500/40 focus:border-primary-500"
+                  aria-label="Buscar cuenta"
+                />
+              </form>
               <div className="flex-1 overflow-y-auto sidebar-scrollbar">
                 <Menu_ onNavegar={() => setMenuAbierto(false)} />
               </div>
@@ -232,7 +233,7 @@ export default function AdminLayout() {
             </form>
           </header>
 
-          <div className="p-4 lg:p-5 w-full max-w-full overflow-x-hidden">
+          <div className="p-3 sm:p-4 lg:p-5 w-full max-w-full overflow-x-hidden">
             <Outlet />
           </div>
         </main>

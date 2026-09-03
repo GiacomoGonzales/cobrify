@@ -195,9 +195,9 @@ export default function AdminPayments() {
           <option value="all">Método</option>
           {Object.entries(METODOS).map(([k, n]) => <option key={k} value={k}>{n}</option>)}
         </FiltroSelect>
-        <Entrada type="date" value={dateRange.start} onChange={e => setDateRange(r => ({ ...r, start: e.target.value }))} className="w-40" aria-label="Desde" />
+        <Entrada type="date" value={dateRange.start} onChange={e => setDateRange(r => ({ ...r, start: e.target.value }))} className="w-[calc(50%-0.75rem)] sm:w-40" aria-label="Desde" />
         <span className="text-gray-400">–</span>
-        <Entrada type="date" value={dateRange.end} onChange={e => setDateRange(r => ({ ...r, end: e.target.value }))} className="w-40" aria-label="Hasta" />
+        <Entrada type="date" value={dateRange.end} onChange={e => setDateRange(r => ({ ...r, end: e.target.value }))} className="w-[calc(50%-0.75rem)] sm:w-40" aria-label="Hasta" />
         {hayFiltros && (
           <button type="button" onClick={() => { setSearchTerm(''); setMethodFilter('all'); setDateRange({ start: '', end: '' }) }} className="h-8 px-2 text-[12.5px] text-gray-500 hover:text-gray-900">
             Limpiar
@@ -212,6 +212,39 @@ export default function AdminPayments() {
       )}
 
       <Seccion sinRelleno className="overflow-hidden">
+        <div className="sm:hidden divide-y divide-gray-100">
+          {loading ? (
+            <p className="px-3 py-8 text-center text-[12.5px] text-gray-500">Cargando pagos…</p>
+          ) : filteredPayments.length === 0 ? (
+            <p className="px-3 py-8 text-center text-[12.5px] text-gray-500">Ningún pago coincide con los filtros</p>
+          ) : (
+            displayedPayments.map(p => (
+              <div key={p.id} className="px-3 py-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <Link to={`/app/admin/users/${p.subscriptionId}`} className="block truncate font-medium hover:underline">{p.businessName}</Link>
+                    <div className="truncate text-[11.5px] text-gray-500">
+                      {fechaHora(p.date)} · {METODOS[p.method] || p.method} · {p.planName || PLANS[p.plan]?.name || p.plan}
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="font-medium">{moneda(p.amount)}</div>
+                    <div className="text-[11.5px]"><Estado valor={p.status} etiqueta={ESTADOS[p.status] || p.status} /></div>
+                  </div>
+                </div>
+                <div className="mt-1.5 flex items-center justify-between gap-2">
+                  <span className="truncate text-[11.5px] text-gray-500">{p.notes || ''}</span>
+                  <div className="flex shrink-0 gap-1">
+                    <Boton tamano="sm" onClick={() => abrirEdicion(p)}>Editar</Boton>
+                    <Boton tamano="sm" variante="peligro" onClick={() => setEliminando(p)}>Eliminar</Boton>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="hidden sm:block">
         <Tabla alto="lg:max-h-[calc(100vh-12rem)]">
           <thead>
             <tr>
@@ -254,6 +287,7 @@ export default function AdminPayments() {
             )}
           </tbody>
         </Tabla>
+        </div>
         {!loading && filteredPayments.length > PAGE_SIZE && (
           <div className="flex items-center justify-between gap-3 px-4 py-2 border-t border-gray-200 text-[12.5px] text-gray-500">
             <span>{(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredPayments.length)} de {filteredPayments.length}</span>
