@@ -4,6 +4,24 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 
+    <!-- chat.localhost NO puede autenticar: la llave de Firebase acepta
+         peticiones solo desde una lista de direcciones y ese host no esta en
+         ella, asi que el login devuelve "requests-from-referer ... are-blocked".
+         Como es la direccion que uno escribe por costumbre, se desvia sola a
+         localhost con ?chat=1, que es lo mismo y si entra. Va aca arriba, antes
+         que cualquier otra cosa, para que ni siquiera arranque la app. -->
+    <script>
+      (function () {
+        try {
+          if (window.location.hostname.toLowerCase() !== 'chat.localhost') return;
+          var u = new URL(window.location.href);
+          u.hostname = 'localhost';
+          u.searchParams.set('chat', '1');
+          window.location.replace(u.toString());
+        } catch (e) { /* si falla, se queda donde estaba */ }
+      })();
+    </script>
+
     <!-- Preconnect to Cloudinary for faster image loading -->
     <link rel="preconnect" href="https://res.cloudinary.com" crossorigin />
     <link rel="dns-prefetch" href="https://res.cloudinary.com" />
