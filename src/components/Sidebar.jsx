@@ -2481,7 +2481,7 @@ function Sidebar() {
                     />
                     <span className={`font-medium text-sm ${sidebarCollapsed ? 'md:hidden' : ''}`}>{item.label}</span>
                     {item.adminOnly && (
-                      <span className={`ml-auto text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full ${sidebarCollapsed ? 'md:hidden' : ''}`}>
+                      <span className={`ml-auto text-xs chip-aviso px-2 py-0.5 rounded-full ${sidebarCollapsed ? 'md:hidden' : ''}`}>
                         Admin
                       </span>
                     )}

@@ -32,7 +32,7 @@ const STATUS_CONFIG = {
   },
   accepted: {
     label: 'Aceptado',
-    chipClass: 'bg-blue-100 text-blue-800 border-blue-300',
+    chipClass: 'chip-info border-blue-300',
     cardClass: 'border-l-4 border-l-blue-500',
     icon: ThumbsUp,
   },
@@ -50,7 +50,7 @@ const STATUS_CONFIG = {
   },
   cancelled: {
     label: 'Cancelado',
-    chipClass: 'bg-red-100 text-red-800 border-red-300',
+    chipClass: 'chip-error border-red-300',
     cardClass: 'border-l-4 border-l-red-500 opacity-60',
     icon: XCircle,
   },

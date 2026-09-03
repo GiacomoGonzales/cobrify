@@ -52,7 +52,7 @@ function AvisoVencimiento({ fecha, que }) {
   const vencido = aviso.tono === 'vencido'
   return (
     <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${
-      vencido ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-800'
+      vencido ? 'bg-red-100 text-red-700' : 'chip-aviso'
     }`}>
       <AlertTriangle className="w-3 h-3" />
       {aviso.texto}

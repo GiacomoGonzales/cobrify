@@ -878,9 +878,9 @@ export default function MySubscription() {
                         <td className="py-3 px-4 text-sm text-gray-600 capitalize">{method}</td>
                         <td className="py-3 px-4">
                           <span className={`px-2 py-1 text-xs rounded-full ${
-                            isFailed ? 'bg-red-100 text-red-800'
-                              : isPending ? 'bg-yellow-100 text-yellow-800'
-                              : 'bg-green-100 text-green-800'
+                            isFailed ? 'chip-error'
+                              : isPending ? 'chip-aviso'
+                              : 'chip-ok'
                           }`}>
                             {isFailed ? 'Fallido' : isPending ? 'Pendiente' : 'Pagado'}
                           </span>
@@ -950,7 +950,7 @@ export default function MySubscription() {
                           <td className="py-3 px-4 text-sm text-gray-900 capitalize">{client.planName || client.plan}</td>
                           <td className="py-3 px-4">
                             <span className={`px-2 py-1 text-xs rounded-full ${
-                              isClientActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                              isClientActive ? 'chip-ok' : 'chip-error'
                             }`}>
                               {isClientActive ? 'Activo' : client.status === 'trial' ? 'Prueba' : 'Suspendido'}
                             </span>

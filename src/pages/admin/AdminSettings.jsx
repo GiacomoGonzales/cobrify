@@ -1207,7 +1207,7 @@ function MaintenanceSection() {
                 </button>
 
                 {result && (
-                  <div className={`mt-3 p-3 rounded-lg ${result.success ? 'bg-gray-100 text-gray-900' : 'bg-red-100 text-red-800'}`}>
+                  <div className={`mt-3 p-3 rounded-lg ${result.success ? 'bg-gray-100 text-gray-900' : 'chip-error'}`}>
                     <p className="font-medium">{result.message}</p>
                     {result.details && result.details.length > 0 && (
                       <ul className="mt-2 text-sm">
@@ -1679,7 +1679,7 @@ function EmissionSecretsMigrationCard() {
             </button>
           </div>
           {result && (
-            <div className={`mt-3 p-3 rounded-lg text-sm ${result.success ? 'bg-gray-100 text-gray-900' : 'bg-red-100 text-red-800'}`}>
+            <div className={`mt-3 p-3 rounded-lg text-sm ${result.success ? 'bg-gray-100 text-gray-900' : 'chip-error'}`}>
               <p className="font-medium">{result.success ? `OK (${result.mode})` : `Error: ${result.error}`}</p>
               {result.stats && (
                 <p className="mt-1">Total: {result.stats.total} · con secretos: {result.stats.withSecrets} · copiados: {result.stats.copied} · borrados: {result.stats.deleted} · sin secretos: {result.stats.skipped}</p>

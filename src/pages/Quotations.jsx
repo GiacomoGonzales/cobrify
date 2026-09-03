@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useDeferredValue } from 'react'
+import { useState, useEffect, useMemo, useDeferredValue } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
@@ -48,7 +48,6 @@ import {
 import { createInvoice, getCompanySettings, getNextDocumentNumber } from '@/services/firestoreService'
 import { generateQuotationPDF, previewQuotationPDF } from '@/utils/quotationPdfGenerator'
 import { printQuotationTicket, getPrinterConfig, connectPrinter } from '@/services/thermalPrinterService'
-import { descargarTicketPdf } from '@/utils/ticketPdf'
 import InvoiceTicket from '@/components/InvoiceTicket'
 import { generateQuotationsExcel } from '@/services/quotationExportService'
 import { preloadLogo } from '@/utils/pdfGenerator'
@@ -94,8 +93,6 @@ export default function Quotations() {
 
   // Impresión web de ticket (window.print con el mismo diseño de las boletas)
   const [ticketQuotation, setTicketQuotation] = useState(null)
-  const [downloadingTicket, setDownloadingTicket] = useState(null) // cotización cuyo ticket se pasa a PDF
-  const ticketRef = useRef(null)
   const [ticketPaperWidth, setTicketPaperWidth] = useState(80)
   const [webPrintLegible, setWebPrintLegible] = useState(false)
   const [ticketFontSize, setTicketFontSize] = useState('small')
@@ -506,35 +503,6 @@ export default function Quotations() {
     await new Promise(r => setTimeout(r, 120))
     window.print()
     setTicketQuotation(null)
-  }
-
-  /**
-   * El ticket como ARCHIVO PDF, igual que en Ventas y en Guías.
-   * Ver src/utils/ticketPdf.js.
-   */
-  const handleDownloadTicketPdf = async (quotation) => {
-    if (downloadingTicket) return
-    setDownloadingTicket(quotation.id)
-    setTicketQuotation({
-      ...quotation,
-      documentType: 'cotizacion',
-      emissionDate: quotation.issueDate || quotation.createdAt,
-    })
-    try {
-      await new Promise(r => setTimeout(r, 150))
-      await descargarTicketPdf(ticketRef.current, {
-        anchoMm: a4SheetPrint ? 210 : ticketPaperWidth,
-        nombreArchivo: `Cotizacion_${quotation.number || 'sin_numero'}`,
-        titulo: `Cotización ${quotation.number || ''}`,
-      })
-      toast.success('Ticket descargado')
-    } catch (error) {
-      console.error('Error al generar el ticket en PDF:', error)
-      toast.error('No se pudo generar el ticket')
-    } finally {
-      setTicketQuotation(null)
-      setDownloadingTicket(null)
-    }
   }
 
   // Búsqueda con haystack pre-construido (perf): re-normaliza solo cuando cambia
@@ -985,7 +953,7 @@ export default function Quotations() {
                           onClick={() => { setOpenMenuId(null); setViewingQuotation(quotation) }}
                           className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                         >
-                          <Eye className="w-4 h-4 text-primary-600" />
+                          <Eye className="w-4 h-4 text-gray-400" />
                           <span>Ver detalles</span>
                         </button>
                         {quotation.status !== 'converted' && (
@@ -993,7 +961,7 @@ export default function Quotations() {
                             onClick={() => { setOpenMenuId(null); appNavigate(`cotizaciones/editar/${quotation.id}`) }}
                             className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                           >
-                            <Edit className="w-4 h-4 text-amber-600" />
+                            <Edit className="w-4 h-4 text-gray-400" />
                             <span>Editar</span>
                           </button>
                         )}
@@ -1001,36 +969,28 @@ export default function Quotations() {
                           onClick={() => { setOpenMenuId(null); handlePreviewPDF(quotation) }}
                           className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                         >
-                          <Eye className="w-4 h-4 text-purple-600" />
+                          <Eye className="w-4 h-4 text-gray-400" />
                           <span>Vista previa / Imprimir</span>
                         </button>
                         <button
                           onClick={() => { setOpenMenuId(null); handleDownloadPDF(quotation) }}
                           className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                         >
-                          <Download className="w-4 h-4 text-green-600" />
+                          <Download className="w-4 h-4 text-gray-400" />
                           <span>Descargar PDF</span>
-                        </button>
-                        <button
-                          onClick={() => { setOpenMenuId(null); handleDownloadTicketPdf(quotation) }}
-                          disabled={downloadingTicket === quotation.id}
-                          className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3 disabled:opacity-50"
-                        >
-                          <Download className="w-4 h-4 text-orange-600" />
-                          <span>{downloadingTicket === quotation.id ? 'Generando...' : 'Descargar ticket'}</span>
                         </button>
                         <button
                           onClick={() => { setOpenMenuId(null); handlePrintTicket(quotation) }}
                           className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                         >
-                          <Printer className="w-4 h-4 text-gray-700" />
+                          <Printer className="w-4 h-4 text-gray-400" />
                           <span>{Capacitor.isNativePlatform() ? 'Imprimir en ticketera' : 'Imprimir ticket'}</span>
                         </button>
                         <button
                           onClick={() => { setOpenMenuId(null); appNavigate(`cotizaciones/nueva?clone=${quotation.id}`) }}
                           className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                         >
-                          <Copy className="w-4 h-4 text-cyan-600" />
+                          <Copy className="w-4 h-4 text-gray-400" />
                           <span>Duplicar</span>
                         </button>
                         {quotation.status !== 'converted' && quotation.status !== 'rejected' && (
@@ -1040,7 +1000,7 @@ export default function Quotations() {
                               onClick={() => { setOpenMenuId(null); setConvertingQuotation(quotation) }}
                               className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                             >
-                              <Receipt className="w-4 h-4 text-blue-600" />
+                              <Receipt className="w-4 h-4 text-gray-400" />
                               <span>Convertir a Factura</span>
                             </button>
                           </>
@@ -1049,7 +1009,7 @@ export default function Quotations() {
                           onClick={() => { setOpenMenuId(null); setDispatchGuideQuotation(quotation) }}
                           className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                         >
-                          <Truck className="w-4 h-4 text-orange-600" />
+                          <Truck className="w-4 h-4 text-gray-400" />
                           <span>Crear Guía Remitente</span>
                         </button>
                         <div className="border-t border-gray-100 my-1" />
@@ -1184,7 +1144,7 @@ export default function Quotations() {
                                   }}
                                   className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                                 >
-                                  <Eye className="w-4 h-4 text-primary-600" />
+                                  <Eye className="w-4 h-4 text-gray-400" />
                                   <span>Ver detalles</span>
                                 </button>
 
@@ -1197,7 +1157,7 @@ export default function Quotations() {
                                     }}
                                     className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                                   >
-                                    <Edit className="w-4 h-4 text-amber-600" />
+                                    <Edit className="w-4 h-4 text-gray-400" />
                                     <span>Editar</span>
                                   </button>
                                 )}
@@ -1210,7 +1170,7 @@ export default function Quotations() {
                                   }}
                                   className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                                 >
-                                  <Eye className="w-4 h-4 text-purple-600" />
+                                  <Eye className="w-4 h-4 text-gray-400" />
                                   <span>Vista previa / Imprimir</span>
                                 </button>
 
@@ -1222,7 +1182,7 @@ export default function Quotations() {
                                   }}
                                   className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                                 >
-                                  <Download className="w-4 h-4 text-green-600" />
+                                  <Download className="w-4 h-4 text-gray-400" />
                                   <span>Descargar PDF</span>
                                 </button>
 
@@ -1234,7 +1194,7 @@ export default function Quotations() {
                                   }}
                                   className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                                 >
-                                  <Printer className="w-4 h-4 text-gray-700" />
+                                  <Printer className="w-4 h-4 text-gray-400" />
                                   <span>{Capacitor.isNativePlatform() ? 'Imprimir en ticketera' : 'Imprimir ticket'}</span>
                                 </button>
 
@@ -1246,7 +1206,7 @@ export default function Quotations() {
                                   }}
                                   className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                                 >
-                                  <Copy className="w-4 h-4 text-cyan-600" />
+                                  <Copy className="w-4 h-4 text-gray-400" />
                                   <span>Duplicar</span>
                                 </button>
 
@@ -1262,7 +1222,7 @@ export default function Quotations() {
                                         }}
                                         className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                                       >
-                                        <Receipt className="w-4 h-4 text-blue-600" />
+                                        <Receipt className="w-4 h-4 text-gray-400" />
                                         <span>Convertir a Factura</span>
                                       </button>
                                     </>
@@ -1276,7 +1236,7 @@ export default function Quotations() {
                                   }}
                                   className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                                 >
-                                  <Truck className="w-4 h-4 text-orange-600" />
+                                  <Truck className="w-4 h-4 text-gray-400" />
                                   <span>Crear Guía Remitente</span>
                                 </button>
 
@@ -1638,7 +1598,7 @@ export default function Quotations() {
 
       {/* Ticket oculto para impresión web (mismo diseño que las boletas) */}
       {ticketQuotation && (
-        <div className="hidden print:block" ref={ticketRef}>
+        <div className="hidden print:block">
           <InvoiceTicket
             invoice={ticketQuotation}
             companySettings={companySettings}

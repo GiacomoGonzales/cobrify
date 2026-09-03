@@ -2823,7 +2823,7 @@ export default function CreateQuotation() {
                       )}
                       <div className="flex flex-wrap gap-2 mb-2">
                         {Object.entries(variant.attributes || {}).map(([key, value]) => (
-                          <span key={key} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                          <span key={key} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium chip-neutro">
                             {key}: {value}
                           </span>
                         ))}

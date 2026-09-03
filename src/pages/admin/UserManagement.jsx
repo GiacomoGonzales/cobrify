@@ -480,7 +480,7 @@ export default function UserManagement() {
                               <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
                                 {sub.businessName || 'Sin nombre'}
                                 {ownerSubUsers.length > 0 && (
-                                  <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-800 rounded-full">
+                                  <span className="px-2 py-0.5 text-xs chip-info rounded-full">
                                     {ownerSubUsers.length} sub-usuario{ownerSubUsers.length !== 1 ? 's' : ''}
                                   </span>
                                 )}
@@ -491,7 +491,7 @@ export default function UserManagement() {
                         </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex flex-col">
-                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                          <span className="px-2 py-1 text-xs font-semibold rounded-full chip-info">
                             {planInfo?.name || sub.plan}
                           </span>
                           {planInfo && (
@@ -517,7 +517,7 @@ export default function UserManagement() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {isBlocked ? (
-                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+                          <span className="px-2 py-1 text-xs font-semibold rounded-full chip-error">
                             Suspendido
                           </span>
                         ) : isExpired ? (
@@ -525,7 +525,7 @@ export default function UserManagement() {
                             Vencido
                           </span>
                         ) : (
-                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                          <span className="px-2 py-1 text-xs font-semibold rounded-full chip-ok">
                             Activo
                           </span>
                         )}
@@ -663,8 +663,8 @@ export default function UserManagement() {
                             <span
                               className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                                 subUserActivo
-                                  ? 'bg-green-100 text-green-800'
-                                  : 'bg-red-100 text-red-800'
+                                  ? 'chip-ok'
+                                  : 'chip-error'
                               }`}
                             >
                               {subUserActivo ? 'Activo' : 'Desactivado'}

@@ -13864,7 +13864,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       <div className="flex items-center gap-2">
                         <p className="font-medium text-gray-900">{batch.lotNumber}</p>
                         {idx === 0 && (
-                          <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 rounded-full">
+                          <span className="px-2 py-0.5 text-xs font-medium chip-ok rounded-full">
                             FEFO
                           </span>
                         )}
@@ -13988,7 +13988,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             <p className="text-xs text-gray-500">Variante: {serial.variantSku}</p>
                           )}
                         </div>
-                        <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 rounded-full whitespace-nowrap">
+                        <span className="px-2 py-0.5 text-xs font-medium chip-ok rounded-full whitespace-nowrap">
                           Disponible
                         </span>
                       </div>

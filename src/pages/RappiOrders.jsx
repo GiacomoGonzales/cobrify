@@ -22,10 +22,10 @@ import { matchesSearchQuery } from '@/lib/utils'
 
 const STATUS_CONFIG = {
   pending: { label: 'Recibido', className: 'bg-amber-100 text-amber-800 border-amber-300', icon: Clock },
-  accepted: { label: 'Aceptado', className: 'bg-blue-100 text-blue-800 border-blue-300', icon: CheckCircle },
+  accepted: { label: 'Aceptado', className: 'chip-info border-blue-300', icon: CheckCircle },
   ready_for_pickup: { label: 'Listo', className: 'bg-indigo-100 text-indigo-800 border-indigo-300', icon: Package },
   completed: { label: 'Facturado', className: 'bg-emerald-100 text-emerald-800 border-emerald-300', icon: CheckCircle },
-  cancelled: { label: 'Cancelado', className: 'bg-red-100 text-red-800 border-red-300', icon: XCircle },
+  cancelled: { label: 'Cancelado', className: 'chip-error border-red-300', icon: XCircle },
 }
 
 const DATE_RANGES = [
@@ -396,7 +396,7 @@ export default function RappiOrders() {
                           {statusCfg.label}
                         </span>
                         {hasUnmatchedItems && (
-                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 border border-yellow-300">
+                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full chip-aviso border border-yellow-300">
                             <AlertCircle className="w-3 h-3" />
                             SKU sin mapear
                           </span>
@@ -526,7 +526,7 @@ export default function RappiOrders() {
                             <span className="text-xs text-gray-400">RappiID: {item.rappiId}</span>
                           )}
                           {unmatched ? (
-                            <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-800">
+                            <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded chip-aviso">
                               <AlertCircle className="w-3 h-3" />
                               No mapeado
                             </span>

@@ -354,7 +354,7 @@ export default function CarrierDispatchGuides() {
   const getStatusBadge = (status, sunatStatus) => {
     if (status === 'draft') {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full chip-info">
           <FileText className="w-3 h-3" />
           Borrador
         </span>
@@ -363,7 +363,7 @@ export default function CarrierDispatchGuides() {
 
     if (sunatStatus === 'accepted') {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
+        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full chip-ok">
           <CheckCircle className="w-3 h-3" />
           Aceptada
         </span>
@@ -372,7 +372,7 @@ export default function CarrierDispatchGuides() {
 
     if (sunatStatus === 'rejected') {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">
+        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full chip-error">
           <XCircle className="w-3 h-3" />
           Rechazada
         </span>
@@ -380,7 +380,7 @@ export default function CarrierDispatchGuides() {
     }
 
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
+      <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full chip-aviso">
         <Clock className="w-3 h-3" />
         Pendiente
       </span>
@@ -731,9 +731,9 @@ export default function CarrierDispatchGuides() {
                         setOpenMenuId(null)
                         handleContinueDraft(guide)
                       }}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-blue-50 flex items-center gap-3 text-blue-600"
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                     >
-                      <PlayCircle className="w-4 h-4" />
+                      <PlayCircle className="w-4 h-4 text-gray-400" />
                       <span>Continuar Emisión</span>
                     </button>
                   )}
@@ -746,7 +746,7 @@ export default function CarrierDispatchGuides() {
                     }}
                     className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                   >
-                    <Eye className="w-4 h-4 text-orange-600" />
+                    <Eye className="w-4 h-4 text-gray-400" />
                     <span>Ver detalles</span>
                   </button>
 
@@ -758,7 +758,7 @@ export default function CarrierDispatchGuides() {
                     }}
                     className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                   >
-                    <Printer className="w-4 h-4 text-purple-600" />
+                    <Printer className="w-4 h-4 text-gray-400" />
                     <span>Vista previa / Imprimir</span>
                   </button>
 
@@ -772,9 +772,9 @@ export default function CarrierDispatchGuides() {
                     className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3 disabled:opacity-50"
                   >
                     {downloadingPdf === guide.id ? (
-                      <Loader2 className="w-4 h-4 text-green-600 animate-spin" />
+                      <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
                     ) : (
-                      <Download className="w-4 h-4 text-green-600" />
+                      <Download className="w-4 h-4 text-gray-400" />
                     )}
                     <span>{downloadingPdf === guide.id ? 'Generando...' : 'Descargar PDF'}</span>
                   </button>
@@ -809,7 +809,7 @@ export default function CarrierDispatchGuides() {
                       }}
                       className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                     >
-                      <Code className="w-4 h-4 text-indigo-600" />
+                      <Code className="w-4 h-4 text-gray-400" />
                       <span>XML SUNAT</span>
                     </button>
                   )}
@@ -844,7 +844,7 @@ export default function CarrierDispatchGuides() {
                       }}
                       className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                     >
-                      <FileCheck className="w-4 h-4 text-green-600" />
+                      <FileCheck className="w-4 h-4 text-gray-400" />
                       <span>CDR SUNAT</span>
                     </button>
                   )}
@@ -862,12 +862,12 @@ export default function CarrierDispatchGuides() {
                         handleSendToSunat(guide)
                       }}
                       disabled={sendingToSunat === guide.id}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-orange-50 flex items-center gap-3 text-orange-600 disabled:opacity-50"
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3 disabled:opacity-50"
                     >
                       {sendingToSunat === guide.id ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
                       ) : (
-                        <Send className="w-4 h-4" />
+                        <Send className="w-4 h-4 text-gray-400" />
                       )}
                       <span>{sendingToSunat === guide.id ? 'Enviando...' : 'Enviar a SUNAT'}</span>
                     </button>
@@ -881,9 +881,9 @@ export default function CarrierDispatchGuides() {
                         setEditingGuideForUpdate(guide)
                         setShowCreateModal(true)
                       }}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-blue-50 flex items-center gap-3 text-blue-600"
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                     >
-                      <Pencil className="w-4 h-4" />
+                      <Pencil className="w-4 h-4 text-gray-400" />
                       <span>Editar guía</span>
                     </button>
                   )}
@@ -897,9 +897,9 @@ export default function CarrierDispatchGuides() {
                           setOpenMenuId(null)
                           handleEditNumber(guide)
                         }}
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-blue-50 flex items-center gap-3 text-blue-600"
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                       >
-                        <Edit3 className="w-4 h-4" />
+                        <Edit3 className="w-4 h-4 text-gray-400" />
                         <span>Cambiar número</span>
                       </button>
                     </>

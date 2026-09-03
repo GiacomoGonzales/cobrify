@@ -12,7 +12,6 @@ import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import EditDispatchGuideModal from '@/components/EditDispatchGuideModal'
 import DispatchGuideTicket from '@/components/DispatchGuideTicket'
 import { aplicarTamanoDeHoja } from '@/utils/printPageSize'
-import { descargarTicketPdf } from '@/utils/ticketPdf'
 import { generateDispatchGuidePDF, previewDispatchGuidePDF, shareDispatchGuidePDF, getDispatchGuidePDFBlob } from '@/utils/dispatchGuidePdfGenerator'
 import { buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import { getActiveBranches } from '@/services/branchService'
@@ -112,7 +111,6 @@ export default function DispatchGuides() {
   const [previewingPdf, setPreviewingPdf] = useState(null) // ID de guía en vista previa
   const [sharingPdf, setSharingPdf] = useState(null) // ID de guía siendo compartida
   const [printingTicket, setPrintingTicket] = useState(null) // Guía para imprimir en ticket
-  const [downloadingTicket, setDownloadingTicket] = useState(null) // Guía cuyo ticket se está pasando a PDF
   const ticketRef = useRef(null) // Ref para el componente de ticket
   const [companySettings, setCompanySettings] = useState(null) // Datos de la empresa
   const [allProducts, setAllProducts] = useState([]) // Productos para PDF (marca, lab, SKU)
@@ -446,41 +444,6 @@ export default function DispatchGuides() {
     }
   }
 
-  /**
-   * El ticket, pero como ARCHIVO. Hasta ahora se podía imprimir o bajar el A4,
-   * y un transportista que quiere mandar la guía por WhatsApp desde el celular
-   * no tenía de dónde agarrarla (pedido de JMC, 03-sep-2026).
-   *
-   * Se fotografía el MISMO componente que va a la impresora, así que el PDF no
-   * puede salir distinto del papel.
-   */
-  const handleDownloadTicketPdf = async (guide) => {
-    if (downloadingTicket) return
-    if (!companySettings) {
-      toast.error('Cargando datos de empresa, intente de nuevo')
-      return
-    }
-    setDownloadingTicket(guide.id)
-    // Montar el ticket y darle a React un cuadro para pintarlo: el componente
-    // solo existe en el DOM mientras `printingTicket` tiene una guía.
-    setPrintingTicket(guide)
-    try {
-      await new Promise(r => setTimeout(r, 150))
-      await descargarTicketPdf(ticketRef.current, {
-        anchoMm: ticketPaperWidth,
-        nombreArchivo: `Guia_${guide.number || 'sin_numero'}`,
-        titulo: `Guía de Remisión ${guide.number || ''}`,
-      })
-      toast.success('Ticket descargado')
-    } catch (error) {
-      console.error('Error al generar el ticket en PDF:', error)
-      toast.error('No se pudo generar el ticket')
-    } finally {
-      setPrintingTicket(null)
-      setDownloadingTicket(null)
-    }
-  }
-
   // Vista previa del PDF
   const handlePreviewPdf = async (guide) => {
     if (previewingPdf) return
@@ -783,7 +746,7 @@ export default function DispatchGuides() {
 
     if (sunatStatus === 'accepted') {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
+        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full chip-ok">
           <CheckCircle className="w-3 h-3" />
           Aceptada
         </span>
@@ -792,7 +755,7 @@ export default function DispatchGuides() {
 
     if (sunatStatus === 'rejected') {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">
+        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full chip-error">
           <XCircle className="w-3 h-3" />
           Rechazada
         </span>
@@ -800,7 +763,7 @@ export default function DispatchGuides() {
     }
 
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
+      <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full chip-aviso">
         <Clock className="w-3 h-3" />
         Pendiente
       </span>
@@ -1189,7 +1152,7 @@ export default function DispatchGuides() {
                     }}
                     className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                   >
-                    <Eye className="w-4 h-4 text-primary-600" />
+                    <Eye className="w-4 h-4 text-gray-400" />
                     <span>Ver detalles</span>
                   </button>
 
@@ -1203,9 +1166,9 @@ export default function DispatchGuides() {
                     className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3 disabled:opacity-50"
                   >
                     {previewingPdf === guide.id ? (
-                      <Loader2 className="w-4 h-4 text-purple-600 animate-spin" />
+                      <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
                     ) : (
-                      <Printer className="w-4 h-4 text-purple-600" />
+                      <Printer className="w-4 h-4 text-gray-400" />
                     )}
                     <span>{previewingPdf === guide.id ? 'Generando...' : 'Imprimir PDF'}</span>
                   </button>
@@ -1218,7 +1181,7 @@ export default function DispatchGuides() {
                     }}
                     className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                   >
-                    <Receipt className="w-4 h-4 text-orange-600" />
+                    <Receipt className="w-4 h-4 text-gray-400" />
                     <span>Imprimir Ticket</span>
                   </button>
 
@@ -1232,28 +1195,11 @@ export default function DispatchGuides() {
                     className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3 disabled:opacity-50"
                   >
                     {downloadingPdf === guide.id ? (
-                      <Loader2 className="w-4 h-4 text-green-600 animate-spin" />
+                      <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
                     ) : (
-                      <Download className="w-4 h-4 text-green-600" />
+                      <Download className="w-4 h-4 text-gray-400" />
                     )}
                     <span>{downloadingPdf === guide.id ? 'Generando...' : 'Descargar PDF'}</span>
-                  </button>
-
-                  {/* Descargar el ticket como PDF (para mandarlo por WhatsApp) */}
-                  <button
-                    onClick={() => {
-                      setOpenMenuId(null)
-                      handleDownloadTicketPdf(guide)
-                    }}
-                    disabled={downloadingTicket === guide.id}
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3 disabled:opacity-50"
-                  >
-                    {downloadingTicket === guide.id ? (
-                      <Loader2 className="w-4 h-4 text-orange-600 animate-spin" />
-                    ) : (
-                      <Download className="w-4 h-4 text-orange-600" />
-                    )}
-                    <span>{downloadingTicket === guide.id ? 'Generando...' : 'Descargar Ticket'}</span>
                   </button>
 
                   {/* Compartir PDF (solo móvil) */}
@@ -1267,9 +1213,9 @@ export default function DispatchGuides() {
                       className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3 disabled:opacity-50"
                     >
                       {sharingPdf === guide.id ? (
-                        <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+                        <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
                       ) : (
-                        <Share2 className="w-4 h-4 text-blue-600" />
+                        <Share2 className="w-4 h-4 text-gray-400" />
                       )}
                       <span>{sharingPdf === guide.id ? 'Preparando...' : 'Compartir PDF'}</span>
                     </button>
@@ -1287,7 +1233,7 @@ export default function DispatchGuides() {
                       }}
                       className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                     >
-                      <Code className="w-4 h-4 text-indigo-600" />
+                      <Code className="w-4 h-4 text-gray-400" />
                       <span>XML SUNAT</span>
                     </button>
                   )}
@@ -1322,7 +1268,7 @@ export default function DispatchGuides() {
                       }}
                       className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                     >
-                      <FileCheck className="w-4 h-4 text-green-600" />
+                      <FileCheck className="w-4 h-4 text-gray-400" />
                       <span>CDR SUNAT</span>
                     </button>
                   )}
@@ -1334,9 +1280,9 @@ export default function DispatchGuides() {
                       setCloningGuide(guide)
                       setShowCreateModal(true)
                     }}
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-teal-50 flex items-center gap-3 text-teal-600"
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                   >
-                    <Copy className="w-4 h-4" />
+                    <Copy className="w-4 h-4 text-gray-400" />
                     <span>Clonar guía</span>
                   </button>
 
@@ -1352,9 +1298,9 @@ export default function DispatchGuides() {
                         setOpenMenuId(null)
                         setEditingGuide(guide)
                       }}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-amber-50 flex items-center gap-3 text-amber-600"
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                     >
-                      <Pencil className="w-4 h-4" />
+                      <Pencil className="w-4 h-4 text-gray-400" />
                       <span>Editar guía</span>
                     </button>
                   )}
@@ -1367,12 +1313,12 @@ export default function DispatchGuides() {
                         handleSendToSunat(guide)
                       }}
                       disabled={sendingToSunat === guide.id}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-blue-50 flex items-center gap-3 text-blue-600 disabled:opacity-50"
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3 disabled:opacity-50"
                     >
                       {sendingToSunat === guide.id ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
                       ) : (
-                        <Send className="w-4 h-4" />
+                        <Send className="w-4 h-4 text-gray-400" />
                       )}
                       <span>{sendingToSunat === guide.id ? 'Enviando...' : 'Enviar a SUNAT'}</span>
                     </button>
@@ -1400,9 +1346,9 @@ export default function DispatchGuides() {
                           toast.error('Error al descontar stock')
                         }
                       }}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-amber-50 flex items-center gap-3 text-amber-700"
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                     >
-                      <Package className="w-4 h-4" />
+                      <Package className="w-4 h-4 text-gray-400" />
                       <span>Descontar stock</span>
                     </button>
                   )}
@@ -1441,9 +1387,9 @@ export default function DispatchGuides() {
                           toast.error('Error al revertir descuento de stock')
                         }
                       }}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-green-50 flex items-center gap-3 text-green-700"
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                     >
-                      <RotateCcw className="w-4 h-4" />
+                      <RotateCcw className="w-4 h-4 text-gray-400" />
                       {/* En una guia ANULADA esto ya no es "revertir": es arreglar
                           un descuadre que quedo colgado. El texto lo dice. */}
                       <span>

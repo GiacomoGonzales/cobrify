@@ -69,7 +69,6 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { doc, updateDoc } from 'firebase/firestore'
 import { storage, db } from '@/lib/firebase'
 import { prepareInvoiceXML, downloadCompressedXML, isSunatConfigured, voidDocument, canVoidDocument, checkVoidStatus } from '@/services/sunatService'
-import { descargarTicketPdf } from '@/utils/ticketPdf'
 import { generateInvoicesExcel } from '@/services/invoiceExportService'
 import InvoiceTicket from '@/components/InvoiceTicket'
 import { aplicarTamanoDeHoja } from '@/utils/printPageSize'
@@ -217,7 +216,6 @@ export default function InvoiceList() {
   // Estado separado para impresión de ticket desde la fila: evita abrir el modal
   // de detalle y no rompe el render del contenedor bulk de impresión masiva.
   const [rowPrintInvoice, setRowPrintInvoice] = useState(null)
-  const [downloadingTicket, setDownloadingTicket] = useState(null) // comprobante cuyo ticket se pasa a PDF
   const [deletingInvoice, setDeletingInvoice] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [sendingToSunat, setSendingToSunat] = useState(null) // ID de factura siendo enviada a SUNAT
@@ -422,33 +420,6 @@ export default function InvoiceList() {
   }, [user])
 
   // Función para imprimir ticket
-  /**
-   * El ticket como ARCHIVO PDF. El "Descargar PDF" de siempre baja el A4; esto
-   * baja lo mismo que sale de la ticketera, para poder mandarlo por WhatsApp.
-   * Fotografía el MISMO componente que se imprime (src/utils/ticketPdf.js).
-   */
-  const handleDownloadTicketPdf = async (invoice) => {
-    if (downloadingTicket) return
-    setDownloadingTicket(invoice.id)
-    // El ticket solo existe en el DOM mientras hay un comprobante seleccionado.
-    setRowPrintInvoice(invoice)
-    try {
-      await new Promise(r => setTimeout(r, 150))
-      await descargarTicketPdf(ticketRef.current, {
-        anchoMm: a4SheetPrint ? 210 : ticketPaperWidth,
-        nombreArchivo: invoice.number || 'comprobante',
-        titulo: invoice.number || 'Comprobante',
-      })
-      toast.success('Ticket descargado')
-    } catch (error) {
-      console.error('Error al generar el ticket en PDF:', error)
-      toast.error('No se pudo generar el ticket')
-    } finally {
-      setRowPrintInvoice(null)
-      setDownloadingTicket(null)
-    }
-  }
-
   const handlePrintTicket = async (invoiceArg) => {
     // Permite llamarlo desde el modal (sin args, usa viewingInvoice) o
     // desde la fila de Ventas pasando la factura directamente.
@@ -3740,7 +3711,7 @@ Gracias por tu preferencia.`
                         setOpenMenuId(null)
                         appNavigate(`pos?editInvoiceId=${invoice.id}`)
                       }}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-blue-50 flex items-center gap-3"
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                     >
                       <Edit className="w-4 h-4 text-blue-600" />
                       <span className="text-blue-600 font-medium">Editar documento</span>
@@ -3768,7 +3739,7 @@ Gracias por tu preferencia.`
                           appNavigate(`pos?duplicateInvoiceId=${invoice.id}`)
                         }
                       }}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-purple-50 flex items-center gap-3"
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                     >
                       <Copy className="w-4 h-4 text-purple-600" />
                       <span className="text-purple-600 font-medium">Duplicar comprobante</span>
@@ -3787,9 +3758,9 @@ Gracias por tu preferencia.`
                       className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {sendingToSunat === invoice.id ? (
-                        <Loader2 className="w-4 h-4 text-green-600 animate-spin" />
+                        <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
                       ) : (
-                        <Send className="w-4 h-4 text-green-600" />
+                        <Send className="w-4 h-4 text-gray-400" />
                       )}
                       <span>Enviar a SUNAT</span>
                     </button>
@@ -3806,7 +3777,7 @@ Gracias por tu preferencia.`
                         handleSendToSunat(invoice.id)
                       }}
                       disabled={sendingToSunat === invoice.id}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-orange-50 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {sendingToSunat === invoice.id ? (
                         <Loader2 className="w-4 h-4 text-orange-600 animate-spin" />
@@ -3834,9 +3805,9 @@ Gracias por tu preferencia.`
                       className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {sendingToSunat === invoice.id ? (
-                        <Loader2 className="w-4 h-4 text-green-600 animate-spin" />
+                        <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
                       ) : (
-                        <Send className="w-4 h-4 text-green-600" />
+                        <Send className="w-4 h-4 text-gray-400" />
                       )}
                       <span>Enviar NC a SUNAT</span>
                     </button>
@@ -3856,7 +3827,7 @@ Gracias por tu preferencia.`
                       }}
                       className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                     >
-                      <Calendar className="w-4 h-4 text-blue-600" />
+                      <Calendar className="w-4 h-4 text-gray-400" />
                       <span>Editar fecha y reenviar a SUNAT</span>
                     </button>
                   )}
@@ -3869,7 +3840,7 @@ Gracias por tu preferencia.`
                         setOpenMenuId(null)
                         appNavigate(`nota-credito?editNC=${invoice.id}`)
                       }}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-amber-50 flex items-center gap-3"
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                     >
                       <Edit className="w-4 h-4 text-amber-600" />
                       <span className="text-amber-700 font-medium">Editar y reemitir (mismo número)</span>
@@ -3899,7 +3870,7 @@ Gracias por tu preferencia.`
                         handleSendCreditNoteToSunat(invoice.id)
                       }}
                       disabled={sendingToSunat === invoice.id}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-orange-50 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {sendingToSunat === invoice.id ? (
                         <Loader2 className="w-4 h-4 text-orange-600 animate-spin" />
@@ -3923,7 +3894,7 @@ Gracias por tu preferencia.`
                         }}
                         className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                       >
-                        <FileMinus className="w-4 h-4 text-orange-600" />
+                        <FileMinus className="w-4 h-4 text-gray-400" />
                         <span>Crear Nota de Crédito</span>
                       </button>
 
@@ -3934,7 +3905,7 @@ Gracias por tu preferencia.`
                         }}
                         className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                       >
-                        <FilePlus className="w-4 h-4 text-blue-600" />
+                        <FilePlus className="w-4 h-4 text-gray-400" />
                         <span>Crear Nota de Débito</span>
                       </button>
                     </>
@@ -3953,7 +3924,7 @@ Gracias por tu preferencia.`
                       }}
                       className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                     >
-                      <Truck className="w-4 h-4 text-green-600" />
+                      <Truck className="w-4 h-4 text-gray-400" />
                       <span>Generar Guía de Remisión</span>
                     </button>
                   )}
@@ -3972,7 +3943,7 @@ Gracias por tu preferencia.`
                       }}
                       className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                     >
-                      <ClipboardList className="w-4 h-4 text-amber-600" />
+                      <ClipboardList className="w-4 h-4 text-gray-400" />
                       <span>Nota de Salida</span>
                     </button>
                   )}
@@ -3990,7 +3961,7 @@ Gracias por tu preferencia.`
                     }}
                     className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                   >
-                    <Eye className="w-4 h-4 text-primary-600" />
+                    <Eye className="w-4 h-4 text-gray-400" />
                     <span>Ver detalles</span>
                   </button>
 
@@ -4006,7 +3977,7 @@ Gracias por tu preferencia.`
                     }}
                     className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                   >
-                    <Printer className="w-4 h-4 text-purple-600" />
+                    <Printer className="w-4 h-4 text-gray-400" />
                     <span>Imprimir ticket</span>
                   </button>
 
@@ -4026,7 +3997,7 @@ Gracias por tu preferencia.`
                     }}
                     className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                   >
-                    <FileText className="w-4 h-4 text-indigo-600" />
+                    <FileText className="w-4 h-4 text-gray-400" />
                     <span>Vista previa de PDF</span>
                   </button>
 
@@ -4048,25 +4019,8 @@ Gracias por tu preferencia.`
                     }}
                     className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                   >
-                    <Download className="w-4 h-4 text-green-600" />
+                    <Download className="w-4 h-4 text-gray-400" />
                     <span>Descargar PDF</span>
-                  </button>
-
-                  {/* Descargar el ticket como PDF (para mandarlo por WhatsApp) */}
-                  <button
-                    onClick={() => {
-                      setOpenMenuId(null)
-                      handleDownloadTicketPdf(invoice)
-                    }}
-                    disabled={downloadingTicket === invoice.id}
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3 disabled:opacity-50"
-                  >
-                    {downloadingTicket === invoice.id ? (
-                      <Loader2 className="w-4 h-4 text-orange-600 animate-spin" />
-                    ) : (
-                      <Download className="w-4 h-4 text-orange-600" />
-                    )}
-                    <span>{downloadingTicket === invoice.id ? 'Generando...' : 'Descargar ticket'}</span>
                   </button>
 
                   {/* Descargar XML - Prioriza el XML real firmado de Storage, fallback al generador frontend */}
@@ -4098,7 +4052,7 @@ Gracias por tu preferencia.`
                       }}
                       className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                     >
-                      <Code className="w-4 h-4 text-blue-600" />
+                      <Code className="w-4 h-4 text-gray-400" />
                       <span>Descargar XML</span>
                     </button>
                   )}
@@ -4123,7 +4077,7 @@ Gracias por tu preferencia.`
                       }}
                       className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                     >
-                      <FileCheck className="w-4 h-4 text-green-600" />
+                      <FileCheck className="w-4 h-4 text-gray-400" />
                       <span>CDR SUNAT</span>
                     </button>
                   )}
@@ -4164,9 +4118,9 @@ Gracias por tu preferencia.`
                           setNewPaymentMethod('Efectivo')
                           setNewPaymentOperation('')
                         }}
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-green-50 flex items-center gap-3 text-green-600"
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                       >
-                        <CheckCircle className="w-4 h-4" />
+                        <CheckCircle className="w-4 h-4 text-gray-400" />
                         <span>Registrar Pago</span>
                       </button>
                     </>
@@ -4188,9 +4142,9 @@ Gracias por tu preferencia.`
                           setVoidReason('')
                           setRefundOnVoid(true)
                         }}
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-orange-50 flex items-center gap-3 text-orange-600"
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                       >
-                        <Ban className="w-4 h-4" />
+                        <Ban className="w-4 h-4 text-gray-400" />
                         <span>{invoice.documentType === 'nota_venta' ? 'Anular Nota de Venta' : 'Anular (rechazada por SUNAT)'}</span>
                       </button>
                     </>
@@ -4213,9 +4167,9 @@ Gracias por tu preferencia.`
                           setVoidingSunatInvoice(invoice)
                           setVoidSunatReason('')
                         }}
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-orange-50 flex items-center gap-3 text-orange-600"
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                       >
-                        <Ban className="w-4 h-4" />
+                        <Ban className="w-4 h-4 text-gray-400" />
                         <span>Anular en SUNAT</span>
                       </button>
                     </>
@@ -4231,9 +4185,9 @@ Gracias por tu preferencia.`
                           setOpenMenuId(null)
                           handleRetryVoid(invoice)
                         }}
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-orange-50 flex items-center gap-3 text-orange-600"
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                       >
-                        <RefreshCw className="w-4 h-4" />
+                        <RefreshCw className="w-4 h-4 text-gray-400" />
                         <span>Reintentar anulación</span>
                       </button>
                     </>

@@ -102,6 +102,25 @@
 }
 
 @layer components {
+  /* ── ETIQUETAS DE ESTADO ─────────────────────────────────────────────────
+     El color de una etiqueta existe para decir de un vistazo si algo está
+     bien, en camino o mal. El sistema venía usando el par -100/-800 de
+     Tailwind, que en una tabla llena de filas satura la pantalla: cada fila
+     grita y ninguna resalta ("parece un arcoíris").
+
+     Acá el fondo va apenas teñido, el texto un tono más bajo y un borde fino
+     por dentro sostiene la forma de píldora. Se sigue leyendo el estado de
+     lejos, sin que la lista parezca un semáforo.
+
+     Solo COLOR: la forma (px, py, rounded-full, text-xs) la sigue poniendo
+     cada etiqueta, así estas clases entran como reemplazo directo del par de
+     Tailwind que había. Un solo lugar para subir o bajar el tono.  */
+  .chip-neutro { @apply bg-gray-50 text-gray-600 ring-1 ring-inset ring-gray-200; }
+  .chip-ok     { @apply bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200; }
+  .chip-aviso  { @apply bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200; }
+  .chip-error  { @apply bg-red-50 text-red-700 ring-1 ring-inset ring-red-200; }
+  .chip-info   { @apply bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200; }
+
   /* Panel de administracion (.admin): Inter, 13px y cifras tabulares. Sin
      zoom: la densidad sale del tamano de letra y de las filas, no de encoger
      la pagina. En pantallas con mouse los campos van a 13px; en tactiles se

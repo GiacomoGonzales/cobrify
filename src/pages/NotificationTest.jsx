@@ -339,7 +339,7 @@ export default function NotificationTest() {
             </div>
 
             {/* Estado del listener */}
-            <div className={`text-center py-2 rounded-lg text-sm ${isListeningNow ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+            <div className={`text-center py-2 rounded-lg text-sm ${isListeningNow ? 'chip-ok' : 'bg-gray-100 text-gray-600'}`}>
               {isListeningNow ? '🎧 Escuchando notificaciones...' : 'Listener detenido'}
             </div>
 

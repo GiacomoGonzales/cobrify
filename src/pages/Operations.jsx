@@ -354,9 +354,9 @@ export default function Operations() {
   function getStatusBadge(status) {
     const statusConfig = OPERATION_STATUS.find(s => s.value === status) || OPERATION_STATUS[0]
     const colors = {
-      yellow: 'bg-yellow-100 text-yellow-800',
-      green: 'bg-green-100 text-green-800',
-      red: 'bg-red-100 text-red-800',
+      yellow: 'chip-aviso',
+      green: 'chip-ok',
+      red: 'chip-error',
     }
     const Icon = statusConfig.icon
     return (

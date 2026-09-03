@@ -604,23 +604,23 @@ export default function RenumberInvoicesModal({ isOpen, onClose }) {
                             <td className="p-2 text-right text-xs">S/ {doc.total?.toFixed(2)}</td>
                             <td className="p-2">
                               {isFalseAccepted ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium chip-aviso">
                                   ⚠️ Duplicado
                                 </span>
                               ) : doc.sunatStatus === 'rejected' ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium chip-error">
                                   ❌ Rechazado
                                 </span>
                               ) : doc.sunatStatus === 'pending' ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium chip-neutro">
                                   ⏳ Pendiente
                                 </span>
                               ) : doc.sunatStatus === 'sending' ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium chip-info">
                                   📤 Enviando
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium chip-ok">
                                   ✓ {doc.sunatStatus}
                                 </span>
                               )}
@@ -836,15 +836,15 @@ export default function RenumberInvoicesModal({ isOpen, onClose }) {
                               <td className="p-2 font-mono text-xs">{result.number}</td>
                               <td className="p-2">
                                 {result.status === 'accepted' ? (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium chip-ok">
                                     ✅ Aceptado
                                   </span>
                                 ) : result.status === 'rejected' ? (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium chip-error">
                                     ❌ Rechazado
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium chip-neutro">
                                     ⚠️ {result.status}
                                   </span>
                                 )}

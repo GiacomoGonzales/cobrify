@@ -512,7 +512,7 @@ export default function PurchaseOrders() {
                     }}
                     className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                   >
-                    <Eye className="w-4 h-4 text-primary-600" />
+                    <Eye className="w-4 h-4 text-gray-400" />
                     <span>Ver detalles</span>
                   </button>
 
@@ -523,7 +523,7 @@ export default function PurchaseOrders() {
                     }}
                     className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                   >
-                    <FileText className="w-4 h-4 text-purple-600" />
+                    <FileText className="w-4 h-4 text-gray-400" />
                     <span>Vista previa PDF</span>
                   </button>
 
@@ -536,9 +536,9 @@ export default function PurchaseOrders() {
                     className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3 disabled:opacity-50"
                   >
                     {downloadingPdf === order.id ? (
-                      <Loader2 className="w-4 h-4 text-green-600 animate-spin" />
+                      <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
                     ) : (
-                      <Download className="w-4 h-4 text-green-600" />
+                      <Download className="w-4 h-4 text-gray-400" />
                     )}
                     <span>Descargar PDF</span>
                   </button>
@@ -552,9 +552,9 @@ export default function PurchaseOrders() {
                           setEditingOrder(order)
                           setShowCreateModal(true)
                         }}
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-primary-50 flex items-center gap-3 text-primary-600"
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                       >
-                        <Edit className="w-4 h-4" />
+                        <Edit className="w-4 h-4 text-gray-400" />
                         <span>Editar</span>
                       </button>
                     </>
@@ -568,9 +568,9 @@ export default function PurchaseOrders() {
                           setOpenMenuId(null)
                           handleMarkAsSent(order)
                         }}
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-blue-50 flex items-center gap-3 text-blue-600"
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                       >
-                        <Send className="w-4 h-4" />
+                        <Send className="w-4 h-4 text-gray-400" />
                         <span>Marcar como enviada</span>
                       </button>
                     </>
@@ -584,9 +584,9 @@ export default function PurchaseOrders() {
                           setOpenMenuId(null)
                           handleMarkAsReceived(order)
                         }}
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-green-50 flex items-center gap-3 text-green-600"
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                       >
-                        <CheckCircle className="w-4 h-4" />
+                        <CheckCircle className="w-4 h-4 text-gray-400" />
                         <span>Marcar como recibida</span>
                       </button>
                     </>
@@ -603,9 +603,9 @@ export default function PurchaseOrders() {
                             state: { fromPurchaseOrder: order }
                           })
                         }}
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-orange-50 flex items-center gap-3 text-orange-600"
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                       >
-                        <ArrowRightCircle className="w-4 h-4" />
+                        <ArrowRightCircle className="w-4 h-4 text-gray-400" />
                         <span>Convertir en Compra</span>
                       </button>
                     </>

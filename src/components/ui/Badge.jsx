@@ -1,12 +1,15 @@
 import { cn } from '@/lib/utils'
 
+// Los tonos viven en src/index.css (.chip-*). Acá solo se elige cuál le toca a
+// cada variante, para que una etiqueta puesta a mano en cualquier página y una
+// puesta con <Badge> se vean iguales.
 const variants = {
-  default: 'bg-gray-100 text-gray-800',
-  primary: 'bg-primary-100 text-primary-800',
-  success: 'bg-green-100 text-green-800',
-  danger: 'bg-red-100 text-red-800',
-  warning: 'bg-yellow-100 text-yellow-800',
-  info: 'bg-blue-100 text-blue-800',
+  default: 'chip-neutro',
+  primary: 'bg-primary-50 text-primary-700 ring-1 ring-inset ring-primary-200',
+  success: 'chip-ok',
+  danger: 'chip-error',
+  warning: 'chip-aviso',
+  info: 'chip-info',
 }
 
 export default function Badge({ children, variant = 'default', className, ...props }) {
