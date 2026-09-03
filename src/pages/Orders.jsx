@@ -929,19 +929,8 @@ export default function Orders() {
     // Navegar al POS con los items de la orden precargados
     appNavigate('pos', {
       state: {
-        fromOrder: true,
-        orderId: orderToClose.id,
-        orderNumber: orderToClose.orderNumber,
+        ...estadoParaCobrar(orderToClose),
         items: orderToClose.items,
-        orderType: orderToClose.orderType,
-        // El costo del envío viaja aparte de los items: el POS lo agrega como
-        // una línea al final del carrito. Así se cobra sin que el cajero tenga
-        // que teclear un precio —que es lo que estos negocios tienen apagado—.
-        deliveryFee: montoDeEnvio(orderToClose.deliveryFee),
-        markAsPaidOnComplete: true,
-        // Sede de la orden: el POS fija sucursal+almacén (comprobante/serie/caja/stock correctos)
-        branchId: orderToClose.branchId ?? null,
-        ...orderCustomerState(orderToClose),
       }
     })
     setShowCloseOrderModal(false)
@@ -1012,21 +1001,18 @@ export default function Orders() {
     if (!orderToClose) return
     appNavigate('pos', {
       state: {
-        fromOrder: true,
+        ...estadoParaCobrar(orderToClose),
         partialClose: true,
-        orderId: orderToClose.id,
-        orderNumber: orderToClose.orderNumber,
-        orderType: orderToClose.orderType,
-        tableId: orderToClose.tableId || null,
-        tableNumber: orderToClose.tableNumber || null,
         items: selectedItems,
         remainingItems,
+        tableId: orderToClose.tableId || null,
+        tableNumber: orderToClose.tableNumber || null,
         waiterId: orderToClose.waiterId || null,
         waiterName: orderToClose.waiterName || null,
-        markAsPaidOnComplete: true,
-        // Sede de la orden: el POS fija sucursal+almacén (comprobante/serie/caja/stock correctos)
-        branchId: orderToClose.branchId ?? null,
-        ...orderCustomerState(orderToClose),
+        // El envío NO se cobra en un pago parcial: la orden sigue abierta y el
+        // envío es UNO solo. Se cobra entero cuando se cierra, o si no se
+        // cobraría una vez por cada persona que paga su parte.
+        deliveryFee: 0,
       },
     })
     setIsIndividualPaymentModalOpen(false)
@@ -1434,26 +1420,45 @@ export default function Orders() {
     customerAddress: order.customerAddress || null,
   })
 
+  /**
+   * Lo que viaja al POS para cobrar una orden.
+   *
+   * Existe porque habia TRES lugares armando este mismo objeto a mano y se
+   * fueron separando: solo el de "Cerrar orden" mandaba el costo del envio, asi
+   * que cobrar desde el boton "Cobrar" de la tarjeta —que es por donde se cobra
+   * normalmente— perdia el delivery (reporte de Edin Solano, 03-sep-2026).
+   *
+   * Los datos propios de cada camino (mesa, mozo, cobro parcial) se agregan
+   * despues; esto es lo que TODOS necesitan.
+   */
+  const estadoParaCobrar = (order) => ({
+    fromOrder: true,
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    orderType: order.orderType,
+    markAsPaidOnComplete: true,
+    // Sede de la orden: el POS fija sucursal+almacén (comprobante/serie/caja/stock correctos)
+    branchId: order.branchId ?? null,
+    // El costo del envío viaja APARTE de los items: el POS lo agrega como una
+    // línea al final del carrito. Así se cobra sin que el cajero teclee un
+    // precio, que es justo lo que estos negocios tienen apagado.
+    deliveryFee: montoDeEnvio(order.deliveryFee),
+    // Datos del cliente capturados al crear la orden → el POS los precarga
+    // para no re-teclear al emitir el comprobante.
+    ...orderCustomerState(order),
+  })
+
   const handleGoToPayment = (order) => {
     appNavigate('pos', {
       state: {
-        fromOrder: true,
-        orderId: order.id,
-        orderNumber: order.orderNumber,
+        ...estadoParaCobrar(order),
         items: order.items,
-        orderType: order.orderType,
-        markAsPaidOnComplete: true, // Flag para marcar como pagada al completar
-        // Si la orden está asociada a una mesa, pasar info para que se libere automáticamente
-        // al completar el pago (restaura comportamiento previo: Cobrar libera la mesa).
+        // Si la orden está asociada a una mesa, pasar info para que se libere
+        // automáticamente al completar el pago (Cobrar libera la mesa).
         tableId: order.tableId || null,
         tableNumber: order.tableNumber || null,
         waiterId: order.waiterId || null,
         waiterName: order.waiterName || null,
-        // Sede de la orden: el POS fija sucursal+almacén (comprobante/serie/caja/stock correctos)
-        branchId: order.branchId ?? null,
-        // Datos del cliente capturados al crear la orden → el POS los precarga
-        // para no re-teclear al emitir el comprobante.
-        ...orderCustomerState(order),
       }
     })
   }
