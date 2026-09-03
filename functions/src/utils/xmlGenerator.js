@@ -267,7 +267,7 @@ const UNIT_CODE_MAP = {
   'METRO2': 'MTK', 'METROCUADRADO': 'MTK', 'METROSCUADRADOS': 'MTK', 'CM2': 'CMK',
   'MM2': 'MMK', 'METRO3': 'MTQ', 'METROCUBICO': 'MTQ', 'METROSCUBICOS': 'MTQ',
   'CM3': 'CMQ', 'MM3': 'MMQ', 'CJ': 'BX', 'BLS': 'BG',
-  'PAQ': 'PK', 'PKT': 'PK', 'BOT': 'BO', 'CTN': 'CT',
+  'PAQ': 'PK', 'PKT': 'PK', 'PACK': 'PK', 'PACKS': 'PK', 'BOT': 'BO', 'CTN': 'CT',
   'CIENTOS': 'CEN', 'DOC': 'DZN', 'TAMBOR': 'DR', 'TAMBORES': 'DR',
   'BLD': 'BJ', 'PALET': 'PF', 'PALETS': 'PF', 'ROLLO': 'RO',
   'ROLLOS': 'RO', 'RESMA': 'RM', 'RESMAS': 'RM', 'CONJUNTO': 'SET',

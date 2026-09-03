@@ -59,6 +59,11 @@ const SUNAT_UNITS = [
   { value: 'ONZ', label: 'ONZ - Onza' },
   { value: 'PF',  label: 'PF - Palet' },
   { value: 'PK',  label: 'PK - Paquete' },
+  // PACK y PAQUETE son lo mismo para SUNAT (código PK), pero NO para quien
+  // lee la cotización: una municipalidad le rechazó una a A&S COPIERS porque
+  // decía "PAQUETE" y sus bases pedían "PACK". Se ofrece como unidad propia
+  // —imprime PACK— y al emitir viaja como PK igual que su hermana.
+  { value: 'PACK', label: 'PACK - Pack' },
   { value: 'PR',  label: 'PR - Par' },
   { value: 'FOT', label: 'FOT - Pie' },
   { value: 'FTK', label: 'FTK - Pie cuadrado' },
@@ -123,6 +128,9 @@ const UNIT_ALIASES = {
   'DISPLAY': 'BX', 'DISPLAYS': 'BX', 'DISP': 'BX',
   'BOLSA': 'BG', 'BOLSAS': 'BG', 'BLS': 'BG',
   'PAQUETE': 'PK', 'PAQUETES': 'PK', 'PAQ': 'PK', 'PKT': 'PK',
+  // 'PACK' se resuelve solo por ser un código válido del catálogo; el alias
+  // cubre los plurales y lo que venga de un Excel.
+  'PACKS': 'PACK', 'PACKS.': 'PACK',
   'BOTELLA': 'BO', 'BOTELLAS': 'BO', 'BOT': 'BO',
   'LATA': 'CA', 'LATAS': 'CA',
   'BARRIL': 'BLL', 'BARRILES': 'BLL',
@@ -283,8 +291,12 @@ export const UNIDADES_SELECT = [
   { value: 'GLI',    label: 'Galón inglés (4.545 dm³)' },
   { value: 'GRM',    label: 'Gramo' },
   { value: 'GRO',    label: 'Gruesa' },
-  { value: 'ST',     label: 'Hoja' },
+  // ST y LEF son los DOS "Hoja" del catálogo 03 y se ofrecían con la misma
+  // etiqueta: no había forma de saber cuál se estaba eligiendo. Se conserva la
+  // pareja —las dos son válidas— y se desempata mostrando el código. LEF va
+  // sin código por ser a la que resuelve el alias "hoja" desde siempre.
   { value: 'LEF',    label: 'Hoja' },
+  { value: 'ST',     label: 'Hoja (ST)' },
   { value: 'HUR',    label: 'Hora' },
   { value: 'JG',     label: 'Jarra' },
   { value: 'KGM',    label: 'Kilogramo' },
@@ -310,10 +322,14 @@ export const UNIDADES_SELECT = [
   { value: 'ONZ',    label: 'Onza' },
   { value: 'PF',     label: 'Palet' },
   { value: 'PK',     label: 'Paquete' },
+  { value: 'PACK',   label: 'Pack' },
   { value: 'PR',     label: 'Par' },
   { value: 'FOT',    label: 'Pie' },
   { value: 'FTK',    label: 'Pie cuadrado' },
-  { value: 'FT3',    label: 'Pie cúbico' },
+  // FT3 NO es del catálogo 03 —el código de pie cúbico es FTQ— y se ofrecían
+  // los dos con la misma etiqueta, sin forma de saber cuál elegir. Se deja
+  // solo el bueno; FT3 sigue reconociéndose para los productos que ya lo
+  // tienen guardado, y al emitir se traduce a FTQ.
   { value: 'FTQ',    label: 'Pie cúbico' },
   { value: 'C62',    label: 'Pieza' },
   { value: 'PG',     label: 'Placa' },
