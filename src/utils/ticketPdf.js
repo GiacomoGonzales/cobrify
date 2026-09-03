@@ -56,6 +56,39 @@ const mostrar = (el, anchoMm) => {
   // fuera de la pantalla: con coordenadas negativas html2canvas a veces recorta.
   estilo.textContent = `
     [${ATRIBUTO_PADRE}] { display: block !important; }
+    /*
+     * Sin esto el PDF sale con el texto CORTADO POR LA MITAD.
+     *
+     * El ticket usa \`overflow: hidden\` —en el contenedor y en cada fila
+     * etiqueta/valor— para que un valor largo no desborde los 80 mm. Al
+     * imprimir eso no molesta, pero html2canvas recorta a una caja más baja que
+     * el texto y se come la mitad de abajo de cada renglón (reporte de JMC con
+     * la guía T001-00000013).
+     *
+     * Quitarlo durante la captura es seguro: el ancho ya lo fija la regla de
+     * acá abajo y los valores largos siguen cortándose solos por \`word-break\`.
+     */
+    [${ATRIBUTO}], [${ATRIBUTO}] * { overflow: visible !important; }
+    /*
+     * Y esto es la otra mitad del mismo problema.
+     *
+     * html2canvas ubica el texto con sus propias métricas de fuente, no con las
+     * del navegador. Con interlineados apretados —1.2, o el que traiga la
+     * fuente— los glifos le quedan por debajo de la caja que calculó para el
+     * elemento, y se cortan igual: el renglón sobre un recuadro con fondo (el
+     * cintillo negro, la caja del peso) perdía la mitad de abajo.
+     *
+     * Un interlineado holgado le da lugar al glifo dentro de su propia caja.
+     *
+     * 1.8 no es un número al azar: se probó contra la guía de JMC. Con 1.4 el
+     * texto ya no se corta, pero la línea inferior de cada título de sección
+     * —DESTINATARIO, DATOS DEL TRASLADO, BIENES— todavía pasa POR ENCIMA de las
+     * letras. Recién a 1.8 el borde cae debajo de los glifos.
+     *
+     * El PDF sale unos milímetros más largo que el papel impreso; eso no
+     * importa: esto es la copia que se manda, no la que sale del rollo.
+     */
+    [${ATRIBUTO}], [${ATRIBUTO}] * { line-height: 1.8 !important; }
     [${ATRIBUTO}] {
       display: block !important;
       position: fixed !important;
