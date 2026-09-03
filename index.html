@@ -107,7 +107,18 @@
       (function () {
         try {
           var hosts = ['chat.cobrifyperu.com', 'chat.cobrify.com', 'chat.localhost'];
-          if (hosts.indexOf(window.location.hostname.toLowerCase()) === -1) return;
+          var host = window.location.hostname.toLowerCase();
+          var esChat = hosts.indexOf(host) !== -1;
+          // Modo de prueba en local: localhost:3000/?chat=1 (ver
+          // src/utils/dominioChat.js — chat.localhost no sirve porque la llave
+          // de Firebase bloquea ese origen).
+          if (!esChat && (host === 'localhost' || host === '127.0.0.1')) {
+            try {
+              if (window.location.search.indexOf('chat=1') !== -1) sessionStorage.setItem('modoChat', '1');
+              esChat = sessionStorage.getItem('modoChat') === '1';
+            } catch (e) { /* sin sessionStorage: sin modo de prueba */ }
+          }
+          if (!esChat) return;
           document.title = 'Cobrify Chat';
           var poner = function (selector, href) {
             var el = document.querySelector(selector);
