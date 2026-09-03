@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { getInvestorReport, recalculateInvestorReport } from '@/services/adminStatsService'
-import { resumenRapido, resumenCompleto } from '@/services/adminResumenService'
+import { resumenRapido, resumenCompleto, compararCobranza } from '@/services/adminResumenService'
 import { PLANS } from '@/services/subscriptionService'
 import { CHART, CHART_TOOLTIP } from '@/components/charts/chartTheme'
 import { Pagina, Seccion, Tabla, Th, Td, Fila, FilaVacia, Boton, Cifras, Cifra, Aviso } from '@/components/admin/ui'
@@ -53,6 +53,8 @@ export default function AdminResumen() {
   const [rapido, setRapido] = useState(null)
   const [cargandoRapido, setCargandoRapido] = useState(true)
   const [reporte, setReporte] = useState(null)
+  // La foto para inversores no va en la primera pantalla: se abre a pedido.
+  const [verInversores, setVerInversores] = useState(false)
   const [completo, setCompleto] = useState(null)
   const [cargandoCompleto, setCargandoCompleto] = useState(false)
   const [recalculando, setRecalculando] = useState(false)
@@ -114,7 +116,7 @@ export default function AdminResumen() {
   const resumen = cargandoRapido
     ? 'Contando cuentas…'
     : rapido
-      ? `${entero(rapido.total)} cuentas · ${entero(rapido.activas)} activas · ${entero(rapido.trial)} en trial · ${entero(rapido.suspendidas)} suspendidas · contado ${haceCuanto(rapido.calculadoEn)}`
+      ? `${entero(rapido.total)} cuentas · ${entero(rapido.activas)} activas · ${entero(rapido.suspendidas)} suspendidas · contado ${haceCuanto(rapido.calculadoEn)}`
       : ''
 
   return (
@@ -136,7 +138,6 @@ export default function AdminResumen() {
         {rapido ? (
           <Cifras>
             <Cifra etiqueta="Cuentas" valor={entero(rapido.total)} nota={`${entero(rapido.activas)} activas`} />
-            <Cifra etiqueta="En trial" valor={entero(rapido.trial)} />
             <Cifra etiqueta="Suspendidas" valor={entero(rapido.suspendidas)} />
             <Cifra etiqueta="Nuevas este mes" valor={entero(rapido.nuevasMes)} />
             <Cifra etiqueta="Vencen en 7 días" valor={entero(rapido.vencen7)} alerta={rapido.vencen7 > 0} />
@@ -149,6 +150,53 @@ export default function AdminResumen() {
         )}
       </Seccion>
 
+      {/* ── Cobranza: lo que entro de verdad ─────────────────────────────── */}
+      <Seccion
+        titulo="Cobranza"
+        descripcion={completo
+          ? 'Sobre los pagos registrados en todas las cuentas.'
+          : 'Los pagos viven dentro de cada cuenta, así que no se pueden contar en el servidor: llegan con “Cargar todo”.'}
+      >
+        {completo?.cobranza ? (
+          <>
+            <Cifras>
+              <Cifra
+                etiqueta="Cobrado hoy"
+                valor={moneda(completo.cobranza.hoy)}
+                nota={`${entero(completo.cobranza.cuentaHoy)} pago${completo.cobranza.cuentaHoy === 1 ? '' : 's'} · ${compararCobranza(completo.cobranza.hoy, completo.cobranza.ayer, 'ayer')}`}
+              />
+              <Cifra
+                etiqueta="Cobrado este mes"
+                valor={moneda(completo.cobranza.mes)}
+                nota={`${entero(completo.cobranza.cuentaMes)} pago${completo.cobranza.cuentaMes === 1 ? '' : 's'} · ${compararCobranza(completo.cobranza.mes, completo.cobranza.mesPasado, 'el mes pasado')}`}
+              />
+              <Cifra etiqueta="Ticket promedio del mes" valor={moneda(completo.cobranza.ticket)} />
+              <Cifra etiqueta="Mes pasado completo" valor={moneda(completo.cobranza.pasadoCompleto)} nota="los 30 días, para tener con qué medir" />
+            </Cifras>
+            <div className="mt-4">
+              <Grafico datos={completo.cobranza.meses} clave="total" nombre="Cobrado" dinero />
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-[12.5px] text-gray-500">Todavía no se cargó.</p>
+            <Boton tamano="sm" variante="primario" onClick={cargarCompleto} disabled={cargandoCompleto}>
+              {cargandoCompleto ? 'Cargando…' : 'Cargar'}
+            </Boton>
+          </div>
+        )}
+      </Seccion>
+
+      {/* ── La foto para inversores: fuera de la vista hasta que se pida ──── */}
+      {!verInversores ? (
+        <button
+          type="button"
+          onClick={() => setVerInversores(true)}
+          className="self-start text-[12.5px] text-gray-500 hover:text-gray-900 underline underline-offset-2"
+        >
+          Ver la foto para inversores
+        </button>
+      ) : (
       <Seccion
         id="inversores"
         titulo="Última foto para inversores"
@@ -157,9 +205,12 @@ export default function AdminResumen() {
           : 'Recorre toda la plataforma en el servidor y guarda el resultado; solo se recalcula cuando lo pides.'}
         className="scroll-mt-16"
         acciones={
-          <Boton tamano="sm" onClick={recalcular} disabled={recalculando}>
-            {recalculando ? 'Calculando…' : hayReporte ? 'Recalcular' : 'Generar reporte'}
-          </Boton>
+          <>
+            <Boton tamano="sm" onClick={recalcular} disabled={recalculando}>
+              {recalculando ? 'Calculando…' : hayReporte ? 'Recalcular' : 'Generar reporte'}
+            </Boton>
+            <Boton tamano="sm" variante="enlace" onClick={() => setVerInversores(false)}>Ocultar</Boton>
+          </>
         }
       >
         {hayReporte ? (
@@ -175,6 +226,7 @@ export default function AdminResumen() {
           <p className="text-[12.5px] text-gray-500">{recalculando ? 'Calculando… puede tardar varios minutos.' : 'Todavía no se generó el reporte.'}</p>
         )}
       </Seccion>
+      )}
 
       {/* ── Lo demas, cuando lo pides ─────────────────────────────────────── */}
       {!completo ? (

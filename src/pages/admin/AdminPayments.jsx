@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { CHART, CHART_TOOLTIP } from '@/components/charts/chartTheme'
 import { getAllPayments, updatePayment, deletePayment } from '@/services/adminStatsService'
 import { PLANS } from '@/services/subscriptionService'
 import { matchesPrebuilt } from '@/lib/utils'
@@ -9,7 +7,7 @@ import { buildAccountHaystack } from '@/utils/adminSearch'
 import { useToast } from '@/contexts/ToastContext'
 import {
   Pagina, Seccion, Tabla, Th, Td, Fila, FilaVacia, Filtros, FiltroSelect, Buscador, Estado, Boton, Modal,
-  Campo, Entrada, Selector, AreaTexto, Cifras, Cifra,
+  Campo, Entrada, Selector, AreaTexto,
 } from '@/components/admin/ui'
 
 // Historial de pagos de todas las cuentas: un pago por cada renovacion.
@@ -25,17 +23,6 @@ const fechaHora = d => (d ? d.toLocaleString('es-PE', { day: '2-digit', month: '
 const aFechaInput = d => {
   const x = d?.toDate ? d.toDate() : d instanceof Date ? d : new Date(d)
   return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`
-}
-
-const NOMBRE_MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
-
-const diasDelMes = d => new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
-
-/** "+18% vs ayer" / "sin nada ayer" — la comparacion, ya escrita. */
-const comparar = (ahora, antes, cuando) => {
-  if (!antes) return ahora > 0 ? `Nada ${cuando}` : `Sin cobros ${cuando}`
-  const pct = Math.round(((ahora - antes) / antes) * 100)
-  return `${pct >= 0 ? '+' : ''}${pct}% vs ${cuando}`
 }
 
 export default function AdminPayments() {
@@ -186,60 +173,6 @@ export default function AdminPayments() {
   const hayFiltros = Boolean(searchTerm) || methodFilter !== 'all' || Boolean(dateRange.start) || Boolean(dateRange.end)
   const orden = { campo: sortField, direccion: sortDirection }
   const desglose = Object.entries(filteredStats.byMethod).sort((a, b) => b[1] - a[1])
-  // COBRANZA: lo mismo que mira el dashboard de un negocio, pero de lo que
-  // COBRA Cobrify. Se calcula sobre TODOS los pagos, no sobre los filtrados: es
-  // un reporte de cuanto entro, no del filtro que uno tenga puesto.
-  //
-  // Sale gratis: getAllPayments ya trajo la lista entera para la tabla.
-  const cobranza = useMemo(() => {
-    const ahora = new Date()
-    const inicioDeHoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate())
-    const inicioDeAyer = new Date(inicioDeHoy); inicioDeAyer.setDate(inicioDeAyer.getDate() - 1)
-    const inicioDelMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1)
-    const inicioMesPasado = new Date(ahora.getFullYear(), ahora.getMonth() - 1, 1)
-
-    // El mes pasado se compara hasta el MISMO dia del mes, no el mes entero:
-    // el dia 3 contra un mes cerrado siempre pierde y no dice nada.
-    const cortePasado = new Date(inicioMesPasado)
-    cortePasado.setDate(Math.min(ahora.getDate(), diasDelMes(inicioMesPasado)))
-    cortePasado.setHours(23, 59, 59, 999)
-
-    let hoy = 0, ayer = 0, mes = 0, mesPasado = 0, pasadoCompleto = 0
-    let cuentaHoy = 0, cuentaMes = 0
-
-    // Doce meses para el grafico, del mas viejo al mas nuevo.
-    const meses = []
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(ahora.getFullYear(), ahora.getMonth() - i, 1)
-      meses.push({ clave: `${d.getFullYear()}-${d.getMonth()}`, month: NOMBRE_MES[d.getMonth()] + ' ' + String(d.getFullYear()).slice(-2), total: 0 })
-    }
-    const porClave = new Map(meses.map(m => [m.clave, m]))
-
-    for (const p of payments) {
-      const d = p.date
-      if (!(d instanceof Date) || Number.isNaN(d.getTime())) continue
-      const monto = Number(p.amount) || 0
-
-      if (d >= inicioDeHoy) { hoy += monto; cuentaHoy++ }
-      else if (d >= inicioDeAyer) ayer += monto
-
-      if (d >= inicioDelMes) { mes += monto; cuentaMes++ }
-      else if (d >= inicioMesPasado) {
-        pasadoCompleto += monto
-        if (d <= cortePasado) mesPasado += monto
-      }
-
-      const fila = porClave.get(`${d.getFullYear()}-${d.getMonth()}`)
-      if (fila) fila.total += monto
-    }
-
-    return {
-      hoy, ayer, mes, mesPasado, pasadoCompleto, cuentaHoy, cuentaMes,
-      ticket: cuentaMes ? mes / cuentaMes : 0,
-      meses,
-    }
-  }, [payments])
-
   const resumen = loading
     ? 'Cargando pagos…'
     : hayFiltros
@@ -256,45 +189,6 @@ export default function AdminPayments() {
         </>
       }
     >
-      <Seccion
-        titulo="Cobranza"
-        descripcion="Lo cobrado de verdad, sobre los pagos registrados. No cambia con los filtros de abajo."
-      >
-        <Cifras>
-          <Cifra
-            etiqueta="Cobrado hoy"
-            valor={moneda(cobranza.hoy)}
-            nota={`${cobranza.cuentaHoy} pago${cobranza.cuentaHoy === 1 ? '' : 's'} · ${comparar(cobranza.hoy, cobranza.ayer, 'ayer')}`}
-          />
-          <Cifra
-            etiqueta="Cobrado este mes"
-            valor={moneda(cobranza.mes)}
-            nota={`${cobranza.cuentaMes} pago${cobranza.cuentaMes === 1 ? '' : 's'} · ${comparar(cobranza.mes, cobranza.mesPasado, 'el mes pasado')}`}
-          />
-          <Cifra
-            etiqueta="Ticket promedio del mes"
-            valor={moneda(cobranza.ticket)}
-          />
-          <Cifra
-            etiqueta="Mes pasado completo"
-            valor={moneda(cobranza.pasadoCompleto)}
-            nota="Los 30 días, para tener con qué medir"
-          />
-        </Cifras>
-
-        <div className="mt-4 h-48 sm:h-56">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={cobranza.meses} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} vertical={false} />
-              <XAxis dataKey="month" tick={{ fontSize: 11, fill: CHART.axis }} stroke={CHART.grid} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: CHART.axis }} stroke={CHART.grid} axisLine={false} tickLine={false} tickFormatter={v => (v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : v)} />
-              <Tooltip contentStyle={{ ...CHART_TOOLTIP, fontSize: 12 }} formatter={v => [moneda(v), 'Cobrado']} />
-              <Area type="monotone" dataKey="total" name="Cobrado" stroke={CHART.primary} strokeWidth={2} fill={CHART.primary} fillOpacity={0.08} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </Seccion>
-
       <Filtros>
         <Buscador ancho="w-full sm:w-80" placeholder="Negocio, correo, RUC…" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
         <FiltroSelect value={methodFilter} onChange={e => setMethodFilter(e.target.value)}>

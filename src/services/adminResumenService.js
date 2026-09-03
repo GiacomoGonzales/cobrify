@@ -39,13 +39,12 @@ export async function resumenRapido() {
   // Planes con precio: el MRR sale de cuantas cuentas activas hay en cada uno
   const planes = Object.entries(PLANS).filter(([, p]) => (p.pricePerMonth || 0) > 0)
 
-  const [total, subUsuarios, activas, suspendidas, trial, nuevasMes, vencen7, vencidas7, renuevanMes, ...activasPorPlan] = await Promise.all([
+  const [total, subUsuarios, activas, suspendidas, nuevasMes, vencen7, vencidas7, renuevanMes, ...activasPorPlan] = await Promise.all([
     contar(subs),
     // Los sub-usuarios viejos tienen su propia suscripcion (con ownerId); se descuentan
     contar(query(subs, where('ownerId', '!=', null))),
     contar(query(subs, where('status', '==', 'active'))),
     contar(query(subs, where('status', '==', 'suspended'))),
-    contar(query(subs, where('plan', 'in', ['trial', 'free']))),
     contar(query(subs, where('createdAt', '>=', inicioDeMes()))),
     contar(query(subs, where('status', '==', 'active'), where('currentPeriodEnd', '>', ahora), where('currentPeriodEnd', '<=', sumarDias(ahora, 7)))),
     contar(query(subs, where('status', '==', 'active'), where('currentPeriodEnd', '>=', sumarDias(ahora, -7)), where('currentPeriodEnd', '<', ahora))),
@@ -60,13 +59,12 @@ export async function resumenRapido() {
     total: Math.max(0, total - subUsuarios),
     activas,
     suspendidas,
-    trial,
     nuevasMes,
     vencen7,
     vencidas7,
     renuevanMes,
     mrr: Math.round(mrr * 100) / 100,
-    lecturas: 9 + planes.length,
+    lecturas: 8 + planes.length,
     calculadoEn: new Date(),
   }
 }
@@ -275,6 +273,82 @@ function calcularAdquisicion(landingSnap, bizSnap, days = 30) {
   }
 }
 
+// ============ COBRANZA: lo que Cobrify cobro, no lo que facturan ============
+//
+// Vive aca y no en la pagina de Pagos porque el Resumen es donde uno viene a
+// preguntarse como va el mes. Los pagos son un arreglo DENTRO de cada
+// suscripcion (`paymentHistory`), asi que no hay agregacion del servidor que
+// los sume: hay que leer las cuentas. Por eso viaja con `resumenCompleto` y no
+// con las cifras baratas de la apertura.
+
+const NOMBRE_MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+
+const diasDelMes = d => new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
+
+/** "+18% vs ayer" / "Sin cobros ayer" — la comparacion, ya escrita. */
+export const compararCobranza = (ahora, antes, cuando) => {
+  if (!antes) return ahora > 0 ? `Nada ${cuando}` : `Sin cobros ${cuando}`
+  const pct = Math.round(((ahora - antes) / antes) * 100)
+  return `${pct >= 0 ? '+' : ''}${pct}% vs ${cuando}`
+}
+
+/**
+ * Cobrado hoy, este mes y en los ultimos doce meses.
+ *
+ * La comparacion mensual va hasta el MISMO DIA del mes pasado, no contra el mes
+ * entero: el dia 3 comparado con un mes cerrado siempre pierde, y un numero que
+ * siempre da rojo no informa nada. El mes pasado completo se guarda aparte, que
+ * es con lo que uno se mide de verdad.
+ */
+function calcularCobranza(subsSnap) {
+  const ahora = new Date()
+  const inicioDeHoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate())
+  const inicioDeAyer = new Date(inicioDeHoy); inicioDeAyer.setDate(inicioDeAyer.getDate() - 1)
+  const inicioDelMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1)
+  const inicioMesPasado = new Date(ahora.getFullYear(), ahora.getMonth() - 1, 1)
+  const cortePasado = new Date(inicioMesPasado)
+  cortePasado.setDate(Math.min(ahora.getDate(), diasDelMes(inicioMesPasado)))
+  cortePasado.setHours(23, 59, 59, 999)
+
+  let hoy = 0, ayer = 0, mes = 0, mesPasado = 0, pasadoCompleto = 0
+  let cuentaHoy = 0, cuentaMes = 0
+
+  const meses = []
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(ahora.getFullYear(), ahora.getMonth() - i, 1)
+    meses.push({ clave: `${d.getFullYear()}-${d.getMonth()}`, month: `${NOMBRE_MES[d.getMonth()]} ${String(d.getFullYear()).slice(-2)}`, total: 0 })
+  }
+  const porClave = new Map(meses.map(m => [m.clave, m]))
+
+  subsSnap.forEach(doc => {
+    const data = doc.data()
+    if (data.ownerId) return // los sub-usuarios no pagan aparte
+    for (const pago of data.paymentHistory || []) {
+      const d = pago.date?.toDate?.() || (pago.date ? new Date(pago.date) : null)
+      if (!d || Number.isNaN(d.getTime())) continue
+      const monto = Number(pago.amount) || 0
+
+      if (d >= inicioDeHoy) { hoy += monto; cuentaHoy++ }
+      else if (d >= inicioDeAyer) ayer += monto
+
+      if (d >= inicioDelMes) { mes += monto; cuentaMes++ }
+      else if (d >= inicioMesPasado) {
+        pasadoCompleto += monto
+        if (d <= cortePasado) mesPasado += monto
+      }
+
+      const fila = porClave.get(`${d.getFullYear()}-${d.getMonth()}`)
+      if (fila) fila.total += monto
+    }
+  })
+
+  return {
+    hoy, ayer, mes, mesPasado, pasadoCompleto, cuentaHoy, cuentaMes,
+    ticket: cuentaMes ? mes / cuentaMes : 0,
+    meses,
+  }
+}
+
 // Por plan (con origen y clase), por departamento y retencion. Excluye
 // sub-usuarios (tienen ownerId) igual que la lista de Usuarios.
 function calcularDetalle(subsSnap, negocios, usuarios) {
@@ -371,6 +445,7 @@ export async function resumenCompleto() {
     analytics: calcularAnalytics(subsSnap, negocios),
     adquisicion: calcularAdquisicion(landingSnap, bizSnap, 30),
     detalle: calcularDetalle(subsSnap, negocios, usuarios),
+    cobranza: calcularCobranza(subsSnap),
     lecturas: subsSnap.size + bizSnap.size + usersSnap.size + 30,
     calculadoEn: new Date(),
   }
