@@ -264,6 +264,49 @@ function prepareRevenueChartData(monthlyRevenue) {
 /**
  * Obtiene todos los pagos con filtros
  */
+/**
+ * Las recargas de saldo de los resellers.
+ *
+ * Es plata que Cobrify cobra de verdad y que NO estaba en ningun lado del
+ * panel: el historial de pagos sale de `subscriptions.paymentHistory`, y una
+ * recarga no toca eso. Tampoco hay doble conteo — cuando el reseller GASTA su
+ * saldo (crear o renovar un cliente) se anota como movimiento negativo en
+ * `resellerTransactions`, pero no genera un pago nuevo.
+ */
+export async function getResellerDeposits() {
+  const [movs, resellersSnap] = await Promise.all([
+    getDocs(query(collection(db, 'resellerTransactions'), where('type', '==', 'deposit'))),
+    getDocs(collection(db, 'resellers')),
+  ])
+
+  const nombre = new Map()
+  resellersSnap.forEach(d => {
+    const r = d.data()
+    nombre.set(d.id, { nombre: r.companyName || r.contactName || 'Reseller', email: r.email || '' })
+  })
+
+  const recargas = []
+  movs.forEach(d => {
+    const t = d.data()
+    const info = nombre.get(t.resellerId) || { nombre: 'Reseller', email: '' }
+    recargas.push({
+      id: `recarga-${d.id}`,
+      esRecarga: true,
+      resellerId: t.resellerId,
+      businessName: info.nombre,
+      email: info.email,
+      amount: Math.abs(Number(t.amount) || 0),
+      method: 'recarga',
+      plan: 'recarga_saldo',
+      planName: 'Recarga de saldo',
+      status: 'completed',
+      date: t.createdAt?.toDate?.() || (t.createdAt ? new Date(t.createdAt) : null),
+      notes: t.description || '',
+    })
+  })
+  return recargas.filter(r => r.date instanceof Date && !Number.isNaN(r.date.getTime()))
+}
+
 export async function getAllPayments(filters = {}) {
   try {
     const subscriptionsRef = collection(db, 'subscriptions')

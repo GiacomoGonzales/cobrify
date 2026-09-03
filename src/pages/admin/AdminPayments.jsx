@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getAllPayments, updatePayment, deletePayment } from '@/services/adminStatsService'
+import { getAllPayments, getResellerDeposits, updatePayment, deletePayment } from '@/services/adminStatsService'
 import { PLANS } from '@/services/subscriptionService'
 import { matchesPrebuilt } from '@/lib/utils'
 import { buildAccountHaystack } from '@/utils/adminSearch'
@@ -8,13 +8,14 @@ import { useToast } from '@/contexts/ToastContext'
 import {
   Pagina, Seccion, Tabla, Th, Td, Fila, FilaVacia, Filtros, FiltroSelect, Buscador, Estado, Boton, Modal,
   Campo, Entrada, Selector, AreaTexto,
+  useMenuDeFila, BotonDeFila, CajaMenu, ItemMenu,
 } from '@/components/admin/ui'
 
 // Historial de pagos de todas las cuentas: un pago por cada renovacion.
 // Los totales y el CSV se calculan sobre TODOS los filtrados, no sobre la
 // pagina visible.
 
-const METODOS = { yape: 'Yape', plin: 'Plin', transferencia: 'Transferencia', efectivo: 'Efectivo', tarjeta: 'Tarjeta', otro: 'Otro' }
+const METODOS = { yape: 'Yape', plin: 'Plin', transferencia: 'Transferencia', efectivo: 'Efectivo', tarjeta: 'Tarjeta', otro: 'Otro', recarga: 'Recarga' }
 const ESTADOS = { completed: 'Completado', pending: 'Pendiente', failed: 'Fallido' }
 const PAGE_SIZE = 50
 
@@ -33,6 +34,7 @@ export default function AdminPayments() {
   const [totalCount, setTotalCount] = useState(0)
   const [searchTerm, setSearchTerm] = useState('')
   const [methodFilter, setMethodFilter] = useState('all')
+  const [origenFiltro, setOrigenFiltro] = useState('all')
   const [dateRange, setDateRange] = useState({ start: '', end: '' })
   const [sortField, setSortField] = useState('date')
   const [sortDirection, setSortDirection] = useState('desc')
@@ -41,6 +43,8 @@ export default function AdminPayments() {
   const [form, setForm] = useState({})
   const [guardando, setGuardando] = useState(false)
   const [eliminando, setEliminando] = useState(null)
+  // Mismo menu de fila que el resto del panel.
+  const menu = useMenuDeFila()
 
   useEffect(() => {
     loadPayments()
@@ -49,10 +53,14 @@ export default function AdminPayments() {
   async function loadPayments() {
     setLoading(true)
     try {
-      const result = await getAllPayments()
-      setPayments(result.payments)
-      setTotalAmount(result.totalAmount)
-      setTotalCount(result.totalCount)
+      // Dos fuentes distintas de la MISMA plata: lo que paga un cliente directo
+      // vive en su suscripcion; lo que paga un reseller es una recarga de saldo
+      // y vive aparte. Ninguna de las dos incluye a la otra.
+      const [result, recargas] = await Promise.all([getAllPayments(), getResellerDeposits()])
+      const todos = [...result.payments, ...recargas]
+      setPayments(todos)
+      setTotalAmount(todos.reduce((t, p) => t + (Number(p.amount) || 0), 0))
+      setTotalCount(todos.length)
     } catch (error) {
       console.error('Error cargando pagos:', error)
       toast.error('No se pudieron cargar los pagos')
@@ -66,6 +74,8 @@ export default function AdminPayments() {
     // Mismo buscador que Usuarios: palabras sueltas, en cualquier orden, sin tildes
     if (searchTerm) result = result.filter(p => matchesPrebuilt(searchTerm, buildAccountHaystack(p)))
     if (methodFilter !== 'all') result = result.filter(p => p.method === methodFilter)
+    if (origenFiltro === 'clientes') result = result.filter(p => !p.esRecarga)
+    if (origenFiltro === 'resellers') result = result.filter(p => p.esRecarga)
     if (dateRange.start) result = result.filter(p => p.date >= new Date(dateRange.start))
     if (dateRange.end) {
       const fin = new Date(dateRange.end)
@@ -82,7 +92,7 @@ export default function AdminPayments() {
       return 0
     })
     return result
-  }, [payments, searchTerm, methodFilter, dateRange, sortField, sortDirection])
+  }, [payments, searchTerm, methodFilter, origenFiltro, dateRange, sortField, sortDirection])
 
   const pageCount = Math.max(1, Math.ceil(filteredPayments.length / PAGE_SIZE))
   const displayedPayments = useMemo(
@@ -111,9 +121,10 @@ export default function AdminPayments() {
   }
 
   function exportToCSV() {
-    const headers = ['Fecha', 'Email', 'Negocio', 'Monto', 'Método', 'Plan', 'Estado', 'Notas']
+    const headers = ['Fecha', 'Origen', 'Email', 'Negocio', 'Monto', 'Método', 'Plan', 'Estado', 'Notas']
     const rows = filteredPayments.map(p => [
       p.date?.toLocaleDateString() || 'N/A',
+      p.esRecarga ? 'Recarga de reseller' : 'Cliente directo',
       p.email,
       p.businessName,
       p.amount,
@@ -170,7 +181,7 @@ export default function AdminPayments() {
     }
   }
 
-  const hayFiltros = Boolean(searchTerm) || methodFilter !== 'all' || Boolean(dateRange.start) || Boolean(dateRange.end)
+  const hayFiltros = Boolean(searchTerm) || methodFilter !== 'all' || origenFiltro !== 'all' || Boolean(dateRange.start) || Boolean(dateRange.end)
   const orden = { campo: sortField, direccion: sortDirection }
   const desglose = Object.entries(filteredStats.byMethod).sort((a, b) => b[1] - a[1])
   const resumen = loading
@@ -191,6 +202,11 @@ export default function AdminPayments() {
     >
       <Filtros>
         <Buscador ancho="w-full sm:w-80" placeholder="Negocio, correo, RUC…" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+        <FiltroSelect value={origenFiltro} onChange={e => setOrigenFiltro(e.target.value)}>
+          <option value="all">Origen</option>
+          <option value="clientes">Clientes directos</option>
+          <option value="resellers">Recargas de resellers</option>
+        </FiltroSelect>
         <FiltroSelect value={methodFilter} onChange={e => setMethodFilter(e.target.value)}>
           <option value="all">Método</option>
           {Object.entries(METODOS).map(([k, n]) => <option key={k} value={k}>{n}</option>)}
@@ -199,7 +215,7 @@ export default function AdminPayments() {
         <span className="text-gray-400">–</span>
         <Entrada type="date" value={dateRange.end} onChange={e => setDateRange(r => ({ ...r, end: e.target.value }))} className="w-[calc(50%-0.75rem)] sm:w-40" aria-label="Hasta" />
         {hayFiltros && (
-          <button type="button" onClick={() => { setSearchTerm(''); setMethodFilter('all'); setDateRange({ start: '', end: '' }) }} className="h-8 px-2 text-[12.5px] text-gray-500 hover:text-gray-900">
+          <button type="button" onClick={() => { setSearchTerm(''); setMethodFilter('all'); setOrigenFiltro('all'); setDateRange({ start: '', end: '' }) }} className="h-8 px-2 text-[12.5px] text-gray-500 hover:text-gray-900">
             Limpiar
           </button>
         )}
@@ -234,10 +250,17 @@ export default function AdminPayments() {
                 </div>
                 <div className="mt-1.5 flex items-center justify-between gap-2">
                   <span className="truncate text-[11.5px] text-gray-500">{p.notes || ''}</span>
-                  <div className="flex shrink-0 gap-1">
-                    <Boton tamano="sm" onClick={() => abrirEdicion(p)}>Editar</Boton>
-                    <Boton tamano="sm" variante="peligro" onClick={() => setEliminando(p)}>Eliminar</Boton>
-                  </div>
+                  {!p.esRecarga && (
+                    <div className="relative shrink-0">
+                      <BotonDeFila onClick={el => menu.alternar(`m-${p.id}`, el)} />
+                      {menu.abiertoEn === `m-${p.id}` && (
+                        <CajaMenu posicion={menu.posicion} refMenu={menu.refMenu}>
+                          <ItemMenu onClick={() => { menu.cerrar(); abrirEdicion(p) }}>Editar el pago</ItemMenu>
+                          <ItemMenu rojo onClick={() => { menu.cerrar(); setEliminando(p) }}>Eliminar el pago</ItemMenu>
+                        </CajaMenu>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ))
@@ -245,7 +268,7 @@ export default function AdminPayments() {
         </div>
 
         <div className="hidden sm:block">
-        <Tabla alto="lg:max-h-[calc(100vh-12rem)]">
+        <Tabla>
           <thead>
             <tr>
               <Th campo="date" orden={orden} onOrdenar={handleSort} ancho={150}>Fecha</Th>
@@ -255,7 +278,7 @@ export default function AdminPayments() {
               <Th>Plan</Th>
               <Th>Estado</Th>
               <Th>Notas</Th>
-              <Th ancho={150}><span className="sr-only">Acciones</span></Th>
+              <Th ancho={44}><span className="sr-only">Acciones</span></Th>
             </tr>
           </thead>
           <tbody>
@@ -268,19 +291,38 @@ export default function AdminPayments() {
                 <Fila key={p.id}>
                   <Td apagado>{fechaHora(p.date)}</Td>
                   <Td className="max-w-[280px]">
-                    <Link to={`/app/admin/users/${p.subscriptionId}`} className="block truncate font-medium hover:underline">{p.businessName}</Link>
-                    <div className="truncate text-[11.5px] text-gray-500">{p.email}</div>
+                    {p.esRecarga ? (
+                      <Link to="/app/admin/resellers" className="block truncate font-medium hover:underline">{p.businessName}</Link>
+                    ) : (
+                      <Link to={`/app/admin/users/${p.subscriptionId}`} className="block truncate font-medium hover:underline">{p.businessName}</Link>
+                    )}
+                    <div className="truncate text-[11.5px] text-gray-500">
+                      {p.esRecarga ? 'Reseller' : ''}{p.esRecarga && p.email ? ' · ' : ''}{p.email}
+                    </div>
                   </Td>
                   <Td numero className="font-medium">{moneda(p.amount)}</Td>
                   <Td apagado>{METODOS[p.method] || p.method}</Td>
                   <Td apagado>{p.planName || PLANS[p.plan]?.name || p.plan}</Td>
                   <Td><Estado valor={p.status} etiqueta={ESTADOS[p.status] || p.status} /></Td>
                   <Td apagado className="max-w-[240px] truncate" title={p.notes || undefined}>{p.notes || '—'}</Td>
-                  <Td alinear="der">
-                    <div className="flex justify-end gap-1">
-                      <Boton tamano="sm" onClick={() => abrirEdicion(p)}>Editar</Boton>
-                      <Boton tamano="sm" variante="peligro" onClick={() => setEliminando(p)}>Eliminar</Boton>
-                    </div>
+                  <Td alinear="centro">
+                    {/* Editar y borrar tocan el historial DENTRO de la
+                        suscripcion; una recarga no vive ahi, asi que no se
+                        toca desde aca: se corrige en Resellers, y el nombre de
+                        la fila ya lleva hasta alla. */}
+                    {p.esRecarga ? (
+                      <span className="text-gray-300" title="Una recarga se corrige desde Resellers">—</span>
+                    ) : (
+                      <div className="relative">
+                        <BotonDeFila onClick={el => menu.alternar(p.id, el)} />
+                        {menu.abiertoEn === p.id && (
+                          <CajaMenu posicion={menu.posicion} refMenu={menu.refMenu}>
+                            <ItemMenu onClick={() => { menu.cerrar(); abrirEdicion(p) }}>Editar el pago</ItemMenu>
+                            <ItemMenu rojo onClick={() => { menu.cerrar(); setEliminando(p) }}>Eliminar el pago</ItemMenu>
+                          </CajaMenu>
+                        )}
+                      </div>
+                    )}
                   </Td>
                 </Fila>
               ))
@@ -299,6 +341,8 @@ export default function AdminPayments() {
           </div>
         )}
       </Seccion>
+
+      {menu.abiertoEn && <div className="fixed inset-0 z-40" onClick={menu.cerrar} />}
 
       {editando && (
         <Modal
