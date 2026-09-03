@@ -244,7 +244,11 @@ const ubigeoDe = (data) => {
 const consultarDomicilioFiscal = async (ruc) => {
   try {
     const isNative = Capacitor.isNativePlatform()
-    const url = isNative ? `${API_BASE_URL}/api/ruc-domicilio-fiscal` : '/api/ruc-domicilio'
+    // MISMA ruta en los dos lados, y no es un detalle: en desarrollo Vite
+    // proxea /api/* DIRECTO a apiperu.dev (ver vite.config.js), asi que el
+    // nombre del proxy de Vercel tiene que ser el de la ruta real de apiperu
+    // o en local da 404 y la direccion no se completa nunca.
+    const url = isNative ? `${API_BASE_URL}/api/ruc-domicilio-fiscal` : '/api/ruc-domicilio-fiscal'
     const response = await httpRequest(url, {
       method: 'POST',
       headers: {
@@ -291,10 +295,11 @@ export const consultarEstablecimientos = async (ruc) => {
 
     const isNative = Capacitor.isNativePlatform()
 
-    // Web: usa el proxy /api/ruc-establecimientos. Nativo: directo a apiperu.dev.
+    // Misma ruta en los dos lados, por el proxy de Vite en desarrollo
+    // (ver el comentario de consultarDomicilioFiscal).
     const url = isNative
       ? `${API_BASE_URL}/api/ruc-establecimientos-anexos`
-      : '/api/ruc-establecimientos'
+      : '/api/ruc-establecimientos-anexos'
     const options = {
       method: 'POST',
       headers: {

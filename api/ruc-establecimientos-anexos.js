@@ -1,20 +1,14 @@
 /**
- * Vercel Serverless Function para consultar el DOMICILIO FISCAL de un RUC
- * en API Perú (https://apiperu.dev/api/ruc-domicilio-fiscal).
+ * Vercel Serverless Function para consultar los ESTABLECIMIENTOS (anexos) de un RUC
+ * en API Perú (https://apiperu.dev/api/ruc-establecimientos-anexos).
  *
- * Por qué existe, si /api/ruc ya trae una dirección:
- *
- * Porque para los RUC de PERSONA NATURAL (los que empiezan con 10) esa
- * dirección viene VACÍA. Verificado contra tres RUC 10 distintos: nombre,
- * estado y condición llegan bien, y `direccion`, `direccion_completa`,
- * departamento, provincia, distrito y ubigeo llegan todos en blanco. Con un
- * RUC 20 el mismo endpoint los devuelve completos.
- *
- * Este endpoint sí los tiene, para los dos tipos de RUC.
+ * OJO CON EL NOMBRE DEL ARCHIVO: tiene que ser el mismo que la ruta de
+ * apiperu (/api/ruc-establecimientos-anexos). En desarrollo Vite proxea /api/* DIRECTO
+ * a apiperu.dev (ver vite.config.js), asi que si el nombre no coincide, en
+ * local da 404 y la consulta falla en silencio.
  *
  * Actúa como proxy hacia apiperu.dev para no exponer el token en el frontend.
- * Es una consulta APARTE de /api/ruc (consume un crédito adicional), así que
- * el cliente solo la usa cuando la dirección llegó vacía.
+ * Es una consulta APARTE de /api/ruc (consume un crédito adicional de la API).
  */
 
 export default async function handler(req, res) {
@@ -55,9 +49,10 @@ export default async function handler(req, res) {
       })
     }
 
-    console.log(`🔍 Consultando domicilio fiscal del RUC: ${ruc}`)
+    console.log(`🔍 Consultando establecimientos del RUC: ${ruc}`)
 
-    const apiResponse = await fetch('https://apiperu.dev/api/ruc-domicilio-fiscal', {
+    // Hacer request a API Perú (POST con body { ruc })
+    const apiResponse = await fetch('https://apiperu.dev/api/ruc-establecimientos-anexos', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${APIPERU_TOKEN}`,
@@ -71,7 +66,7 @@ export default async function handler(req, res) {
     const result = await apiResponse.json().catch(() => null)
 
     if (!apiResponse.ok) {
-      console.error(`❌ Error de API Perú (domicilio fiscal): ${apiResponse.status}`, result)
+      console.error(`❌ Error de API Perú (establecimientos): ${apiResponse.status}`, result)
       // Reenviar el estado y el mensaje REAL de apiperu para poder diagnosticar
       // (p.ej. 401/403 = el plan/token no incluye este endpoint).
       return res.status(apiResponse.status).json({
@@ -81,14 +76,14 @@ export default async function handler(req, res) {
       })
     }
 
-    // Devolver respuesta tal cual ({ success, data: {...} })
+    // Devolver respuesta tal cual ({ success, data: [...] })
     return res.status(200).json(result)
 
   } catch (error) {
-    console.error('❌ Error en /api/ruc-domicilio:', error)
+    console.error('❌ Error en /api/ruc-establecimientos-anexos:', error)
     return res.status(500).json({
       success: false,
-      error: error.message || 'Error al consultar domicilio fiscal'
+      error: error.message || 'Error al consultar establecimientos'
     })
   }
 }
