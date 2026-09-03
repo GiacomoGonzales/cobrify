@@ -14,6 +14,7 @@ import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS, resolveUbigeoParts } from '@/data
 import SUNAT_UNITS, { normalizeSunatUnit } from '@/data/sunatUnits'
 import { matchesSearchQuery } from '@/lib/utils'
 import { consultarRUC, consultarDNI, consultarEstablecimientos } from '@/services/documentLookupService'
+import { codigosDeUbigeo } from '@/utils/ubigeoDesdeConsulta'
 
 const TRANSFER_REASONS = [
   { value: '01', label: 'Venta' },
@@ -532,6 +533,8 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
         if (result.success) {
           setRecipientName(result.data.razonSocial || '')
           if (result.data.direccion) setRecipientAddress(result.data.direccion)
+          // El UBIGEO del destinatario, igual que al crear la guia.
+          aplicarUbigeoConsultado(result.data, setRecipientDepartment, setRecipientProvince, setRecipientDistrict)
           toast.success('Datos encontrados')
         } else {
           toast.error(result.error || 'No se encontraron datos')
@@ -753,6 +756,8 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
       const result = await consultarRUC(ruc)
       if (result.success) {
         setSupplierName(result.data.razonSocial || '')
+        // El domicilio del proveedor es el punto de partida, igual que al crear.
+        aplicarUbigeoConsultado(result.data, setOriginDepartment, setOriginProvince, setOriginDistrict)
         if (result.data.direccion) {
           setSupplierAddress(result.data.direccion)
           setOriginAddress(result.data.direccion)
@@ -853,6 +858,23 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
     } finally {
       setIsSearchingCarrier(false)
     }
+  }
+
+
+  /**
+   * Deja puesta la ubicacion que vino con la consulta de RUC.
+   *
+   * Solo pisa lo que se pudo resolver: si la consulta trae el departamento pero
+   * no el distrito, no se inventa uno. El criterio (codigo antes que nombre)
+   * vive en src/utils/ubigeoDesdeConsulta.js.
+   */
+  const aplicarUbigeoConsultado = (datos, setDept, setProv, setDist) => {
+    const ubi = codigosDeUbigeo(datos)
+    if (!ubi.departamento) return false
+    setDept(ubi.departamento)
+    setProv(ubi.provincia)
+    setDist(ubi.distrito)
+    return true
   }
 
   const handleSubmit = async (e) => {

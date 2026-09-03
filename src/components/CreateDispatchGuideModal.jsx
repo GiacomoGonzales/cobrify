@@ -14,6 +14,7 @@ import SUNAT_UNITS, { normalizeSunatUnit } from '@/data/sunatUnits'
 import { matchesSearchQuery } from '@/lib/utils'
 import { UNIDADES_PESO, convertirPeso } from '@/utils/weightUnits'
 import { consultarRUC, consultarDNI, consultarEstablecimientos } from '@/services/documentLookupService'
+import { codigosDeUbigeo } from '@/utils/ubigeoDesdeConsulta'
 import { validatePlate, normalizePlate, PLATE_MAX_LENGTH, PLATE_EXAMPLE } from '@/utils/vehiclePlate'
 import SelectorDeFlota, { useFlota } from '@/components/fleet/SelectorDeFlota'
 
@@ -1189,6 +1190,9 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = 
           if (result.data.direccion) {
             setRecipientAddress(result.data.direccion)
           }
+          // El UBIGEO del destinatario. La consulta ya lo trae y es lo que
+          // SUNAT valida en el punto de llegada; antes se elegia a mano.
+          aplicarUbigeoConsultado(result.data, setRecipientDepartment, setRecipientProvince, setRecipientDistrict)
           toast.success(`Datos encontrados: ${result.data.razonSocial}`)
         }
       } else {
@@ -1371,6 +1375,9 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = 
       const result = await consultarRUC(ruc)
       if (result.success) {
         setSupplierName(result.data.razonSocial || '')
+        // En una guia por COMPRA el domicilio del proveedor es el punto de
+        // partida: su ubigeo sale de la misma consulta que la direccion.
+        aplicarUbigeoConsultado(result.data, setOriginDepartment, setOriginProvince, setOriginDistrict)
         if (result.data.direccion) {
           // Domicilio fiscal: se guarda en los datos del proveedor y además se
           // propone como punto de partida (el usuario puede cambiarlo por un anexo).
@@ -1516,6 +1523,23 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = 
     } catch (error) {
       console.error('Error al autocompletar destinatario para compra:', error)
     }
+  }
+
+
+  /**
+   * Deja puesta la ubicacion que vino con la consulta de RUC.
+   *
+   * Solo pisa lo que se pudo resolver: si la consulta trae el departamento pero
+   * no el distrito, no se inventa uno. El criterio (codigo antes que nombre)
+   * vive en src/utils/ubigeoDesdeConsulta.js.
+   */
+  const aplicarUbigeoConsultado = (datos, setDept, setProv, setDist) => {
+    const ubi = codigosDeUbigeo(datos)
+    if (!ubi.departamento) return false
+    setDept(ubi.departamento)
+    setProv(ubi.provincia)
+    setDist(ubi.distrito)
+    return true
   }
 
   const handleSubmit = async (e, { skipSunat = false } = {}) => {

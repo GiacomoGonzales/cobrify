@@ -22,7 +22,7 @@
  * parcial sea ÚNICA. Si hay dos candidatos se prefiere dejarlo vacío: que el
  * usuario elija es mejor que ponerle el distrito equivocado en el comprobante.
  */
-import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
+import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS, resolveUbigeoParts } from '@/data/peruUbigeos'
 
 const VACIO = { departamento: '', provincia: '', distrito: '' }
 
@@ -64,21 +64,20 @@ const porNombre = (lista, nombre) => {
 export function codigosDeUbigeo(datos) {
   if (!datos) return { ...VACIO }
 
-  // 1. El código, si vino y es de verdad. Se valida contra el catálogo para no
-  //    dejar seleccionado un distrito que el selector no tiene.
+  // 1. El código, si vino y es de verdad. La validación contra el catálogo la
+  //    hace resolveUbigeoParts, la misma que ya usan las guías de remisión.
   const codigo = String(datos.ubigeo || '').trim()
+  const partes = resolveUbigeoParts(codigo)
+  if (partes.valid) {
+    return { departamento: partes.departamento, provincia: partes.provincia, distrito: partes.distrito }
+  }
+  // Un código que no cierra del todo todavía sirve a medias: se deja puesto lo
+  // que sí existe y el usuario completa el resto.
   if (/^\d{6}$/.test(codigo)) {
     const dep = codigo.slice(0, 2)
     const prov = codigo.slice(2, 4)
-    const dist = codigo.slice(4, 6)
     const existeDep = DEPARTAMENTOS.some(d => d.code === dep)
     const existeProv = (PROVINCIAS[dep] || []).some(p => p.code === prov)
-    const existeDist = (DISTRITOS[`${dep}${prov}`] || []).some(d => d.code === dist)
-    if (existeDep && existeProv && existeDist) {
-      return { departamento: dep, provincia: prov, distrito: dist }
-    }
-    // Un código a medias todavía sirve: el departamento y la provincia se dejan
-    // puestos y el usuario solo elige el distrito.
     if (existeDep && existeProv) return { departamento: dep, provincia: prov, distrito: '' }
     if (existeDep) return { departamento: dep, provincia: '', distrito: '' }
   }
