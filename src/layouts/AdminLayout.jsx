@@ -3,9 +3,11 @@ import { Outlet, NavLink, Navigate, useLocation, useNavigate } from 'react-route
 import { useAuth } from '@/contexts/AuthContext'
 import { Capacitor } from '@capacitor/core'
 import { StatusBar, Style } from '@capacitor/status-bar'
-import { Search, Menu, X, Sun, Moon } from 'lucide-react'
+import { Search, Menu, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TituloAdminContext } from '@/components/admin/ui/tituloAdmin'
+import { useTema } from '@/utils/temaOscuro'
+import BotonTema from '@/components/BotonTema'
 
 // Menu del panel: una lista, solo texto, sin titulos de bloque. El Resumen
 // va primero; la bandeja de WhatsApp (que vive fuera del panel) al final.
@@ -79,56 +81,12 @@ function Menu_({ onNavegar }) {
   )
 }
 
-/**
- * MODO CLARO Y OSCURO DEL ADMIN.
- *
- * Es una clase (`oscuro`) sobre la raiz del panel; los colores se retinen en
- * src/index.css. Vive solo aca: la app de negocios y el chat no cambian.
- *
- * Por defecto sigue lo que tenga puesto el sistema. En cuanto se toca el
- * interruptor, esa eleccion manda y se recuerda.
- */
-const LLAVE_TEMA = 'adminTema'
-
-const temaDelSistema = () =>
-  (typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches)
-    ? 'oscuro'
-    : 'claro'
-
-const temaInicial = () => {
-  try {
-    const guardado = localStorage.getItem(LLAVE_TEMA)
-    if (guardado === 'claro' || guardado === 'oscuro') return guardado
-  } catch { /* sin localStorage: manda el sistema */ }
-  return temaDelSistema()
-}
-
-function BotonTema({ tema, onCambiar, className }) {
-  const aOscuro = tema === 'claro'
-  return (
-    <button
-      type="button"
-      onClick={onCambiar}
-      className={cn('p-1.5 rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-900', className)}
-      title={aOscuro ? 'Modo oscuro' : 'Modo claro'}
-      aria-label={aOscuro ? 'Cambiar a modo oscuro' : 'Cambiar a modo claro'}
-    >
-      {aOscuro ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-    </button>
-  )
-}
-
 export default function AdminLayout() {
   const { isAdmin, isLoading, user, logout } = useAuth()
   const [menuAbierto, setMenuAbierto] = useState(false)
   const [tituloPagina, setTituloPagina] = useState(null)
-  const [tema, setTema] = useState(temaInicial)
+  const [tema, cambiarTema] = useTema('adminTema')
 
-  const cambiarTema = () => {
-    const nuevo = tema === 'claro' ? 'oscuro' : 'claro'
-    setTema(nuevo)
-    try { localStorage.setItem(LLAVE_TEMA, nuevo) } catch { /* no se recuerda, y ya */ }
-  }
   const [busqueda, setBusqueda] = useState('')
   const buscadorRef = useRef(null)
   const location = useLocation()
@@ -265,8 +223,10 @@ export default function AdminLayout() {
         <main className="lg:pl-56 min-h-screen min-w-0">
           {/* Cabecera: titulo de la pagina y buscador global de cuentas */}
           <header className="hidden lg:flex sticky top-0 z-20 h-12 bg-white border-b border-gray-200 px-5 items-center justify-between gap-4">
-            <h1 className="text-[14px] font-semibold text-gray-900 truncate">{titulo}</h1>
-            <div className="flex items-center gap-2">
+            {/* min-w-0: sin el, el titulo no se encoge y empuja al buscador
+                fuera de la pantalla con una razon social larga. */}
+            <h1 className="min-w-0 truncate text-[14px] font-semibold text-gray-900" title={titulo}>{titulo}</h1>
+            <div className="flex flex-none items-center gap-2">
               <form onSubmit={buscar} className="relative w-80">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
                 <input

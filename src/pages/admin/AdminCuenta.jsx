@@ -366,10 +366,10 @@ export default function AdminCuenta() {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <Seccion titulo="Negocio">
           <ListaDatos>
-            <Dato etiqueta="Razón social">{c.businessName}</Dato>
-            <Dato etiqueta="Nombre comercial">{c.tradeName}</Dato>
+            <Dato etiqueta="Razón social" apilar>{c.businessName}</Dato>
+            <Dato etiqueta="Nombre comercial" apilar>{c.tradeName}</Dato>
             <Dato etiqueta="RUC">{c.ruc}</Dato>
-            <Dato etiqueta="Dirección" recortar={false}>{c.address}</Dato>
+            <Dato etiqueta="Dirección" apilar>{c.address}</Dato>
             <Dato etiqueta="Ubicación">{[c.district, c.province, c.department].filter(Boolean).join(', ')}</Dato>
             <Dato etiqueta="Teléfono del local">{c.phone}</Dato>
             <Dato etiqueta="Modo">{nombreModo(c.businessMode)}</Dato>
