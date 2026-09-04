@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Loader2, BarChart3, Copy, Save, ChevronDown, ChevronRight, FileSpreadsheet } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Loader2, BarChart3, Copy, Save, ChevronDown, ChevronRight, FileSpreadsheet, HelpCircle } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getInvoices, getProducts, getProductCategories } from '@/services/firestoreService'
@@ -413,7 +414,10 @@ export default function ModifiersPanel({ companySettings }) {
 
   return (
     <div className="space-y-4">
-      {/* Sub-pestañas */}
+      {/* Sub-pestañas. La guía se enlaza acá y no con GuideLink porque esta
+          pantalla es una PESTAÑA de Insumos: el panel lateral resuelve la guía
+          por ruta y en /app/ingredientes abriría la de Insumos. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex gap-2 p-1 bg-gray-100 rounded-lg w-full sm:w-auto sm:inline-flex">
         <button
           type="button"
@@ -435,6 +439,15 @@ export default function ModifiersPanel({ companySettings }) {
           <Copy className="w-4 h-4" />
           Plantillas
         </button>
+      </div>
+
+        <Link
+          to="/app/manual/modificadores"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:text-primary-700 hover:underline"
+        >
+          <HelpCircle className="w-4 h-4" />
+          ¿Cómo funciona esta página?
+        </Link>
       </div>
 
       {subTab === 'report' && (

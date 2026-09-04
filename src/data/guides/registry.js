@@ -382,6 +382,18 @@ export const GUIDES = [
     load: () => import('./ingredientes.js'),
   },
   {
+    // Sin ruta propia: es la pestaña "Modificadores" de Insumos, y esa ruta ya
+    // la tiene la guía de Insumos. Guía de solo manual, como el catálogo online.
+    id: 'modificadores',
+    route: null,
+    title: 'Modificadores',
+    category: 'Inventario',
+    description: 'Los extras que el cliente elige sobre un plato: qué se pide más, cómo dejar de escribir el mismo veinte veces y que un agregado descuente su insumo.',
+    keywords: 'modificadores extras agregados opciones cremas termino de la carne sin cebolla pieza extra recargo obligatorio maximo permitir repetir llevar control reporte que se pide mas ingreso por agregados excel plantillas desde plantilla modificadores en uso versiones unificar repetidos aplicar a los productos categorias descontar insumos al vender enlazar insumo stock restaurante',
+    modos: ['restaurant'],
+    load: () => import('./modificadores.js'),
+  },
+  {
     id: 'recetas',
     route: '/app/recetas',
     title: 'Recetas / Composición',
