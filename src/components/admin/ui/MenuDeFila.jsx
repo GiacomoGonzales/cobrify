@@ -60,6 +60,37 @@ export function useMenuDeFila() {
     }
   }, [abiertoEn])
 
+  // Un clic fuera lo cierra. Antes solo se cerraba eligiendo una opcion o
+  // volviendo a tocar el boton: si te arrepentias, el menu se quedaba abierto.
+  // Se escucha en la fase de captura y en `mousedown` para adelantarse a los
+  // onClick de la pagina — si no, abrir un menu sobre una fila clicable podia
+  // disparar la accion de la fila.
+  useEffect(() => {
+    if (!abiertoEn) return undefined
+    const alTocar = e => {
+      if (menu.current?.contains(e.target)) return
+      if (disparador.current?.contains(e.target)) return
+      setAbiertoEn(null)
+      disparador.current = null
+    }
+    document.addEventListener('mousedown', alTocar, true)
+    document.addEventListener('touchstart', alTocar, true)
+    return () => {
+      document.removeEventListener('mousedown', alTocar, true)
+      document.removeEventListener('touchstart', alTocar, true)
+    }
+  }, [abiertoEn])
+
+  // Escape tambien: es lo que espera cualquiera con el teclado a mano.
+  useEffect(() => {
+    if (!abiertoEn) return undefined
+    const alTeclear = e => {
+      if (e.key === 'Escape') { setAbiertoEn(null); disparador.current = null }
+    }
+    document.addEventListener('keydown', alTeclear)
+    return () => document.removeEventListener('keydown', alTeclear)
+  }, [abiertoEn])
+
   const alternar = (id, el) => {
     if (abiertoEn === id) { setAbiertoEn(null); disparador.current = null; return }
     const pos = calcular(el)
