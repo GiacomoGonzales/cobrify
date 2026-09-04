@@ -4444,6 +4444,18 @@ export default function POS() {
   // costo registrado, o con receta): en esos casos el reporte usa su fallback
   // (costo de catálogo / receta actual).
   const computeItemCostAtSale = (item) => {
+    // El item PUEDE traer su costo ya congelado: el producto personalizado lo
+    // pide en pantalla y lo guarda al agregarlo al carrito. Ese manda, porque
+    // es el que el vendedor escribió para ESTA venta.
+    //
+    // Va antes del corte de abajo: el corte devolvía null para todo lo
+    // personalizado, así que el costo tecleado se perdía al armar el
+    // comprobante y el reporte mostraba costo y utilidad vacíos — el servicio
+    // escrito a mano seguía figurando con 100% de margen, que es justo lo que
+    // el campo venía a resolver.
+    const propio = Number(item.costAtSale)
+    if (Number.isFinite(propio) && propio > 0) return propio
+
     // Productos personalizados / servicios ad-hoc no existen en el catálogo.
     const itemId = item.id || item.productId
     if (item.isCustom || (typeof itemId === 'string' && (itemId.startsWith('custom-') || itemId.startsWith('appointment-')))) {
