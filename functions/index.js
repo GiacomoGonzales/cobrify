@@ -578,6 +578,33 @@ const ERRORES_DE_CONFIGURACION = [
   'clave incorrecta',
 ]
 
+/**
+ * EL ESTADO FINAL DE UN ENVÍO, DECIDIDO EN UN SOLO SITIO.
+ *
+ * Existe porque cada ruta de envío decidía por su cuenta y no todas lo hacían
+ * bien: las guías de remisión, por ejemplo, marcaban `error` o `rejected` sin
+ * preguntarse siquiera si el fallo había sido temporal, así que una guía que se
+ * caía por timeout no la reintentaba nadie.
+ *
+ * La distinción que importa: SUNAT RECHAZA cuando evaluó el documento y dijo
+ * que no — eso es definitivo y hay que corregir el comprobante. Un timeout o
+ * una conexión cortada NO es un rechazo: SUNAT ni lo miró. Marcar eso como
+ * rechazado es mentirle al usuario y, peor, sacar el documento de la cola de
+ * reintentos: la venta se queda sin declarar y nadie se entera.
+ *
+ * El mensaje se lee de `error` ANTES que de `description` porque cuando el
+ * envío revienta con una excepción, el router devuelve el motivo en `error` y
+ * deja `description` vacío. Mirar solo `description` era ver un error en blanco
+ * y concluir "rechazo permanente".
+ */
+function estadoDeEnvio(resultado, { pendienteManual = false } = {}) {
+  if (resultado?.accepted) return 'accepted'
+  if (pendienteManual) return 'signed'
+  const codigo = resultado?.responseCode || ''
+  const mensaje = resultado?.error || resultado?.description || ''
+  return isTransientSunatError(codigo, mensaje) ? 'pending' : 'rejected'
+}
+
 function isTransientSunatError(responseCode, description) {
   const code = String(responseCode || '').toLowerCase()
   const desc = String(description || '').toLowerCase()
@@ -1115,7 +1142,7 @@ export const sendInvoiceToSunat = onRequest(
       // IMPORTANTE: Los errores temporales de SUNAT NO deben quedar como 'rejected' ni 'signed'
       // sino como 'pending' para permitir reintento automático
       const isPendingManual = emissionResult.pendingManual === true
-      const isTransientError = isTransientSunatError(emissionResult.responseCode, emissionResult.description)
+      const isTransientError = isTransientSunatError(emissionResult.responseCode, emissionResult.error || emissionResult.description)
 
       // Validar que existe prueba del CDR antes de marcar como aceptado
       const hasCDRProof = !!(
@@ -1176,7 +1203,7 @@ export const sendInvoiceToSunat = onRequest(
 
       const sunatResponseBase = {
         code: emissionResult.responseCode || '',
-        description: emissionResult.description || '',
+        description: emissionResult.description || emissionResult.error || '',
         observations: observations,
         method: emissionResult.method,
         pendingManual: isPendingManual,
@@ -1322,7 +1349,7 @@ export const sendInvoiceToSunat = onRequest(
       if (isTransientError || isPendingManual) {
         updateData.lastRetryError = sanitizeForFirestore({
           code: emissionResult.responseCode || '',
-          description: emissionResult.description || '',
+          description: emissionResult.description || emissionResult.error || '',
           timestamp: new Date().toISOString(),
           isTransient: true
         })
@@ -1846,7 +1873,7 @@ export const sendCreditNoteToSunat = onRequest(
       }
 
       const isPendingManual = emissionResult.pendingManual === true
-      const finalStatus = isPendingManual ? 'signed' : (emissionResult.accepted ? 'accepted' : 'rejected')
+      const finalStatus = estadoDeEnvio(emissionResult, { pendienteManual: isPendingManual })
 
       // Normalizar observations
       let observations = []
@@ -1860,7 +1887,7 @@ export const sendCreditNoteToSunat = onRequest(
 
       const sunatResponseBase = {
         code: emissionResult.responseCode || '',
-        description: emissionResult.description || '',
+        description: emissionResult.description || emissionResult.error || '',
         observations: observations,
         method: emissionResult.method,
         pendingManual: isPendingManual
@@ -2504,7 +2531,7 @@ export const sendDebitNoteToSunat = onRequest(
       }
 
       const isPendingManual = emissionResult.pendingManual === true
-      const finalStatus = isPendingManual ? 'signed' : (emissionResult.accepted ? 'accepted' : 'rejected')
+      const finalStatus = estadoDeEnvio(emissionResult, { pendienteManual: isPendingManual })
 
       // Normalizar observations
       let observations = []
@@ -2518,7 +2545,7 @@ export const sendDebitNoteToSunat = onRequest(
 
       const sunatResponseBase = {
         code: emissionResult.responseCode || '',
-        description: emissionResult.description || '',
+        description: emissionResult.description || emissionResult.error || '',
         observations: observations,
         method: emissionResult.method,
         pendingManual: isPendingManual
@@ -3846,7 +3873,7 @@ export const sendDispatchGuideToSunatFn = onRequest(
 
       // 5. Actualizar el estado de la guía en Firestore
       const updateData = {
-        sunatStatus: result.accepted ? 'accepted' : (result.error ? 'error' : 'rejected'),
+        sunatStatus: estadoDeEnvio(result),
         sunatResponseCode: result.responseCode || null,
         sunatDescription: result.description || result.error || null,
         sunatMethod: result.method || 'sunat_direct',
@@ -4203,7 +4230,7 @@ export const sendCarrierDispatchGuideToSunatFn = onRequest(
 
       // 5. Actualizar el estado de la guía en Firestore
       const updateData = {
-        sunatStatus: result.accepted ? 'accepted' : (result.error ? 'error' : 'rejected'),
+        sunatStatus: estadoDeEnvio(result),
         sunatResponseCode: result.responseCode || null,
         sunatDescription: result.description || result.error || null,
         sunatMethod: result.method || 'sunat_direct',

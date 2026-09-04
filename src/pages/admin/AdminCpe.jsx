@@ -74,6 +74,25 @@ const ESTADOS = {
   voided: { label: 'Anulado', color: 'bg-gray-100 text-gray-600', Icon: Ban },
 }
 
+/**
+ * "Rechazado" y "sin respuesta" no son lo mismo y no deben leerse igual.
+ *
+ * RECHAZADO: SUNAT miró el documento y dijo que no. Es definitivo y hay que
+ * corregir el comprobante.
+ * SIN RESPUESTA: se cortó la conexión o se agotó el tiempo. SUNAT ni lo vio,
+ * el documento sigue en la cola y se reintenta solo. No hay nada que hacer.
+ *
+ * Los dos quedan en 'pending', así que se distinguen por la huella que deja el
+ * envío fallido: `lastRetryError` o la marca `isTransient`.
+ */
+const sinRespuestaDeSunat = (inv) =>
+  !!(inv?.lastRetryError || inv?.sunatResponse?.isTransient)
+
+const etiquetaDeEstado = (inv, estado) =>
+  estado === 'pending' && sinRespuestaDeSunat(inv)
+    ? 'Sin respuesta de SUNAT'
+    : (ESTADOS[estado]?.label || inv?.sunatStatus)
+
 // Corre `fn` sobre `items` de a `tam` en paralelo (para no disparar cientos
 // de consultas de golpe).
 async function enTandas(items, tam, fn) {
@@ -1084,7 +1103,7 @@ export default function AdminCpe() {
                           <Td apagado>{formatFechaHora(d.createdAt)}</Td>
                           <Td className="font-medium">{d.number || d.id}</Td>
                           <Td apagado>{TIPOS[d.documentType]?.label || d.documentType || '—'}</Td>
-                          <Td><Estado valor={estadoSunatDe(d)} etiqueta={ESTADOS[estadoSunatDe(d)]?.label || d.sunatStatus} /></Td>
+                          <Td><Estado valor={estadoSunatDe(d)} etiqueta={etiquetaDeEstado(d, estadoSunatDe(d))} /></Td>
                           <Td><Estado valor={lectura.clave === 'reintento' ? 'ok' : 'rejected'} etiqueta={lectura.texto} /></Td>
                           <Td numero apagado>{d.retryCount || 0}</Td>
                           <Td apagado>{tieneCdr(d) ? 'Sí' : 'No'}</Td>
