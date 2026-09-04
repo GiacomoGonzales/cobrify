@@ -137,6 +137,120 @@ export function resumenDeModificadores(enUso) {
 }
 
 /**
+ * ¿Este grupo de un producto es el de esta plantilla?
+ *
+ * Por `templateId` cuando lo tiene, porque es la referencia explícita que dejó
+ * "Desde plantilla". Y si no lo tiene, por nombre: los modificadores viejos se
+ * escribieron a mano años antes de que existieran las plantillas y no hay otra
+ * forma de reconocerlos, que es justamente a los que hay que llegar.
+ *
+ * Un grupo con OTRO `templateId` no se toca aunque se llame igual: pertenece a
+ * otra plantilla y no es de esta.
+ */
+export const grupoEsDeLaPlantilla = (grupo, plantilla) => {
+  if (!grupo || !plantilla) return false
+  if (grupo.templateId) return grupo.templateId === plantilla.id
+  return !!nombreComparable(grupo.name)
+    && nombreComparable(grupo.name) === nombreComparable(plantilla.name)
+}
+
+/**
+ * El grupo que le queda al producto después de aplicarle la plantilla.
+ *
+ * Se conserva el `id` del grupo que ya tenía: es el que quedó guardado en los
+ * comprobantes emitidos, y el reporte de modificadores cruza por ahí. Cambiarlo
+ * dejaría el historial sin poder emparejarse con la definición actual.
+ *
+ * Los ids de las opciones se reaprovechan cuando la opción se sigue llamando
+ * igual, por lo mismo. Las opciones nuevas estrenan id.
+ */
+export function grupoDesdePlantilla(plantilla, grupoActual = null) {
+  const ts = Date.now()
+  const idsLibres = new Map()
+  for (const o of grupoActual?.options || []) {
+    const clave = nombreComparable(o?.name)
+    if (clave && o?.id && !idsLibres.has(clave)) idsLibres.set(clave, o.id)
+  }
+  const tomarId = (nombre, i) => {
+    const clave = nombreComparable(nombre)
+    const id = idsLibres.get(clave)
+    // Se saca del mapa para que dos opciones que se normalizan igual no
+    // terminen compartiendo el mismo id dentro del grupo.
+    if (id) idsLibres.delete(clave)
+    return id || `opt-${ts}-${i}`
+  }
+  return {
+    id: grupoActual?.id || `mod-${ts}`,
+    name: cleanText(plantilla?.name),
+    required: !!plantilla?.required,
+    maxSelection: Number(plantilla?.maxSelection) || 1,
+    ...(plantilla?.allowRepeat ? { allowRepeat: true } : {}),
+    ...(plantilla?.trackUsage ? { trackUsage: true } : {}),
+    ...(plantilla?.id ? { templateId: plantilla.id } : {}),
+    options: (plantilla?.options || []).map((o, i) => ({
+      id: tomarId(o?.name, i),
+      name: cleanText(o?.name),
+      priceAdjustment: Number(o?.priceAdjustment) || 0,
+    })),
+  }
+}
+
+/**
+ * Qué le pasaría a cada producto si se aplica la plantilla. NO escribe nada.
+ *
+ * Existe separado de la escritura para que la pantalla pueda mostrar los
+ * números ANTES de confirmar: esto cambia lo que se le cobra al cliente en los
+ * productos que hoy tienen otra cosa, y eso no se pregunta después.
+ *
+ * @param {Array} productos Todos los productos del negocio.
+ * @param {object} plantilla La plantilla a aplicar.
+ * @param {Iterable} idsDestino Los productos elegidos.
+ * @returns {{cambios: Array, totales: object}} `cambios` trae solo los que hay
+ *   que escribir, cada uno con el array `modifiers` completo del producto.
+ */
+export function planDeAplicacion(productos, plantilla, idsDestino) {
+  const destino = new Set(idsDestino || [])
+  const cambios = []
+  const totales = { alcanzados: 0, iguales: 0, reemplazan: 0, agregan: 0 }
+
+  for (const producto of productos || []) {
+    if (!producto?.id || !destino.has(producto.id)) continue
+    totales.alcanzados++
+
+    const actuales = producto.modifiers || []
+    const indice = actuales.findIndex((g) => grupoEsDeLaPlantilla(g, plantilla))
+    const datos = { id: producto.id, nombre: cleanText(producto?.name) }
+
+    if (indice === -1) {
+      totales.agregan++
+      cambios.push({
+        producto: datos,
+        tipo: 'agrega',
+        modifiers: [...actuales, grupoDesdePlantilla(plantilla)],
+      })
+      continue
+    }
+
+    const actual = actuales[indice]
+    // Si lo que el cliente ve ya es idéntico, no se escribe. Así aplicar dos
+    // veces seguidas no hace nada la segunda, y el conteo dice la verdad.
+    const yaEstaIgual = firmaDelGrupo(actual) === firmaDelGrupo(plantilla)
+      && cleanText(actual.name) === cleanText(plantilla?.name)
+    if (yaEstaIgual) {
+      totales.iguales++
+      continue
+    }
+
+    const modifiers = [...actuales]
+    modifiers[indice] = grupoDesdePlantilla(plantilla, actual)
+    totales.reemplazan++
+    cambios.push({ producto: datos, tipo: 'reemplaza', antes: actual, modifiers })
+  }
+
+  return { cambios, totales }
+}
+
+/**
  * Convierte una versión en plantilla, lista para guardar.
  *
  * Los ids se generan nuevos: la plantilla es una cosa aparte del grupo que

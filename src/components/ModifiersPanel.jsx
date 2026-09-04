@@ -2,11 +2,15 @@ import { useState, useEffect, useMemo } from 'react'
 import { Loader2, BarChart3, Copy, Save, ChevronDown, ChevronRight, FileSpreadsheet } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { getInvoices, getProducts } from '@/services/firestoreService'
+import { getInvoices, getProducts, getProductCategories } from '@/services/firestoreService'
+import Modal from '@/components/ui/Modal'
 import { getInvoiceDate, parseLocalDateString } from '@/utils/invoiceDate'
-import { getModifierTemplates, saveModifierTemplates } from '@/services/modifierTemplateService'
+import {
+  getModifierTemplates, saveModifierTemplates, aplicarPlantillaAProductos,
+} from '@/services/modifierTemplateService'
 import {
   modificadoresEnUso, resumenDeModificadores, plantillaDesdeVersion, nombreComparable,
+  grupoEsDeLaPlantilla, planDeAplicacion,
 } from '@/utils/modificadoresEnUso'
 import ProductModifiersSection from '@/components/ProductModifiersSection'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -58,6 +62,13 @@ export default function ModifiersPanel({ companySettings }) {
   const [isSavingTemplates, setIsSavingTemplates] = useState(false)
   const [expandedUso, setExpandedUso] = useState(() => new Set())
 
+  // ===== Aplicar una plantilla a los productos =====
+  const [categories, setCategories] = useState([])
+  const [aplicando, setAplicando] = useState(null) // la plantilla elegida
+  const [incluirLosQueLaUsan, setIncluirLosQueLaUsan] = useState(true)
+  const [categoriasElegidas, setCategoriasElegidas] = useState(() => new Set())
+  const [isApplying, setIsApplying] = useState(false)
+
   useEffect(() => {
     if (isDemoMode) return
     let cancelled = false
@@ -65,15 +76,17 @@ export default function ModifiersPanel({ companySettings }) {
       setIsLoading(true)
       try {
         const businessId = getBusinessId()
-        const [invRes, prodRes, tplRes] = await Promise.all([
+        const [invRes, prodRes, tplRes, catRes] = await Promise.all([
           getInvoices(businessId),
           getProducts(businessId),
           getModifierTemplates(businessId),
+          getProductCategories(businessId),
         ])
         if (cancelled) return
         if (invRes.success) setInvoices(invRes.data || [])
         if (prodRes.success) setProducts(prodRes.data || [])
         if (tplRes.success) setTemplates(tplRes.data || [])
+        if (catRes.success) setCategories(catRes.data || [])
       } catch (e) {
         console.error('Error cargando datos de modificadores:', e)
       } finally {
@@ -274,6 +287,92 @@ export default function ModifiersPanel({ companySettings }) {
     setTemplates((prev) => [...prev, plantillaDesdeVersion(version, nombre)])
     setTemplatesDirty(true)
     toast.success(`"${nombre}" agregado abajo. Falta guardar.`)
+  }
+
+  // ── Aplicar una plantilla a los productos ─────────────────────────────────
+  //
+  // Es lo que de verdad quita el trabajo repetido: sin esto, cambiarle el
+  // precio al Ají significa entrar a los sesenta productos que lo tienen.
+  //
+  // Sigue siendo una COPIA por producto —el POS y el catálogo leen lo que el
+  // producto tiene, igual que siempre—; lo único que cambia es que la copia se
+  // rehace desde un solo lugar, cuando el dueño lo pide y viendo antes a
+  // cuántos productos alcanza.
+
+  // Las categorías que TIENEN productos, con su conteo. Se cuenta contra los
+  // productos reales y no contra el catálogo de categorías: una categoría
+  // vacía en la lista solo sería ruido para elegir.
+  const categoriasConProductos = useMemo(() => {
+    const conteo = new Map()
+    for (const p of products) {
+      if (p?.category) conteo.set(p.category, (conteo.get(p.category) || 0) + 1)
+    }
+    return categories
+      .filter((c) => conteo.get(c?.id))
+      .map((c) => ({ id: c.id, nombre: c.name, productos: conteo.get(c.id) }))
+      .sort((a, b) => b.productos - a.productos)
+  }, [products, categories])
+
+  // A qué productos alcanza lo elegido: los que ya lo tienen, más los de las
+  // categorías marcadas. Un producto que está en las dos cuenta una vez.
+  const idsDestino = useMemo(() => {
+    if (!aplicando) return new Set()
+    const ids = new Set()
+    for (const p of products) {
+      const yaLoTiene = (p?.modifiers || []).some((g) => grupoEsDeLaPlantilla(g, aplicando))
+      if (incluirLosQueLaUsan && yaLoTiene) ids.add(p.id)
+      if (p?.category && categoriasElegidas.has(p.category)) ids.add(p.id)
+    }
+    return ids
+  }, [aplicando, products, incluirLosQueLaUsan, categoriasElegidas])
+
+  const plan = useMemo(
+    () => (aplicando ? planDeAplicacion(products, aplicando, idsDestino) : null),
+    [aplicando, products, idsDestino],
+  )
+
+  const cuantosLaUsan = (tpl) =>
+    products.filter((p) => (p?.modifiers || []).some((g) => grupoEsDeLaPlantilla(g, tpl))).length
+
+  const abrirAplicar = (tpl) => {
+    setAplicando(tpl)
+    setIncluirLosQueLaUsan(true)
+    setCategoriasElegidas(new Set())
+  }
+
+  const toggleCategoria = (id) => {
+    setCategoriasElegidas((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const handleAplicar = async () => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+    if (!plan?.cambios.length) return
+    setIsApplying(true)
+    try {
+      const res = await aplicarPlantillaAProductos(getBusinessId(), plan.cambios)
+      if (!res.success) throw new Error(res.error)
+
+      // Se refleja en memoria lo que se acaba de escribir, para que la lista de
+      // "Modificadores en uso" quede al día sin recargar la página.
+      const porId = new Map(plan.cambios.map((c) => [c.producto.id, c.modifiers]))
+      setProducts((prev) => prev.map((p) => (porId.has(p.id) ? { ...p, modifiers: porId.get(p.id) } : p)))
+
+      toast.success(`Aplicado en ${res.escritos} producto${res.escritos === 1 ? '' : 's'}`)
+      setAplicando(null)
+    } catch (e) {
+      console.error('Error aplicando la plantilla:', e)
+      toast.error('No se pudo aplicar la plantilla')
+    } finally {
+      setIsApplying(false)
+    }
   }
 
   const handleTemplatesChange = (next) => {
@@ -625,9 +724,150 @@ export default function ModifiersPanel({ companySettings }) {
                 )}
               </Button>
             </div>
+
+            {/* ── Llevar una plantilla a los productos ──────────────────── */}
+            {templates.length > 0 && (
+              <div className="pt-4 border-t border-gray-200">
+                <h3 className="text-sm font-semibold text-gray-900">Aplicar a los productos</h3>
+                <p className="text-xs text-gray-500 mt-0.5 mb-3">
+                  Escribe la plantilla en los productos que ya la usan, o en categorías enteras. Sirve
+                  para cambiar un precio en un solo lugar en vez de producto por producto.
+                </p>
+
+                {templatesDirty ? (
+                  <p className="text-xs text-amber-700 border border-amber-200 bg-amber-50 rounded-lg p-3">
+                    Guarda las plantillas primero: se aplica la versión guardada.
+                  </p>
+                ) : (
+                  <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
+                    {templates.map((tpl) => {
+                      const usan = cuantosLaUsan(tpl)
+                      return (
+                        <div key={tpl.id} className="flex items-center gap-3 px-3 py-2.5">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{tpl.name || 'Sin nombre'}</p>
+                            <p className="text-xs text-gray-500">
+                              {(tpl.options || []).length} opción{(tpl.options || []).length === 1 ? '' : 'es'}
+                              {' · '}
+                              {usan === 0 ? 'ningún producto la usa' : `${usan} producto${usan === 1 ? '' : 's'} la usan`}
+                            </p>
+                          </div>
+                          <Button size="sm" variant="outline" onClick={() => abrirAplicar(tpl)}>
+                            Aplicar
+                          </Button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
+
+      {/* Aplicar una plantilla: se elige a quién y se ven los números antes */}
+      <Modal
+        isOpen={!!aplicando}
+        onClose={() => !isApplying && setAplicando(null)}
+        title={`Aplicar "${aplicando?.name || ''}"`}
+        size="lg"
+      >
+        {aplicando && (
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm font-medium text-gray-900 mb-2">¿A qué productos?</p>
+
+              <label className="flex items-start gap-2.5 p-2.5 rounded-lg hover:bg-gray-50 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={incluirLosQueLaUsan}
+                  onChange={(e) => setIncluirLosQueLaUsan(e.target.checked)}
+                  className="mt-0.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                <span className="text-sm text-gray-700">
+                  Los que ya lo tienen
+                  <span className="text-gray-500"> · {cuantosLaUsan(aplicando)} producto{cuantosLaUsan(aplicando) === 1 ? '' : 's'}</span>
+                </span>
+              </label>
+
+              {categoriasConProductos.length > 0 && (
+                <>
+                  <p className="text-xs text-gray-500 mt-3 mb-1.5 px-2.5">
+                    Y además, categorías enteras (lo reciben aunque hoy no lo tengan):
+                  </p>
+                  <div className="max-h-52 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+                    {categoriasConProductos.map((c) => (
+                      <label key={c.id} className="flex items-center gap-2.5 px-2.5 py-2 hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={categoriasElegidas.has(c.id)}
+                          onChange={() => toggleCategoria(c.id)}
+                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        />
+                        <span className="text-sm text-gray-700 flex-1 truncate">{c.nombre}</span>
+                        <span className="text-xs text-gray-500">{c.productos}</span>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Los números, antes de confirmar */}
+            <div className="bg-gray-50 rounded-lg p-3 space-y-1">
+              {plan?.totales.alcanzados === 0 ? (
+                <p className="text-sm text-gray-500">No has elegido ningún producto.</p>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-900">
+                    Alcanza a <strong>{plan.totales.alcanzados}</strong> producto{plan.totales.alcanzados === 1 ? '' : 's'}.
+                  </p>
+                  <ul className="text-xs text-gray-600 space-y-0.5">
+                    {plan.totales.agregan > 0 && (
+                      <li><strong>{plan.totales.agregan}</strong> lo reciben por primera vez.</li>
+                    )}
+                    {plan.totales.reemplazan > 0 && (
+                      <li className="text-amber-700">
+                        <strong>{plan.totales.reemplazan}</strong> tienen otra cosa y les cambia lo que se cobra.
+                      </li>
+                    )}
+                    {plan.totales.iguales > 0 && (
+                      <li><strong>{plan.totales.iguales}</strong> ya lo tienen igual y no se tocan.</li>
+                    )}
+                  </ul>
+                </>
+              )}
+            </div>
+
+            {plan?.totales.reemplazan > 0 && (
+              <div className="text-xs text-gray-600">
+                <p className="font-medium text-gray-700 mb-1">Cambian:</p>
+                <p>
+                  {plan.cambios.filter((c) => c.tipo === 'reemplaza').slice(0, 10).map((c) => c.producto.nombre).join(', ')}
+                  {plan.totales.reemplazan > 10 && ` y ${plan.totales.reemplazan - 10} más`}
+                </p>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-200">
+              <Button variant="outline" onClick={() => setAplicando(null)} disabled={isApplying}>
+                Cancelar
+              </Button>
+              <Button onClick={handleAplicar} disabled={isApplying || !plan?.cambios.length}>
+                {isApplying ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Aplicando...
+                  </>
+                ) : (
+                  `Aplicar en ${plan?.cambios.length || 0} producto${plan?.cambios.length === 1 ? '' : 's'}`
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }

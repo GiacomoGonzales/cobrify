@@ -96,7 +96,29 @@ export default {
         },
         {
           type: 'ojo',
-          text: 'Crear la plantilla no toca tus productos: los que ya tienen ese modificador siguen exactamente igual, y se sigue vendiendo y cobrando lo mismo. La plantilla es para los productos que cargues de ahora en adelante.',
+          text: 'Crear la plantilla no toca tus productos: los que ya tienen ese modificador siguen exactamente igual, y se sigue vendiendo y cobrando lo mismo.',
+        },
+        {
+          type: 'texto',
+          text: 'Para que el cambio sí llegue a los productos está **Aplicar a los productos**, abajo de las plantillas. Con eso le cambias el precio al Ají en un solo lugar en vez de entrar a los sesenta platos que lo tienen.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Edita la plantilla como quieres que quede y presiona **Guardar plantillas**.',
+            'En **Aplicar a los productos**, presiona **Aplicar** en la que acabas de cambiar.',
+            'Deja marcado **Los que ya lo tienen**, y si quieres marca también categorías enteras para que lo reciban aunque hoy no lo tengan.',
+            'Lee el resumen: cuántos lo reciben por primera vez, a cuántos les cambia lo que se cobra y cuántos ya estaban igual.',
+            'Confirma.',
+          ],
+        },
+        {
+          type: 'ojo',
+          text: 'Los que aparecen como que **les cambia lo que se cobra** son los que hoy tienen otras opciones o otro precio, y van a quedar con lo de la plantilla. Revisa esa lista antes de confirmar. Los que ya estaban iguales no se tocan, así que aplicar dos veces seguidas no hace nada la segunda.',
+        },
+        {
+          type: 'consejo',
+          text: 'Las ventas ya emitidas no cambian: cada comprobante guarda lo que se cobró ese día. Esto solo cambia lo que se va a ofrecer de ahora en adelante.',
         },
       ],
     },
@@ -109,7 +131,11 @@ export default {
     },
     {
       q: 'Cambié una plantilla y los productos siguen con lo de antes.',
-      a: 'Es así a propósito. Al insertar una plantilla en un producto se copia, para que puedas ajustarla en ese plato sin afectar a los demás. Si quieres el cambio en un producto, ábrelo y edítalo ahí.',
+      a: 'Al insertar una plantilla en un producto se copia, para que puedas ajustarla en ese plato sin afectar a los demás. Para bajar el cambio a los productos usa **Aplicar a los productos**, abajo de las plantillas: ahí eliges a cuáles y te dice cuántos cambian antes de confirmar.',
+    },
+    {
+      q: 'Quiero que todos los productos de una categoría lleven el mismo modificador.',
+      a: 'En **Aplicar a los productos** marca esa categoría. Los productos que no lo tengan lo reciben, y los que ya lo tenían quedan con la versión de la plantilla.',
     },
     {
       q: 'Vendí todo el día y los insumos no bajaron.',
