@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, ChevronDown, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer, X, ShoppingCart, Truck, PackageCheck, Edit2, MoreVertical, FileText, Split, UserMinus, Wine, UtensilsCrossed, ChevronUp, ClipboardList, UserRound } from 'lucide-react'
-import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import Card, { CardContent } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -16,6 +16,8 @@ import ConsumoInternoModal from '@/components/inventory/ConsumoInternoModal'
 import { createBarTab, occupyTable } from '@/services/tableService'
 import { useLocationAccess } from '@/utils/locationAccess'
 import { useAppContext } from '@/hooks/useAppContext'
+import { Cantidad, ChipDeEstadoItem, Modificadores, NotaDelPlato } from '@/components/restaurant/tarjetaOrden'
+import { BOTON_ACCION, BOTON_CABECERA, ETIQUETA_CABECERA, ZOOM_TARJETAS, clasesDeTarjeta, clasesDeBanda } from '@/components/restaurant/tarjetaOrdenEstilos'
 import { useToast } from '@/contexts/ToastContext'
 import { collection, query, where, onSnapshot, orderBy as firestoreOrderBy, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -206,7 +208,12 @@ function HistorialOrdenes({ ordenes, cargando, fechas, setFechas, abierta, setAb
  * ancho. En el celular se queda en 14: con 16, los dos botones y el menu
  * "+" no entran en una tarjeta de 343 px sin partirse en dos renglones.
  */
-const BOTON_ACCION = 'flex-1 min-h-[44px] text-sm sm:text-base'
+// Lo que se ve junto al nombre del repartidor en el selector.
+const ESTADO_REPARTIDOR = {
+  available: 'disponible',
+  on_delivery: 'en reparto',
+  break: 'descanso',
+}
 
 export default function Orders() {
   const { user, getBusinessId, isDemoMode, demoData, filterBranchesByAccess, filterWarehousesByAccess, allowedBranches, hasMainBranchAccess, userPermissions, businessMode, businessSettings } = useAppContext()
@@ -1519,56 +1526,16 @@ export default function Orders() {
     return date.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
   }
 
+  // Etiqueta e icono del estado. El color de la tarjeta lo pone
+  // components/restaurant/tarjetaOrden.jsx, compartido con Cocina.
   const getStatusConfig = (status) => {
     switch (status) {
-      case 'pending':
-        return {
-          label: 'Pendiente',
-          variant: 'warning',
-          icon: Clock,
-          color: 'text-yellow-600',
-          bgColor: 'bg-yellow-50 border-yellow-200',
-        }
-      case 'preparing':
-        return {
-          label: 'En Preparación',
-          variant: 'default',
-          icon: AlertCircle,
-          color: 'text-blue-600',
-          bgColor: 'bg-blue-50 border-blue-200',
-        }
-      case 'ready':
-        return {
-          label: 'Lista',
-          variant: 'success',
-          icon: CheckCircle,
-          color: 'text-green-600',
-          bgColor: 'bg-green-50 border-green-200',
-        }
-      case 'dispatched':
-        return {
-          label: 'Despachada',
-          variant: 'info',
-          icon: Truck,
-          color: 'text-purple-600',
-          bgColor: 'bg-purple-50 border-purple-200',
-        }
-      case 'delivered':
-        return {
-          label: 'Entregada',
-          variant: 'secondary',
-          icon: CheckCircle,
-          color: 'text-gray-600',
-          bgColor: 'bg-gray-50 border-gray-200',
-        }
-      default:
-        return {
-          label: status,
-          variant: 'default',
-          icon: AlertCircle,
-          color: 'text-gray-600',
-          bgColor: 'bg-gray-50 border-gray-200',
-        }
+      case 'pending': return { label: 'Pendiente', icon: Clock }
+      case 'preparing': return { label: 'En Preparación', icon: AlertCircle }
+      case 'ready': return { label: 'Lista', icon: CheckCircle }
+      case 'dispatched': return { label: 'Despachada', icon: Truck }
+      case 'delivered': return { label: 'Entregada', icon: CheckCircle }
+      default: return { label: status, icon: AlertCircle }
     }
   }
 
@@ -1584,23 +1551,40 @@ export default function Orders() {
   }
 
   return (
-    <div className="space-y-6" style={{ zoom: 0.7 }}>
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
-        <div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              {pestana === 'historial' ? 'Historial de Órdenes' : 'Órdenes Activas'}
-            </h1>
-            <GuideLink />
+    // Sin el `zoom: 0.7` que tenía desde junio: encogía la página entera al 70%
+    // y era la razón de fondo de que la letra se viera chica. La densidad se
+    // recupera con la cabecera compacta y una cuarta columna en pantallas anchas.
+    <div className="space-y-4">
+      {/* Cabecera en UNA fila: título, pestañas y acciones. Antes había título
+          de 30px, subtítulo, fila de pestañas y cuatro tarjetas de contadores:
+          más de 200px antes de ver la primera orden. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="text-xl font-bold text-gray-900">
+            {pestana === 'historial' ? 'Historial de Órdenes' : 'Órdenes Activas'}
+          </h1>
+          <GuideLink />
+          <div className="flex border border-gray-300 overflow-hidden">
+            {[
+              { id: 'activas', label: 'Activas' },
+              { id: 'historial', label: 'Historial' },
+            ].map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setPestana(t.id)}
+                className={`px-3 py-1.5 text-sm font-semibold transition-colors ${
+                  pestana === t.id
+                    ? 'bg-gray-900 text-white'
+                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
           </div>
-          <p className="text-gray-600 mt-1">
-            {pestana === 'historial'
-              ? 'Órdenes ya cobradas, con su mesa, mozo y el comprobante con el que se cerraron'
-              : 'Monitorea las órdenes en tiempo real'}
-          </p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
           {/* Selector de sede: solo si el negocio tiene sucursales configuradas */}
           {branches.length > 0 && (
             <Select
@@ -1618,57 +1602,37 @@ export default function Orders() {
             <>
               <Button
                 variant="outline"
-                size="lg"
                 onClick={abrirConsumoInterno}
                 disabled={isDemoMode || cargandoConsumo}
-                className="w-full sm:w-auto"
+                className="flex-1 sm:flex-none rounded-none"
                 title={isDemoMode ? 'No disponible en modo demo' : 'Descontar stock sin cobrar: consumo del personal, merma, cortesías'}
               >
                 {cargandoConsumo
-                  ? <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  : <UserRound className="w-5 h-5 mr-2" />}
+                  ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  : <UserRound className="w-4 h-4 mr-2" />}
                 Consumo interno
               </Button>
               <Button
                 variant="outline"
-                size="lg"
                 onClick={() => { setBarTabName(''); setShowBarTabModal(true) }}
-                className="w-full sm:w-auto"
+                className="flex-1 sm:flex-none rounded-none"
               >
-                <Wine className="w-5 h-5 mr-2" />
+                <Wine className="w-4 h-4 mr-2" />
                 Cuenta de barra
               </Button>
-              <Button onClick={handleCreateOrderClick} size="lg" className="w-full sm:w-auto">
-                <Plus className="w-5 h-5 mr-2" />
+              <Button onClick={handleCreateOrderClick} className="flex-1 sm:flex-none rounded-none">
+                <Plus className="w-4 h-4 mr-2" />
                 Nueva Orden
               </Button>
             </>
           )}
         </div>
       </div>
-
-      {/* Pestañas: activas / historial */}
-      <div className="border-b border-gray-200">
-        <nav className="flex space-x-8">
-          {[
-            { id: 'activas', label: 'Activas' },
-            { id: 'historial', label: 'Historial' },
-          ].map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setPestana(t.id)}
-              className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
-                pestana === t.id
-                  ? 'border-primary-500 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </nav>
-      </div>
+      {pestana === 'historial' && (
+        <p className="text-sm text-gray-500">
+          Órdenes ya cobradas, con su mesa, mozo y el comprobante con el que se cerraron
+        </p>
+      )}
 
       {pestana === 'historial' ? (
         <HistorialOrdenes
@@ -1681,61 +1645,12 @@ export default function Orders() {
         />
       ) : (
       <>
-      {/* Estadísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Órdenes Activas</p>
-                <p className="text-2xl font-bold text-gray-900 mt-2">{orders.length}</p>
-              </div>
-              <ListOrdered className="w-10 h-10 text-gray-500" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Pendientes</p>
-                <p className="text-2xl font-bold text-yellow-600 mt-2">
-                  {stats?.pending || 0}
-                </p>
-              </div>
-              <Clock className="w-10 h-10 text-yellow-500" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">En Preparación</p>
-                <p className="text-2xl font-bold text-blue-600 mt-2">
-                  {stats?.preparing || 0}
-                </p>
-              </div>
-              <AlertCircle className="w-10 h-10 text-blue-500" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Ventas Hoy</p>
-                <p className="text-2xl font-bold text-green-600 mt-2">
-                  S/ {(stats?.totalSalesToday || 0).toFixed(2)}
-                </p>
-              </div>
-              <DollarSign className="w-10 h-10 text-green-500" />
-            </div>
-          </CardContent>
-        </Card>
+      {/* Contadores en una tira, en vez de cuatro tarjetas de 100px */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-1 px-4 py-2 bg-white border border-gray-300 text-sm text-gray-600">
+        <span>Activas <strong className="ml-1 text-base text-gray-900 tabular-nums">{orders.length}</strong></span>
+        <span>Pendientes <strong className="ml-1 text-base text-amber-600 tabular-nums">{stats?.pending || 0}</strong></span>
+        <span>En preparación <strong className="ml-1 text-base text-blue-600 tabular-nums">{stats?.preparing || 0}</strong></span>
+        <span className="sm:ml-auto">Ventas hoy <strong className="ml-1 text-base text-gray-900 tabular-nums">S/ {(stats?.totalSalesToday || 0).toFixed(2)}</strong></span>
       </div>
 
       {/* Filtro por marca */}
@@ -1743,7 +1658,7 @@ export default function Orders() {
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setSelectedBrandFilter('all')}
-            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${
+            className={`px-3 py-1.5 rounded-none font-medium text-sm transition-all ${
               selectedBrandFilter === 'all'
                 ? 'bg-gray-800 text-white shadow-md'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -1757,7 +1672,7 @@ export default function Orders() {
               <button
                 key={brand.id}
                 onClick={() => setSelectedBrandFilter(brand.id)}
-                className={`px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2 ${
+                className={`px-3 py-1.5 rounded-none font-medium text-sm transition-all flex items-center gap-2 ${
                   selectedBrandFilter === brand.id
                     ? 'text-white shadow-md'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -1774,7 +1689,7 @@ export default function Orders() {
           })}
           <button
             onClick={() => setSelectedBrandFilter('none')}
-            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${
+            className={`px-3 py-1.5 rounded-none font-medium text-sm transition-all ${
               selectedBrandFilter === 'none'
                 ? 'bg-gray-600 text-white shadow-md'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -1790,7 +1705,7 @@ export default function Orders() {
           Por defecto el grid las estira todas a la altura de la mas alta de
           la fila, asi que una orden de dos productos quedaba con medio
           cuerpo en blanco solo porque la de al lado traia cuatro. */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 items-start" style={{ zoom: ZOOM_TARJETAS }}>
         {orders.length === 0 ? (
           <div className="col-span-full">
             <Card>
@@ -1818,110 +1733,122 @@ export default function Orders() {
             const isUrgent = order.priority === 'urgent'
 
             return (
-              <Card key={order.id} className={`border-2 ${isUrgent ? 'border-red-500 bg-red-50' : statusConfig.bgColor}`}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-lg">{order.orderNumber || '#' + order.id.slice(-6)}</span>
+              <Card key={order.id} className={clasesDeTarjeta(isUrgent)}>
+                {/* Cabecera: una sola banda de color por tarjeta. Numero y
+                    tiempo grandes, que es lo que se mira desde lejos. */}
+                <div className={clasesDeBanda(order.status, isUrgent)}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="shrink-0 text-2xl font-bold tracking-tight leading-none">
+                        {order.orderNumber || '#' + order.id.slice(-6)}
+                      </span>
+                      {/* `truncate` en el texto: si la tarjeta es angosta, el
+                          rotulo se corta con "..." en vez de montarse sobre
+                          el tiempo. */}
+                      <span className="flex items-center gap-1 min-w-0 text-sm font-semibold uppercase tracking-wide opacity-90">
+                        <StatusIcon className="w-4 h-4 shrink-0" />
+                        <span className="truncate">{statusConfig.label}</span>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xl font-bold tabular-nums leading-none">
+                        {elapsed}
+                      </span>
+                      {order.status !== 'delivered' && !order.tableNumber && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOrderToEdit(order)
+                            setShowEditOrderModal(true)
+                          }}
+                          className={BOTON_CABECERA}
+                          title="Editar orden"
+                        >
+                          <Edit2 className="w-5 h-5" />
+                        </button>
+                      )}
+                      {/* Se apagan TODOS los botones mientras hay una comanda en
+                          curso: la ticketera acepta una conexion a la vez, y un
+                          boton que no hace nada al tocarlo es peor que uno
+                          apagado. El reloj de arena va solo en el que se imprime. */}
+                      <button
+                        type="button"
+                        onClick={() => handlePrintKitchenTicket(order)}
+                        disabled={!!printingOrderId}
+                        className={BOTON_CABECERA}
+                        title={printingOrderId === order.id ? 'Enviando a cocina...' : 'Imprimir Comanda'}
+                      >
+                        {printingOrderId === order.id
+                          ? <Loader2 className="w-5 h-5 animate-spin" />
+                          : <Printer className="w-5 h-5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Etiquetas, solo si hay alguna: asi la cabecera no crece
+                      en vano en la mayoria de tarjetas. */}
+                  {(isUrgent
+                    || (requirePaymentBeforeKitchen && (order.paid || order.status === 'pending'))
+                    || order.invoiced
+                    || order.brandName) && (
+                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
                       {isUrgent && (
-                        <span className="px-2 py-0.5 bg-red-600 text-white text-xs font-bold rounded-full animate-pulse">
-                          URGENTE
-                        </span>
+                        <span className={`${ETIQUETA_CABECERA} animate-pulse`}>URGENTE</span>
                       )}
                       {requirePaymentBeforeKitchen && (
                         order.paid ? (
-                          <span className="px-2 py-0.5 bg-green-600 text-white text-xs font-bold rounded-full flex items-center gap-1">
+                          <span className={ETIQUETA_CABECERA}>
                             <DollarSign className="w-3 h-3" />
                             PAGADO
                           </span>
                         ) : order.status === 'pending' ? (
-                          <span className="px-2 py-0.5 bg-yellow-500 text-white text-xs font-bold rounded-full flex items-center gap-1">
+                          <span className={ETIQUETA_CABECERA}>
                             <DollarSign className="w-3 h-3" />
                             PAGO PENDIENTE
                           </span>
                         ) : null
                       )}
                       {order.invoiced && (
-                        <span className="px-2 py-0.5 bg-emerald-600 text-white text-xs font-bold rounded-full flex items-center gap-1">
+                        <span className={ETIQUETA_CABECERA}>
                           <Receipt className="w-3 h-3" />
                           FACTURADO
                         </span>
                       )}
                       {order.brandName && (
                         <span
-                          className="px-2 py-0.5 text-white text-xs font-bold rounded-full"
+                          className="inline-flex items-center px-1.5 py-0.5 text-white text-xs font-bold rounded-sm ring-1 ring-black/10"
                           style={{ backgroundColor: order.brandColor || '#8B5CF6' }}
                         >
                           {order.brandName}
                         </span>
                       )}
-                      <Badge variant={statusConfig.variant} className="flex items-center gap-1">
-                        <StatusIcon className="w-3 h-3" />
-                        {statusConfig.label}
-                      </Badge>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-sm font-semibold ${statusConfig.color}`}>
-                        {elapsed}
-                      </span>
-                      {order.status !== 'delivered' && !order.tableNumber && (
-                        <Button
-                          onClick={() => {
-                            setOrderToEdit(order)
-                            setShowEditOrderModal(true)
-                          }}
-                          variant="outline"
-                          size="sm"
-                          className="p-1.5"
-                          title="Editar orden"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </Button>
-                      )}
-                      {/* Se apagan TODOS los botones mientras hay una comanda en
-                          curso: la ticketera acepta una conexion a la vez, y un
-                          boton que no hace nada al tocarlo es peor que uno
-                          apagado. El reloj de arena va solo en el que se imprime. */}
-                      <Button
-                        onClick={() => handlePrintKitchenTicket(order)}
-                        disabled={!!printingOrderId}
-                        variant="outline"
-                        size="sm"
-                        className="p-1.5"
-                        title={printingOrderId === order.id ? 'Enviando a cocina...' : 'Imprimir Comanda'}
-                      >
-                        {printingOrderId === order.id
-                          ? <Loader2 className="w-4 h-4 animate-spin" />
-                          : <Printer className="w-4 h-4" />}
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {/* Info de Mesa/Tipo y Mozo/Fuente */}
-                  <div className="flex items-center justify-between text-sm pb-3 border-b border-gray-200">
+                  )}
+                </div>
+
+                <CardContent className="px-4 py-3 space-y-3">
+                  {/* Mesa/tipo y mozo/fuente */}
+                  <div className="flex items-center justify-between text-sm font-medium text-gray-700 pb-3 border-b border-gray-200">
                     {order.tableNumber ? (
                       <div className="flex items-center gap-2">
-                        <div className="bg-gray-100 rounded-full w-8 h-8 flex items-center justify-center font-bold text-gray-700">
+                        <span className="w-8 h-8 flex items-center justify-center bg-gray-900 text-white font-bold rounded-sm">
                           {order.tableNumber}
-                        </div>
-                        <span className="text-gray-600">Mesa {order.tableNumber}</span>
+                        </span>
+                        <span>Mesa {order.tableNumber}</span>
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
                         {order.orderType === 'delivery' ? (
-                          <Bike className="w-4 h-4 text-blue-600" />
+                          <Bike className="w-5 h-5 text-gray-500" />
                         ) : order.orderType === 'counter' ? (
-                          <UtensilsCrossed className="w-4 h-4 text-amber-600" />
+                          <UtensilsCrossed className="w-5 h-5 text-gray-500" />
                         ) : (
-                          <ShoppingBag className="w-4 h-4 text-green-600" />
+                          <ShoppingBag className="w-5 h-5 text-gray-500" />
                         )}
-                        <span className="text-gray-600">
-                          {orderTypeLabel(order.orderType)}
-                        </span>
+                        <span>{orderTypeLabel(order.orderType)}</span>
                       </div>
                     )}
-                    <div className="flex items-center gap-1 text-gray-600">
+                    <div className="flex items-center gap-1.5 text-gray-500">
                       {order.waiterName ? (
                         <>
                           <Users className="w-4 h-4" />
@@ -1938,29 +1865,29 @@ export default function Orders() {
 
                   {/* Nombre del cliente si existe */}
                   {order.customerName && (
-                    <div className="flex items-center gap-2 text-sm text-gray-600 pb-2">
-                      <User className="w-4 h-4" />
-                      <span>{order.customerName}</span>
+                    <div className="flex items-center gap-2 text-sm text-gray-700">
+                      <User className="w-4 h-4 text-gray-500 shrink-0" />
+                      <span className="font-medium">{order.customerName}</span>
                       {order.customerPhone && (
-                        <span className="text-gray-400">• {order.customerPhone}</span>
+                        <span className="text-gray-500">{order.customerPhone}</span>
                       )}
                     </div>
                   )}
 
                   {/* Selector de repartidor para delivery */}
                   {order.orderType === 'delivery' && deliveryPersonsForOrder(order).length > 0 && (
-                    <div className="flex items-center gap-2 text-sm pb-2 border-b border-gray-200 mb-2">
-                      <Bike className="w-4 h-4 text-blue-600" />
-                      <span className="text-gray-600">Repartidor:</span>
+                    <div className="flex items-center gap-2 text-sm">
+                      <Bike className="w-4 h-4 text-gray-500 shrink-0" />
+                      <span className="text-gray-700">Repartidor:</span>
                       <select
                         value={order.deliveryPersonId || ''}
                         onChange={(e) => handleAssignDeliveryPerson(order.id, e.target.value)}
-                        className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                        className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
                       >
                         <option value="">Sin asignar</option>
                         {deliveryPersonsForOrder(order).map((person) => (
                           <option key={person.id} value={person.id}>
-                            {person.name}{person.operationalStatus ? ` (${person.operationalStatus === 'available' ? '✓' : person.operationalStatus === 'on_delivery' ? '🚗' : person.operationalStatus === 'break' ? '☕' : '⭘'})` : ''}
+                            {person.name}{person.operationalStatus ? ` (${ESTADO_REPARTIDOR[person.operationalStatus] || person.operationalStatus})` : ''}
                           </option>
                         ))}
                       </select>
@@ -1969,18 +1896,18 @@ export default function Orders() {
 
                   {/* Mostrar repartidor asignado cuando hay pocos repartidores */}
                   {order.orderType === 'delivery' && order.deliveryPersonName && deliveryPersonsForOrder(order).length === 0 && (
-                    <div className="flex items-center gap-2 text-sm text-blue-600 pb-2">
-                      <Bike className="w-4 h-4" />
-                      <span>Repartidor: {order.deliveryPersonName}</span>
+                    <div className="flex items-center gap-2 text-sm text-gray-700">
+                      <Bike className="w-4 h-4 text-gray-500 shrink-0" />
+                      <span>Repartidor: <span className="font-medium">{order.deliveryPersonName}</span></span>
                     </div>
                   )}
 
                   {/* Costo del envío: se pone al crear el pedido y se corrige acá
                       (la dirección resultó más lejos, el cliente lo cambió...). */}
                   {order.orderType === 'delivery' && (
-                    <div className="flex items-center gap-2 text-sm pb-2">
-                      <Bike className="w-4 h-4 text-gray-400 shrink-0" />
-                      <span className="text-gray-600">Envío:</span>
+                    <div className="flex items-center gap-2 text-sm">
+                      <Bike className="w-4 h-4 text-gray-500 shrink-0" />
+                      <span className="text-gray-700">Envío:</span>
                       {envioEnEdicion?.id === order.id ? (
                         <>
                           <div className="relative w-28">
@@ -1997,18 +1924,18 @@ export default function Orders() {
                                 if (e.key === 'Enter') guardarEnvio()
                                 if (e.key === 'Escape') setEnvioEnEdicion(null)
                               }}
-                              className="w-full pl-7 pr-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                              className="w-full pl-7 pr-2 py-1 text-sm border border-gray-300 rounded-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                             />
                           </div>
                           <button
                             onClick={guardarEnvio}
-                            className="text-xs font-medium text-primary-600 hover:text-primary-700"
+                            className="text-sm font-medium text-primary-600 hover:text-primary-700"
                           >
                             Guardar
                           </button>
                           <button
                             onClick={() => setEnvioEnEdicion(null)}
-                            className="text-xs text-gray-500 hover:text-gray-700"
+                            className="text-sm text-gray-500 hover:text-gray-700"
                           >
                             Cancelar
                           </button>
@@ -2016,7 +1943,7 @@ export default function Orders() {
                       ) : (
                         <button
                           onClick={() => setEnvioEnEdicion({ id: order.id, valor: String(montoDeEnvio(order.deliveryFee) || '') })}
-                          className="text-gray-900 font-medium hover:text-primary-600 hover:underline"
+                          className="text-gray-900 font-semibold tabular-nums hover:text-primary-600 hover:underline"
                         >
                           {montoDeEnvio(order.deliveryFee) > 0
                             ? `S/ ${montoDeEnvio(order.deliveryFee).toFixed(2)}`
@@ -2026,92 +1953,59 @@ export default function Orders() {
                     </div>
                   )}
 
-                  {/* Items */}
-                  <div className="space-y-2">
+                  {/* Items: cantidad en un cuadrado, nombre grande. Los
+                      modificadores y las notas cuelgan del plato, con un filete
+                      a la izquierda en vez de una caja de color. */}
+                  <div className="divide-y divide-gray-200">
                     {(order.items || []).map((item, idx) => {
-                      const itemStatus = item.status || 'pending'
                       return (
-                        <div key={item.itemId || idx} className="space-y-1">
-                          <div className="flex justify-between text-sm items-start">
-                            <div className="flex items-center gap-2 flex-1">
-                              <span className="text-gray-700">
-                                {item.quantity}x {item.name}
+                        <div key={item.itemId || idx} className="flex gap-3 py-2.5">
+                          <Cantidad n={item.quantity} />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-3">
+                              <span className="text-base font-semibold text-gray-900 leading-snug">
+                                {item.name}
                               </span>
-                              {/* Badge de estado del item - Solo si itemStatusTracking está habilitado */}
-                              {itemStatusTracking && (
-                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium text-white ${
-                                  itemStatus === 'delivered' ? 'bg-gray-600' :
-                                  itemStatus === 'ready' ? 'bg-green-600' :
-                                  itemStatus === 'preparing' ? 'bg-blue-600' :
-                                  'bg-yellow-600'
-                                }`}>
-                                  {itemStatus === 'delivered' ? '✓ Entregado' :
-                                   itemStatus === 'ready' ? '● Listo' :
-                                   itemStatus === 'preparing' ? '⚡ Preparando' :
-                                   '○ Pendiente'}
-                                </span>
-                              )}
+                              <span className="text-base font-semibold text-gray-700 tabular-nums whitespace-nowrap">
+                                S/ {(item.total || 0).toFixed(2)}
+                              </span>
                             </div>
-                            <span className="font-medium text-gray-900">
-                              S/ {(item.total || 0).toFixed(2)}
-                            </span>
-                          </div>
 
-                        {/* Mostrar modificadores si existen */}
-                        {item.modifiers && item.modifiers.length > 0 && (
-                          <div className="ml-6 bg-primary-50 border border-primary-200 rounded px-2 py-1.5 space-y-1">
-                            <div className="text-xs font-semibold text-primary-900 uppercase">
-                              Modificadores:
-                            </div>
-                            {item.modifiers.map((modifier, modIdx) => (
-                              <div key={modIdx} className="text-xs text-primary-800">
-                                <span className="font-medium">• {modifier.modifierName}:</span>
-                                <span className="ml-1">
-                                  {modifier.options.map((opt, optIdx) => (
-                                    <span key={optIdx}>
-                                      {opt.optionName}
-                                      {opt.priceAdjustment > 0 && ` (+S/ ${opt.priceAdjustment.toFixed(2)})`}
-                                      {optIdx < modifier.options.length - 1 && ', '}
-                                    </span>
-                                  ))}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                            {/* Estado del plato - solo si itemStatusTracking está habilitado */}
+                            {itemStatusTracking && (
+                              <div className="mt-1"><ChipDeEstadoItem status={item.status} /></div>
+                            )}
 
-                        {item.notes && (
-                          <div className="flex items-start gap-1 text-xs text-orange-700 bg-orange-50 px-2 py-1 rounded ml-6">
-                            <AlertTriangle className="w-3 h-3 flex-shrink-0 mt-0.5" />
-                            <span>{item.notes}</span>
+                            <Modificadores modifiers={item.modifiers} />
+
+                            <NotaDelPlato nota={item.notes} />
                           </div>
-                        )}
                         </div>
                       )
                     })}
                   </div>
 
                   {/* Total */}
-                  <div className="flex justify-between items-center pt-3 border-t border-gray-200">
-                    <span className="font-semibold text-gray-900">TOTAL</span>
-                    <span className="text-lg font-bold text-gray-900">
+                  <div className="flex justify-between items-center pt-3 border-t-2 border-gray-900">
+                    <span className="text-base font-bold text-gray-900">TOTAL</span>
+                    <span className="text-xl font-bold text-gray-900 tabular-nums">
                       S/ {(order.total || 0).toFixed(2)}
                     </span>
                   </div>
 
-                  {/* Hora de inicio */}
-                  <div className="flex items-center gap-2 text-xs text-gray-500">
-                    <Clock className="w-3 h-3" />
-                    <span>Iniciada a las {formatTime(order.createdAt)}</span>
-                  </div>
-
-                  {/* Mostrar hora de despacho si existe */}
-                  {order.dispatchedAt && (
-                    <div className="flex items-center gap-2 text-xs text-purple-600 mt-2">
-                      <Truck className="w-3 h-3" />
-                      <span>Despachada a las {formatTime(order.dispatchedAt)}</span>
+                  {/* Horas */}
+                  <div className="space-y-1 text-sm text-gray-500">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 shrink-0" />
+                      <span>Iniciada a las {formatTime(order.createdAt)}</span>
                     </div>
-                  )}
+                    {order.dispatchedAt && (
+                      <div className="flex items-center gap-2">
+                        <Truck className="w-4 h-4 shrink-0" />
+                        <span>Despachada a las {formatTime(order.dispatchedAt)}</span>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Botones de acción: avanzar estado + Marcar Entregada + menú "+".
                       Entregada va como BOTON y Cobrar al menú porque cerrar la orden
@@ -2119,7 +2013,7 @@ export default function Orders() {
                       menos. Y no se pierde: Entregada sobre una orden sin facturar
                       abre el cierre, que ofrece emitir el comprobante o cerrar sin
                       él con su motivo. */}
-                  <div className="mt-3 flex gap-2 items-stretch">
+                  <div className="pt-1 flex gap-2 items-stretch">
                     {/* Botón primario según estado */}
                     {order.status === 'pending' && (
                       <Button
@@ -2129,10 +2023,10 @@ export default function Orders() {
                         className={BOTON_ACCION}
                       >
                         {isUpdating ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <Loader2 className="w-5 h-5 animate-spin" />
                         ) : (
                           <>
-                            <ChevronRight className="w-4 h-4 mr-1" />
+                            <ChevronRight className="w-5 h-5 mr-1.5" />
                             En Preparación
                           </>
                         )}
@@ -2146,10 +2040,10 @@ export default function Orders() {
                         className={BOTON_ACCION}
                       >
                         {isUpdating ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <Loader2 className="w-5 h-5 animate-spin" />
                         ) : (
                           <>
-                            <CheckCircle className="w-4 h-4 mr-1" />
+                            <CheckCircle className="w-5 h-5 mr-1.5" />
                             Marcar Lista
                           </>
                         )}
@@ -2162,7 +2056,7 @@ export default function Orders() {
                         size="sm"
                         className={BOTON_ACCION}
                       >
-                        <Receipt className="w-4 h-4 mr-1" />
+                        <Receipt className="w-5 h-5 mr-1.5" />
                         Cerrar Cuenta
                       </Button>
                     )}
@@ -2172,13 +2066,13 @@ export default function Orders() {
                         disabled={isUpdating}
                         size="sm"
                         variant="outline"
-                        className={`${BOTON_ACCION} border-purple-500 text-purple-600 hover:bg-purple-50`}
+                        className={`${BOTON_ACCION} border-2 border-violet-600 text-violet-700 hover:bg-violet-50`}
                       >
                         {isUpdating ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <Loader2 className="w-5 h-5 animate-spin" />
                         ) : (
                           <>
-                            <PackageCheck className="w-4 h-4 mr-1" />
+                            <PackageCheck className="w-5 h-5 mr-1.5" />
                             Despachar
                           </>
                         )}
@@ -2196,11 +2090,10 @@ export default function Orders() {
                         size="sm"
                         className={BOTON_ACCION}
                       >
-                        <CheckCircle className="w-4 h-4 mr-1" />
+                        <CheckCircle className="w-5 h-5 mr-1.5" />
                         Marcar Entregada
                       </Button>
                     )}
-
 
                     {/* Menú "+" con acciones secundarias */}
                     <div className="relative">
@@ -2208,10 +2101,10 @@ export default function Orders() {
                         onClick={() => setOpenMenuOrderId(openMenuOrderId === order.id ? null : order.id)}
                         variant="outline"
                         size="sm"
-                        className="px-3 min-h-[44px]"
+                        className="w-14 min-h-[52px] rounded-none"
                         title="Más acciones"
                       >
-                        <Plus className="w-4 h-4" />
+                        <Plus className="w-5 h-5" />
                       </Button>
 
                       {openMenuOrderId === order.id && (
@@ -2220,7 +2113,7 @@ export default function Orders() {
                             className="fixed inset-0 z-10"
                             onClick={() => setOpenMenuOrderId(null)}
                           />
-                          <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg py-1 overflow-hidden min-w-[200px]">
+                          <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-gray-300 rounded-none shadow-lg py-1 overflow-hidden min-w-[220px]">
                             {/* Cobrar / Facturar. Vive acá y no como botón porque se usa
                                 mucho menos que cerrar la orden — y porque "Marcar
                                 Entregada" sobre una orden sin facturar ya ofrece emitir
@@ -2238,9 +2131,9 @@ export default function Orders() {
                                   setOpenMenuOrderId(null)
                                   handleGoToPayment(order)
                                 }}
-                                className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
+                                className="w-full text-left px-4 py-3 text-base hover:bg-gray-50 flex items-center gap-3"
                               >
-                                <DollarSign className="w-4 h-4 text-gray-400" />
+                                <DollarSign className="w-5 h-5 text-gray-400" />
                                 {/* "Por adelantado" porque lo normal es cerrar con
                                     "Marcar Entregada", que ya pregunta por el comprobante.
                                     Esto es cobrar ANTES de cerrar. Si la orden ya está
@@ -2254,9 +2147,9 @@ export default function Orders() {
                                 setOpenMenuOrderId(null)
                                 handlePrintPreBill(order)
                               }}
-                              className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
+                              className="w-full text-left px-4 py-3 text-base hover:bg-gray-50 flex items-center gap-3"
                             >
-                              <FileText className="w-4 h-4 text-gray-600" />
+                              <FileText className="w-5 h-5 text-gray-600" />
                               <span className="font-medium text-gray-900">Imprimir Precuenta</span>
                             </button>
                             <button
@@ -2264,9 +2157,9 @@ export default function Orders() {
                                 setOpenMenuOrderId(null)
                                 handleSplitBill(order)
                               }}
-                              className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
+                              className="w-full text-left px-4 py-3 text-base hover:bg-gray-50 flex items-center gap-3"
                             >
-                              <Split className="w-4 h-4 text-gray-600" />
+                              <Split className="w-5 h-5 text-gray-600" />
                               <span className="font-medium text-gray-900">Dividir Cuenta</span>
                             </button>
                             {/* Cerrar Cuenta secundario: en ready sin mesa (delivery/takeout), por si se necesita cerrar sin despachar */}
@@ -2276,9 +2169,9 @@ export default function Orders() {
                                   setOpenMenuOrderId(null)
                                   handleCloseOrder(order)
                                 }}
-                                className="w-full text-left px-4 py-2.5 text-sm hover:bg-green-50 flex items-center gap-3 border-t border-gray-100"
+                                className="w-full text-left px-4 py-3 text-base hover:bg-green-50 flex items-center gap-3 border-t border-gray-100"
                               >
-                                <Receipt className="w-4 h-4 text-green-600" />
+                                <Receipt className="w-5 h-5 text-green-600" />
                                 <span className="font-medium text-gray-900">Cerrar Cuenta</span>
                               </button>
                             )}

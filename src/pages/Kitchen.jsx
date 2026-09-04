@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { ChefHat, Clock, CheckCircle, AlertTriangle, Flame, Loader2, LayoutGrid } from 'lucide-react'
-import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import { ChefHat, Clock, CheckCircle, Flame, Loader2, LayoutGrid } from 'lucide-react'
+import Card, { CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
-import Badge from '@/components/ui/Badge'
 import Select from '@/components/ui/Select'
 import { getActiveOrders, updateOrderStatus, updateItemStatus } from '@/services/orderService'
 import { getProductCategories } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
 import { useLocationAccess } from '@/utils/locationAccess'
 import { useAppContext } from '@/hooks/useAppContext'
+import { Cantidad, ChipDeEstadoItem, Modificadores, NotaDelPlato } from '@/components/restaurant/tarjetaOrden'
+import { BOTON_ACCION, BOTON_ITEM, ETIQUETA_CABECERA, RECUADRO_CABECERA, ZOOM_TARJETAS, clasesDeTarjeta, clasesDeBanda } from '@/components/restaurant/tarjetaOrdenEstilos'
 import { useToast } from '@/contexts/ToastContext'
 import { collection, query, where, onSnapshot, orderBy as firestoreOrderBy, doc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -386,7 +387,7 @@ export default function Kitchen() {
   }
 
   const calculateElapsedTime = (createdAt) => {
-    if (!createdAt) return '0 min'
+    if (!createdAt) return 0
     const orderDate = createdAt.toDate ? createdAt.toDate() : new Date(createdAt)
     const now = new Date()
     const diffMs = now - orderDate
@@ -426,125 +427,95 @@ export default function Kitchen() {
     }
   }
 
+  // El tiempo va en un recuadro blanco sobre la banda: se pone ámbar a los
+  // 10 minutos y rojo a los 20. Antes de eso, sin color: lo que no se atrasa
+  // no tiene por qué llamar la atención.
   const getElapsedColor = (elapsed) => {
     const minutes = parseInt(elapsed)
     if (minutes > 20) return 'text-red-600'
-    if (minutes > 10) return 'text-yellow-600'
-    return 'text-green-600'
+    if (minutes > 10) return 'text-amber-600'
+    return 'text-gray-900'
   }
 
+  // Misma tarjeta que Órdenes (components/restaurant/tarjetaOrden.jsx). Lo que
+  // cambia es lo que le importa a la cocina: el tiempo en un recuadro que se
+  // colorea al atrasarse, y los modificadores sin precios.
   const renderOrderCard = (order, showActions = true) => {
     const elapsed = calculateElapsedTime(order.createdAt)
     const isUpdating = updatingOrderId === order.id
     const isUrgent = order.priority === 'urgent'
 
     return (
-      <Card key={order.id} className={`border-2 ${isUrgent ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className={`rounded-full w-10 h-10 flex items-center justify-center ${isUrgent ? 'bg-red-100' : 'bg-primary-100'}`}>
-                <span className={`font-bold text-lg ${isUrgent ? 'text-red-600' : 'text-primary-600'}`}>{order.tableNumber}</span>
-              </div>
-              <div>
+      <Card key={order.id} className={clasesDeTarjeta(isUrgent)}>
+        <div className={clasesDeBanda(order.status, isUrgent)}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              {order.tableNumber && (
+                <span className={`w-9 h-9 shrink-0 flex items-center justify-center text-gray-900 text-lg font-bold ${RECUADRO_CABECERA}`}>
+                  {order.tableNumber}
+                </span>
+              )}
+              <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="font-mono font-bold text-gray-900">{order.orderNumber || '#' + order.id.slice(-6)}</span>
+                  <span className="text-2xl font-bold tracking-tight leading-none">
+                    {order.orderNumber || '#' + order.id.slice(-6)}
+                  </span>
                   {isUrgent && (
-                    <span className="px-2 py-0.5 bg-red-600 text-white text-xs font-bold rounded-full animate-pulse">
-                      URGENTE
-                    </span>
+                    <span className={`${ETIQUETA_CABECERA} animate-pulse`}>URGENTE</span>
                   )}
                 </div>
-                <div className="text-xs text-gray-500">{order.waiterName}</div>
+                {order.waiterName && (
+                  <div className="text-sm opacity-90 truncate mt-1">{order.waiterName}</div>
+                )}
               </div>
             </div>
-            <div className="text-right">
-              <div className={`text-lg font-bold ${getElapsedColor(elapsed)}`}>
+            <div className="text-right shrink-0">
+              <div className={`inline-block px-2 py-0.5 text-xl font-bold tabular-nums leading-tight ${RECUADRO_CABECERA} ${getElapsedColor(elapsed)}`}>
                 {elapsed} min
               </div>
-              <div className="text-xs text-gray-500">{formatTime(order.createdAt)}</div>
+              <div className="text-sm opacity-90 mt-1">{formatTime(order.createdAt)}</div>
             </div>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {/* Items */}
-          <div className="space-y-2">
+        </div>
+
+        <CardContent className="px-4 py-3 space-y-3">
+          {/* Platos */}
+          <div className="divide-y divide-gray-200">
             {(order.items || []).map((item, idx) => {
               const itemStatus = item.status || 'pending'
               const isItemUpdating = updatingItemId === item.itemId
 
               return (
-                <div key={item.itemId || idx} className="bg-gray-50 rounded-lg p-3 space-y-2 border-2 border-gray-200">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-gray-900 text-lg">{item.quantity}x</span>
-                        <span className="font-semibold text-gray-900">{item.name}</span>
-
-                        {/* Badge de estado del item - Solo si itemStatusTracking está habilitado */}
-                        {itemStatusTracking && (
-                          <Badge className={`text-xs text-white ${
-                            itemStatus === 'delivered' ? 'bg-gray-600' :
-                            itemStatus === 'ready' ? 'bg-green-600' :
-                            itemStatus === 'preparing' ? 'bg-blue-600' :
-                            'bg-yellow-600'
-                          }`}>
-                            {itemStatus === 'delivered' ? 'Entregado' :
-                             itemStatus === 'ready' ? 'Listo' :
-                             itemStatus === 'preparing' ? 'Preparando' :
-                             'Pendiente'}
-                          </Badge>
-                        )}
+                <div key={item.itemId || idx} className="py-2.5">
+                  <div className="flex gap-3">
+                    <Cantidad n={item.quantity} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <span className="text-base font-semibold text-gray-900 leading-snug">
+                          {item.name}
+                        </span>
+                        {/* Estado del plato - Solo si itemStatusTracking está habilitado */}
+                        {itemStatusTracking && <ChipDeEstadoItem status={itemStatus} />}
                       </div>
-
-                      {/* Mostrar modificadores si existen - DESTACADO */}
-                      {item.modifiers && item.modifiers.length > 0 && (
-                        <div className="mt-2 bg-black text-white rounded-lg p-2 space-y-1">
-                          <div className="text-xs font-bold uppercase tracking-wide flex items-center gap-1">
-                            <Flame className="w-3 h-3" />
-                            Modificadores
-                          </div>
-                          {item.modifiers.map((modifier, modIdx) => (
-                            <div key={modIdx} className="text-sm">
-                              <span className="font-semibold">• {modifier.modifierName}:</span>
-                              <div className="ml-4 text-xs">
-                                {modifier.options.map((opt, optIdx) => (
-                                  <div key={optIdx}>
-                                    → {opt.optionName}
-                                    {opt.priceAdjustment > 0 && (
-                                      <span className="text-yellow-300"> (+S/ {opt.priceAdjustment.toFixed(2)})</span>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {item.notes && (
-                        <div className="flex items-center gap-1 mt-2 text-xs text-orange-700 bg-orange-50 px-2 py-1 rounded w-fit">
-                          <AlertTriangle className="w-3 h-3" />
-                          <span>{item.notes}</span>
-                        </div>
-                      )}
+                      <Modificadores modifiers={item.modifiers} conPrecios={false} />
+                      <NotaDelPlato nota={item.notes} />
                     </div>
                   </div>
 
                   {/* Botones de acción por item - Solo si itemStatusTracking está habilitado */}
                   {itemStatusTracking && showActions && itemStatus !== 'delivered' && (
-                    <div className="flex gap-2 pt-2 border-t border-gray-300">
+                    <div className="flex gap-2 mt-2.5">
                       {itemStatus === 'pending' && (
                         <Button
                           onClick={() => handleItemStatusChange(order.id, item.itemId, 'preparing')}
                           disabled={isItemUpdating}
                           size="sm"
-                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-xs"
+                          className={BOTON_ITEM}
                         >
                           {isItemUpdating ? (
-                            <><Loader2 className="w-3 h-3 mr-1 animate-spin" />Actualizando...</>
+                            <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Actualizando...</>
                           ) : (
-                            <><Flame className="w-3 h-3 mr-1" />Iniciar</>
+                            <><Flame className="w-4 h-4 mr-1.5" />Iniciar</>
                           )}
                         </Button>
                       )}
@@ -552,13 +523,14 @@ export default function Kitchen() {
                         <Button
                           onClick={() => handleItemStatusChange(order.id, item.itemId, 'ready')}
                           disabled={isItemUpdating}
+                          variant="success"
                           size="sm"
-                          className="flex-1 bg-green-600 hover:bg-green-700 text-xs"
+                          className={BOTON_ITEM}
                         >
                           {isItemUpdating ? (
-                            <><Loader2 className="w-3 h-3 mr-1 animate-spin" />Actualizando...</>
+                            <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Actualizando...</>
                           ) : (
-                            <><CheckCircle className="w-3 h-3 mr-1" />Marcar Listo</>
+                            <><CheckCircle className="w-4 h-4 mr-1.5" />Marcar Listo</>
                           )}
                         </Button>
                       )}
@@ -566,13 +538,14 @@ export default function Kitchen() {
                         <Button
                           onClick={() => handleItemStatusChange(order.id, item.itemId, 'delivered')}
                           disabled={isItemUpdating}
+                          variant="secondary"
                           size="sm"
-                          className="flex-1 bg-gray-600 hover:bg-gray-700 text-xs"
+                          className={BOTON_ITEM}
                         >
                           {isItemUpdating ? (
-                            <><Loader2 className="w-3 h-3 mr-1 animate-spin" />Actualizando...</>
+                            <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Actualizando...</>
                           ) : (
-                            <><CheckCircle className="w-3 h-3 mr-1" />Entregado</>
+                            <><CheckCircle className="w-4 h-4 mr-1.5" />Entregado</>
                           )}
                         </Button>
                       )}
@@ -585,17 +558,18 @@ export default function Kitchen() {
 
           {/* Actions por orden completa - Solo si itemStatusTracking está deshabilitado */}
           {!itemStatusTracking && showActions && (
-            <div className="flex gap-2 pt-2">
+            <div className="flex gap-2 pt-1">
               {order.status === 'pending' && (
                 <Button
                   onClick={() => handleStatusChange(order.id, 'preparing')}
                   disabled={isUpdating}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700"
+                  size="sm"
+                  className={BOTON_ACCION}
                 >
                   {isUpdating ? (
-                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Actualizando...</>
+                    <><Loader2 className="w-5 h-5 mr-1.5 animate-spin" />Actualizando...</>
                   ) : (
-                    <><Flame className="w-4 h-4 mr-2" />Iniciar Preparación</>
+                    <><Flame className="w-5 h-5 mr-1.5" />Iniciar Preparación</>
                   )}
                 </Button>
               )}
@@ -603,12 +577,14 @@ export default function Kitchen() {
                 <Button
                   onClick={() => handleStatusChange(order.id, 'ready')}
                   disabled={isUpdating}
-                  className="flex-1 bg-green-600 hover:bg-green-700"
+                  variant="success"
+                  size="sm"
+                  className={BOTON_ACCION}
                 >
                   {isUpdating ? (
-                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Actualizando...</>
+                    <><Loader2 className="w-5 h-5 mr-1.5 animate-spin" />Actualizando...</>
                   ) : (
-                    <><CheckCircle className="w-4 h-4 mr-2" />Marcar como Lista</>
+                    <><CheckCircle className="w-5 h-5 mr-1.5" />Marcar como Lista</>
                   )}
                 </Button>
               )}
@@ -633,17 +609,17 @@ export default function Kitchen() {
   }
 
   return (
-    <div className="space-y-6" style={{ zoom: 0.7 }}>
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Vista de Cocina</h1>
-            <GuideLink />
-          </div>
-          <p className="text-gray-600 mt-1">Sistema de display para la cocina (KDS)</p>
+    // Sin el `zoom: 0.7` de junio: encogía la pantalla entera al 70% y era la
+    // razón de fondo de que la letra se viera chica en cocina.
+    <div className="space-y-4">
+      {/* Cabecera en una fila. Los contadores que había debajo se fueron: las
+          columnas ya dicen "Pendientes (3)", era el mismo número dos veces. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="text-xl font-bold text-gray-900">Vista de Cocina</h1>
+          <GuideLink />
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {/* Selector de sede: solo si el negocio tiene sucursales */}
           {branches.length > 0 && (
             <Select value={selectedBranchId || ''} onChange={(e) => setSelectedBranchId(e.target.value || null)}>
@@ -651,9 +627,9 @@ export default function Kitchen() {
               {branches.map((b) => (<option key={b.id} value={b.id}>{b.name}</option>))}
             </Select>
           )}
-          <div className="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-lg">
-            <Clock className="w-5 h-5 text-gray-600" />
-            <span className="font-mono text-xl font-bold text-gray-900">
+          <div className="flex items-center gap-2 bg-gray-900 text-white px-3 py-1.5">
+            <Clock className="w-4 h-4" />
+            <span className="font-mono text-lg font-bold tabular-nums">
               {new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}
             </span>
           </div>
@@ -662,11 +638,11 @@ export default function Kitchen() {
 
       {/* Tabs de Estaciones - Solo si está habilitado el modo multi-estación */}
       {enableKitchenStations && kitchenStations.length > 0 && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-2">
+        <div className="bg-white shadow-sm border border-gray-300 p-2">
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
             <button
               onClick={() => setSelectedStation('all')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
+              className={`flex items-center gap-2 px-3 py-2 rounded-none font-semibold text-sm whitespace-nowrap transition-colors ${
                 selectedStation === 'all'
                   ? 'bg-gray-900 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -689,7 +665,7 @@ export default function Kitchen() {
                 <button
                   key={station.id}
                   onClick={() => setSelectedStation(station.id)}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
+                  className={`flex items-center gap-2 px-3 py-2 rounded-none font-semibold text-sm whitespace-nowrap transition-colors ${
                     isSelected
                       ? 'text-white'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -731,71 +707,14 @@ export default function Kitchen() {
         </div>
       )}
 
-      {/* Estadísticas - Solo en modo legacy (orden completa) */}
-      {!itemStatusTracking && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="border-2 border-yellow-200 bg-yellow-50">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-yellow-700">Pendientes</p>
-                  <p className="text-3xl font-bold text-yellow-600 mt-2">{filteredPendingOrders.length}</p>
-                </div>
-                <Clock className="w-12 h-12 text-yellow-500" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-2 border-blue-200 bg-blue-50">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-blue-700">En Preparación</p>
-                  <p className="text-3xl font-bold text-blue-600 mt-2">{filteredPreparingOrders.length}</p>
-                </div>
-                <Flame className="w-12 h-12 text-blue-500" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-2 border-green-200 bg-green-50">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-green-700">Listas</p>
-                  <p className="text-3xl font-bold text-green-600 mt-2">{filteredReadyOrders.length}</p>
-                </div>
-                <CheckCircle className="w-12 h-12 text-green-500" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Estadística simple para modo item-tracking */}
-      {itemStatusTracking && (
-        <Card className="border-2 border-primary-200 bg-primary-50">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-primary-700">Órdenes Activas</p>
-                <p className="text-3xl font-bold text-primary-600 mt-2">{filteredAllActiveOrders.length}</p>
-                <p className="text-xs text-primary-600 mt-1">Ordenadas por tiempo de llegada</p>
-              </div>
-              <ChefHat className="w-12 h-12 text-primary-500" />
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Modo Legacy: 3 Columnas por estado de orden */}
       {!itemStatusTracking && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4" style={{ zoom: ZOOM_TARJETAS }}>
           {/* Pendientes */}
           <div className="space-y-4">
-            <div className="flex items-center gap-2 pb-2 border-b-2 border-yellow-300">
-              <Clock className="w-5 h-5 text-yellow-600" />
-              <h2 className="text-lg font-bold text-yellow-700">
+            <div className="flex items-center gap-2 pb-2 border-b-4 border-amber-300">
+              <Clock className="w-5 h-5 text-amber-600" />
+              <h2 className="text-lg font-bold text-gray-900">
                 Pendientes ({filteredPendingOrders.length})
               </h2>
             </div>
@@ -812,9 +731,9 @@ export default function Kitchen() {
 
           {/* En Preparación */}
           <div className="space-y-4">
-            <div className="flex items-center gap-2 pb-2 border-b-2 border-blue-300">
-              <Flame className="w-5 h-5 text-blue-600" />
-              <h2 className="text-lg font-bold text-blue-700">
+            <div className="flex items-center gap-2 pb-2 border-b-4 border-sky-300">
+              <Flame className="w-5 h-5 text-sky-600" />
+              <h2 className="text-lg font-bold text-gray-900">
                 En Preparación ({filteredPreparingOrders.length})
               </h2>
             </div>
@@ -831,9 +750,9 @@ export default function Kitchen() {
 
           {/* Listas */}
           <div className="space-y-4">
-            <div className="flex items-center gap-2 pb-2 border-b-2 border-green-300">
-              <CheckCircle className="w-5 h-5 text-green-600" />
-              <h2 className="text-lg font-bold text-green-700">
+            <div className="flex items-center gap-2 pb-2 border-b-4 border-emerald-300">
+              <CheckCircle className="w-5 h-5 text-emerald-600" />
+              <h2 className="text-lg font-bold text-gray-900">
                 Listas ({filteredReadyOrders.length})
               </h2>
             </div>
@@ -853,16 +772,16 @@ export default function Kitchen() {
       {/* Modo Item-Tracking: Una sola lista ordenada por tiempo */}
       {itemStatusTracking && (
         <div>
-          <div className="flex items-center gap-2 pb-4 border-b-2 border-primary-300 mb-4">
-            <ChefHat className="w-6 h-6 text-primary-600" />
-            <h2 className="text-xl font-bold text-primary-700">
+          <div className="flex items-center gap-2 pb-2 border-b-4 border-gray-900 mb-3">
+            <ChefHat className="w-5 h-5 text-gray-700" />
+            <h2 className="text-lg font-bold text-gray-900">
               Órdenes Activas ({filteredAllActiveOrders.length})
             </h2>
             <span className="text-sm text-gray-500 ml-2">
               • Ordenadas por tiempo de llegada
             </span>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 2xl:grid-cols-4 gap-4" style={{ zoom: ZOOM_TARJETAS }}>
             {filteredAllActiveOrders.map(order => renderOrderCard(order))}
             {filteredAllActiveOrders.length === 0 && (
               <div className="col-span-full text-center py-16 text-gray-400">
