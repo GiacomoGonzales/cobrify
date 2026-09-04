@@ -35,7 +35,7 @@ export default function PanelMultimedia({ mensajes, onCerrar, onAbrirImagen, onI
   return (
     <aside className="w-full sm:w-80 bg-white border-l border-gray-200 flex flex-col h-full">
       <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-        <h3 className="font-semibold text-gray-900 text-sm">Archivos</h3>
+        <h3 className="font-semibold text-gray-900 text-[13px]">Archivos</h3>
         <button onClick={onCerrar} className="text-gray-400 hover:text-gray-600" aria-label="Cerrar">
           <X className="w-5 h-5" />
         </button>
@@ -46,7 +46,7 @@ export default function PanelMultimedia({ mensajes, onCerrar, onAbrirImagen, onI
           <button
             key={id}
             onClick={() => setPestana(id)}
-            className={`flex-1 px-2 py-2 text-xs font-semibold border-b-2 transition-colors ${
+            className={`flex-1 px-2 py-2 text-[11.5px] font-semibold border-b-2 transition-colors ${
               pestana === id ? 'border-green-600 text-green-700' : 'border-transparent text-gray-500 hover:text-gray-800'
             }`}
           >
@@ -58,7 +58,7 @@ export default function PanelMultimedia({ mensajes, onCerrar, onAbrirImagen, onI
 
       <div className="flex-1 overflow-y-auto p-3">
         {lista.length === 0 && (
-          <p className="text-sm text-gray-400 text-center py-8">
+          <p className="text-[13px] text-gray-400 text-center py-8">
             No hay {pestana === 'media' ? 'fotos ni videos' : pestana === 'document' ? 'documentos' : 'audios'} en esta conversación.
           </p>
         )}
@@ -104,7 +104,7 @@ export default function PanelMultimedia({ mensajes, onCerrar, onAbrirImagen, onI
                     : <FileText className="w-5 h-5 text-red-500" />}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm text-gray-800 truncate">
+                  <p className="text-[13px] text-gray-800 truncate">
                     {m.media.filename || (pestana === 'audio' ? 'Audio' : 'Documento')}
                   </p>
                   <p className="text-[11px] text-gray-400">{formatearHora(m.timestamp)}</p>

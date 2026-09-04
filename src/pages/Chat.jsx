@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   Check,
   CheckCheck,
-  CheckCircle2,
   Clock,
   FileText,
   Film,
@@ -17,19 +16,14 @@ import {
   Camera,
   Mic,
   Reply,
-  RotateCcw,
   Search,
   Send,
   StickyNote,
   UserCircle,
   Megaphone,
-  LayoutTemplate,
   Settings,
-  GalleryThumbnails,
   ArrowDown,
-  Tag,
   Trash2,
-  AlertTriangle,
   AlertCircle,
   SmilePlus,
   Trash,
@@ -37,6 +31,7 @@ import {
 } from 'lucide-react'
 import FichaCliente from '@/components/chat/FichaCliente'
 import TextoWhatsapp, { TarjetaEnlace } from '@/components/chat/TextoWhatsapp'
+import { Boton, useMenuDeFila, BotonDeFila, CajaMenu, ItemMenu, SeparadorMenu } from '@/components/admin/ui'
 import MiniaturaPdf, { formatoKB } from '@/components/chat/MiniaturaPdf'
 import SelectorPlantilla from '@/components/chat/SelectorPlantilla'
 import VisorMedia from '@/components/chat/VisorMedia'
@@ -146,6 +141,8 @@ export default function Chat() {
   // Visor de imagenes, panel de archivos y busqueda dentro de la conversacion.
   const [visorIndice, setVisorIndice] = useState(null)
   const [panelMedia, setPanelMedia] = useState(false)
+  // El menu "..." de la cabecera, el mismo del admin.
+  const menuCabecera = useMenuDeFila()
   const [buscarEnChat, setBuscarEnChat] = useState('')
   const [buscadorAbierto, setBuscadorAbierto] = useState(false)
   const [resaltado, setResaltado] = useState(null)
@@ -643,7 +640,7 @@ export default function Chat() {
   if (isLoading || !rolesResolved) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
       </div>
     )
   }
@@ -651,7 +648,7 @@ export default function Chat() {
   if (!isAdmin) return <Navigate to="/app/dashboard" replace />
 
   return (
-    <div className="h-screen flex bg-gray-50 overflow-hidden relative">
+    <div className="chat-cobrify font-admin text-[13px] text-gray-900 antialiased h-screen flex bg-gray-50 overflow-hidden relative">
 
       {/* ---------- Lista de conversaciones ---------- */}
       <aside
@@ -661,26 +658,29 @@ export default function Chat() {
       >
         <div className="px-4 py-3 border-b border-gray-200">
           <div className="flex items-center gap-2 mb-3">
-            <MessageCircle className="w-5 h-5 text-green-600" />
+            <MessageCircle className="w-5 h-5 text-primary-600" />
             <h1 className="font-bold text-gray-900">WhatsApp</h1>
             <button
               onClick={() => { setConfigAbierta(true); setActivaId(null) }}
-              className={`ml-auto p-1.5 rounded-lg hover:bg-gray-100 ${configAbierta ? 'text-green-600' : 'text-gray-400 hover:text-gray-600'}`}
+              className={`ml-auto p-1.5 rounded-lg hover:bg-gray-100 ${configAbierta ? 'text-primary-600' : 'text-gray-400 hover:text-gray-600'}`}
               title="Configuracion del chat"
             >
               <Settings className="w-5 h-5" />
             </button>
           </div>
           {/* Los dos mundos */}
-          <div className="flex gap-1 mb-3 text-xs font-semibold">
+          {/* Pestañas como las del admin: el activo se marca con la línea de
+              abajo, no rellenando la píldora de negro. */}
+          <div className="flex gap-1 mb-3 -mx-1 border-b border-gray-200">
             {[['todos', 'Todos'], ['clientes', 'Clientes'], ['leads', 'Leads']].map(([id, nombre]) => (
               <button
                 key={id}
+                type="button"
                 onClick={() => setMundo(id)}
-                className={`px-3 py-1.5 rounded-full border transition-colors ${
+                className={`px-3 py-2 text-[12.5px] border-b-2 -mb-px transition-colors ${
                   mundo === id
-                    ? 'bg-gray-900 text-white border-gray-900'
-                    : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+                    ? 'border-gray-900 text-gray-900 font-medium'
+                    : 'border-transparent text-gray-500 hover:text-gray-900'
                 }`}
               >
                 {nombre}
@@ -695,7 +695,7 @@ export default function Chat() {
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
               placeholder="Buscar por nombre o número"
-              className="w-full pl-9 pr-3 py-2 text-sm bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="w-full pl-9 pr-3 py-2 text-[13px] bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
 
@@ -705,15 +705,15 @@ export default function Chat() {
               <button
                 key={e.id}
                 onClick={() => setTab(e.id)}
-                className={`flex-1 px-2 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                className={`flex-1 rounded-md px-2 py-1.5 text-[11.5px] transition-colors ${
                   tab === e.id
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
+                    ? 'bg-white text-gray-900 font-medium border border-gray-200'
+                    : 'text-gray-500 hover:text-gray-900'
                 }`}
               >
                 {e.nombre}
                 {conteos[e.id] > 0 && (
-                  <span className="ml-1 text-[10px] text-gray-400">{conteos[e.id]}</span>
+                  <span className="ml-1 text-[11px] text-gray-400">{conteos[e.id]}</span>
                 )}
               </button>
             ))}
@@ -728,16 +728,15 @@ export default function Chat() {
                   <button
                     key={e.id}
                     onClick={() => setFiltroEtiqueta(activo ? null : e.id)}
-                    className={`flex-none inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors ${
-                      activo ? 'text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                    className={`flex-none inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                      activo
+                        ? 'border-gray-900 bg-gray-100 text-gray-900'
+                        : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
                     }`}
-                    style={activo
-                      ? { backgroundColor: e.color, borderColor: e.color }
-                      : { borderColor: '#e5e7eb' }}
                   >
                     <span
                       className="w-1.5 h-1.5 rounded-full flex-none"
-                      style={{ backgroundColor: activo ? 'white' : e.color }}
+                      style={{ backgroundColor: e.color }}
                     />
                     {e.nombre}
                   </button>
@@ -745,7 +744,7 @@ export default function Chat() {
               })}
               <button
                 onClick={() => setGestorAbierto(true)}
-                className="flex-none inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border border-dashed border-gray-300 text-gray-400 hover:text-gray-600 hover:border-gray-400"
+                className="flex-none inline-flex items-center gap-1 rounded-full border border-dashed border-gray-300 px-2.5 py-1 text-[11px] font-medium text-gray-400 hover:border-gray-400 hover:text-gray-700"
                 title="Administrar etiquetas"
               >
                 <Pencil className="w-3 h-3" />
@@ -757,8 +756,8 @@ export default function Chat() {
           <div className="flex items-center gap-2 mt-2.5">
             <button
               onClick={() => setSoloSinRespuesta((v) => !v)}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors ${
-                soloSinRespuesta ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                soloSinRespuesta ? 'border-gray-900 bg-gray-100 text-gray-900' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
               }`}
               title="Les escribimos y no contestaron en 7 dias"
             >
@@ -768,7 +767,7 @@ export default function Chat() {
             {filtradas.length > 0 && (
               <button
                 onClick={() => setCampanaAbierta(true)}
-                className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-green-600 text-white hover:bg-green-700"
+                className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50"
                 title="Enviar una plantilla a todas las conversaciones de esta lista"
               >
                 <Megaphone className="w-3 h-3" />
@@ -778,20 +777,20 @@ export default function Chat() {
           </div>
 
           {campanaEnCurso && (
-            <div className="mt-2.5 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-green-800 truncate">{campanaEnCurso.titulo}</span>
-                <button onClick={() => setCampanaEnCurso(null)} className="text-green-600 hover:text-green-800" aria-label="Ocultar">
+            <div className="mt-2.5 bg-primary-50 border border-primary-200 rounded-lg px-3 py-2">
+              <div className="flex items-center justify-between text-[11.5px]">
+                <span className="font-semibold text-primary-800 truncate">{campanaEnCurso.titulo}</span>
+                <button onClick={() => setCampanaEnCurso(null)} className="text-primary-600 hover:text-primary-800" aria-label="Ocultar">
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
-              <div className="h-1.5 bg-green-100 rounded-full mt-1.5 overflow-hidden">
+              <div className="h-1.5 bg-primary-100 rounded-full mt-1.5 overflow-hidden">
                 <div
-                  className="h-full bg-green-600 transition-all"
+                  className="h-full bg-primary-600 transition-all"
                   style={{ width: `${Math.round(((campanaEnCurso.enviados || 0) + (campanaEnCurso.fallidos || 0) + (campanaEnCurso.omitidos || 0)) / Math.max(1, campanaEnCurso.total) * 100)}%` }}
                 />
               </div>
-              <p className="text-[11px] text-green-800 mt-1">
+              <p className="text-[11px] text-primary-800 mt-1">
                 {campanaEnCurso.enviados || 0} enviados
                 {campanaEnCurso.fallidos ? ` · ${campanaEnCurso.fallidos} fallidos` : ''}
                 {campanaEnCurso.omitidos ? ` · ${campanaEnCurso.omitidos} omitidos (baja)` : ''}
@@ -804,12 +803,12 @@ export default function Chat() {
 
         <div className="flex-1 overflow-y-auto">
           {cargando && (
-            <p className="p-4 text-sm text-gray-500">Cargando conversaciones...</p>
+            <p className="p-4 text-[13px] text-gray-500">Cargando conversaciones...</p>
           )}
 
           {sinPermiso && (
-            <div className="p-4 m-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <p className="text-sm text-amber-900">
+            <div className="p-4 m-3 bg-gray-50 border border-gray-200 rounded-lg">
+              <p className="text-[13px] text-gray-900">
                 No se pudieron leer las conversaciones. Esta bandeja es solo para
                 cuentas de administrador.
               </p>
@@ -819,7 +818,7 @@ export default function Chat() {
           {!cargando && !sinPermiso && filtradas.length === 0 && (
             <div className="p-6 text-center">
               <MessageCircle className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-              <p className="text-sm text-gray-500">
+              <p className="text-[13px] text-gray-500">
                 {busqueda || filtroEtiqueta
                   ? 'No hay conversaciones que coincidan.'
                   : tab === 'pendiente'
@@ -838,19 +837,19 @@ export default function Chat() {
                 key={c.id}
                 onClick={() => setActivaId(c.id)}
                 className={`w-full text-left px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors ${
-                  c.id === activaId ? 'bg-green-50' : ''
+                  c.id === activaId ? 'bg-gray-100' : ''
                 }`}
               >
                 <div className="flex items-start gap-3">
                   <Avatar nombre={c.nombre} waId={c.waId} cliente={!!c.linkedBusinessId} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold text-gray-900 text-sm truncate">
+                      <span className="font-semibold text-gray-900 text-[13px] truncate">
                         {c.nombre || formatearNumero(c.waId)}
                       </span>
                       {c.linkedBusinessId && (
                         <span title={c.linkedBusinessName || 'Cliente de Cobrify'}>
-                          <UserCircle className="w-3.5 h-3.5 text-green-600 flex-none" />
+                          <UserCircle className="w-3.5 h-3.5 text-primary-600 flex-none" />
                         </span>
                       )}
                       {!abierta && (
@@ -859,7 +858,7 @@ export default function Chat() {
                         </span>
                       )}
                     </div>
-                    <p className="text-sm text-gray-500 truncate mt-0.5">
+                    <p className="text-[13px] text-gray-500 truncate mt-0.5">
                       {c.ultimaDireccion === 'saliente' && (
                         <span className="text-gray-400">Vos: </span>
                       )}
@@ -873,7 +872,7 @@ export default function Chat() {
                           return (
                             <span
                               key={id}
-                              className="inline-flex items-center gap-1 px-1.5 py-px rounded text-[10px] font-semibold"
+                              className="inline-flex items-center gap-1 px-1.5 py-px rounded text-[11px] font-semibold"
                               style={{ backgroundColor: `${e.color}18`, color: e.color }}
                             >
                               {e.nombre}
@@ -881,9 +880,9 @@ export default function Chat() {
                           )
                         })}
                         {(c.etiquetas || []).length > 3 && (
-                          <span className="text-[10px] text-gray-400">+{(c.etiquetas || []).length - 3}</span>
+                          <span className="text-[11px] text-gray-400">+{(c.etiquetas || []).length - 3}</span>
                         )}
-                        {c.nota && <StickyNote className="w-3 h-3 text-amber-500" />}
+                        {c.nota && <StickyNote className="w-3 h-3 text-gray-500" />}
                       </div>
                     )}
                   </div>
@@ -892,7 +891,7 @@ export default function Chat() {
                       {formatearHora(c.ultimoMensajeAt)}
                     </span>
                     {c.sinLeer > 0 && (
-                      <span className="bg-green-500 text-white text-[11px] font-bold rounded-full px-1.5 min-w-[18px] text-center">
+                      <span className="bg-primary-500 text-white text-[11px] font-bold rounded-full px-1.5 min-w-[18px] text-center">
                         {c.sinLeer}
                       </span>
                     )}
@@ -929,112 +928,91 @@ export default function Chat() {
                 <h2 className="font-semibold text-gray-900 truncate">
                   {activa.nombre || formatearNumero(activa.waId)}
                 </h2>
-                <p className="text-xs text-gray-500 truncate">
+                <p className="text-[11.5px] text-gray-500 truncate">
                   {formatearNumero(activa.waId)}
                   {activa.linkedBusinessName && (
-                    <span className="text-green-700"> · {activa.linkedBusinessName}</span>
+                    <span className="text-primary-700"> · {activa.linkedBusinessName}</span>
                   )}
                 </p>
               </div>
               {ventanaAbierta && (
                 <span
-                  className="text-xs text-gray-500 hidden lg:block"
+                  className="text-[11.5px] text-gray-500 hidden lg:block"
                   title="Tiempo que queda para responder sin plantilla"
                 >
                   Ventana: {formatearRestante(restante)}
                 </span>
               )}
 
-              {/* Acciones de organizacion */}
+              {/* Siete iconos sin etiqueta eran adivinanza. Quedan a la vista
+                  los dos de todos los dias —la ficha del cliente y cerrar la
+                  conversacion— y el resto entra al menu "...", el mismo del
+                  admin, donde cada accion se lee con su nombre. */}
               <div className="flex items-center gap-1 relative">
                 <button
-                  onClick={() => { setBuscadorAbierto((v) => !v); setPanelMedia(false) }}
-                  className={`p-2 rounded-lg hover:bg-gray-100 ${buscadorAbierto ? 'text-green-600' : 'text-gray-500 hover:text-gray-700'}`}
-                  title="Buscar en la conversacion"
-                >
-                  <Search className="w-5 h-5" />
-                </button>
-                <button
-                  onClick={() => { setPanelMedia((v) => !v); setFichaVisible(false) }}
-                  className={`p-2 rounded-lg hover:bg-gray-100 ${panelMedia ? 'text-green-600' : 'text-gray-500 hover:text-gray-700'}`}
-                  title="Archivos de la conversacion"
-                >
-                  <GalleryThumbnails className="w-5 h-5" />
-                </button>
-                <button
                   onClick={() => { setFichaVisible((v) => !v); setPanelMedia(false) }}
-                  className={`p-2 rounded-lg hover:bg-gray-100 ${
-                    activa.linkedBusinessId ? 'text-green-600' : 'text-gray-500 hover:text-gray-700'
+                  className={`h-8 w-8 grid place-items-center rounded-md hover:bg-gray-100 ${
+                    activa.linkedBusinessId ? 'text-primary-600' : 'text-gray-500 hover:text-gray-900'
                   }`}
                   title={activa.linkedBusinessId ? `Cliente: ${activa.linkedBusinessName || ''}` : 'Ficha del cliente'}
                 >
-                  <UserCircle className="w-5 h-5" />
+                  <UserCircle className="w-4 h-4" />
                 </button>
-                <button
-                  onClick={() => setTagPickerAbierto((v) => !v)}
-                  className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-                  title="Etiquetas"
-                >
-                  <Tag className="w-5 h-5" />
-                </button>
-                <button
-                  onClick={() => {
-                    setNotaBorrador(activa.nota || '')
-                    setNotaAbierta((v) => !v)
-                  }}
-                  className={`p-2 rounded-lg hover:bg-gray-100 ${activa.nota ? 'text-amber-500' : 'text-gray-500 hover:text-gray-700'}`}
-                  title="Nota interna"
-                >
-                  <StickyNote className="w-5 h-5" />
-                </button>
-                {estadoDe(activa) === 'abierta' && (
-                  <button
-                    onClick={() => handleEstado('pendiente')}
-                    className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-amber-600"
-                    title="Marcar pendiente"
-                  >
-                    <Clock className="w-5 h-5" />
-                  </button>
-                )}
+
                 {estadoDe(activa) !== 'completada' ? (
-                  <button
-                    onClick={() => handleEstado('completada')}
-                    className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-green-600"
-                    title="Completar"
-                  >
-                    <CheckCircle2 className="w-5 h-5" />
-                  </button>
+                  <Boton tamano="sm" onClick={() => handleEstado('completada')}>Completar</Boton>
                 ) : (
-                  <button
-                    onClick={() => handleEstado('abierta')}
-                    className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-green-600"
-                    title="Reabrir"
-                  >
-                    <RotateCcw className="w-5 h-5" />
-                  </button>
+                  <Boton tamano="sm" onClick={() => handleEstado('abierta')}>Reabrir</Boton>
+                )}
+
+                <BotonDeFila onClick={(el) => menuCabecera.alternar('cabecera', el)} />
+                {menuCabecera.abiertoEn === 'cabecera' && (
+                  <CajaMenu posicion={menuCabecera.posicion} refMenu={menuCabecera.refMenu}>
+                    <ItemMenu onClick={() => { menuCabecera.cerrar(); setBuscadorAbierto((v) => !v); setPanelMedia(false) }}>
+                      Buscar en la conversación
+                    </ItemMenu>
+                    <ItemMenu onClick={() => { menuCabecera.cerrar(); setPanelMedia((v) => !v); setFichaVisible(false) }}>
+                      Archivos de la conversación
+                    </ItemMenu>
+                    <SeparadorMenu />
+                    <ItemMenu onClick={() => { menuCabecera.cerrar(); setTagPickerAbierto((v) => !v) }}>
+                      Etiquetas
+                    </ItemMenu>
+                    <ItemMenu onClick={() => { menuCabecera.cerrar(); setNotaBorrador(activa.nota || ''); setNotaAbierta((v) => !v) }}>
+                      {activa.nota ? 'Ver nota interna' : 'Agregar nota interna'}
+                    </ItemMenu>
+                    {estadoDe(activa) === 'abierta' && (
+                      <>
+                        <SeparadorMenu />
+                        <ItemMenu onClick={() => { menuCabecera.cerrar(); handleEstado('pendiente') }}>
+                          Marcar pendiente
+                        </ItemMenu>
+                      </>
+                    )}
+                  </CajaMenu>
                 )}
 
                 {/* Selector de etiquetas */}
                 {tagPickerAbierto && (
-                  <div className="absolute right-0 top-11 z-20 w-60 bg-white border border-gray-200 rounded-xl shadow-lg py-2">
+                  <div className="absolute right-0 top-11 z-20 w-60 bg-white border border-gray-200 rounded-lg shadow-lg py-2">
                     {etiquetas.map((e) => {
                       const tiene = (activa.etiquetas || []).includes(e.id)
                       return (
                         <button
                           key={e.id}
                           onClick={() => alternarEtiqueta(activaId, e.id, tiene).catch(() => toast.error('No se pudo cambiar la etiqueta'))}
-                          className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left hover:bg-gray-50"
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[13px] text-left hover:bg-gray-50"
                         >
                           <span className="w-2.5 h-2.5 rounded-full flex-none" style={{ backgroundColor: e.color }} />
                           <span className="flex-1 text-gray-800">{e.nombre}</span>
-                          {tiene && <Check className="w-4 h-4 text-green-600" />}
+                          {tiene && <Check className="w-4 h-4 text-primary-600" />}
                         </button>
                       )
                     })}
                     <div className="border-t border-gray-100 mt-1 pt-1">
                       <button
                         onClick={() => { setTagPickerAbierto(false); setGestorAbierto(true) }}
-                        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-gray-500 hover:bg-gray-50"
+                        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[13px] text-gray-500 hover:bg-gray-50"
                       >
                         <Pencil className="w-3.5 h-3.5" />
                         Administrar etiquetas
@@ -1059,13 +1037,13 @@ export default function Chat() {
                       if (e.key === 'Enter' && coincidencias.length) irAlMensaje(coincidencias[coincidencias.length - 1].id)
                     }}
                     placeholder="Buscar en esta conversacion"
-                    className="w-full pl-9 pr-3 py-2 text-sm bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    className="w-full pl-9 pr-3 py-2 text-[13px] bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
                 {buscarEnChat.trim() && (
                   <div className="mt-1.5 max-h-40 overflow-y-auto">
                     {coincidencias.length === 0 ? (
-                      <p className="text-xs text-gray-400 py-1">Sin coincidencias</p>
+                      <p className="text-[11.5px] text-gray-400 py-1">Sin coincidencias</p>
                     ) : (
                       [...coincidencias].reverse().slice(0, 20).map((m) => (
                         <button
@@ -1074,8 +1052,8 @@ export default function Chat() {
                           className="w-full text-left px-2 py-1.5 rounded hover:bg-gray-50 flex items-center gap-2"
                         >
                           <ArrowDown className="w-3 h-3 text-gray-300 flex-none" />
-                          <span className="text-xs text-gray-700 truncate flex-1">{m.texto}</span>
-                          <span className="text-[10px] text-gray-400 flex-none">{formatearHora(m.timestamp)}</span>
+                          <span className="text-[11.5px] text-gray-700 truncate flex-1">{m.texto}</span>
+                          <span className="text-[11px] text-gray-400 flex-none">{formatearHora(m.timestamp)}</span>
                         </button>
                       ))
                     )}
@@ -1086,12 +1064,12 @@ export default function Chat() {
 
             {activa.optOut && (
               <div className="px-4 py-2 bg-red-50 border-b border-red-200 flex items-center justify-between gap-3">
-                <p className="text-xs text-red-800">
+                <p className="text-[11.5px] text-red-800">
                   Este contacto pidió no recibir más mensajes. Las campañas lo saltan.
                 </p>
                 <button
                   onClick={() => revertirBaja(activaId).then(() => toast.success('Baja revertida')).catch(() => toast.error('No se pudo revertir'))}
-                  className="text-xs font-semibold text-red-700 underline whitespace-nowrap"
+                  className="text-[11.5px] font-semibold text-red-700 underline whitespace-nowrap"
                 >
                   Revertir
                 </button>
@@ -1126,12 +1104,12 @@ export default function Chat() {
 
             {/* Nota interna: solo la ves vos, el cliente nunca */}
             {notaAbierta && (
-              <div className="px-4 py-3 bg-amber-50 border-b border-amber-200">
+              <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-semibold text-amber-800 uppercase tracking-wide">
+                  <span className="text-[11.5px] font-semibold text-gray-600 uppercase tracking-wide">
                     Nota interna (el cliente no la ve)
                   </span>
-                  <button onClick={() => setNotaAbierta(false)} className="text-amber-500 hover:text-amber-700">
+                  <button onClick={() => setNotaAbierta(false)} className="text-gray-500 hover:text-gray-700">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
@@ -1140,24 +1118,21 @@ export default function Chat() {
                   onChange={(e) => setNotaBorrador(e.target.value)}
                   rows={2}
                   placeholder="Quedo en llamar el lunes, pidio cotizacion de 3 sucursales..."
-                  className="w-full text-sm bg-white border border-amber-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
+                  className="w-full text-[13px] bg-white border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
                 />
                 <div className="flex justify-end mt-1.5">
-                  <button
-                    onClick={handleGuardarNota}
-                    className="px-3 py-1.5 text-xs font-semibold bg-amber-600 text-white rounded-lg hover:bg-amber-700"
-                  >
+                  <Boton variante="primario" tamano="sm" onClick={handleGuardarNota}>
                     Guardar nota
-                  </button>
+                  </Boton>
                 </div>
               </div>
             )}
             {!notaAbierta && activa.nota && (
               <button
                 onClick={() => { setNotaBorrador(activa.nota); setNotaAbierta(true) }}
-                className="px-4 py-2 bg-amber-50 border-b border-amber-100 text-left w-full hover:bg-amber-100 transition-colors"
+                className="px-4 py-2 bg-gray-50 border-b border-gray-200 text-left w-full hover:bg-gray-100 transition-colors"
               >
-                <p className="text-xs text-amber-800 truncate">
+                <p className="text-[11.5px] text-gray-600 truncate">
                   <StickyNote className="w-3 h-3 inline mr-1.5 -mt-0.5" />
                   {activa.nota}
                 </p>
@@ -1203,7 +1178,7 @@ export default function Chat() {
                             type="button"
                             onClick={() => alternarReaccion(m, e)}
                             className={`w-7 h-7 rounded-full text-base leading-none hover:bg-gray-100 ${
-                              miReaccion === e ? 'bg-green-50' : ''
+                              miReaccion === e ? 'bg-primary-50' : ''
                             }`}
                             title={miReaccion === e ? 'Quitar reacción' : `Reaccionar ${e}`}
                           >
@@ -1251,9 +1226,9 @@ export default function Chat() {
                         setPaletaAbierta(null)
                         setMenuMensaje(abierto ? null : m.id)
                       }}
-                      className={`rounded-2xl px-3.5 py-2 ${
+                      className={`rounded-2xl px-3.5 py-2 text-[14px] leading-snug ${
                         mio
-                          ? 'bg-green-600 text-white rounded-br-sm'
+                          ? 'bg-primary-50 border border-primary-100 text-gray-900 rounded-br-sm'
                           : 'bg-white border border-gray-200 text-gray-900 rounded-bl-sm'
                       }`}
                     >
@@ -1262,26 +1237,26 @@ export default function Chat() {
                           type="button"
                           onClick={() => citado && irAlMensaje(citado.id)}
                           className={`block w-full text-left mb-1.5 rounded-md px-2 py-1 border-l-[3px] ${
-                            mio ? 'bg-black/10 border-green-200' : 'bg-gray-100 border-gray-400'
+                            mio ? 'bg-white/70 border-primary-300' : 'bg-gray-100 border-gray-400'
                           }`}
                         >
-                          <span className={`block text-[11px] font-semibold ${mio ? 'text-green-100' : 'text-gray-600'}`}>
+                          <span className={`block text-[11px] font-semibold ${mio ? 'text-gray-500' : 'text-gray-600'}`}>
                             {citado
                               ? (citado.direccion === 'saliente' ? 'Vos' : (activa?.nombre || 'Cliente'))
                               : 'Mensaje citado'}
                           </span>
-                          <span className={`block text-[12px] truncate ${mio ? 'text-green-50' : 'text-gray-500'}`}>
+                          <span className={`block text-[11.5px] truncate ${mio ? 'text-gray-500' : 'text-gray-500'}`}>
                             {citado ? resumenDeCita(citado) : 'No está en esta parte de la conversación'}
                           </span>
                         </button>
                       )}
                       {m.tipo === 'template' && (
-                        <span className={`inline-block text-[10px] font-semibold uppercase tracking-wide mb-1 ${mio ? 'text-green-200' : 'text-gray-400'}`}>
+                        <span className={`inline-block text-[11px] font-semibold uppercase tracking-wide mb-1 ${mio ? 'text-gray-500' : 'text-gray-400'}`}>
                           Plantilla
                         </span>
                       )}
                       {m.automatico && (
-                        <span className={`inline-block text-[10px] font-semibold uppercase tracking-wide mb-1 ${mio ? 'text-green-200' : 'text-gray-400'}`}>
+                        <span className={`inline-block text-[11px] font-semibold uppercase tracking-wide mb-1 ${mio ? 'text-gray-500' : 'text-gray-400'}`}>
                           Respuesta automática
                         </span>
                       )}
@@ -1320,7 +1295,7 @@ export default function Chat() {
                         <BurbujaDocumento media={m.media} mio={mio} />
                       )}
                       {['image', 'sticker', 'video', 'audio', 'document'].includes(m.tipo) && !m.media?.url && (
-                        <p className="text-sm italic opacity-75 mb-1">
+                        <p className="text-[13px] italic opacity-75 mb-1">
                           {m.tipo === 'image' ? 'Imagen' : m.tipo === 'audio' ? 'Audio' : m.tipo === 'video' ? 'Video' : m.tipo === 'document' ? 'Documento' : 'Sticker'} no disponible
                         </p>
                       )}
@@ -1329,20 +1304,20 @@ export default function Chat() {
                         ? (
                           <TextoWhatsapp
                             texto={m.texto}
-                            claseEnlace={`underline break-all ${mio ? 'text-green-100' : 'text-blue-600'}`}
+                            claseEnlace={`underline break-all ${'text-blue-600'}`}
                           />
                         )
                         : !['image', 'sticker', 'video', 'audio', 'document'].includes(m.tipo)
-                          && <p className="text-sm italic opacity-75">[{m.tipo}]</p>}
+                          && <p className="text-[13px] italic opacity-75">[{m.tipo}]</p>}
                       <div
                         className={`flex items-center gap-1 justify-end mt-0.5 ${
-                          mio ? 'text-green-100' : 'text-gray-400'
+                          'text-gray-400'
                         }`}
                       >
                         {fallo && (
-                          <span className="text-[10px] font-semibold text-red-100">No se envió</span>
+                          <span className="text-[11px] font-semibold text-red-100">No se envió</span>
                         )}
-                        <span className="text-[10px]">{formatearHora(m.timestamp)}</span>
+                        <span className="text-[11px]">{formatearHora(m.timestamp)}</span>
                         {mio && (
                           fallo
                             ? <AlertCircle className="w-3.5 h-3.5 text-red-100" />
@@ -1358,7 +1333,7 @@ export default function Chat() {
                     </div>
                     {conReaccion && (
                       <span
-                        className={`absolute -bottom-2.5 ${mio ? 'left-2' : 'right-2'} px-1.5 py-0.5 rounded-full bg-white border border-gray-200 shadow-sm text-[12px] leading-none`}
+                        className={`absolute -bottom-2.5 ${mio ? 'left-2' : 'right-2'} px-1.5 py-0.5 rounded-full bg-white border border-gray-200 shadow-sm text-[11.5px] leading-none`}
                         title={miReaccion && suReaccion ? 'Tu reacción y la del cliente' : miReaccion ? 'Tu reacción' : 'Reacción del cliente'}
                       >
                         {suReaccion}{miReaccion}
@@ -1421,9 +1396,9 @@ export default function Chat() {
                   <div
                     className={`absolute bottom-full left-4 right-4 ${
                       adjuntoGuardado ? 'mb-[3.9rem]' : 'mb-1'
-                    } bg-white border border-gray-200 rounded-xl shadow-sm p-2 flex items-center gap-2.5 z-10`}
+                    } bg-white border border-gray-200 rounded-lg shadow-sm p-2 flex items-center gap-2.5 z-10`}
                   >
-                    <div className="w-1 self-stretch rounded-full bg-green-600 flex-none" />
+                    <div className="w-1 self-stretch rounded-full bg-primary-600 flex-none" />
                     <div className="min-w-0 flex-1">
                       <p className="text-[11px] font-semibold text-gray-500">
                         Respondiendo a {respondiendoA.direccion === 'saliente' ? 'tu mensaje' : (activa?.nombre || 'el cliente')}
@@ -1441,7 +1416,7 @@ export default function Chat() {
                   </div>
                 )}
                 {adjuntoGuardado && (
-                  <div className="absolute bottom-full left-4 right-4 mb-1 bg-white border border-green-200 rounded-xl shadow-sm p-2 flex items-center gap-2.5 z-10">
+                  <div className="absolute bottom-full left-4 right-4 mb-1 bg-white border border-primary-200 rounded-lg shadow-sm p-2 flex items-center gap-2.5 z-10">
                     {adjuntoGuardado.tipo === 'image' ? (
                       <img src={adjuntoGuardado.url} alt="" className="w-10 h-10 rounded object-cover flex-none" />
                     ) : adjuntoGuardado.tipo === 'video' ? (
@@ -1454,7 +1429,7 @@ export default function Chat() {
                       </div>
                     )}
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium text-gray-800 truncate">
+                      <p className="text-[11.5px] font-medium text-gray-800 truncate">
                         {adjuntoGuardado.filename || NOMBRE_TIPO[adjuntoGuardado.tipo]}
                       </p>
                       <p className="text-[11px] text-gray-400">Se envía con este mensaje</p>
@@ -1470,9 +1445,9 @@ export default function Chat() {
                   </div>
                 )}
                 {!adjuntoGuardado && sugerenciasRapidas.length > 0 && (
-                  <div className="absolute bottom-full left-4 right-4 mb-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden z-10">
+                  <div className="absolute bottom-full left-4 right-4 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden z-10">
                     <div className="px-3.5 py-1.5 bg-gray-50 border-b border-gray-100">
-                      <p className="text-[10px] text-gray-400">Flechas para elegir · Enter para usar</p>
+                      <p className="text-[11px] text-gray-400">Flechas para elegir · Enter para usar</p>
                     </div>
                     {sugerenciasRapidas.map((r, idx) => (
                       <button
@@ -1481,11 +1456,11 @@ export default function Chat() {
                         onClick={() => aplicarRapida(r)}
                         onMouseEnter={() => setSugerenciaSel(idx)}
                         className={`w-full text-left px-3.5 py-2 flex items-start gap-3 ${
-                          idx === sugerenciaSel ? 'bg-green-50' : 'hover:bg-gray-50'
+                          idx === sugerenciaSel ? 'bg-primary-50' : 'hover:bg-gray-50'
                         }`}
                       >
-                        <span className="font-mono text-xs font-semibold text-green-700 bg-green-50 px-1.5 py-0.5 rounded flex-none">/{r.atajo}</span>
-                        <span className="text-sm text-gray-700 truncate flex-1">{r.texto}</span>
+                        <span className="font-mono text-[11.5px] font-semibold text-primary-700 bg-primary-50 px-1.5 py-0.5 rounded flex-none">/{r.atajo}</span>
+                        <span className="text-[13px] text-gray-700 truncate flex-1">{r.texto}</span>
                         {r.media && (
                           <span className="flex-none text-gray-400" title={NOMBRE_TIPO[r.media.tipo]}>
                             {r.media.tipo === 'image' ? <ImageIconoRapida />
@@ -1501,10 +1476,10 @@ export default function Chat() {
                 {grabadora.grabando ? (
                   <div className="flex-1 flex items-center gap-3 px-4 py-2.5 bg-gray-100 rounded-2xl">
                     <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse flex-none" />
-                    <span className="text-sm font-medium text-gray-700 tabular-nums">
+                    <span className="text-[13px] font-medium text-gray-700 tabular-nums">
                       {relojDeGrabacion(grabadora.segundos)}
                     </span>
-                    <span className="text-xs text-gray-400 hidden sm:inline">Grabando una nota de voz</span>
+                    <span className="text-[11.5px] text-gray-400 hidden sm:inline">Grabando una nota de voz</span>
                     <button
                       type="button"
                       onClick={grabadora.cancelar}
@@ -1557,7 +1532,7 @@ export default function Chat() {
                   }}
                   placeholder={respuestasRapidas.length ? 'Escribí un mensaje, o / para una respuesta rápida' : 'Escribí un mensaje'}
                   disabled={enviando}
-                  className="flex-1 px-4 py-2.5 bg-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-60 resize-none leading-5 max-h-[132px]"
+                  className="flex-1 px-4 py-2.5 bg-gray-100 rounded-2xl text-[14px] focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-60 resize-none leading-5 max-h-[132px]"
                 />
                 )}
                 {/* Con algo escrito, el botón envía. Sin nada, ofrece el
@@ -1567,7 +1542,7 @@ export default function Chat() {
                     type={grabadora.grabando ? 'button' : 'submit'}
                     onClick={grabadora.grabando ? handleEnviarNota : undefined}
                     disabled={enviando || (!grabadora.grabando && !texto.trim())}
-                    className="p-2.5 bg-green-600 text-white rounded-full hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    className="p-2.5 bg-primary-600 text-white rounded-full hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     aria-label={grabadora.grabando ? 'Enviar la nota de voz' : 'Enviar'}
                   >
                     <Send className="w-5 h-5" />
@@ -1586,26 +1561,24 @@ export default function Chat() {
                 )}
               </form>
             ) : (
-              <div className="px-4 py-3 bg-amber-50 border-t border-amber-200">
-                <div className="flex gap-2.5">
-                  <AlertTriangle className="w-5 h-5 text-amber-600 flex-none mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-amber-900">
+              <div className="border-t border-gray-200 bg-gray-50 px-4 py-3">
+                {/* La ventana de 24h cerrada no es un error: es una regla de
+                    Meta. Va en gris, como los avisos del admin; el ámbar se fue
+                    con el resto de la paleta. */}
+                <div className="flex items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-gray-900">
                       Pasaron más de 24 horas desde su último mensaje
                     </p>
-                    <p className="text-xs text-amber-800 mt-0.5">
+                    <p className="mt-0.5 text-[12px] text-gray-500">
                       WhatsApp solo permite responder libremente dentro de las 24 horas.
                       Para escribirle ahora hace falta una plantilla aprobada por Meta,
                       que se cobra aparte. Si te vuelve a escribir, la ventana se reabre.
                     </p>
                   </div>
-                  <button
-                    onClick={() => setSelectorAbierto(true)}
-                    className="ml-auto flex-none inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-amber-600 text-white rounded-lg hover:bg-amber-700"
-                  >
-                    <LayoutTemplate className="w-4 h-4" />
+                  <Boton variante="primario" onClick={() => setSelectorAbierto(true)} className="flex-none">
                     Enviar plantilla
-                  </button>
+                  </Boton>
                 </div>
               </div>
             )}
@@ -1618,7 +1591,7 @@ export default function Chat() {
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setAdjunto(null)}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
             <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-              <h3 className="font-bold text-gray-900 text-sm">Enviar archivo</h3>
+              <h3 className="font-bold text-gray-900 text-[13px]">Enviar archivo</h3>
               <button onClick={() => setAdjunto(null)} className="text-gray-400 hover:text-gray-600" aria-label="Cancelar">
                 <X className="w-5 h-5" />
               </button>
@@ -1631,11 +1604,11 @@ export default function Chat() {
                   className="rounded-lg max-h-64 mx-auto object-contain"
                 />
               ) : (
-                <div className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3">
+                <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-4 py-3">
                   <FileText className="w-8 h-8 text-red-500 flex-none" />
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-800 truncate">{adjunto.name}</p>
-                    <p className="text-xs text-gray-400">{(adjunto.size / 1024 / 1024).toFixed(1)} MB</p>
+                    <p className="text-[13px] font-medium text-gray-800 truncate">{adjunto.name}</p>
+                    <p className="text-[11.5px] text-gray-400">{(adjunto.size / 1024 / 1024).toFixed(1)} MB</p>
                   </div>
                 </div>
               )}
@@ -1644,24 +1617,20 @@ export default function Chat() {
                 value={pieAdjunto}
                 onChange={(e) => setPieAdjunto(e.target.value)}
                 placeholder="Agregar un comentario (opcional)"
-                className="w-full mt-4 px-4 py-2.5 bg-gray-100 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="w-full mt-4 px-4 py-2.5 bg-gray-100 rounded-full text-[13px] focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
             <div className="px-5 py-3 border-t border-gray-200 flex justify-end gap-2">
               <button
                 onClick={() => setAdjunto(null)}
                 disabled={enviando}
-                className="px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50"
+                className="px-4 py-2 text-[13px] font-semibold text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50"
               >
                 Cancelar
               </button>
-              <button
-                onClick={handleEnviarAdjunto}
-                disabled={enviando}
-                className="px-4 py-2 text-sm font-semibold bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-              >
-                {enviando ? 'Enviando...' : 'Enviar'}
-              </button>
+              <Boton variante="primario" onClick={handleEnviarAdjunto} disabled={enviando}>
+                {enviando ? 'Enviando…' : 'Enviar'}
+              </Boton>
             </div>
           </div>
         </div>
@@ -1777,13 +1746,13 @@ function Avatar({ nombre, waId, cliente }) {
   return (
     <div className="relative flex-none">
       <div
-        className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold"
+        className="w-10 h-10 rounded-full flex items-center justify-center text-white text-[13px] font-bold"
         style={{ backgroundColor: color }}
       >
         {iniciales}
       </div>
       {cliente && (
-        <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full" title="Cliente de Cobrify" />
+        <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-primary-500 border-2 border-white rounded-full" title="Cliente de Cobrify" />
       )}
     </div>
   )
@@ -1804,7 +1773,7 @@ function BurbujaDocumento({ media, mio }) {
       href={media.url}
       target="_blank"
       rel="noopener noreferrer"
-      className={`block rounded-lg overflow-hidden mb-1 ${mio ? 'bg-green-700/50' : 'bg-gray-100'}`}
+      className={`block rounded-lg overflow-hidden mb-1 ${'bg-white/70'}`}
     >
       {esPdf && <MiniaturaPdf url={media.url} onDatos={setInfo} />}
       <div className="flex items-center gap-2.5 px-3 py-2.5">
@@ -1812,10 +1781,10 @@ function BurbujaDocumento({ media, mio }) {
           <FileText className="w-5 h-5 text-white" />
         </div>
         <div className="min-w-0">
-          <p className={`text-sm font-medium truncate ${mio ? 'text-white' : 'text-gray-900'}`}>
+          <p className={`text-[13px] font-medium truncate ${'text-gray-900'}`}>
             {media.filename || 'Documento'}
           </p>
-          <p className={`text-xs ${mio ? 'text-green-100' : 'text-gray-500'}`}>
+          <p className={`text-[11.5px] ${mio ? 'text-gray-500' : 'text-gray-500'}`}>
             {info ? `${info.paginas} pagina${info.paginas === 1 ? '' : 's'} · ` : ''}
             {esPdf ? 'PDF' : 'Archivo'}
             {info?.tamano ? ` · ${formatoKB(info.tamano)}` : ''}
@@ -1888,7 +1857,7 @@ function GestorDeEtiquetas({ etiquetas, onCerrar, onGuardar }) {
                   copia[i] = { ...e, nombre: ev.target.value }
                   setLista(copia)
                 }}
-                className="flex-1 text-sm px-2 py-1.5 border border-transparent hover:border-gray-200 focus:border-gray-300 rounded-lg focus:outline-none"
+                className="flex-1 text-[13px] px-2 py-1.5 border border-transparent hover:border-gray-200 focus:border-gray-300 rounded-lg focus:outline-none"
               />
               <button
                 onClick={() => setLista(lista.filter((x) => x.id !== e.id))}
@@ -1914,12 +1883,12 @@ function GestorDeEtiquetas({ etiquetas, onCerrar, onGuardar }) {
               onChange={(e) => setNombreNuevo(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') agregar() }}
               placeholder="Nueva etiqueta"
-              className="flex-1 text-sm px-3 py-1.5 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="flex-1 text-[13px] px-3 py-1.5 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
             <button
               onClick={agregar}
               disabled={!nombreNuevo.trim()}
-              className="p-1.5 text-green-600 hover:text-green-700 disabled:opacity-30"
+              className="p-1.5 text-primary-600 hover:text-primary-700 disabled:opacity-30"
               title="Agregar"
             >
               <Plus className="w-5 h-5" />
@@ -1930,7 +1899,7 @@ function GestorDeEtiquetas({ etiquetas, onCerrar, onGuardar }) {
         <div className="px-5 py-3 border-t border-gray-200 flex justify-end gap-2">
           <button
             onClick={onCerrar}
-            className="px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100 rounded-lg"
+            className="px-4 py-2 text-[13px] font-semibold text-gray-600 hover:bg-gray-100 rounded-lg"
           >
             Cancelar
           </button>
@@ -1942,7 +1911,7 @@ function GestorDeEtiquetas({ etiquetas, onCerrar, onGuardar }) {
               await onGuardar(limpias)
               onCerrar()
             }}
-            className="px-4 py-2 text-sm font-semibold bg-green-600 text-white rounded-lg hover:bg-green-700"
+            className="px-4 py-2 text-[13px] font-semibold bg-primary-600 text-white rounded-lg hover:bg-primary-700"
           >
             Guardar
           </button>

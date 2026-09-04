@@ -67,7 +67,8 @@ export default function TextoWhatsapp({ texto, claseEnlace }) {
   }
   if (cursor < texto.length) partes.push(texto.slice(cursor))
 
-  return <p className="text-sm whitespace-pre-wrap break-words">{partes}</p>
+  // El cuerpo del mensaje se queda en 14: es lo que mas se lee de la pantalla.
+  return <p className="text-[14px] leading-snug whitespace-pre-wrap break-words">{partes}</p>
 }
 
 /** Tarjeta de vista previa de un enlace, como la muestra WhatsApp. */
@@ -79,7 +80,7 @@ export function TarjetaEnlace({ vista, mio }) {
       target="_blank"
       rel="noopener noreferrer"
       className={`block rounded-lg overflow-hidden mb-1 ${
-        mio ? 'bg-green-700/50' : 'bg-gray-100'
+        mio ? 'bg-white/70' : 'bg-gray-100'
       }`}
     >
       {vista.imagen && (
@@ -92,15 +93,15 @@ export function TarjetaEnlace({ vista, mio }) {
         />
       )}
       <div className="px-3 py-2">
-        <p className={`text-sm font-semibold leading-snug line-clamp-2 ${mio ? 'text-white' : 'text-gray-900'}`}>
+        <p className={`text-[13px] font-semibold leading-snug line-clamp-2 ${'text-gray-900'}`}>
           {vista.titulo}
         </p>
         {vista.descripcion && (
-          <p className={`text-xs mt-0.5 line-clamp-2 ${mio ? 'text-green-100' : 'text-gray-500'}`}>
+          <p className={`text-[11.5px] mt-0.5 line-clamp-2 ${'text-gray-500'}`}>
             {vista.descripcion}
           </p>
         )}
-        <p className={`text-[11px] mt-1 ${mio ? 'text-green-200' : 'text-gray-400'}`}>
+        <p className={`text-[11px] mt-1 ${'text-gray-400'}`}>
           {vista.sitio}
         </p>
       </div>

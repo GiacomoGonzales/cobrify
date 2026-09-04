@@ -142,17 +142,40 @@
   .chip-info   { @apply bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200; }
   .chip-morado { @apply bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-200; }
 
-  /* Panel de administracion (.admin): Inter, 13px y cifras tabulares. Sin
+  /* Panel de administracion (.admin) y bandeja del chat (.chat-cobrify):
+     Inter, 13px y cifras tabulares. Sin
      zoom: la densidad sale del tamano de letra y de las filas, no de encoger
      la pagina. En pantallas con mouse los campos van a 13px; en tactiles se
      quedan en 16px para que iOS no haga zoom al enfocar. */
-  .admin {
+  .admin,
+  .chat-cobrify {
     font-variant-numeric: tabular-nums;
+  }
+
+  /* El acento del chat es el verde de Cobrify Chat, no el azul del admin.
+     Se retiñe `primary` dentro de la bandeja y con eso el kit del admin
+     —botones, foco de los campos— adopta el verde sin tocar un componente.
+     No pisa la marca de ningun reseller: el chat ya era verde a mano en los
+     70 sitios donde se usaba, esto solo hace que el kit haga juego. */
+  .chat-cobrify {
+    --primary-50: 236 253 243;
+    --primary-100: 209 250 229;
+    --primary-200: 167 243 208;
+    --primary-300: 110 231 183;
+    --primary-400: 52 211 153;
+    --primary-500: 37 187 106;
+    --primary-600: 22 163 74;
+    --primary-700: 21 128 61;
+    --primary-800: 22 101 52;
+    --primary-900: 20 83 45;
+    --primary-950: 5 46 22;
   }
   @media (pointer: fine) {
     .admin input,
     .admin select,
-    .admin textarea {
+    .admin textarea,
+    .chat-cobrify input,
+    .chat-cobrify select {
       font-size: 13px;
     }
   }

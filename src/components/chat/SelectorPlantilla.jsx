@@ -97,7 +97,7 @@ export default function SelectorPlantilla({ titulo, destinatarios, onEnviar, onC
         <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
           <div>
             <h3 className="font-bold text-gray-900">{titulo || 'Enviar plantilla'}</h3>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-[11.5px] text-gray-500 mt-0.5">
               {modoCampana
                 ? `${destinatarios} destinatario${destinatarios === 1 ? '' : 's'} · se cobra por conversación iniciada`
                 : 'Fuera de las 24 horas solo se puede escribir con una plantilla aprobada por Meta'}
@@ -122,13 +122,13 @@ export default function SelectorPlantilla({ titulo, destinatarios, onEnviar, onC
           {/* Lista */}
           <div className="sm:col-span-2 border-b sm:border-b-0 sm:border-r border-gray-200 overflow-y-auto max-h-48 sm:max-h-none">
             {aprobadas.length === 0 && !sincronizando && (
-              <div className="p-4 text-sm text-gray-500">
+              <div className="p-4 text-[13px] text-gray-500">
                 No hay plantillas aprobadas todavía. Se crean y aprueban en el panel de Meta
                 (WhatsApp Manager → Plantillas de mensajes) y después aparecen acá.
               </div>
             )}
             {sincronizando && aprobadas.length === 0 && (
-              <p className="p-4 text-sm text-gray-500">Trayendo plantillas de Meta...</p>
+              <p className="p-4 text-[13px] text-gray-500">Trayendo plantillas de Meta...</p>
             )}
             {aprobadas.map((p) => (
               <button
@@ -138,7 +138,7 @@ export default function SelectorPlantilla({ titulo, destinatarios, onEnviar, onC
                   elegida?.id === p.id ? 'bg-green-50' : ''
                 }`}
               >
-                <p className="text-sm font-semibold text-gray-900 truncate">{p.name}</p>
+                <p className="text-[13px] font-semibold text-gray-900 truncate">{p.name}</p>
                 <p className="text-[11px] text-gray-500">
                   {CATEGORIAS[p.category] || p.category} · {p.language}
                 </p>
@@ -149,7 +149,7 @@ export default function SelectorPlantilla({ titulo, destinatarios, onEnviar, onC
             )}
             {otras.map((p) => (
               <div key={p.id} className="px-4 py-2 opacity-50" title={p.rejectedReason || p.status}>
-                <p className="text-sm text-gray-700 truncate">{p.name}</p>
+                <p className="text-[13px] text-gray-700 truncate">{p.name}</p>
                 <p className="text-[11px] text-gray-500">
                   {p.status === 'PENDING' ? 'En revisión' : p.status === 'REJECTED' ? 'Rechazada' : p.status}
                 </p>
@@ -160,12 +160,12 @@ export default function SelectorPlantilla({ titulo, destinatarios, onEnviar, onC
           {/* Formulario + vista previa */}
           <div className="sm:col-span-3 overflow-y-auto p-5">
             {!elegida ? (
-              <p className="text-sm text-gray-500">Elegí una plantilla de la lista.</p>
+              <p className="text-[13px] text-gray-500">Elegí una plantilla de la lista.</p>
             ) : (
               <div className="space-y-4">
                 {cab?.formato === 'IMAGE' && (
                   <div>
-                    <label className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
+                    <label className="text-[11.5px] font-semibold text-gray-600 flex items-center gap-1.5">
                       <ImageIcon className="w-3.5 h-3.5" /> Imagen de cabecera (URL pública)
                     </label>
                     <input
@@ -173,24 +173,24 @@ export default function SelectorPlantilla({ titulo, destinatarios, onEnviar, onC
                       value={headerImageUrl}
                       onChange={(e) => setHeaderImageUrl(e.target.value)}
                       placeholder="https://www.cobrifyperu.com/socialmedia.jpeg"
-                      className="w-full mt-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      className="w-full mt-1 px-3 py-2 text-[13px] border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                     />
                   </div>
                 )}
                 {cab?.conVariable && (
                   <div>
-                    <label className="text-xs font-semibold text-gray-600">Cabecera: {'{{1}}'}</label>
+                    <label className="text-[11.5px] font-semibold text-gray-600">Cabecera: {'{{1}}'}</label>
                     <input
                       type="text"
                       value={headerText}
                       onChange={(e) => setHeaderText(e.target.value)}
-                      className="w-full mt-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      className="w-full mt-1 px-3 py-2 text-[13px] border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                     />
                   </div>
                 )}
                 {body.map((v, i) => (
                   <div key={i}>
-                    <label className="text-xs font-semibold text-gray-600">
+                    <label className="text-[11.5px] font-semibold text-gray-600">
                       Variable {'{{'}{i + 1}{'}}'}
                       {modoCampana && i === 0 && (
                         <span className="font-normal text-gray-400"> — podés usar {'{nombre}'} o {'{negocio}'}</span>
@@ -205,18 +205,18 @@ export default function SelectorPlantilla({ titulo, destinatarios, onEnviar, onC
                         setBody(copia)
                       }}
                       placeholder={modoCampana && i === 0 ? '{nombre}' : ''}
-                      className="w-full mt-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                      className="w-full mt-1 px-3 py-2 text-[13px] border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                     />
                   </div>
                 ))}
 
                 <div>
-                  <p className="text-xs font-semibold text-gray-600 mb-1.5">Así lo va a ver el cliente</p>
+                  <p className="text-[11.5px] font-semibold text-gray-600 mb-1.5">Así lo va a ver el cliente</p>
                   <div className="bg-[#e7f7ec] rounded-2xl rounded-br-sm px-3.5 py-2.5 max-w-sm">
                     {cab?.formato === 'IMAGE' && headerImageUrl && (
                       <img src={headerImageUrl} alt="" className="rounded-lg mb-2 max-h-40 w-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none' }} />
                     )}
-                    <p className="text-sm text-gray-900 whitespace-pre-wrap">{previsualizarPlantilla(elegida, valores)}</p>
+                    <p className="text-[13px] text-gray-900 whitespace-pre-wrap">{previsualizarPlantilla(elegida, valores)}</p>
                   </div>
                   {(elegida.components || []).some((c) => c.type === 'BUTTONS') && (
                     <p className="text-[11px] text-gray-400 mt-1">Esta plantilla incluye botones; se muestran en el WhatsApp del cliente.</p>
@@ -228,13 +228,13 @@ export default function SelectorPlantilla({ titulo, destinatarios, onEnviar, onC
         </div>
 
         <div className="px-5 py-3 border-t border-gray-200 flex justify-end gap-2">
-          <button onClick={onCerrar} disabled={enviando} className="px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50">
+          <button onClick={onCerrar} disabled={enviando} className="px-4 py-2 text-[13px] font-semibold text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50">
             Cancelar
           </button>
           <button
             onClick={enviar}
             disabled={!elegida || faltan || enviando}
-            className="px-4 py-2 text-sm font-semibold bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+            className="px-4 py-2 text-[13px] font-semibold bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
           >
             <Send className="w-4 h-4" />
             {enviando ? 'Enviando...' : modoCampana ? `Enviar a ${destinatarios}` : 'Enviar plantilla'}

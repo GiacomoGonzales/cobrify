@@ -50,7 +50,7 @@ export default function VisorMedia({ imagenes, indiceInicial = 0, onCerrar }) {
       onClick={onCerrar}
     >
       <div className="flex items-center justify-between px-4 py-3 text-white/80" onClick={(e) => e.stopPropagation()}>
-        <span className="text-sm">
+        <span className="text-[13px]">
           {imagenes.length > 1 ? `${i + 1} de ${imagenes.length}` : ''}
         </span>
         <div className="flex items-center gap-1">

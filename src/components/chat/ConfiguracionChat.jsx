@@ -7,17 +7,15 @@ import {
   FileText,
   Film,
   Image as ImageIcon,
-  MessageSquareText,
   Music,
   Paperclip,
   Plus,
-  Save,
   Trash2,
   UserCircle,
   X,
-  Zap,
 } from 'lucide-react'
 import { useToast } from '@/contexts/ToastContext'
+import { Seccion, Campo, Entrada, Selector, AreaTexto, Boton } from '@/components/admin/ui'
 import {
   obtenerPerfil,
   guardarPerfil,
@@ -51,20 +49,21 @@ export default function ConfiguracionChat({ onVolver }) {
         <h2 className="font-semibold text-gray-900">Configuración del chat</h2>
       </header>
 
-      <div className="px-4 pt-3 bg-white border-b border-gray-200 flex gap-1 overflow-x-auto">
+      {/* Pestañas al estilo del admin: sin iconos, que aquí solo decoraban. */}
+      <div className="flex items-center gap-1 px-2 bg-white border-b border-gray-200 overflow-x-auto">
         {[
-          ['perfil', UserCircle, 'Perfil del negocio'],
-          ['automaticos', Zap, 'Respuestas automáticas'],
-          ['rapidas', MessageSquareText, 'Respuestas rápidas'],
-        ].map(([id, Icono, nombre]) => (
+          ['perfil', 'Perfil del negocio'],
+          ['automaticos', 'Respuestas automáticas'],
+          ['rapidas', 'Respuestas rápidas'],
+        ].map(([id, nombre]) => (
           <button
             key={id}
+            type="button"
             onClick={() => setSeccion(id)}
-            className={`flex items-center gap-1.5 px-3 py-2 text-sm font-semibold border-b-2 whitespace-nowrap transition-colors ${
-              seccion === id ? 'border-green-600 text-green-700' : 'border-transparent text-gray-500 hover:text-gray-800'
+            className={`px-3 py-2.5 text-[13px] border-b-2 -mb-px whitespace-nowrap ${
+              seccion === id ? 'border-gray-900 text-gray-900 font-medium' : 'border-transparent text-gray-500 hover:text-gray-900'
             }`}
           >
-            <Icono className="w-4 h-4" />
             {nombre}
           </button>
         ))}
@@ -140,7 +139,7 @@ function SeccionPerfil() {
     }
   }
 
-  if (cargando) return <p className="text-sm text-gray-500">Leyendo el perfil de WhatsApp...</p>
+  if (cargando) return <p className="text-[13px] text-gray-500">Leyendo el perfil de WhatsApp...</p>
   if (!perfil) return null
 
   const campo = (k, v) => setPerfil((p) => ({ ...p, [k]: v }))
@@ -148,7 +147,7 @@ function SeccionPerfil() {
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-gray-600">
+      <p className="text-[13px] text-gray-600">
         Esto es lo que ven tus clientes al tocar tu nombre en WhatsApp. Los cambios
         son inmediatos. El <strong>nombre visible</strong> ("Cobrify Facturación") no se
         edita desde acá: Meta exige aprobarlo, y se cambia en WhatsApp Manager.
@@ -163,7 +162,7 @@ function SeccionPerfil() {
           </div>
           <button
             onClick={() => selector.current?.click()}
-            className="absolute -bottom-1 -right-1 p-2 bg-green-600 text-white rounded-full shadow hover:bg-green-700"
+            className="absolute -bottom-1 -right-1 p-2 bg-primary-600 text-white rounded-full shadow hover:bg-primary-700"
             title="Cambiar foto"
           >
             <Camera className="w-4 h-4" />
@@ -172,27 +171,27 @@ function SeccionPerfil() {
         </div>
         <div>
           <p className="font-semibold text-gray-900">Cobrify Facturación</p>
-          {numero && <p className="text-sm text-gray-500">+{numero}</p>}
-          {foto && <p className="text-xs text-amber-600 mt-1">Foto nueva elegida, falta guardar</p>}
-          <p className="text-xs text-gray-400 mt-1">JPG o PNG cuadrada, hasta 5 MB. Ideal 640x640.</p>
+          {numero && <p className="text-[13px] text-gray-500">+{numero}</p>}
+          {foto && <p className="text-[11.5px] text-amber-600 mt-1">Foto nueva elegida, falta guardar</p>}
+          <p className="text-[11.5px] text-gray-400 mt-1">JPG o PNG cuadrada, hasta 5 MB. Ideal 640x640.</p>
         </div>
       </div>
 
       <Campo etiqueta="Frase corta (info)" ayuda="Aparece bajo el nombre. Máx. 139 caracteres.">
-        <input type="text" maxLength={139} value={perfil.about} onChange={(e) => campo('about', e.target.value)} className={inputCls} placeholder="Facturación electrónica SUNAT para tu negocio" />
+        <Entrada type="text" maxLength={139} value={perfil.about} onChange={(e) => campo('about', e.target.value)} placeholder="Facturación electrónica SUNAT para tu negocio" />
       </Campo>
       <Campo etiqueta="Descripción" ayuda="Qué hace tu negocio. Máx. 512 caracteres.">
-        <textarea rows={3} maxLength={512} value={perfil.description} onChange={(e) => campo('description', e.target.value)} className={inputCls} />
+        <AreaTexto rows={3} maxLength={512} value={perfil.description} onChange={(e) => campo('description', e.target.value)} />
       </Campo>
       <Campo etiqueta="Dirección">
-        <input type="text" maxLength={256} value={perfil.address} onChange={(e) => campo('address', e.target.value)} className={inputCls} placeholder="Lima, Perú" />
+        <Entrada type="text" maxLength={256} value={perfil.address} onChange={(e) => campo('address', e.target.value)} placeholder="Lima, Perú" />
       </Campo>
       <Campo etiqueta="Correo de contacto">
-        <input type="email" maxLength={128} value={perfil.email} onChange={(e) => campo('email', e.target.value)} className={inputCls} />
+        <Entrada type="email" maxLength={128} value={perfil.email} onChange={(e) => campo('email', e.target.value)} />
       </Campo>
       <Campo etiqueta="Sitios web" ayuda="Hasta 2, con https://">
         {[0, 1].map((i) => (
-          <input
+          <Entrada
             key={i}
             type="url"
             value={perfil.websites[i] || ''}
@@ -201,22 +200,21 @@ function SeccionPerfil() {
               w[i] = e.target.value
               campo('websites', w)
             }}
-            className={`${inputCls} ${i === 1 ? 'mt-2' : ''}`}
+            className={i === 1 ? 'mt-2' : ''}
             placeholder={i === 0 ? 'https://www.cobrifyperu.com' : ''}
           />
         ))}
       </Campo>
       <Campo etiqueta="Rubro">
-        <select value={perfil.vertical} onChange={(e) => campo('vertical', e.target.value)} className={`${inputCls} bg-white`}>
+        <Selector value={perfil.vertical} onChange={(e) => campo('vertical', e.target.value)} className="bg-white">
           {RUBROS.map(([v, n]) => <option key={v} value={v}>{n}</option>)}
-        </select>
+        </Selector>
       </Campo>
 
       <div className="flex justify-end">
-        <button onClick={guardar} disabled={guardando} className={btnPrimario}>
-          <Save className="w-4 h-4" />
-          {guardando ? 'Guardando...' : 'Guardar perfil'}
-        </button>
+        <Boton variante="primario" onClick={guardar} disabled={guardando}>
+          {guardando ? 'Guardando…' : 'Guardar perfil'}
+        </Boton>
       </div>
     </div>
   )
@@ -242,7 +240,7 @@ function SeccionAutomaticos() {
     }
   }
 
-  if (!cfg) return <p className="text-sm text-gray-500">Cargando...</p>
+  if (!cfg) return <p className="text-[13px] text-gray-500">Cargando...</p>
   const b = cfg.bienvenida || CONFIG_AUTOMATICOS_DEFAULT.bienvenida
   const au = cfg.ausencia || CONFIG_AUTOMATICOS_DEFAULT.ausencia
   const h = au.horario || CONFIG_AUTOMATICOS_DEFAULT.ausencia.horario
@@ -252,7 +250,7 @@ function SeccionAutomaticos() {
 
   return (
     <div className="space-y-6">
-      <p className="text-sm text-gray-600">
+      <p className="text-[13px] text-gray-600">
         Las escribe el sistema en tu nombre y quedan en el hilo marcadas como automáticas.
         Podés usar <code className="bg-gray-100 px-1 rounded">{'{nombre}'}</code> y se reemplaza por el nombre del contacto.
       </p>
@@ -263,7 +261,7 @@ function SeccionAutomaticos() {
         activa={b.activa}
         onToggle={(v) => setB({ activa: v })}
       >
-        <textarea rows={3} value={b.texto} onChange={(e) => setB({ texto: e.target.value })} className={inputCls} />
+        <AreaTexto rows={3} value={b.texto} onChange={(e) => setB({ texto: e.target.value })} />
       </Tarjeta>
 
       <Tarjeta
@@ -272,9 +270,9 @@ function SeccionAutomaticos() {
         activa={au.activa}
         onToggle={(v) => setAu({ activa: v })}
       >
-        <textarea rows={3} value={au.texto} onChange={(e) => setAu({ texto: e.target.value })} className={inputCls} />
+        <AreaTexto rows={3} value={au.texto} onChange={(e) => setAu({ texto: e.target.value })} />
         <div className="mt-3">
-          <p className="text-xs font-semibold text-gray-600 flex items-center gap-1.5 mb-2">
+          <p className="text-[11.5px] font-semibold text-gray-600 flex items-center gap-1.5 mb-2">
             <Clock className="w-3.5 h-3.5" /> Horario de atención (hora de Lima)
           </p>
           <div className="flex flex-wrap items-center gap-2">
@@ -286,14 +284,14 @@ function SeccionAutomaticos() {
                     key={d}
                     type="button"
                     onClick={() => setH({ dias: on ? h.dias.filter((x) => x !== d) : [...(h.dias || []), d].sort() })}
-                    className={`w-8 h-8 rounded-full text-xs font-bold ${on ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-500'}`}
+                    className={`w-8 h-8 rounded-full text-[11.5px] font-bold ${on ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-500'}`}
                   >
                     {letra}
                   </button>
                 )
               })}
             </div>
-            <div className="flex items-center gap-2 text-sm">
+            <div className="flex items-center gap-2 text-[13px]">
               <input type="time" value={h.desde} onChange={(e) => setH({ desde: e.target.value })} className="px-2 py-1.5 border border-gray-300 rounded-lg" />
               <span className="text-gray-400">a</span>
               <input type="time" value={h.hasta} onChange={(e) => setH({ hasta: e.target.value })} className="px-2 py-1.5 border border-gray-300 rounded-lg" />
@@ -303,10 +301,9 @@ function SeccionAutomaticos() {
       </Tarjeta>
 
       <div className="flex justify-end">
-        <button onClick={guardar} disabled={guardando} className={btnPrimario}>
-          <Save className="w-4 h-4" />
-          {guardando ? 'Guardando...' : 'Guardar'}
-        </button>
+        <Boton variante="primario" onClick={guardar} disabled={guardando}>
+          {guardando ? 'Guardando…' : 'Guardar'}
+        </Boton>
       </div>
     </div>
   )
@@ -379,16 +376,16 @@ function SeccionRapidas() {
     }
   }
 
-  if (!lista) return <p className="text-sm text-gray-500">Cargando...</p>
+  if (!lista) return <p className="text-[13px] text-gray-500">Cargando...</p>
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-gray-600">
+      <p className="text-[13px] text-gray-600">
         Lo que escribís veinte veces, escrito una sola vez. En el cuadro de mensaje tipeá
         <code className="bg-gray-100 px-1 rounded mx-1">/</code> y elegí el atajo: el texto se pega y lo podés
         retocar antes de enviar. Acepta <code className="bg-gray-100 px-1 rounded">{'{nombre}'}</code>.
       </p>
-      <p className="text-sm text-gray-600">
+      <p className="text-[13px] text-gray-600">
         Cada una puede llevar <strong>una imagen, un video, un audio o un PDF</strong>. El archivo se
         guarda una sola vez: mandarlo después es instantáneo, no importa cuánto pese.
       </p>
@@ -402,14 +399,14 @@ function SeccionRapidas() {
       />
 
       {lista.length === 0 && (
-        <p className="text-sm text-gray-400 italic">Todavía no hay respuestas rápidas. Algunas ideas: /precios, /pago, /horario, /demo.</p>
+        <p className="text-[13px] text-gray-400 italic">Todavía no hay respuestas rápidas. Algunas ideas: /precios, /pago, /horario, /demo.</p>
       )}
 
       <div className="space-y-2">
         {lista.map((r, i) => (
-          <div key={r.atajo} className="bg-white border border-gray-200 rounded-xl p-3">
+          <div key={r.atajo} className="bg-white border border-gray-200 rounded-lg p-3">
             <div className="flex items-start gap-3">
-              <span className="font-mono text-sm font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded flex-none">/{r.atajo}</span>
+              <span className="font-mono text-[13px] font-semibold text-primary-700 bg-primary-50 px-2 py-0.5 rounded flex-none">/{r.atajo}</span>
               <textarea
                 rows={2}
                 value={r.texto}
@@ -418,12 +415,12 @@ function SeccionRapidas() {
                   copia[i] = { ...r, texto: e.target.value }
                   setLista(copia)
                 }}
-                className="flex-1 text-sm bg-transparent focus:outline-none resize-none"
+                className="flex-1 text-[13px] bg-transparent focus:outline-none resize-none"
               />
               <button
                 onClick={() => pedirArchivo(i)}
                 disabled={subiendo !== null}
-                className={`p-1 disabled:opacity-40 ${r.media ? 'text-green-600' : 'text-gray-300 hover:text-gray-600'}`}
+                className={`p-1 disabled:opacity-40 ${r.media ? 'text-primary-600' : 'text-gray-300 hover:text-gray-600'}`}
                 title={r.media ? 'Cambiar archivo' : 'Adjuntar archivo'}
               >
                 <Paperclip className="w-4 h-4" />
@@ -434,7 +431,7 @@ function SeccionRapidas() {
             </div>
 
             {subiendo === i && (
-              <p className="text-xs text-gray-500 mt-2 pl-1">Subiendo el archivo...</p>
+              <p className="text-[11.5px] text-gray-500 mt-2 pl-1">Subiendo el archivo...</p>
             )}
 
             {r.media && subiendo !== i && (
@@ -454,15 +451,15 @@ function SeccionRapidas() {
         ))}
       </div>
 
-      <div className="bg-white border border-dashed border-gray-300 rounded-xl p-3 space-y-2">
+      <div className="bg-white border border-dashed border-gray-300 rounded-lg p-3 space-y-2">
         <div className="flex items-center gap-2">
-          <span className="text-gray-400 font-mono text-sm">/</span>
+          <span className="text-gray-400 font-mono text-[13px]">/</span>
           <input
             type="text"
             value={atajo}
             onChange={(e) => setAtajo(e.target.value)}
             placeholder="atajo (ej: precios)"
-            className="flex-1 text-sm px-3 py-1.5 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+            className="flex-1 text-[13px] px-3 py-1.5 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
         </div>
         <textarea
@@ -470,28 +467,25 @@ function SeccionRapidas() {
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
           placeholder="Texto de la respuesta"
-          className="w-full text-sm px-3 py-2 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
+          className="w-full text-[13px] px-3 py-2 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
         />
         <div className="flex justify-end">
-          <button onClick={agregar} disabled={!atajo.trim() || !texto.trim()} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-green-700 hover:bg-green-50 rounded-lg disabled:opacity-40">
+          <button onClick={agregar} disabled={!atajo.trim() || !texto.trim()} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-semibold text-primary-700 hover:bg-primary-50 rounded-lg disabled:opacity-40">
             <Plus className="w-4 h-4" /> Agregar
           </button>
         </div>
       </div>
 
       <div className="flex justify-end">
-        <button onClick={guardar} disabled={guardando} className={btnPrimario}>
-          <Save className="w-4 h-4" />
-          {guardando ? 'Guardando...' : 'Guardar'}
-        </button>
+        <Boton variante="primario" onClick={guardar} disabled={guardando}>
+          {guardando ? 'Guardando…' : 'Guardar'}
+        </Boton>
       </div>
     </div>
   )
 }
 
 /* ============================ piezas ============================ */
-const inputCls = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500'
-const btnPrimario = 'inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50'
 
 /** Vista compacta del archivo de una respuesta rápida, con opción de quitarlo. */
 const ICONO_TIPO = { image: ImageIcon, video: Film, audio: Music, document: FileText }
@@ -510,7 +504,7 @@ function VistaAdjunto({ media, onQuitar }) {
         </div>
       )}
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium text-gray-800 truncate">{media.filename || NOMBRE_TIPO[media.tipo]}</p>
+        <p className="text-[11.5px] font-medium text-gray-800 truncate">{media.filename || NOMBRE_TIPO[media.tipo]}</p>
         <p className="text-[11px] text-gray-400">
           {NOMBRE_TIPO[media.tipo]}
           {media.bytes ? ` · ${(media.bytes / 1024 / 1024).toFixed(1)} MB` : ''}
@@ -523,34 +517,25 @@ function VistaAdjunto({ media, onQuitar }) {
   )
 }
 
-function Campo({ etiqueta, ayuda, children }) {
-  return (
-    <div>
-      <label className="text-xs font-semibold text-gray-600">{etiqueta}</label>
-      <div className="mt-1">{children}</div>
-      {ayuda && <p className="text-[11px] text-gray-400 mt-1">{ayuda}</p>}
-    </div>
-  )
-}
-
+/** Una Seccion del kit con su interruptor de encendido en la cabecera. */
 function Tarjeta({ titulo, descripcion, activa, onToggle, children }) {
   return (
-    <div className={`bg-white border rounded-xl p-4 ${activa ? 'border-green-300' : 'border-gray-200'}`}>
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div>
-          <p className="font-semibold text-gray-900">{titulo}</p>
-          <p className="text-xs text-gray-500 mt-0.5">{descripcion}</p>
-        </div>
+    <Seccion
+      titulo={titulo}
+      descripcion={descripcion}
+      acciones={
         <button
           type="button"
           onClick={() => onToggle(!activa)}
-          className={`relative flex-none w-11 h-6 rounded-full transition-colors ${activa ? 'bg-green-600' : 'bg-gray-300'}`}
+          className={`relative flex-none w-9 h-5 rounded-full transition-colors ${activa ? 'bg-primary-600' : 'bg-gray-300'}`}
           aria-pressed={activa}
+          aria-label={activa ? 'Desactivar' : 'Activar'}
         >
-          <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${activa ? 'left-5.5 left-[22px]' : 'left-0.5'}`} />
+          <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${activa ? 'left-[18px]' : 'left-0.5'}`} />
         </button>
-      </div>
+      }
+    >
       <div className={activa ? '' : 'opacity-60'}>{children}</div>
-    </div>
+    </Seccion>
   )
 }
