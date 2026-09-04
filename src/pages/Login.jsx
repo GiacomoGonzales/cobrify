@@ -138,6 +138,63 @@ export default function Login() {
 
   // Si hay branding personalizado (reseller), usar esos valores
   // Si no, usar los valores de Cobrify por defecto
+  // Cobrify Chat tiene su propia entrada. Antes caia en la rama de marca
+  // personalizada —la de los resellers— y de ahi salian las dos cosas que
+  // desentonaban: el verde plano de fondo y el recuadro blanco alrededor del
+  // logo. Ese recuadro existe porque el logo de un reseller puede ser oscuro y
+  // necesita respaldo; el nuestro no, y encima ya trae su propia forma.
+  if (esDominioDelChat()) {
+    return (
+      <AuthShell tono="chat" className="max-w-md chat-cobrify">
+        <div className="text-center mb-6">
+          <img
+            src={MARCA_CHAT.icono}
+            alt={MARCA_CHAT.nombre}
+            className="w-24 h-24 mx-auto mb-3 object-contain drop-shadow-lg"
+          />
+          <h1 className="text-3xl font-bold text-[#0A2540] mb-1">{MARCA_CHAT.nombre}</h1>
+          <p className="text-sm text-[#425466]">Bandeja de WhatsApp</p>
+        </div>
+
+        <Card className="shadow-xl">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-xl">Iniciar Sesión</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+              <Input
+                label="Correo Electrónico"
+                type="email"
+                placeholder="correo@ejemplo.com"
+                error={errors.email?.message}
+                {...register('email')}
+              />
+              <Input
+                label="Contraseña"
+                type="password"
+                placeholder="••••••••"
+                error={errors.password?.message}
+                {...register('password')}
+              />
+              {error && (
+                <div className="p-2.5 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-600">{error}</p>
+                </div>
+              )}
+              <Button type="submit" className="w-full" loading={isLoading}>
+                Iniciar Sesión
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        <p className="text-center text-[#425466] text-xs mt-4">
+          © {new Date().getFullYear()} {MARCA_CHAT.nombre}. Bandeja de WhatsApp.
+        </p>
+      </AuthShell>
+    )
+  }
+
   if (customBranding) {
     return (
       <div
@@ -206,7 +263,10 @@ export default function Login() {
                   type="submit"
                   className="w-full"
                   loading={isLoading}
-                  style={{ backgroundColor: customBranding.primaryColor }}
+                  style={{
+                    backgroundColor: customBranding.primaryColor,
+                    borderColor: customBranding.primaryColor,
+                  }}
                 >
                   Iniciar Sesión
                 </Button>
