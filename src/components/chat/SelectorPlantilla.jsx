@@ -160,7 +160,7 @@ export default function SelectorPlantilla({ titulo, destinatarios, onEnviar, onC
           {/* Formulario + vista previa */}
           <div className="sm:col-span-3 overflow-y-auto p-5">
             {!elegida ? (
-              <p className="text-[13px] text-gray-500">Elegí una plantilla de la lista.</p>
+              <p className="text-[13px] text-gray-500">Elige una plantilla de la lista.</p>
             ) : (
               <div className="space-y-4">
                 {cab?.formato === 'IMAGE' && (

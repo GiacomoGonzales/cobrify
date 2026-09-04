@@ -252,7 +252,7 @@ function SeccionAutomaticos() {
     <div className="space-y-6">
       <p className="text-[13px] text-gray-600">
         Las escribe el sistema en tu nombre y quedan en el hilo marcadas como automáticas.
-        Podés usar <code className="bg-gray-100 px-1 rounded">{'{nombre}'}</code> y se reemplaza por el nombre del contacto.
+        Puedes usar <code className="bg-gray-100 px-1 rounded">{'{nombre}'}</code> y se reemplaza por el nombre del contacto.
       </p>
 
       <Tarjeta
@@ -356,7 +356,7 @@ function SeccionRapidas() {
         copia[i] = { ...copia[i], media }
         return copia
       })
-      toast.success('Archivo listo. Acordate de guardar.')
+      toast.success('Archivo listo. Acuérdate de guardar.')
     } catch (err) {
       toast.error(err.message || 'No se pudo subir el archivo')
     } finally {

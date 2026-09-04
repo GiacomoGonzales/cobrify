@@ -63,3 +63,42 @@ const enModoPruebaDelChat = () => {
 export const esDominioDelChat = (hostname = window.location.hostname) =>
   HOSTS_DEL_CHAT.includes(String(hostname || '').toLowerCase().split(':')[0])
   || enModoPruebaDelChat()
+
+/**
+ * Hosts que son de Cobrify. Un reseller sirve la misma app desde su propio
+ * dominio con su propia marca, y ahi la bandeja NO debe decir "Cobrify Chat".
+ */
+const HOSTS_PROPIOS = [
+  'cobrifyperu.com', 'www.cobrifyperu.com', 'app.cobrifyperu.com',
+  'cobrify.com', 'www.cobrify.com', 'app.cobrify.com',
+  ...LOCALES,
+]
+
+/**
+ * ¿Se esta VIENDO la bandeja del chat, sin importar por donde se entro?
+ *
+ * `esDominioDelChat` responde por el host, y con eso alcanzaba mientras el chat
+ * vivia solo en chat.cobrifyperu.com. Pero la ruta /chat existe en cualquier
+ * host, asi que entrando por cobrifyperu.com/chat la pestana quedaba con el
+ * favicon y el titulo del sistema de facturacion.
+ *
+ * La ruta sola no basta como regla: en el dominio de un reseller mandaria su
+ * marca, no la nuestra. Por eso se exige ademas que el host sea de Cobrify.
+ */
+export const estaEnElChat = () => {
+  if (esDominioDelChat()) return true
+  try {
+    const host = String(window.location.hostname || '').toLowerCase()
+    if (!HOSTS_PROPIOS.includes(host)) return false
+    if (window.location.pathname.replace(/\/+$/, '').startsWith('/chat')) {
+      // Se anota para el resto de la pestana: al entrar sin sesion la app
+      // manda a /login, y ahi la ruta ya no dice /chat. Sin esto, el login de
+      // la bandeja aparecia con el favicon del sistema de facturacion.
+      sessionStorage.setItem('modoChat', '1')
+      return true
+    }
+    return sessionStorage.getItem('modoChat') === '1'
+  } catch {
+    return false
+  }
+}

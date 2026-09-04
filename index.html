@@ -116,7 +116,7 @@
       "inLanguage": "es-PE"
     }
     </script>
-    <!-- MARCA DEL SUBDOMINIO DEL CHAT (chat.cobrifyperu.com).
+    <!-- MARCA DE COBRIFY CHAT (chat.cobrifyperu.com, o la ruta /chat).
          Va en el <head>, no en el <body>: tiene que correr ANTES de que el
          navegador lea el manifiesto o pinte el favicon, o se ve un parpadeo con
          el logo de Cobrify. El criterio ("chat.") esta espejado en
@@ -135,6 +135,22 @@
               if (window.location.search.indexOf('chat=1') !== -1) sessionStorage.setItem('modoChat', '1');
               esChat = sessionStorage.getItem('modoChat') === '1';
             } catch (e) { /* sin sessionStorage: sin modo de prueba */ }
+          }
+          // Entrando por la RUTA /chat en un dominio nuestro (no de reseller):
+          // ahi la pestana quedaba con el favicon del sistema de facturacion.
+          // Espejado en `estaEnElChat` de src/utils/dominioChat.js.
+          if (!esChat) {
+            var propios = ['cobrifyperu.com', 'www.cobrifyperu.com', 'app.cobrifyperu.com',
+                           'cobrify.com', 'www.cobrify.com', 'app.cobrify.com',
+                           'localhost', '127.0.0.1'];
+            if (propios.indexOf(host) !== -1) {
+              try {
+                if (window.location.pathname.replace(/\/+$/, '').indexOf('/chat') === 0) {
+                  sessionStorage.setItem('modoChat', '1');
+                }
+                esChat = sessionStorage.getItem('modoChat') === '1';
+              } catch (e) { /* sin sessionStorage: manda el host */ }
+            }
           }
           if (!esChat) return;
           document.title = 'Cobrify Chat';

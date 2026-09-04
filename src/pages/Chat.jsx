@@ -11,7 +11,6 @@ import {
   Music,
   MessageCircle,
   Paperclip,
-  Pencil,
   Plus,
   Camera,
   Mic,
@@ -40,6 +39,9 @@ import ConfiguracionChat from '@/components/chat/ConfiguracionChat'
 import { useGrabadora, relojDeGrabacion } from '@/components/chat/grabadoraDeVoz'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
+import { MARCA_CHAT } from '@/utils/dominioChat'
+import { useTema } from '@/utils/temaOscuro'
+import BotonTema from '@/components/BotonTema'
 import {
   suscribirConversaciones,
   suscribirMensajes,
@@ -108,7 +110,6 @@ export default function Chat() {
   const [fichaVisible, setFichaVisible] = useState(false)
   const [filtroEtiqueta, setFiltroEtiqueta] = useState(null)
   const [etiquetas, setEtiquetas] = useState([])
-  const [tagPickerAbierto, setTagPickerAbierto] = useState(false)
   const [gestorAbierto, setGestorAbierto] = useState(false)
   const [notaAbierta, setNotaAbierta] = useState(false)
   const [notaBorrador, setNotaBorrador] = useState('')
@@ -143,6 +144,12 @@ export default function Chat() {
   const [panelMedia, setPanelMedia] = useState(false)
   // El menu "..." de la cabecera, el mismo del admin.
   const menuCabecera = useMenuDeFila()
+  const menuEtiquetas = useMenuDeFila()
+  const menuTagsConv = useMenuDeFila()
+  // Claro u oscuro. Se guarda aparte del panel: son personas distintas.
+  const [tema, cambiarTema] = useTema('chatTema')
+  // La etiqueta del filtro, para nombrarla en el boton del desplegable.
+  const etiquetaElegida = etiquetas.find((e) => e.id === filtroEtiqueta) || null
   const [buscarEnChat, setBuscarEnChat] = useState('')
   const [buscadorAbierto, setBuscadorAbierto] = useState(false)
   const [resaltado, setResaltado] = useState(null)
@@ -211,7 +218,7 @@ export default function Chat() {
   useEffect(() => {
     if (activaId) setConfigAbierta(false)
     setPendientes([])
-    setTagPickerAbierto(false)
+    menuTagsConv.cerrar()
     setNotaAbierta(false)
     setAdjunto(null)
     setPieAdjunto('')
@@ -648,21 +655,23 @@ export default function Chat() {
   if (!isAdmin) return <Navigate to="/app/dashboard" replace />
 
   return (
-    <div className="chat-cobrify font-admin text-[13px] text-gray-900 antialiased h-screen flex bg-gray-50 overflow-hidden relative">
+    <div className={`chat-cobrify font-admin text-[13px] text-gray-900 antialiased h-screen flex bg-gray-50 overflow-hidden relative ${tema === 'oscuro' ? 'oscuro' : ''}`}>
 
       {/* ---------- Lista de conversaciones ---------- */}
       <aside
-        className={`w-full md:w-80 lg:w-96 border-r border-gray-200 bg-white flex flex-col ${
-          activaId ? 'hidden md:flex' : 'flex'
-        }`}
+        className="w-full md:w-80 lg:w-96 border-r border-gray-200 bg-white flex flex-col"
       >
         <div className="px-4 py-3 border-b border-gray-200">
           <div className="flex items-center gap-2 mb-3">
-            <MessageCircle className="w-5 h-5 text-primary-600" />
-            <h1 className="font-bold text-gray-900">WhatsApp</h1>
+            {/* La marca del producto, no la del canal: el cliente contrata
+                Cobrify Chat, WhatsApp es por donde llegan los mensajes. El
+                icono es el mismo de la app de iOS. */}
+            <img src={MARCA_CHAT.icono} alt="" className="w-6 h-6 rounded-md flex-none" />
+            <h1 className="font-semibold text-gray-900">{MARCA_CHAT.nombre}</h1>
+            <BotonTema tema={tema} onCambiar={cambiarTema} className="ml-auto" />
             <button
               onClick={() => { setConfigAbierta(true); setActivaId(null) }}
-              className={`ml-auto p-1.5 rounded-lg hover:bg-gray-100 ${configAbierta ? 'text-primary-600' : 'text-gray-400 hover:text-gray-600'}`}
+              className={`p-1.5 rounded-lg hover:bg-gray-100 ${configAbierta ? 'text-primary-600' : 'text-gray-400 hover:text-gray-600'}`}
               title="Configuracion del chat"
             >
               <Settings className="w-5 h-5" />
@@ -671,7 +680,7 @@ export default function Chat() {
           {/* Los dos mundos */}
           {/* Pestañas como las del admin: el activo se marca con la línea de
               abajo, no rellenando la píldora de negro. */}
-          <div className="flex gap-1 mb-3 -mx-1 border-b border-gray-200">
+          <div className="flex items-center gap-1 mb-3 -mx-1 border-b border-gray-200">
             {[['todos', 'Todos'], ['clientes', 'Clientes'], ['leads', 'Leads']].map(([id, nombre]) => (
               <button
                 key={id}
@@ -686,6 +695,51 @@ export default function Chat() {
                 {nombre}
               </button>
             ))}
+            {etiquetas.length > 0 && (
+              <div className="relative ml-auto mb-1.5 flex-none">
+                <button
+                  type="button"
+                  onClick={(ev) => menuEtiquetas.alternar('etiquetas', ev.currentTarget)}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                    etiquetaElegida
+                      ? 'border-gray-900 bg-gray-100 text-gray-900'
+                      : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                  }`}
+                  title="Filtrar por etiqueta"
+                >
+                  {etiquetaElegida && (
+                    <span className="w-1.5 h-1.5 rounded-full flex-none" style={{ backgroundColor: etiquetaElegida.color }} />
+                  )}
+                  {etiquetaElegida ? etiquetaElegida.nombre : 'Etiquetas'}
+                  <span className="text-gray-400">▾</span>
+                </button>
+
+                {menuEtiquetas.abiertoEn === 'etiquetas' && (
+                  <CajaMenu posicion={menuEtiquetas.posicion} refMenu={menuEtiquetas.refMenu}>
+                    <ItemMenu onClick={() => { menuEtiquetas.cerrar(); setFiltroEtiqueta(null) }}>
+                      Todas las etiquetas
+                    </ItemMenu>
+                    <SeparadorMenu />
+                    {etiquetas.map((e) => (
+                      <ItemMenu
+                        key={e.id}
+                        onClick={() => { menuEtiquetas.cerrar(); setFiltroEtiqueta(filtroEtiqueta === e.id ? null : e.id) }}
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full flex-none" style={{ backgroundColor: e.color }} />
+                          {e.nombre}
+                          {filtroEtiqueta === e.id && <span className="ml-auto text-gray-400">✓</span>}
+                        </span>
+                      </ItemMenu>
+                    ))}
+                    <SeparadorMenu />
+                    <ItemMenu onClick={() => { menuEtiquetas.cerrar(); setGestorAbierto(true) }}>
+                      Administrar etiquetas
+                    </ItemMenu>
+                  </CajaMenu>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="relative">
@@ -719,40 +773,9 @@ export default function Chat() {
             ))}
           </div>
 
-          {/* Filtro por etiqueta */}
-          {etiquetas.length > 0 && (
-            <div className="flex gap-1.5 mt-2.5 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none' }}>
-              {etiquetas.map((e) => {
-                const activo = filtroEtiqueta === e.id
-                return (
-                  <button
-                    key={e.id}
-                    onClick={() => setFiltroEtiqueta(activo ? null : e.id)}
-                    className={`flex-none inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                      activo
-                        ? 'border-gray-900 bg-gray-100 text-gray-900'
-                        : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span
-                      className="w-1.5 h-1.5 rounded-full flex-none"
-                      style={{ backgroundColor: e.color }}
-                    />
-                    {e.nombre}
-                  </button>
-                )
-              })}
-              <button
-                onClick={() => setGestorAbierto(true)}
-                className="flex-none inline-flex items-center gap-1 rounded-full border border-dashed border-gray-300 px-2.5 py-1 text-[11px] font-medium text-gray-400 hover:border-gray-400 hover:text-gray-700"
-                title="Administrar etiquetas"
-              >
-                <Pencil className="w-3 h-3" />
-              </button>
-            </div>
-          )}
-
-          {/* Sin respuesta + campaña a la lista filtrada */}
+          {/* Sin respuesta + etiquetas + campaña, todo en una linea. Las
+              etiquetas eran una fila propia que crecia con cada etiqueta
+              nueva y empujaba la lista de conversaciones hacia abajo. */}
           <div className="flex items-center gap-2 mt-2.5">
             <button
               onClick={() => setSoloSinRespuesta((v) => !v)}
@@ -860,7 +883,7 @@ export default function Chat() {
                     </div>
                     <p className="text-[13px] text-gray-500 truncate mt-0.5">
                       {c.ultimaDireccion === 'saliente' && (
-                        <span className="text-gray-400">Vos: </span>
+                        <span className="text-gray-400">Tú: </span>
                       )}
                       {c.ultimoMensaje}
                     </p>
@@ -904,14 +927,26 @@ export default function Chat() {
       </aside>
 
       {/* ---------- Conversación ---------- */}
-      <main className={`flex-1 flex flex-col ${activaId || configAbierta ? 'flex' : 'hidden md:flex'}`}>
+      {/* En móvil la conversación entra deslizándose sobre la lista y sale por
+          donde vino, como en cualquier app de mensajería. Se mueve la capa
+          entera con `transform`, que el navegador resuelve sin volver a
+          dibujar nada — de ahí que no se sienta pesado en un Android modesto.
+          En escritorio no cambia nada: `max-md:` solo aplica por debajo de md.
+          Y con "reducir movimiento" activado en el sistema, no hay animación. */}
+      <main
+        className={`flex-1 flex flex-col bg-gray-50
+          max-md:absolute max-md:inset-0 max-md:z-20
+          max-md:transition-transform max-md:duration-200 max-md:ease-out
+          motion-reduce:transition-none
+          ${activaId || configAbierta ? 'max-md:translate-x-0' : 'max-md:translate-x-full'}`}
+      >
         {configAbierta ? (
           <ConfiguracionChat onVolver={() => setConfigAbierta(false)} />
         ) : !activa ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <MessageCircle className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500">Elegí una conversación para leerla</p>
+              <p className="text-gray-500">Elige una conversación para leerla</p>
             </div>
           </div>
         ) : (
@@ -975,7 +1010,14 @@ export default function Chat() {
                       Archivos de la conversación
                     </ItemMenu>
                     <SeparadorMenu />
-                    <ItemMenu onClick={() => { menuCabecera.cerrar(); setTagPickerAbierto((v) => !v) }}>
+                    <ItemMenu
+                      onClick={(ev) => {
+                        // Se ancla al mismo boton "..." que abrio este menu.
+                        const boton = ev.currentTarget.closest('header')?.querySelector('[aria-label="Acciones"]')
+                        menuCabecera.cerrar()
+                        if (boton) menuTagsConv.alternar('tags', boton)
+                      }}
+                    >
                       Etiquetas
                     </ItemMenu>
                     <ItemMenu onClick={() => { menuCabecera.cerrar(); setNotaBorrador(activa.nota || ''); setNotaAbierta((v) => !v) }}>
@@ -992,33 +1034,31 @@ export default function Chat() {
                   </CajaMenu>
                 )}
 
-                {/* Selector de etiquetas */}
-                {tagPickerAbierto && (
-                  <div className="absolute right-0 top-11 z-20 w-60 bg-white border border-gray-200 rounded-lg shadow-lg py-2">
+                {/* Etiquetas de ESTA conversacion. Se queda abierto al marcar
+                    y desmarcar —son varias— y se cierra con clic afuera o Esc,
+                    como el resto de menus del kit. */}
+                {menuTagsConv.abiertoEn === 'tags' && (
+                  <CajaMenu posicion={menuTagsConv.posicion} refMenu={menuTagsConv.refMenu}>
                     {etiquetas.map((e) => {
                       const tiene = (activa.etiquetas || []).includes(e.id)
                       return (
-                        <button
+                        <ItemMenu
                           key={e.id}
                           onClick={() => alternarEtiqueta(activaId, e.id, tiene).catch(() => toast.error('No se pudo cambiar la etiqueta'))}
-                          className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[13px] text-left hover:bg-gray-50"
                         >
-                          <span className="w-2.5 h-2.5 rounded-full flex-none" style={{ backgroundColor: e.color }} />
-                          <span className="flex-1 text-gray-800">{e.nombre}</span>
-                          {tiene && <Check className="w-4 h-4 text-primary-600" />}
-                        </button>
+                          <span className="flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full flex-none" style={{ backgroundColor: e.color }} />
+                            <span className="flex-1">{e.nombre}</span>
+                            {tiene && <span className="text-gray-400">✓</span>}
+                          </span>
+                        </ItemMenu>
                       )
                     })}
-                    <div className="border-t border-gray-100 mt-1 pt-1">
-                      <button
-                        onClick={() => { setTagPickerAbierto(false); setGestorAbierto(true) }}
-                        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[13px] text-gray-500 hover:bg-gray-50"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                        Administrar etiquetas
-                      </button>
-                    </div>
-                  </div>
+                    <SeparadorMenu />
+                    <ItemMenu onClick={() => { menuTagsConv.cerrar(); setGestorAbierto(true) }}>
+                      Administrar etiquetas
+                    </ItemMenu>
+                  </CajaMenu>
                 )}
               </div>
             </header>
@@ -1102,7 +1142,7 @@ export default function Chat() {
               </div>
             )}
 
-            {/* Nota interna: solo la ves vos, el cliente nunca */}
+            {/* Nota interna: solo la ves tú, el cliente nunca */}
             {notaAbierta && (
               <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
                 <div className="flex items-center justify-between mb-1.5">
@@ -1161,6 +1201,10 @@ export default function Chat() {
                 }
                 const m = el.mensaje
                 const mio = m.direccion === 'saliente'
+                // Los stickers y las notas de voz no llevan burbuja: el sticker tiene su
+                // propia forma recortada y el reproductor de audio ya trae su recuadro.
+                // Meterlos en una burbuja era poner un marco sobre otro marco.
+                const sinBurbuja = m.tipo === 'sticker' || (m.tipo === 'audio' && !m.texto && !m.respondeA)
                 const citado = m.respondeA ? mensajePorWaId.get(m.respondeA) : null
                 const miReaccion = reaccionDeM(m)
                 const suReaccion = m.reacciones?.cliente || ''
@@ -1217,7 +1261,13 @@ export default function Chat() {
                     } ${resaltado === m.id ? 'animate-pulse' : ''}`}
                   >
                     {mio && acciones}
-                    <div className={`relative ${m.linkPreview || m.tipo === 'document' ? 'w-72 max-w-[85%]' : 'max-w-[75%]'}`}>
+                    {/* Tope en pixeles, no solo en porcentaje: en una pantalla
+                        ancha el 75% son mas de mil pixeles, y ahi pasaban dos
+                        cosas malas — la imagen quedaba nadando en un hueco
+                        enorme, y el texto salia en renglones larguisimos que
+                        cuesta leer. 34rem deja la linea en la medida comoda de
+                        lectura y hace que la imagen llene la burbuja. */}
+                    <div className={`relative ${m.linkPreview || m.tipo === 'document' ? 'w-72 max-w-[85%]' : 'max-w-[min(75%,34rem)]'}`}>
                     <div
                       onClick={(e) => {
                         // En el celular no hay mouse: tocar la burbuja saca las
@@ -1226,10 +1276,12 @@ export default function Chat() {
                         setPaletaAbierta(null)
                         setMenuMensaje(abierto ? null : m.id)
                       }}
-                      className={`rounded-2xl px-3.5 py-2 text-[14px] leading-snug ${
-                        mio
-                          ? 'bg-primary-50 border border-primary-100 text-gray-900 rounded-br-sm'
-                          : 'bg-white border border-gray-200 text-gray-900 rounded-bl-sm'
+                      className={`text-[14px] leading-snug ${
+                        sinBurbuja
+                          ? 'text-gray-900'
+                          : mio
+                            ? 'rounded-2xl px-3.5 py-2 bg-primary-50 border border-primary-100 text-gray-900 rounded-br-sm'
+                            : 'rounded-2xl px-3.5 py-2 bg-white border border-gray-200 text-gray-900 rounded-bl-sm'
                       }`}
                     >
                       {m.respondeA && (
@@ -1242,7 +1294,7 @@ export default function Chat() {
                         >
                           <span className={`block text-[11px] font-semibold ${mio ? 'text-gray-500' : 'text-gray-600'}`}>
                             {citado
-                              ? (citado.direccion === 'saliente' ? 'Vos' : (activa?.nombre || 'Cliente'))
+                              ? (citado.direccion === 'saliente' ? 'Tú' : (activa?.nombre || 'Cliente'))
                               : 'Mensaje citado'}
                           </span>
                           <span className={`block text-[11.5px] truncate ${mio ? 'text-gray-500' : 'text-gray-500'}`}>
@@ -1264,7 +1316,9 @@ export default function Chat() {
                         <button
                           type="button"
                           onClick={() => abrirVisorDe(m.media)}
-                          className="block w-full"
+                          // El boton envuelve la foto, no la fila: w-fit para que
+                          // el area clicable sea la imagen y no el ancho entero.
+                          className="block w-fit max-w-full"
                         >
                           <img
                             // La MINIATURA, no el original: una foto de camara
@@ -1530,7 +1584,7 @@ export default function Chat() {
                       handleEnviar(e)
                     }
                   }}
-                  placeholder={respuestasRapidas.length ? 'Escribí un mensaje, o / para una respuesta rápida' : 'Escribí un mensaje'}
+                  placeholder={respuestasRapidas.length ? 'Escribe un mensaje, o / para una respuesta rápida' : 'Escribe un mensaje'}
                   disabled={enviando}
                   className="flex-1 px-4 py-2.5 bg-gray-100 rounded-2xl text-[14px] focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-60 resize-none leading-5 max-h-[132px]"
                 />

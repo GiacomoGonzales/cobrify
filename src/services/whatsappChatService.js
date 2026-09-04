@@ -17,6 +17,9 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { metodoDeEmision } from '@/services/adminCuentasService'
+import { nombreRubro } from '@/data/rubros'
+import { nombreModo } from '@/utils/businessModes'
 
 /**
  * Chat de WhatsApp — lectura en vivo y envío.
@@ -298,6 +301,9 @@ export const guardarEtiquetas = (lista) =>
  * Ficha del cliente vinculado: suscripcion + datos del negocio, juntos.
  * Devuelve null si el negocio ya no existe.
  */
+/** El nombre del rubro, o nada si la cuenta no tiene ninguno. */
+const nombreDeRubro = (id) => (id ? nombreRubro(id) : null)
+
 export const obtenerFichaCliente = async (businessId) => {
   const [subSnap, bizSnap] = await Promise.all([
     getDoc(doc(db, 'subscriptions', businessId)),
@@ -331,6 +337,27 @@ export const obtenerFichaCliente = async (businessId) => {
     // cuantos muestra: antes se cortaban en tres aca y no habia forma de ver
     // el resto sin salir al panel.
     pagos: [...(sub.paymentHistory || [])].reverse(),
+
+    // ── Lo principal de la ficha del admin ──
+    // No se copia todo: en 320 px de ancho, y con un cliente esperando del
+    // otro lado, lo que sirve es saber quien es, a que se dedica, si puede
+    // facturar y de quien es la cuenta. El resto se ve en el panel.
+    codigoCliente: biz.codigoCliente || null,
+    // El rubro CONFIRMADO manda; si no hay, vale la sugerencia.
+    rubro: nombreDeRubro(biz.rubro || biz.rubroSugerido),
+    rubroEsSugerido: !biz.rubro && !!biz.rubroSugerido,
+    modo: nombreModo(biz.businessMode || 'retail'),
+    ubicacion: [biz.department, biz.province].filter(Boolean).join(' · ') || null,
+    telefono: biz.contactPhone || biz.phone || null,
+    // Es LA pregunta de soporte: "no puedo facturar". Con esto se sabe si la
+    // cuenta siquiera esta configurada para emitir, y por que via.
+    emision: metodoDeEmision(biz),
+    // De quien es la cuenta: reseller manda sobre vendedor, igual que en el panel.
+    origen: sub.resellerId ? 'reseller' : (sub.vendedorId ? 'vendedor' : 'directo'),
+    origenNombre: sub.resellerName || sub.vendedorName || null,
+    alta: sub.createdAt?.toDate?.() || sub.startDate?.toDate?.() || null,
+    // Lo que el equipo dejo escrito de esta cuenta.
+    notasAdmin: sub.notasAdmin || '',
   }
 }
 

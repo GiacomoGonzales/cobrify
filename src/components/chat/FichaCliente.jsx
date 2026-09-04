@@ -12,7 +12,7 @@ import {
   X,
 } from 'lucide-react'
 import { useToast } from '@/contexts/ToastContext'
-import { Modal, Campo, Entrada, Selector, Boton } from '@/components/admin/ui'
+import { Modal, Campo, Entrada, Selector, Boton, ListaDatos, Dato, Aviso } from '@/components/admin/ui'
 import {
   obtenerFichaCliente,
   buscarNegocios,
@@ -24,6 +24,13 @@ import { registerPayment, suspendUser, reactivateUser, PLANS } from '@/services/
 
 /** Los mismos métodos de cobro que ofrece el panel. */
 const METODOS = ['Yape', 'Plin', 'Transferencia', 'Efectivo', 'Tarjeta']
+
+/** Por donde emite la cuenta. Es la primera pregunta cuando "no puede facturar". */
+const ETIQUETA_EMISION = {
+  qpse: 'QPse',
+  sunat_direct: 'SUNAT directo',
+  none: 'Sin emisión',
+}
 
 /**
  * Ficha del cliente al costado de la conversación (Fase 2 del CRM).
@@ -93,7 +100,7 @@ export default function FichaCliente({ conversacion, onCerrar }) {
     const dias = ficha.diasParaVencer
     const fecha = ficha.vence.toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' })
     if (dias < 0) return { texto: `Venció el ${fecha}`, clase: 'bg-red-50 text-red-700 border-red-200' }
-    if (dias <= 7) return { texto: `Vence en ${dias} día${dias === 1 ? '' : 's'} (${fecha})`, clase: 'bg-amber-50 text-amber-800 border-amber-200' }
+    if (dias <= 7) return { texto: `Vence en ${dias} día${dias === 1 ? '' : 's'} (${fecha})`, clase: 'bg-red-50 text-red-700 border-red-200' }
     return { texto: `Vence el ${fecha}`, clase: 'bg-primary-50 text-primary-700 border-primary-200' }
   }
 
@@ -120,7 +127,7 @@ export default function FichaCliente({ conversacion, onCerrar }) {
             </div>
 
             <div className="mt-3">
-              <label className="text-[11.5px] font-semibold text-gray-600 uppercase tracking-wide">
+              <label className="text-[12px] font-medium text-gray-700">
                 Vincular a un negocio
               </label>
               <div className="relative mt-1.5">
@@ -167,39 +174,49 @@ export default function FichaCliente({ conversacion, onCerrar }) {
         {businessId && !cargando && ficha && (
           <div className="space-y-4">
             <div>
-              <p className="font-bold text-gray-900 leading-snug">{ficha.nombre || 'Negocio'}</p>
-              {ficha.ruc && <p className="text-[11.5px] text-gray-500 mt-0.5">RUC {ficha.ruc}</p>}
+              <p className="text-[14px] font-semibold text-gray-900 leading-snug">{ficha.nombre || 'Negocio'}</p>
+              <p className="text-[11.5px] text-gray-500 mt-0.5">
+                {[ficha.ruc && `RUC ${ficha.ruc}`, ficha.codigoCliente].filter(Boolean).join(' · ') || '—'}
+              </p>
               {ficha.email && <p className="text-[11.5px] text-gray-500 truncate">{ficha.email}</p>}
               {conversacion.linkedBy === 'manual' && (
                 <p className="text-[11px] text-gray-400 mt-1">Vinculado a mano</p>
               )}
             </div>
 
-            <div className="bg-gray-50 rounded-lg p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[11.5px] text-gray-500">Plan</span>
-                <span className="text-[13px] font-semibold text-gray-800">{ficha.planName || '-'}</span>
-              </div>
+            {/* El negocio: a que se dedica y donde. Es lo que evita atender a
+                ciegas cuando el cliente escribe sin presentarse. */}
+            <ListaDatos>
+              <Dato etiqueta="Rubro">
+                {ficha.rubro}
+                {ficha.rubro && ficha.rubroEsSugerido && <span className="text-gray-400"> (sugerido)</span>}
+              </Dato>
+              <Dato etiqueta="Modo">{ficha.modo}</Dato>
+              <Dato etiqueta="Ubicación">{ficha.ubicacion}</Dato>
+              <Dato etiqueta="Emisión">{ETIQUETA_EMISION[ficha.emision] || 'Sin emisión'}</Dato>
+              <Dato etiqueta="Origen">
+                {ficha.origenNombre || (ficha.origen === 'directo' ? 'Directo de Cobrify' : '—')}
+              </Dato>
+              <Dato etiqueta="Cliente desde">
+                {ficha.alta ? ficha.alta.toLocaleDateString('es-PE', { month: 'short', year: 'numeric' }) : null}
+              </Dato>
+            </ListaDatos>
+
+            <ListaDatos>
+              <Dato etiqueta="Plan">{ficha.planName}</Dato>
               {ficha.renewalPrice != null && (
-                <div className="flex items-center justify-between">
-                  <span className="text-[11.5px] text-gray-500">Precio pactado</span>
-                  <span className="text-[13px] font-semibold text-gray-800">S/ {Number(ficha.renewalPrice).toFixed(2)}</span>
-                </div>
+                <Dato etiqueta="Precio pactado">S/ {Number(ficha.renewalPrice).toFixed(2)}</Dato>
               )}
-              {ficha.accessBlocked && (
-                <div className="pt-1 border-t border-gray-200">
-                  <p className="text-[11.5px] font-semibold text-red-600">Cuenta suspendida</p>
-                  {ficha.motivoBloqueo && (
-                    <p className="text-[11px] text-gray-500 mt-0.5">Motivo: {ficha.motivoBloqueo}</p>
-                  )}
-                  {ficha.bloqueadoEl && (
-                    <p className="text-[11px] text-gray-400">
-                      Desde el {ficha.bloqueadoEl.toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' })}
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
+            </ListaDatos>
+
+            {ficha.accessBlocked && (
+              <Aviso tono="rojo" titulo="Cuenta suspendida">
+                {ficha.motivoBloqueo && <p>Motivo: {ficha.motivoBloqueo}</p>}
+                {ficha.bloqueadoEl && (
+                  <p>Desde el {ficha.bloqueadoEl.toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                )}
+              </Aviso>
+            )}
 
             {vencimiento() && (
               <div className={`flex items-center gap-2 border rounded-lg px-3 py-2.5 ${vencimiento().clase}`}>
@@ -211,7 +228,7 @@ export default function FichaCliente({ conversacion, onCerrar }) {
             {/* Comprobantes del mes: es lo primero que pregunta un cliente
                 que llama porque "no puede facturar". */}
             <div className="bg-gray-50 rounded-lg p-3">
-              <p className="text-[11.5px] font-semibold text-gray-600 uppercase tracking-wide mb-1.5">
+              <p className="text-[12px] font-medium text-gray-700 mb-1.5">
                 Comprobantes de este mes
               </p>
               {ficha.topeComprobantes === null || ficha.topeComprobantes < 0 ? (
@@ -225,7 +242,7 @@ export default function FichaCliente({ conversacion, onCerrar }) {
                       <span className="font-semibold">{ficha.emitidosEsteMes}</span> de {ficha.topeComprobantes}
                     </span>
                     <span className={`text-[11.5px] font-medium ${
-                      ficha.topeComprobantes - ficha.emitidosEsteMes < 50 ? 'text-amber-700' : 'text-gray-400'
+                      ficha.topeComprobantes - ficha.emitidosEsteMes < 50 ? 'text-red-600' : 'text-gray-400'
                     }`}>
                       quedan {Math.max(0, ficha.topeComprobantes - ficha.emitidosEsteMes)}
                     </span>
@@ -240,7 +257,7 @@ export default function FichaCliente({ conversacion, onCerrar }) {
                   </div>
                   <button
                     onClick={() => setComprobantesAbierto(true)}
-                    className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11.5px] font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:border-gray-300"
+                    className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11.5px] font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:border-gray-300"
                   >
                     <FilePlus2 className="w-3.5 h-3.5" />
                     Agregar 500 comprobantes
@@ -251,7 +268,7 @@ export default function FichaCliente({ conversacion, onCerrar }) {
 
             {ficha.pagos.length > 0 && (
               <div>
-                <p className="text-[11.5px] font-semibold text-gray-600 uppercase tracking-wide mb-1.5">
+                <p className="text-[12px] font-medium text-gray-700 mb-1.5">
                   {verTodosLosPagos ? `Pagos (${ficha.pagos.length})` : 'Últimos pagos'}
                 </p>
                 <div className="space-y-1.5">
@@ -278,9 +295,13 @@ export default function FichaCliente({ conversacion, onCerrar }) {
               </div>
             )}
 
+            {ficha.notasAdmin && (
+              <Aviso titulo="Nota del equipo">{ficha.notasAdmin}</Aviso>
+            )}
+
             <button
               onClick={() => setRenovarAbierto(true)}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary-600 text-white text-[13px] font-semibold rounded-lg hover:bg-primary-700 transition-colors"
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary-600 text-white text-[13px] font-medium rounded-md hover:bg-primary-700 transition-colors"
             >
               <CreditCard className="w-4 h-4" />
               Registrar renovación
@@ -292,7 +313,7 @@ export default function FichaCliente({ conversacion, onCerrar }) {
               <button
                 onClick={() => setReactivarAbierto(true)}
                 disabled={trabajando}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-600 text-white text-[13px] font-semibold rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white text-gray-700 border border-gray-300 text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
                 <ShieldCheck className="w-4 h-4" />
                 Reactivar acceso
@@ -301,7 +322,7 @@ export default function FichaCliente({ conversacion, onCerrar }) {
               <button
                 onClick={handleSuspender}
                 disabled={trabajando}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 text-[11.5px] font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 text-[11.5px] font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
               >
                 <Lock className="w-3.5 h-3.5" />
                 Suspender acceso

@@ -12,7 +12,8 @@ import {
   applyBrandingColors,
   removeBrandingColors
 } from '@/services/brandingService'
-import { esDominioDelChat, MARCA_CHAT } from '@/utils/dominioChat'
+import { useLocation } from 'react-router-dom'
+import { estaEnElChat, MARCA_CHAT } from '@/utils/dominioChat'
 
 const BrandingContext = createContext({
   branding: DEFAULT_BRANDING,
@@ -21,6 +22,8 @@ const BrandingContext = createContext({
 })
 
 export function BrandingProvider({ children }) {
+  // La ruta importa para la marca: /chat lleva la de Cobrify Chat.
+  const location = useLocation()
   const { user, isReseller, isAdmin, resellerData, isLoading: authLoading, getBusinessId } = useAuth()
   // ARRANCA desde la marca memorizada, no desde Cobrify: asi el login y el
   // navbar salen con la marca del reseller desde el primer render, sin el
@@ -66,7 +69,7 @@ export function BrandingProvider({ children }) {
     if (!esDominioReseller()) return
     const esRealDelReseller = branding.primaryColor !== DEFAULT_BRANDING.primaryColor || branding.logoUrl
     if (esRealDelReseller) guardarMarcaCache(branding)
-  }, [branding, brandingLoaded])
+  }, [branding, brandingLoaded, location.pathname])
 
   async function loadBranding() {
     console.log('🎨 BrandingContext loadBranding called')
@@ -187,10 +190,14 @@ export function BrandingProvider({ children }) {
     const path = window.location.pathname
     if (path.startsWith('/catalogo/') || path.startsWith('/menu/')) return
 
-    // El subdominio del chat tiene marca propia y no la resuelve este contexto:
+    // La bandeja del chat tiene marca propia y no la resuelve este contexto:
     // sin esta salida, al terminar de cargar la marca por defecto se volvia a
     // poner el titulo y el favicon de Cobrify encima de los de Cobrify Chat.
-    if (esDominioDelChat()) {
+    //
+    // Se mira la RUTA y no solo el host: /chat existe en cualquier dominio, y
+    // entrando por cobrifyperu.com/chat la pestana quedaba con el favicon del
+    // sistema de facturacion.
+    if (estaEnElChat()) {
       document.title = MARCA_CHAT.nombre
       const ponerIcono = (selector, href) => {
         const el = document.querySelector(selector)
