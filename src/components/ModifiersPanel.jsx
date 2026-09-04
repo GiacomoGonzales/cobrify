@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { Loader2, BarChart3, Copy, Save, ChevronDown, ChevronRight, FileSpreadsheet, HelpCircle } from 'lucide-react'
+import { Loader2, BarChart3, Save, ChevronDown, ChevronRight, FileSpreadsheet, HelpCircle, Plus, Edit2, Trash2, ListChecks } from 'lucide-react'
 import Button from '@/components/ui/Button'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, cleanText } from '@/lib/utils'
 import { getInvoices, getProducts, getProductCategories } from '@/services/firestoreService'
 import Modal from '@/components/ui/Modal'
 import { getInvoiceDate, parseLocalDateString } from '@/utils/invoiceDate'
@@ -36,8 +36,18 @@ import {
  *   Los datos salen de los comprobantes emitidos (items[].modifiers ya guardados
  *   en cada venta) → funciona retroactivo. El filtro "Solo con control" usa el
  *   flag trackUsage del modificador en la definición ACTUAL del producto.
- * - Plantillas: grupos de modificadores reutilizables que se insertan en los
- *   productos desde el editor ("Desde plantilla"). Al insertar se copian.
+ * - Mis modificadores: UNA lista con todo lo que el negocio usa, agrupado por
+ *   nombre. Junta dos fuentes que antes se dibujaban por separado: lo que está
+ *   escrito dentro de los productos y lo que quedó guardado para reusar. Cada
+ *   fila trae todo lo que se puede hacer con ese modificador —unificar sus
+ *   versiones, editarlo, aplicarlo a productos o categorías—, así la pantalla
+ *   es una lista y no tres secciones con la misma información.
+ *
+ * Guardar y aplicar siguen siendo dos cosas distintas, y a propósito: el
+ * producto guarda su propia COPIA del modificador (es lo que el POS lee al
+ * vender), así que cambiar la definición guardada no toca a los que ya la
+ * tienen hasta que se aplica. Lo que sí cambió es que ahora la pantalla avisa
+ * sola cuándo quedó alguien atrás.
  */
 
 const norm = (s) => String(s || '').trim().toLowerCase()
@@ -60,7 +70,6 @@ export default function ModifiersPanel({ companySettings }) {
 
   // ===== Plantillas =====
   const [templates, setTemplates] = useState([])
-  const [templatesDirty, setTemplatesDirty] = useState(false)
   const [isSavingTemplates, setIsSavingTemplates] = useState(false)
   const [expandedUso, setExpandedUso] = useState(() => new Set())
 
@@ -73,6 +82,7 @@ export default function ModifiersPanel({ companySettings }) {
   const [isSyncing, setIsSyncing] = useState(false)
   const [unificando, setUnificando] = useState(null)
   const [isUnifying, setIsUnifying] = useState(false)
+  const [editando, setEditando] = useState(null)
 
   useEffect(() => {
     if (isDemoMode) return
@@ -270,11 +280,36 @@ export default function ModifiersPanel({ companySettings }) {
   const enUso = useMemo(() => modificadoresEnUso(products), [products])
   const resumenUso = useMemo(() => resumenDeModificadores(enUso), [enUso])
 
-  // Nombres que ya están como plantilla, para no ofrecer crearla dos veces.
-  const clavesDePlantillas = useMemo(
-    () => new Set(templates.map((t) => nombreComparable(t?.name))),
-    [templates],
-  )
+  // UNA sola lista. Antes eran tres: los que están en los productos, el editor
+  // de guardados y la lista para aplicar —las dos últimas, la misma lista
+  // dibujada dos veces—. Acá cada modificador es UNA fila, venga de donde
+  // venga, y todo lo que se puede hacer con él está dentro de esa fila.
+  const lista = useMemo(() => {
+    const porClave = new Map()
+    for (const m of enUso) porClave.set(m.clave, { ...m, plantilla: null })
+    for (const tpl of templates) {
+      const clave = nombreComparable(tpl?.name)
+      if (!clave) continue
+      const existente = porClave.get(clave)
+      if (existente) {
+        existente.plantilla = tpl
+      } else {
+        // Guardado pero todavía sin usar en ningún producto: igual tiene que
+        // verse, o el usuario no encuentra lo que acaba de crear.
+        porClave.set(clave, {
+          clave,
+          nombre: cleanText(tpl.name),
+          productos: 0,
+          versiones: [],
+          esIgualEnTodos: true,
+          llevaControl: !!tpl.trackUsage,
+          plantilla: tpl,
+        })
+      }
+    }
+    return [...porClave.values()]
+      .sort((a, b) => b.productos - a.productos || a.nombre.localeCompare(b.nombre))
+  }, [enUso, templates])
 
   const toggleUso = (clave) => {
     setExpandedUso((prev) => {
@@ -288,10 +323,101 @@ export default function ModifiersPanel({ companySettings }) {
   // Crear la plantilla NO toca los productos: es solo dejar el grupo escrito
   // una vez para que el próximo producto lo tome de ahí en vez de tipearlo.
   // Los productos que ya lo tienen siguen exactamente igual.
-  const handleUsarComoPlantilla = (version, nombre) => {
-    setTemplates((prev) => [...prev, plantillaDesdeVersion(version, nombre)])
-    setTemplatesDirty(true)
-    toast.success(`"${nombre}" agregado abajo. Falta guardar.`)
+  // ── Guardar un modificador para reusar ────────────────────────────────────
+  //
+  // Guardar es inmediato y por modificador: antes había un editor con TODOS
+  // juntos y un botón "Guardar plantillas" aparte, o sea la misma lista
+  // dibujada dos veces y un paso que era fácil no dar.
+  const guardarLista = async (nuevas) => {
+    const res = await saveModifierTemplates(getBusinessId(), nuevas)
+    if (!res.success) throw new Error(res.error)
+    setTemplates(nuevas)
+    return nuevas
+  }
+
+  const nuevoModificador = () => {
+    setEditando({
+      esNuevo: true,
+      grupo: {
+        id: `mod-tpl-${Date.now()}`,
+        name: '',
+        required: false,
+        maxSelection: 1,
+        options: [],
+      },
+    })
+  }
+
+  // Editar el guardado, o sembrarlo con la versión más usada cuando todavía no
+  // existe: es lo que antes hacía "Crear plantilla con esta".
+  const abrirEditor = (entrada) => {
+    if (entrada.plantilla) {
+      setEditando({ esNuevo: false, grupo: entrada.plantilla })
+      return
+    }
+    const version = entrada.versiones[0]
+    setEditando({
+      esNuevo: true,
+      grupo: version
+        ? plantillaDesdeVersion(version, entrada.nombre)
+        : { id: `mod-tpl-${Date.now()}`, name: entrada.nombre, required: false, maxSelection: 1, options: [] },
+    })
+  }
+
+  const guardarEditor = async () => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+    const grupo = editando?.grupo
+    if (!grupo) return
+    if (!cleanText(grupo.name)) {
+      toast.error('Ponle un nombre al modificador')
+      return
+    }
+    setIsSavingTemplates(true)
+    try {
+      const nuevas = templates.some((t) => t.id === grupo.id)
+        ? templates.map((t) => (t.id === grupo.id ? grupo : t))
+        : [...templates, grupo]
+      await guardarLista(nuevas)
+      setEditando(null)
+
+      // El plan se calcula acá y no se lee del memo: `setTemplates` no cambia
+      // las variables de esta función, así que el memo todavía trae el valor
+      // del render anterior.
+      const pendiente = planDeSincronizacion(products, nuevas)
+      if (pendiente.cambios.length > 0) {
+        toast.success(
+          `Guardado. ${pendiente.cambios.length} producto${pendiente.cambios.length === 1 ? '' : 's'} ` +
+          `${pendiente.cambios.length === 1 ? 'sigue' : 'siguen'} con la versión anterior: actualízalos arriba.`,
+          7000,
+        )
+      } else {
+        toast.success('Guardado')
+      }
+    } catch (e) {
+      console.error('Error guardando el modificador:', e)
+      toast.error('No se pudo guardar')
+    } finally {
+      setIsSavingTemplates(false)
+    }
+  }
+
+  // Quitarlo de los guardados NO lo saca de los productos: cada uno tiene su
+  // copia y sigue vendiendo igual. Solo deja de ofrecerse para reusar.
+  const quitarDeGuardados = async (entrada) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+    try {
+      await guardarLista(templates.filter((t) => t.id !== entrada.plantilla.id))
+      toast.success(`"${entrada.nombre}" ya no está en tus guardados. Los productos no cambian.`)
+    } catch (e) {
+      console.error('Error quitando el modificador guardado:', e)
+      toast.error('No se pudo quitar')
+    }
   }
 
   // ── Aplicar una plantilla a los productos ─────────────────────────────────
@@ -346,12 +472,11 @@ export default function ModifiersPanel({ companySettings }) {
   // —quitar el modificador viejo y volver a insertarlo—, que es justo lo que no
   // sirve. Acá se detecta y se arregla de una vez.
   //
-  // Se calcula sobre las plantillas GUARDADAS: mientras hay cambios sin
-  // guardar, actualizar dejaría los productos con algo que ni siquiera está en
-  // el negocio todavía.
+  // Se calcula sobre lo GUARDADO. Como ahora guardar es inmediato (el editor
+  // escribe al confirmar), no hay estado a medio camino que esperar.
   const sincronizacion = useMemo(
-    () => (templatesDirty ? { porPlantilla: [], cambios: [] } : planDeSincronizacion(products, templates)),
-    [products, templates, templatesDirty],
+    () => planDeSincronizacion(products, templates),
+    [products, templates],
   )
 
   // ── Dejar todos los que se llaman igual con UNA sola versión ──────────────
@@ -451,54 +576,6 @@ export default function ModifiersPanel({ companySettings }) {
     }
   }
 
-  const handleTemplatesChange = (next) => {
-    setTemplates(next)
-    setTemplatesDirty(true)
-  }
-
-  const handleSaveTemplates = async () => {
-    if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
-      return
-    }
-    setIsSavingTemplates(true)
-    try {
-      const res = await saveModifierTemplates(getBusinessId(), templates)
-      if (res.success) {
-        setTemplatesDirty(false)
-        // El plan se calcula acá y no se lee del memo: `setTemplatesDirty` no
-        // cambia las variables de esta función, así que el memo todavía trae el
-        // valor del render anterior (vacío, porque estaba "sucio").
-        const pendiente = planDeSincronizacion(products, templates)
-        if (pendiente.cambios.length > 0) {
-          toast.success(
-            `Plantillas guardadas. ${pendiente.cambios.length} producto${pendiente.cambios.length === 1 ? '' : 's'} ` +
-            `${pendiente.cambios.length === 1 ? 'sigue' : 'siguen'} con la versión anterior: actualízalos abajo.`,
-            7000,
-          )
-        } else {
-          toast.success('Plantillas guardadas')
-        }
-      } else {
-        throw new Error(res.error)
-      }
-    } catch (e) {
-      console.error('Error guardando plantillas:', e)
-      toast.error('No se pudieron guardar las plantillas')
-    } finally {
-      setIsSavingTemplates(false)
-    }
-  }
-
-  if (isDemoMode) {
-    return (
-      <div className="text-center py-12 text-gray-500">
-        <BarChart3 className="w-10 h-10 mx-auto mb-2 text-gray-300" />
-        <p className="text-sm">El reporte de modificadores no está disponible en modo demo.</p>
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-4">
       {/* Sub-pestañas. La guía se enlaza acá y no con GuideLink porque esta
@@ -523,8 +600,8 @@ export default function ModifiersPanel({ companySettings }) {
             subTab === 'templates' ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'
           }`}
         >
-          <Copy className="w-4 h-4" />
-          Plantillas
+          <ListChecks className="w-4 h-4" />
+          Mis modificadores
         </button>
       </div>
 
@@ -683,163 +760,245 @@ export default function ModifiersPanel({ companySettings }) {
       )}
 
       {subTab === 'templates' && (
-        <div className="space-y-6">
-          {/* ── Lo que el negocio YA tiene escrito en sus productos ───────── */}
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900">Modificadores en uso</h3>
-            <p className="text-xs text-gray-500 mt-0.5 mb-3">
-              Todo lo que está escrito dentro de tus productos, agrupado por nombre. Si el mismo
-              modificador se tipeó en muchos productos, acá aparece una sola vez.
-            </p>
-
-            {enUso.length === 0 ? (
-              <p className="text-sm text-gray-500 border border-dashed border-gray-200 rounded-lg p-4 text-center">
-                Ningún producto tiene modificadores todavía.
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900">Tus modificadores</h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Todos agrupados por nombre: los que están escritos dentro de tus productos y los que
+                dejaste guardados para reusar.
               </p>
-            ) : (
-              <>
-                <p className="text-xs text-gray-600 mb-2">
-                  <strong>{resumenUso.escritos}</strong> escritos en los productos,{' '}
-                  <strong>{resumenUso.distintos}</strong> distintos
-                  {resumenUso.divergentes > 0 && (
-                    <> · <strong>{resumenUso.divergentes}</strong> con versiones que no coinciden</>
-                  )}
-                </p>
-
-                <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
-                  {enUso.map((m) => {
-                    const abierto = expandedUso.has(m.clave)
-                    const yaEsPlantilla = clavesDePlantillas.has(m.clave)
-                    return (
-                      <div key={m.clave}>
-                        <button
-                          type="button"
-                          onClick={() => toggleUso(m.clave)}
-                          className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-gray-50 transition-colors"
-                        >
-                          {abierto
-                            ? <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                            : <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />}
-                          <span className="text-sm font-medium text-gray-900 flex-1 truncate">{m.nombre}</span>
-                          {!m.esIgualEnTodos && (
-                            <span className="chip-aviso px-2 py-0.5 rounded-full text-xs flex-shrink-0">
-                              {m.versiones.length} versiones
-                            </span>
-                          )}
-                          {yaEsPlantilla && (
-                            <span className="chip-neutro px-2 py-0.5 rounded-full text-xs flex-shrink-0">
-                              Ya es plantilla
-                            </span>
-                          )}
-                          <span className="text-xs text-gray-500 flex-shrink-0">
-                            {m.productos} producto{m.productos === 1 ? '' : 's'}
-                          </span>
-                        </button>
-
-                        {abierto && (
-                          <div className="px-3 pb-3 pl-9 space-y-3">
-                            {!m.esIgualEnTodos && (
-                              <p className="text-xs text-amber-700">
-                                Se llaman igual pero no dicen lo mismo. Con <strong>Dejar todos con esta</strong> los
-                                unificas en una sola; con <strong>Crear plantilla</strong> solo la guardas para
-                                reusarla, sin tocar los productos.
-                              </p>
-                            )}
-                            {m.versiones.map((v, i) => (
-                              <div key={v.firma} className="bg-gray-50 rounded-lg p-3 space-y-2">
-                                {!m.esIgualEnTodos && (
-                                  <p className="text-xs font-medium text-gray-700">
-                                    Versión {i + 1} · {v.productos.length} producto{v.productos.length === 1 ? '' : 's'}
-                                  </p>
-                                )}
-                                <div className="flex flex-wrap gap-1.5">
-                                  {(v.grupo?.options || []).length === 0 ? (
-                                    <span className="text-xs text-gray-500">Sin opciones</span>
-                                  ) : (
-                                    (v.grupo.options || []).map((o, oi) => (
-                                      <span
-                                        key={o?.id || oi}
-                                        className="chip-neutro px-2 py-0.5 rounded-full text-xs"
-                                      >
-                                        {o?.name || 'Sin nombre'}
-                                        {Number(o?.priceAdjustment) ? ` +${formatCurrency(Number(o.priceAdjustment))}` : ''}
-                                      </span>
-                                    ))
-                                  )}
-                                </div>
-                                {/* Lo que separa esta versión de las otras y NO se ve
-                                    en las opciones. Sin esto, dos versiones con los
-                                    mismos nombres y precios aparecían separadas sin
-                                    explicación y la pantalla parecía rota. */}
-                                {(() => {
-                                  const difieren = atributosQueDifieren(m.versiones)
-                                  if (difieren.length === 0) return null
-                                  const a = atributosDeLaVersion(v.grupo)
-                                  const textos = []
-                                  if (difieren.includes('obligatorio')) textos.push(a.obligatorio ? 'Obligatorio' : 'Opcional')
-                                  if (difieren.includes('maximo')) textos.push(`Máximo ${a.maximo}`)
-                                  if (difieren.includes('repite')) textos.push(a.repite ? 'Permite repetir' : 'Sin repetir')
-                                  if (difieren.includes('insumos')) {
-                                    textos.push(a.insumos.length ? `Descuenta ${a.insumos.join(' y ')}` : 'No descuenta insumo')
-                                  }
-                                  return (
-                                    <p className="text-xs text-amber-700">
-                                      Se diferencia en: {textos.join(' · ')}
-                                    </p>
-                                  )
-                                })()}
-                                <p className="text-xs text-gray-500">
-                                  En: {v.productos.slice(0, 6).map((x) => x.nombre).join(', ')}
-                                  {v.productos.length > 6 && ` y ${v.productos.length - 6} más`}
-                                </p>
-                                <div className="flex flex-wrap gap-2">
-                                  {!m.esIgualEnTodos && (
-                                    <Button size="sm" onClick={() => abrirUnificar(m, v)}>
-                                      Dejar todos con esta
-                                    </Button>
-                                  )}
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleUsarComoPlantilla(v, m.nombre)}
-                                  >
-                                    <Copy className="w-3.5 h-3.5 mr-1.5" />
-                                    Crear plantilla con esta
-                                  </Button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              </>
-            )}
+            </div>
+            <Button size="sm" variant="outline" onClick={nuevoModificador}>
+              <Plus className="w-4 h-4 mr-1.5" />
+              Nuevo
+            </Button>
           </div>
 
-          {/* ── Plantillas reutilizables ──────────────────────────────────── */}
-          <div className="space-y-4 pt-2 border-t border-gray-200">
-            <p className="text-xs text-gray-500 pt-3">
-              Las plantillas son los grupos que quedan disponibles en el editor de cada producto con el
-              botón <strong>"Desde plantilla"</strong>, para no volver a escribirlos. Al insertarlas se
-              copian: editar una plantilla después NO cambia los productos que ya la usan.
+          {resumenUso.escritos > 0 && (
+            <p className="text-xs text-gray-600">
+              <strong>{resumenUso.escritos}</strong> escritos en los productos,{' '}
+              <strong>{resumenUso.distintos}</strong> distintos
+              {resumenUso.divergentes > 0 && (
+                <> · <strong>{resumenUso.divergentes}</strong> con versiones que no coinciden</>
+              )}
+            </p>
+          )}
+
+          {/* Lo que quedó con la versión vieja de su modificador guardado.
+              Aparece solo cuando hay algo que hacer, y ahí mismo se arregla:
+              sin esto había que ir plato por plato, quitando el modificador
+              viejo y volviendo a insertarlo. */}
+          {sincronizacion.cambios.length > 0 && (
+            <div className="border border-amber-200 bg-amber-50 rounded-lg p-3">
+              <p className="text-sm text-amber-900">
+                <strong>{sincronizacion.cambios.length}</strong> producto{sincronizacion.cambios.length === 1 ? '' : 's'}
+                {sincronizacion.cambios.length === 1 ? ' quedó' : ' quedaron'} con la versión anterior de{' '}
+                {sincronizacion.porPlantilla.filter((x) => x.desactualizados > 0).length === 1
+                  ? `"${sincronizacion.porPlantilla.find((x) => x.desactualizados > 0)?.plantilla.name}"`
+                  : 'sus modificadores guardados'}.
+              </p>
+              <p className="text-xs text-amber-800 mt-1">
+                {sincronizacion.cambios.slice(0, 8).map((c) => c.producto.nombre).join(', ')}
+                {sincronizacion.cambios.length > 8 && ` y ${sincronizacion.cambios.length - 8} más`}
+              </p>
+              <Button size="sm" className="mt-2" onClick={handleSincronizar} disabled={isSyncing}>
+                {isSyncing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Actualizando...
+                  </>
+                ) : (
+                  `Actualizar ${sincronizacion.cambios.length} producto${sincronizacion.cambios.length === 1 ? '' : 's'}`
+                )}
+              </Button>
+            </div>
+          )}
+
+          {lista.length === 0 ? (
+            <p className="text-sm text-gray-500 border border-dashed border-gray-200 rounded-lg p-4 text-center">
+              Todavía no tienes modificadores. Créalos dentro de un producto, o usa <strong>Nuevo</strong>{' '}
+              para dejar uno guardado y reusarlo.
+            </p>
+          ) : (
+            <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
+              {lista.map((m) => {
+                const abierto = expandedUso.has(m.clave)
+                const opcionesSueltas = m.versiones.length === 0 ? (m.plantilla?.options || []) : null
+                return (
+                  <div key={m.clave}>
+                    <button
+                      type="button"
+                      onClick={() => toggleUso(m.clave)}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-gray-50 transition-colors"
+                    >
+                      {abierto
+                        ? <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        : <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+                      <span className="text-sm font-medium text-gray-900 flex-1 truncate">{m.nombre}</span>
+                      {!m.esIgualEnTodos && (
+                        <span className="chip-aviso px-2 py-0.5 rounded-full text-xs flex-shrink-0">
+                          {m.versiones.length} versiones
+                        </span>
+                      )}
+                      {m.plantilla && (
+                        <span className="chip-neutro px-2 py-0.5 rounded-full text-xs flex-shrink-0">
+                          Guardado
+                        </span>
+                      )}
+                      <span className="text-xs text-gray-500 flex-shrink-0">
+                        {m.productos === 0
+                          ? 'sin usar'
+                          : `${m.productos} producto${m.productos === 1 ? '' : 's'}`}
+                      </span>
+                    </button>
+
+                    {abierto && (
+                      <div className="px-3 pb-3 pl-9 space-y-3">
+                        {!m.esIgualEnTodos && (
+                          <p className="text-xs text-amber-700">
+                            Se llaman igual pero no dicen lo mismo. Con <strong>Dejar todos con esta</strong> los
+                            unificas en uno solo.
+                          </p>
+                        )}
+
+                        {/* Guardado pero todavía sin usar en ningún producto */}
+                        {opcionesSueltas && (
+                          <div className="bg-gray-50 rounded-lg p-3 space-y-2">
+                            <div className="flex flex-wrap gap-1.5">
+                              {opcionesSueltas.length === 0 ? (
+                                <span className="text-xs text-gray-500">Sin opciones</span>
+                              ) : (
+                                opcionesSueltas.map((o, oi) => (
+                                  <span key={o?.id || oi} className="chip-neutro px-2 py-0.5 rounded-full text-xs">
+                                    {o?.name || 'Sin nombre'}
+                                    {Number(o?.priceAdjustment) ? ` +${formatCurrency(Number(o.priceAdjustment))}` : ''}
+                                  </span>
+                                ))
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-500">
+                              Guardado para reusar. Ningún producto lo tiene todavía: insértalo desde el editor
+                              del producto con <strong>Desde plantilla</strong>, o repártelo con{' '}
+                              <strong>Aplicar a productos</strong>.
+                            </p>
+                          </div>
+                        )}
+
+                        {m.versiones.map((v, i) => (
+                          <div key={v.firma} className="bg-gray-50 rounded-lg p-3 space-y-2">
+                            {!m.esIgualEnTodos && (
+                              <p className="text-xs font-medium text-gray-700">
+                                Versión {i + 1} · {v.productos.length} producto{v.productos.length === 1 ? '' : 's'}
+                              </p>
+                            )}
+                            <div className="flex flex-wrap gap-1.5">
+                              {(v.grupo?.options || []).length === 0 ? (
+                                <span className="text-xs text-gray-500">Sin opciones</span>
+                              ) : (
+                                (v.grupo.options || []).map((o, oi) => (
+                                  <span
+                                    key={o?.id || oi}
+                                    className="chip-neutro px-2 py-0.5 rounded-full text-xs"
+                                  >
+                                    {o?.name || 'Sin nombre'}
+                                    {Number(o?.priceAdjustment) ? ` +${formatCurrency(Number(o.priceAdjustment))}` : ''}
+                                  </span>
+                                ))
+                              )}
+                            </div>
+
+                            {/* Lo que separa esta versión de las otras y NO se ve
+                                en las opciones. Sin esto, dos versiones con los
+                                mismos nombres y precios aparecían separadas sin
+                                explicación y la pantalla parecía rota. */}
+                            {(() => {
+                              const difieren = atributosQueDifieren(m.versiones)
+                              if (difieren.length === 0) return null
+                              const a = atributosDeLaVersion(v.grupo)
+                              const textos = []
+                              if (difieren.includes('obligatorio')) textos.push(a.obligatorio ? 'Obligatorio' : 'Opcional')
+                              if (difieren.includes('maximo')) textos.push(`Máximo ${a.maximo}`)
+                              if (difieren.includes('repite')) textos.push(a.repite ? 'Permite repetir' : 'Sin repetir')
+                              if (difieren.includes('insumos')) {
+                                textos.push(a.insumos.length ? `Descuenta ${a.insumos.join(' y ')}` : 'No descuenta insumo')
+                              }
+                              return (
+                                <p className="text-xs text-amber-700">
+                                  Se diferencia en: {textos.join(' · ')}
+                                </p>
+                              )
+                            })()}
+
+                            <p className="text-xs text-gray-500">
+                              En: {v.productos.slice(0, 6).map((x) => x.nombre).join(', ')}
+                              {v.productos.length > 6 && ` y ${v.productos.length - 6} más`}
+                            </p>
+
+                            {!m.esIgualEnTodos && (
+                              <Button size="sm" onClick={() => abrirUnificar(m, v)}>
+                                Dejar todos con esta
+                              </Button>
+                            )}
+                          </div>
+                        ))}
+
+                        {/* Lo que se puede hacer con este modificador */}
+                        <div className="flex flex-wrap gap-2">
+                          <Button size="sm" variant="outline" onClick={() => abrirEditor(m)}>
+                            <Edit2 className="w-3.5 h-3.5 mr-1.5" />
+                            {m.plantilla ? 'Editar' : 'Guardar para reusar'}
+                          </Button>
+                          {m.plantilla && (
+                            <Button size="sm" variant="outline" onClick={() => abrirAplicar(m.plantilla)}>
+                              Aplicar a productos
+                            </Button>
+                          )}
+                          {m.plantilla && (
+                            <Button size="sm" variant="outline" onClick={() => quitarDeGuardados(m)}>
+                              <Trash2 className="w-3.5 h-3.5 mr-1.5 text-red-600" />
+                              Quitar de guardados
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Editar UN modificador guardado. En modal a proposito: la lista de
+          afuera se mantiene como lista y no se convierte en un formulario
+          largo, que es lo que hacia que la pantalla se viera cargada. */}
+      <Modal
+        isOpen={!!editando}
+        onClose={() => !isSavingTemplates && setEditando(null)}
+        title={editando?.esNuevo ? 'Nuevo modificador' : 'Editar modificador'}
+        size="lg"
+      >
+        {editando && (
+          <div className="space-y-4">
+            <p className="text-xs text-gray-500">
+              Esto es la definición que queda guardada para reusar. Los productos que ya lo tienen
+              conservan su copia; al guardar te avisamos si alguno quedó atrás.
             </p>
 
             <ProductModifiersSection
-              modifiers={templates}
-              onChange={handleTemplatesChange}
+              modifiers={[editando.grupo]}
+              onChange={([grupo]) => grupo && setEditando((prev) => ({ ...prev, grupo }))}
               enableTemplates={false}
-              title="Plantillas de modificadores"
-              description="Estos grupos estarán disponibles en el editor de productos con el botón 'Desde plantilla'."
+              soloUno
             />
 
-            <div className="flex items-center justify-end gap-3">
-              {templatesDirty && (
-                <span className="text-xs text-amber-600 font-medium">Hay cambios sin guardar</span>
-              )}
-              <Button onClick={handleSaveTemplates} disabled={isSavingTemplates || !templatesDirty}>
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-200">
+              <Button variant="outline" onClick={() => setEditando(null)} disabled={isSavingTemplates}>
+                Cancelar
+              </Button>
+              <Button onClick={guardarEditor} disabled={isSavingTemplates}>
                 {isSavingTemplates ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -848,82 +1007,14 @@ export default function ModifiersPanel({ companySettings }) {
                 ) : (
                   <>
                     <Save className="w-4 h-4 mr-2" />
-                    Guardar plantillas
+                    Guardar
                   </>
                 )}
               </Button>
             </div>
-
-            {/* Lo que quedó con la versión vieja de su plantilla. Aparece solo
-                cuando hay algo que hacer, y ahí mismo se arregla: sin esto
-                había que ir plato por plato, quitando el modificador viejo y
-                volviendo a insertarlo. */}
-            {sincronizacion.cambios.length > 0 && (
-              <div className="border border-amber-200 bg-amber-50 rounded-lg p-3">
-                <p className="text-sm text-amber-900">
-                  <strong>{sincronizacion.cambios.length}</strong> producto{sincronizacion.cambios.length === 1 ? '' : 's'}
-                  {sincronizacion.cambios.length === 1 ? ' quedó' : ' quedaron'} con la versión anterior de{' '}
-                  {sincronizacion.porPlantilla.filter((x) => x.desactualizados > 0).length === 1
-                    ? `la plantilla "${sincronizacion.porPlantilla.find((x) => x.desactualizados > 0)?.plantilla.name}"`
-                    : 'sus plantillas'}.
-                </p>
-                <p className="text-xs text-amber-800 mt-1">
-                  {sincronizacion.cambios.slice(0, 8).map((c) => c.producto.nombre).join(', ')}
-                  {sincronizacion.cambios.length > 8 && ` y ${sincronizacion.cambios.length - 8} más`}
-                </p>
-                <Button size="sm" className="mt-2" onClick={handleSincronizar} disabled={isSyncing}>
-                  {isSyncing ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Actualizando...
-                    </>
-                  ) : (
-                    `Actualizar ${sincronizacion.cambios.length} producto${sincronizacion.cambios.length === 1 ? '' : 's'}`
-                  )}
-                </Button>
-              </div>
-            )}
-
-            {/* ── Llevar una plantilla a los productos ──────────────────── */}
-            {templates.length > 0 && (
-              <div className="pt-4 border-t border-gray-200">
-                <h3 className="text-sm font-semibold text-gray-900">Aplicar a los productos</h3>
-                <p className="text-xs text-gray-500 mt-0.5 mb-3">
-                  Escribe la plantilla en los productos que ya la usan, o en categorías enteras. Sirve
-                  para cambiar un precio en un solo lugar en vez de producto por producto.
-                </p>
-
-                {templatesDirty ? (
-                  <p className="text-xs text-amber-700 border border-amber-200 bg-amber-50 rounded-lg p-3">
-                    Guarda las plantillas primero: se aplica la versión guardada.
-                  </p>
-                ) : (
-                  <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
-                    {templates.map((tpl) => {
-                      const usan = cuantosLaUsan(tpl)
-                      return (
-                        <div key={tpl.id} className="flex items-center gap-3 px-3 py-2.5">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 truncate">{tpl.name || 'Sin nombre'}</p>
-                            <p className="text-xs text-gray-500">
-                              {(tpl.options || []).length} opción{(tpl.options || []).length === 1 ? '' : 'es'}
-                              {' · '}
-                              {usan === 0 ? 'ningún producto la usa' : `${usan} producto${usan === 1 ? '' : 's'} la usan`}
-                            </p>
-                          </div>
-                          <Button size="sm" variant="outline" onClick={() => abrirAplicar(tpl)}>
-                            Aplicar
-                          </Button>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
 
       {/* Dejar todos los que se llaman igual con una sola versión */}
       <Modal

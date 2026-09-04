@@ -70,7 +70,7 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'La pestaña **Modificadores** es para los extras que el cliente pide sobre un producto (extra queso, sin cebolla, doble carne). Ahí ves cuánto se pide cada uno, juntas los que tienes repetidos y armas plantillas para no volver a escribirlos.',
+          text: 'La pestaña **Modificadores** es para los extras que el cliente pide sobre un producto (extra queso, sin cebolla, doble carne). Ahí los ves todos en una sola lista, juntas los que tienes repetidos y los dejas guardados para no volver a escribirlos.',
         },
         {
           type: 'texto',

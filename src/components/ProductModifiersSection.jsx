@@ -23,6 +23,9 @@ export default function ProductModifiersSection({
   enableTemplates = true,
   title = 'Modificadores (Modo Restaurante)',
   description = 'Agrega opciones personalizables como término de la carne, ingredientes adicionales, tipo de pan, etc.',
+  // Editar UN solo modificador, sin encabezado ni botones de agregar: lo usa la
+  // pantalla de Modificadores, donde la lista y el "Nuevo" ya viven afuera.
+  soloUno = false,
 }) {
   const { getBusinessId, isDemoMode } = useAppContext()
   const [editingModifierId, setEditingModifierId] = useState(null)
@@ -288,15 +291,17 @@ export default function ProductModifiersSection({
   }
 
   return (
-    <div className="border-t border-gray-200 pt-4">
-      <div className="mb-4">
-        <h3 className="text-sm font-semibold text-gray-900 mb-1">
-          {title}
-        </h3>
-        <p className="text-xs text-gray-600">
-          {description}
-        </p>
-      </div>
+    <div className={soloUno ? '' : 'border-t border-gray-200 pt-4'}>
+      {!soloUno && (
+        <div className="mb-4">
+          <h3 className="text-sm font-semibold text-gray-900 mb-1">
+            {title}
+          </h3>
+          <p className="text-xs text-gray-600">
+            {description}
+          </p>
+        </div>
+      )}
 
       {modifiers.length === 0 ? (
         <div className="text-center py-6 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
@@ -672,7 +677,7 @@ export default function ProductModifiersSection({
 
           {/* Uno debajo del otro en el celular: lado a lado, "Agregar Otro
               Modificador" no entraba y salia en dos renglones. */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+          <div className={`flex flex-col sm:flex-row sm:items-center gap-2 ${soloUno ? 'hidden' : ''}`}>
             <Button
               type="button"
               variant="outline"
