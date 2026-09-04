@@ -1,17 +1,15 @@
 import React, { useState, useEffect } from 'react'
-import { db, auth } from '@/lib/firebase'
+import { db } from '@/lib/firebase'
 import { nombreRubro, sugerirRubroDeCuenta } from '@/data/rubros'
-import { doc, collection, getDocs, deleteDoc, writeBatch, query, limit } from 'firebase/firestore'
+import { doc, collection, getDocs, writeBatch, query, limit } from 'firebase/firestore'
 import { PLANS, SELLABLE_PLAN_IDS } from '@/services/subscriptionService'
 import {
   RefreshCw,
-  Shield,
-  Database,
   CheckCircle,
   Info,
   Clock,
   Trash2,
-  Image as ImageIcon, Hash, Tag } from 'lucide-react'
+  Image as ImageIcon, Tag } from 'lucide-react'
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '@/lib/firebase'
 import { Boton, Seccion, Tabla, Th, Td, Fila, FilaVacia } from '@/components/admin/ui'
@@ -348,297 +346,29 @@ function SystemSection() {
   )
 }
 
-/**
- * Productos con IGV 10% que deberían ser 10.5%. Es una reparación puntual de
- * cuando cambió la Ley 31556, no una configuración: por eso vive acá y ya no
- * en la pestaña Sistema. Borra el `igvRate` del producto para que herede el
- * del negocio.
- */
-function ProductosIgv10Card() {
-  const [scanning, setScanning] = useState(false)
-  const [scanResult, setScanResult] = useState(null)
-  const [migrating, setMigrating] = useState(false)
-  const [migrateMsg, setMigrateMsg] = useState(null)
-
-  async function scanProducts() {
-    setScanning(true)
-    setScanResult(null)
-    setMigrateMsg(null)
-    try {
-      // Buscar negocios con IGV reducido
-      const { collection: colRef, getDocs: getDocsSnap, query, where } = await import('firebase/firestore')
-      const businessesSnap = await getDocsSnap(colRef(db, 'businesses'))
-      const results = []
-
-      for (const bizDoc of businessesSnap.docs) {
-        const bizData = bizDoc.data()
-
-        // Buscar productos con igvRate = 10 en TODOS los negocios
-        const productsQuery = query(colRef(db, 'businesses', bizDoc.id, 'products'), where('igvRate', '==', 10))
-        const productsSnap = await getDocsSnap(productsQuery)
-        if (productsSnap.empty) continue
-
-        const tc = bizData.emissionConfig?.taxConfig
-        results.push({
-          businessId: bizDoc.id,
-          businessName: bizData.razonSocial || bizData.businessName || bizDoc.id,
-          configIgv: tc?.igvRate ?? 18,
-          taxType: tc?.taxType || 'standard',
-          products: productsSnap.docs.map(p => ({ id: p.id, name: p.data().name }))
-        })
-      }
-      setScanResult(results)
-    } catch (error) {
-      setMigrateMsg({ success: false, message: error.message })
-    } finally {
-      setScanning(false)
-    }
-  }
-
-  async function fixProducts(businessId, productIds) {
-    setMigrating(true)
-    try {
-      const { doc: docRef, updateDoc, deleteField } = await import('firebase/firestore')
-      for (const pid of productIds) {
-        await updateDoc(docRef(db, 'businesses', businessId, 'products', pid), { igvRate: deleteField() })
-      }
-      // Quitar del resultado
-      setScanResult(prev => prev.map(r => r.businessId === businessId ? { ...r, products: [] } : r).filter(r => r.products.length > 0))
-      setMigrateMsg({ success: true, message: `${productIds.length} productos corregidos` })
-    } catch (error) {
-      setMigrateMsg({ success: false, message: error.message })
-    } finally {
-      setMigrating(false)
-    }
-  }
-
-  async function fixAll() {
-    if (!scanResult?.length) return
-    setMigrating(true)
-    let total = 0
-    try {
-      const { doc: docRef, updateDoc, deleteField } = await import('firebase/firestore')
-      for (const biz of scanResult) {
-        for (const p of biz.products) {
-          await updateDoc(docRef(db, 'businesses', biz.businessId, 'products', p.id), { igvRate: deleteField() })
-          total++
-        }
-      }
-      setScanResult([])
-      setMigrateMsg({ success: true, message: `${total} productos corregidos en total` })
-    } catch (error) {
-      setMigrateMsg({ success: false, message: error.message })
-    } finally {
-      setMigrating(false)
-    }
-  }
-
-  return (
-    <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="font-medium text-gray-900">Productos con IGV 10% (deben ser 10.5%)</p>
-            <p className="text-sm text-gray-500">Detecta negocios con IGV reducido cuyos productos aún tienen 10% guardado</p>
-          </div>
-          <button
-            onClick={scanProducts}
-            disabled={scanning}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 text-sm font-medium"
-          >
-            {scanning ? 'Escaneando...' : 'Escanear'}
-          </button>
-        </div>
-
-        {/* Resultados del escaneo */}
-        {scanResult !== null && (
-          <div className="mt-3 p-3 bg-white rounded-lg border text-sm max-h-80 overflow-y-auto">
-            {scanResult.length === 0 ? (
-              <p className="text-gray-700 font-medium">Todo correcto. No hay productos con IGV 10%.</p>
-            ) : (
-              <>
-                <div className="flex items-center justify-between mb-3">
-                  <p className="font-medium text-gray-900">
-                    {scanResult.reduce((sum, r) => sum + r.products.length, 0)} productos en {scanResult.length} negocios
-                  </p>
-                  <button
-                    onClick={fixAll}
-                    disabled={migrating}
-                    className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 text-xs font-medium"
-                  >
-                    {migrating ? 'Corrigiendo...' : 'Corregir todos'}
-                  </button>
-                </div>
-                {scanResult.map(biz => (
-                  <div key={biz.businessId} className="mb-3 pb-3 border-b last:border-0">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-gray-800">{biz.businessName}</p>
-                        <p className="text-xs text-gray-500">Config actual: IGV {biz.configIgv}% ({biz.taxType}) — {biz.products.length} productos con 10%</p>
-                      </div>
-                      <button
-                        onClick={() => fixProducts(biz.businessId, biz.products.map(p => p.id))}
-                        disabled={migrating}
-                        className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200 disabled:opacity-50 shrink-0"
-                      >
-                        Corregir
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {biz.products.map(p => (
-                        <span key={p.id} className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded">{p.name}</span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Mensaje */}
-        {migrateMsg && (
-          <div className={`mt-3 p-3 rounded-lg text-sm ${migrateMsg.success ? 'bg-gray-50 text-gray-900' : 'bg-red-50 text-red-800'}`}>
-            <p className="font-medium">{migrateMsg.message}</p>
-          </div>
-        )}
-      </div>
-  )
-}
 
 function MaintenanceSection() {
-  const [cleaning, setCleaning] = useState(false)
-  const [result, setResult] = useState(null)
-
-  async function cleanupSubUserSubscriptions() {
-    setCleaning(true)
-    setResult(null)
-
-    try {
-      // 1. Obtener todos los usuarios con ownerId (sub-usuarios)
-      const usersSnapshot = await getDocs(collection(db, 'users'))
-      const subUserIds = new Set()
-
-      usersSnapshot.forEach(docSnap => {
-        const data = docSnap.data()
-        if (data.ownerId) {
-          subUserIds.add(docSnap.id)
-        }
-      })
-
-      console.log(`Encontrados ${subUserIds.size} sub-usuarios`)
-
-      // 2. Buscar suscripciones que pertenecen a sub-usuarios
-      const subscriptionsSnapshot = await getDocs(collection(db, 'subscriptions'))
-      const toDelete = []
-
-      subscriptionsSnapshot.forEach(docSnap => {
-        if (subUserIds.has(docSnap.id)) {
-          toDelete.push({
-            id: docSnap.id,
-            email: docSnap.data().email,
-            plan: docSnap.data().plan
-          })
-        }
-      })
-
-      console.log(`Suscripciones a eliminar: ${toDelete.length}`)
-
-      // 3. Eliminar las suscripciones incorrectas
-      let deleted = 0
-      for (const sub of toDelete) {
-        try {
-          await deleteDoc(doc(db, 'subscriptions', sub.id))
-          deleted++
-          console.log(`Eliminada suscripción de: ${sub.email}`)
-        } catch (error) {
-          console.error(`Error al eliminar ${sub.email}:`, error)
-        }
-      }
-
-      setResult({
-        success: true,
-        message: `Limpieza completada: ${deleted} suscripciones de sub-usuarios eliminadas`,
-        details: toDelete
-      })
-
-    } catch (error) {
-      console.error('Error en limpieza:', error)
-      setResult({
-        success: false,
-        message: `Error: ${error.message}`
-      })
-    } finally {
-      setCleaning(false)
-    }
-  }
-
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Herramientas de Mantenimiento</h3>
 
         <div className="space-y-4">
-          {/* Limpieza de suscripciones de sub-usuarios */}
-          <div className="bg-gray-50 rounded-lg p-5 border border-gray-200">
-            <div className="flex items-start gap-3">
-              <Trash2 className="w-6 h-6 text-gray-700 flex-shrink-0 mt-1" />
-              <div className="flex-1">
-                <h4 className="font-medium text-gray-900">Limpiar suscripciones de sub-usuarios</h4>
-                <p className="text-sm text-gray-600 mt-1">
-                  Elimina suscripciones "trial" que fueron creadas incorrectamente para sub-usuarios.
-                  Los sub-usuarios deben usar la suscripción de su negocio principal.
-                </p>
-
-                <button
-                  onClick={cleanupSubUserSubscriptions}
-                  disabled={cleaning}
-                  className="mt-3 flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
-                >
-                  {cleaning ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      Limpiando...
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 className="w-4 h-4" />
-                      Ejecutar limpieza
-                    </>
-                  )}
-                </button>
-
-                {result && (
-                  <div className={`mt-3 p-3 rounded-lg ${result.success ? 'bg-gray-100 text-gray-900' : 'chip-error'}`}>
-                    <p className="font-medium">{result.message}</p>
-                    {result.details && result.details.length > 0 && (
-                      <ul className="mt-2 text-sm">
-                        {result.details.map((d, i) => (
-                          <li key={i}>• {d.email} (plan: {d.plan})</li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
           {/* Limpiar Cloudinary: borrar lo ya migrado a R2 (paso final del cierre, irreversible) */}
           <CloudinaryCleanupCard />
 
           {/* Inventario para migración a Cloudflare R2 (solo lectura, no modifica nada) */}
           <CloudinaryInventoryCard />
 
-          {/* Migración Cloudinary → Cloudflare R2, un negocio a la vez (piloto) */}
+          {/* Migración Cloudinary → Cloudflare R2. El piloto ya cerró (todo lo
+              nuevo sube a R2), pero las imágenes VIEJAS siguen allá: 12
+              componentes del catálogo aún las sirven desde Cloudinary. */}
           <R2MigrationCard />
 
-          {/* Migración de credenciales SUNAT a subcolección protegida (cierre de exposición pública) */}
-          <EmissionSecretsMigrationCard />
-          <CodigoClienteCard />
+          {/* Rubro sugerido. No es una migración cumplida: quedan 133 cuentas sin
+              rubro, y el catálogo acaba de pasar de 22 a 51, así que volver a
+              correrla clasifica bastante más que la vez pasada. */}
           <RubroSugeridoCard />
-
-          {/* Productos con IGV 10% que deberían ser 10.5% (Ley 31556). Vivía en Sistema. */}
-          <ProductosIgv10Card />
 
           {/* Info */}
           <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
@@ -666,84 +396,6 @@ function formatBytes(b) {
 // Dispara la Cloud Function migrateEmissionSecrets (admin-only) que mueve el
 // certificado/claves SUNAT/QPse del doc público a /businesses/{id}/secrets/emission.
 // Orden: Probar (dry-run) → Copiar → (deploy del cliente) → Borrar del doc público.
-/**
- * Código de cliente: numera de una vez las cuentas que ya existen, por orden
- * de alta (la más antigua es la 1000001). Las nuevas se numeran solas al
- * nacer (trigger `asignarCodigoCliente`). Primero "Simular" para ver cuántas
- * y cuáles; "Numerar" recién cuando el reporte cuadre.
- */
-function CodigoClienteCard() {
-  const [busy, setBusy] = useState('')
-  const [result, setResult] = useState(null)
-  const URL = 'https://us-central1-cobrify-395fe.cloudfunctions.net/numerarClientes'
-
-  async function run(mode) {
-    if (mode === 'real' && !window.confirm('¿Numerar todas las cuentas que todavía no tienen código? El número se asigna una sola vez y no se cambia después.')) return
-    setBusy(mode)
-    setResult(null)
-    try {
-      const idToken = await auth.currentUser.getIdToken()
-      const res = await fetch(URL + (mode === 'dry' ? '?dryRun=1' : ''), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
-        body: JSON.stringify({}),
-      })
-      setResult(await res.json())
-    } catch (e) {
-      setResult({ success: false, error: e.message })
-    } finally {
-      setBusy('')
-    }
-  }
-
-  return (
-    <div className="bg-gray-50 rounded-lg p-5 border border-gray-200">
-      <div className="flex items-start gap-3">
-        <Hash className="w-6 h-6 text-gray-700 flex-shrink-0 mt-1" />
-        <div className="flex-1">
-          <h4 className="font-medium text-gray-900">Códigos de cliente</h4>
-          <p className="text-sm text-gray-600 mt-1">
-            Da a cada cuenta su código de cliente (desde <b>1000001</b>, por orden de alta). Se asigna una sola
-            vez y no cambia. Las cuentas nuevas lo reciben solas al crearse; esto es solo para las que ya existen.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button onClick={() => run('dry')} disabled={!!busy}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-900 rounded-lg hover:bg-gray-100 disabled:opacity-50">
-              {busy === 'dry' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Info className="w-4 h-4" />} Simular
-            </button>
-            <button onClick={() => run('real')} disabled={!!busy}
-              className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50">
-              {busy === 'real' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Hash className="w-4 h-4" />} Numerar ahora
-            </button>
-          </div>
-          {result && (
-            <div className={`mt-3 p-3 rounded-lg text-sm ${result.success ? 'bg-white border border-gray-200' : 'bg-red-50 border border-red-200 text-red-700'}`}>
-              {result.success ? (
-                <>
-                  <p className="text-gray-800">
-                    {result.dryRun ? 'Simulación: ' : 'Listo: '}
-                    <b>{result.total}</b> cuentas en total ·{' '}
-                    {result.dryRun
-                      ? <><b>{result.yaNumerados}</b> ya tenían código · <b>{result.porNumerar}</b> por numerar{result.fechaDesdeAuth ? <> · <b>{result.fechaDesdeAuth}</b> con fecha tomada de Auth</> : null}{result.sinFechaDeAlta ? <> · <b>{result.sinFechaDeAlta}</b> sin fecha de alta (van al final)</> : null}</>
-                      : <><b>{result.asignados}</b> numeradas · último código <b>{result.ultimoCodigo}</b></>}
-                  </p>
-                  {Array.isArray(result.muestra) && result.muestra.length > 0 && (
-                    <ul className="mt-2 text-xs text-gray-600 space-y-0.5">
-                      {result.muestra.map((m) => (
-                        <li key={m.id}><span className="text-gray-400">{m.alta || 'sin fecha'}</span> · {m.nombre}{m.ruc ? ` · RUC ${m.ruc}` : ''}</li>
-                      ))}
-                      {result.dryRun && result.porNumerar > result.muestra.length && <li className="text-gray-400">… y {result.porNumerar - result.muestra.length} más</li>}
-                    </ul>
-                  )}
-                </>
-              ) : <p>{result.error || 'Error'}</p>}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
 
 /**
  * Rubro sugerido. Propone el rubro de cada cuenta con lo que ya tenemos: el
@@ -1019,85 +671,6 @@ function RubroSugeridoCard() {
   )
 }
 
-function EmissionSecretsMigrationCard() {
-  const [busy, setBusy] = useState('')
-  const [result, setResult] = useState(null)
-  const [businessId, setBusinessId] = useState('')
-
-  const MIGRATE_URL = 'https://us-central1-cobrify-395fe.cloudfunctions.net/migrateEmissionSecrets'
-
-  async function run(mode) {
-    if (mode === 'delete' && !window.confirm('¿Borrar las credenciales del doc público? Hacelo SOLO después de desplegar el cliente que lee del subcolección.')) return
-    setBusy(mode)
-    setResult(null)
-    try {
-      const idToken = await auth.currentUser.getIdToken()
-      const body = {}
-      const v = businessId.trim()
-      if (v) { if (v.includes('@')) body.email = v; else body.businessId = v }
-      if (mode === 'dryRun') body.dryRun = true
-      if (mode === 'delete') body.deleteTopLevel = true
-      const res = await fetch(MIGRATE_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
-        body: JSON.stringify(body),
-      })
-      setResult(await res.json())
-    } catch (e) {
-      setResult({ success: false, error: e.message })
-    } finally {
-      setBusy('')
-    }
-  }
-
-  return (
-    <div className="bg-red-50 rounded-lg p-5 border border-red-200">
-      <div className="flex items-start gap-3">
-        <Shield className="w-6 h-6 text-red-600 flex-shrink-0 mt-1" />
-        <div className="flex-1">
-          <h4 className="font-medium text-gray-900">Migrar credenciales SUNAT a subcolección protegida</h4>
-          <p className="text-sm text-gray-600 mt-1">
-            Mueve el certificado .p12, claves SOL y credenciales QPse del doc público del negocio a la
-            subcolección protegida <code>secrets/emission</code>. Orden: <b>Probar</b> → <b>Copiar</b> →
-            (tras el deploy del cliente) <b>Borrar del doc público</b>.
-          </p>
-          <input
-            type="text"
-            value={businessId}
-            onChange={(e) => setBusinessId(e.target.value)}
-            placeholder="businessId o email (opcional: para probar un solo negocio)"
-            className="mt-3 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-          />
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button onClick={() => run('dryRun')} disabled={!!busy}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50">
-              {busy === 'dryRun' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Info className="w-4 h-4" />} Probar (dry-run)
-            </button>
-            <button onClick={() => run('copy')} disabled={!!busy}
-              className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50">
-              {busy === 'copy' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />} Copiar al subcolección
-            </button>
-            <button onClick={() => run('delete')} disabled={!!busy}
-              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50">
-              {busy === 'delete' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />} Borrar del doc público
-            </button>
-          </div>
-          {result && (
-            <div className={`mt-3 p-3 rounded-lg text-sm ${result.success ? 'bg-gray-100 text-gray-900' : 'chip-error'}`}>
-              <p className="font-medium">{result.success ? `OK (${result.mode})` : `Error: ${result.error}`}</p>
-              {result.stats && (
-                <p className="mt-1">Total: {result.stats.total} · con secretos: {result.stats.withSecrets} · copiados: {result.stats.copied} · borrados: {result.stats.deleted} · sin secretos: {result.stats.skipped}</p>
-              )}
-              {result.details && (
-                <pre className="mt-2 text-xs overflow-auto max-h-40">{JSON.stringify(result.details, null, 2)}</pre>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
 
 function CloudinaryCleanupCard() {
   const [scanning, setScanning] = useState(false)
