@@ -4415,21 +4415,6 @@ export const retryPendingInvoices = onSchedule(
           }
         }
 
-        // Buscar facturas/boletas pendientes de este negocio
-        const invoicesRef = db.collection('businesses').doc(businessId).collection('invoices')
-
-        const pendingInvoices = await invoicesRef
-          .where('sunatStatus', '==', 'pending')
-          .where('documentType', 'in', skipFacturas ? ['boleta'] : ['factura', 'boleta'])
-          .limit(BATCH_SIZE)
-          .get()
-
-        if (pendingInvoices.empty) {
-          continue
-        }
-
-        console.log(`📋 [RETRY] Negocio ${businessId}: ${pendingInvoices.size} documentos pendientes${skipFacturas ? ' (solo boletas)' : ''}`)
-
         // Mapear emissionConfig al formato esperado (igual que en sendInvoiceToSunat)
         const businessDataForEmission = { ...businessData }
         if (businessData.emissionConfig) {
@@ -4455,6 +4440,22 @@ export const retryPendingInvoices = onSchedule(
             businessDataForEmission.qpse = { enabled: false }
           }
         }
+
+        // Buscar facturas/boletas pendientes de este negocio
+        const invoicesRef = db.collection('businesses').doc(businessId).collection('invoices')
+
+        const pendingInvoices = await invoicesRef
+          .where('sunatStatus', '==', 'pending')
+          .where('documentType', 'in', skipFacturas
+            ? ['boleta', 'nota_credito', 'nota_debito']
+            : ['factura', 'boleta', 'nota_credito', 'nota_debito'])
+          .limit(BATCH_SIZE)
+          .get()
+
+        if (!pendingInvoices.empty) {
+          console.log(`📋 [RETRY] Negocio ${businessId}: ${pendingInvoices.size} documentos pendientes${skipFacturas ? ' (solo boletas)' : ''}`)
+        }
+
 
         for (const invoiceDoc of pendingInvoices.docs) {
           const invoiceData = invoiceDoc.data()
@@ -4554,7 +4555,12 @@ export const retryPendingInvoices = onSchedule(
               correlativeNumber: invoiceData.correlativeNumber,
             }
 
-            const result = await emitirComprobante(invoiceForEmission, businessDataForEmission)
+            // Cada tipo tiene su emisor. Antes solo se reintentaban facturas y
+            // boletas: una nota de credito caida por conexion no la reenviaba nadie.
+            const emisor = invoiceData.documentType === 'nota_credito' ? emitirNotaCredito
+              : invoiceData.documentType === 'nota_debito' ? emitirNotaDebito
+              : emitirComprobante
+            const result = await emisor(invoiceForEmission, businessDataForEmission)
 
             // ── MANEJO DE 1033: Documento ya registrado en SUNAT ──
             const resultCode = String(result.responseCode || '')
@@ -4571,19 +4577,11 @@ export const retryPendingInvoices = onSchedule(
             }
 
             // Determinar estado final
-            const isTransient = isTransientSunatError(result.responseCode, result.description)
-
-            let finalStatus
-            if (result.accepted) {
-              finalStatus = 'accepted'
-              totalSuccess++
-            } else if (isTransient) {
-              finalStatus = 'pending' // Mantener para próximo reintento
-              totalSkipped++
-            } else {
-              finalStatus = 'rejected'
-              totalFailed++
-            }
+            const finalStatus = estadoDeEnvio(result)
+            const isTransient = finalStatus === 'pending'
+            if (finalStatus === 'accepted') totalSuccess++
+            else if (isTransient) totalSkipped++
+            else totalFailed++
 
             // Actualizar documento
             const updateData = {
@@ -4636,6 +4634,98 @@ export const retryPendingInvoices = onSchedule(
 
           // Pequeña pausa entre documentos para no sobrecargar SUNAT
           await new Promise(resolve => setTimeout(resolve, 500))
+        }
+
+        // ── GUÍAS DE REMISIÓN ──
+        // Viven en otra colección y tienen su propio emisor, por eso van en un
+        // bucle aparte. Antes no las reintentaba nadie: una guía que se caía por
+        // conexión se quedaba pendiente para siempre.
+        for (const [coleccion, emitirGuia, etiqueta] of [
+          ['dispatchGuides', emitirGuiaRemision, 'GRE'],
+          ['carrierDispatchGuides', emitirGuiaRemisionTransportista, 'GRE-T'],
+        ]) {
+          const guiasRef = db.collection('businesses').doc(businessId).collection(coleccion)
+          let guiasPendientes
+          try {
+            guiasPendientes = await guiasRef.where('sunatStatus', '==', 'pending').limit(BATCH_SIZE).get()
+          } catch (e) {
+            console.warn(`⚠️ [RETRY-${etiqueta}] No se pudo consultar ${coleccion}: ${e.message}`)
+            continue
+          }
+          if (guiasPendientes.empty) continue
+
+          for (const guiaDoc of guiasPendientes.docs) {
+            const guia = guiaDoc.data()
+            const numero = guia.number || `${guia.series}-${guia.correlative}`
+
+            // SOLO se reintenta lo que YA se intento enviar y fallo. Una guia
+            // nace con sunatStatus 'pending' desde que se crea, asi que sin este
+            // filtro el trabajo enviaria a SUNAT borradores que nadie mando —
+            // y eso no se deshace. La huella de un intento previo es tener
+            // respuesta, error de reintento o fecha de envio.
+            const seIntentoAntes = !!(guia.sunatDescription || guia.sunatResponseCode ||
+              guia.lastRetryError || guia.retryCount || guia.sunatSentAt)
+            if (!seIntentoAntes) continue
+
+            // Las muy recientes las deja en paz: puede haber un envío en curso.
+            const creada = guia.createdAt?.toDate?.() || new Date(guia.createdAt)
+            if ((Date.now() - creada.getTime()) / 60000 < MIN_AGE_MINUTES) continue
+
+            if ((guia.retryCount || 0) >= MAX_RETRIES) {
+              await guiasRef.doc(guiaDoc.id).update({
+                sunatStatus: 'failed_permanent',
+                sunatDescription: `Falló después de ${guia.retryCount} intentos automáticos`,
+                updatedAt: FieldValue.serverTimestamp(),
+              })
+              totalFailed++
+              continue
+            }
+
+            try {
+              const result = await emitirGuia({ ...guia, series: guia.series, correlative: guia.correlative }, businessDataForEmission)
+
+              // SUNAT ya la tiene: 1033 en comprobantes, 4000 en guías.
+              const cod = String(result.responseCode || '')
+              const desc = (result.description || result.error || '').toLowerCase()
+              if (!result.accepted && (cod.includes('1033') || cod.includes('4000') ||
+                  desc.includes('registrado previamente') || desc.includes('ya existe'))) {
+                result.accepted = true
+              }
+
+              const estado = estadoDeEnvio(result)
+              const update = {
+                sunatStatus: estado,
+                sunatResponseCode: result.responseCode || null,
+                sunatDescription: result.description || result.error || null,
+                updatedAt: FieldValue.serverTimestamp(),
+              }
+              if (estado === 'pending') {
+                update.retryCount = FieldValue.increment(1)
+                update.lastRetryError = sanitizeForFirestore({
+                  code: result.responseCode || '',
+                  description: result.description || result.error || '',
+                  timestamp: new Date().toISOString(),
+                })
+              }
+              await guiasRef.doc(guiaDoc.id).update(update)
+
+              if (estado === 'accepted') totalSuccess++
+              else if (estado === 'pending') totalSkipped++
+              else totalFailed++
+              totalProcessed++
+              console.log(`📦 [RETRY-${etiqueta}] ${numero}: ${estado}`)
+            } catch (guiaError) {
+              console.error(`❌ [RETRY-${etiqueta}] Error en ${numero}:`, guiaError.message)
+              await guiasRef.doc(guiaDoc.id).update({
+                retryCount: FieldValue.increment(1),
+                lastRetryError: { message: guiaError.message, timestamp: new Date().toISOString() },
+                updatedAt: FieldValue.serverTimestamp(),
+              })
+              totalFailed++
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 500))
+          }
         }
       }
 
@@ -4795,18 +4885,10 @@ export const resendPendingBoletas = onRequest(
               result.accepted = true
             }
 
-            const isTransient = isTransientSunatError(result.responseCode, result.description)
-
-            let finalStatus
-            if (result.accepted) {
-              finalStatus = 'accepted'
-              totalSuccess++
-            } else if (isTransient) {
-              finalStatus = 'pending'
-            } else {
-              finalStatus = 'rejected'
-              totalFailed++
-            }
+            const finalStatus = estadoDeEnvio(result)
+            const isTransient = finalStatus === 'pending'
+            if (finalStatus === 'accepted') totalSuccess++
+            else if (!isTransient) totalFailed++
 
             await invoicesRef.doc(invoiceId).update({
               sunatStatus: finalStatus,
@@ -5041,19 +5123,11 @@ export const testRetryPendingInvoices = onRequest(
               result.accepted = true
             }
 
-            const isTransient = isTransientSunatError(result.responseCode, result.description)
-
-            let finalStatus
-            if (result.accepted) {
-              finalStatus = 'accepted'
-              totalSuccess++
-            } else if (isTransient) {
-              finalStatus = 'pending'
-              totalSkipped++
-            } else {
-              finalStatus = 'rejected'
-              totalFailed++
-            }
+            const finalStatus = estadoDeEnvio(result)
+            const isTransient = finalStatus === 'pending'
+            if (finalStatus === 'accepted') totalSuccess++
+            else if (isTransient) totalSkipped++
+            else totalFailed++
 
             const updateData = {
               sunatStatus: finalStatus,
